@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies-codes Get-All-Company-Codes-and-Descriptions-by-Resource" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies-codes get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,9 +93,9 @@ export def commands []: nothing -> table {
 #
 # GET /v2/companies/{companyId}/codes/{codeResource}
 # operationId: Get All Company Codes and Descriptions by Resource
-export def "companies-codes Get-All-Company-Codes-and-Descriptions-by-Resource" [
-  companyId: string
-  codeResource: string
+export def "companies-codes get" [
+  company_id: string
+  code_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,7 +107,7 @@ export def "companies-codes Get-All-Company-Codes-and-Descriptions-by-Resource" 
 ]: nothing -> table<code: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/codes/($codeResource)")
+  let full_url = (build-url $base ({company_id: $company_id, code_resource: $code_resource} | format pattern "/v2/companies/{company_id}/codes/{code_resource}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -117,8 +117,8 @@ export def "companies-codes Get-All-Company-Codes-and-Descriptions-by-Resource" 
 #
 # GET /v2/companies/{companyId}/customfields/{category}
 # operationId: Get All Custom Fields by category
-export def "companies-customfields Get-All-Custom-Fields-by-category" [
-  companyId: string
+export def "companies-customfields get" [
+  company_id: string
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -131,7 +131,7 @@ export def "companies-customfields Get-All-Custom-Fields-by-category" [
 ]: nothing -> table<category: string, defaultValue: string, isRequired: bool, label: string, type: string, values: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/customfields/($category)")
+  let full_url = (build-url $base ({company_id: $company_id, category: $category} | format pattern "/v2/companies/{company_id}/customfields/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -163,8 +163,8 @@ export def "companies-customfields Get-All-Custom-Fields-by-category" [
 # --webTime shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
 # --workAddress shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, location?: string, mailStop?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
 # --workEligibility shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
-export def "companies-employees Add-employee" [
-  companyId: string
+export def "companies-employees post" [
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,56 +173,56 @@ export def "companies-employees Add-employee" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --additionalDirectDeposit: list # Add up to 19 direct deposit accounts in addition to the main direct deposit account. IMPORTANT: A direct deposit update will remove ALL existing main and additional direct deposit information in WebPay and replace with information provided on the request. GET API will not return direct deposit data. — item shape: {accountNumber?: string, accountType?: string, amount?: float, amountType?: string, blockSpecial?: bool, isSkipPreNote?: bool, nameOnAccount?: string, preNoteDate?: string, routingNumber?: string}
-  --additionalRate: list # Add Additional Rates. — item shape: {changeReason?: string, costCenter1?: string, costCenter2?: string, costCenter3?: string, effectiveDate?: string, endCheckDate?: string, job?: string, rate?: float, rateCode?: string, rateNotes?: string, ratePer?: string, shift?: string}
-  --benefitSetup: record #  Add or update setup values used for employee benefits integration, insurance plan settings, and ACA reporting. — shape: {benefitClass?: string, benefitClassEffectiveDate?: string, benefitSalary?: float, benefitSalaryEffectiveDate?: string, doNotApplyAdministrativePeriod?: bool, isMeasureAcaEligibility?: bool}
-  --birthDate: string # Employee birthdate. Common formats include *MM-DD-CCYY*, *CCYY-MM-DD*. (nullable, format: paylocity-date)
-  --coEmpCode: string # Unique idenifier for SSO.<br  />Max length: 20 (nullable)
-  --companyFEIN: string # Company FEIN as defined in Web Pay, applicable with GET requests only.<br  /> Max length: 20 (nullable)
-  --companyName: string # Company name as defined in Web Pay, applicable with GET requests only.<br  /> Max length: 50 (nullable)
+  --additional-direct-deposit: list # Add up to 19 direct deposit accounts in addition to the main direct deposit account. IMPORTANT: A direct deposit update will remove ALL existing main and additional direct deposit information in WebPay and replace with information provided on the request. GET API will not return direct deposit data. — item shape: {accountNumber?: string, accountType?: string, amount?: float, amountType?: string, blockSpecial?: bool, isSkipPreNote?: bool, nameOnAccount?: string, preNoteDate?: string, routingNumber?: string}
+  --additional-rate: list # Add Additional Rates. — item shape: {changeReason?: string, costCenter1?: string, costCenter2?: string, costCenter3?: string, effectiveDate?: string, endCheckDate?: string, job?: string, rate?: float, rateCode?: string, rateNotes?: string, ratePer?: string, shift?: string}
+  --benefit-setup: record #  Add or update setup values used for employee benefits integration, insurance plan settings, and ACA reporting. — shape: {benefitClass?: string, benefitClassEffectiveDate?: string, benefitSalary?: float, benefitSalaryEffectiveDate?: string, doNotApplyAdministrativePeriod?: bool, isMeasureAcaEligibility?: bool}
+  --birth-date: string # Employee birthdate. Common formats include *MM-DD-CCYY*, *CCYY-MM-DD*. (nullable, format: paylocity-date)
+  --co-emp-code: string # Unique idenifier for SSO.<br  />Max length: 20 (nullable)
+  --company-fein: string # Company FEIN as defined in Web Pay, applicable with GET requests only.<br  /> Max length: 20 (nullable)
+  --company-name: string # Company name as defined in Web Pay, applicable with GET requests only.<br  /> Max length: 50 (nullable)
   --currency: string # Employee is paid in this currency. <br  />Max length: 30 (nullable)
-  --customBooleanFields: list # Up to 8 custom fields of boolean (checkbox) type value. — item shape: {category: "PayrollAndHR", label: string, value: bool}
-  --customDateFields: list # Up to 8 custom fields of the date type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
-  --customDropDownFields: list # Up to 8 custom fields of the dropdown type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
-  --customNumberFields: list # Up to 8 custom fields of numeric type value. — item shape: {category: "PayrollAndHR", label: string, value: float}
-  --customTextFields: list # Up to 8 custom fields of text type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
-  --departmentPosition: record # Add or update home department cost center, position, supervisor, reviewer, employment type, EEO class, pay settings, and union information. — shape: {changeReason?: string, clockBadgeNumber?: string, costCenter1?: string, costCenter2?: string, costCenter3?: string, effectiveDate?: string, employeeType?: string, equalEmploymentOpportunityClass?: string, isMinimumWageExempt?: bool, isOvertimeExempt?: bool, isSupervisorReviewer?: bool, isUnionDuesCollected?: bool, isUnionInitiationCollected?: bool, jobTitle?: string, payGroup?: string, positionCode?: string, reviewerCompanyNumber?: string, reviewerEmployeeId?: string, shift?: string, supervisorCompanyNumber?: string, supervisorEmployeeId?: string, tipped?: string, unionAffiliationDate?: string, unionCode?: string, unionPosition?: string, workersCompensation?: string}
-  --disabilityDescription: string # Indicates if employee has disability status. (nullable)
-  --emergencyContacts: list # Add or update Emergency Contacts. — item shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, email?: string, firstName: string, homePhone?: string, lastName: string, mobilePhone?: string, notes?: string, pager?: string, primaryPhone?: string, priority?: string, relationship?: string, state?: string, syncEmployeeInfo?: bool, workExtension?: string, workPhone?: string, zip?: string}
-  --employeeId: string # Leave blank to have Web Pay automatically assign the next available employee ID.<br  />Max length: 9 (nullable)
+  --custom-boolean-fields: list # Up to 8 custom fields of boolean (checkbox) type value. — item shape: {category: "PayrollAndHR", label: string, value: bool}
+  --custom-date-fields: list # Up to 8 custom fields of the date type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
+  --custom-drop-down-fields: list # Up to 8 custom fields of the dropdown type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
+  --custom-number-fields: list # Up to 8 custom fields of numeric type value. — item shape: {category: "PayrollAndHR", label: string, value: float}
+  --custom-text-fields: list # Up to 8 custom fields of text type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
+  --department-position: record # Add or update home department cost center, position, supervisor, reviewer, employment type, EEO class, pay settings, and union information. — shape: {changeReason?: string, clockBadgeNumber?: string, costCenter1?: string, costCenter2?: string, costCenter3?: string, effectiveDate?: string, employeeType?: string, equalEmploymentOpportunityClass?: string, isMinimumWageExempt?: bool, isOvertimeExempt?: bool, isSupervisorReviewer?: bool, isUnionDuesCollected?: bool, isUnionInitiationCollected?: bool, jobTitle?: string, payGroup?: string, positionCode?: string, reviewerCompanyNumber?: string, reviewerEmployeeId?: string, shift?: string, supervisorCompanyNumber?: string, supervisorEmployeeId?: string, tipped?: string, unionAffiliationDate?: string, unionCode?: string, unionPosition?: string, workersCompensation?: string}
+  --disability-description: string # Indicates if employee has disability status. (nullable)
+  --emergency-contacts: list # Add or update Emergency Contacts. — item shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, email?: string, firstName: string, homePhone?: string, lastName: string, mobilePhone?: string, notes?: string, pager?: string, primaryPhone?: string, priority?: string, relationship?: string, state?: string, syncEmployeeInfo?: bool, workExtension?: string, workPhone?: string, zip?: string}
+  --employee-id: string # Leave blank to have Web Pay automatically assign the next available employee ID.<br  />Max length: 9 (nullable)
   --ethnicity: string # Employee ethnicity.<br  /> Max length: 10 (nullable)
-  --federalTax: record # Add or update federal tax amount type (taxCalculationCode), amount or percentage, filing status, and exemptions. — shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, taxCalculationCode?: string, w4FormYear?: int}
-  --firstName: string # Employee first name. <br  />Max length: 40 (nullable)
+  --federal-tax: record # Add or update federal tax amount type (taxCalculationCode), amount or percentage, filing status, and exemptions. — shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, taxCalculationCode?: string, w4FormYear?: int}
+  --first-name: string # Employee first name. <br  />Max length: 40 (nullable)
   --gender: string # Employee gender. Common values *M* (Male), *F* (Female). <br  />Max length: 1 (nullable)
-  --homeAddress: record # Add or update employee's home address, personal phone numbers, and personal email. — shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, mobilePhone?: string, phone?: string, postalCode?: string, state?: string}
-  --isHighlyCompensated: oneof<nothing, bool> # Indicates if employee meets the highly compensated employee criteria.
-  --isSmoker: oneof<nothing, bool> # Indicates if employee is a smoker.
-  --lastName: string # Employee last name. <br  />Max length: 40 (nullable)
-  --localTax: list # Add, update, or delete local tax code, filing status, and exemptions including  PA-PSD taxes. — item shape: {exemptions?: float, exemptions2?: float, filingStatus?: string, residentPSD?: string, taxCode?: string, workPSD?: string}
-  --mainDirectDeposit: record # Add the main direct deposit account. After deposits are made to any additional direct deposit accounts, the remaining net check is deposited in the main direct deposit account. IMPORTANT: A direct deposit update will remove ALL existing main and additional direct deposit information in WebPay and replace with what is provided on the request. GET API will not return direct deposit data. — shape: {accountNumber?: string, accountType?: string, blockSpecial?: bool, isSkipPreNote?: bool, nameOnAccount?: string, preNoteDate?: string, routingNumber?: string}
-  --maritalStatus: string # Employee marital status. Common values *D (Divorced), M (Married), S (Single), W (Widowed)*. <br  />Max length: 10 (nullable)
-  --middleName: string # Employee middle name.<br  /> Max length: 20 (nullable)
-  --nonPrimaryStateTax: record # Add or update non-primary state tax code, amount type (taxCalculationCode), amount or percentage, filing status, exemptions, supplemental check (specialCheckCalc), and reciprocity code information. — shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, reciprocityCode?: string, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
-  --ownerPercent: float # Percentage of employee's ownership in the company, entered as a whole number. <br  /> Decimal (12,2) (nullable)
-  --preferredName: string # Employee preferred display name.<br  /> Max length: 20 (nullable)
-  --primaryPayRate: record # Add or update hourly or salary pay rate, effective date, and pay frequency. — shape: {annualSalary?: float, baseRate?: float, beginCheckDate?: string, changeReason?: string, defaultHours?: float, effectiveDate?: string, isAutoPay?: bool, payFrequency?: string, payGrade?: string, payRateNote?: string, payType?: string, ratePer?: string, salary?: float}
-  --primaryStateTax: record # Add or update primary state tax code, amount type (taxCalculationCode), amount or percentage, filing status, exemptions, and supplemental check (specialCheckCalc) information. Only one primary state is allowed. Sending an updated primary state will replace the current primary state. — shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
-  --priorLastName: string # Prior last name if applicable.<br  />Max length: 40 (nullable)
+  --home-address: record # Add or update employee's home address, personal phone numbers, and personal email. — shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, mobilePhone?: string, phone?: string, postalCode?: string, state?: string}
+  --is-highly-compensated: oneof<nothing, bool> # Indicates if employee meets the highly compensated employee criteria.
+  --is-smoker: oneof<nothing, bool> # Indicates if employee is a smoker.
+  --last-name: string # Employee last name. <br  />Max length: 40 (nullable)
+  --local-tax: list # Add, update, or delete local tax code, filing status, and exemptions including  PA-PSD taxes. — item shape: {exemptions?: float, exemptions2?: float, filingStatus?: string, residentPSD?: string, taxCode?: string, workPSD?: string}
+  --main-direct-deposit: record # Add the main direct deposit account. After deposits are made to any additional direct deposit accounts, the remaining net check is deposited in the main direct deposit account. IMPORTANT: A direct deposit update will remove ALL existing main and additional direct deposit information in WebPay and replace with what is provided on the request. GET API will not return direct deposit data. — shape: {accountNumber?: string, accountType?: string, blockSpecial?: bool, isSkipPreNote?: bool, nameOnAccount?: string, preNoteDate?: string, routingNumber?: string}
+  --marital-status: string # Employee marital status. Common values *D (Divorced), M (Married), S (Single), W (Widowed)*. <br  />Max length: 10 (nullable)
+  --middle-name: string # Employee middle name.<br  /> Max length: 20 (nullable)
+  --non-primary-state-tax: record # Add or update non-primary state tax code, amount type (taxCalculationCode), amount or percentage, filing status, exemptions, supplemental check (specialCheckCalc), and reciprocity code information. — shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, reciprocityCode?: string, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
+  --owner-percent: float # Percentage of employee's ownership in the company, entered as a whole number. <br  /> Decimal (12,2) (nullable)
+  --preferred-name: string # Employee preferred display name.<br  /> Max length: 20 (nullable)
+  --primary-pay-rate: record # Add or update hourly or salary pay rate, effective date, and pay frequency. — shape: {annualSalary?: float, baseRate?: float, beginCheckDate?: string, changeReason?: string, defaultHours?: float, effectiveDate?: string, isAutoPay?: bool, payFrequency?: string, payGrade?: string, payRateNote?: string, payType?: string, ratePer?: string, salary?: float}
+  --primary-state-tax: record # Add or update primary state tax code, amount type (taxCalculationCode), amount or percentage, filing status, exemptions, and supplemental check (specialCheckCalc) information. Only one primary state is allowed. Sending an updated primary state will replace the current primary state. — shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
+  --prior-last-name: string # Prior last name if applicable.<br  />Max length: 40 (nullable)
   --salutation: string # Employee preferred salutation. <br  />Max length: 10 (nullable)
   --ssn: string # Employee social security number. Leave it blank if valid social security number not available. <br  />Max length: 11 (nullable)
   --status: record # Add or update employee status, change reason, effective date, and adjusted seniority date. Note that companies that are still in Implementation cannot hire future employees. — shape: {adjustedSeniorityDate?: string, changeReason?: string, effectiveDate?: string, employeeStatus?: string, hireDate?: string, isEligibleForRehire?: bool, reHireDate?: string, statusType?: string, terminationDate?: string}
   --suffix: string # Employee name suffix. Common values are *Jr, Sr, II*.<br  />Max length: 30 (nullable)
-  --taxSetup: record # Add tax form, 1099 exempt reasons and notes, and 943 agricultural employee information. Once the employee receives wages, this information cannot be updated. Add or update SUI tax state, retirement plan, and statutory information. — shape: {fitwExemptNotes?: string, fitwExemptReason?: string, futaExemptNotes?: string, futaExemptReason?: string, isEmployee943?: bool, isPension?: bool, isStatutory?: bool, medExemptNotes?: string, medExemptReason?: string, sitwExemptNotes?: string, sitwExemptReason?: string, ssExemptNotes?: string, ssExemptReason?: string, suiExemptNotes?: string, suiExemptReason?: string, suiState?: string, taxDistributionCode1099R?: string, taxForm?: string}
-  --veteranDescription: string # Indicates if employee is a veteran. (nullable)
-  --webTime: record # Add or update Web Time badge number and charge rate and synchronize Web Pay and Web Time employee data. — shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
-  --workAddress: record # Add or update employee's work address, phone numbers, and email. Work Location drop down field is not included. — shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, location?: string, mailStop?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
-  --workEligibility: record # Add or update I-9 work authorization information. — shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
+  --tax-setup: record # Add tax form, 1099 exempt reasons and notes, and 943 agricultural employee information. Once the employee receives wages, this information cannot be updated. Add or update SUI tax state, retirement plan, and statutory information. — shape: {fitwExemptNotes?: string, fitwExemptReason?: string, futaExemptNotes?: string, futaExemptReason?: string, isEmployee943?: bool, isPension?: bool, isStatutory?: bool, medExemptNotes?: string, medExemptReason?: string, sitwExemptNotes?: string, sitwExemptReason?: string, ssExemptNotes?: string, ssExemptReason?: string, suiExemptNotes?: string, suiExemptReason?: string, suiState?: string, taxDistributionCode1099R?: string, taxForm?: string}
+  --veteran-description: string # Indicates if employee is a veteran. (nullable)
+  --web-time: record # Add or update Web Time badge number and charge rate and synchronize Web Pay and Web Time employee data. — shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
+  --work-address: record # Add or update employee's work address, phone numbers, and email. Work Location drop down field is not included. — shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, location?: string, mailStop?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
+  --work-eligibility: record # Add or update I-9 work authorization information. — shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
 ]: any -> record<employeeId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees")
-  let body = {additionalDirectDeposit: $additionalDirectDeposit, additionalRate: $additionalRate, benefitSetup: $benefitSetup, birthDate: $birthDate, coEmpCode: $coEmpCode, companyFEIN: $companyFEIN, companyName: $companyName, currency: $currency, customBooleanFields: $customBooleanFields, customDateFields: $customDateFields, customDropDownFields: $customDropDownFields, customNumberFields: $customNumberFields, customTextFields: $customTextFields, departmentPosition: $departmentPosition, disabilityDescription: $disabilityDescription, emergencyContacts: $emergencyContacts, employeeId: $employeeId, ethnicity: $ethnicity, federalTax: $federalTax, firstName: $firstName, gender: $gender, homeAddress: $homeAddress, isHighlyCompensated: $isHighlyCompensated, isSmoker: $isSmoker, lastName: $lastName, localTax: $localTax, mainDirectDeposit: $mainDirectDeposit, maritalStatus: $maritalStatus, middleName: $middleName, nonPrimaryStateTax: $nonPrimaryStateTax, ownerPercent: $ownerPercent, preferredName: $preferredName, primaryPayRate: $primaryPayRate, primaryStateTax: $primaryStateTax, priorLastName: $priorLastName, salutation: $salutation, ssn: $ssn, status: $status, suffix: $suffix, taxSetup: $taxSetup, veteranDescription: $veteranDescription, webTime: $webTime, workAddress: $workAddress, workEligibility: $workEligibility} | compact
+  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/v2/companies/{company_id}/employees"))
+  let body = {"additionalDirectDeposit": $additional_direct_deposit, "additionalRate": $additional_rate, "benefitSetup": $benefit_setup, "birthDate": $birth_date, "coEmpCode": $co_emp_code, "companyFEIN": $company_fein, "companyName": $company_name, "currency": $currency, "customBooleanFields": $custom_boolean_fields, "customDateFields": $custom_date_fields, "customDropDownFields": $custom_drop_down_fields, "customNumberFields": $custom_number_fields, "customTextFields": $custom_text_fields, "departmentPosition": $department_position, "disabilityDescription": $disability_description, "emergencyContacts": $emergency_contacts, "employeeId": $employee_id, "ethnicity": $ethnicity, "federalTax": $federal_tax, "firstName": $first_name, "gender": $gender, "homeAddress": $home_address, "isHighlyCompensated": $is_highly_compensated, "isSmoker": $is_smoker, "lastName": $last_name, "localTax": $local_tax, "mainDirectDeposit": $main_direct_deposit, "maritalStatus": $marital_status, "middleName": $middle_name, "nonPrimaryStateTax": $non_primary_state_tax, "ownerPercent": $owner_percent, "preferredName": $preferred_name, "primaryPayRate": $primary_pay_rate, "primaryStateTax": $primary_state_tax, "priorLastName": $prior_last_name, "salutation": $salutation, "ssn": $ssn, "status": $status, "suffix": $suffix, "taxSetup": $tax_setup, "veteranDescription": $veteran_description, "webTime": $web_time, "workAddress": $work_address, "workEligibility": $work_eligibility} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -233,8 +233,8 @@ export def "companies-employees Add-employee" [
 #
 # GET /v2/companies/{companyId}/employees/
 # operationId: Get all employees
-export def "companies-employees Get-all-employees" [
-  companyId: string
+export def "companies-employees list" [
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,7 +250,7 @@ export def "companies-employees Get-all-employees" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "pagenumber" $pagenumber "scalar") (serialize-qp "includetotalcount" $includetotalcount "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/" $qp)
+  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/v2/companies/{company_id}/employees/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,9 +260,9 @@ export def "companies-employees Get-all-employees" [
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}
 # operationId: Get employee
-export def "companies-employees Get-employee" [
-  companyId: string
-  employeeId: string
+export def "companies-employees get" [
+  company_id: string
+  employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,7 +274,7 @@ export def "companies-employees Get-employee" [
 ]: nothing -> record<additionalDirectDeposit: table<accountNumber: string, accountType: string, amount: float, amountType: string, blockSpecial: bool, isSkipPreNote: bool, nameOnAccount: string, preNoteDate: string, routingNumber: string>, additionalRate: table<changeReason: string, costCenter1: string, costCenter2: string, costCenter3: string, effectiveDate: string, endCheckDate: string, job: string, rate: float, rateCode: string, rateNotes: string, ratePer: string, shift: string>, benefitSetup: record<benefitClass: string, benefitClassEffectiveDate: string, benefitSalary: float, benefitSalaryEffectiveDate: string, doNotApplyAdministrativePeriod: bool, isMeasureAcaEligibility: bool>, birthDate: string, coEmpCode: string, companyFEIN: string, companyName: string, currency: string, customBooleanFields: table<category: string, label: string, value: bool>, customDateFields: table<category: string, label: string, value: string>, customDropDownFields: table<category: string, label: string, value: string>, customNumberFields: table<category: string, label: string, value: float>, customTextFields: table<category: string, label: string, value: string>, departmentPosition: record<changeReason: string, clockBadgeNumber: string, costCenter1: string, costCenter2: string, costCenter3: string, effectiveDate: string, employeeType: string, equalEmploymentOpportunityClass: string, isMinimumWageExempt: bool, isOvertimeExempt: bool, isSupervisorReviewer: bool, isUnionDuesCollected: bool, isUnionInitiationCollected: bool, jobTitle: string, payGroup: string, positionCode: string, reviewerCompanyNumber: string, reviewerEmployeeId: string, shift: string, supervisorCompanyNumber: string, supervisorEmployeeId: string, tipped: string, unionAffiliationDate: string, unionCode: string, unionPosition: string, workersCompensation: string>, disabilityDescription: string, emergencyContacts: table<address1: string, address2: string, city: string, country: string, county: string, email: string, firstName: string, homePhone: string, lastName: string, mobilePhone: string, notes: string, pager: string, primaryPhone: string, priority: string, relationship: string, state: string, syncEmployeeInfo: bool, workExtension: string, workPhone: string, zip: string>, employeeId: string, ethnicity: string, federalTax: record<amount: float, deductionsAmount: float, dependentsAmount: float, exemptions: float, filingStatus: string, higherRate: bool, otherIncomeAmount: float, percentage: float, taxCalculationCode: string, w4FormYear: int>, firstName: string, gender: string, homeAddress: record<address1: string, address2: string, city: string, country: string, county: string, emailAddress: string, mobilePhone: string, phone: string, postalCode: string, state: string>, isHighlyCompensated: bool, isSmoker: bool, lastName: string, localTax: table<exemptions: float, exemptions2: float, filingStatus: string, residentPSD: string, taxCode: string, workPSD: string>, mainDirectDeposit: record<accountNumber: string, accountType: string, blockSpecial: bool, isSkipPreNote: bool, nameOnAccount: string, preNoteDate: string, routingNumber: string>, maritalStatus: string, middleName: string, nonPrimaryStateTax: record<amount: float, deductionsAmount: float, dependentsAmount: float, exemptions: float, exemptions2: float, filingStatus: string, higherRate: bool, otherIncomeAmount: float, percentage: float, reciprocityCode: string, specialCheckCalc: string, taxCalculationCode: string, taxCode: string, w4FormYear: int>, ownerPercent: float, preferredName: string, primaryPayRate: record<annualSalary: float, baseRate: float, beginCheckDate: string, changeReason: string, defaultHours: float, effectiveDate: string, isAutoPay: bool, payFrequency: string, payGrade: string, payRateNote: string, payType: string, ratePer: string, salary: float>, primaryStateTax: record<amount: float, deductionsAmount: float, dependentsAmount: float, exemptions: float, exemptions2: float, filingStatus: string, higherRate: bool, otherIncomeAmount: float, percentage: float, specialCheckCalc: string, taxCalculationCode: string, taxCode: string, w4FormYear: int>, priorLastName: string, salutation: string, ssn: string, status: record<adjustedSeniorityDate: string, changeReason: string, effectiveDate: string, employeeStatus: string, hireDate: string, isEligibleForRehire: bool, reHireDate: string, statusType: string, terminationDate: string>, suffix: string, taxSetup: record<fitwExemptNotes: string, fitwExemptReason: string, futaExemptNotes: string, futaExemptReason: string, isEmployee943: bool, isPension: bool, isStatutory: bool, medExemptNotes: string, medExemptReason: string, sitwExemptNotes: string, sitwExemptReason: string, ssExemptNotes: string, ssExemptReason: string, suiExemptNotes: string, suiExemptReason: string, suiState: string, taxDistributionCode1099R: string, taxForm: string>, veteranDescription: string, webTime: record<badgeNumber: string, chargeRate: float, isTimeLaborEnabled: bool>, workAddress: record<address1: string, address2: string, city: string, country: string, county: string, emailAddress: string, location: string, mailStop: string, mobilePhone: string, pager: string, phone: string, phoneExtension: string, postalCode: string, state: string>, workEligibility: record<alienOrAdmissionDocumentNumber: string, attestedDate: string, countryOfIssuance: string, foreignPassportNumber: string, i94AdmissionNumber: string, i9DateVerified: string, i9Notes: string, isI9Verified: bool, isSsnVerified: bool, ssnDateVerified: string, ssnNotes: string, visaType: string, workAuthorization: string, workUntil: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)")
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id} | format pattern "/v2/companies/{company_id}/employees/{employee_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -306,9 +306,9 @@ export def "companies-employees Get-employee" [
 # --webTime shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
 # --workAddress shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, location?: string, mailStop?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
 # --workEligibility shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
-export def "companies-employees Update-employee" [
-  companyId: string
-  employeeId: string
+export def "companies-employees patch" [
+  company_id: string
+  employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,56 +317,56 @@ export def "companies-employees Update-employee" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --additionalDirectDeposit: list # Add up to 19 direct deposit accounts in addition to the main direct deposit account. IMPORTANT: A direct deposit update will remove ALL existing main and additional direct deposit information in WebPay and replace with information provided on the request. GET API will not return direct deposit data. — item shape: {accountNumber?: string, accountType?: string, amount?: float, amountType?: string, blockSpecial?: bool, isSkipPreNote?: bool, nameOnAccount?: string, preNoteDate?: string, routingNumber?: string}
-  --additionalRate: list # Add Additional Rates. — item shape: {changeReason?: string, costCenter1?: string, costCenter2?: string, costCenter3?: string, effectiveDate?: string, endCheckDate?: string, job?: string, rate?: float, rateCode?: string, rateNotes?: string, ratePer?: string, shift?: string}
-  --benefitSetup: record #  Add or update setup values used for employee benefits integration, insurance plan settings, and ACA reporting. — shape: {benefitClass?: string, benefitClassEffectiveDate?: string, benefitSalary?: float, benefitSalaryEffectiveDate?: string, doNotApplyAdministrativePeriod?: bool, isMeasureAcaEligibility?: bool}
-  --birthDate: string # Employee birthdate. Common formats include *MM-DD-CCYY*, *CCYY-MM-DD*. (nullable, format: paylocity-date)
-  --coEmpCode: string # Unique idenifier for SSO.<br  />Max length: 20 (nullable)
-  --companyFEIN: string # Company FEIN as defined in Web Pay, applicable with GET requests only.<br  /> Max length: 20 (nullable)
-  --companyName: string # Company name as defined in Web Pay, applicable with GET requests only.<br  /> Max length: 50 (nullable)
+  --additional-direct-deposit: list # Add up to 19 direct deposit accounts in addition to the main direct deposit account. IMPORTANT: A direct deposit update will remove ALL existing main and additional direct deposit information in WebPay and replace with information provided on the request. GET API will not return direct deposit data. — item shape: {accountNumber?: string, accountType?: string, amount?: float, amountType?: string, blockSpecial?: bool, isSkipPreNote?: bool, nameOnAccount?: string, preNoteDate?: string, routingNumber?: string}
+  --additional-rate: list # Add Additional Rates. — item shape: {changeReason?: string, costCenter1?: string, costCenter2?: string, costCenter3?: string, effectiveDate?: string, endCheckDate?: string, job?: string, rate?: float, rateCode?: string, rateNotes?: string, ratePer?: string, shift?: string}
+  --benefit-setup: record #  Add or update setup values used for employee benefits integration, insurance plan settings, and ACA reporting. — shape: {benefitClass?: string, benefitClassEffectiveDate?: string, benefitSalary?: float, benefitSalaryEffectiveDate?: string, doNotApplyAdministrativePeriod?: bool, isMeasureAcaEligibility?: bool}
+  --birth-date: string # Employee birthdate. Common formats include *MM-DD-CCYY*, *CCYY-MM-DD*. (nullable, format: paylocity-date)
+  --co-emp-code: string # Unique idenifier for SSO.<br  />Max length: 20 (nullable)
+  --company-fein: string # Company FEIN as defined in Web Pay, applicable with GET requests only.<br  /> Max length: 20 (nullable)
+  --company-name: string # Company name as defined in Web Pay, applicable with GET requests only.<br  /> Max length: 50 (nullable)
   --currency: string # Employee is paid in this currency. <br  />Max length: 30 (nullable)
-  --customBooleanFields: list # Up to 8 custom fields of boolean (checkbox) type value. — item shape: {category: "PayrollAndHR", label: string, value: bool}
-  --customDateFields: list # Up to 8 custom fields of the date type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
-  --customDropDownFields: list # Up to 8 custom fields of the dropdown type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
-  --customNumberFields: list # Up to 8 custom fields of numeric type value. — item shape: {category: "PayrollAndHR", label: string, value: float}
-  --customTextFields: list # Up to 8 custom fields of text type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
-  --departmentPosition: record # Add or update home department cost center, position, supervisor, reviewer, employment type, EEO class, pay settings, and union information. — shape: {changeReason?: string, clockBadgeNumber?: string, costCenter1?: string, costCenter2?: string, costCenter3?: string, effectiveDate?: string, employeeType?: string, equalEmploymentOpportunityClass?: string, isMinimumWageExempt?: bool, isOvertimeExempt?: bool, isSupervisorReviewer?: bool, isUnionDuesCollected?: bool, isUnionInitiationCollected?: bool, jobTitle?: string, payGroup?: string, positionCode?: string, reviewerCompanyNumber?: string, reviewerEmployeeId?: string, shift?: string, supervisorCompanyNumber?: string, supervisorEmployeeId?: string, tipped?: string, unionAffiliationDate?: string, unionCode?: string, unionPosition?: string, workersCompensation?: string}
-  --disabilityDescription: string # Indicates if employee has disability status. (nullable)
-  --emergencyContacts: list # Add or update Emergency Contacts. — item shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, email?: string, firstName: string, homePhone?: string, lastName: string, mobilePhone?: string, notes?: string, pager?: string, primaryPhone?: string, priority?: string, relationship?: string, state?: string, syncEmployeeInfo?: bool, workExtension?: string, workPhone?: string, zip?: string}
-  --body-employeeId: string # Leave blank to have Web Pay automatically assign the next available employee ID.<br  />Max length: 9 (nullable)
+  --custom-boolean-fields: list # Up to 8 custom fields of boolean (checkbox) type value. — item shape: {category: "PayrollAndHR", label: string, value: bool}
+  --custom-date-fields: list # Up to 8 custom fields of the date type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
+  --custom-drop-down-fields: list # Up to 8 custom fields of the dropdown type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
+  --custom-number-fields: list # Up to 8 custom fields of numeric type value. — item shape: {category: "PayrollAndHR", label: string, value: float}
+  --custom-text-fields: list # Up to 8 custom fields of text type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
+  --department-position: record # Add or update home department cost center, position, supervisor, reviewer, employment type, EEO class, pay settings, and union information. — shape: {changeReason?: string, clockBadgeNumber?: string, costCenter1?: string, costCenter2?: string, costCenter3?: string, effectiveDate?: string, employeeType?: string, equalEmploymentOpportunityClass?: string, isMinimumWageExempt?: bool, isOvertimeExempt?: bool, isSupervisorReviewer?: bool, isUnionDuesCollected?: bool, isUnionInitiationCollected?: bool, jobTitle?: string, payGroup?: string, positionCode?: string, reviewerCompanyNumber?: string, reviewerEmployeeId?: string, shift?: string, supervisorCompanyNumber?: string, supervisorEmployeeId?: string, tipped?: string, unionAffiliationDate?: string, unionCode?: string, unionPosition?: string, workersCompensation?: string}
+  --disability-description: string # Indicates if employee has disability status. (nullable)
+  --emergency-contacts: list # Add or update Emergency Contacts. — item shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, email?: string, firstName: string, homePhone?: string, lastName: string, mobilePhone?: string, notes?: string, pager?: string, primaryPhone?: string, priority?: string, relationship?: string, state?: string, syncEmployeeInfo?: bool, workExtension?: string, workPhone?: string, zip?: string}
+  --body-employee-id: string # Leave blank to have Web Pay automatically assign the next available employee ID.<br  />Max length: 9 (nullable)
   --ethnicity: string # Employee ethnicity.<br  /> Max length: 10 (nullable)
-  --federalTax: record # Add or update federal tax amount type (taxCalculationCode), amount or percentage, filing status, and exemptions. — shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, taxCalculationCode?: string, w4FormYear?: int}
-  --firstName: string # Employee first name. <br  />Max length: 40 (nullable)
+  --federal-tax: record # Add or update federal tax amount type (taxCalculationCode), amount or percentage, filing status, and exemptions. — shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, taxCalculationCode?: string, w4FormYear?: int}
+  --first-name: string # Employee first name. <br  />Max length: 40 (nullable)
   --gender: string # Employee gender. Common values *M* (Male), *F* (Female). <br  />Max length: 1 (nullable)
-  --homeAddress: record # Add or update employee's home address, personal phone numbers, and personal email. — shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, mobilePhone?: string, phone?: string, postalCode?: string, state?: string}
-  --isHighlyCompensated: oneof<nothing, bool> # Indicates if employee meets the highly compensated employee criteria.
-  --isSmoker: oneof<nothing, bool> # Indicates if employee is a smoker.
-  --lastName: string # Employee last name. <br  />Max length: 40 (nullable)
-  --localTax: list # Add, update, or delete local tax code, filing status, and exemptions including  PA-PSD taxes. — item shape: {exemptions?: float, exemptions2?: float, filingStatus?: string, residentPSD?: string, taxCode?: string, workPSD?: string}
-  --mainDirectDeposit: record # Add the main direct deposit account. After deposits are made to any additional direct deposit accounts, the remaining net check is deposited in the main direct deposit account. IMPORTANT: A direct deposit update will remove ALL existing main and additional direct deposit information in WebPay and replace with what is provided on the request. GET API will not return direct deposit data. — shape: {accountNumber?: string, accountType?: string, blockSpecial?: bool, isSkipPreNote?: bool, nameOnAccount?: string, preNoteDate?: string, routingNumber?: string}
-  --maritalStatus: string # Employee marital status. Common values *D (Divorced), M (Married), S (Single), W (Widowed)*. <br  />Max length: 10 (nullable)
-  --middleName: string # Employee middle name.<br  /> Max length: 20 (nullable)
-  --nonPrimaryStateTax: record # Add or update non-primary state tax code, amount type (taxCalculationCode), amount or percentage, filing status, exemptions, supplemental check (specialCheckCalc), and reciprocity code information. — shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, reciprocityCode?: string, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
-  --ownerPercent: float # Percentage of employee's ownership in the company, entered as a whole number. <br  /> Decimal (12,2) (nullable)
-  --preferredName: string # Employee preferred display name.<br  /> Max length: 20 (nullable)
-  --primaryPayRate: record # Add or update hourly or salary pay rate, effective date, and pay frequency. — shape: {annualSalary?: float, baseRate?: float, beginCheckDate?: string, changeReason?: string, defaultHours?: float, effectiveDate?: string, isAutoPay?: bool, payFrequency?: string, payGrade?: string, payRateNote?: string, payType?: string, ratePer?: string, salary?: float}
-  --primaryStateTax: record # Add or update primary state tax code, amount type (taxCalculationCode), amount or percentage, filing status, exemptions, and supplemental check (specialCheckCalc) information. Only one primary state is allowed. Sending an updated primary state will replace the current primary state. — shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
-  --priorLastName: string # Prior last name if applicable.<br  />Max length: 40 (nullable)
+  --home-address: record # Add or update employee's home address, personal phone numbers, and personal email. — shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, mobilePhone?: string, phone?: string, postalCode?: string, state?: string}
+  --is-highly-compensated: oneof<nothing, bool> # Indicates if employee meets the highly compensated employee criteria.
+  --is-smoker: oneof<nothing, bool> # Indicates if employee is a smoker.
+  --last-name: string # Employee last name. <br  />Max length: 40 (nullable)
+  --local-tax: list # Add, update, or delete local tax code, filing status, and exemptions including  PA-PSD taxes. — item shape: {exemptions?: float, exemptions2?: float, filingStatus?: string, residentPSD?: string, taxCode?: string, workPSD?: string}
+  --main-direct-deposit: record # Add the main direct deposit account. After deposits are made to any additional direct deposit accounts, the remaining net check is deposited in the main direct deposit account. IMPORTANT: A direct deposit update will remove ALL existing main and additional direct deposit information in WebPay and replace with what is provided on the request. GET API will not return direct deposit data. — shape: {accountNumber?: string, accountType?: string, blockSpecial?: bool, isSkipPreNote?: bool, nameOnAccount?: string, preNoteDate?: string, routingNumber?: string}
+  --marital-status: string # Employee marital status. Common values *D (Divorced), M (Married), S (Single), W (Widowed)*. <br  />Max length: 10 (nullable)
+  --middle-name: string # Employee middle name.<br  /> Max length: 20 (nullable)
+  --non-primary-state-tax: record # Add or update non-primary state tax code, amount type (taxCalculationCode), amount or percentage, filing status, exemptions, supplemental check (specialCheckCalc), and reciprocity code information. — shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, reciprocityCode?: string, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
+  --owner-percent: float # Percentage of employee's ownership in the company, entered as a whole number. <br  /> Decimal (12,2) (nullable)
+  --preferred-name: string # Employee preferred display name.<br  /> Max length: 20 (nullable)
+  --primary-pay-rate: record # Add or update hourly or salary pay rate, effective date, and pay frequency. — shape: {annualSalary?: float, baseRate?: float, beginCheckDate?: string, changeReason?: string, defaultHours?: float, effectiveDate?: string, isAutoPay?: bool, payFrequency?: string, payGrade?: string, payRateNote?: string, payType?: string, ratePer?: string, salary?: float}
+  --primary-state-tax: record # Add or update primary state tax code, amount type (taxCalculationCode), amount or percentage, filing status, exemptions, and supplemental check (specialCheckCalc) information. Only one primary state is allowed. Sending an updated primary state will replace the current primary state. — shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
+  --prior-last-name: string # Prior last name if applicable.<br  />Max length: 40 (nullable)
   --salutation: string # Employee preferred salutation. <br  />Max length: 10 (nullable)
   --ssn: string # Employee social security number. Leave it blank if valid social security number not available. <br  />Max length: 11 (nullable)
   --status: record # Add or update employee status, change reason, effective date, and adjusted seniority date. Note that companies that are still in Implementation cannot hire future employees. — shape: {adjustedSeniorityDate?: string, changeReason?: string, effectiveDate?: string, employeeStatus?: string, hireDate?: string, isEligibleForRehire?: bool, reHireDate?: string, statusType?: string, terminationDate?: string}
   --suffix: string # Employee name suffix. Common values are *Jr, Sr, II*.<br  />Max length: 30 (nullable)
-  --taxSetup: record # Add tax form, 1099 exempt reasons and notes, and 943 agricultural employee information. Once the employee receives wages, this information cannot be updated. Add or update SUI tax state, retirement plan, and statutory information. — shape: {fitwExemptNotes?: string, fitwExemptReason?: string, futaExemptNotes?: string, futaExemptReason?: string, isEmployee943?: bool, isPension?: bool, isStatutory?: bool, medExemptNotes?: string, medExemptReason?: string, sitwExemptNotes?: string, sitwExemptReason?: string, ssExemptNotes?: string, ssExemptReason?: string, suiExemptNotes?: string, suiExemptReason?: string, suiState?: string, taxDistributionCode1099R?: string, taxForm?: string}
-  --veteranDescription: string # Indicates if employee is a veteran. (nullable)
-  --webTime: record # Add or update Web Time badge number and charge rate and synchronize Web Pay and Web Time employee data. — shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
-  --workAddress: record # Add or update employee's work address, phone numbers, and email. Work Location drop down field is not included. — shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, location?: string, mailStop?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
-  --workEligibility: record # Add or update I-9 work authorization information. — shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
+  --tax-setup: record # Add tax form, 1099 exempt reasons and notes, and 943 agricultural employee information. Once the employee receives wages, this information cannot be updated. Add or update SUI tax state, retirement plan, and statutory information. — shape: {fitwExemptNotes?: string, fitwExemptReason?: string, futaExemptNotes?: string, futaExemptReason?: string, isEmployee943?: bool, isPension?: bool, isStatutory?: bool, medExemptNotes?: string, medExemptReason?: string, sitwExemptNotes?: string, sitwExemptReason?: string, ssExemptNotes?: string, ssExemptReason?: string, suiExemptNotes?: string, suiExemptReason?: string, suiState?: string, taxDistributionCode1099R?: string, taxForm?: string}
+  --veteran-description: string # Indicates if employee is a veteran. (nullable)
+  --web-time: record # Add or update Web Time badge number and charge rate and synchronize Web Pay and Web Time employee data. — shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
+  --work-address: record # Add or update employee's work address, phone numbers, and email. Work Location drop down field is not included. — shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, location?: string, mailStop?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
+  --work-eligibility: record # Add or update I-9 work authorization information. — shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)")
-  let body = {additionalDirectDeposit: $additionalDirectDeposit, additionalRate: $additionalRate, benefitSetup: $benefitSetup, birthDate: $birthDate, coEmpCode: $coEmpCode, companyFEIN: $companyFEIN, companyName: $companyName, currency: $currency, customBooleanFields: $customBooleanFields, customDateFields: $customDateFields, customDropDownFields: $customDropDownFields, customNumberFields: $customNumberFields, customTextFields: $customTextFields, departmentPosition: $departmentPosition, disabilityDescription: $disabilityDescription, emergencyContacts: $emergencyContacts, employeeId: $body_employeeId, ethnicity: $ethnicity, federalTax: $federalTax, firstName: $firstName, gender: $gender, homeAddress: $homeAddress, isHighlyCompensated: $isHighlyCompensated, isSmoker: $isSmoker, lastName: $lastName, localTax: $localTax, mainDirectDeposit: $mainDirectDeposit, maritalStatus: $maritalStatus, middleName: $middleName, nonPrimaryStateTax: $nonPrimaryStateTax, ownerPercent: $ownerPercent, preferredName: $preferredName, primaryPayRate: $primaryPayRate, primaryStateTax: $primaryStateTax, priorLastName: $priorLastName, salutation: $salutation, ssn: $ssn, status: $status, suffix: $suffix, taxSetup: $taxSetup, veteranDescription: $veteranDescription, webTime: $webTime, workAddress: $workAddress, workEligibility: $workEligibility} | compact
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id} | format pattern "/v2/companies/{company_id}/employees/{employee_id}"))
+  let body = {"additionalDirectDeposit": $additional_direct_deposit, "additionalRate": $additional_rate, "benefitSetup": $benefit_setup, "birthDate": $birth_date, "coEmpCode": $co_emp_code, "companyFEIN": $company_fein, "companyName": $company_name, "currency": $currency, "customBooleanFields": $custom_boolean_fields, "customDateFields": $custom_date_fields, "customDropDownFields": $custom_drop_down_fields, "customNumberFields": $custom_number_fields, "customTextFields": $custom_text_fields, "departmentPosition": $department_position, "disabilityDescription": $disability_description, "emergencyContacts": $emergency_contacts, "employeeId": $body_employee_id, "ethnicity": $ethnicity, "federalTax": $federal_tax, "firstName": $first_name, "gender": $gender, "homeAddress": $home_address, "isHighlyCompensated": $is_highly_compensated, "isSmoker": $is_smoker, "lastName": $last_name, "localTax": $local_tax, "mainDirectDeposit": $main_direct_deposit, "maritalStatus": $marital_status, "middleName": $middle_name, "nonPrimaryStateTax": $non_primary_state_tax, "ownerPercent": $owner_percent, "preferredName": $preferred_name, "primaryPayRate": $primary_pay_rate, "primaryStateTax": $primary_state_tax, "priorLastName": $prior_last_name, "salutation": $salutation, "ssn": $ssn, "status": $status, "suffix": $suffix, "taxSetup": $tax_setup, "veteranDescription": $veteran_description, "webTime": $web_time, "workAddress": $work_address, "workEligibility": $work_eligibility} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -377,9 +377,9 @@ export def "companies-employees Update-employee" [
 #
 # PUT /v2/companies/{companyId}/employees/{employeeId}/additionalRates
 # operationId: Add or update additional rates
-export def "companies-employees-additional-rates Add-or-update-additional-rates" [
-  companyId: string
-  employeeId: string
+export def "companies-employees-additional-rates put" [
+  company_id: string
+  employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,24 +388,24 @@ export def "companies-employees-additional-rates Add-or-update-additional-rates"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --changeReason: string # Not required. If populated, must match one of the system coded values available in the Additional Rates Change Reason drop down.<br /> (nullable)
-  --costCenter1: string # Not required. Valid values must match one of the system coded cost centers available in the Additional Rates Cost Center level 1 drop down. This cell must be in a text format.<br /> (nullable)
-  --costCenter2: string # Not required. Valid values must match one of the system coded cost centers available in the Additional Rates Cost Center level 2 drop down. This cell must be in a text format.<br /> (nullable)
-  --costCenter3: string # Not required. Valid values must match one of the system coded cost centers available in the Additional Rates Cost Center level 3 drop down. This cell must be in a text format.<br /> (nullable)
-  --effectiveDate: string # Required. Common formats include *MM-DD-CCYY*, *CCYY-MM-DD*.<br /> (nullable, format: paylocity-date)
-  --endCheckDate: string # Not required. Must match one of the system coded check dates available in the Additional Rates End Check Date drop down. Common formats include *MM-DD-CCYY*, *CCYY-MM-DD*.<br /> (nullable, format: paylocity-date)
+  --change-reason: string # Not required. If populated, must match one of the system coded values available in the Additional Rates Change Reason drop down.<br /> (nullable)
+  --cost-center1: string # Not required. Valid values must match one of the system coded cost centers available in the Additional Rates Cost Center level 1 drop down. This cell must be in a text format.<br /> (nullable)
+  --cost-center2: string # Not required. Valid values must match one of the system coded cost centers available in the Additional Rates Cost Center level 2 drop down. This cell must be in a text format.<br /> (nullable)
+  --cost-center3: string # Not required. Valid values must match one of the system coded cost centers available in the Additional Rates Cost Center level 3 drop down. This cell must be in a text format.<br /> (nullable)
+  --effective-date: string # Required. Common formats include *MM-DD-CCYY*, *CCYY-MM-DD*.<br /> (nullable, format: paylocity-date)
+  --end-check-date: string # Not required. Must match one of the system coded check dates available in the Additional Rates End Check Date drop down. Common formats include *MM-DD-CCYY*, *CCYY-MM-DD*.<br /> (nullable, format: paylocity-date)
   --job: string # Not required. If populated, must match one of the system coded values available in the Additional Rates Job drop down.<br /> (nullable)
   --rate: float # Required. Enter dollar amount that corresponds to the Per selection.<br /> (nullable)
-  --rateCode: string # Required. If populated, must match one of the system coded values available in the Additional Rates Rate Code drop down.<br /> (nullable)
-  --rateNotes: string # Not required.<br  />Max length: 4000<br /> (nullable)
-  --ratePer: string # Required. Valid values are HOUR or WEEK.<br /> (nullable)
+  --rate-code: string # Required. If populated, must match one of the system coded values available in the Additional Rates Rate Code drop down.<br /> (nullable)
+  --rate-notes: string # Not required.<br  />Max length: 4000<br /> (nullable)
+  --rate-per: string # Required. Valid values are HOUR or WEEK.<br /> (nullable)
   --shift: string # Not required. If populated, must match one of the system coded values available in the Additional Rates Shift drop down.<br /> (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/additionalRates")
-  let body = {changeReason: $changeReason, costCenter1: $costCenter1, costCenter2: $costCenter2, costCenter3: $costCenter3, effectiveDate: $effectiveDate, endCheckDate: $endCheckDate, job: $job, rate: $rate, rateCode: $rateCode, rateNotes: $rateNotes, ratePer: $ratePer, shift: $shift} | compact
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/additionalRates"))
+  let body = {"changeReason": $change_reason, "costCenter1": $cost_center1, "costCenter2": $cost_center2, "costCenter3": $cost_center3, "effectiveDate": $effective_date, "endCheckDate": $end_check_date, "job": $job, "rate": $rate, "rateCode": $rate_code, "rateNotes": $rate_notes, "ratePer": $rate_per, "shift": $shift} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -416,9 +416,9 @@ export def "companies-employees-additional-rates Add-or-update-additional-rates"
 #
 # PUT /v2/companies/{companyId}/employees/{employeeId}/benefitSetup
 # operationId: Update or add employee benefit setup
-export def "companies-employees-benefit-setup Update-or-add-employee-benefit-setup" [
-  companyId: string
-  employeeId: string
+export def "companies-employees-benefit-setup put" [
+  company_id: string
+  employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,18 +427,18 @@ export def "companies-employees-benefit-setup Update-or-add-employee-benefit-set
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --benefitClass: string # Benefit Class code. Values are configured in Web Pay Company > Setup > Benefits > Classes.<br  />Max length: 30 (nullable)
-  --benefitClassEffectiveDate: string # Date when Benefit Class takes effect. Common formats include *MM-DD-CCYY*, *CCYY-MM-DD*. (nullable, format: paylocity-date)
-  --benefitSalary: float # Salary used to configure benefits.<br  />Decimal(12,2) (nullable)
-  --benefitSalaryEffectiveDate: string # Date when Benefit Salary takes effect. Common formats include *MM-DD-CCYY*, *CCYY-MM-DD*. (nullable, format: paylocity-date)
-  --doNotApplyAdministrativePeriod: oneof<nothing, bool> # Applicable only for HR Enhanced clients and Benefit Classes with ACA Employment Type of Full Time. (nullable)
-  --isMeasureAcaEligibility: oneof<nothing, bool> # Only valid for HR Enhanced clients and Benefit Classes that are ACA Employment Type of Full Time. (nullable)
+  --benefit-class: string # Benefit Class code. Values are configured in Web Pay Company > Setup > Benefits > Classes.<br  />Max length: 30 (nullable)
+  --benefit-class-effective-date: string # Date when Benefit Class takes effect. Common formats include *MM-DD-CCYY*, *CCYY-MM-DD*. (nullable, format: paylocity-date)
+  --benefit-salary: float # Salary used to configure benefits.<br  />Decimal(12,2) (nullable)
+  --benefit-salary-effective-date: string # Date when Benefit Salary takes effect. Common formats include *MM-DD-CCYY*, *CCYY-MM-DD*. (nullable, format: paylocity-date)
+  --do-not-apply-administrative-period: oneof<nothing, bool> # Applicable only for HR Enhanced clients and Benefit Classes with ACA Employment Type of Full Time. (nullable)
+  --is-measure-aca-eligibility: oneof<nothing, bool> # Only valid for HR Enhanced clients and Benefit Classes that are ACA Employment Type of Full Time. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/benefitSetup")
-  let body = {benefitClass: $benefitClass, benefitClassEffectiveDate: $benefitClassEffectiveDate, benefitSalary: $benefitSalary, benefitSalaryEffectiveDate: $benefitSalaryEffectiveDate, doNotApplyAdministrativePeriod: $doNotApplyAdministrativePeriod, isMeasureAcaEligibility: $isMeasureAcaEligibility} | compact
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/benefitSetup"))
+  let body = {"benefitClass": $benefit_class, "benefitClassEffectiveDate": $benefit_class_effective_date, "benefitSalary": $benefit_salary, "benefitSalaryEffectiveDate": $benefit_salary_effective_date, "doNotApplyAdministrativePeriod": $do_not_apply_administrative_period, "isMeasureAcaEligibility": $is_measure_aca_eligibility} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -449,9 +449,9 @@ export def "companies-employees-benefit-setup Update-or-add-employee-benefit-set
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/directDeposit
 # operationId: Get All Direct Deposit
-export def "companies-employees-direct-deposit Get-All-Direct-Deposit" [
-  companyId: string
-  employeeId: string
+export def "companies-employees-direct-deposit get" [
+  company_id: string
+  employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,7 +463,7 @@ export def "companies-employees-direct-deposit Get-All-Direct-Deposit" [
 ]: nothing -> table<additionalDirectDeposit: list<record>, mainDirectDeposit: record<accountNumber: string, accountType: string, blockSpecial: bool, isSkipPreNote: bool, nameOnAccount: string, preNoteDate: string, routingNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/directDeposit")
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/directDeposit"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -473,9 +473,9 @@ export def "companies-employees-direct-deposit Get-All-Direct-Deposit" [
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/earnings
 # operationId: Get All Earnings
-export def "companies-employees-earnings Get-All-Earnings" [
-  companyId: string
-  employeeId: string
+export def "companies-employees-earnings get-by-companyId-employeeId" [
+  company_id: string
+  employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,7 +487,7 @@ export def "companies-employees-earnings Get-All-Earnings" [
 ]: nothing -> table<agency: string, amount: float, annualMaximum: float, calculationCode: string, costCenter1: string, costCenter2: string, costCenter3: string, earningCode: string, effectiveDate: string, endDate: string, frequency: string, goal: float, hoursOrUnits: float, isSelfInsured: bool, jobCode: string, miscellaneousInfo: string, paidTowardsGoal: float, payPeriodMaximum: float, payPeriodMinimum: float, rate: float, rateCode: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/earnings")
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/earnings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -497,9 +497,9 @@ export def "companies-employees-earnings Get-All-Earnings" [
 #
 # PUT /v2/companies/{companyId}/employees/{employeeId}/earnings
 # operationId: Add or update an employee earning
-export def "companies-employees-earnings Add-or-update-an-employee-earning" [
-  companyId: string
-  employeeId: string
+export def "companies-employees-earnings put" [
+  company_id: string
+  employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,32 +510,32 @@ export def "companies-employees-earnings Add-or-update-an-employee-earning" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --agency: string # Third-party agency associated with earning. Must match Company setup.<br  />Max length: 10 (nullable)
   --amount: float # Value that matches CalculationCode to add to gross wages. For percentage (%), enter whole number (10 = 10%).  <br  />Decimal(12,2) (nullable)
-  --annualMaximum: float # Year to Date dollar amount not to be exceeded for an earning in the calendar year. Used only with company driven maximums. <br  />Decimal(12,2) (nullable)
-  --calculationCode: string # Defines how earnings are calculated. Common values are *% (percentage of gross), flat (flat dollar amount)*. Defaulted to the Company setup calcCode for earning. <br  />Max length: 20 (nullable)
-  --costCenter1: string # Cost Center associated with earning. Must match Company setup.<br  /> Max length: 10 (nullable)
-  --costCenter2: string # Cost Center associated with earning. Must match Company setup.<br  /> Max length: 10 (nullable)
-  --costCenter3: string # Cost Center associated with earning. Must match Company setup.<br  /> Max length: 10 (nullable)
-  --earningCode: string # Earning code. Must match Company setup. <br  />Max length: 10 (nullable)
-  --effectiveDate: string # Date earning is active. Defaulted to run date or check date based on Company setup. Common formats are MM-DD-CCYY, CCYY-MM-DD. (nullable, format: paylocity-date)
-  --endDate: string # Stop date of an earning. Common formats are MM-DD-CCYY, CCYY-MM-DD. (nullable, format: paylocity-date)
+  --annual-maximum: float # Year to Date dollar amount not to be exceeded for an earning in the calendar year. Used only with company driven maximums. <br  />Decimal(12,2) (nullable)
+  --calculation-code: string # Defines how earnings are calculated. Common values are *% (percentage of gross), flat (flat dollar amount)*. Defaulted to the Company setup calcCode for earning. <br  />Max length: 20 (nullable)
+  --cost-center1: string # Cost Center associated with earning. Must match Company setup.<br  /> Max length: 10 (nullable)
+  --cost-center2: string # Cost Center associated with earning. Must match Company setup.<br  /> Max length: 10 (nullable)
+  --cost-center3: string # Cost Center associated with earning. Must match Company setup.<br  /> Max length: 10 (nullable)
+  --earning-code: string # Earning code. Must match Company setup. <br  />Max length: 10 (nullable)
+  --effective-date: string # Date earning is active. Defaulted to run date or check date based on Company setup. Common formats are MM-DD-CCYY, CCYY-MM-DD. (nullable, format: paylocity-date)
+  --end-date: string # Stop date of an earning. Common formats are MM-DD-CCYY, CCYY-MM-DD. (nullable, format: paylocity-date)
   --frequency: string # Needed if earning is applied differently from the payroll frequency (one time earning for example).<br  /> Max length: 5 (nullable)
   --goal: float # Dollar amount. The employee earning will stop when the goal amount is reached.<br  /> Decimal(12,2) (nullable)
-  --hoursOrUnits: float # The value is used in conjunction with the Rate field. When entering Group Term Life Insurance (GTL), it should contain the full amount of the group term life insurance policy. <br  /> Decimal(12,2) (nullable)
-  --isSelfInsured: oneof<nothing, bool> # Used for ACA. If not entered, defaulted to Company earning setup. (nullable)
-  --jobCode: string # Job code associated with earnings. Must match Company setup.<br  /> Max length: 20 (nullable)
-  --miscellaneousInfo: string # Information to print on the check stub if agency is set up for this earning. <br  />Max length: 50 (nullable)
-  --paidTowardsGoal: float # Amount already paid to employee toward goal. <br  /> Decimal(12,2) (nullable)
-  --payPeriodMaximum: float # Maximum amount of the earning on a single paycheck. <br  /> Decimal(12,2) (nullable)
-  --payPeriodMinimum: float # Minimum amount of the earning on a single paycheck. <br  /> Decimal(12,2) (nullable)
+  --hours-or-units: float # The value is used in conjunction with the Rate field. When entering Group Term Life Insurance (GTL), it should contain the full amount of the group term life insurance policy. <br  /> Decimal(12,2) (nullable)
+  --is-self-insured: oneof<nothing, bool> # Used for ACA. If not entered, defaulted to Company earning setup. (nullable)
+  --job-code: string # Job code associated with earnings. Must match Company setup.<br  /> Max length: 20 (nullable)
+  --miscellaneous-info: string # Information to print on the check stub if agency is set up for this earning. <br  />Max length: 50 (nullable)
+  --paid-towards-goal: float # Amount already paid to employee toward goal. <br  /> Decimal(12,2) (nullable)
+  --pay-period-maximum: float # Maximum amount of the earning on a single paycheck. <br  /> Decimal(12,2) (nullable)
+  --pay-period-minimum: float # Minimum amount of the earning on a single paycheck. <br  /> Decimal(12,2) (nullable)
   --rate: float # Rate is used in conjunction with the hoursOrUnits field. <br  /> Decimal(12,2) (nullable)
-  --rateCode: string # Rate Code applies to additional pay rates entered for an employee. Must match Company setup. <br  /> Max length: 10 (nullable)
-  --startDate: string # Start date of an earning based on payroll calendar. Common formats are MM-DD-CCYY, CCYY-MM-DD. (nullable, format: paylocity-date)
+  --rate-code: string # Rate Code applies to additional pay rates entered for an employee. Must match Company setup. <br  /> Max length: 10 (nullable)
+  --start-date: string # Start date of an earning based on payroll calendar. Common formats are MM-DD-CCYY, CCYY-MM-DD. (nullable, format: paylocity-date)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/earnings")
-  let body = {agency: $agency, amount: $amount, annualMaximum: $annualMaximum, calculationCode: $calculationCode, costCenter1: $costCenter1, costCenter2: $costCenter2, costCenter3: $costCenter3, earningCode: $earningCode, effectiveDate: $effectiveDate, endDate: $endDate, frequency: $frequency, goal: $goal, hoursOrUnits: $hoursOrUnits, isSelfInsured: $isSelfInsured, jobCode: $jobCode, miscellaneousInfo: $miscellaneousInfo, paidTowardsGoal: $paidTowardsGoal, payPeriodMaximum: $payPeriodMaximum, payPeriodMinimum: $payPeriodMinimum, rate: $rate, rateCode: $rateCode, startDate: $startDate} | compact
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/earnings"))
+  let body = {"agency": $agency, "amount": $amount, "annualMaximum": $annual_maximum, "calculationCode": $calculation_code, "costCenter1": $cost_center1, "costCenter2": $cost_center2, "costCenter3": $cost_center3, "earningCode": $earning_code, "effectiveDate": $effective_date, "endDate": $end_date, "frequency": $frequency, "goal": $goal, "hoursOrUnits": $hours_or_units, "isSelfInsured": $is_self_insured, "jobCode": $job_code, "miscellaneousInfo": $miscellaneous_info, "paidTowardsGoal": $paid_towards_goal, "payPeriodMaximum": $pay_period_maximum, "payPeriodMinimum": $pay_period_minimum, "rate": $rate, "rateCode": $rate_code, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -546,10 +546,10 @@ export def "companies-employees-earnings Add-or-update-an-employee-earning" [
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/earnings/{earningCode}
 # operationId: Get Earnings by Earning Code
-export def "companies-employees-earnings Get-Earnings-by-Earning-Code" [
-  companyId: string
-  employeeId: string
-  earningCode: string
+export def "companies-employees-earnings get-by-companyId-employeeId-earningCode" [
+  company_id: string
+  employee_id: string
+  earning_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -561,7 +561,7 @@ export def "companies-employees-earnings Get-Earnings-by-Earning-Code" [
 ]: nothing -> table<agency: string, amount: float, annualMaximum: float, calculationCode: string, costCenter1: string, costCenter2: string, costCenter3: string, earningCode: string, effectiveDate: string, endDate: string, frequency: string, goal: float, hoursOrUnits: float, isSelfInsured: bool, jobCode: string, miscellaneousInfo: string, paidTowardsGoal: float, payPeriodMaximum: float, payPeriodMinimum: float, rate: float, rateCode: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/earnings/($earningCode)")
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id, earning_code: $earning_code} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/earnings/{earning_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -571,11 +571,11 @@ export def "companies-employees-earnings Get-Earnings-by-Earning-Code" [
 #
 # DELETE /v2/companies/{companyId}/employees/{employeeId}/earnings/{earningCode}/{startDate}
 # operationId: Delete Earning by Earning Code and Start Date
-export def "companies-employees-earnings Delete-Earning-by-Earning-Code-and-Start-Date" [
-  companyId: string
-  employeeId: string
-  earningCode: string
-  startDate: string
+export def "companies-employees-earnings delete" [
+  company_id: string
+  employee_id: string
+  earning_code: string
+  start_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,7 +587,7 @@ export def "companies-employees-earnings Delete-Earning-by-Earning-Code-and-Star
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/earnings/($earningCode)/($startDate)")
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id, earning_code: $earning_code, start_date: $start_date} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/earnings/{earning_code}/{start_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -597,11 +597,11 @@ export def "companies-employees-earnings Delete-Earning-by-Earning-Code-and-Star
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/earnings/{earningCode}/{startDate}
 # operationId: Get Earning by Earning Code and Start Date
-export def "companies-employees-earnings Get-Earning-by-Earning-Code-and-Start-Date" [
-  companyId: string
-  employeeId: string
-  earningCode: string
-  startDate: string
+export def "companies-employees-earnings get-by-companyId-employeeId-earningCode-startDate" [
+  company_id: string
+  employee_id: string
+  earning_code: string
+  start_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -613,7 +613,7 @@ export def "companies-employees-earnings Get-Earning-by-Earning-Code-and-Start-D
 ]: nothing -> record<agency: string, amount: float, annualMaximum: float, calculationCode: string, costCenter1: string, costCenter2: string, costCenter3: string, earningCode: string, effectiveDate: string, endDate: string, frequency: string, goal: float, hoursOrUnits: float, isSelfInsured: bool, jobCode: string, miscellaneousInfo: string, paidTowardsGoal: float, payPeriodMaximum: float, payPeriodMinimum: float, rate: float, rateCode: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/earnings/($earningCode)/($startDate)")
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id, earning_code: $earning_code, start_date: $start_date} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/earnings/{earning_code}/{start_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -623,9 +623,9 @@ export def "companies-employees-earnings Get-Earning-by-Earning-Code-and-Start-D
 #
 # PUT /v2/companies/{companyId}/employees/{employeeId}/emergencyContacts
 # operationId: Add or update emergency contacts
-export def "companies-employees-emergency-contacts Add-or-update-emergency-contacts" [
-  companyId: string
-  employeeId: string
+export def "companies-employees-emergency-contacts put" [
+  company_id: string
+  employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,26 +640,26 @@ export def "companies-employees-emergency-contacts Add-or-update-emergency-conta
   --country: string # County. (nullable)
   --county: string # Country.  Must be a valid 3 character country code.  Common values are *USA* (United States), *CAN* (Canada). (nullable)
   --email: string # Contact email.  Must be valid email address format. (nullable)
-  --firstName: string # Required. Contact first name. <br  />Max length: 40 (nullable)
-  --homePhone: string # Contact Home Phone.  Valid phone format  *(###) #######* or *######-####* or *### ### ####* or *##########* or, if international, starts with *+#*, only spaces and digits allowed. (nullable)
-  --lastName: string # Required. Contact last name. <br  />Max length: 40 (nullable)
-  --mobilePhone: string # Contact Mobile Phone.  Valid phone format  *(###) #######* or *######-####* or *### ### ####* or *##########* or, if international, starts with *+#*, only spaces and digits allowed. (nullable)
+  --first-name: string # Required. Contact first name. <br  />Max length: 40 (nullable)
+  --home-phone: string # Contact Home Phone.  Valid phone format  *(###) #######* or *######-####* or *### ### ####* or *##########* or, if international, starts with *+#*, only spaces and digits allowed. (nullable)
+  --last-name: string # Required. Contact last name. <br  />Max length: 40 (nullable)
+  --mobile-phone: string # Contact Mobile Phone.  Valid phone format  *(###) #######* or *######-####* or *### ### ####* or *##########* or, if international, starts with *+#*, only spaces and digits allowed. (nullable)
   --notes: string # Notes. <br  />Max length: 1000 (nullable)
   --pager: string # Contact Pager.  Valid phone format  *(###) #######* or *######-####* or *### ### ####* or *##########* or, if international, starts with *+#*, only spaces and digits allowed. (nullable)
-  --primaryPhone: string # Required. Contact primary phone type.  Must match Company setup.  Valid  values are H (Home), M (Mobile), P (Pager), W (Work) (nullable)
+  --primary-phone: string # Required. Contact primary phone type.  Must match Company setup.  Valid  values are H (Home), M (Mobile), P (Pager), W (Work) (nullable)
   --priority: string # Required. Contact priority. Valid values are *P* (Primary) or *S* (Secondary). (nullable)
   --relationship: string # Required. Contact relationship.  Must match Company setup.  Common values are Spouse, Mother, Father. (nullable)
   --state: string # State or Province.  If U.S. address, must be valid 2 character state code.  Common values are *IL* (Illinois), *CA* (California). (nullable)
-  --syncEmployeeInfo: oneof<nothing, bool> # Valid values are *true* or *false*.
-  --workExtension: string # Work Extension. (nullable)
-  --workPhone: string # Contact Work Phone.  Valid phone format  *(###) #######* or *######-####* or *### ### ####* or *##########* or, if international, starts with *+#*, only spaces and digits allowed. (nullable)
+  --sync-employee-info: oneof<nothing, bool> # Valid values are *true* or *false*.
+  --work-extension: string # Work Extension. (nullable)
+  --work-phone: string # Contact Work Phone.  Valid phone format  *(###) #######* or *######-####* or *### ### ####* or *##########* or, if international, starts with *+#*, only spaces and digits allowed. (nullable)
   --zip: string # Postal code.  If U.S. address, must be a valid zip code. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/emergencyContacts")
-  let body = {address1: $address1, address2: $address2, city: $city, country: $country, county: $county, email: $email, firstName: $firstName, homePhone: $homePhone, lastName: $lastName, mobilePhone: $mobilePhone, notes: $notes, pager: $pager, primaryPhone: $primaryPhone, priority: $priority, relationship: $relationship, state: $state, syncEmployeeInfo: $syncEmployeeInfo, workExtension: $workExtension, workPhone: $workPhone, zip: $zip} | compact
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/emergencyContacts"))
+  let body = {"address1": $address1, "address2": $address2, "city": $city, "country": $country, "county": $county, "email": $email, "firstName": $first_name, "homePhone": $home_phone, "lastName": $last_name, "mobilePhone": $mobile_phone, "notes": $notes, "pager": $pager, "primaryPhone": $primary_phone, "priority": $priority, "relationship": $relationship, "state": $state, "syncEmployeeInfo": $sync_employee_info, "workExtension": $work_extension, "workPhone": $work_phone, "zip": $zip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -670,9 +670,9 @@ export def "companies-employees-emergency-contacts Add-or-update-emergency-conta
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/localTaxes
 # operationId: Get all local taxes
-export def "companies-employees-local-taxes Get-all-local-taxes" [
-  companyId: string
-  employeeId: string
+export def "companies-employees-local-taxes list" [
+  company_id: string
+  employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,7 +684,7 @@ export def "companies-employees-local-taxes Get-all-local-taxes" [
 ]: nothing -> table<exemptions: float, exemptions2: float, filingStatus: string, residentPSD: string, taxCode: string, workPSD: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/localTaxes")
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/localTaxes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -694,9 +694,9 @@ export def "companies-employees-local-taxes Get-all-local-taxes" [
 #
 # POST /v2/companies/{companyId}/employees/{employeeId}/localTaxes
 # operationId: Add local tax
-export def "companies-employees-local-taxes Add-local-tax" [
-  companyId: string
-  employeeId: string
+export def "companies-employees-local-taxes post" [
+  company_id: string
+  employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -707,16 +707,16 @@ export def "companies-employees-local-taxes Add-local-tax" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --exemptions: float # Local tax exemptions value.<br  />Decimal (12,2) (nullable)
   --exemptions2: float # Local tax exemptions 2 value.<br  />Decimal (12,2) (nullable)
-  --filingStatus: string # Employee local tax filing status. Must match specific local tax setup. <br  /> Max length: 50 (nullable)
-  --residentPSD: string # Resident PSD (political subdivision code) applicable in PA. Must match Company setup.<br  /> Max length: 9 (nullable)
-  --taxCode: string # Local tax code.<br  />Max length: 50 (nullable)
-  --workPSD: string # Work location PSD. Must match Company setup. <br  /> Max length: 9 (nullable)
+  --filing-status: string # Employee local tax filing status. Must match specific local tax setup. <br  /> Max length: 50 (nullable)
+  --resident-psd: string # Resident PSD (political subdivision code) applicable in PA. Must match Company setup.<br  /> Max length: 9 (nullable)
+  --tax-code: string # Local tax code.<br  />Max length: 50 (nullable)
+  --work-psd: string # Work location PSD. Must match Company setup. <br  /> Max length: 9 (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/localTaxes")
-  let body = {exemptions: $exemptions, exemptions2: $exemptions2, filingStatus: $filingStatus, residentPSD: $residentPSD, taxCode: $taxCode, workPSD: $workPSD} | compact
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/localTaxes"))
+  let body = {"exemptions": $exemptions, "exemptions2": $exemptions2, "filingStatus": $filing_status, "residentPSD": $resident_psd, "taxCode": $tax_code, "workPSD": $work_psd} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -727,10 +727,10 @@ export def "companies-employees-local-taxes Add-local-tax" [
 #
 # DELETE /v2/companies/{companyId}/employees/{employeeId}/localTaxes/{taxCode}
 # operationId: Delete local tax by tax code
-export def "companies-employees-local-taxes Delete-local-tax-by-tax-code" [
-  companyId: string
-  employeeId: string
-  taxCode: string
+export def "companies-employees-local-taxes delete" [
+  company_id: string
+  employee_id: string
+  tax_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,7 +742,7 @@ export def "companies-employees-local-taxes Delete-local-tax-by-tax-code" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/localTaxes/($taxCode)")
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id, tax_code: $tax_code} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/localTaxes/{tax_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -752,10 +752,10 @@ export def "companies-employees-local-taxes Delete-local-tax-by-tax-code" [
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/localTaxes/{taxCode}
 # operationId: Get local tax by tax code
-export def "companies-employees-local-taxes Get-local-tax-by-tax-code" [
-  companyId: string
-  employeeId: string
-  taxCode: string
+export def "companies-employees-local-taxes get" [
+  company_id: string
+  employee_id: string
+  tax_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,7 +767,7 @@ export def "companies-employees-local-taxes Get-local-tax-by-tax-code" [
 ]: nothing -> table<exemptions: float, exemptions2: float, filingStatus: string, residentPSD: string, taxCode: string, workPSD: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/localTaxes/($taxCode)")
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id, tax_code: $tax_code} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/localTaxes/{tax_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -777,9 +777,9 @@ export def "companies-employees-local-taxes Get-local-tax-by-tax-code" [
 #
 # PUT /v2/companies/{companyId}/employees/{employeeId}/nonprimaryStateTax
 # operationId: Add or update non-primary state tax
-export def "companies-employees-nonprimary-state-tax Add-or-update-non-primary-state-tax" [
-  companyId: string
-  employeeId: string
+export def "companies-employees-nonprimary-state-tax put" [
+  company_id: string
+  employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -789,25 +789,25 @@ export def "companies-employees-nonprimary-state-tax Add-or-update-non-primary-s
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --amount: float # State tax code.<br  /> Max length: 50 (nullable)
-  --deductionsAmount: float # Box 4(b) on form W4 (year 2020 or later): Deductions amount. <br  />Decimal (12,2)
-  --dependentsAmount: float # Box 3 on form W4 (year 2020 or later): Total dependents amount. <br  />Decimal (12,2)
+  --deductions-amount: float # Box 4(b) on form W4 (year 2020 or later): Deductions amount. <br  />Decimal (12,2)
+  --dependents-amount: float # Box 3 on form W4 (year 2020 or later): Total dependents amount. <br  />Decimal (12,2)
   --exemptions: float # State tax exemptions value.<br  />Decimal (12,2) (nullable)
   --exemptions2: float # State tax exemptions 2 value.<br  />Decimal (12,2) (nullable)
-  --filingStatus: string # Employee state tax filing status. Common values are *S* (Single), *M* (Married).<br  />Max length: 50 (nullable)
-  --higherRate: oneof<nothing, bool> # Box 2(c) on form W4 (year 2020 or later): Multiple Jobs or Spouse Works. <br  />Boolean
-  --otherIncomeAmount: float # Box 4(a) on form W4 (year 2020 or later): Other income amount. <br  />Decimal (12,2)
+  --filing-status: string # Employee state tax filing status. Common values are *S* (Single), *M* (Married).<br  />Max length: 50 (nullable)
+  --higher-rate: oneof<nothing, bool> # Box 2(c) on form W4 (year 2020 or later): Multiple Jobs or Spouse Works. <br  />Boolean
+  --other-income-amount: float # Box 4(a) on form W4 (year 2020 or later): Other income amount. <br  />Decimal (12,2)
   --percentage: float # State Tax percentage. <br  />Decimal (12,2) (nullable)
-  --reciprocityCode: string # Non-primary state tax reciprocity code.<br  /> Max length: 50 (nullable)
-  --specialCheckCalc: string # Supplemental check calculation code. Common values are *Blocked* (Taxes blocked on Supplemental checks), *Supp* (Use supplemental Tax Rate-Code). <br  />Max length: 10 (nullable)
-  --taxCalculationCode: string # Tax calculation code. Common values are *F* (Flat), *P* (Percentage), *FDFP* (Flat Dollar Amount plus Fixed Percentage). <br  />Max length: 10 (nullable)
-  --taxCode: string # State tax code.<br  /> Max length: 50 (nullable)
-  --w4FormYear: int # The state W4 form year <br  />Integer
+  --reciprocity-code: string # Non-primary state tax reciprocity code.<br  /> Max length: 50 (nullable)
+  --special-check-calc: string # Supplemental check calculation code. Common values are *Blocked* (Taxes blocked on Supplemental checks), *Supp* (Use supplemental Tax Rate-Code). <br  />Max length: 10 (nullable)
+  --tax-calculation-code: string # Tax calculation code. Common values are *F* (Flat), *P* (Percentage), *FDFP* (Flat Dollar Amount plus Fixed Percentage). <br  />Max length: 10 (nullable)
+  --tax-code: string # State tax code.<br  /> Max length: 50 (nullable)
+  --w4-form-year: int # The state W4 form year <br  />Integer
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/nonprimaryStateTax")
-  let body = {amount: $amount, deductionsAmount: $deductionsAmount, dependentsAmount: $dependentsAmount, exemptions: $exemptions, exemptions2: $exemptions2, filingStatus: $filingStatus, higherRate: $higherRate, otherIncomeAmount: $otherIncomeAmount, percentage: $percentage, reciprocityCode: $reciprocityCode, specialCheckCalc: $specialCheckCalc, taxCalculationCode: $taxCalculationCode, taxCode: $taxCode, w4FormYear: $w4FormYear} | compact
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/nonprimaryStateTax"))
+  let body = {"amount": $amount, "deductionsAmount": $deductions_amount, "dependentsAmount": $dependents_amount, "exemptions": $exemptions, "exemptions2": $exemptions2, "filingStatus": $filing_status, "higherRate": $higher_rate, "otherIncomeAmount": $other_income_amount, "percentage": $percentage, "reciprocityCode": $reciprocity_code, "specialCheckCalc": $special_check_calc, "taxCalculationCode": $tax_calculation_code, "taxCode": $tax_code, "w4FormYear": $w4_form_year} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -818,9 +818,9 @@ export def "companies-employees-nonprimary-state-tax Add-or-update-non-primary-s
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/paystatement/details/{year}
 # operationId: Gets employee pay statement detail data based on the specified year
-export def "companies-employees-paystatement-details Gets-employee-pay-statement-detail-data-based-on-the-specified-year" [
-  companyId: string
-  employeeId: string
+export def "companies-employees-paystatement-details get-s-employee-pay-statement-detail-data-based-on-the-specified" [
+  company_id: string
+  employee_id: string
   year: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -838,7 +838,7 @@ export def "companies-employees-paystatement-details Gets-employee-pay-statement
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "pagenumber" $pagenumber "scalar") (serialize-qp "includetotalcount" $includetotalcount "scalar") (serialize-qp "codegroup" $codegroup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/paystatement/details/($year)" $qp)
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id, year: $year} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/paystatement/details/{year}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -848,11 +848,11 @@ export def "companies-employees-paystatement-details Gets-employee-pay-statement
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/paystatement/details/{year}/{checkDate}
 # operationId: Gets employee pay statement detail data based on the specified year and check date
-export def "companies-employees-paystatement-details Gets-employee-pay-statement-detail-data-based-on-the-specified-year-and-check-date" [
-  companyId: string
-  employeeId: string
+export def "companies-employees-paystatement-details get-s-employee-pay-statement-detail-data-based-on-the-specified-and-check-date" [
+  company_id: string
+  employee_id: string
   year: string
-  checkDate: string
+  check_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -869,7 +869,7 @@ export def "companies-employees-paystatement-details Gets-employee-pay-statement
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "pagenumber" $pagenumber "scalar") (serialize-qp "includetotalcount" $includetotalcount "scalar") (serialize-qp "codegroup" $codegroup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/paystatement/details/($year)/($checkDate)" $qp)
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id, year: $year, check_date: $check_date} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/paystatement/details/{year}/{check_date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -879,9 +879,9 @@ export def "companies-employees-paystatement-details Gets-employee-pay-statement
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/paystatement/summary/{year}
 # operationId: Gets employee pay statement summary data based on the specified year
-export def "companies-employees-paystatement-summary Gets-employee-pay-statement-summary-data-based-on-the-specified-year" [
-  companyId: string
-  employeeId: string
+export def "companies-employees-paystatement-summary get-s-employee-pay-statement-summary-data-based-on-the-specified" [
+  company_id: string
+  employee_id: string
   year: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -899,7 +899,7 @@ export def "companies-employees-paystatement-summary Gets-employee-pay-statement
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "pagenumber" $pagenumber "scalar") (serialize-qp "includetotalcount" $includetotalcount "scalar") (serialize-qp "codegroup" $codegroup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/paystatement/summary/($year)" $qp)
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id, year: $year} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/paystatement/summary/{year}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -909,11 +909,11 @@ export def "companies-employees-paystatement-summary Gets-employee-pay-statement
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/paystatement/summary/{year}/{checkDate}
 # operationId: Gets employee pay statement summary data based on the specified year and check date
-export def "companies-employees-paystatement-summary Gets-employee-pay-statement-summary-data-based-on-the-specified-year-and-check-date" [
-  companyId: string
-  employeeId: string
+export def "companies-employees-paystatement-summary get-s-employee-pay-statement-summary-data-based-on-the-specified-and-check-date" [
+  company_id: string
+  employee_id: string
   year: string
-  checkDate: string
+  check_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -930,7 +930,7 @@ export def "companies-employees-paystatement-summary Gets-employee-pay-statement
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "pagenumber" $pagenumber "scalar") (serialize-qp "includetotalcount" $includetotalcount "scalar") (serialize-qp "codegroup" $codegroup "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/paystatement/summary/($year)/($checkDate)" $qp)
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id, year: $year, check_date: $check_date} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/paystatement/summary/{year}/{check_date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -940,9 +940,9 @@ export def "companies-employees-paystatement-summary Gets-employee-pay-statement
 #
 # PUT /v2/companies/{companyId}/employees/{employeeId}/primaryStateTax
 # operationId: Add or update primary state tax
-export def "companies-employees-primary-state-tax Add-or-update-primary-state-tax" [
-  companyId: string
-  employeeId: string
+export def "companies-employees-primary-state-tax put" [
+  company_id: string
+  employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -952,24 +952,24 @@ export def "companies-employees-primary-state-tax Add-or-update-primary-state-ta
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --amount: float # State tax code.<br  /> Max length: 50 (nullable)
-  --deductionsAmount: float # Box 4(b) on form W4 (year 2020 or later): Deductions amount. <br  />Decimal (12,2)
-  --dependentsAmount: float # Box 3 on form W4 (year 2020 or later): Total dependents amount. <br  />Decimal (12,2)
+  --deductions-amount: float # Box 4(b) on form W4 (year 2020 or later): Deductions amount. <br  />Decimal (12,2)
+  --dependents-amount: float # Box 3 on form W4 (year 2020 or later): Total dependents amount. <br  />Decimal (12,2)
   --exemptions: float # State tax exemptions value.<br  />Decimal (12,2) (nullable)
   --exemptions2: float # State tax exemptions 2 value.<br  />Decimal (12,2) (nullable)
-  --filingStatus: string # Employee state tax filing status. Common values are *S* (Single), *M* (Married).<br  />Max length: 50 (nullable)
-  --higherRate: oneof<nothing, bool> # Box 2(c) on form W4 (year 2020 or later): Multiple Jobs or Spouse Works. <br  />Boolean
-  --otherIncomeAmount: float # Box 4(a) on form W4 (year 2020 or later): Other income amount. <br  />Decimal (12,2)
+  --filing-status: string # Employee state tax filing status. Common values are *S* (Single), *M* (Married).<br  />Max length: 50 (nullable)
+  --higher-rate: oneof<nothing, bool> # Box 2(c) on form W4 (year 2020 or later): Multiple Jobs or Spouse Works. <br  />Boolean
+  --other-income-amount: float # Box 4(a) on form W4 (year 2020 or later): Other income amount. <br  />Decimal (12,2)
   --percentage: float # State Tax percentage. <br  />Decimal (12,2) (nullable)
-  --specialCheckCalc: string # Supplemental check calculation code. Common values are *Blocked* (Taxes blocked on Supplemental checks), *Supp* (Use supplemental Tax Rate-Code). <br  />Max length: 10 (nullable)
-  --taxCalculationCode: string # Tax calculation code. Common values are *F* (Flat), *P* (Percentage), *FDFP* (Flat Dollar Amount plus Fixed Percentage). <br  />Max length: 10 (nullable)
-  --taxCode: string # State tax code.<br  /> Max length: 50 (nullable)
-  --w4FormYear: int # The state W4 form year <br  />Integer
+  --special-check-calc: string # Supplemental check calculation code. Common values are *Blocked* (Taxes blocked on Supplemental checks), *Supp* (Use supplemental Tax Rate-Code). <br  />Max length: 10 (nullable)
+  --tax-calculation-code: string # Tax calculation code. Common values are *F* (Flat), *P* (Percentage), *FDFP* (Flat Dollar Amount plus Fixed Percentage). <br  />Max length: 10 (nullable)
+  --tax-code: string # State tax code.<br  /> Max length: 50 (nullable)
+  --w4-form-year: int # The state W4 form year <br  />Integer
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/primaryStateTax")
-  let body = {amount: $amount, deductionsAmount: $deductionsAmount, dependentsAmount: $dependentsAmount, exemptions: $exemptions, exemptions2: $exemptions2, filingStatus: $filingStatus, higherRate: $higherRate, otherIncomeAmount: $otherIncomeAmount, percentage: $percentage, specialCheckCalc: $specialCheckCalc, taxCalculationCode: $taxCalculationCode, taxCode: $taxCode, w4FormYear: $w4FormYear} | compact
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/primaryStateTax"))
+  let body = {"amount": $amount, "deductionsAmount": $deductions_amount, "dependentsAmount": $dependents_amount, "exemptions": $exemptions, "exemptions2": $exemptions2, "filingStatus": $filing_status, "higherRate": $higher_rate, "otherIncomeAmount": $other_income_amount, "percentage": $percentage, "specialCheckCalc": $special_check_calc, "taxCalculationCode": $tax_calculation_code, "taxCode": $tax_code, "w4FormYear": $w4_form_year} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -980,9 +980,9 @@ export def "companies-employees-primary-state-tax Add-or-update-primary-state-ta
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/sensitivedata
 # operationId: Get sensitive data
-export def "companies-employees-sensitivedata Get-sensitive-data" [
-  companyId: string
-  employeeId: string
+export def "companies-employees-sensitivedata get" [
+  company_id: string
+  employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -994,7 +994,7 @@ export def "companies-employees-sensitivedata Get-sensitive-data" [
 ]: nothing -> table<disability: record<disability: string, disabilityClassifications: list, hasDisability: string>, ethnicity: record<ethnicRacialIdentities: list, ethnicity: string>, gender: record<displayPronouns: bool, genderIdentityDescription: string, identifyAsLegalGender: string, legalGender: string, pronouns: string, sexualOrientation: string>, veteran: record<isVeteran: string, veteran: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/sensitivedata")
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/sensitivedata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1008,9 +1008,9 @@ export def "companies-employees-sensitivedata Get-sensitive-data" [
 # --ethnicity shape: {ethnicRacialIdentities?: list, ethnicity?: string}
 # --gender shape: {displayPronouns?: bool, genderIdentityDescription?: string, identifyAsLegalGender?: string, legalGender?: string, pronouns?: string, sexualOrientation?: string}
 # --veteran shape: {isVeteran?: string, veteran?: string}
-export def "companies-employees-sensitivedata Add-or-update-Sensitive-Data" [
-  companyId: string
-  employeeId: string
+export def "companies-employees-sensitivedata put" [
+  company_id: string
+  employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1027,8 +1027,8 @@ export def "companies-employees-sensitivedata Add-or-update-Sensitive-Data" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/employees/($employeeId)/sensitivedata")
-  let body = {disability: $disability, ethnicity: $ethnicity, gender: $gender, veteran: $veteran} | compact
+  let full_url = (build-url $base ({company_id: $company_id, employee_id: $employee_id} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/sensitivedata"))
+  let body = {"disability": $disability, "ethnicity": $ethnicity, "gender": $gender, "veteran": $veteran} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1039,8 +1039,8 @@ export def "companies-employees-sensitivedata Add-or-update-Sensitive-Data" [
 #
 # GET /v2/companies/{companyId}/openapi
 # operationId: Get company-specific Open API documentation
-export def "companies-openapi Get-company-specific-Open-API-documentation" [
-  companyId: string
+export def "companies-openapi get" [
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1049,12 +1049,12 @@ export def "companies-openapi Get-company-specific-Open-API-documentation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer + JWT
+  --authorization: string # Bearer + JWT
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/companies/($companyId)/openapi")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/v2/companies/{company_id}/openapi"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1065,7 +1065,7 @@ export def "companies-openapi Get-company-specific-Open-API-documentation" [
 #
 # POST /v2/credentials/secrets
 # operationId: Add Client Secret
-export def "credentials-secrets Add-Client-Secret" [
+export def "credentials-secrets post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1080,7 +1080,7 @@ export def "credentials-secrets Add-Client-Secret" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/credentials/secrets")
-  let body = {code: $code} | compact
+  let body = {"code": $code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1110,8 +1110,8 @@ export def "credentials-secrets Add-Client-Secret" [
 # --webTime shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
 # --workAddress item shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
 # --workEligibility item shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
-export def "weblinkstaging-companies-employees-newemployees Add-new-employee-to-Web-Link" [
-  companyId: string
+export def "weblinkstaging-companies-employees-newemployees post" [
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1120,57 +1120,57 @@ export def "weblinkstaging-companies-employees-newemployees Add-new-employee-to-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --additionalDirectDeposit: list # Add up to 19 direct deposit accounts in addition to the main direct deposit account. IMPORTANT: A direct deposit update will remove ALL existing main and additional direct deposit information in WebPay and replace with information provided on the request. GET API will not return direct deposit data. — item shape: {accountNumber?: string, accountType?: string, amount?: float, amountType?: string, isSkipPreNote?: bool, preNoteDate?: string, routingNumber?: string}
-  --benefitSetup: list # Add setup values used for employee benefits integration, insurance plan settings, and ACA reporting. — item shape: {benefitClass?: string, benefitClassEffectiveDate?: string, benefitSalary?: float, benefitSalaryEffectiveDate?: string, doNotApplyAdministrativePeriod?: bool, isMeasureAcaEligibility?: bool}
-  --birthDate: string # Employee birthdate. Common formats include *MM-DD-CCYY*, *CCYY-MM-DD*. (nullable, format: paylocity-date)
-  --customBooleanFields: list # Up to 8 custom fields of boolean (checkbox) type value. — item shape: {category: "PayrollAndHR", label: string, value: bool}
-  --customDateFields: list # Up to 8 custom fields of the date type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
-  --customDropDownFields: list # Up to 8 custom fields of the dropdown type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
-  --customNumberFields: list # Up to 8 custom fields of numeric type value. — item shape: {category: "PayrollAndHR", label: string, value: float}
-  --customTextFields: list # Up to 8 custom fields of text type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
-  --departmentPosition: list # Add home department cost center, position, supervisor, reviewer, employment type, EEO class, pay settings, and union information. — item shape: {changeReason?: string, clockBadgeNumber?: string, costCenter1?: string, costCenter2?: string, costCenter3?: string, effectiveDate?: string, employeeType?: string, equalEmploymentOpportunityClass?: string, isMinimumWageExempt?: bool, isOvertimeExempt?: bool, isSupervisorReviewer?: bool, isUnionDuesCollected?: bool, isUnionInitiationCollected?: bool, jobTitle?: string, payGroup?: string, positionCode?: string, shift?: string, supervisorCompanyNumber?: string, supervisorEmployeeId?: string, tipped?: string, unionAffiliationDate?: string, unionCode?: string, unionPosition?: string, workersCompensation?: string}
-  --disabilityDescription: string # Indicates if employee has disability status. (nullable)
-  --employeeId: string # Leave blank to have Web Pay automatically assign the next available employee ID.<br  /> Max length: 10 (nullable)
+  --additional-direct-deposit: list # Add up to 19 direct deposit accounts in addition to the main direct deposit account. IMPORTANT: A direct deposit update will remove ALL existing main and additional direct deposit information in WebPay and replace with information provided on the request. GET API will not return direct deposit data. — item shape: {accountNumber?: string, accountType?: string, amount?: float, amountType?: string, isSkipPreNote?: bool, preNoteDate?: string, routingNumber?: string}
+  --benefit-setup: list # Add setup values used for employee benefits integration, insurance plan settings, and ACA reporting. — item shape: {benefitClass?: string, benefitClassEffectiveDate?: string, benefitSalary?: float, benefitSalaryEffectiveDate?: string, doNotApplyAdministrativePeriod?: bool, isMeasureAcaEligibility?: bool}
+  --birth-date: string # Employee birthdate. Common formats include *MM-DD-CCYY*, *CCYY-MM-DD*. (nullable, format: paylocity-date)
+  --custom-boolean-fields: list # Up to 8 custom fields of boolean (checkbox) type value. — item shape: {category: "PayrollAndHR", label: string, value: bool}
+  --custom-date-fields: list # Up to 8 custom fields of the date type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
+  --custom-drop-down-fields: list # Up to 8 custom fields of the dropdown type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
+  --custom-number-fields: list # Up to 8 custom fields of numeric type value. — item shape: {category: "PayrollAndHR", label: string, value: float}
+  --custom-text-fields: list # Up to 8 custom fields of text type value. — item shape: {category: "PayrollAndHR", label: string, value: string}
+  --department-position: list # Add home department cost center, position, supervisor, reviewer, employment type, EEO class, pay settings, and union information. — item shape: {changeReason?: string, clockBadgeNumber?: string, costCenter1?: string, costCenter2?: string, costCenter3?: string, effectiveDate?: string, employeeType?: string, equalEmploymentOpportunityClass?: string, isMinimumWageExempt?: bool, isOvertimeExempt?: bool, isSupervisorReviewer?: bool, isUnionDuesCollected?: bool, isUnionInitiationCollected?: bool, jobTitle?: string, payGroup?: string, positionCode?: string, shift?: string, supervisorCompanyNumber?: string, supervisorEmployeeId?: string, tipped?: string, unionAffiliationDate?: string, unionCode?: string, unionPosition?: string, workersCompensation?: string}
+  --disability-description: string # Indicates if employee has disability status. (nullable)
+  --employee-id: string # Leave blank to have Web Pay automatically assign the next available employee ID.<br  /> Max length: 10 (nullable)
   --ethnicity: string # Employee ethnicity.<br  /> Max length: 10 (nullable)
-  --federalTax: list # Add federal tax amount type (taxCalculationCode), amount or percentage, filing status, and exemptions. — item shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, taxCalculationCode?: string, w4FormYear?: int}
-  --firstName: string # Employee first name. <br  />Max length: 40 (nullable)
-  --fitwExemptReason: string # Reason code for FITW exemption. Common values are *SE* (Statutory employee), *CR* (clergy/Religious). <br  /> Max length: 30 (nullable)
-  --futaExemptReason: string # Reason code for FUTA exemption. Common values are *501* (5019c)(3) Organization), *IC* (Independent Contractor).<br  /> Max length: 30 (nullable)
+  --federal-tax: list # Add federal tax amount type (taxCalculationCode), amount or percentage, filing status, and exemptions. — item shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, taxCalculationCode?: string, w4FormYear?: int}
+  --first-name: string # Employee first name. <br  />Max length: 40 (nullable)
+  --fitw-exempt-reason: string # Reason code for FITW exemption. Common values are *SE* (Statutory employee), *CR* (clergy/Religious). <br  /> Max length: 30 (nullable)
+  --futa-exempt-reason: string # Reason code for FUTA exemption. Common values are *501* (5019c)(3) Organization), *IC* (Independent Contractor).<br  /> Max length: 30 (nullable)
   --gender: string # Employee gender. Common values *M* (Male), *F* (Female). <br  />Max length: 1 (nullable)
-  --homeAddress: list # Add employee's home address, personal phone numbers, and personal email. — item shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, mobilePhone?: string, phone?: string, postalCode?: string, state?: string}
-  --isEmployee943: oneof<nothing, bool> # Indicates if employee in agriculture or farming. (nullable)
-  --isSmoker: oneof<nothing, bool> # Indicates if employee is a smoker. (nullable)
-  --lastName: string # Employee last name. <br  />Max length: 40 (nullable)
-  --localTax: list # Add local tax code, filing status, and exemptions including PA-PSD taxes. — item shape: {exemptions?: float, exemptions2?: float, filingStatus?: string, residentPSD?: string, taxCode?: string, workPSD?: string}
-  --mainDirectDeposit: list # Add the main direct deposit account. After deposits are made to any additional direct deposit accounts, the remaining net check is deposited in the main direct deposit account. IMPORTANT: A direct deposit update will remove ALL existing main and additional direct deposit information in WebPay and replace with what is provided on the request. GET API will not return direct deposit data. — item shape: {accountNumber?: string, accountType?: string, isSkipPreNote?: bool, preNoteDate?: string, routingNumber?: string}
-  --maritalStatus: string # Employee marital status. Common values *D (Divorced), M (Married), S (Single), W (Widowed)*. <br  />Max length: 10 (nullable)
-  --medExemptReason: string # Reason code for Medicare exemption. Common values are *501* (5019c)(3) Organization), *IC* (Independent Contractor).<br  /> Max length: 30 (nullable)
-  --middleName: string # Employee middle name.<br  /> Max length: 20 (nullable)
-  --nonPrimaryStateTax: list # Add non-primary state tax code, amount type (taxCalculationCode), amount or percentage, filing status, exemptions, supplemental check (specialCheckCalc), and reciprocity code information. — item shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, reciprocityCode?: string, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
-  --preferredName: string # Employee preferred display name.<br  /> Max length: 20 (nullable)
-  --primaryPayRate: list # Add hourly or salary pay rate, effective date, and pay frequency. — item shape: {baseRate?: float, changeReason?: string, defaultHours?: float, effectiveDate?: string, isAutoPay?: bool, payFrequency?: string, payGrade?: string, payType?: string, ratePer?: string, salary?: float}
-  --primaryStateTax: list # Add primary state tax code, amount type (taxCalculationCode), amount or percentage, filing status, exemptions, and supplemental check (specialCheckCalc) information. Only one primary state is allowed. — item shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
-  --priorLastName: string # Prior last name if applicable.<br  />Max length: 40 (nullable)
+  --home-address: list # Add employee's home address, personal phone numbers, and personal email. — item shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, mobilePhone?: string, phone?: string, postalCode?: string, state?: string}
+  --is-employee943: oneof<nothing, bool> # Indicates if employee in agriculture or farming. (nullable)
+  --is-smoker: oneof<nothing, bool> # Indicates if employee is a smoker. (nullable)
+  --last-name: string # Employee last name. <br  />Max length: 40 (nullable)
+  --local-tax: list # Add local tax code, filing status, and exemptions including PA-PSD taxes. — item shape: {exemptions?: float, exemptions2?: float, filingStatus?: string, residentPSD?: string, taxCode?: string, workPSD?: string}
+  --main-direct-deposit: list # Add the main direct deposit account. After deposits are made to any additional direct deposit accounts, the remaining net check is deposited in the main direct deposit account. IMPORTANT: A direct deposit update will remove ALL existing main and additional direct deposit information in WebPay and replace with what is provided on the request. GET API will not return direct deposit data. — item shape: {accountNumber?: string, accountType?: string, isSkipPreNote?: bool, preNoteDate?: string, routingNumber?: string}
+  --marital-status: string # Employee marital status. Common values *D (Divorced), M (Married), S (Single), W (Widowed)*. <br  />Max length: 10 (nullable)
+  --med-exempt-reason: string # Reason code for Medicare exemption. Common values are *501* (5019c)(3) Organization), *IC* (Independent Contractor).<br  /> Max length: 30 (nullable)
+  --middle-name: string # Employee middle name.<br  /> Max length: 20 (nullable)
+  --non-primary-state-tax: list # Add non-primary state tax code, amount type (taxCalculationCode), amount or percentage, filing status, exemptions, supplemental check (specialCheckCalc), and reciprocity code information. — item shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, reciprocityCode?: string, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
+  --preferred-name: string # Employee preferred display name.<br  /> Max length: 20 (nullable)
+  --primary-pay-rate: list # Add hourly or salary pay rate, effective date, and pay frequency. — item shape: {baseRate?: float, changeReason?: string, defaultHours?: float, effectiveDate?: string, isAutoPay?: bool, payFrequency?: string, payGrade?: string, payType?: string, ratePer?: string, salary?: float}
+  --primary-state-tax: list # Add primary state tax code, amount type (taxCalculationCode), amount or percentage, filing status, exemptions, and supplemental check (specialCheckCalc) information. Only one primary state is allowed. — item shape: {amount?: float, deductionsAmount?: float, dependentsAmount?: float, exemptions?: float, exemptions2?: float, filingStatus?: string, higherRate?: bool, otherIncomeAmount?: float, percentage?: float, specialCheckCalc?: string, taxCalculationCode?: string, taxCode?: string, w4FormYear?: int}
+  --prior-last-name: string # Prior last name if applicable.<br  />Max length: 40 (nullable)
   --salutation: string # Employee preferred salutation. <br  />Max length: 10 (nullable)
-  --sitwExemptReason: string # Reason code for SITW exemption. Common values are *SE* (Statutory employee), *CR* (clergy/Religious). <br  /> Max length: 30 (nullable)
-  --ssExemptReason: string # Reason code for Social Security exemption. Common values are *SE* (Statutory employee), *CR* (clergy/Religious). <br  /> Max length: 30 (nullable)
+  --sitw-exempt-reason: string # Reason code for SITW exemption. Common values are *SE* (Statutory employee), *CR* (clergy/Religious). <br  /> Max length: 30 (nullable)
+  --ss-exempt-reason: string # Reason code for Social Security exemption. Common values are *SE* (Statutory employee), *CR* (clergy/Religious). <br  /> Max length: 30 (nullable)
   --ssn: string # Employee social security number. Leave it blank if valid social security number not available. <br  />Max length: 11 (nullable)
   --status: list # Add employee status, change reason, effective date, and adjusted seniority date. Note that companies that are still in Implementation cannot hire future employees. — item shape: {adjustedSeniorityDate?: string, changeReason?: string, effectiveDate?: string, employeeStatus?: string, hireDate?: string, isEligibleForRehire?: bool}
   --suffix: string # Employee name suffix. Common values are *Jr, Sr, II*.<br  />Max length: 30 (nullable)
-  --suiExemptReason: string # Reason code for SUI exemption. Common values are *SE* (Statutory employee), *CR* (clergy/Religious). <br  /> Max length: 30 (nullable)
-  --suiState: string # Employee SUI (State Unemployment Insurance) state. <br  />Max length: 2 (nullable)
-  --taxDistributionCode1099R: string # Employee 1099R distribution code. Common values are *7* (Normal Distribution), *F* (Charitable Gift Annuity). <br  />Max length: 1 (nullable)
-  --taxForm: string # Employee tax form for reporting income. Valid values are *W2, 1099M, 1099R*. Default is W2. <br  />Max length: 15 (nullable)
-  --veteranDescription: string # Indicates if employee is a veteran. (nullable)
-  --webTime: record # Add Web Time badge number and charge rate and synchronize Web Pay and Web Time employee data. — shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
-  --workAddress: list # Add employee's work address, phone numbers, and email. Work Location drop down field is not included. — item shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
-  --workEligibility: list # Add I-9 work authorization information. — item shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
+  --sui-exempt-reason: string # Reason code for SUI exemption. Common values are *SE* (Statutory employee), *CR* (clergy/Religious). <br  /> Max length: 30 (nullable)
+  --sui-state: string # Employee SUI (State Unemployment Insurance) state. <br  />Max length: 2 (nullable)
+  --tax-distribution-code1099-r: string # Employee 1099R distribution code. Common values are *7* (Normal Distribution), *F* (Charitable Gift Annuity). <br  />Max length: 1 (nullable)
+  --tax-form: string # Employee tax form for reporting income. Valid values are *W2, 1099M, 1099R*. Default is W2. <br  />Max length: 15 (nullable)
+  --veteran-description: string # Indicates if employee is a veteran. (nullable)
+  --web-time: record # Add Web Time badge number and charge rate and synchronize Web Pay and Web Time employee data. — shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
+  --work-address: list # Add employee's work address, phone numbers, and email. Work Location drop down field is not included. — item shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
+  --work-eligibility: list # Add I-9 work authorization information. — item shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
 ]: any -> table<trackingNumber: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/weblinkstaging/companies/($companyId)/employees/newemployees")
-  let body = {additionalDirectDeposit: $additionalDirectDeposit, benefitSetup: $benefitSetup, birthDate: $birthDate, customBooleanFields: $customBooleanFields, customDateFields: $customDateFields, customDropDownFields: $customDropDownFields, customNumberFields: $customNumberFields, customTextFields: $customTextFields, departmentPosition: $departmentPosition, disabilityDescription: $disabilityDescription, employeeId: $employeeId, ethnicity: $ethnicity, federalTax: $federalTax, firstName: $firstName, fitwExemptReason: $fitwExemptReason, futaExemptReason: $futaExemptReason, gender: $gender, homeAddress: $homeAddress, isEmployee943: $isEmployee943, isSmoker: $isSmoker, lastName: $lastName, localTax: $localTax, mainDirectDeposit: $mainDirectDeposit, maritalStatus: $maritalStatus, medExemptReason: $medExemptReason, middleName: $middleName, nonPrimaryStateTax: $nonPrimaryStateTax, preferredName: $preferredName, primaryPayRate: $primaryPayRate, primaryStateTax: $primaryStateTax, priorLastName: $priorLastName, salutation: $salutation, sitwExemptReason: $sitwExemptReason, ssExemptReason: $ssExemptReason, ssn: $ssn, status: $status, suffix: $suffix, suiExemptReason: $suiExemptReason, suiState: $suiState, taxDistributionCode1099R: $taxDistributionCode1099R, taxForm: $taxForm, veteranDescription: $veteranDescription, webTime: $webTime, workAddress: $workAddress, workEligibility: $workEligibility} | compact
+  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/v2/weblinkstaging/companies/{company_id}/employees/newemployees"))
+  let body = {"additionalDirectDeposit": $additional_direct_deposit, "benefitSetup": $benefit_setup, "birthDate": $birth_date, "customBooleanFields": $custom_boolean_fields, "customDateFields": $custom_date_fields, "customDropDownFields": $custom_drop_down_fields, "customNumberFields": $custom_number_fields, "customTextFields": $custom_text_fields, "departmentPosition": $department_position, "disabilityDescription": $disability_description, "employeeId": $employee_id, "ethnicity": $ethnicity, "federalTax": $federal_tax, "firstName": $first_name, "fitwExemptReason": $fitw_exempt_reason, "futaExemptReason": $futa_exempt_reason, "gender": $gender, "homeAddress": $home_address, "isEmployee943": $is_employee943, "isSmoker": $is_smoker, "lastName": $last_name, "localTax": $local_tax, "mainDirectDeposit": $main_direct_deposit, "maritalStatus": $marital_status, "medExemptReason": $med_exempt_reason, "middleName": $middle_name, "nonPrimaryStateTax": $non_primary_state_tax, "preferredName": $preferred_name, "primaryPayRate": $primary_pay_rate, "primaryStateTax": $primary_state_tax, "priorLastName": $prior_last_name, "salutation": $salutation, "sitwExemptReason": $sitw_exempt_reason, "ssExemptReason": $ss_exempt_reason, "ssn": $ssn, "status": $status, "suffix": $suffix, "suiExemptReason": $sui_exempt_reason, "suiState": $sui_state, "taxDistributionCode1099R": $tax_distribution_code1099_r, "taxForm": $tax_form, "veteranDescription": $veteran_description, "webTime": $web_time, "workAddress": $work_address, "workEligibility": $work_eligibility} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

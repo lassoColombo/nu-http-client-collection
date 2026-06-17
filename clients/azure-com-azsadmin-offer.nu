@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delegated-providers-offers List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delegated-providers-offers list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /delegatedProviders/{delegatedProviderId}/offers
 # operationId: DelegatedProviderOffers_List
-export def "delegated-providers-offers List" [
-  delegatedProviderId: string
+export def "delegated-providers-offers list" [
+  delegated_provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "delegated-providers-offers List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/delegatedProviders/($delegatedProviderId)/offers" $qp)
+  let full_url = (build-url $base ({delegated_provider_id: $delegated_provider_id} | format pattern "/delegatedProviders/{delegated_provider_id}/offers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,9 +118,9 @@ export def "delegated-providers-offers List" [
 #
 # GET /delegatedProviders/{delegatedProviderId}/offers/{offerName}
 # operationId: DelegatedProviderOffers_Get
-export def "delegated-providers-offers Get" [
-  delegatedProviderId: string
-  offerName: string
+export def "delegated-providers-offers get" [
+  delegated_provider_id: string
+  offer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "delegated-providers-offers Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/delegatedProviders/($delegatedProviderId)/offers/($offerName)" $qp)
+  let full_url = (build-url $base ({delegated_provider_id: $delegated_provider_id, offer_name: $offer_name} | format pattern "/delegatedProviders/{delegated_provider_id}/offers/{offer_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,7 +144,7 @@ export def "delegated-providers-offers Get" [
 #
 # GET /offers
 # operationId: Offers_List
-export def "offers List" [
+export def "offers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

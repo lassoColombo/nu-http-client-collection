@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v-version-areas Get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v-version-areas list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /v{version}/areas
 # operationId: Areas_Get
-export def "v-version-areas Get" [
+export def "v-version-areas list" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -105,7 +105,7 @@ export def "v-version-areas Get" [
 ]: nothing -> record<areas: table<Description: string, Id: string, Name: string, XLatitude: string, XLongitude: string, YLatitude: string, YLongitude: string>, row_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v($version)/areas")
+  let full_url = (build-url $base ({version: $version} | format pattern "/v{version}/areas"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -115,8 +115,8 @@ export def "v-version-areas Get" [
 #
 # GET /v{version}/areas/{area_Ids}
 export def "v-version-areas get" [
-  area_Ids: string
   version: string
+  area_ids: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,7 +128,7 @@ export def "v-version-areas get" [
 ]: nothing -> record<areas: table<Description: string, Id: string, Name: string, XLatitude: string, XLongitude: string, YLatitude: string, YLongitude: string>, row_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v($version)/areas/($area_Ids)")
+  let full_url = (build-url $base ({version: $version, area_ids: $area_ids} | format pattern "/v{version}/areas/{area_ids}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -138,7 +138,7 @@ export def "v-version-areas get" [
 #
 # GET /v{version}/quality/daily
 # operationId: Quality_GetDailyDataQualityForSite
-export def "v-version-quality-daily GetDailyDataQualityForSite" [
+export def "v-version-quality-daily get-daily-data-quality-for-site" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -148,14 +148,14 @@ export def "v-version-quality-daily GetDailyDataQualityForSite" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --siteId: string
+  --site-id: string
   --start-date: string # The start date of the report in the format ddmmyyyy (i.e 31012016)
   --end-date: string # The end date of the report in the format ddmmyyyy (i.e 31012016)
 ]: nothing -> record<Qualities: table<Date: string, Quality: int>, row_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "siteId" $siteId "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v($version)/quality/daily" $qp)
+  let qp = [(serialize-qp "siteId" $site_id "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({version: $version} | format pattern "/v{version}/quality/daily") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -165,7 +165,7 @@ export def "v-version-quality-daily GetDailyDataQualityForSite" [
 #
 # GET /v{version}/quality/overall
 # operationId: Quality_GetOverallDataQualityForSites
-export def "v-version-quality-overall GetOverallDataQualityForSites" [
+export def "v-version-quality-overall get-overall-data-quality-for-sites" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,7 +182,7 @@ export def "v-version-quality-overall GetOverallDataQualityForSites" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sites" $sites "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v($version)/quality/overall" $qp)
+  let full_url = (build-url $base ({version: $version} | format pattern "/v{version}/quality/overall") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -192,9 +192,9 @@ export def "v-version-quality-overall GetOverallDataQualityForSites" [
 #
 # GET /v{version}/reports/{report_type}
 # operationId: Reports_Index
-export def "v-version-reports Index" [
-  report_type: string
+export def "v-version-reports get" [
   version: string
+  report_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,12 +208,12 @@ export def "v-version-reports Index" [
   --end-date: string # The end date of the report in the format ddmmyyyy (i.e 31012016)
   --page: int # The page offset to return. (format: int32)
   --page-size: int # The number of rows to return. (format: int32)
-  --reportSubTypeId: int # format: int32
+  --report-sub-type-id: int # format: int32
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sites" $sites "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "reportSubTypeId" $reportSubTypeId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v($version)/reports/($report_type)" $qp)
+  let qp = [(serialize-qp "sites" $sites "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "reportSubTypeId" $report_sub_type_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({version: $version, report_type: $report_type} | format pattern "/v{version}/reports/{report_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -223,10 +223,10 @@ export def "v-version-reports Index" [
 #
 # GET /v{version}/reports/{start_date}/to/{end_date}/{report_type}
 export def "v-version-reports-to get" [
-  report_type: string
+  version: string
   start_date: string
   end_date: string
-  version: string
+  report_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,12 +238,12 @@ export def "v-version-reports-to get" [
   --sites: string # Comma separated list of site Ids.
   --page: int # The page offset to return. (format: int32)
   --page-size: int # The number of rows to return. (format: int32)
-  --reportSubTypeId: int # format: int32
+  --report-sub-type-id: int # format: int32
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sites" $sites "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "reportSubTypeId" $reportSubTypeId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v($version)/reports/($start_date)/to/($end_date)/($report_type)" $qp)
+  let qp = [(serialize-qp "sites" $sites "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "reportSubTypeId" $report_sub_type_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({version: $version, start_date: $start_date, end_date: $end_date, report_type: $report_type} | format pattern "/v{version}/reports/{start_date}/to/{end_date}/{report_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,7 +253,7 @@ export def "v-version-reports-to get" [
 #
 # GET /v{version}/sites
 # operationId: Sites_Index
-export def "v-version-sites Index" [
+export def "v-version-sites list" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "v-version-sites Index" [
 ]: nothing -> record<row_count: int, sites: table<Description: string, Id: string, Latitude: float, Longitude: float, Name: string, Status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v($version)/sites")
+  let full_url = (build-url $base ({version: $version} | format pattern "/v{version}/sites"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -276,8 +276,8 @@ export def "v-version-sites Index" [
 #
 # GET /v{version}/sites/{site_Ids}
 export def "v-version-sites get" [
-  site_Ids: string
   version: string
+  site_ids: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "v-version-sites get" [
 ]: nothing -> record<row_count: int, sites: table<Description: string, Id: string, Latitude: float, Longitude: float, Name: string, Status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v($version)/sites/($site_Ids)")
+  let full_url = (build-url $base ({version: $version, site_ids: $site_ids} | format pattern "/v{version}/sites/{site_ids}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,7 +299,7 @@ export def "v-version-sites get" [
 #
 # GET /v{version}/sitetypes
 # operationId: SiteTypes_Index
-export def "v-version-sitetypes Index" [
+export def "v-version-sitetypes get" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -312,7 +312,7 @@ export def "v-version-sitetypes Index" [
 ]: nothing -> record<row_count: int, sitetypes: table<Description: string, Id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v($version)/sitetypes")
+  let full_url = (build-url $base ({version: $version} | format pattern "/v{version}/sitetypes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -322,9 +322,9 @@ export def "v-version-sitetypes Index" [
 #
 # GET /v{version}/sitetypes/{siteType_Id}/sites
 # operationId: SiteTypes_GetSitesForPublicFacingAPI
-export def "v-version-sitetypes-sites GetSitesForPublicFacingAPI" [
-  siteType_Id: int
+export def "v-version-sitetypes-sites get-sites-for-public-facing-api" [
   version: string
+  site_type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,7 +336,7 @@ export def "v-version-sitetypes-sites GetSitesForPublicFacingAPI" [
 ]: nothing -> record<Sites: table<Active: list, Description: list, Id: list, Lattitude: list, Longitude: list, SiteId: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v($version)/sitetypes/($siteType_Id)/sites")
+  let full_url = (build-url $base ({version: $version, site_type_id: $site_type_id} | format pattern "/v{version}/sitetypes/{site_type_id}/sites"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -67,7 +67,7 @@ def base-url-completer [] { ["https://pal-test.adyen.com/pal/servlet/BinLookup/v
 def auth-scheme-completer [] { ["x-api-key" "basic"] }
 
 # Completers for enum parameters
-def shopperInteraction-completer [] { ["ContAuth" "Ecommerce" "Moto" "POS"] }
+def shopper-interaction-completer [] { ["ContAuth" "Ecommerce" "Moto" "POS"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -105,18 +105,18 @@ export def "get3ds-availability post-get3dsAvailability" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --additionalData: record # This field contains additional data, which may be required for a particular request.  The `additionalData` object consists of entries, each of which includes the key and value.
+  --additional-data: record # This field contains additional data, which may be required for a particular request.  The `additionalData` object consists of entries, each of which includes the key and value.
   --brands: list # List of brands.
-  --cardNumber: string # Card number or BIN.
-  merchantAccount: string # The merchant account identifier.
-  --recurringDetailReference: string # A recurring detail reference corresponding to a card.
-  --shopperReference: string # The shopper's reference to uniquely identify this shopper (e.g. user ID or account ID).
+  --card-number: string # Card number or BIN.
+  merchant_account: string # The merchant account identifier.
+  --recurring-detail-reference: string # A recurring detail reference corresponding to a card.
+  --shopper-reference: string # The shopper's reference to uniquely identify this shopper (e.g. user ID or account ID).
 ]: any -> record<binDetails: record<issuerCountry: string>, dsPublicKeys: table<brand: string, directoryServerId: string, fromSDKVersion: string, publicKey: string>, threeDS1Supported: bool, threeDS2CardRangeDetails: table<acsInfoInd: list, brandCode: string, endRange: string, startRange: string, threeDS2Versions: list, threeDSMethodURL: string>, threeDS2supported: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/get3dsAvailability")
-  let body = {additionalData: $additionalData, brands: $brands, cardNumber: $cardNumber, merchantAccount: $merchantAccount, recurringDetailReference: $recurringDetailReference, shopperReference: $shopperReference} | compact
+  let body = {"additionalData": $additional_data, "brands": $brands, "cardNumber": $card_number, "merchantAccount": $merchant_account, "recurringDetailReference": $recurring_detail_reference, "shopperReference": $shopper_reference} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -142,20 +142,20 @@ export def "get-cost-estimate post-getCostEstimate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: record # shape: {currency: string, value: int}
   --assumptions: record # shape: {assume3DSecureAuthenticated?: bool, assumeLevel3Data?: bool, installments?: int}
-  --cardNumber: string # The card number (4-19 characters) for PCI compliant use cases. Do not use any separators.  > Either the `cardNumber` or `encryptedCardNumber` field must be provided in a payment request.
-  --encryptedCardNumber: string # Encrypted data that stores card information for non PCI-compliant use cases. The encrypted data must be created with the Checkout Card Component or Secured Fields Component, and must contain the `encryptedCardNumber` field.  > Either the `cardNumber` or `encryptedCardNumber` field must be provided in a payment request.
-  merchantAccount: string # The merchant account identifier you want to process the (transaction) request with.
-  --merchantDetails: record # shape: {countryCode?: string, enrolledIn3DSecure?: bool, mcc?: string}
+  --card-number: string # The card number (4-19 characters) for PCI compliant use cases. Do not use any separators.  > Either the `cardNumber` or `encryptedCardNumber` field must be provided in a payment request.
+  --encrypted-card-number: string # Encrypted data that stores card information for non PCI-compliant use cases. The encrypted data must be created with the Checkout Card Component or Secured Fields Component, and must contain the `encryptedCardNumber` field.  > Either the `cardNumber` or `encryptedCardNumber` field must be provided in a payment request.
+  merchant_account: string # The merchant account identifier you want to process the (transaction) request with.
+  --merchant-details: record # shape: {countryCode?: string, enrolledIn3DSecure?: bool, mcc?: string}
   --recurring: record # shape: {contract?: "ONECLICK"|"RECURRING"|"PAYOUT", recurringDetailName?: string, recurringExpiry?: string, recurringFrequency?: string, tokenService?: "VISATOKENSERVICE"|"MCTOKENSERVICE"}
-  --selectedRecurringDetailReference: string # The `recurringDetailReference` you want to use for this cost estimate. The value `LATEST` can be used to select the most recently stored recurring detail.
-  --shopperInteraction: string@shopperInteraction-completer # Specifies the sales channel, through which the shopper gives their card details, and whether the shopper is a returning customer. For the web service API, Adyen assumes Ecommerce shopper interaction by default.  This field has the following possible values: * `Ecommerce` - Online transactions where the cardholder is present (online). For better authorisation rates, we recommend sending the card security code (CSC) along with the request. * `ContAuth` - Card on file and/or subscription transactions, where the card holder is known to the merchant (returning customer). If the shopper is present (online), you can supply also the CSC to improve authorisation (one-click payment). * `Moto` - Mail-order and telephone-order transactions where the shopper is in contact with the merchant via email or telephone. * `POS` - Point-of-sale transactions where the shopper is physically present to make a payment using a secure payment terminal.
-  --shopperReference: string # Required for recurring payments.  Your reference to uniquely identify this shopper, for example user ID or account ID. Minimum length: 3 characters. > Your reference must not include personally identifiable information (PII), for example name or email address.
+  --selected-recurring-detail-reference: string # The `recurringDetailReference` you want to use for this cost estimate. The value `LATEST` can be used to select the most recently stored recurring detail.
+  --shopper-interaction: string@shopper-interaction-completer # Specifies the sales channel, through which the shopper gives their card details, and whether the shopper is a returning customer. For the web service API, Adyen assumes Ecommerce shopper interaction by default.  This field has the following possible values: * `Ecommerce` - Online transactions where the cardholder is present (online). For better authorisation rates, we recommend sending the card security code (CSC) along with the request. * `ContAuth` - Card on file and/or subscription transactions, where the card holder is known to the merchant (returning customer). If the shopper is present (online), you can supply also the CSC to improve authorisation (one-click payment). * `Moto` - Mail-order and telephone-order transactions where the shopper is in contact with the merchant via email or telephone. * `POS` - Point-of-sale transactions where the shopper is physically present to make a payment using a secure payment terminal.
+  --shopper-reference: string # Required for recurring payments.  Your reference to uniquely identify this shopper, for example user ID or account ID. Minimum length: 3 characters. > Your reference must not include personally identifiable information (PII), for example name or email address.
 ]: any -> record<cardBin: record<bin: string, commercial: bool, fundingSource: string, fundsAvailability: string, issuerBin: string, issuingBank: string, issuingCountry: string, issuingCurrency: string, paymentMethod: string, payoutEligible: string, summary: string>, costEstimateAmount: record<currency: string, value: int>, costEstimateReference: string, resultCode: string, surchargeType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getCostEstimate")
-  let body = {amount: $amount, assumptions: $assumptions, cardNumber: $cardNumber, encryptedCardNumber: $encryptedCardNumber, merchantAccount: $merchantAccount, merchantDetails: $merchantDetails, recurring: $recurring, selectedRecurringDetailReference: $selectedRecurringDetailReference, shopperInteraction: $shopperInteraction, shopperReference: $shopperReference} | compact
+  let body = {"amount": $amount, "assumptions": $assumptions, "cardNumber": $card_number, "encryptedCardNumber": $encrypted_card_number, "merchantAccount": $merchant_account, "merchantDetails": $merchant_details, "recurring": $recurring, "selectedRecurringDetailReference": $selected_recurring_detail_reference, "shopperInteraction": $shopper_interaction, "shopperReference": $shopper_reference} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

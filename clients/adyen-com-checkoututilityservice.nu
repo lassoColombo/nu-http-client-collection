@@ -100,13 +100,13 @@ export def "origin-keys post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  originDomains: list # The list of origin domains, for which origin keys are requested.
+  origin_domains: list # The list of origin domains, for which origin keys are requested.
 ]: any -> record<originKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/originKeys")
-  let body = {originDomains: $originDomains} | compact
+  let body = {"originDomains": $origin_domains} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-enterprise-knowledge-graph-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-enterprise-knowledge-graph-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.EnterpriseKnowledgeGraph/operations
 # operationId: Operations_List
-export def "providers-microsoft-enterprise-knowledge-graph-operations List" [
+export def "providers-microsoft-enterprise-knowledge-graph-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-enterprise-knowledge-graph-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EnterpriseKnowledgeGraph/services
 # operationId: EnterpriseKnowledgeGraph_List
-export def "subscriptions-providers-microsoft-enterprise-knowledge-graph-services List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-enterprise-knowledge-graph-services list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "subscriptions-providers-microsoft-enterprise-knowledge-graph-service
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.EnterpriseKnowledgeGraph/services" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.EnterpriseKnowledgeGraph/services") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,9 +142,9 @@ export def "subscriptions-providers-microsoft-enterprise-knowledge-graph-service
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EnterpriseKnowledgeGraph/services
 # operationId: EnterpriseKnowledgeGraph_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowledge-graph-services ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowledge-graph-services list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowled
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EnterpriseKnowledgeGraph/services" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EnterpriseKnowledgeGraph/services") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -168,10 +168,10 @@ export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowled
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EnterpriseKnowledgeGraph/services/{resourceName}
 # operationId: EnterpriseKnowledgeGraph_Delete
-export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowledge-graph-services Delete" [
-  resourceGroupName: string
-  resourceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowledge-graph-services delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowled
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EnterpriseKnowledgeGraph/services/($resourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EnterpriseKnowledgeGraph/services/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,10 +195,10 @@ export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowled
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EnterpriseKnowledgeGraph/services/{resourceName}
 # operationId: EnterpriseKnowledgeGraph_Get
-export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowledge-graph-services Get" [
-  resourceGroupName: string
-  resourceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowledge-graph-services get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowled
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EnterpriseKnowledgeGraph/services/($resourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EnterpriseKnowledgeGraph/services/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -224,10 +224,10 @@ export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowled
 # operationId: EnterpriseKnowledgeGraph_Update
 # --properties shape: {description?: string, metadata?: record, provisioningState?: "Creating"|"Deleting"|"Failed"|"Succeeded"}
 # --sku shape: {name: "F0"|"S1"}
-export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowledge-graph-services Update" [
-  resourceGroupName: string
-  resourceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowledge-graph-services update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,8 +246,8 @@ export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowled
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EnterpriseKnowledgeGraph/services/($resourceName)" $qp)
-  let body = {properties: $properties, location: $location, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EnterpriseKnowledgeGraph/services/{resource_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -260,10 +260,10 @@ export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowled
 # operationId: EnterpriseKnowledgeGraph_Create
 # --properties shape: {description?: string, metadata?: record, provisioningState?: "Creating"|"Deleting"|"Failed"|"Succeeded"}
 # --sku shape: {name: "F0"|"S1"}
-export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowledge-graph-services Create" [
-  resourceGroupName: string
-  resourceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowledge-graph-services create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,8 +282,8 @@ export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowled
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EnterpriseKnowledgeGraph/services/($resourceName)" $qp)
-  let body = {properties: $properties, location: $location, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EnterpriseKnowledgeGraph/services/{resource_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

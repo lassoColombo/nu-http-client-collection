@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-dev-spaces-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-dev-spaces-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DevSpaces/operations
 # operationId: Operations_List
-export def "providers-microsoft-dev-spaces-operations List" [
+export def "providers-microsoft-dev-spaces-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-dev-spaces-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DevSpaces/controllers
 # operationId: Controllers_List
-export def "subscriptions-providers-microsoft-dev-spaces-controllers List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-dev-spaces-controllers list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "subscriptions-providers-microsoft-dev-spaces-controllers List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DevSpaces/controllers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DevSpaces/controllers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,9 +142,9 @@ export def "subscriptions-providers-microsoft-dev-spaces-controllers List" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevSpaces/controllers
 # operationId: Controllers_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DevSpaces/controllers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevSpaces/controllers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -168,9 +168,9 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevSpaces/controllers/{name}
 # operationId: Controllers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers Delete" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers delete" [
+  subscription_id: string
+  resource_group_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DevSpaces/controllers/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevSpaces/controllers/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,9 +195,9 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevSpaces/controllers/{name}
 # operationId: Controllers_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers Get" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers get" [
+  subscription_id: string
+  resource_group_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -212,7 +212,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DevSpaces/controllers/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevSpaces/controllers/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -222,9 +222,9 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevSpaces/controllers/{name}
 # operationId: Controllers_Update
-export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers Update" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers update" [
+  subscription_id: string
+  resource_group_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -241,8 +241,8 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DevSpaces/controllers/($name)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevSpaces/controllers/{name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -255,9 +255,9 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
 # operationId: Controllers_Create
 # --properties shape: {targetContainerHostCredentialsBase64: string, targetContainerHostResourceId: string}
 # --sku shape: {name: "S1", tier?: "Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers Create" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers create" [
+  subscription_id: string
+  resource_group_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,8 +277,8 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DevSpaces/controllers/($name)" $qp)
-  let body = {properties: $properties, sku: $sku, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevSpaces/controllers/{name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -289,9 +289,9 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevSpaces/controllers/{name}/listConnectionDetails
 # operationId: Controllers_ListConnectionDetails
-export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers-list-connection-details ListConnectionDetails" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers-list-connection-details list" [
+  subscription_id: string
+  resource_group_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,7 +306,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DevSpaces/controllers/($name)/listConnectionDetails" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevSpaces/controllers/{name}/listConnectionDetails") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -316,9 +316,9 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevSpaces/locations/{location}/checkContainerHostMapping
 # operationId: ContainerHostMappings_GetContainerHostMapping
-export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-locations-check-container-host-mapping GetContainerHostMapping" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-locations-check-container-host-mapping get" [
+  subscription_id: string
+  resource_group_name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,14 +329,14 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-locatio
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  --containerHostResourceId: string # ARM ID of the Container Host resource
+  --container-host-resource-id: string # ARM ID of the Container Host resource
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DevSpaces/locations/($location)/checkContainerHostMapping" $qp)
-  let body = {containerHostResourceId: $containerHostResourceId} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location: $location} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevSpaces/locations/{location}/checkContainerHostMapping") $qp)
+  let body = {"containerHostResourceId": $container_host_resource_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-templates ListByService" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-templates list-by" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/templates
 # operationId: EmailTemplate_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates ListByService" [
-  resourceGroupName: string
-  serviceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates list-by" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,7 +112,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ApiManagement/service/($serviceName)/templates" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/templates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,11 +122,11 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/templates/{templateName}
 # operationId: EmailTemplate_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates Delete" [
-  resourceGroupName: string
-  serviceName: string
-  templateName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates delete" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,13 +136,13 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request.
-  --If-Match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update.
+  --if-match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update.
 ]: nothing -> record<error: record<code: string, details: list<record>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ApiManagement/service/($serviceName)/templates/($templateName)" $qp)
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, template_name: $template_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/templates/{template_name}") $qp)
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -153,11 +153,11 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/templates/{templateName}
 # operationId: EmailTemplate_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates Get" [
-  resourceGroupName: string
-  serviceName: string
-  templateName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates get" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ApiManagement/service/($serviceName)/templates/($templateName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, template_name: $template_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/templates/{template_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -181,11 +181,11 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/templates/{templateName}
 # operationId: EmailTemplate_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates GetEntityTag" [
-  resourceGroupName: string
-  serviceName: string
-  templateName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates get-entity-tag" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ApiManagement/service/($serviceName)/templates/($templateName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, template_name: $template_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/templates/{template_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -210,11 +210,11 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/templates/{templateName}
 # operationId: EmailTemplate_Update
 # --properties shape: {body?: string, description?: string, parameters?: list, subject?: string, title?: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates Update" [
-  resourceGroupName: string
-  serviceName: string
-  templateName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates update" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,8 +230,8 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ApiManagement/service/($serviceName)/templates/($templateName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, template_name: $template_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/templates/{template_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -243,11 +243,11 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/templates/{templateName}
 # operationId: EmailTemplate_CreateOrUpdate
 # --properties shape: {body?: string, description?: string, parameters?: list, subject?: string, title?: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates CreateOrUpdate" [
-  resourceGroupName: string
-  serviceName: string
-  templateName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,17 +257,17 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request.
-  --If-Match: string # ETag of the Entity. Not required when creating an entity, but required when updating an entity.
+  --if-match: string # ETag of the Entity. Not required when creating an entity, but required when updating an entity.
   --properties: any # Email Template Update Contract properties. — shape: {body?: string, description?: string, parameters?: list, subject?: string, title?: string}
 ]: any -> record<properties: record<body: string, description: string, isDefault: bool, parameters: list<record>, subject: string, title: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ApiManagement/service/($serviceName)/templates/($templateName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, template_name: $template_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/templates/{template_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

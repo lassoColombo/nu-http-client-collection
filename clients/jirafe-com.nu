@@ -71,7 +71,7 @@ def status-completer [] { ["cancelled"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,8 +100,8 @@ export def commands []: nothing -> table {
 # --customer item shape: {active_flag?: bool, change_date: string, company?: string, cookies?: record, create_date: string, department?: string, email?: string, first_name?: string, id: string, last_name?: string, marketing_opt_in?: bool, name?: string, phone?: string, position?: string}
 # --order item shape: {cart_id?: string, change_date: string, create_date: string, currency: string, customer: record, items: list, order_date: string, order_number: string, previous_items?: list, status: "accepted", subtotal: float, total: float, total_discounts: float, total_payment_cost: float, total_shipping: float, total_tax: float}
 # --product item shape: {ancestors?: list, attributes?: list, base_product?: record, brand?: string, catalog?: record, categories?: list, change_date: string, code: string, create_date: string, id: string, images?: list, is_order: bool, is_sku: bool, name?: string, rating?: float, urls?: record, vendors?: list}
-export def "batch post" [
-  siteId: string
+export def "batch create" [
+  site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,8 +120,8 @@ export def "batch post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($siteId)/batch")
-  let body = {cart: $cart, category: $category, customer: $customer, employee: $employee, order: $order, product: $product} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/{site_id}/batch"))
+  let body = {"cart": $cart, "category": $category, "customer": $customer, "employee": $employee, "order": $order, "product": $product} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -136,8 +136,8 @@ export def "batch post" [
 # --items item shape: {cart_item_number: string, change_date: string, create_date: string, discount_price: float, id: string, price: float, product: record, quantity: int}
 # --previous_items item shape: {cart_item_number: string, change_date: string, create_date: string, discount_price: float, id: string, price: float, product: record, quantity: int}
 # --visit shape: {last_pageview_id: string, pageview_id: string, visit_id: string, visitor_id: string}
-export def "cart post" [
-  siteId: string
+export def "cart create" [
+  site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,8 +166,8 @@ export def "cart post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($siteId)/cart")
-  let body = {cart_id: $cart_id, change_date: $change_date, cookies: $cookies, create_date: $create_date, currency: $currency, customer: $customer, id: $id, items: $items, previous_items: $previous_items, subtotal: $subtotal, total: $total, total_discounts: $total_discounts, total_payment_cost: $total_payment_cost, total_shipping: $total_shipping, total_tax: $total_tax, visit: $visit} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/{site_id}/cart"))
+  let body = {"cart_id": $cart_id, "change_date": $change_date, "cookies": $cookies, "create_date": $create_date, "currency": $currency, "customer": $customer, "id": $id, "items": $items, "previous_items": $previous_items, "subtotal": $subtotal, "total": $total, "total_discounts": $total_discounts, "total_payment_cost": $total_payment_cost, "total_shipping": $total_shipping, "total_tax": $total_tax, "visit": $visit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -178,8 +178,8 @@ export def "cart post" [
 #
 # POST /{siteId}/category
 # operationId: postCategory
-export def "category post" [
-  siteId: string
+export def "category create" [
+  site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,8 +194,8 @@ export def "category post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($siteId)/category")
-  let body = {id: $id, name: $name} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/{site_id}/category"))
+  let body = {"id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -206,8 +206,8 @@ export def "category post" [
 #
 # POST /{siteId}/customer
 # operationId: postCustomer
-export def "customer post" [
-  siteId: string
+export def "customer create" [
+  site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,8 +234,8 @@ export def "customer post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($siteId)/customer")
-  let body = {active_flag: $active_flag, change_date: $change_date, company: $company, cookies: $cookies, create_date: $create_date, department: $department, email: $email, first_name: $first_name, id: $id, last_name: $last_name, marketing_opt_in: $marketing_opt_in, name: $name, phone: $phone, position: $position} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/{site_id}/customer"))
+  let body = {"active_flag": $active_flag, "change_date": $change_date, "company": $company, "cookies": $cookies, "create_date": $create_date, "department": $department, "email": $email, "first_name": $first_name, "id": $id, "last_name": $last_name, "marketing_opt_in": $marketing_opt_in, "name": $name, "phone": $phone, "position": $position} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -246,8 +246,8 @@ export def "customer post" [
 #
 # POST /{siteId}/order
 # operationId: postOrderCancelled
-export def "order post" [
-  siteId: string
+export def "order create-order-cancelled" [
+  site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,8 +263,8 @@ export def "order post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($siteId)/order")
-  let body = {cancel_date: $cancel_date, order_number: $order_number, status: $status} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/{site_id}/order"))
+  let body = {"cancel_date": $cancel_date, "order_number": $order_number, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -281,8 +281,8 @@ export def "order post" [
 # --categories item shape: {id: string, name: string}
 # --urls shape: {admin?: string, store?: string}
 # --vendors item shape: {id?: string, name?: string}
-export def "product post" [
-  siteId: string
+export def "product create" [
+  site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,8 +312,8 @@ export def "product post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($siteId)/product")
-  let body = {ancestors: $ancestors, attributes: $attributes, base_product: $base_product, brand: $brand, catalog: $catalog, categories: $categories, change_date: $change_date, code: $code, create_date: $create_date, id: $id, images: $images, is_order: $is_order, is_sku: $is_sku, name: $name, rating: $rating, urls: $urls, vendors: $vendors} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/{site_id}/product"))
+  let body = {"ancestors": $ancestors, "attributes": $attributes, "base_product": $base_product, "brand": $brand, "catalog": $catalog, "categories": $categories, "change_date": $change_date, "code": $code, "create_date": $create_date, "id": $id, "images": $images, "is_order": $is_order, "is_sku": $is_sku, "name": $name, "rating": $rating, "urls": $urls, "vendors": $vendors} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

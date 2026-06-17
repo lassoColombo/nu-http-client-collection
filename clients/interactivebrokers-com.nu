@@ -66,9 +66,9 @@ def base-url-completer [] { ["https://www.interactivebrokers.com/tradingapi/v1"]
 def auth-scheme-completer [] { ["portal"] }
 
 # Completers for enum parameters
-def Order Type-completer [] { ["1" "2" "3" "4"] }
-def Side-completer [] { ["1" "2"] }
-def Time in Force-completer [] { ["0" "1" "2" "3" "7"] }
+def order-type-completer [] { ["1" "2" "3" "4"] }
+def side-completer [] { ["1" "2"] }
+def time-in-force-completer [] { ["0" "1" "2" "3" "7"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -129,24 +129,24 @@ export def "accounts-order-impact post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Aux Price: float # Required price to support Stop and Stop Limit orders
-  --ContractId: float # The internal IB identifier for the trading product specified as an integer (can be obtained in response to /secdef request)
-  --Currency: string # The currency in which the FX pair trades (only for InstrumentType=CASH)
-  --CustomerOrderId: string # The order ID assigned by the customer.
-  --InstrumentType: string # The instrument type of the contract
-  --ListingExchange: string # The exchange on which the trading product is listed (only for InstrumentType=STK)
-  --Order Type: float@Order Type-completer # Market = '1' Limit = '2' Stop = '3' StopLimit = '4'
-  --Price: float # The order price
-  --Quantity: float # The number of units in the order; contracts or shares
-  --Side: float@Side-completer # Buy = '1', Sell = '2'
-  --Ticker: string # The symbol that identifies the trading product
-  --Time in Force: float@Time in Force-completer # Defines order's active lifetime. Day = '0' GTC (Good till Cancel) = '1' IOC (Immediate or Cancel) = '3' Open = '2' Close = '7'
+  --aux-price: float # Required price to support Stop and Stop Limit orders
+  --contract-id: float # The internal IB identifier for the trading product specified as an integer (can be obtained in response to /secdef request)
+  --currency: string # The currency in which the FX pair trades (only for InstrumentType=CASH)
+  --customer-order-id: string # The order ID assigned by the customer.
+  --instrument-type: string # The instrument type of the contract
+  --listing-exchange: string # The exchange on which the trading product is listed (only for InstrumentType=STK)
+  --order-type: float@order-type-completer # Market = '1' Limit = '2' Stop = '3' StopLimit = '4'
+  --price: float # The order price
+  --quantity: float # The number of units in the order; contracts or shares
+  --side: float@side-completer # Buy = '1', Sell = '2'
+  --ticker: string # The symbol that identifies the trading product
+  --time-in-force: float@time-in-force-completer # Defines order's active lifetime. Day = '0' GTC (Good till Cancel) = '1' IOC (Immediate or Cancel) = '3' Open = '2' Close = '7'
 ]: any -> record<Commission: float, CommissionsCurrency: string, EquityWithLoan: float, InitMargin: float, InitMarginBefore: float, MaintMargin: float, MaintMarginBefore: float, MarginCurrency: string, MaxCommissions: float, MinCommissions: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account)/order_impact")
-  let body = {Aux Price: $Aux Price, ContractId: $ContractId, Currency: $Currency, CustomerOrderId: $CustomerOrderId, InstrumentType: $InstrumentType, ListingExchange: $ListingExchange, Order Type: $Order Type, Price: $Price, Quantity: $Quantity, Side: $Side, Ticker: $Ticker, Time in Force: $Time in Force} | compact
+  let full_url = (build-url $base ({account: $account} | format pattern "/accounts/{account}/order_impact"))
+  let body = {"Aux Price": $aux_price, "ContractId": $contract_id, "Currency": $currency, "CustomerOrderId": $customer_order_id, "InstrumentType": $instrument_type, "ListingExchange": $listing_exchange, "Order Type": $order_type, "Price": $price, "Quantity": $quantity, "Side": $side, "Ticker": $ticker, "Time in Force": $time_in_force} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -169,7 +169,7 @@ export def "accounts-orders list" [
 ]: nothing -> table<ContractId: float, CustomerOrderId: float, FilledQuantity: float, ListingExchange: string, OrderType: float, OutsideRTH: string, Price: float, RemainingQuantity: float, Side: string, Status: string, Ticker: string, TimeInForce: float, TransactionTime: string, Warning: string> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account)/orders")
+  let full_url = (build-url $base ({account: $account} | format pattern "/accounts/{account}/orders"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,31 +188,31 @@ export def "accounts-orders post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Aux Price: float # Required Price to support Stop and Stop Limit orders
-  --ContractId: float # The internal IB identifier for the trading product specified as an integer (can be obtained in response to /secdef request)
-  --Currency: string # The currency in which the FX pair trades (only for InstrumentType=CASH)
-  --CustomerOrderId: string # The order ID assigned by the customer.
-  --GermanHftAlgo: oneof<nothing, bool> # By setting this bool to false the customer attests that the order is not subject to German HFT Act, was not generated using any automated algorithm, and no algorithm determined or changed financial instrument, side, quantity, order type, limit or other price, trading venue or timing of this order. Currently we cannot accept orders where this flag is set to true. Such orders will be rejected.
-  --InstrumentType: string # The instrument type of the contract
-  --ListingExchange: string # The exchange on which the trading product is listed (only for InstrumentType=STK)
-  --Mifid2Algo: string # This field permits specification of the user's preregistered (via account management) MiFID II short code for algos that are responsible for investment decisions
-  --Mifid2DecisionMaker: string # This field permits specification of the user's preregistered (via account management) MiFID II short code for decision makers.
-  --Mifid2ExecutionAlgo: string # This field permits specification of the user's preregistered (via account management) MiFID II short code for algos that are responsible for handling/routing of the order.
-  --Mifid2ExecutionTrader: string # This field permits specification of the user's preregistered (via account management) MiFID II person responsible for handling/routing of the order
-  --Order Type: float@Order Type-completer # Market = '1' Limit = '2' Stop = '3' StopLimit = '4'
-  --OrderRestrictions: float # MultiValueString representing the restrictions associated with an order. If more than one restriction is applicable to an order, this field can contain multiple instructions separated by space.  '1' Program Trade '2' Index Arbitrage  '3' Non-Index Arbitrage
-  --Outside RTH: float # Indicates if order is active outside regular trading hours, where defined. 0 = no (default), 1 = yes
-  --Price: float # The order price
-  --Quantity: float # The number of units in the order; contracts or shares
-  --Side: float@Side-completer # Buy = '1', Sell = '2'
-  --Ticker: string # The symbol that identifies the trading product
-  --Time in Force: float@Time in Force-completer # Defines order's active lifetime. Day = '0' GTC (Good till Cancel) = '1' IOC (Immediate or Cancel) = '3' Open = '2' Close = '7'
+  --aux-price: float # Required Price to support Stop and Stop Limit orders
+  --contract-id: float # The internal IB identifier for the trading product specified as an integer (can be obtained in response to /secdef request)
+  --currency: string # The currency in which the FX pair trades (only for InstrumentType=CASH)
+  --customer-order-id: string # The order ID assigned by the customer.
+  --german-hft-algo: oneof<nothing, bool> # By setting this bool to false the customer attests that the order is not subject to German HFT Act, was not generated using any automated algorithm, and no algorithm determined or changed financial instrument, side, quantity, order type, limit or other price, trading venue or timing of this order. Currently we cannot accept orders where this flag is set to true. Such orders will be rejected.
+  --instrument-type: string # The instrument type of the contract
+  --listing-exchange: string # The exchange on which the trading product is listed (only for InstrumentType=STK)
+  --mifid2-algo: string # This field permits specification of the user's preregistered (via account management) MiFID II short code for algos that are responsible for investment decisions
+  --mifid2-decision-maker: string # This field permits specification of the user's preregistered (via account management) MiFID II short code for decision makers.
+  --mifid2-execution-algo: string # This field permits specification of the user's preregistered (via account management) MiFID II short code for algos that are responsible for handling/routing of the order.
+  --mifid2-execution-trader: string # This field permits specification of the user's preregistered (via account management) MiFID II person responsible for handling/routing of the order
+  --order-type: float@order-type-completer # Market = '1' Limit = '2' Stop = '3' StopLimit = '4'
+  --order-restrictions: float # MultiValueString representing the restrictions associated with an order. If more than one restriction is applicable to an order, this field can contain multiple instructions separated by space.  '1' Program Trade '2' Index Arbitrage  '3' Non-Index Arbitrage
+  --outside-rth: float # Indicates if order is active outside regular trading hours, where defined. 0 = no (default), 1 = yes
+  --price: float # The order price
+  --quantity: float # The number of units in the order; contracts or shares
+  --side: float@side-completer # Buy = '1', Sell = '2'
+  --ticker: string # The symbol that identifies the trading product
+  --time-in-force: float@time-in-force-completer # Defines order's active lifetime. Day = '0' GTC (Good till Cancel) = '1' IOC (Immediate or Cancel) = '3' Open = '2' Close = '7'
 ]: any -> table<ContractId: float, CustomerOrderId: float, FilledQuantity: float, ListingExchange: string, OrderType: float, OutsideRTH: string, Price: float, RemainingQuantity: float, Side: string, Status: string, Ticker: string, TimeInForce: float, TransactionTime: string, Warning: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account)/orders")
-  let body = {Aux Price: $Aux Price, ContractId: $ContractId, Currency: $Currency, CustomerOrderId: $CustomerOrderId, GermanHftAlgo: $GermanHftAlgo, InstrumentType: $InstrumentType, ListingExchange: $ListingExchange, Mifid2Algo: $Mifid2Algo, Mifid2DecisionMaker: $Mifid2DecisionMaker, Mifid2ExecutionAlgo: $Mifid2ExecutionAlgo, Mifid2ExecutionTrader: $Mifid2ExecutionTrader, Order Type: $Order Type, OrderRestrictions: $OrderRestrictions, Outside RTH: $Outside RTH, Price: $Price, Quantity: $Quantity, Side: $Side, Ticker: $Ticker, Time in Force: $Time in Force} | compact
+  let full_url = (build-url $base ({account: $account} | format pattern "/accounts/{account}/orders"))
+  let body = {"Aux Price": $aux_price, "ContractId": $contract_id, "Currency": $currency, "CustomerOrderId": $customer_order_id, "GermanHftAlgo": $german_hft_algo, "InstrumentType": $instrument_type, "ListingExchange": $listing_exchange, "Mifid2Algo": $mifid2_algo, "Mifid2DecisionMaker": $mifid2_decision_maker, "Mifid2ExecutionAlgo": $mifid2_execution_algo, "Mifid2ExecutionTrader": $mifid2_execution_trader, "Order Type": $order_type, "OrderRestrictions": $order_restrictions, "Outside RTH": $outside_rth, "Price": $price, "Quantity": $quantity, "Side": $side, "Ticker": $ticker, "Time in Force": $time_in_force} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -224,7 +224,7 @@ export def "accounts-orders post" [
 # DELETE /accounts/{account}/orders/{CustomerOrderId}
 export def "accounts-orders delete" [
   account: string
-  CustomerOrderId: string
+  customer_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +236,7 @@ export def "accounts-orders delete" [
 ]: nothing -> table<CustomerOrderId: string, OrderQty: float, OrderType: float, Price: string, Side: float, Status: string, Symbol: float, Warning: string> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account)/orders/($CustomerOrderId)")
+  let full_url = (build-url $base ({account: $account, customer_order_id: $customer_order_id} | format pattern "/accounts/{account}/orders/{customer_order_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -247,7 +247,7 @@ export def "accounts-orders delete" [
 # GET /accounts/{account}/orders/{CustomerOrderId}
 export def "accounts-orders get" [
   account: string
-  CustomerOrderId: string
+  customer_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,7 +259,7 @@ export def "accounts-orders get" [
 ]: nothing -> table<ContractId: float, CustomerOrderId: float, FilledQuantity: float, ListingExchange: string, OrderType: float, OutsideRTH: string, Price: float, RemainingQuantity: float, Side: string, Status: string, Ticker: string, TimeInForce: float, TransactionTime: string, Warning: string> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account)/orders/($CustomerOrderId)")
+  let full_url = (build-url $base ({account: $account, customer_order_id: $customer_order_id} | format pattern "/accounts/{account}/orders/{customer_order_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -270,7 +270,7 @@ export def "accounts-orders get" [
 # PUT /accounts/{account}/orders/{CustomerOrderId}
 export def "accounts-orders put" [
   account: string
-  CustomerOrderId: string
+  customer_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,26 +279,26 @@ export def "accounts-orders put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Aux Price: float # Required Price to support Stop and Stop Limit orders
-  --body-CustomerOrderId: string # The new order ID assigned by the customer for the modification.
-  --GermanHftAlgo: oneof<nothing, bool> # By setting this bool to false the customer attests that the order is not subject to German HFT Act, was not generated using any automated algorithm, and no algorithm determined or changed financial instrument, side, quantity, order type, limit or other price, trading venue or timing of this order. Currently we cannot accept orders where this flag is set to true. Such orders will be rejected.
-  --Mifid2Algo: string # This field permits specification of the user's preregistered (via account management) MiFID II short code for algos that are responsible for investment decisions
-  --Mifid2DecisionMaker: string # This field permits specification of the user's preregistered (via account management) MiFID II short code for decision makers.
-  --Mifid2ExecutionAlgo: string # This field permits specification of the user's preregistered (via account management) MiFID II short code for algos that are responsible for handling/routing of the order.
-  --Mifid2ExecutionTrader: string # This field permits specification of the user's preregistered (via account management) MiFID II person responsible for handling/routing of the order
-  --Order Type: float@Order Type-completer # Market = '1' Limit = '2' Stop = '3' StopLimit = '4'
-  --OrigCustomerOrderId: string # The order ID assigned by the customer
-  --Outside RTH: float # Indicates if order is active outside regular trading hours, where defined. 0 = no (default), 1 = yes
-  --Price: float # The order price
-  --Quantity: float # The number of units in the order; contracts or shares
-  --Side: float@Side-completer # Buy = '1', Sell = '2'
-  --Time in Force: float@Time in Force-completer # Defines order's active lifetime. Day = '0' GTC (Good till Cancel) = '1' IOC (Immediate or Cancel) = '3' Open = '2' Close = '7'
+  --aux-price: float # Required Price to support Stop and Stop Limit orders
+  --body-customer-order-id: string # The new order ID assigned by the customer for the modification.
+  --german-hft-algo: oneof<nothing, bool> # By setting this bool to false the customer attests that the order is not subject to German HFT Act, was not generated using any automated algorithm, and no algorithm determined or changed financial instrument, side, quantity, order type, limit or other price, trading venue or timing of this order. Currently we cannot accept orders where this flag is set to true. Such orders will be rejected.
+  --mifid2-algo: string # This field permits specification of the user's preregistered (via account management) MiFID II short code for algos that are responsible for investment decisions
+  --mifid2-decision-maker: string # This field permits specification of the user's preregistered (via account management) MiFID II short code for decision makers.
+  --mifid2-execution-algo: string # This field permits specification of the user's preregistered (via account management) MiFID II short code for algos that are responsible for handling/routing of the order.
+  --mifid2-execution-trader: string # This field permits specification of the user's preregistered (via account management) MiFID II person responsible for handling/routing of the order
+  --order-type: float@order-type-completer # Market = '1' Limit = '2' Stop = '3' StopLimit = '4'
+  --orig-customer-order-id: string # The order ID assigned by the customer
+  --outside-rth: float # Indicates if order is active outside regular trading hours, where defined. 0 = no (default), 1 = yes
+  --price: float # The order price
+  --quantity: float # The number of units in the order; contracts or shares
+  --side: float@side-completer # Buy = '1', Sell = '2'
+  --time-in-force: float@time-in-force-completer # Defines order's active lifetime. Day = '0' GTC (Good till Cancel) = '1' IOC (Immediate or Cancel) = '3' Open = '2' Close = '7'
 ]: any -> table<CustomerOrderId: string, OrderQty: float, OrderType: float, Price: string, Side: float, Status: string, Symbol: float, Warning: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account)/orders/($CustomerOrderId)")
-  let body = {Aux Price: $Aux Price, CustomerOrderId: $body_CustomerOrderId, GermanHftAlgo: $GermanHftAlgo, Mifid2Algo: $Mifid2Algo, Mifid2DecisionMaker: $Mifid2DecisionMaker, Mifid2ExecutionAlgo: $Mifid2ExecutionAlgo, Mifid2ExecutionTrader: $Mifid2ExecutionTrader, Order Type: $Order Type, OrigCustomerOrderId: $OrigCustomerOrderId, Outside RTH: $Outside RTH, Price: $Price, Quantity: $Quantity, Side: $Side, Time in Force: $Time in Force} | compact
+  let full_url = (build-url $base ({account: $account, customer_order_id: $customer_order_id} | format pattern "/accounts/{account}/orders/{customer_order_id}"))
+  let body = {"Aux Price": $aux_price, "CustomerOrderId": $body_customer_order_id, "GermanHftAlgo": $german_hft_algo, "Mifid2Algo": $mifid2_algo, "Mifid2DecisionMaker": $mifid2_decision_maker, "Mifid2ExecutionAlgo": $mifid2_execution_algo, "Mifid2ExecutionTrader": $mifid2_execution_trader, "Order Type": $order_type, "OrigCustomerOrderId": $orig_customer_order_id, "Outside RTH": $outside_rth, "Price": $price, "Quantity": $quantity, "Side": $side, "Time in Force": $time_in_force} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -321,7 +321,7 @@ export def "accounts-positions get" [
 ]: nothing -> table<AverageCost: float, ContractId: float, Position: float> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account)/positions")
+  let full_url = (build-url $base ({account: $account} | format pattern "/accounts/{account}/positions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -343,7 +343,7 @@ export def "accounts-summary get" [
 ]: nothing -> record<Info: record<AccountCode: string, AccountReady: string, AccountType: string, Cushion: string, DayTradesRemaining: string, DayTradesRemainingT: string, DayTradesRemainingT_2: string, DayTradesRemainingT_3: string, DayTradesRemainingT_4: string, HighestSeverity: string, Leverage_S: string, LookAheadNextChange: string, SegmentTitle_C: string, SegmentTitle_S: string, TradingType_S: string, WhatIfPMEnabled: string>, Ledger: table<CashBalance: float, CashBalanceFXSegment: float, CashCumQty: float, ExchangeRate: float, FutureOptionMarketValue: float, FuturePNL: float, NetDividend: float, NetInterest: float, NetLiquidation: float, OptionMarketValue: float, RealizedPNL: float, StockMarketValue: float, TotalCashBalance: float, UnrealizedPNL: float>, Summary: record<AccruedCash: float, AccruedCash_C: float, AccruedCash_S: float, AccruedDividend: float, AccruedDividend_C: float, AccruedDividend_S: float, AvailableFunds: float, AvailableFunds_C: float, AvailableFunds_S: float, Billable: float, Billable_C: float, Billable_S: float, BuyingPower: float, EquityWithLoanValue: float, EquityWithLoanValue_C: float, EquityWithLoanValue_S: float, ExcessLiquidity: float, ExcessLiquidity_C: float, ExcessLiquidity_S: float, FullAvailableFunds: float, FullAvailableFunds_C: float, FullAvailableFunds_S: float, FullExcessLiquidity: float, FullExcessLiquidity_C: float, FullExcessLiquidity_S: float, FullInitMarginReq: float, FullInitMarginReq_C: float, FullInitMarginReq_S: float, FullMaintMarginReq: float, FullMaintMarginReq_C: float, FullMaintMarginReq_S: float, GrossPositionValue: float, GrossPositionValue_C: float, GrossPositionValue_S: float, IndianStockHaircut: float, IndianStockHaircut_C: float, IndianStockHaircut_S: float, InitMarginReq: float, InitMarginReq_C: float, InitMarginReq_S: float, InsuredDeposit: float, InsuredDeposit_C: float, InsuredDeposit_S: float, LookAheadAvailableFunds: float, LookAheadAvailableFunds_C: float, LookAheadAvailableFunds_S: float, LookAheadExcessLiquidity: float, LookAheadExcessLiquidity_C: float, LookAheadExcessLiquidity_S: float, LookAheadInitMarginReq: float, LookAheadInitMarginReq_C: float, LookAheadInitMarginReq_S: float, LookAheadMaintMarginReq: float, LookAheadMaintMarginReq_C: float, LookAheadMaintMarginReq_S: float, MaintMarginReq: float, MaintMarginReq_C: float, MaintMarginReq_S: float, NetLiquidation: float, NetLiquidation_C: float, NetLiquidation_S: float, NetLiquidationUncertainty: float, PASharesValue: float, PASharesValue_C: float, PASharesValue_S: float, PostExpirationExcess: float, PostExpirationExcess_C: float, PostExpirationExcess_S: float, PostExpirationMargin: float, PostExpirationMargin_C: float, PostExpirationMargin_S: float, RegTEquity: float, RegTEquity_S: float, RegTMargin: float, RegTMargin_S: float, SMA: float, SMA_S: float, TotalCashValue: float, TotalCashValue_C: float, TotalCashValue_S: float>> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account)/summary")
+  let full_url = (build-url $base ({account: $account} | format pattern "/accounts/{account}/summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -367,7 +367,7 @@ export def "accounts-trades get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account)/trades")
+  let full_url = (build-url $base ({account: $account} | format pattern "/accounts/{account}/trades"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -443,7 +443,7 @@ export def "oauth-access-token post" [
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/access_token")
-  let body = {oauth_consumer_key: $oauth_consumer_key, oauth_nonce: $oauth_nonce, oauth_signature: $oauth_signature, oauth_signature_method: $oauth_signature_method, oauth_timestamp: $oauth_timestamp, oauth_token: $oauth_token, oauth_verifier: $oauth_verifier} | compact
+  let body = {"oauth_consumer_key": $oauth_consumer_key, "oauth_nonce": $oauth_nonce, "oauth_signature": $oauth_signature, "oauth_signature_method": $oauth_signature_method, "oauth_timestamp": $oauth_timestamp, "oauth_token": $oauth_token, "oauth_verifier": $oauth_verifier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -474,7 +474,7 @@ export def "oauth-live-session-token post" [
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/live_session_token")
-  let body = {diffie_hellman_challenge: $diffie_hellman_challenge, oauth_consumer_key: $oauth_consumer_key, oauth_nonce: $oauth_nonce, oauth_signature: $oauth_signature, oauth_signature_method: $oauth_signature_method, oauth_timestamp: $oauth_timestamp, oauth_token: $oauth_token} | compact
+  let body = {"diffie_hellman_challenge": $diffie_hellman_challenge, "oauth_consumer_key": $oauth_consumer_key, "oauth_nonce": $oauth_nonce, "oauth_signature": $oauth_signature, "oauth_signature_method": $oauth_signature_method, "oauth_timestamp": $oauth_timestamp, "oauth_token": $oauth_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -504,7 +504,7 @@ export def "oauth-request-token post" [
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/request_token")
-  let body = {oauth_callback: $oauth_callback, oauth_consumer_key: $oauth_consumer_key, oauth_nonce: $oauth_nonce, oauth_signature: $oauth_signature, oauth_signature_method: $oauth_signature_method, oauth_timestamp: $oauth_timestamp} | compact
+  let body = {"oauth_callback": $oauth_callback, "oauth_consumer_key": $oauth_consumer_key, "oauth_nonce": $oauth_nonce, "oauth_signature": $oauth_signature, "oauth_signature_method": $oauth_signature_method, "oauth_timestamp": $oauth_timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -533,7 +533,7 @@ export def "secdef get" [
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secdef")
-  let body = {conid: $conid, currency: $currency, exchange: $exchange, symbol: $symbol, type: $type} | compact
+  let body = {"conid": $conid, "currency": $currency, "exchange": $exchange, "symbol": $symbol, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

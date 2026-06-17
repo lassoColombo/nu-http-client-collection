@@ -67,7 +67,7 @@ def auth-scheme-completer [] { ["basic"] }
 
 # Completers for enum parameters
 def status-completer [] { ["approved" "inReview" "rejected" "suspended"] }
-def modifiedBy-completer [] { ["administrator" "developer"] }
+def modified-by-completer [] { ["administrator" "developer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -106,14 +106,14 @@ export def "apps list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'name':'MyApp'} matches all the apps that have the name 'MyApp'
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
-  --pageNumber: int # The result set page number to be returned
+  --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
-  --userId: string # The unique id of the user requesting this resource
-  --isOwner: oneof<nothing, bool> # Whether this result should only contain apps that are owned by this user
+  --user-id: string # The unique id of the user requesting this resource
+  --is-owner: oneof<nothing, bool> # Whether this result should only contain apps that are owned by this user
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "isOwner" $isOwner "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "isOwner" $is_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -132,11 +132,11 @@ export def "apps post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developerId: string # The unique id of the developer that is adding this app
+  --developer-id: string # The unique id of the developer that is adding this app
   --name: string # The name of the app
   --type: string # The type for this app
   --model: string # A JSON object representing the pricing model type for this app
-  --customData: string # A custom JSON object that you can create and attach to this record
+  --custom-data: string # A custom JSON object that you can create and attach to this record
   --attributes: string # A custom set of app attributes defined by the administrator and attached to this app
   --restrict: string # JSON object to restrict users from owning or viewing this app. Example: {'view':{'country':['Canada','Mexico']},'own':{'country':['Canada','Mexico']}} restricts users from canada and mexico from viewing or owning this app
   --allow: string # JSON object to restrict users from owning or viewing this app. Example: {'view':{'country':['Canada','Mexico']},'own':{'country':['Canada','Mexico']}} restricts users from canada and mexico from viewing or owning this app
@@ -144,7 +144,7 @@ export def "apps post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "developerId" $developerId "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "customData" $customData "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "restrict" $restrict "scalar") (serialize-qp "allow" $allow "scalar") (serialize-qp "access" $access "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "developerId" $developer_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "customData" $custom_data "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "restrict" $restrict "scalar") (serialize-qp "allow" $allow "scalar") (serialize-qp "access" $access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -155,7 +155,7 @@ export def "apps post" [
 #
 # GET /apps/bySafeName/{safeName}
 export def "apps-by-safe-name get" [
-  safeName: string
+  safe_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,13 +164,13 @@ export def "apps-by-safe-name get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userId: string # The unique id of the user that is requesting this resource
-  --trackViews: oneof<nothing, bool> # Whether this call should be tracked as a 'view' for this app. Default is false.
+  --user-id: string # The unique id of the user that is requesting this resource
+  --track-views: oneof<nothing, bool> # Whether this call should be tracked as a 'view' for this app. Default is false.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userId" $userId "scalar") (serialize-qp "trackViews" $trackViews "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/apps/bySafeName/($safeName)" $qp)
+  let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "trackViews" $track_views "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({safe_name: $safe_name} | format pattern "/apps/bySafeName/{safe_name}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -191,14 +191,14 @@ export def "apps-text-search get" [
   --query: string # A query document. Example: {'name':'MyApp'} matches all the documents that have the name 'MyApp'
   --text: string # The text to search for.
   --fields: string # A JSON array containing all the fields to be searched through. Example: ['name', 'customData.description']
-  --pageNumber: int # The result set page number to be returned
+  --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
-  --userId: string # The unique id of the user requesting this resource
-  --isOwned: oneof<nothing, bool> # Whether this result should only contain apps that are owned by this user
+  --user-id: string # The unique id of the user requesting this resource
+  --is-owned: oneof<nothing, bool> # Whether this result should only contain apps that are owned by this user
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "isOwned" $isOwned "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "isOwned" $is_owned "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps/textSearch" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -219,13 +219,13 @@ export def "apps-versions get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'name':'MyApp'} matches all the apps that have the name 'MyApp'
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
-  --pageNumber: int # The result set page number to be returned
+  --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
-  --developerId: string # The unique id of the developer requesting this resource
+  --developer-id: string # The unique id of the developer requesting this resource
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "developerId" $developerId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "developerId" $developer_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps/versions" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -236,7 +236,7 @@ export def "apps-versions get" [
 #
 # DELETE /apps/{appId}
 export def "apps delete" [
-  appId: string
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,12 +245,12 @@ export def "apps delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developerId: string # The unique id of the developer that is removing this app
+  --developer-id: string # The unique id of the developer that is removing this app
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "developerId" $developerId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/apps/($appId)" $qp)
+  let qp = [(serialize-qp "developerId" $developer_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,7 +260,7 @@ export def "apps delete" [
 #
 # GET /apps/{appId}
 export def "apps get" [
-  appId: string
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,13 +269,13 @@ export def "apps get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userId: string # The unique id of the user that is requesting this resource
-  --trackViews: oneof<nothing, bool> # Whether this call should be tracked as a 'view' for this app. Default is false.
+  --user-id: string # The unique id of the user that is requesting this resource
+  --track-views: oneof<nothing, bool> # Whether this call should be tracked as a 'view' for this app. Default is false.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userId" $userId "scalar") (serialize-qp "trackViews" $trackViews "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/apps/($appId)" $qp)
+  let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "trackViews" $track_views "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -285,7 +285,7 @@ export def "apps get" [
 #
 # POST /apps/{appId}/live
 export def "apps-live post" [
-  appId: string
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,13 +294,13 @@ export def "apps-live post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developerId: string # The unique id of the developer that is changing this AppVersion
+  --developer-id: string # The unique id of the developer that is changing this AppVersion
   --version: string # The new version of the live App
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "developerId" $developerId "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/apps/($appId)/live" $qp)
+  let qp = [(serialize-qp "developerId" $developer_id "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/live") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -310,7 +310,7 @@ export def "apps-live post" [
 #
 # POST /apps/{appId}/publish
 export def "apps-publish post" [
-  appId: string
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,14 +319,14 @@ export def "apps-publish post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developerId: string # The unique id of the developer that is modifying this app
+  --developer-id: string # The unique id of the developer that is modifying this app
   --version: int # The version of the app to be published
-  --autoApprove: oneof<nothing, bool> # If true, this AppVersion is automatically approved and becomes immediately available to end users
+  --auto-approve: oneof<nothing, bool> # If true, this AppVersion is automatically approved and becomes immediately available to end users
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "developerId" $developerId "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "autoApprove" $autoApprove "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/apps/($appId)/publish" $qp)
+  let qp = [(serialize-qp "developerId" $developer_id "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "autoApprove" $auto_approve "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/publish") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -336,7 +336,7 @@ export def "apps-publish post" [
 #
 # DELETE /apps/{appId}/versions/{version}
 export def "apps-versions delete" [
-  appId: string
+  app_id: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -346,12 +346,12 @@ export def "apps-versions delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developerId: string # The unique id of the developer that is removing this app
+  --developer-id: string # The unique id of the developer that is removing this app
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "developerId" $developerId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/apps/($appId)/versions/($version)" $qp)
+  let qp = [(serialize-qp "developerId" $developer_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({app_id: $app_id, version: $version} | format pattern "/apps/{app_id}/versions/{version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -361,7 +361,7 @@ export def "apps-versions delete" [
 #
 # GET /apps/{appId}/versions/{version}
 export def "apps-versions get-by-appId-version" [
-  appId: string
+  app_id: string
   version: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -371,12 +371,12 @@ export def "apps-versions get-by-appId-version" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developerId: string # The unique id of the developer that is requesting this resource
+  --developer-id: string # The unique id of the developer that is requesting this resource
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "developerId" $developerId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/apps/($appId)/versions/($version)" $qp)
+  let qp = [(serialize-qp "developerId" $developer_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({app_id: $app_id, version: $version} | format pattern "/apps/{app_id}/versions/{version}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -386,7 +386,7 @@ export def "apps-versions get-by-appId-version" [
 #
 # PATCH /apps/{appId}/versions/{version}
 export def "apps-versions patch" [
-  appId: string
+  app_id: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -396,21 +396,21 @@ export def "apps-versions patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developerId: string # The unique id of the developer that is updating this app
+  --developer-id: string # The unique id of the developer that is updating this app
   --name: string # The name of the app
   --type: string # The type for this app
   --model: string # A JSON object representing the pricing model type for this app
-  --customData: string # A custom JSON object that you can create and attach to this record
+  --custom-data: string # A custom JSON object that you can create and attach to this record
   --attributes: string # A custom set of app attributes defined by the administrator and attached to this app
   --restrict: string # JSON object to restrict users from purchasing or viewing this app. Example: {'view':{'country':['Canada','Mexico']},'purchase':{'country':['Canada','Mexico']}} restricts users from canada and mexico from viewing or purchasing this app
   --allow: string # JSON object to allow users to purchase or view this app. Example: {'purchase':{'country':['Canada','Mexico']}} allows only users from canada and mexico to purchase this app
   --access: string # JSON array of data access requirements
-  --approvalRequired: string # False if updates should skip the approval process and be available immediately. Default is True
+  --approval-required: string # False if updates should skip the approval process and be available immediately. Default is True
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "developerId" $developerId "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "customData" $customData "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "restrict" $restrict "scalar") (serialize-qp "allow" $allow "scalar") (serialize-qp "access" $access "scalar") (serialize-qp "approvalRequired" $approvalRequired "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/apps/($appId)/versions/($version)" $qp)
+  let qp = [(serialize-qp "developerId" $developer_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "customData" $custom_data "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "restrict" $restrict "scalar") (serialize-qp "allow" $allow "scalar") (serialize-qp "access" $access "scalar") (serialize-qp "approvalRequired" $approval_required "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({app_id: $app_id, version: $version} | format pattern "/apps/{app_id}/versions/{version}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -420,7 +420,7 @@ export def "apps-versions patch" [
 #
 # POST /apps/{appId}/versions/{version}
 export def "apps-versions post" [
-  appId: string
+  app_id: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -430,21 +430,21 @@ export def "apps-versions post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developerId: string # The unique id of the developer that is updating this app
+  --developer-id: string # The unique id of the developer that is updating this app
   --name: string # The name of the app
   --type: string # The type for this app
   --model: string # A JSON object representing the pricing model type for this app
-  --customData: string # A custom JSON object that you can create and attach to this record
+  --custom-data: string # A custom JSON object that you can create and attach to this record
   --attributes: string # A custom set of app attributes defined by the administrator and attached to this app
   --restrict: string # JSON object to restrict users from purchasing or viewing this app. Example: {'view':{'country':['Canada','Mexico']},'purchase':{'country':['Canada','Mexico']}} restricts users from canada and mexico from viewing or purchasing this app
   --allow: string # JSON object to allow users to purchase or view this app. Example: {'purchase':{'country':['Canada','Mexico']}} allows only users from canada and mexico to purchase this app
   --access: string # JSON array of data access requirements
-  --approvalRequired: string # False if updates should skip the approval process and be available immediately. Default is True
+  --approval-required: string # False if updates should skip the approval process and be available immediately. Default is True
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "developerId" $developerId "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "customData" $customData "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "restrict" $restrict "scalar") (serialize-qp "allow" $allow "scalar") (serialize-qp "access" $access "scalar") (serialize-qp "approvalRequired" $approvalRequired "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/apps/($appId)/versions/($version)" $qp)
+  let qp = [(serialize-qp "developerId" $developer_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "customData" $custom_data "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "restrict" $restrict "scalar") (serialize-qp "allow" $allow "scalar") (serialize-qp "access" $access "scalar") (serialize-qp "approvalRequired" $approval_required "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({app_id: $app_id, version: $version} | format pattern "/apps/{app_id}/versions/{version}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -454,7 +454,7 @@ export def "apps-versions post" [
 #
 # POST /apps/{appId}/versions/{version}/status
 export def "apps-versions-status post" [
-  appId: string
+  app_id: string
   version: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -464,15 +464,15 @@ export def "apps-versions-status post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developerId: string # The unique id of the developer that is modifying this app
+  --developer-id: string # The unique id of the developer that is modifying this app
   --status: string@status-completer # The new status for this app. Can be either 'inReview', 'approved', 'suspended' or 'rejected'
-  --modifiedBy: string@modifiedBy-completer # The role initiating this status change. Can be either 'developer' or 'administrator' (default) (default: administrator)
+  --modified-by: string@modified-by-completer # The role initiating this status change. Can be either 'developer' or 'administrator' (default) (default: administrator)
   --reason: string # The reason for this status change
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "developerId" $developerId "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "modifiedBy" $modifiedBy "scalar") (serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/apps/($appId)/versions/($version)/status" $qp)
+  let qp = [(serialize-qp "developerId" $developer_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "modifiedBy" $modified_by "scalar") (serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({app_id: $app_id, version: $version} | format pattern "/apps/{app_id}/versions/{version}/status") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -482,7 +482,7 @@ export def "apps-versions-status post" [
 #
 # POST /custom-gateway/payment/{ownershipId}
 export def "custom-gateway-payment post" [
-  ownershipId: string
+  ownership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,15 +493,15 @@ export def "custom-gateway-payment post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # The total amount paid in cents
   --date: int # The date (in milliseconds) of when this payment was made (format: int64)
-  --feeAmount: int # The fee (in cents) paid to a payment processors or third parties to process this payment. Default is 0.
-  --marketplaceAmount: int # The amount (in cents) paid to the marketplace owner as a commission for the purchase of this app. Defaults based on the commission amount configured for this marketplace.
-  --developerAmount: int # The amount (in cents) paid to the owner of the app. Defaults based on the commission amount configured for this marketplace.
-  --customData: string # A custom JSON object to attach to this transaction
+  --fee-amount: int # The fee (in cents) paid to a payment processors or third parties to process this payment. Default is 0.
+  --marketplace-amount: int # The amount (in cents) paid to the marketplace owner as a commission for the purchase of this app. Defaults based on the commission amount configured for this marketplace.
+  --developer-amount: int # The amount (in cents) paid to the owner of the app. Defaults based on the commission amount configured for this marketplace.
+  --custom-data: string # A custom JSON object to attach to this transaction
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "feeAmount" $feeAmount "scalar") (serialize-qp "marketplaceAmount" $marketplaceAmount "scalar") (serialize-qp "developerAmount" $developerAmount "scalar") (serialize-qp "customData" $customData "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/custom-gateway/payment/($ownershipId)" $qp)
+  let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "feeAmount" $fee_amount "scalar") (serialize-qp "marketplaceAmount" $marketplace_amount "scalar") (serialize-qp "developerAmount" $developer_amount "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({ownership_id: $ownership_id} | format pattern "/custom-gateway/payment/{ownership_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -511,7 +511,7 @@ export def "custom-gateway-payment post" [
 #
 # POST /custom-gateway/refund/{ownershipId}
 export def "custom-gateway-refund post" [
-  ownershipId: string
+  ownership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,15 +522,15 @@ export def "custom-gateway-refund post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # The total amount refunded in cents
   --date: int # The date (in milliseconds) of when this refund was made (format: int64)
-  --feeAmount: int # The fee (in cents) recovered from a payment processor or third party to process this payment. The default value is 0
-  --marketplaceAmount: int # The amount (in cents) recovered from the marketplace owner as a commission refund for the purchase of this app
-  --developerAmount: int # The amount (in cents) recovered from the owner of the app
-  --customData: string # A custom JSON object to attach to this transaction
+  --fee-amount: int # The fee (in cents) recovered from a payment processor or third party to process this payment. The default value is 0
+  --marketplace-amount: int # The amount (in cents) recovered from the marketplace owner as a commission refund for the purchase of this app
+  --developer-amount: int # The amount (in cents) recovered from the owner of the app
+  --custom-data: string # A custom JSON object to attach to this transaction
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "feeAmount" $feeAmount "scalar") (serialize-qp "marketplaceAmount" $marketplaceAmount "scalar") (serialize-qp "developerAmount" $developerAmount "scalar") (serialize-qp "customData" $customData "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/custom-gateway/refund/($ownershipId)" $qp)
+  let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "feeAmount" $fee_amount "scalar") (serialize-qp "marketplaceAmount" $marketplace_amount "scalar") (serialize-qp "developerAmount" $developer_amount "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({ownership_id: $ownership_id} | format pattern "/custom-gateway/refund/{ownership_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -550,12 +550,12 @@ export def "developer-accounts list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'name':'NASA'} matches all the developerAccounts that have the name 'NASA'
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
-  --pageNumber: int # The result set page number to be returned
+  --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/developerAccounts" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -566,7 +566,7 @@ export def "developer-accounts list" [
 #
 # DELETE /developerAccounts/{developerAccountId}
 export def "developer-accounts delete" [
-  developerAccountId: string
+  developer_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,7 +578,7 @@ export def "developer-accounts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/developerAccounts/($developerAccountId)")
+  let full_url = (build-url $base ({developer_account_id: $developer_account_id} | format pattern "/developerAccounts/{developer_account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -588,7 +588,7 @@ export def "developer-accounts delete" [
 #
 # GET /developerAccounts/{developerAccountId}
 export def "developer-accounts get" [
-  developerAccountId: string
+  developer_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +600,7 @@ export def "developer-accounts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/developerAccounts/($developerAccountId)")
+  let full_url = (build-url $base ({developer_account_id: $developer_account_id} | format pattern "/developerAccounts/{developer_account_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -610,7 +610,7 @@ export def "developer-accounts get" [
 #
 # PATCH /developerAccounts/{developerAccountId}
 export def "developer-accounts patch" [
-  developerAccountId: string
+  developer_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -619,15 +619,15 @@ export def "developer-accounts patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developerId: string # The id of the developer that this account belongs to
+  --developer-id: string # The id of the developer that this account belongs to
   --email: string # The contact email address
   --name: string # The name for the account
-  --customData: string # A custom JSON object that you can create and attach to this record
+  --custom-data: string # A custom JSON object that you can create and attach to this record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "developerId" $developerId "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $customData "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/developerAccounts/($developerAccountId)" $qp)
+  let qp = [(serialize-qp "developerId" $developer_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({developer_account_id: $developer_account_id} | format pattern "/developerAccounts/{developer_account_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -637,7 +637,7 @@ export def "developer-accounts patch" [
 #
 # POST /developerAccounts/{developerAccountId}
 export def "developer-accounts post" [
-  developerAccountId: string
+  developer_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -646,15 +646,15 @@ export def "developer-accounts post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developerId: string # The id of the developer that this account belongs to
+  --developer-id: string # The id of the developer that this account belongs to
   --email: string # The contact email address
   --name: string # The name for the account
-  --customData: string # A custom JSON object that you can create and attach to this record
+  --custom-data: string # A custom JSON object that you can create and attach to this record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "developerId" $developerId "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $customData "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/developerAccounts/($developerAccountId)" $qp)
+  let qp = [(serialize-qp "developerId" $developer_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({developer_account_id: $developer_account_id} | format pattern "/developerAccounts/{developer_account_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -674,12 +674,12 @@ export def "developers list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'name':'John'} matches all the developers that have the name 'John'
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
-  --pageNumber: int # The result set page number to be returned
+  --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/developers" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -690,7 +690,7 @@ export def "developers list" [
 #
 # DELETE /developers/{developerId}
 export def "developers delete" [
-  developerId: string
+  developer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -702,7 +702,7 @@ export def "developers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/developers/($developerId)")
+  let full_url = (build-url $base ({developer_id: $developer_id} | format pattern "/developers/{developer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -712,7 +712,7 @@ export def "developers delete" [
 #
 # GET /developers/{developerId}
 export def "developers get" [
-  developerId: string
+  developer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -724,7 +724,7 @@ export def "developers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/developers/($developerId)")
+  let full_url = (build-url $base ({developer_id: $developer_id} | format pattern "/developers/{developer_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -734,7 +734,7 @@ export def "developers get" [
 #
 # PATCH /developers/{developerId}
 export def "developers patch" [
-  developerId: string
+  developer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,12 +747,12 @@ export def "developers patch" [
   --email: string # The developer's email
   --username: string # The developer's username
   --name: string # The developer's name
-  --customData: string # A custom JSON object that you can create and attach to this record
+  --custom-data: string # A custom JSON object that you can create and attach to this record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $customData "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/developers/($developerId)" $qp)
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({developer_id: $developer_id} | format pattern "/developers/{developer_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -762,7 +762,7 @@ export def "developers patch" [
 #
 # POST /developers/{developerId}
 export def "developers post" [
-  developerId: string
+  developer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -775,12 +775,12 @@ export def "developers post" [
   --email: string # The developer's email
   --username: string # The developer's username
   --name: string # The developer's name
-  --customData: string # A custom JSON object that you can create and attach to this record
+  --custom-data: string # A custom JSON object that you can create and attach to this record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $customData "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/developers/($developerId)" $qp)
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({developer_id: $developer_id} | format pattern "/developers/{developer_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -790,7 +790,7 @@ export def "developers post" [
 #
 # GET /events/{eventId}
 export def "events get" [
-  eventId: string
+  event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,7 +802,7 @@ export def "events get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($eventId)")
+  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/events/{event_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -822,12 +822,12 @@ export def "files get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'name':'file.txt'} matches all the files that have the name 'file.txt'
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
-  --pageNumber: int # The result set page number to be returned
+  --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -846,16 +846,16 @@ export def "files post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --isPrivate: oneof<nothing, bool> # If true, this file will be protected as a private file and require the generation of a signed URL in order to download using the Download File API. The default is false.
+  --is-private: oneof<nothing, bool> # If true, this file will be protected as a private file and require the generation of a signed URL in order to download using the Download File API. The default is false.
   --hash: string # A comma separated list of hashes to return in order to verify file integrity.
   file: string # The file to be uploaded (format: binary)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "isPrivate" $isPrivate "scalar") (serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "isPrivate" $is_private "scalar") (serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files" $qp)
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -874,11 +874,11 @@ export def "files-by-id-or-url get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fileIdOrUrl: string # The fileId or fileUrl of the file to be returned
+  --file-id-or-url: string # The fileId or fileUrl of the file to be returned
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fileIdOrUrl" $fileIdOrUrl "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fileIdOrUrl" $file_id_or_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files/byIdOrUrl" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -897,12 +897,12 @@ export def "files-download get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fileId: string # The URL of the file to be uploaded
-  --validSeconds: int # The number of seconds that this signed URL should be valid for. The default is 60.
+  --file-id: string # The URL of the file to be uploaded
+  --valid-seconds: int # The number of seconds that this signed URL should be valid for. The default is 60.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fileId" $fileId "scalar") (serialize-qp "validSeconds" $validSeconds "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fileId" $file_id "scalar") (serialize-qp "validSeconds" $valid_seconds "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files/download" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -922,11 +922,11 @@ export def "files-url post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-url: string # The URL of the file to be uploaded
-  --isPrivate: oneof<nothing, bool> # If true, this file will be protected as a private file and require the generation of a signed URL in order to download using the Download File API. The default is false.
+  --is-private: oneof<nothing, bool> # If true, this file will be protected as a private file and require the generation of a signed URL in order to download using the Download File API. The default is false.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "isPrivate" $isPrivate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "isPrivate" $is_private "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files/url" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -968,12 +968,12 @@ export def "ownership list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'userId':'12'} matches all the ownership records that have the userId '12'.
   --qp-sort: string # A sort document. Example: {'date':1} sorts the results by date in ascending order
-  --pageNumber: int # The result set page number to be returned
+  --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ownership" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -992,15 +992,15 @@ export def "ownership-install post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --appId: string # The id of the App being owned
-  --userId: string # The id of the User requesting to own the App
-  --modelId: string # The id of the model associated with this ownership request
+  --app-id: string # The id of the App being owned
+  --user-id: string # The id of the User requesting to own the App
+  --model-id: string # The id of the model associated with this ownership request
   --model: string # A custom model that will override the app's default model for this install
-  --customData: string # A custom JSON object to attach to this ownership record
+  --custom-data: string # A custom JSON object to attach to this ownership record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "appId" $appId "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "modelId" $modelId "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "customData" $customData "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "appId" $app_id "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "modelId" $model_id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ownership/install" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1011,7 +1011,7 @@ export def "ownership-install post" [
 #
 # POST /ownership/uninstall/{ownershipId}
 export def "ownership-uninstall post" [
-  ownershipId: string
+  ownership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1020,14 +1020,14 @@ export def "ownership-uninstall post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userId: string # The id of the User requesting to uninstall the App
-  --cancelOwnership: oneof<nothing, bool> # True if this app will require payment to be re-installed. Default is false
-  --customData: string # A custom JSON object to attach to this ownership record
+  --user-id: string # The id of the User requesting to uninstall the App
+  --cancel-ownership: oneof<nothing, bool> # True if this app will require payment to be re-installed. Default is false
+  --custom-data: string # A custom JSON object to attach to this ownership record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userId" $userId "scalar") (serialize-qp "cancelOwnership" $cancelOwnership "scalar") (serialize-qp "customData" $customData "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ownership/uninstall/($ownershipId)" $qp)
+  let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "cancelOwnership" $cancel_ownership "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({ownership_id: $ownership_id} | format pattern "/ownership/uninstall/{ownership_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1037,7 +1037,7 @@ export def "ownership-uninstall post" [
 #
 # GET /ownership/{ownershipId}
 export def "ownership get" [
-  ownershipId: string
+  ownership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1049,7 +1049,7 @@ export def "ownership get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ownership/($ownershipId)")
+  let full_url = (build-url $base ({ownership_id: $ownership_id} | format pattern "/ownership/{ownership_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1059,7 +1059,7 @@ export def "ownership get" [
 #
 # PATCH /ownership/{ownershipId}
 export def "ownership patch" [
-  ownershipId: string
+  ownership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1068,13 +1068,13 @@ export def "ownership patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customData: string # Custom JSON object that will be attached to this ownership record
+  --custom-data: string # Custom JSON object that will be attached to this ownership record
   --expires: int # The date (in millis) of when this app ownership expires (format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "customData" $customData "scalar") (serialize-qp "expires" $expires "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ownership/($ownershipId)" $qp)
+  let qp = [(serialize-qp "customData" $custom_data "scalar") (serialize-qp "expires" $expires "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({ownership_id: $ownership_id} | format pattern "/ownership/{ownership_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1084,7 +1084,7 @@ export def "ownership patch" [
 #
 # POST /ownership/{ownershipId}
 export def "ownership post" [
-  ownershipId: string
+  ownership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1093,13 +1093,13 @@ export def "ownership post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customData: string # Custom JSON object that will be attached to this ownership record
+  --custom-data: string # Custom JSON object that will be attached to this ownership record
   --expires: int # The date (in millis) of when this app ownership expires (format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "customData" $customData "scalar") (serialize-qp "expires" $expires "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ownership/($ownershipId)" $qp)
+  let qp = [(serialize-qp "customData" $custom_data "scalar") (serialize-qp "expires" $expires "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({ownership_id: $ownership_id} | format pattern "/ownership/{ownership_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1109,7 +1109,7 @@ export def "ownership post" [
 #
 # DELETE /permission/apps/{appId}
 export def "permission-apps delete" [
-  appId: string
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1118,12 +1118,12 @@ export def "permission-apps delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userId: string # The id of the user
+  --user-id: string # The id of the user
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userId" $userId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/permission/apps/($appId)" $qp)
+  let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/permission/apps/{app_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1133,7 +1133,7 @@ export def "permission-apps delete" [
 #
 # GET /permission/apps/{appId}
 export def "permission-apps get" [
-  appId: string
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1142,12 +1142,12 @@ export def "permission-apps get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userId: string # The id of the user
+  --user-id: string # The id of the user
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userId" $userId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/permission/apps/($appId)" $qp)
+  let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/permission/apps/{app_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1157,7 +1157,7 @@ export def "permission-apps get" [
 #
 # POST /permission/apps/{appId}
 export def "permission-apps post" [
-  appId: string
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1166,14 +1166,14 @@ export def "permission-apps post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userId: string # The id of the user
+  --user-id: string # The id of the user
   --date: int # The time (in milliseconds) of when the user agreed to the access request (format: int64)
   --ip: string # The ip address of the user agreeing to the access request
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userId" $userId "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/permission/apps/($appId)" $qp)
+  let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/permission/apps/{app_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1193,12 +1193,12 @@ export def "reviews list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'rating': 500} matches all the reviews that have a rating of 500. 
   --qp-sort: string # A sort document. Example: {'rating':1} sorts the results by rating in ascending order
-  --pageNumber: int # The result set page number to be returned
+  --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reviews" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1217,20 +1217,20 @@ export def "reviews post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --appId: string # The id of the App that will own this review
-  --userId: string # The id of the User that is posting this review
-  --userAccountId: string # The id of the User account that is posting this review
+  --app-id: string # The id of the App that will own this review
+  --user-id: string # The id of the User that is posting this review
+  --user-account-id: string # The id of the User account that is posting this review
   --headline: string # The review's headline. Limited to 50 characters.
   --rating: int # The rating given within this review. The rating is represented as an integer between 0 and 500 (0 - 5 stars)
   --description: string # The review's description. Limited to 2000 characters.
   --type: string # The type for this review
-  --mustOwnApp: oneof<nothing, bool> # True if a review can be created only by a user that has owned the app. The default is True.
-  --autoApprove: oneof<nothing, bool> # True if the review should be automatically approved. The default is False.
-  --customData: string # A custom JSON object that you can create and attach to this record
+  --must-own-app: oneof<nothing, bool> # True if a review can be created only by a user that has owned the app. The default is True.
+  --auto-approve: oneof<nothing, bool> # True if the review should be automatically approved. The default is False.
+  --custom-data: string # A custom JSON object that you can create and attach to this record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "appId" $appId "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "userAccountId" $userAccountId "scalar") (serialize-qp "headline" $headline "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "mustOwnApp" $mustOwnApp "scalar") (serialize-qp "autoApprove" $autoApprove "scalar") (serialize-qp "customData" $customData "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "appId" $app_id "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "userAccountId" $user_account_id "scalar") (serialize-qp "headline" $headline "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "mustOwnApp" $must_own_app "scalar") (serialize-qp "autoApprove" $auto_approve "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reviews" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1241,7 +1241,7 @@ export def "reviews post" [
 #
 # DELETE /reviews/{reviewId}
 export def "reviews delete" [
-  reviewId: string
+  review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1250,13 +1250,13 @@ export def "reviews delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userId: string # The id of the User that is removing this review
-  --userAccountId: string # The id of the User account that is emoving this review
+  --user-id: string # The id of the User that is removing this review
+  --user-account-id: string # The id of the User account that is emoving this review
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userId" $userId "scalar") (serialize-qp "userAccountId" $userAccountId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/reviews/($reviewId)" $qp)
+  let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "userAccountId" $user_account_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({review_id: $review_id} | format pattern "/reviews/{review_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1266,7 +1266,7 @@ export def "reviews delete" [
 #
 # GET /reviews/{reviewId}
 export def "reviews get" [
-  reviewId: string
+  review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1278,7 +1278,7 @@ export def "reviews get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reviews/($reviewId)")
+  let full_url = (build-url $base ({review_id: $review_id} | format pattern "/reviews/{review_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1288,7 +1288,7 @@ export def "reviews get" [
 #
 # PATCH /reviews/{reviewId}
 export def "reviews patch" [
-  reviewId: string
+  review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1297,17 +1297,17 @@ export def "reviews patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userId: string # The id of the User that is updating this review
-  --userAccountId: string # The id of the User account that is posting this review
+  --user-id: string # The id of the User that is updating this review
+  --user-account-id: string # The id of the User account that is posting this review
   --headline: string # The review's headline. Limited to 50 characters.
   --rating: int # The rating given within this review. The rating is represented as an integer between 0 and 500 (0 - 5 stars)
   --description: string # The review's description. Limited to 2000 characters.
-  --customData: string # A custom JSON object that you can create and attach to this record
+  --custom-data: string # A custom JSON object that you can create and attach to this record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userId" $userId "scalar") (serialize-qp "userAccountId" $userAccountId "scalar") (serialize-qp "headline" $headline "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "customData" $customData "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/reviews/($reviewId)" $qp)
+  let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "userAccountId" $user_account_id "scalar") (serialize-qp "headline" $headline "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({review_id: $review_id} | format pattern "/reviews/{review_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1317,7 +1317,7 @@ export def "reviews patch" [
 #
 # POST /reviews/{reviewId}
 export def "reviews post-by-reviewId" [
-  reviewId: string
+  review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1326,17 +1326,17 @@ export def "reviews post-by-reviewId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userId: string # The id of the User that is updating this review
-  --userAccountId: string # The id of the User account that is posting this review
+  --user-id: string # The id of the User that is updating this review
+  --user-account-id: string # The id of the User account that is posting this review
   --headline: string # The review's headline. Limited to 50 characters.
   --rating: int # The rating given within this review. The rating is represented as an integer between 0 and 500 (0 - 5 stars)
   --description: string # The review's description. Limited to 2000 characters.
-  --customData: string # A custom JSON object that you can create and attach to this record
+  --custom-data: string # A custom JSON object that you can create and attach to this record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userId" $userId "scalar") (serialize-qp "userAccountId" $userAccountId "scalar") (serialize-qp "headline" $headline "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "customData" $customData "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/reviews/($reviewId)" $qp)
+  let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "userAccountId" $user_account_id "scalar") (serialize-qp "headline" $headline "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({review_id: $review_id} | format pattern "/reviews/{review_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1355,15 +1355,15 @@ export def "stats-increment post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --appId: string # The id of the app associated with this statistic value
-  --userId: string # The id of the user that is performing the action
+  --app-id: string # The id of the app associated with this statistic value
+  --user-id: string # The id of the user that is performing the action
   --value: int # The increment amount. Default is 1 if no value is provided.
   --date: int # The date (in millis) for when this increment occurred. The default is the current date if no value is provided. (format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "appId" $appId "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/stats/increment/($field)" $qp)
+  let qp = [(serialize-qp "appId" $app_id "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({field: $field} | format pattern "/stats/increment/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1390,7 +1390,7 @@ export def "stats-series get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/stats/series/($period)/($fields)" $qp)
+  let full_url = (build-url $base ({period: $period, fields: $fields} | format pattern "/stats/series/{period}/{fields}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1426,7 +1426,7 @@ export def "stats-total get" [
 #
 # GET /stripe-gateway/developer/{developerId}/accounts
 export def "stripe-gateway-developer-accounts get" [
-  developerId: string
+  developer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1438,7 +1438,7 @@ export def "stripe-gateway-developer-accounts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stripe-gateway/developer/($developerId)/accounts")
+  let full_url = (build-url $base ({developer_id: $developer_id} | format pattern "/stripe-gateway/developer/{developer_id}/accounts"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1448,7 +1448,7 @@ export def "stripe-gateway-developer-accounts get" [
 #
 # POST /stripe-gateway/developer/{developerId}/accounts
 export def "stripe-gateway-developer-accounts post" [
-  developerId: string
+  developer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1457,12 +1457,12 @@ export def "stripe-gateway-developer-accounts post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --redirectUrl: string # The URL to redirect this developer after they have connected their Stripe account
+  --redirect-url: string # The URL to redirect this developer after they have connected their Stripe account
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "redirectUrl" $redirectUrl "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/stripe-gateway/developer/($developerId)/accounts" $qp)
+  let qp = [(serialize-qp "redirectUrl" $redirect_url "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({developer_id: $developer_id} | format pattern "/stripe-gateway/developer/{developer_id}/accounts") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1472,8 +1472,8 @@ export def "stripe-gateway-developer-accounts post" [
 #
 # DELETE /stripe-gateway/developer/{developerId}/accounts/{stripeId}
 export def "stripe-gateway-developer-accounts delete" [
-  developerId: string
-  stripeId: string
+  developer_id: string
+  stripe_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1485,7 +1485,7 @@ export def "stripe-gateway-developer-accounts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stripe-gateway/developer/($developerId)/accounts/($stripeId)")
+  let full_url = (build-url $base ({developer_id: $developer_id, stripe_id: $stripe_id} | format pattern "/stripe-gateway/developer/{developer_id}/accounts/{stripe_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1495,7 +1495,7 @@ export def "stripe-gateway-developer-accounts delete" [
 #
 # GET /stripe-gateway/user/{userId}/cards
 export def "stripe-gateway-user-cards get" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1507,7 +1507,7 @@ export def "stripe-gateway-user-cards get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stripe-gateway/user/($userId)/cards")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/stripe-gateway/user/{user_id}/cards"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1517,7 +1517,7 @@ export def "stripe-gateway-user-cards get" [
 #
 # POST /stripe-gateway/user/{userId}/cards
 export def "stripe-gateway-user-cards post-by-userId" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1527,12 +1527,12 @@ export def "stripe-gateway-user-cards post-by-userId" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # The Stripe token returned by the Stripe.js Stripe.card.createToken call
-  --isDefault: oneof<nothing, bool> # Set to true if this should be set to be the default credit card
+  --is-default: oneof<nothing, bool> # Set to true if this should be set to be the default credit card
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "isDefault" $isDefault "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/stripe-gateway/user/($userId)/cards" $qp)
+  let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "isDefault" $is_default "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/stripe-gateway/user/{user_id}/cards") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1542,8 +1542,8 @@ export def "stripe-gateway-user-cards post-by-userId" [
 #
 # DELETE /stripe-gateway/user/{userId}/cards/{cardId}
 export def "stripe-gateway-user-cards delete" [
-  userId: string
-  cardId: string
+  user_id: string
+  card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1555,7 +1555,7 @@ export def "stripe-gateway-user-cards delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stripe-gateway/user/($userId)/cards/($cardId)")
+  let full_url = (build-url $base ({user_id: $user_id, card_id: $card_id} | format pattern "/stripe-gateway/user/{user_id}/cards/{card_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1565,8 +1565,8 @@ export def "stripe-gateway-user-cards delete" [
 #
 # POST /stripe-gateway/user/{userId}/cards/{cardId}
 export def "stripe-gateway-user-cards post-by-userId-cardId" [
-  userId: string
-  cardId: string
+  user_id: string
+  card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1575,7 +1575,7 @@ export def "stripe-gateway-user-cards post-by-userId-cardId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --isDefault: oneof<nothing, bool> # Set to true if this should be set to be the default credit card
+  --is-default: oneof<nothing, bool> # Set to true if this should be set to be the default credit card
   --address-city: string # The card holder's city
   --address-country: string # The card holder's country
   --address-line1: string # The card holder's street address
@@ -1585,8 +1585,8 @@ export def "stripe-gateway-user-cards post-by-userId-cardId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "isDefault" $isDefault "scalar") (serialize-qp "address_city" $address_city "scalar") (serialize-qp "address_country" $address_country "scalar") (serialize-qp "address_line1" $address_line1 "scalar") (serialize-qp "address_line2" $address_line2 "scalar") (serialize-qp "address_state" $address_state "scalar") (serialize-qp "address_zip" $address_zip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/stripe-gateway/user/($userId)/cards/($cardId)" $qp)
+  let qp = [(serialize-qp "isDefault" $is_default "scalar") (serialize-qp "address_city" $address_city "scalar") (serialize-qp "address_country" $address_country "scalar") (serialize-qp "address_line1" $address_line1 "scalar") (serialize-qp "address_line2" $address_line2 "scalar") (serialize-qp "address_state" $address_state "scalar") (serialize-qp "address_zip" $address_zip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({user_id: $user_id, card_id: $card_id} | format pattern "/stripe-gateway/user/{user_id}/cards/{card_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1606,12 +1606,12 @@ export def "transactions list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'userId':'1'} matches all the transactions that have the userId '1'.
   --qp-sort: string # A sort document. Example: {'date':1} sorts the results by total in ascending order
-  --pageNumber: int # The result set page number to be returned
+  --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/transactions" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1622,7 +1622,7 @@ export def "transactions list" [
 #
 # DELETE /transactions/{transactionId}
 export def "transactions delete" [
-  transactionId: string
+  transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1634,7 +1634,7 @@ export def "transactions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transactions/($transactionId)")
+  let full_url = (build-url $base ({transaction_id: $transaction_id} | format pattern "/transactions/{transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1644,7 +1644,7 @@ export def "transactions delete" [
 #
 # GET /transactions/{transactionId}
 export def "transactions get" [
-  transactionId: string
+  transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1656,7 +1656,7 @@ export def "transactions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transactions/($transactionId)")
+  let full_url = (build-url $base ({transaction_id: $transaction_id} | format pattern "/transactions/{transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1666,7 +1666,7 @@ export def "transactions get" [
 #
 # POST /transactions/{transactionId}
 export def "transactions post" [
-  transactionId: string
+  transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1675,12 +1675,12 @@ export def "transactions post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customData: string # A custom JSON object that you can create and attach to this record
+  --custom-data: string # A custom JSON object that you can create and attach to this record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "customData" $customData "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/transactions/($transactionId)" $qp)
+  let qp = [(serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({transaction_id: $transaction_id} | format pattern "/transactions/{transaction_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1700,12 +1700,12 @@ export def "user-accounts list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'name':'NASA'} matches all the userAccounts that have the name 'NASA'
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
-  --pageNumber: int # The result set page number to be returned
+  --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/userAccounts" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1716,7 +1716,7 @@ export def "user-accounts list" [
 #
 # DELETE /userAccounts/{userAccountId}
 export def "user-accounts delete" [
-  userAccountId: string
+  user_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1728,7 +1728,7 @@ export def "user-accounts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/userAccounts/($userAccountId)")
+  let full_url = (build-url $base ({user_account_id: $user_account_id} | format pattern "/userAccounts/{user_account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1738,7 +1738,7 @@ export def "user-accounts delete" [
 #
 # GET /userAccounts/{userAccountId}
 export def "user-accounts get" [
-  userAccountId: string
+  user_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1750,7 +1750,7 @@ export def "user-accounts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/userAccounts/($userAccountId)")
+  let full_url = (build-url $base ({user_account_id: $user_account_id} | format pattern "/userAccounts/{user_account_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1760,7 +1760,7 @@ export def "user-accounts get" [
 #
 # PATCH /userAccounts/{userAccountId}
 export def "user-accounts patch" [
-  userAccountId: string
+  user_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1769,15 +1769,15 @@ export def "user-accounts patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userId: string # The Id of the user that this account belongs to
+  --user-id: string # The Id of the user that this account belongs to
   --email: string # The contact email address
   --name: string # The user account name
-  --customData: string # A custom JSON object that you can create and attach to this record
+  --custom-data: string # A custom JSON object that you can create and attach to this record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userId" $userId "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $customData "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/userAccounts/($userAccountId)" $qp)
+  let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({user_account_id: $user_account_id} | format pattern "/userAccounts/{user_account_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1787,7 +1787,7 @@ export def "user-accounts patch" [
 #
 # POST /userAccounts/{userAccountId}
 export def "user-accounts post" [
-  userAccountId: string
+  user_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1796,15 +1796,15 @@ export def "user-accounts post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userId: string # The Id of the user that this account belongs to
+  --user-id: string # The Id of the user that this account belongs to
   --email: string # The contact email address
   --name: string # The user account name
-  --customData: string # A custom JSON object that you can create and attach to this record
+  --custom-data: string # A custom JSON object that you can create and attach to this record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userId" $userId "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $customData "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/userAccounts/($userAccountId)" $qp)
+  let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({user_account_id: $user_account_id} | format pattern "/userAccounts/{user_account_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1824,12 +1824,12 @@ export def "users list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query document. Example: {'name':'John'} matches all the users that have the name 'John'
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
-  --pageNumber: int # The result set page number to be returned
+  --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1840,7 +1840,7 @@ export def "users list" [
 #
 # DELETE /users/{userId}
 export def "users delete" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1852,7 +1852,7 @@ export def "users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($userId)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1862,7 +1862,7 @@ export def "users delete" [
 #
 # GET /users/{userId}
 export def "users get" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1874,7 +1874,7 @@ export def "users get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($userId)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1884,7 +1884,7 @@ export def "users get" [
 #
 # PATCH /users/{userId}
 export def "users patch" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1897,12 +1897,12 @@ export def "users patch" [
   --email: string # The user's email
   --username: string # The user's username
   --name: string # The user's name
-  --customData: string # A custom JSON object that you can create and attach to this record
+  --custom-data: string # A custom JSON object that you can create and attach to this record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $customData "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($userId)" $qp)
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1912,7 +1912,7 @@ export def "users patch" [
 #
 # POST /users/{userId}
 export def "users post" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1925,12 +1925,12 @@ export def "users post" [
   --email: string # The user's email
   --username: string # The user's username
   --name: string # The user's name
-  --customData: string # A custom JSON object that you can create and attach to this record
+  --custom-data: string # A custom JSON object that you can create and attach to this record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $customData "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($userId)" $qp)
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

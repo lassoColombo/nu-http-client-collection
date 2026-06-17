@@ -71,7 +71,7 @@ def type-completer [] { ["Microsoft.NetApp/netAppAccounts" "Microsoft.NetApp/net
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-net-app-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-net-app-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.NetApp/operations
 # operationId: Operations_List
-export def "providers-microsoft-net-app-operations List" [
+export def "providers-microsoft-net-app-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,8 +119,8 @@ export def "providers-microsoft-net-app-operations List" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.NetApp/locations/{location}/checkFilePathAvailability
 # operationId: CheckFilePathAvailability
-export def "subscriptions-providers-microsoft-net-app-locations-check-file-path-availability CheckFilePathAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-net-app-locations-check-file-path-availability check" [
+  subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -132,15 +132,15 @@ export def "subscriptions-providers-microsoft-net-app-locations-check-file-path-
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (default: 2019-07-01)
   name: string # Resource name to verify.
-  resourceGroup: string # Resource group name.
+  resource_group: string # Resource group name.
   type: string@type-completer # Resource type used for verification.
 ]: any -> record<isAvailable: bool, message: string, reason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.NetApp/locations/($location)/checkFilePathAvailability" $qp)
-  let body = {name: $name, resourceGroup: $resourceGroup, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.NetApp/locations/{location}/checkFilePathAvailability") $qp)
+  let body = {"name": $name, "resourceGroup": $resource_group, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -151,8 +151,8 @@ export def "subscriptions-providers-microsoft-net-app-locations-check-file-path-
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.NetApp/locations/{location}/checkNameAvailability
 # operationId: CheckNameAvailability
-export def "subscriptions-providers-microsoft-net-app-locations-check-name-availability CheckNameAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-net-app-locations-check-name-availability check" [
+  subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -164,15 +164,15 @@ export def "subscriptions-providers-microsoft-net-app-locations-check-name-avail
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. (default: 2019-07-01)
   name: string # Resource name to verify.
-  resourceGroup: string # Resource group name.
+  resource_group: string # Resource group name.
   type: string@type-completer # Resource type used for verification.
 ]: any -> record<isAvailable: bool, message: string, reason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.NetApp/locations/($location)/checkNameAvailability" $qp)
-  let body = {name: $name, resourceGroup: $resourceGroup, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.NetApp/locations/{location}/checkNameAvailability") $qp)
+  let body = {"name": $name, "resourceGroup": $resource_group, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -183,9 +183,9 @@ export def "subscriptions-providers-microsoft-net-app-locations-check-name-avail
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts
 # operationId: Accounts_List
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts List" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -209,10 +209,10 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}
 # operationId: Accounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -236,10 +236,10 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}
 # operationId: Accounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -264,10 +264,10 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}
 # operationId: Accounts_Update
 # --properties shape: {activeDirectories?: list}
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,8 +285,8 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)" $qp)
-  let body = {location: $location, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}") $qp)
+  let body = {"location": $location, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -298,10 +298,10 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}
 # operationId: Accounts_CreateOrUpdate
 # --properties shape: {activeDirectories?: list}
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,8 +319,8 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)" $qp)
-  let body = {location: $location, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}") $qp)
+  let body = {"location": $location, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -331,10 +331,10 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools
 # operationId: Pools_List
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools List" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,7 +348,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)/capacityPools" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}/capacityPools") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -358,11 +358,11 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}
 # operationId: Pools_Delete
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  poolName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,7 +376,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)/capacityPools/($poolName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, pool_name: $pool_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}/capacityPools/{pool_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -386,11 +386,11 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}
 # operationId: Pools_Get
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  poolName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,7 +404,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)/capacityPools/($poolName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, pool_name: $pool_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}/capacityPools/{pool_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -415,11 +415,11 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}
 # operationId: Pools_Update
 # --properties shape: {serviceLevel?: "Standard"|"Premium"|"Ultra", size?: int}
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  poolName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -437,8 +437,8 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)/capacityPools/($poolName)" $qp)
-  let body = {location: $location, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, pool_name: $pool_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}/capacityPools/{pool_name}") $qp)
+  let body = {"location": $location, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -450,11 +450,11 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}
 # operationId: Pools_CreateOrUpdate
 # --properties shape: {serviceLevel: "Standard"|"Premium"|"Ultra", size: int}
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  poolName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -472,8 +472,8 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)/capacityPools/($poolName)" $qp)
-  let body = {location: $location, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, pool_name: $pool_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}/capacityPools/{pool_name}") $qp)
+  let body = {"location": $location, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -484,11 +484,11 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes
 # operationId: Volumes_List
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes List" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  poolName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,7 +502,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)/capacityPools/($poolName)/volumes" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, pool_name: $pool_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}/capacityPools/{pool_name}/volumes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -512,12 +512,12 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}
 # operationId: Volumes_Delete
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  poolName: string
-  volumeName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
+  volume_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -531,7 +531,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)/capacityPools/($poolName)/volumes/($volumeName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, pool_name: $pool_name, volume_name: $volume_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}/capacityPools/{pool_name}/volumes/{volume_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -541,12 +541,12 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}
 # operationId: Volumes_Get
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  poolName: string
-  volumeName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
+  volume_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,7 +560,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)/capacityPools/($poolName)/volumes/($volumeName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, pool_name: $pool_name, volume_name: $volume_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}/capacityPools/{pool_name}/volumes/{volume_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -571,12 +571,12 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}
 # operationId: Volumes_Update
 # --properties shape: {exportPolicy?: any, serviceLevel?: "Standard"|"Premium"|"Ultra", usageThreshold?: int}
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  poolName: string
-  volumeName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
+  volume_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,8 +594,8 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)/capacityPools/($poolName)/volumes/($volumeName)" $qp)
-  let body = {location: $location, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, pool_name: $pool_name, volume_name: $volume_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}/capacityPools/{pool_name}/volumes/{volume_name}") $qp)
+  let body = {"location": $location, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -607,12 +607,12 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}
 # operationId: Volumes_CreateOrUpdate
 # --properties shape: {creationToken: string, exportPolicy?: any, mountTargets?: any, protocolTypes?: list, serviceLevel?: "Standard"|"Premium"|"Ultra", snapshotId?: string, subnetId: string, usageThreshold: int}
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  poolName: string
-  volumeName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
+  volume_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,8 +630,8 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)/capacityPools/($poolName)/volumes/($volumeName)" $qp)
-  let body = {location: $location, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, pool_name: $pool_name, volume_name: $volume_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}/capacityPools/{pool_name}/volumes/{volume_name}") $qp)
+  let body = {"location": $location, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -642,12 +642,12 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}/mountTargets
 # operationId: MountTargets_List
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-mount-targets List" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  poolName: string
-  volumeName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-mount-targets list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
+  volume_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -661,7 +661,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)/capacityPools/($poolName)/volumes/($volumeName)/mountTargets" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, pool_name: $pool_name, volume_name: $volume_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}/capacityPools/{pool_name}/volumes/{volume_name}/mountTargets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -671,12 +671,12 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}/snapshots
 # operationId: Snapshots_List
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-snapshots List" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  poolName: string
-  volumeName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-snapshots list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
+  volume_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,7 +690,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)/capacityPools/($poolName)/volumes/($volumeName)/snapshots" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, pool_name: $pool_name, volume_name: $volume_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}/capacityPools/{pool_name}/volumes/{volume_name}/snapshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -700,13 +700,13 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}/snapshots/{snapshotName}
 # operationId: Snapshots_Delete
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-snapshots Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  poolName: string
-  volumeName: string
-  snapshotName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-snapshots delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
+  volume_name: string
+  snapshot_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -720,7 +720,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)/capacityPools/($poolName)/volumes/($volumeName)/snapshots/($snapshotName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, pool_name: $pool_name, volume_name: $volume_name, snapshot_name: $snapshot_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}/capacityPools/{pool_name}/volumes/{volume_name}/snapshots/{snapshot_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -730,13 +730,13 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}/snapshots/{snapshotName}
 # operationId: Snapshots_Get
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-snapshots Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  poolName: string
-  volumeName: string
-  snapshotName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-snapshots get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
+  volume_name: string
+  snapshot_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,7 +750,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)/capacityPools/($poolName)/volumes/($volumeName)/snapshots/($snapshotName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, pool_name: $pool_name, volume_name: $volume_name, snapshot_name: $snapshot_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}/capacityPools/{pool_name}/volumes/{volume_name}/snapshots/{snapshot_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -760,13 +760,13 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}/snapshots/{snapshotName}
 # operationId: Snapshots_Update
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-snapshots Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  poolName: string
-  volumeName: string
-  snapshotName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-snapshots update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
+  volume_name: string
+  snapshot_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -782,8 +782,8 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)/capacityPools/($poolName)/volumes/($volumeName)/snapshots/($snapshotName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, pool_name: $pool_name, volume_name: $volume_name, snapshot_name: $snapshot_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}/capacityPools/{pool_name}/volumes/{volume_name}/snapshots/{snapshot_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -795,13 +795,13 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}/snapshots/{snapshotName}
 # operationId: Snapshots_Create
 # --properties shape: {fileSystemId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-snapshots Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  poolName: string
-  volumeName: string
-  snapshotName: string
+export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-snapshots create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  pool_name: string
+  volume_name: string
+  snapshot_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -819,8 +819,8 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NetApp/netAppAccounts/($accountName)/capacityPools/($poolName)/volumes/($volumeName)/snapshots/($snapshotName)" $qp)
-  let body = {location: $location, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, pool_name: $pool_name, volume_name: $volume_name, snapshot_name: $snapshot_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NetApp/netAppAccounts/{account_name}/capacityPools/{pool_name}/volumes/{volume_name}/snapshots/{snapshot_name}") $qp)
+  let body = {"location": $location, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

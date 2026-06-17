@@ -124,7 +124,7 @@ export def "api ping" [
 #
 # GET /account
 # operationId: get_users_account
-export def "account account" [
+export def "account get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,7 +146,7 @@ export def "account account" [
 #
 # GET /accounts
 # operationId: list_accounts
-export def "accounts accounts" [
+export def "accounts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "accounts account" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts")
-  let body = {email: $email, name: $name} | compact
+  let body = {"email": $email, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -210,7 +210,7 @@ export def "accounts account-by-accountname" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountname)")
+  let full_url = (build-url $base ({accountname: $accountname} | format pattern "/accounts/{accountname}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -233,7 +233,7 @@ export def "accounts account-by-accountname-1" [
 ]: nothing -> record<created_at: string, email: string, last_updated: string, name: string, state: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountname)")
+  let full_url = (build-url $base ({accountname: $accountname} | format pattern "/accounts/{accountname}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,8 +258,8 @@ export def "accounts-state state" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountname)/state")
-  let body = {state: $state} | compact
+  let full_url = (build-url $base ({accountname: $accountname} | format pattern "/accounts/{accountname}/state"))
+  let body = {"state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -283,7 +283,7 @@ export def "accounts-users users" [
 ]: nothing -> table<created_at: string, last_updated: string, source: string, type: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountname)/users")
+  let full_url = (build-url $base ({accountname: $accountname} | format pattern "/accounts/{accountname}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -309,8 +309,8 @@ export def "accounts-users user-by-accountname" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountname)/users")
-  let body = {password: $password, username: $username} | compact
+  let full_url = (build-url $base ({accountname: $accountname} | format pattern "/accounts/{accountname}/users"))
+  let body = {"password": $password, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -335,7 +335,7 @@ export def "accounts-users user-by-accountname-username" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountname)/users/($username)")
+  let full_url = (build-url $base ({accountname: $accountname, username: $username} | format pattern "/accounts/{accountname}/users/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -359,7 +359,7 @@ export def "accounts-users user-by-accountname-username-1" [
 ]: nothing -> record<created_at: string, last_updated: string, source: string, type: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountname)/users/($username)")
+  let full_url = (build-url $base ({accountname: $accountname, username: $username} | format pattern "/accounts/{accountname}/users/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -385,7 +385,7 @@ export def "accounts-users-credentials credential-by-accountname-username" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "credential_type" $credential_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($accountname)/users/($username)/credentials" $qp)
+  let full_url = (build-url $base ({accountname: $accountname, username: $username} | format pattern "/accounts/{accountname}/users/{username}/credentials") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -409,7 +409,7 @@ export def "accounts-users-credentials credentials" [
 ]: nothing -> table<created_at: string, type: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountname)/users/($username)/credentials")
+  let full_url = (build-url $base ({accountname: $accountname, username: $username} | format pattern "/accounts/{accountname}/users/{username}/credentials"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -437,8 +437,8 @@ export def "accounts-users-credentials credential-by-accountname-username-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountname)/users/($username)/credentials")
-  let body = {created_at: $created_at, type: $type, value: $value} | compact
+  let full_url = (build-url $base ({accountname: $accountname, username: $username} | format pattern "/accounts/{accountname}/users/{username}/credentials"))
+  let body = {"created_at": $created_at, "type": $type, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -448,7 +448,7 @@ export def "accounts-users-credentials credential-by-accountname-username-1" [
 # GET /archives
 #
 # operationId: list_archives
-export def "archives archives" [
+export def "archives archive-s" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,7 +516,7 @@ export def "archives-images analysis" [
 # DELETE /archives/images/{imageDigest}
 # operationId: delete_archived_analysis
 export def "archives-images analysis-by-imageDigest" [
-  imageDigest: string
+  image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,7 +530,7 @@ export def "archives-images analysis-by-imageDigest" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/archives/images/($imageDigest)" $qp)
+  let full_url = (build-url $base ({image_digest: $image_digest} | format pattern "/archives/images/{image_digest}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -541,7 +541,7 @@ export def "archives-images analysis-by-imageDigest" [
 # GET /archives/images/{imageDigest}
 # operationId: get_archived_analysis
 export def "archives-images analysis-by-imageDigest-1" [
-  imageDigest: string
+  image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,7 +553,7 @@ export def "archives-images analysis-by-imageDigest-1" [
 ]: nothing -> record<analyzed_at: string, annotations: record, archive_size_bytes: int, created_at: string, imageDigest: string, image_detail: table<detected_at: string, pullstring: string, registry: string, repository: string, tag: string>, last_updated: string, parentDigest: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/archives/images/($imageDigest)")
+  let full_url = (build-url $base ({image_digest: $image_digest} | format pattern "/archives/images/{image_digest}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -611,7 +611,7 @@ export def "archives-rules rule" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/archives/rules")
-  let body = {analysis_age_days: $analysis_age_days, created_at: $created_at, exclude: $exclude, last_updated: $last_updated, max_images_per_account: $max_images_per_account, rule_id: $rule_id, selector: $selector, system_global: $system_global, tag_versions_newer: $tag_versions_newer, transition: $transition} | compact
+  let body = {"analysis_age_days": $analysis_age_days, "created_at": $created_at, "exclude": $exclude, "last_updated": $last_updated, "max_images_per_account": $max_images_per_account, "rule_id": $rule_id, "selector": $selector, "system_global": $system_global, "tag_versions_newer": $tag_versions_newer, "transition": $transition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -622,7 +622,7 @@ export def "archives-rules rule" [
 #
 # operationId: delete_analysis_archive_rule
 export def "archives-rules rule-by-ruleId" [
-  ruleId: string
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -634,7 +634,7 @@ export def "archives-rules rule-by-ruleId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/archives/rules/($ruleId)")
+  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/archives/rules/{rule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -644,7 +644,7 @@ export def "archives-rules rule-by-ruleId" [
 #
 # operationId: get_analysis_archive_rule
 export def "archives-rules rule-by-ruleId-1" [
-  ruleId: string
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,7 +656,7 @@ export def "archives-rules rule-by-ruleId-1" [
 ]: nothing -> record<analysis_age_days: int, created_at: string, exclude: record<expiration_days: int, selector: record<registry: string, repository: string, tag: string>>, last_updated: string, max_images_per_account: int, rule_id: string, selector: record<registry: string, repository: string, tag: string>, system_global: bool, tag_versions_newer: int, transition: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/archives/rules/($ruleId)")
+  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/archives/rules/{rule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -688,7 +688,7 @@ export def "event-types types" [
 #
 # DELETE /events
 # operationId: delete_events
-export def "events events" [
+export def "events delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -717,7 +717,7 @@ export def "events events" [
 #
 # GET /events
 # operationId: list_events
-export def "events events-1" [
+export def "events get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -754,7 +754,7 @@ export def "events events-1" [
 # DELETE /events/{eventId}
 # operationId: delete_event
 export def "events event-by-eventId" [
-  eventId: string
+  event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,7 +767,7 @@ export def "events event-by-eventId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($eventId)")
+  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/events/{event_id}"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -780,7 +780,7 @@ export def "events event-by-eventId" [
 # GET /events/{eventId}
 # operationId: get_event
 export def "events event-by-eventId-1" [
-  eventId: string
+  event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -793,7 +793,7 @@ export def "events event-by-eventId-1" [
 ]: nothing -> record<created_at: string, event: record<category: string, details: record, level: string, message: string, resource: record<id: string, type: string, user_id: string>, source: record<base_url: string, hostid: string, request_id: string, servicename: string>, timestamp: string, type: string>, generated_uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($eventId)")
+  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/events/{event_id}"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -836,13 +836,13 @@ export def "images async" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --imageDigests: list
+  --image-digests: list
   --force: oneof<nothing, bool>
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
 ]: nothing -> table<detail: string, digest: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "imageDigests" $imageDigests "csv") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "imageDigests" $image_digests "csv") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/images" $qp)
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -855,7 +855,7 @@ export def "images async" [
 #
 # GET /images
 # operationId: list_images
-export def "images images" [
+export def "images get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -911,7 +911,7 @@ export def "images image" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar") (serialize-qp "autosubscribe" $autosubscribe "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/images" $qp)
-  let body = {annotations: $annotations, created_at: $created_at, digest: $digest, dockerfile: $dockerfile, image_type: $image_type, source: $body_source, tag: $tag} | compact
+  let body = {"annotations": $annotations, "created_at": $created_at, "digest": $digest, "dockerfile": $dockerfile, "image_type": $image_type, "source": $body_source, "tag": $tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -925,7 +925,7 @@ export def "images image" [
 # DELETE /images/by_id/{imageId}
 # operationId: delete_image_by_imageId
 export def "images-by-id imageId-by-imageId" [
-  imageId: string
+  image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,7 +940,7 @@ export def "images-by-id imageId-by-imageId" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/images/by_id/($imageId)" $qp)
+  let full_url = (build-url $base ({image_id: $image_id} | format pattern "/images/by_id/{image_id}") $qp)
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -953,7 +953,7 @@ export def "images-by-id imageId-by-imageId" [
 # GET /images/by_id/{imageId}
 # operationId: get_image_by_imageId
 export def "images-by-id imageId-by-imageId-1" [
-  imageId: string
+  image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -966,7 +966,7 @@ export def "images-by-id imageId-by-imageId-1" [
 ]: nothing -> table<analysis_status: string, annotations: record, created_at: string, imageDigest: string, image_content: record, image_detail: list<record>, image_status: string, last_updated: string, record_version: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/by_id/($imageId)")
+  let full_url = (build-url $base ({image_id: $image_id} | format pattern "/images/by_id/{image_id}"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -979,7 +979,7 @@ export def "images-by-id imageId-by-imageId-1" [
 # GET /images/by_id/{imageId}/check
 # operationId: get_image_policy_check_by_imageId
 export def "images-by-id-check imageId" [
-  imageId: string
+  image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -988,7 +988,7 @@ export def "images-by-id-check imageId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --policyId: string
+  --policy-id: string
   --tag: string
   --detail: oneof<nothing, bool>
   --history: oneof<nothing, bool>
@@ -996,8 +996,8 @@ export def "images-by-id-check imageId" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "policyId" $policyId "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "detail" $detail "scalar") (serialize-qp "history" $history "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/images/by_id/($imageId)/check" $qp)
+  let qp = [(serialize-qp "policyId" $policy_id "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "detail" $detail "scalar") (serialize-qp "history" $history "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({image_id: $image_id} | format pattern "/images/by_id/{image_id}/check") $qp)
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1010,7 +1010,7 @@ export def "images-by-id-check imageId" [
 # GET /images/by_id/{imageId}/content
 # operationId: list_image_content_by_imageid
 export def "images-by-id-content imageid" [
-  imageId: string
+  image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1023,7 +1023,7 @@ export def "images-by-id-content imageid" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/by_id/($imageId)/content")
+  let full_url = (build-url $base ({image_id: $image_id} | format pattern "/images/by_id/{image_id}/content"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1036,7 +1036,7 @@ export def "images-by-id-content imageid" [
 # GET /images/by_id/{imageId}/content/files
 # operationId: get_image_content_by_type_imageId_files
 export def "images-by-id-content-files files" [
-  imageId: string
+  image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1049,7 +1049,7 @@ export def "images-by-id-content-files files" [
 ]: nothing -> record<content: table<filename: string, gid: int, linkdest: string, mode: string, sha256: string, size: int, type: string, uid: int>, content_type: string, imageDigest: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/by_id/($imageId)/content/files")
+  let full_url = (build-url $base ({image_id: $image_id} | format pattern "/images/by_id/{image_id}/content/files"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1062,7 +1062,7 @@ export def "images-by-id-content-files files" [
 # GET /images/by_id/{imageId}/content/java
 # operationId: get_image_content_by_type_imageId_javapackage
 export def "images-by-id-content-java javapackage" [
-  imageId: string
+  image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1075,7 +1075,7 @@ export def "images-by-id-content-java javapackage" [
 ]: nothing -> record<content: table<cpes: list, implementation_version: string, location: string, maven_version: string, origin: string, package: string, specification_version: string, type: string>, content_type: string, imageDigest: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/by_id/($imageId)/content/java")
+  let full_url = (build-url $base ({image_id: $image_id} | format pattern "/images/by_id/{image_id}/content/java"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1088,7 +1088,7 @@ export def "images-by-id-content-java javapackage" [
 # GET /images/by_id/{imageId}/content/{ctype}
 # operationId: get_image_content_by_type_imageId
 export def "images-by-id-content imageId" [
-  imageId: string
+  image_id: string
   ctype: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1102,7 +1102,7 @@ export def "images-by-id-content imageId" [
 ]: nothing -> record<content: table<cpes: list, license: string, licenses: list, location: string, origin: string, package: string, size: string, type: string, version: string>, content_type: string, imageDigest: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/by_id/($imageId)/content/($ctype)")
+  let full_url = (build-url $base ({image_id: $image_id, ctype: $ctype} | format pattern "/images/by_id/{image_id}/content/{ctype}"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1115,7 +1115,7 @@ export def "images-by-id-content imageId" [
 # GET /images/by_id/{imageId}/vuln
 # operationId: get_image_vulnerability_types_by_imageId
 export def "images-by-id-vuln list" [
-  imageId: string
+  image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1128,7 +1128,7 @@ export def "images-by-id-vuln list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/by_id/($imageId)/vuln")
+  let full_url = (build-url $base ({image_id: $image_id} | format pattern "/images/by_id/{image_id}/vuln"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1141,7 +1141,7 @@ export def "images-by-id-vuln list" [
 # GET /images/by_id/{imageId}/vuln/{vtype}
 # operationId: get_image_vulnerabilities_by_type_imageId
 export def "images-by-id-vuln imageId" [
-  imageId: string
+  image_id: string
   vtype: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1155,7 +1155,7 @@ export def "images-by-id-vuln imageId" [
 ]: nothing -> record<imageDigest: string, vulnerabilities: table<feed: string, feed_group: string, fix: string, nvd_data: list, package: string, package_cpe: string, package_name: string, package_path: string, package_type: string, package_version: string, severity: string, url: string, vendor_data: list, vuln: string, will_not_fix: bool>, vulnerability_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/by_id/($imageId)/vuln/($vtype)")
+  let full_url = (build-url $base ({image_id: $image_id, vtype: $vtype} | format pattern "/images/by_id/{image_id}/vuln/{vtype}"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1168,7 +1168,7 @@ export def "images-by-id-vuln imageId" [
 # DELETE /images/{imageDigest}
 # operationId: delete_image
 export def "images image-by-imageDigest" [
-  imageDigest: string
+  image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1183,7 +1183,7 @@ export def "images image-by-imageDigest" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/images/($imageDigest)" $qp)
+  let full_url = (build-url $base ({image_digest: $image_digest} | format pattern "/images/{image_digest}") $qp)
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1196,7 +1196,7 @@ export def "images image-by-imageDigest" [
 # GET /images/{imageDigest}
 # operationId: get_image
 export def "images image-by-imageDigest-1" [
-  imageDigest: string
+  image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1209,7 +1209,7 @@ export def "images image-by-imageDigest-1" [
 ]: nothing -> table<analysis_status: string, annotations: record, created_at: string, imageDigest: string, image_content: record, image_detail: list<record>, image_status: string, last_updated: string, record_version: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($imageDigest)")
+  let full_url = (build-url $base ({image_digest: $image_digest} | format pattern "/images/{image_digest}"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1222,7 +1222,7 @@ export def "images image-by-imageDigest-1" [
 # GET /images/{imageDigest}/artifacts/file_content_search
 # operationId: list_file_content_search_results
 export def "images-artifacts-file-content-search results" [
-  imageDigest: string
+  image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1234,7 +1234,7 @@ export def "images-artifacts-file-content-search results" [
 ]: nothing -> table<matches: list<record>, path: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($imageDigest)/artifacts/file_content_search")
+  let full_url = (build-url $base ({image_digest: $image_digest} | format pattern "/images/{image_digest}/artifacts/file_content_search"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1245,7 +1245,7 @@ export def "images-artifacts-file-content-search results" [
 # GET /images/{imageDigest}/artifacts/retrieved_files
 # operationId: list_retrieved_files
 export def "images-artifacts-retrieved-files files" [
-  imageDigest: string
+  image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1257,7 +1257,7 @@ export def "images-artifacts-retrieved-files files" [
 ]: nothing -> table<b64_content: string, path: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($imageDigest)/artifacts/retrieved_files")
+  let full_url = (build-url $base ({image_digest: $image_digest} | format pattern "/images/{image_digest}/artifacts/retrieved_files"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1268,7 +1268,7 @@ export def "images-artifacts-retrieved-files files" [
 # GET /images/{imageDigest}/artifacts/secret_search
 # operationId: list_secret_search_results
 export def "images-artifacts-secret-search results" [
-  imageDigest: string
+  image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1280,7 +1280,7 @@ export def "images-artifacts-secret-search results" [
 ]: nothing -> table<matches: list<record>, path: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($imageDigest)/artifacts/secret_search")
+  let full_url = (build-url $base ({image_digest: $image_digest} | format pattern "/images/{image_digest}/artifacts/secret_search"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1291,7 +1291,7 @@ export def "images-artifacts-secret-search results" [
 # GET /images/{imageDigest}/check
 # operationId: get_image_policy_check
 export def "images-check check" [
-  imageDigest: string
+  image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1300,7 +1300,7 @@ export def "images-check check" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --policyId: string
+  --policy-id: string
   --tag: string
   --detail: oneof<nothing, bool>
   --history: oneof<nothing, bool>
@@ -1309,8 +1309,8 @@ export def "images-check check" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "policyId" $policyId "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "detail" $detail "scalar") (serialize-qp "history" $history "scalar") (serialize-qp "interactive" $interactive "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/images/($imageDigest)/check" $qp)
+  let qp = [(serialize-qp "policyId" $policy_id "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "detail" $detail "scalar") (serialize-qp "history" $history "scalar") (serialize-qp "interactive" $interactive "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({image_digest: $image_digest} | format pattern "/images/{image_digest}/check") $qp)
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1323,7 +1323,7 @@ export def "images-check check" [
 # GET /images/{imageDigest}/content
 # operationId: list_image_content
 export def "images-content content" [
-  imageDigest: string
+  image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1336,7 +1336,7 @@ export def "images-content content" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($imageDigest)/content")
+  let full_url = (build-url $base ({image_digest: $image_digest} | format pattern "/images/{image_digest}/content"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1349,7 +1349,7 @@ export def "images-content content" [
 # GET /images/{imageDigest}/content/files
 # operationId: get_image_content_by_type_files
 export def "images-content-files files" [
-  imageDigest: string
+  image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1362,7 +1362,7 @@ export def "images-content-files files" [
 ]: nothing -> record<content: table<filename: string, gid: int, linkdest: string, mode: string, sha256: string, size: int, type: string, uid: int>, content_type: string, imageDigest: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($imageDigest)/content/files")
+  let full_url = (build-url $base ({image_digest: $image_digest} | format pattern "/images/{image_digest}/content/files"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1375,7 +1375,7 @@ export def "images-content-files files" [
 # GET /images/{imageDigest}/content/java
 # operationId: get_image_content_by_type_javapackage
 export def "images-content-java javapackage" [
-  imageDigest: string
+  image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1388,7 +1388,7 @@ export def "images-content-java javapackage" [
 ]: nothing -> record<content: table<cpes: list, implementation_version: string, location: string, maven_version: string, origin: string, package: string, specification_version: string, type: string>, content_type: string, imageDigest: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($imageDigest)/content/java")
+  let full_url = (build-url $base ({image_digest: $image_digest} | format pattern "/images/{image_digest}/content/java"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1401,7 +1401,7 @@ export def "images-content-java javapackage" [
 # GET /images/{imageDigest}/content/malware
 # operationId: get_image_content_by_type_malware
 export def "images-content-malware malware" [
-  imageDigest: string
+  image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1414,7 +1414,7 @@ export def "images-content-malware malware" [
 ]: nothing -> record<content: table<enabled: bool, findings: list, metadata: record, scanner: string>, content_type: string, imageDigest: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($imageDigest)/content/malware")
+  let full_url = (build-url $base ({image_digest: $image_digest} | format pattern "/images/{image_digest}/content/malware"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1427,7 +1427,7 @@ export def "images-content-malware malware" [
 # GET /images/{imageDigest}/content/{ctype}
 # operationId: get_image_content_by_type
 export def "images-content type" [
-  imageDigest: string
+  image_digest: string
   ctype: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1441,7 +1441,7 @@ export def "images-content type" [
 ]: nothing -> record<content: table<cpes: list, license: string, licenses: list, location: string, origin: string, package: string, size: string, type: string, version: string>, content_type: string, imageDigest: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($imageDigest)/content/($ctype)")
+  let full_url = (build-url $base ({image_digest: $image_digest, ctype: $ctype} | format pattern "/images/{image_digest}/content/{ctype}"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1454,7 +1454,7 @@ export def "images-content type" [
 # GET /images/{imageDigest}/metadata
 # operationId: list_image_metadata
 export def "images-metadata metadata" [
-  imageDigest: string
+  image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1467,7 +1467,7 @@ export def "images-metadata metadata" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($imageDigest)/metadata")
+  let full_url = (build-url $base ({image_digest: $image_digest} | format pattern "/images/{image_digest}/metadata"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1480,7 +1480,7 @@ export def "images-metadata metadata" [
 # GET /images/{imageDigest}/metadata/{mtype}
 # operationId: get_image_metadata_by_type
 export def "images-metadata type" [
-  imageDigest: string
+  image_digest: string
   mtype: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1494,7 +1494,7 @@ export def "images-metadata type" [
 ]: nothing -> record<imageDigest: string, metadata: any, metadata_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($imageDigest)/metadata/($mtype)")
+  let full_url = (build-url $base ({image_digest: $image_digest, mtype: $mtype} | format pattern "/images/{image_digest}/metadata/{mtype}"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1507,7 +1507,7 @@ export def "images-metadata type" [
 # GET /images/{imageDigest}/sboms/native
 # operationId: get_image_sbom_native
 export def "images-sboms-native native" [
-  imageDigest: string
+  image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1520,7 +1520,7 @@ export def "images-sboms-native native" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($imageDigest)/sboms/native")
+  let full_url = (build-url $base ({image_digest: $image_digest} | format pattern "/images/{image_digest}/sboms/native"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/gzip"
@@ -1533,7 +1533,7 @@ export def "images-sboms-native native" [
 # GET /images/{imageDigest}/vuln
 # operationId: get_image_vulnerability_types
 export def "images-vuln types" [
-  imageDigest: string
+  image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1546,7 +1546,7 @@ export def "images-vuln types" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($imageDigest)/vuln")
+  let full_url = (build-url $base ({image_digest: $image_digest} | format pattern "/images/{image_digest}/vuln"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1559,7 +1559,7 @@ export def "images-vuln types" [
 # GET /images/{imageDigest}/vuln/{vtype}
 # operationId: get_image_vulnerabilities_by_type
 export def "images-vuln type" [
-  imageDigest: string
+  image_digest: string
   vtype: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1576,7 +1576,7 @@ export def "images-vuln type" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force_refresh" $force_refresh "scalar") (serialize-qp "vendor_only" $vendor_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/images/($imageDigest)/vuln/($vtype)" $qp)
+  let full_url = (build-url $base ({image_digest: $image_digest, vtype: $vtype} | format pattern "/images/{image_digest}/vuln/{vtype}") $qp)
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1603,7 +1603,7 @@ export def "import-images archive" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/import/images")
-  let body = {archive_file: $archive_file} | compact
+  let body = {"archive_file": $archive_file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1671,7 +1671,7 @@ export def "imports-images operation-by-operation_id" [
 ]: nothing -> record<created_at: string, expires_at: string, status: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/imports/images/($operation_id)")
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/imports/images/{operation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1694,7 +1694,7 @@ export def "imports-images operation-by-operation_id-1" [
 ]: nothing -> record<created_at: string, expires_at: string, status: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/imports/images/($operation_id)")
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/imports/images/{operation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1717,7 +1717,7 @@ export def "imports-images-dockerfile dockerfiles" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/imports/images/($operation_id)/dockerfile")
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/imports/images/{operation_id}/dockerfile"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1742,7 +1742,7 @@ export def "imports-images-dockerfile dockerfile" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/imports/images/($operation_id)/dockerfile")
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/imports/images/{operation_id}/dockerfile"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1766,7 +1766,7 @@ export def "imports-images-image-config configs" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/imports/images/($operation_id)/image_config")
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/imports/images/{operation_id}/image_config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1791,7 +1791,7 @@ export def "imports-images-image-config config" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/imports/images/($operation_id)/image_config")
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/imports/images/{operation_id}/image_config"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1815,7 +1815,7 @@ export def "imports-images-manifest manifests" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/imports/images/($operation_id)/manifest")
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/imports/images/{operation_id}/manifest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1840,7 +1840,7 @@ export def "imports-images-manifest manifest" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/imports/images/($operation_id)/manifest")
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/imports/images/{operation_id}/manifest"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1864,7 +1864,7 @@ export def "imports-images-packages packages-by-operation_id" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/imports/images/($operation_id)/packages")
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/imports/images/{operation_id}/packages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1890,7 +1890,7 @@ export def "imports-images-packages packages-by-operation_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --artifactRelationships: list # item shape: {child: string, metadata?: record, parent: string, type: string}
+  --artifact-relationships: list # item shape: {child: string, metadata?: record, parent: string, type: string}
   artifacts: list # item shape: {cpes: list, foundBy?: string, id?: string, language: string, licenses: list, locations: list, metadata?: record, metadataType: string, name: string, purl?: string, type: string, version: string}
   --descriptor: record # shape: {name: string, version: string}
   distro: record # shape: {idLike: string, name: string, version: string}
@@ -1900,8 +1900,8 @@ export def "imports-images-packages packages-by-operation_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/imports/images/($operation_id)/packages")
-  let body = {artifactRelationships: $artifactRelationships, artifacts: $artifacts, descriptor: $descriptor, distro: $distro, schema: $schema, source: $body_source} | compact
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/imports/images/{operation_id}/packages"))
+  let body = {"artifactRelationships": $artifact_relationships, "artifacts": $artifacts, "descriptor": $descriptor, "distro": $distro, "schema": $schema, "source": $body_source} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1925,7 +1925,7 @@ export def "imports-images-parent-manifest manifests" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/imports/images/($operation_id)/parent_manifest")
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/imports/images/{operation_id}/parent_manifest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1950,7 +1950,7 @@ export def "imports-images-parent-manifest manifest" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/imports/images/($operation_id)/parent_manifest")
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/imports/images/{operation_id}/parent_manifest"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1979,7 +1979,7 @@ export def "oauth-token token" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/token")
-  let body = {client_id: $client_id, grant_type: $grant_type, password: $password, username: $username} | compact
+  let body = {"client_id": $client_id, "grant_type": $grant_type, "password": $password, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1990,7 +1990,7 @@ export def "oauth-token token" [
 #
 # GET /policies
 # operationId: list_policies
-export def "policies policies" [
+export def "policies get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2046,7 +2046,7 @@ export def "policies policy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/policies")
-  let body = {blacklisted_images: $blacklisted_images, comment: $comment, id: $id, mappings: $mappings, name: $name, policies: $policies, version: $version, whitelisted_images: $whitelisted_images, whitelists: $whitelists} | compact
+  let body = {"blacklisted_images": $blacklisted_images, "comment": $comment, "id": $id, "mappings": $mappings, "name": $name, "policies": $policies, "version": $version, "whitelisted_images": $whitelisted_images, "whitelists": $whitelists} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2060,7 +2060,7 @@ export def "policies policy" [
 # DELETE /policies/{policyId}
 # operationId: delete_policy
 export def "policies policy-by-policyId" [
-  policyId: string
+  policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2073,7 +2073,7 @@ export def "policies policy-by-policyId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/policies/($policyId)")
+  let full_url = (build-url $base ({policy_id: $policy_id} | format pattern "/policies/{policy_id}"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2086,7 +2086,7 @@ export def "policies policy-by-policyId" [
 # GET /policies/{policyId}
 # operationId: get_policy
 export def "policies policy-by-policyId-1" [
-  policyId: string
+  policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2101,7 +2101,7 @@ export def "policies policy-by-policyId-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "detail" $detail "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/policies/($policyId)" $qp)
+  let full_url = (build-url $base ({policy_id: $policy_id} | format pattern "/policies/{policy_id}") $qp)
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2115,7 +2115,7 @@ export def "policies policy-by-policyId-1" [
 # operationId: update_policy
 # --policybundle shape: {blacklisted_images?: list, comment?: string, id: string, mappings: list, name?: string, policies: list, version: string, whitelisted_images?: list, whitelists?: list}
 export def "policies policy-by-policyId-2" [
-  policyId: string
+  policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2129,17 +2129,17 @@ export def "policies policy-by-policyId-2" [
   --active: oneof<nothing, bool> # True if the bundle is currently defined to be used automatically
   --created-at: string # format: date-time
   --last-updated: string # format: date-time
-  --body-policyId: string # The bundle's identifier
+  --body-policy-id: string # The bundle's identifier
   --policy-source: string # Source location of where the policy bundle originated
   --policybundle: record # A bundle containing a set of policies, whitelists, and rules for mapping them to specific images — shape: {blacklisted_images?: list, comment?: string, id: string, mappings: list, name?: string, policies: list, version: string, whitelisted_images?: list, whitelists?: list}
-  --userId: string # UserId of the user that owns the bundle
+  --user-id: string # UserId of the user that owns the bundle
 ]: any -> table<active: bool, created_at: string, last_updated: string, policyId: string, policy_source: string, policybundle: record<blacklisted_images: list, comment: string, id: string, mappings: list, name: string, policies: list, version: string, whitelisted_images: list, whitelists: list>, userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "active" $active "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/policies/($policyId)" $qp)
-  let body = {active: $active, created_at: $created_at, last_updated: $last_updated, policyId: $body_policyId, policy_source: $policy_source, policybundle: $policybundle, userId: $userId} | compact
+  let full_url = (build-url $base ({policy_id: $policy_id} | format pattern "/policies/{policy_id}") $qp)
+  let body = {"active": $active, "created_at": $created_at, "last_updated": $last_updated, "policyId": $body_policy_id, "policy_source": $policy_source, "policybundle": $policybundle, "userId": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2245,7 +2245,7 @@ export def "query-vulnerabilities vulnerabilities" [
 #
 # GET /registries
 # operationId: list_registries
-export def "registries registries" [
+export def "registries get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2293,7 +2293,7 @@ export def "registries registry" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "validate" $validate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/registries" $qp)
-  let body = {registry: $registry, registry_name: $registry_name, registry_pass: $registry_pass, registry_type: $registry_type, registry_user: $registry_user, registry_verify: $registry_verify} | compact
+  let body = {"registry": $registry, "registry_name": $registry_name, "registry_pass": $registry_pass, "registry_type": $registry_type, "registry_user": $registry_user, "registry_verify": $registry_verify} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2320,7 +2320,7 @@ export def "registries registry-by-registry" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/registries/($registry)")
+  let full_url = (build-url $base ({registry: $registry} | format pattern "/registries/{registry}"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2346,7 +2346,7 @@ export def "registries registry-by-registry-1" [
 ]: nothing -> table<created_at: string, last_upated: string, registry: string, registry_name: string, registry_type: string, registry_user: string, registry_verify: bool, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/registries/($registry)")
+  let full_url = (build-url $base ({registry: $registry} | format pattern "/registries/{registry}"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2381,8 +2381,8 @@ export def "registries registry-by-registry-2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "validate" $validate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/registries/($registry)" $qp)
-  let body = {registry: $body_registry, registry_name: $registry_name, registry_pass: $registry_pass, registry_type: $registry_type, registry_user: $registry_user, registry_verify: $registry_verify} | compact
+  let full_url = (build-url $base ({registry: $registry} | format pattern "/registries/{registry}") $qp)
+  let body = {"registry": $body_registry, "registry_name": $registry_name, "registry_pass": $registry_pass, "registry_type": $registry_type, "registry_user": $registry_user, "registry_verify": $registry_verify} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2424,7 +2424,7 @@ export def "repositories repository" [
 #
 # GET /status
 # operationId: get_status
-export def "status status" [
+export def "status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2446,7 +2446,7 @@ export def "status status" [
 #
 # GET /subscriptions
 # operationId: list_subscriptions
-export def "subscriptions subscriptions" [
+export def "subscriptions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2492,7 +2492,7 @@ export def "subscriptions subscription" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions")
-  let body = {subscription_key: $subscription_key, subscription_type: $subscription_type, subscription_value: $subscription_value} | compact
+  let body = {"subscription_key": $subscription_key, "subscription_type": $subscription_type, "subscription_value": $subscription_value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2506,7 +2506,7 @@ export def "subscriptions subscription" [
 # DELETE /subscriptions/{subscriptionId}
 # operationId: delete_subscription
 export def "subscriptions subscription-by-subscriptionId" [
-  subscriptionId: string
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2519,7 +2519,7 @@ export def "subscriptions subscription-by-subscriptionId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2532,7 +2532,7 @@ export def "subscriptions subscription-by-subscriptionId" [
 # GET /subscriptions/{subscriptionId}
 # operationId: get_subscription
 export def "subscriptions subscription-by-subscriptionId-1" [
-  subscriptionId: string
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2545,7 +2545,7 @@ export def "subscriptions subscription-by-subscriptionId-1" [
 ]: nothing -> table<active: bool, subscription_id: string, subscription_key: string, subscription_type: string, subscription_value: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}"))
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2558,7 +2558,7 @@ export def "subscriptions subscription-by-subscriptionId-1" [
 # PUT /subscriptions/{subscriptionId}
 # operationId: update_subscription
 export def "subscriptions subscription-by-subscriptionId-2" [
-  subscriptionId: string
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2574,8 +2574,8 @@ export def "subscriptions subscription-by-subscriptionId-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)")
-  let body = {active: $active, subscription_value: $subscription_value} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}"))
+  let body = {"active": $active, "subscription_value": $subscription_value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-anchore-account": $x_anchore_account} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2719,7 +2719,7 @@ export def "system-feeds feed" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/system/feeds/($feed)")
+  let full_url = (build-url $base ({feed: $feed} | format pattern "/system/feeds/{feed}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2729,7 +2729,7 @@ export def "system-feeds feed" [
 #
 # PUT /system/feeds/{feed}
 # operationId: toggle_feed_enabled
-export def "system-feeds enabled-by-feed" [
+export def "system-feeds enable-d-by-feed" [
   feed: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2744,7 +2744,7 @@ export def "system-feeds enabled-by-feed" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "enabled" $enabled "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/system/feeds/($feed)" $qp)
+  let full_url = (build-url $base ({feed: $feed} | format pattern "/system/feeds/{feed}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2768,7 +2768,7 @@ export def "system-feeds group" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/system/feeds/($feed)/($group)")
+  let full_url = (build-url $base ({feed: $feed, group: $group} | format pattern "/system/feeds/{feed}/{group}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2778,7 +2778,7 @@ export def "system-feeds group" [
 #
 # PUT /system/feeds/{feed}/{group}
 # operationId: toggle_group_enabled
-export def "system-feeds enabled-by-feed-group" [
+export def "system-feeds enable-d-by-feed-group" [
   feed: string
   group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2794,7 +2794,7 @@ export def "system-feeds enabled-by-feed-group" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "enabled" $enabled "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/system/feeds/($feed)/($group)" $qp)
+  let full_url = (build-url $base ({feed: $feed, group: $group} | format pattern "/system/feeds/{feed}/{group}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2861,7 +2861,7 @@ export def "system-services name" [
 ]: nothing -> table<base_url: string, hostid: string, service_detail: record<available: bool, busy: bool, db_version: string, detail: record, message: string, up: bool, version: string>, servicename: string, status: bool, status_message: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/system/services/($servicename)")
+  let full_url = (build-url $base ({servicename: $servicename} | format pattern "/system/services/{servicename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2885,7 +2885,7 @@ export def "system-services service" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/system/services/($servicename)/($hostid)")
+  let full_url = (build-url $base ({servicename: $servicename, hostid: $hostid} | format pattern "/system/services/{servicename}/{hostid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2909,7 +2909,7 @@ export def "system-services host" [
 ]: nothing -> table<base_url: string, hostid: string, service_detail: record<available: bool, busy: bool, db_version: string, detail: record, message: string, up: bool, version: string>, servicename: string, status: bool, status_message: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/system/services/($servicename)/($hostid)")
+  let full_url = (build-url $base ({servicename: $servicename, hostid: $hostid} | format pattern "/system/services/{servicename}/{hostid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2934,7 +2934,7 @@ export def "system-webhooks-test webhook" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "notification_type" $notification_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/system/webhooks/($webhook_type)/test" $qp)
+  let full_url = (build-url $base ({webhook_type: $webhook_type} | format pattern "/system/webhooks/{webhook_type}/test") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2944,7 +2944,7 @@ export def "system-webhooks-test webhook" [
 #
 # GET /user
 # operationId: get_user
-export def "user user" [
+export def "user get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3005,7 +3005,7 @@ export def "user-credentials credential" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/credentials")
-  let body = {created_at: $created_at, type: $type, value: $value} | compact
+  let body = {"created_at": $created_at, "type": $type, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

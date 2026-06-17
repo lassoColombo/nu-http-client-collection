@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 def house-completer [] { ["Bicameral" "Commons" "Lords"] }
 def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 def answered-completer [] { ["Answered" "Any" "Unanswered"] }
-def questionStatus-completer [] { ["AllQuestions" "AnsweredOnly" "NotAnswered"] }
+def question-status-completer [] { ["AllQuestions" "AnsweredOnly" "NotAnswered"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -106,15 +106,15 @@ export def "dailyreports-dailyreports get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dateFrom: string # Daily report with report date on or after the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
-  --dateTo: string # Daily report with report date on or before the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
+  --date-from: string # Daily report with report date on or after the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
+  --date-to: string # Daily report with report date on or before the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
   --house: string@house-completer # Daily report relating to the House specified. Defaults to Bicameral
   --skip: int # Number of records to skip, default is 0 (nullable, format: int32)
   --take: int # Number of records to take, default is 20 (nullable, format: int32)
 ]: nothing -> record<results: table<links: list, value: record>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dateFrom" $dateFrom "scalar") (serialize-qp "dateTo" $dateTo "scalar") (serialize-qp "house" $house "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "house" $house "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/dailyreports/dailyreports" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -134,21 +134,21 @@ export def "writtenquestions-questions get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --askingMemberId: int # Written questions asked by member with member ID specified (nullable, format: int32)
-  --answeringMemberId: int # Written questions answered by member with member ID specified (nullable, format: int32)
-  --tabledWhenFrom: string # Written questions tabled on or after the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
-  --tabledWhenTo: string # Written questions tabled on or before the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
+  --asking-member-id: int # Written questions asked by member with member ID specified (nullable, format: int32)
+  --answering-member-id: int # Written questions answered by member with member ID specified (nullable, format: int32)
+  --tabled-when-from: string # Written questions tabled on or after the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
+  --tabled-when-to: string # Written questions tabled on or before the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
   --answered: string@answered-completer # Written questions that have been answered, unanswered or either.
-  --answeredWhenFrom: string # Written questions answered on or after the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
-  --answeredWhenTo: string # Written questions answered on or before the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
-  --questionStatus: string@questionStatus-completer # Written questions with the status specified
-  --includeWithdrawn: oneof<nothing, bool> # Include written questions that have been withdrawn
-  --expandMember: oneof<nothing, bool> # Expand the details of Members in the results
-  --correctedWhenFrom: string # Written questions corrected on or after the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
-  --correctedWhenTo: string # Written questions corrected on or before the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
-  --searchTerm: string # Written questions / statements containing the search term specified, searches item content (nullable)
-  --uIN: string # Written questions / statements with the uin specified (nullable)
-  --answeringBodies: list # Written questions / statements relating to the answering bodies with the IDs specified (nullable)
+  --answered-when-from: string # Written questions answered on or after the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
+  --answered-when-to: string # Written questions answered on or before the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
+  --question-status: string@question-status-completer # Written questions with the status specified
+  --include-withdrawn: oneof<nothing, bool> # Include written questions that have been withdrawn
+  --expand-member: oneof<nothing, bool> # Expand the details of Members in the results
+  --corrected-when-from: string # Written questions corrected on or after the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
+  --corrected-when-to: string # Written questions corrected on or before the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
+  --search-term: string # Written questions / statements containing the search term specified, searches item content (nullable)
+  --u-in: string # Written questions / statements with the uin specified (nullable)
+  --answering-bodies: list # Written questions / statements relating to the answering bodies with the IDs specified (nullable)
   --members: list # Written questions / statements relating to the members with the IDs specified (nullable)
   --house: string@house-completer # Written questions / statements relating to the House specified
   --skip: int # Number of records to skip, default is 0 (nullable, format: int32)
@@ -156,7 +156,7 @@ export def "writtenquestions-questions get" [
 ]: nothing -> record<results: table<links: list, value: record>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "askingMemberId" $askingMemberId "scalar") (serialize-qp "answeringMemberId" $answeringMemberId "scalar") (serialize-qp "tabledWhenFrom" $tabledWhenFrom "scalar") (serialize-qp "tabledWhenTo" $tabledWhenTo "scalar") (serialize-qp "answered" $answered "scalar") (serialize-qp "answeredWhenFrom" $answeredWhenFrom "scalar") (serialize-qp "answeredWhenTo" $answeredWhenTo "scalar") (serialize-qp "questionStatus" $questionStatus "scalar") (serialize-qp "includeWithdrawn" $includeWithdrawn "scalar") (serialize-qp "expandMember" $expandMember "scalar") (serialize-qp "correctedWhenFrom" $correctedWhenFrom "scalar") (serialize-qp "correctedWhenTo" $correctedWhenTo "scalar") (serialize-qp "searchTerm" $searchTerm "scalar") (serialize-qp "uIN" $uIN "scalar") (serialize-qp "answeringBodies" $answeringBodies "multi") (serialize-qp "members" $members "multi") (serialize-qp "house" $house "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "askingMemberId" $asking_member_id "scalar") (serialize-qp "answeringMemberId" $answering_member_id "scalar") (serialize-qp "tabledWhenFrom" $tabled_when_from "scalar") (serialize-qp "tabledWhenTo" $tabled_when_to "scalar") (serialize-qp "answered" $answered "scalar") (serialize-qp "answeredWhenFrom" $answered_when_from "scalar") (serialize-qp "answeredWhenTo" $answered_when_to "scalar") (serialize-qp "questionStatus" $question_status "scalar") (serialize-qp "includeWithdrawn" $include_withdrawn "scalar") (serialize-qp "expandMember" $expand_member "scalar") (serialize-qp "correctedWhenFrom" $corrected_when_from "scalar") (serialize-qp "correctedWhenTo" $corrected_when_to "scalar") (serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "uIN" $u_in "scalar") (serialize-qp "answeringBodies" $answering_bodies "multi") (serialize-qp "members" $members "multi") (serialize-qp "house" $house "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/writtenquestions/questions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -178,12 +178,12 @@ export def "writtenquestions-questions get-by-date-uin" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expandMember: oneof<nothing, bool> # Expand the details of Members in the results
+  --expand-member: oneof<nothing, bool> # Expand the details of Members in the results
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<answerIsCorrection: bool, answerIsHolding: bool, answerText: string, answeringBodyId: int, answeringBodyName: string, answeringMember: record<id: int, listAs: string, memberFrom: string, name: string, party: string, partyAbbreviation: string, partyColour: string, thumbnailUrl: string>, answeringMemberId: int, askingMember: record<id: int, listAs: string, memberFrom: string, name: string, party: string, partyAbbreviation: string, partyColour: string, thumbnailUrl: string>, askingMemberId: int, attachmentCount: int, attachments: list<record>, comparableAnswerText: string, correctingMember: record<id: int, listAs: string, memberFrom: string, name: string, party: string, partyAbbreviation: string, partyColour: string, thumbnailUrl: string>, correctingMemberId: int, dateAnswerCorrected: string, dateAnswered: string, dateForAnswer: string, dateHoldingAnswer: string, dateTabled: string, groupedQuestions: list<string>, groupedQuestionsDates: list<record>, heading: string, house: string, id: int, isNamedDay: bool, isWithdrawn: bool, memberHasInterest: bool, originalAnswerText: string, questionText: string, uin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expandMember" $expandMember "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/writtenquestions/questions/($date)/($uin)" $qp)
+  let qp = [(serialize-qp "expandMember" $expand_member "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({date: $date, uin: $uin} | format pattern "/api/writtenquestions/questions/{date}/{uin}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -203,12 +203,12 @@ export def "writtenquestions-questions get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expandMember: oneof<nothing, bool> # Expand the details of Members in the result
+  --expand-member: oneof<nothing, bool> # Expand the details of Members in the result
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<answerIsCorrection: bool, answerIsHolding: bool, answerText: string, answeringBodyId: int, answeringBodyName: string, answeringMember: record<id: int, listAs: string, memberFrom: string, name: string, party: string, partyAbbreviation: string, partyColour: string, thumbnailUrl: string>, answeringMemberId: int, askingMember: record<id: int, listAs: string, memberFrom: string, name: string, party: string, partyAbbreviation: string, partyColour: string, thumbnailUrl: string>, askingMemberId: int, attachmentCount: int, attachments: list<record>, comparableAnswerText: string, correctingMember: record<id: int, listAs: string, memberFrom: string, name: string, party: string, partyAbbreviation: string, partyColour: string, thumbnailUrl: string>, correctingMemberId: int, dateAnswerCorrected: string, dateAnswered: string, dateForAnswer: string, dateHoldingAnswer: string, dateTabled: string, groupedQuestions: list<string>, groupedQuestionsDates: list<record>, heading: string, house: string, id: int, isNamedDay: bool, isWithdrawn: bool, memberHasInterest: bool, originalAnswerText: string, questionText: string, uin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expandMember" $expandMember "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/writtenquestions/questions/($id)" $qp)
+  let qp = [(serialize-qp "expandMember" $expand_member "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/writtenquestions/questions/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -227,20 +227,20 @@ export def "writtenstatements-statements get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --madeWhenFrom: string # Written statements made on or after the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
-  --madeWhenTo: string # Written statements made on or before the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
-  --searchTerm: string # Written questions / statements containing the search term specified, searches item content (nullable)
-  --uIN: string # Written questions / statements with the uin specified (nullable)
-  --answeringBodies: list # Written questions / statements relating to the answering bodies with the IDs specified (nullable)
+  --made-when-from: string # Written statements made on or after the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
+  --made-when-to: string # Written statements made on or before the date specified. Date format yyyy-mm-dd (nullable, format: date-time)
+  --search-term: string # Written questions / statements containing the search term specified, searches item content (nullable)
+  --u-in: string # Written questions / statements with the uin specified (nullable)
+  --answering-bodies: list # Written questions / statements relating to the answering bodies with the IDs specified (nullable)
   --members: list # Written questions / statements relating to the members with the IDs specified (nullable)
   --house: string@house-completer # Written questions / statements relating to the House specified
   --skip: int # Number of records to skip, default is 0 (nullable, format: int32)
   --take: int # Number of records to take, default is 20 (nullable, format: int32)
-  --expandMember: oneof<nothing, bool> # Expand the details of Members in the results
+  --expand-member: oneof<nothing, bool> # Expand the details of Members in the results
 ]: nothing -> record<results: table<links: list, value: record>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "madeWhenFrom" $madeWhenFrom "scalar") (serialize-qp "madeWhenTo" $madeWhenTo "scalar") (serialize-qp "searchTerm" $searchTerm "scalar") (serialize-qp "uIN" $uIN "scalar") (serialize-qp "answeringBodies" $answeringBodies "multi") (serialize-qp "members" $members "multi") (serialize-qp "house" $house "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar") (serialize-qp "expandMember" $expandMember "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "madeWhenFrom" $made_when_from "scalar") (serialize-qp "madeWhenTo" $made_when_to "scalar") (serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "uIN" $u_in "scalar") (serialize-qp "answeringBodies" $answering_bodies "multi") (serialize-qp "members" $members "multi") (serialize-qp "house" $house "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar") (serialize-qp "expandMember" $expand_member "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/writtenstatements/statements" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -262,12 +262,12 @@ export def "writtenstatements-statements get-by-date-uin" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expandMember: oneof<nothing, bool> # Expand the details of Members in the results
+  --expand-member: oneof<nothing, bool> # Expand the details of Members in the results
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<answeringBodyId: int, answeringBodyName: string, attachments: list<record>, dateMade: string, hasAttachments: bool, hasLinkedStatements: bool, house: string, id: int, linkedStatements: list<record>, member: record<id: int, listAs: string, memberFrom: string, name: string, party: string, partyAbbreviation: string, partyColour: string, thumbnailUrl: string>, memberId: int, memberRole: string, noticeNumber: int, text: string, title: string, uin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expandMember" $expandMember "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/writtenstatements/statements/($date)/($uin)" $qp)
+  let qp = [(serialize-qp "expandMember" $expand_member "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({date: $date, uin: $uin} | format pattern "/api/writtenstatements/statements/{date}/{uin}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -287,12 +287,12 @@ export def "writtenstatements-statements get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expandMember: oneof<nothing, bool> # Expand the details of Members in the results
+  --expand-member: oneof<nothing, bool> # Expand the details of Members in the results
 ]: nothing -> record<results: table<links: list, value: record>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expandMember" $expandMember "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/writtenstatements/statements/($id)" $qp)
+  let qp = [(serialize-qp "expandMember" $expand_member "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/writtenstatements/statements/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

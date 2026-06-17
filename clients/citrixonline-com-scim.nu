@@ -102,13 +102,13 @@ export def "groups list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string #  Without a filter, all groups are returned. The filter parameter must be a properly formed SCIM filter using the operator "eq" (equals), "sw" (starts with), or "co" (contains). The filter works for the displayName attribute. Sorting and pagination are supported. For example, GET /Groups?filter=displayName%20eq%20%22Engineering%22&sortBy=displayName&sortOrder=ascending&count=50&startIndex=51
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
 ]: nothing -> record<resources: table<displayName: string, id: string, members: list, meta: record>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Groups" $qp)
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,7 +120,7 @@ export def "groups list" [
 # POST /Groups
 # operationId: createGroup
 # --members item shape: {type: "group"|"user", value: string}
-export def "groups createGroup" [
+export def "groups create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,17 +129,17 @@ export def "groups createGroup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
-  displayName: string # The group's display name
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  display_name: string # The group's display name
   --members: list # An array of members — item shape: {type: "group"|"user", value: string}
 ]: any -> record<displayName: string, id: string, members: table<type: string, value: string>, meta: record<created: string, location: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Groups")
-  let body = {displayName: $displayName, members: $members} | compact
+  let body = {"displayName": $display_name, "members": $members} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -151,7 +151,7 @@ export def "groups createGroup" [
 # DELETE /Groups/{groupKey}
 # operationId: deleteGroup
 export def "groups delete" [
-  groupKey: int
+  group_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,12 +160,12 @@ export def "groups delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Groups/($groupKey)")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({group_key: $group_key} | format pattern "/Groups/{group_key}"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -177,7 +177,7 @@ export def "groups delete" [
 # GET /Groups/{groupKey}
 # operationId: getGroup
 export def "groups get" [
-  groupKey: int
+  group_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,12 +186,12 @@ export def "groups get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
 ]: nothing -> record<displayName: string, id: string, members: table<type: string, value: string>, meta: record<created: string, location: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Groups/($groupKey)")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({group_key: $group_key} | format pattern "/Groups/{group_key}"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -203,8 +203,8 @@ export def "groups get" [
 # PATCH /Groups/{groupKey}
 # operationId: updateGroup
 # --members item shape: {type: "group"|"user", value: string}
-export def "groups updateGroup" [
-  groupKey: int
+export def "groups update-by-groupKey" [
+  group_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,17 +213,17 @@ export def "groups updateGroup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
-  displayName: string # The group's display name
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  display_name: string # The group's display name
   --members: list # An array of members — item shape: {type: "group"|"user", value: string}
 ]: any -> record<displayName: string, id: string, members: table<type: string, value: string>, meta: record<created: string, location: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Groups/($groupKey)")
-  let body = {displayName: $displayName, members: $members} | compact
+  let full_url = (build-url $base ({group_key: $group_key} | format pattern "/Groups/{group_key}"))
+  let body = {"displayName": $display_name, "members": $members} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -235,8 +235,8 @@ export def "groups updateGroup" [
 # PUT /Groups/{groupKey}
 # operationId: replaceGroup
 # --members item shape: {type: "group"|"user", value: string}
-export def "groups replaceGroup" [
-  groupKey: int
+export def "groups update-by-groupKey-1" [
+  group_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,17 +245,17 @@ export def "groups replaceGroup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
-  displayName: string # The group's display name
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  display_name: string # The group's display name
   --members: list # An array of members — item shape: {type: "group"|"user", value: string}
 ]: any -> record<displayName: string, id: string, members: table<type: string, value: string>, meta: record<created: string, location: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Groups/($groupKey)")
-  let body = {displayName: $displayName, members: $members} | compact
+  let full_url = (build-url $base ({group_key: $group_key} | format pattern "/Groups/{group_key}"))
+  let body = {"displayName": $display_name, "members": $members} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -275,12 +275,12 @@ export def "schemas-users get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
 ]: nothing -> record<attributes: table<caseExact: bool, description: string, multiValued: bool, name: string, readOnly: bool, required: bool, schema: string, subAttributes: list, type: string>, description: string, endpoint: string, id: string, name: string, schema: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Schemas/Users")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -300,12 +300,12 @@ export def "service-provider-configs get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
 ]: nothing -> record<authenticationSchemes: record<description: string, documentationUrl: string, name: string, specUrl: string>, bulk: record<supported: bool>, changePassword: record<supported: bool>, documentationUrl: string, etag: record<supported: bool>, filter: record<supported: bool>, patch: record<supported: bool>, sort: record<supported: bool>, xmlDataFormat: record<supported: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ServiceProviderConfigs")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -326,13 +326,13 @@ export def "users list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string #  Without a filter, all users in a user domain are returned. The filter parameter must be a properly formed SCIM filter using either the operator eq (equals) or the operator sw (starts with). The filter works for userName, displayName, name.givenName, and name.familyName attributes. For example, /Users?filter=name.familyName%20eq%20%%22Smith%22
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
 ]: nothing -> record<resources: table<displayName: string, id: string, locale: string, meta: record, name: record, timezone: string, userName: string>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Users" $qp)
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -344,7 +344,7 @@ export def "users list" [
 # POST /Users
 # operationId: createUsers
 # --name shape: {familyName: string, givenName: string}
-export def "users createUsers" [
+export def "users create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,21 +353,21 @@ export def "users createUsers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
-  --displayName: string # The user's display name
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --display-name: string # The user's display name
   --locale: string # The user's language settings
   --name: any # The full name of the user — shape: {familyName: string, givenName: string}
   --password: string # The user's password
   --timezone: string # The user's time zone
-  --userName: string # The user's username, usually their email address
+  --user-name: string # The user's username, usually their email address
 ]: any -> record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Users")
-  let body = {displayName: $displayName, locale: $locale, name: $name, password: $password, timezone: $timezone, userName: $userName} | compact
+  let body = {"displayName": $display_name, "locale": $locale, "name": $name, "password": $password, "timezone": $timezone, "userName": $user_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -387,12 +387,12 @@ export def "users-me get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
 ]: nothing -> record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Users/me")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -404,7 +404,7 @@ export def "users-me get" [
 # PATCH /Users/me
 # operationId: updateMe
 # --name shape: {familyName: string, givenName: string}
-export def "users-me updateMe" [
+export def "users-me update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,21 +413,21 @@ export def "users-me updateMe" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
-  --displayName: string # The user's display name
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --display-name: string # The user's display name
   --locale: string # The user's language settings
   --name: any # The full name of the user — shape: {familyName: string, givenName: string}
   --password: string # The user's password
   --timezone: string # The user's time zone
-  --userName: string # The user's username, usually their email address
+  --user-name: string # The user's username, usually their email address
 ]: any -> record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Users/me")
-  let body = {displayName: $displayName, locale: $locale, name: $name, password: $password, timezone: $timezone, userName: $userName} | compact
+  let body = {"displayName": $display_name, "locale": $locale, "name": $name, "password": $password, "timezone": $timezone, "userName": $user_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -439,7 +439,7 @@ export def "users-me updateMe" [
 # PUT /Users/me
 # operationId: replaceMe
 # --name shape: {familyName: string, givenName: string}
-export def "users-me replaceMe" [
+export def "users-me update-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,21 +448,21 @@ export def "users-me replaceMe" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
-  --displayName: string # The user's display name
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --display-name: string # The user's display name
   --locale: string # The user's language settings
   --name: any # The full name of the user — shape: {familyName: string, givenName: string}
   --password: string # The user's password
   --timezone: string # The user's time zone
-  --userName: string # The user's username, usually their email address
+  --user-name: string # The user's username, usually their email address
 ]: any -> record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Users/me")
-  let body = {displayName: $displayName, locale: $locale, name: $name, password: $password, timezone: $timezone, userName: $userName} | compact
+  let body = {"displayName": $display_name, "locale": $locale, "name": $name, "password": $password, "timezone": $timezone, "userName": $user_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -474,7 +474,7 @@ export def "users-me replaceMe" [
 # DELETE /Users/{userKey}
 # operationId: deleteUser
 export def "users delete" [
-  userKey: int
+  user_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,12 +483,12 @@ export def "users delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Users/($userKey)")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/Users/{user_key}"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -500,7 +500,7 @@ export def "users delete" [
 # GET /Users/{userKey}
 # operationId: getUser
 export def "users get" [
-  userKey: int
+  user_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,12 +509,12 @@ export def "users get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
 ]: nothing -> record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Users/($userKey)")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/Users/{user_key}"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -526,8 +526,8 @@ export def "users get" [
 # PATCH /Users/{userKey}
 # operationId: updateUser
 # --name shape: {familyName: string, givenName: string}
-export def "users updateUser" [
-  userKey: int
+export def "users update-by-userKey" [
+  user_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -536,21 +536,21 @@ export def "users updateUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
-  --displayName: string # The user's display name
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --display-name: string # The user's display name
   --locale: string # The user's language settings
   --name: any # The full name of the user — shape: {familyName: string, givenName: string}
   --password: string # The user's password
   --timezone: string # The user's time zone
-  --userName: string # The user's username, usually their email address
+  --user-name: string # The user's username, usually their email address
 ]: any -> record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Users/($userKey)")
-  let body = {displayName: $displayName, locale: $locale, name: $name, password: $password, timezone: $timezone, userName: $userName} | compact
+  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/Users/{user_key}"))
+  let body = {"displayName": $display_name, "locale": $locale, "name": $name, "password": $password, "timezone": $timezone, "userName": $user_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -562,8 +562,8 @@ export def "users updateUser" [
 # PUT /Users/{userKey}
 # operationId: replaceUser
 # --name shape: {familyName: string, givenName: string}
-export def "users replaceUser" [
-  userKey: int
+export def "users update-by-userKey-1" [
+  user_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,21 +572,21 @@ export def "users replaceUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
-  --displayName: string # The user's display name
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --display-name: string # The user's display name
   --locale: string # The user's language settings
   --name: any # The full name of the user — shape: {familyName: string, givenName: string}
   --password: string # The user's password
   --timezone: string # The user's time zone
-  --userName: string # The user's username, usually their email address
+  --user-name: string # The user's username, usually their email address
 ]: any -> record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Users/($userKey)")
-  let body = {displayName: $displayName, locale: $locale, name: $name, password: $password, timezone: $timezone, userName: $userName} | compact
+  let full_url = (build-url $base ({user_key: $user_key} | format pattern "/Users/{user_key}"))
+  let body = {"displayName": $display_name, "locale": $locale, "name": $name, "password": $password, "timezone": $timezone, "userName": $user_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

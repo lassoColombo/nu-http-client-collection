@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dumps createADump" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dumps create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # POST /dumps
 # operationId: createADump
-export def "dumps createADump" [
+export def "dumps create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,7 +114,7 @@ export def "dumps createADump" [
 #
 # GET /health
 # operationId: health
-export def "health health" [
+export def "health get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "indexes get" [
 #
 # POST /indexes
 # operationId: createIndexWithPrimaryKey
-export def "indexes createIndexWithPrimaryKey" [
+export def "indexes create-index-with-primary-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,14 +170,14 @@ export def "indexes createIndexWithPrimaryKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --primaryKey: string # e.g. number
+  --primary-key: string # e.g. number
   --uid: string # e.g. books
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/indexes")
-  let body = {primaryKey: $primaryKey, uid: $uid} | compact
+  let body = {"primaryKey": $primary_key, "uid": $uid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -188,7 +188,7 @@ export def "indexes createIndexWithPrimaryKey" [
 #
 # DELETE /indexes/books
 # operationId: deleteAnIndex
-export def "indexes-books delete" [
+export def "indexes-books delete-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,13 +241,13 @@ export def "indexes-books udpateIndex" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --primaryKey: string # e.g. title
+  --primary-key: string # e.g. title
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/indexes/books")
-  let body = {primaryKey: $primaryKey} | compact
+  let body = {"primaryKey": $primary_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -258,7 +258,7 @@ export def "indexes-books udpateIndex" [
 #
 # DELETE /indexes/books/documents
 # operationId: deleteAllDocuments
-export def "indexes-books-documents delete" [
+export def "indexes-books-documents delete-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "indexes-books-documents get" [
 #
 # POST /indexes/books/documents
 # operationId: addOrReplaceDocuments
-export def "indexes-books-documents addOrReplaceDocuments" [
+export def "indexes-books-documents create-or-replace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,13 +315,13 @@ export def "indexes-books-documents addOrReplaceDocuments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --primaryKey: string # e.g. id
+  --primary-key: string # e.g. id
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "primaryKey" $primaryKey "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "primaryKey" $primary_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/indexes/books/documents" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -333,7 +333,7 @@ export def "indexes-books-documents addOrReplaceDocuments" [
 #
 # PUT /indexes/books/documents
 # operationId: addOrUpdateDocuments
-export def "indexes-books-documents addOrUpdateDocuments" [
+export def "indexes-books-documents create-or-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,13 +342,13 @@ export def "indexes-books-documents addOrUpdateDocuments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --primaryKey: string # e.g. id
+  --primary-key: string # e.g. id
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "primaryKey" $primaryKey "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "primaryKey" $primary_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/indexes/books/documents" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -360,7 +360,7 @@ export def "indexes-books-documents addOrUpdateDocuments" [
 #
 # DELETE /indexes/books/documents/1
 # operationId: deleteOneDocument
-export def "indexes-books-documents-1 delete" [
+export def "indexes-books-documents-1 delete-one" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,7 +385,7 @@ export def "indexes-books-documents-1 delete" [
 #
 # GET /indexes/books/documents/2
 # operationId: getOneDocument
-export def "indexes-books-documents-2 get" [
+export def "indexes-books-documents-2 get-one" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -409,7 +409,7 @@ export def "indexes-books-documents-2 get" [
 #
 # POST /indexes/books/documents/delete-batch
 # operationId: deleteDocuments
-export def "indexes-books-documents-delete-batch post" [
+export def "indexes-books-documents-delete-batch delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "indexes-books-documents-delete-batch post" [
 #
 # GET /indexes/books/search
 # operationId: searchInIndex
-export def "indexes-books-search searchInIndex" [
+export def "indexes-books-search list-in-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,24 +446,24 @@ export def "indexes-books-search searchInIndex" [
   --q: string # e.g. prinec
   --offset: string # e.g. 0
   --limit: string # e.g. 1
-  --attributesToRetrieve: string # e.g. title,author
-  --attributesToCrop: string # e.g. title
-  --attributesToHighlight: string # e.g. *
-  --cropLength: string # e.g. 5
-  --cropMarker: string # e.g. [...]
+  --attributes-to-retrieve: string # e.g. title,author
+  --attributes-to-crop: string # e.g. title
+  --attributes-to-highlight: string # e.g. *
+  --crop-length: string # e.g. 5
+  --crop-marker: string # e.g. [...]
   --filter: string # e.g. genre="fantasy"
-  --showMatchesPosition: string # e.g. true
+  --show-matches-position: string # e.g. true
   --facets: string # e.g. genre
   --qp-sort: string # e.g. price
-  --highlightPreTag: string # e.g. <mark>
-  --highlightPostTag: string # e.g. </mark>
-  --matchingStrategy: string # e.g. all
+  --highlight-pre-tag: string # e.g. <mark>
+  --highlight-post-tag: string # e.g. </mark>
+  --matching-strategy: string # e.g. all
   --page: string # e.g. 2
-  --hitsPerPage: string # e.g. 50
+  --hits-per-page: string # e.g. 50
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "attributesToRetrieve" $attributesToRetrieve "scalar") (serialize-qp "attributesToCrop" $attributesToCrop "scalar") (serialize-qp "attributesToHighlight" $attributesToHighlight "scalar") (serialize-qp "cropLength" $cropLength "scalar") (serialize-qp "cropMarker" $cropMarker "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "showMatchesPosition" $showMatchesPosition "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "highlightPreTag" $highlightPreTag "scalar") (serialize-qp "highlightPostTag" $highlightPostTag "scalar") (serialize-qp "matchingStrategy" $matchingStrategy "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "hitsPerPage" $hitsPerPage "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "attributesToRetrieve" $attributes_to_retrieve "scalar") (serialize-qp "attributesToCrop" $attributes_to_crop "scalar") (serialize-qp "attributesToHighlight" $attributes_to_highlight "scalar") (serialize-qp "cropLength" $crop_length "scalar") (serialize-qp "cropMarker" $crop_marker "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "showMatchesPosition" $show_matches_position "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "highlightPreTag" $highlight_pre_tag "scalar") (serialize-qp "highlightPostTag" $highlight_post_tag "scalar") (serialize-qp "matchingStrategy" $matching_strategy "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "hitsPerPage" $hits_per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/indexes/books/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -474,7 +474,7 @@ export def "indexes-books-search searchInIndex" [
 #
 # POST /indexes/books/search
 # operationId: searchInIndex1
-export def "indexes-books-search searchInIndex1" [
+export def "indexes-books-search list-in-index1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,14 +483,14 @@ export def "indexes-books-search searchInIndex1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --attributesToHighlight: list # e.g. [title]
+  --attributes-to-highlight: list # e.g. [title]
   --q: string # e.g. 
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/indexes/books/search")
-  let body = {attributesToHighlight: $attributesToHighlight, q: $q} | compact
+  let body = {"attributesToHighlight": $attributes_to_highlight, "q": $q} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -501,7 +501,7 @@ export def "indexes-books-search searchInIndex1" [
 #
 # DELETE /indexes/books/settings
 # operationId: resetAllSettings
-export def "indexes-books-settings resetAllSettings" [
+export def "indexes-books-settings reset-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,7 +523,7 @@ export def "indexes-books-settings resetAllSettings" [
 #
 # GET /indexes/books/settings
 # operationId: getAllSettings
-export def "indexes-books-settings get" [
+export def "indexes-books-settings get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -545,7 +545,7 @@ export def "indexes-books-settings get" [
 #
 # PATCH /indexes/books/settings
 # operationId: updateSettings
-export def "indexes-books-settings updateSettings" [
+export def "indexes-books-settings update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -554,17 +554,17 @@ export def "indexes-books-settings updateSettings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --displayedAttributes: list # e.g. [title, author, genre, price]
-  --filterableAttributes: list # e.g. [genre, price]
-  --searchableAttributes: list # e.g. [title, author]
-  --sortableAttributes: list # e.g. [price]
-  --stopWords: list # e.g. [of, the]
+  --displayed-attributes: list # e.g. [title, author, genre, price]
+  --filterable-attributes: list # e.g. [genre, price]
+  --searchable-attributes: list # e.g. [title, author]
+  --sortable-attributes: list # e.g. [price]
+  --stop-words: list # e.g. [of, the]
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/indexes/books/settings")
-  let body = {displayedAttributes: $displayedAttributes, filterableAttributes: $filterableAttributes, searchableAttributes: $searchableAttributes, sortableAttributes: $sortableAttributes, stopWords: $stopWords} | compact
+  let body = {"displayedAttributes": $displayed_attributes, "filterableAttributes": $filterable_attributes, "searchableAttributes": $searchable_attributes, "sortableAttributes": $sortable_attributes, "stopWords": $stop_words} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -575,7 +575,7 @@ export def "indexes-books-settings updateSettings" [
 #
 # DELETE /indexes/books/settings/displayed-attributes
 # operationId: resetDisplayedAttributes
-export def "indexes-books-settings-displayed-attributes resetDisplayedAttributes" [
+export def "indexes-books-settings-displayed-attributes reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -619,7 +619,7 @@ export def "indexes-books-settings-displayed-attributes get" [
 #
 # PUT /indexes/books/settings/displayed-attributes
 # operationId: updateDisplayedAttributes
-export def "indexes-books-settings-displayed-attributes updateDisplayedAttributes" [
+export def "indexes-books-settings-displayed-attributes update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,7 +644,7 @@ export def "indexes-books-settings-displayed-attributes updateDisplayedAttribute
 #
 # DELETE /indexes/books/settings/distinct-attribute
 # operationId: resetDistinctAttribute
-export def "indexes-books-settings-distinct-attribute resetDistinctAttribute" [
+export def "indexes-books-settings-distinct-attribute reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -688,7 +688,7 @@ export def "indexes-books-settings-distinct-attribute get" [
 #
 # PUT /indexes/books/settings/distinct-attribute
 # operationId: updateDistinctAttribute
-export def "indexes-books-settings-distinct-attribute updateDistinctAttribute" [
+export def "indexes-books-settings-distinct-attribute update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,7 +713,7 @@ export def "indexes-books-settings-distinct-attribute updateDistinctAttribute" [
 #
 # DELETE /indexes/books/settings/faceting
 # operationId: resetFaceting
-export def "indexes-books-settings-faceting resetFaceting" [
+export def "indexes-books-settings-faceting reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -757,7 +757,7 @@ export def "indexes-books-settings-faceting get" [
 #
 # PATCH /indexes/books/settings/faceting
 # operationId: updateFaceting
-export def "indexes-books-settings-faceting updateFaceting" [
+export def "indexes-books-settings-faceting update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -766,13 +766,13 @@ export def "indexes-books-settings-faceting updateFaceting" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxValuesPerFacet: float # e.g. 3000
+  --max-values-per-facet: float # e.g. 3000
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/indexes/books/settings/faceting")
-  let body = {maxValuesPerFacet: $maxValuesPerFacet} | compact
+  let body = {"maxValuesPerFacet": $max_values_per_facet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -783,7 +783,7 @@ export def "indexes-books-settings-faceting updateFaceting" [
 #
 # DELETE /indexes/books/settings/filterable-attributes
 # operationId: resetFilterableAttributes
-export def "indexes-books-settings-filterable-attributes resetFilterableAttributes" [
+export def "indexes-books-settings-filterable-attributes reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -827,7 +827,7 @@ export def "indexes-books-settings-filterable-attributes get" [
 #
 # PUT /indexes/books/settings/filterable-attributes
 # operationId: updateFilterableAttributes
-export def "indexes-books-settings-filterable-attributes updateFilterableAttributes" [
+export def "indexes-books-settings-filterable-attributes update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -852,7 +852,7 @@ export def "indexes-books-settings-filterable-attributes updateFilterableAttribu
 #
 # DELETE /indexes/books/settings/pagination
 # operationId: resetPagination
-export def "indexes-books-settings-pagination resetPagination" [
+export def "indexes-books-settings-pagination reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -896,7 +896,7 @@ export def "indexes-books-settings-pagination get" [
 #
 # PATCH /indexes/books/settings/pagination
 # operationId: updatePagination
-export def "indexes-books-settings-pagination updatePagination" [
+export def "indexes-books-settings-pagination update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,13 +905,13 @@ export def "indexes-books-settings-pagination updatePagination" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxTotalHits: float # e.g. 2000
+  --max-total-hits: float # e.g. 2000
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/indexes/books/settings/pagination")
-  let body = {maxTotalHits: $maxTotalHits} | compact
+  let body = {"maxTotalHits": $max_total_hits} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -922,7 +922,7 @@ export def "indexes-books-settings-pagination updatePagination" [
 #
 # DELETE /indexes/books/settings/ranking-rules
 # operationId: resetRankingRules
-export def "indexes-books-settings-ranking-rules resetRankingRules" [
+export def "indexes-books-settings-ranking-rules reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -966,7 +966,7 @@ export def "indexes-books-settings-ranking-rules get" [
 #
 # PUT /indexes/books/settings/ranking-rules
 # operationId: updateRankingRules
-export def "indexes-books-settings-ranking-rules updateRankingRules" [
+export def "indexes-books-settings-ranking-rules update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -991,7 +991,7 @@ export def "indexes-books-settings-ranking-rules updateRankingRules" [
 #
 # DELETE /indexes/books/settings/searchable-attributes
 # operationId: resetSearchableAttributes
-export def "indexes-books-settings-searchable-attributes resetSearchableAttributes" [
+export def "indexes-books-settings-searchable-attributes reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1035,7 +1035,7 @@ export def "indexes-books-settings-searchable-attributes get" [
 #
 # PUT /indexes/books/settings/searchable-attributes
 # operationId: updateSearchableAttributes
-export def "indexes-books-settings-searchable-attributes updateSearchableAttributes" [
+export def "indexes-books-settings-searchable-attributes update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1060,7 +1060,7 @@ export def "indexes-books-settings-searchable-attributes updateSearchableAttribu
 #
 # DELETE /indexes/books/settings/sortable-attributes
 # operationId: resetSortableAttributes
-export def "indexes-books-settings-sortable-attributes resetSortableAttributes" [
+export def "indexes-books-settings-sortable-attributes reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1104,7 +1104,7 @@ export def "indexes-books-settings-sortable-attributes get" [
 #
 # PUT /indexes/books/settings/sortable-attributes
 # operationId: updateSortableAttributes
-export def "indexes-books-settings-sortable-attributes updateSortableAttributes" [
+export def "indexes-books-settings-sortable-attributes update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1129,7 +1129,7 @@ export def "indexes-books-settings-sortable-attributes updateSortableAttributes"
 #
 # DELETE /indexes/books/settings/stop-words
 # operationId: resetStopWords
-export def "indexes-books-settings-stop-words resetStopWords" [
+export def "indexes-books-settings-stop-words reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1176,7 +1176,7 @@ export def "indexes-books-settings-stop-words get" [
 #
 # PUT /indexes/books/settings/stop-words
 # operationId: updateStopWords
-export def "indexes-books-settings-stop-words updateStopWords" [
+export def "indexes-books-settings-stop-words update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1201,7 +1201,7 @@ export def "indexes-books-settings-stop-words updateStopWords" [
 #
 # DELETE /indexes/books/settings/synonyms
 # operationId: resetSynonyms
-export def "indexes-books-settings-synonyms resetSynonyms" [
+export def "indexes-books-settings-synonyms reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1248,7 +1248,7 @@ export def "indexes-books-settings-synonyms get" [
 #
 # PUT /indexes/books/settings/synonyms
 # operationId: updateSynonyms
-export def "indexes-books-settings-synonyms updateSynonyms" [
+export def "indexes-books-settings-synonyms update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1257,14 +1257,14 @@ export def "indexes-books-settings-synonyms updateSynonyms" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --harry potter: list # e.g. [hp]
+  --harry-potter: list # e.g. [hp]
   --hp: list # e.g. [harry potter]
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/indexes/books/settings/synonyms")
-  let body = {harry potter: $harry potter, hp: $hp} | compact
+  let body = {"harry potter": $harry_potter, "hp": $hp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1275,7 +1275,7 @@ export def "indexes-books-settings-synonyms updateSynonyms" [
 #
 # DELETE /indexes/books/settings/typo-tolerance
 # operationId: resetTypoTolerance
-export def "indexes-books-settings-typo-tolerance resetTypoTolerance" [
+export def "indexes-books-settings-typo-tolerance reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1320,7 +1320,7 @@ export def "indexes-books-settings-typo-tolerance get" [
 # PATCH /indexes/books/settings/typo-tolerance
 # operationId: updateTypoTolerance
 # --minWordSizeForTypos shape: {oneTypo?: float, twoTypos?: float}
-export def "indexes-books-settings-typo-tolerance updateTypoTolerance" [
+export def "indexes-books-settings-typo-tolerance update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1329,15 +1329,15 @@ export def "indexes-books-settings-typo-tolerance updateTypoTolerance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --disableOnAttributes: list # e.g. [genre]
-  --disableOnWords: list # e.g. [Prince]
-  --minWordSizeForTypos: record # shape: {oneTypo?: float, twoTypos?: float}
+  --disable-on-attributes: list # e.g. [genre]
+  --disable-on-words: list # e.g. [Prince]
+  --min-word-size-for-typos: record # shape: {oneTypo?: float, twoTypos?: float}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/indexes/books/settings/typo-tolerance")
-  let body = {disableOnAttributes: $disableOnAttributes, disableOnWords: $disableOnWords, minWordSizeForTypos: $minWordSizeForTypos} | compact
+  let body = {"disableOnAttributes": $disable_on_attributes, "disableOnWords": $disable_on_words, "minWordSizeForTypos": $min_word_size_for_typos} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1348,7 +1348,7 @@ export def "indexes-books-settings-typo-tolerance updateTypoTolerance" [
 #
 # GET /indexes/books/stats
 # operationId: statsOfAnIndex
-export def "indexes-books-stats statsOfAnIndex" [
+export def "indexes-books-stats stats-of-an-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1420,7 +1420,7 @@ export def "keys get" [
 #
 # POST /keys
 # operationId: createAKey
-export def "keys createAKey" [
+export def "keys create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1431,7 +1431,7 @@ export def "keys createAKey" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --actions: list # e.g. [documents.add, documents.delete]
   --description: string # e.g. Key to add and delete documents, in `books` index.
-  --expiresAt: any # nullable
+  --expires-at: any # nullable
   --indexes: list # e.g. [books]
   --name: string # e.g. docs-key
 ]: any -> any {
@@ -1439,7 +1439,7 @@ export def "keys createAKey" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/keys")
-  let body = {actions: $actions, description: $description, expiresAt: $expiresAt, indexes: $indexes, name: $name} | compact
+  let body = {"actions": $actions, "description": $description, "expiresAt": $expires_at, "indexes": $indexes, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1450,7 +1450,7 @@ export def "keys createAKey" [
 #
 # GET /keys/L8l05tFb188aab693735bbaf1f898b9902fb39f865160d39dddba2b47b940115a0430705
 # operationId: getOneKey
-export def "keys-l8l05t-fb188aab693735bbaf1f898b9902fb39f865160d39dddba2b47b940115a0430705 get" [
+export def "keys-l8l05t-fb188aab693735bbaf1f898b9902fb39f865160d39dddba2b47b940115a0430705 get-one" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1494,7 +1494,7 @@ export def "keys-k-n2a-k9eo8a7b627e425717d9196c8081552ca004e513545ed178f8a56981d
 #
 # PATCH /keys/wYZjGJyBcdb0621b97999c233246a8ec0a35d0fcd9a6417ef8ccee0c8978b64b123af2dd
 # operationId: updateAKey
-export def "keys-w-y-zj-g-jy-bcdb0621b97999c233246a8ec0a35d0fcd9a6417ef8ccee0c8978b64b123af2dd updateAKey" [
+export def "keys-w-y-zj-g-jy-bcdb0621b97999c233246a8ec0a35d0fcd9a6417ef8ccee0c8978b64b123af2dd update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1509,7 +1509,7 @@ export def "keys-w-y-zj-g-jy-bcdb0621b97999c233246a8ec0a35d0fcd9a6417ef8ccee0c89
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/keys/wYZjGJyBcdb0621b97999c233246a8ec0a35d0fcd9a6417ef8ccee0c8978b64b123af2dd")
-  let body = {description: $description} | compact
+  let body = {"description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1552,22 +1552,22 @@ export def "tasks delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --uids: string
-  --indexUids: string # e.g. books
+  --index-uids: string # e.g. books
   --types: string # e.g. documentAdditionOrUpdate
   --statuses: string # e.g. failed
-  --beforeEnqueuedAt: string
-  --afterEnqueuedAt: string
-  --beforeStartedAt: string
-  --afterStartedAt: string
-  --beforeFinishedAt: string
-  --afterFinishedAt: string
-  --canceledBy: string
+  --before-enqueued-at: string
+  --after-enqueued-at: string
+  --before-started-at: string
+  --after-started-at: string
+  --before-finished-at: string
+  --after-finished-at: string
+  --canceled-by: string
   --limit: string # e.g. 2
   --qp-from: string # e.g. 10
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "uids" $uids "scalar") (serialize-qp "indexUids" $indexUids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "statuses" $statuses "scalar") (serialize-qp "beforeEnqueuedAt" $beforeEnqueuedAt "scalar") (serialize-qp "afterEnqueuedAt" $afterEnqueuedAt "scalar") (serialize-qp "beforeStartedAt" $beforeStartedAt "scalar") (serialize-qp "afterStartedAt" $afterStartedAt "scalar") (serialize-qp "beforeFinishedAt" $beforeFinishedAt "scalar") (serialize-qp "afterFinishedAt" $afterFinishedAt "scalar") (serialize-qp "canceledBy" $canceledBy "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "uids" $uids "scalar") (serialize-qp "indexUids" $index_uids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "statuses" $statuses "scalar") (serialize-qp "beforeEnqueuedAt" $before_enqueued_at "scalar") (serialize-qp "afterEnqueuedAt" $after_enqueued_at "scalar") (serialize-qp "beforeStartedAt" $before_started_at "scalar") (serialize-qp "afterStartedAt" $after_started_at "scalar") (serialize-qp "beforeFinishedAt" $before_finished_at "scalar") (serialize-qp "afterFinishedAt" $after_finished_at "scalar") (serialize-qp "canceledBy" $canceled_by "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1578,7 +1578,7 @@ export def "tasks delete" [
 #
 # GET /tasks
 # operationId: getAllTasks
-export def "tasks get" [
+export def "tasks get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1588,22 +1588,22 @@ export def "tasks get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --uids: string # e.g. 3
-  --indexUids: string # e.g. books
+  --index-uids: string # e.g. books
   --types: string # e.g. documentAdditionOrUpdate
   --statuses: string # e.g. failed
-  --beforeEnqueuedAt: string
-  --afterEnqueuedAt: string
-  --beforeStartedAt: string
-  --afterStartedAt: string
-  --beforeFinishedAt: string
-  --afterFinishedAt: string
-  --canceledBy: string
+  --before-enqueued-at: string
+  --after-enqueued-at: string
+  --before-started-at: string
+  --after-started-at: string
+  --before-finished-at: string
+  --after-finished-at: string
+  --canceled-by: string
   --limit: string # e.g. 2
   --qp-from: string # e.g. 10
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "uids" $uids "scalar") (serialize-qp "indexUids" $indexUids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "statuses" $statuses "scalar") (serialize-qp "beforeEnqueuedAt" $beforeEnqueuedAt "scalar") (serialize-qp "afterEnqueuedAt" $afterEnqueuedAt "scalar") (serialize-qp "beforeStartedAt" $beforeStartedAt "scalar") (serialize-qp "afterStartedAt" $afterStartedAt "scalar") (serialize-qp "beforeFinishedAt" $beforeFinishedAt "scalar") (serialize-qp "afterFinishedAt" $afterFinishedAt "scalar") (serialize-qp "canceledBy" $canceledBy "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "uids" $uids "scalar") (serialize-qp "indexUids" $index_uids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "statuses" $statuses "scalar") (serialize-qp "beforeEnqueuedAt" $before_enqueued_at "scalar") (serialize-qp "afterEnqueuedAt" $after_enqueued_at "scalar") (serialize-qp "beforeStartedAt" $before_started_at "scalar") (serialize-qp "afterStartedAt" $after_started_at "scalar") (serialize-qp "beforeFinishedAt" $before_finished_at "scalar") (serialize-qp "afterFinishedAt" $after_finished_at "scalar") (serialize-qp "canceledBy" $canceled_by "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1614,7 +1614,7 @@ export def "tasks get" [
 #
 # GET /tasks/0
 # operationId: getOneTask
-export def "tasks-0 get" [
+export def "tasks-0 get-one" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1636,7 +1636,7 @@ export def "tasks-0 get" [
 #
 # POST /tasks/cancel
 # operationId: cancelTasks
-export def "tasks-cancel cancelTasks" [
+export def "tasks-cancel cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1646,22 +1646,22 @@ export def "tasks-cancel cancelTasks" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --uids: string
-  --indexUids: string # e.g. books
+  --index-uids: string # e.g. books
   --types: string # e.g. documentAdditionOrUpdate
   --statuses: string # e.g. failed
-  --beforeEnqueuedAt: string
-  --afterEnqueuedAt: string
-  --beforeStartedAt: string
-  --afterStartedAt: string
-  --beforeFinishedAt: string
-  --afterFinishedAt: string
-  --canceledBy: string
+  --before-enqueued-at: string
+  --after-enqueued-at: string
+  --before-started-at: string
+  --after-started-at: string
+  --before-finished-at: string
+  --after-finished-at: string
+  --canceled-by: string
   --limit: string # e.g. 2
   --qp-from: string # e.g. 10
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "uids" $uids "scalar") (serialize-qp "indexUids" $indexUids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "statuses" $statuses "scalar") (serialize-qp "beforeEnqueuedAt" $beforeEnqueuedAt "scalar") (serialize-qp "afterEnqueuedAt" $afterEnqueuedAt "scalar") (serialize-qp "beforeStartedAt" $beforeStartedAt "scalar") (serialize-qp "afterStartedAt" $afterStartedAt "scalar") (serialize-qp "beforeFinishedAt" $beforeFinishedAt "scalar") (serialize-qp "afterFinishedAt" $afterFinishedAt "scalar") (serialize-qp "canceledBy" $canceledBy "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "uids" $uids "scalar") (serialize-qp "indexUids" $index_uids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "statuses" $statuses "scalar") (serialize-qp "beforeEnqueuedAt" $before_enqueued_at "scalar") (serialize-qp "afterEnqueuedAt" $after_enqueued_at "scalar") (serialize-qp "beforeStartedAt" $before_started_at "scalar") (serialize-qp "afterStartedAt" $after_started_at "scalar") (serialize-qp "beforeFinishedAt" $before_finished_at "scalar") (serialize-qp "afterFinishedAt" $after_finished_at "scalar") (serialize-qp "canceledBy" $canceled_by "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tasks/cancel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1672,7 +1672,7 @@ export def "tasks-cancel cancelTasks" [
 #
 # GET /version
 # operationId: version
-export def "version version" [
+export def "version get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

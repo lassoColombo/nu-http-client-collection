@@ -143,7 +143,7 @@ export def "accounts-balance-get accountsBalanceGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/balance/get")
-  let body = {access_token: $access_token, client_id: $client_id, options: $options, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -174,7 +174,7 @@ export def "accounts-get accountsGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/get")
-  let body = {access_token: $access_token, client_id: $client_id, options: $options, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -202,7 +202,7 @@ export def "application-get applicationGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/application/get")
-  let body = {application_id: $application_id, client_id: $client_id, secret: $secret} | compact
+  let body = {"application_id": $application_id, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,7 +232,7 @@ export def "asset-report-audit-copy-create assetReportAuditCopyCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/audit_copy/create")
-  let body = {asset_report_token: $asset_report_token, auditor_id: $auditor_id, client_id: $client_id, secret: $secret} | compact
+  let body = {"asset_report_token": $asset_report_token, "auditor_id": $auditor_id, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -261,7 +261,7 @@ export def "asset-report-audit-copy-get assetReportAuditCopyGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/audit_copy/get")
-  let body = {audit_copy_token: $audit_copy_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -290,7 +290,7 @@ export def "asset-report-audit-copy-remove assetReportAuditCopyRemove" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/audit_copy/remove")
-  let body = {audit_copy_token: $audit_copy_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -323,7 +323,7 @@ export def "asset-report-create assetReportCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/create")
-  let body = {access_tokens: $access_tokens, client_id: $client_id, days_requested: $days_requested, options: $options, report_type: $report_type, secret: $secret} | compact
+  let body = {"access_tokens": $access_tokens, "client_id": $client_id, "days_requested": $days_requested, "options": $options, "report_type": $report_type, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -353,7 +353,7 @@ export def "asset-report-filter assetReportFilter" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/filter")
-  let body = {account_ids_to_exclude: $account_ids_to_exclude, asset_report_token: $asset_report_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"account_ids_to_exclude": $account_ids_to_exclude, "asset_report_token": $asset_report_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -386,7 +386,7 @@ export def "asset-report-get assetReportGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/get")
-  let body = {asset_report_token: $asset_report_token, client_id: $client_id, fast_report: $fast_report, include_insights: $include_insights, options: $options, secret: $secret} | compact
+  let body = {"asset_report_token": $asset_report_token, "client_id": $client_id, "fast_report": $fast_report, "include_insights": $include_insights, "options": $options, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -417,7 +417,7 @@ export def "asset-report-pdf-get assetReportPdfGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/pdf/get")
-  let body = {asset_report_token: $asset_report_token, client_id: $client_id, options: $options, secret: $secret} | compact
+  let body = {"asset_report_token": $asset_report_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -449,7 +449,7 @@ export def "asset-report-refresh assetReportRefresh" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/refresh")
-  let body = {asset_report_token: $asset_report_token, client_id: $client_id, days_requested: $days_requested, options: $options, secret: $secret} | compact
+  let body = {"asset_report_token": $asset_report_token, "client_id": $client_id, "days_requested": $days_requested, "options": $options, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -478,7 +478,7 @@ export def "asset-report-remove assetReportRemove" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/remove")
-  let body = {asset_report_token: $asset_report_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"asset_report_token": $asset_report_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -509,7 +509,7 @@ export def "auth-get authGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/get")
-  let body = {access_token: $access_token, client_id: $client_id, options: $options, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -538,7 +538,7 @@ export def "bank-transfer-balance-get bankTransferBalanceGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/balance/get")
-  let body = {client_id: $client_id, origination_account_id: $origination_account_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "origination_account_id": $origination_account_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -567,7 +567,7 @@ export def "bank-transfer-cancel bankTransferCancel" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/cancel")
-  let body = {bank_transfer_id: $bank_transfer_id, client_id: $client_id, secret: $secret} | compact
+  let body = {"bank_transfer_id": $bank_transfer_id, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -609,7 +609,7 @@ export def "bank-transfer-create bankTransferCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/create")
-  let body = {access_token: $access_token, account_id: $account_id, ach_class: $ach_class, amount: $amount, client_id: $client_id, custom_tag: $custom_tag, description: $description, idempotency_key: $idempotency_key, iso_currency_code: $iso_currency_code, metadata: $metadata, network: $network, origination_account_id: $origination_account_id, secret: $secret, type: $type, user: $user} | compact
+  let body = {"access_token": $access_token, "account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "client_id": $client_id, "custom_tag": $custom_tag, "description": $description, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "metadata": $metadata, "network": $network, "origination_account_id": $origination_account_id, "secret": $secret, "type": $type, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -647,7 +647,7 @@ export def "bank-transfer-event-list bankTransferEventList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/event/list")
-  let body = {account_id: $account_id, bank_transfer_id: $bank_transfer_id, bank_transfer_type: $bank_transfer_type, client_id: $client_id, count: $count, direction: $direction, end_date: $end_date, event_types: $event_types, offset: $offset, origination_account_id: $origination_account_id, secret: $secret, start_date: $start_date} | compact
+  let body = {"account_id": $account_id, "bank_transfer_id": $bank_transfer_id, "bank_transfer_type": $bank_transfer_type, "client_id": $client_id, "count": $count, "direction": $direction, "end_date": $end_date, "event_types": $event_types, "offset": $offset, "origination_account_id": $origination_account_id, "secret": $secret, "start_date": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -677,7 +677,7 @@ export def "bank-transfer-event-sync bankTransferEventSync" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/event/sync")
-  let body = {after_id: $after_id, client_id: $client_id, count: $count, secret: $secret} | compact
+  let body = {"after_id": $after_id, "client_id": $client_id, "count": $count, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -706,7 +706,7 @@ export def "bank-transfer-get bankTransferGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/get")
-  let body = {bank_transfer_id: $bank_transfer_id, client_id: $client_id, secret: $secret} | compact
+  let body = {"bank_transfer_id": $bank_transfer_id, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -740,7 +740,7 @@ export def "bank-transfer-list bankTransferList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/list")
-  let body = {client_id: $client_id, count: $count, direction: $direction, end_date: $end_date, offset: $offset, origination_account_id: $origination_account_id, secret: $secret, start_date: $start_date} | compact
+  let body = {"client_id": $client_id, "count": $count, "direction": $direction, "end_date": $end_date, "offset": $offset, "origination_account_id": $origination_account_id, "secret": $secret, "start_date": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -772,7 +772,7 @@ export def "bank-transfer-migrate-account bankTransferMigrateAccount" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/migrate_account")
-  let body = {account_number: $account_number, account_type: $account_type, client_id: $client_id, routing_number: $routing_number, secret: $secret, wire_routing_number: $wire_routing_number} | compact
+  let body = {"account_number": $account_number, "account_type": $account_type, "client_id": $client_id, "routing_number": $routing_number, "secret": $secret, "wire_routing_number": $wire_routing_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -801,7 +801,7 @@ export def "bank-transfer-sweep-get bankTransferSweepGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/sweep/get")
-  let body = {client_id: $client_id, secret: $secret, sweep_id: $sweep_id} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "sweep_id": $sweep_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -833,7 +833,7 @@ export def "bank-transfer-sweep-list bankTransferSweepList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/sweep/list")
-  let body = {client_id: $client_id, count: $count, end_time: $end_time, origination_account_id: $origination_account_id, secret: $secret, start_time: $start_time} | compact
+  let body = {"client_id": $client_id, "count": $count, "end_time": $end_time, "origination_account_id": $origination_account_id, "secret": $secret, "start_time": $start_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -862,7 +862,7 @@ export def "beta-credit-bank-employment-get creditBankEmploymentGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/beta/credit/v1/bank_employment/get")
-  let body = {client_id: $client_id, secret: $secret, user_token: $user_token} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -893,7 +893,7 @@ export def "beta-transactions-rules-create transactionsRulesCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/beta/transactions/rules/v1/create")
-  let body = {access_token: $access_token, client_id: $client_id, personal_finance_category: $personal_finance_category, rule_details: $rule_details, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "personal_finance_category": $personal_finance_category, "rule_details": $rule_details, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -921,7 +921,7 @@ export def "beta-transactions-rules-list transactionsRulesList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/beta/transactions/rules/v1/list")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -950,7 +950,7 @@ export def "beta-transactions-rules-remove transactionsRulesRemove" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/beta/transactions/rules/v1/remove")
-  let body = {access_token: $access_token, client_id: $client_id, rule_id: $rule_id, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "rule_id": $rule_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -980,7 +980,7 @@ export def "beta-transactions-enhance transactionsEnhance" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/beta/transactions/v1/enhance")
-  let body = {account_type: $account_type, client_id: $client_id, secret: $secret, transactions: $transactions} | compact
+  let body = {"account_type": $account_type, "client_id": $client_id, "secret": $secret, "transactions": $transactions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1035,7 +1035,7 @@ export def "credit-asset-report-freddie-mac-get creditAssetReportFreddieMacGet" 
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/asset_report/freddie_mac/get")
-  let body = {audit_copy_token: $audit_copy_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1064,7 +1064,7 @@ export def "credit-audit-copy-token-create creditAuditCopyTokenCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/audit_copy_token/create")
-  let body = {client_id: $client_id, report_tokens: $report_tokens, secret: $secret} | compact
+  let body = {"client_id": $client_id, "report_tokens": $report_tokens, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1093,7 +1093,7 @@ export def "credit-audit-copy-token-remove creditReportAuditCopyRemove" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/audit_copy_token/remove")
-  let body = {audit_copy_token: $audit_copy_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1123,7 +1123,7 @@ export def "credit-audit-copy-token-update creditAuditCopyTokenUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/audit_copy_token/update")
-  let body = {audit_copy_token: $audit_copy_token, client_id: $client_id, report_tokens: $report_tokens, secret: $secret} | compact
+  let body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "report_tokens": $report_tokens, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1154,7 +1154,7 @@ export def "credit-bank-income-get creditBankIncomeGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/bank_income/get")
-  let body = {client_id: $client_id, options: $options, secret: $secret, user_token: $user_token} | compact
+  let body = {"client_id": $client_id, "options": $options, "secret": $secret, "user_token": $user_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1183,7 +1183,7 @@ export def "credit-bank-income-pdf-get creditBankIncomePdfGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/bank_income/pdf/get")
-  let body = {client_id: $client_id, secret: $secret, user_token: $user_token} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1214,7 +1214,7 @@ export def "credit-bank-income-refresh creditBankIncomeRefresh" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/bank_income/refresh")
-  let body = {client_id: $client_id, options: $options, secret: $secret, user_token: $user_token} | compact
+  let body = {"client_id": $client_id, "options": $options, "secret": $secret, "user_token": $user_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1243,7 +1243,7 @@ export def "credit-employment-get creditEmploymentGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/employment/get")
-  let body = {client_id: $client_id, secret: $secret, user_token: $user_token} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1272,7 +1272,7 @@ export def "credit-freddie-mac-reports-get creditFreddieMacReportsGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/freddie_mac/reports/get")
-  let body = {audit_copy_token: $audit_copy_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1301,7 +1301,7 @@ export def "credit-payroll-income-get creditPayrollIncomeGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/payroll_income/get")
-  let body = {client_id: $client_id, secret: $secret, user_token: $user_token} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1337,7 +1337,7 @@ export def "credit-payroll-income-precheck creditPayrollIncomePrecheck" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/payroll_income/precheck")
-  let body = {access_tokens: $access_tokens, client_id: $client_id, employer: $employer, payroll_institution: $payroll_institution, secret: $secret, us_military_info: $us_military_info, user_token: $user_token} | compact
+  let body = {"access_tokens": $access_tokens, "client_id": $client_id, "employer": $employer, "payroll_institution": $payroll_institution, "secret": $secret, "us_military_info": $us_military_info, "user_token": $user_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1366,7 +1366,7 @@ export def "credit-payroll-income-refresh creditPayrollIncomeRefresh" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/payroll_income/refresh")
-  let body = {client_id: $client_id, secret: $secret, user_token: $user_token} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1397,7 +1397,7 @@ export def "credit-relay-create creditRelayCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/relay/create")
-  let body = {client_id: $client_id, report_tokens: $report_tokens, secondary_client_id: $secondary_client_id, secret: $secret, webhook: $webhook} | compact
+  let body = {"client_id": $client_id, "report_tokens": $report_tokens, "secondary_client_id": $secondary_client_id, "secret": $secret, "webhook": $webhook} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1427,7 +1427,7 @@ export def "credit-relay-get creditRelayGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/relay/get")
-  let body = {client_id: $client_id, relay_token: $relay_token, report_type: $report_type, secret: $secret} | compact
+  let body = {"client_id": $client_id, "relay_token": $relay_token, "report_type": $report_type, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1458,7 +1458,7 @@ export def "credit-relay-refresh creditRelayRefresh" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/relay/refresh")
-  let body = {client_id: $client_id, relay_token: $relay_token, report_type: $report_type, secret: $secret, webhook: $webhook} | compact
+  let body = {"client_id": $client_id, "relay_token": $relay_token, "report_type": $report_type, "secret": $secret, "webhook": $webhook} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1487,7 +1487,7 @@ export def "credit-relay-remove creditRelayRemove" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/relay/remove")
-  let body = {client_id: $client_id, relay_token: $relay_token, secret: $secret} | compact
+  let body = {"client_id": $client_id, "relay_token": $relay_token, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1516,7 +1516,7 @@ export def "credit-sessions-get creditSessionsGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/sessions/get")
-  let body = {client_id: $client_id, secret: $secret, user_token: $user_token} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1545,7 +1545,7 @@ export def "dashboard-user-get dashboardUserGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dashboard_user/get")
-  let body = {client_id: $client_id, dashboard_user_id: $dashboard_user_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "dashboard_user_id": $dashboard_user_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1574,7 +1574,7 @@ export def "dashboard-user-list dashboardUserList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dashboard_user/list")
-  let body = {client_id: $client_id, cursor: $cursor, secret: $secret} | compact
+  let body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1609,7 +1609,7 @@ export def "deposit-switch-alt-create depositSwitchAltCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deposit_switch/alt/create")
-  let body = {client_id: $client_id, country_code: $country_code, options: $options, secret: $secret, target_account: $target_account, target_user: $target_user} | compact
+  let body = {"client_id": $client_id, "country_code": $country_code, "options": $options, "secret": $secret, "target_account": $target_account, "target_user": $target_user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1642,7 +1642,7 @@ export def "deposit-switch-create depositSwitchCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deposit_switch/create")
-  let body = {client_id: $client_id, country_code: $country_code, options: $options, secret: $secret, target_access_token: $target_access_token, target_account_id: $target_account_id} | compact
+  let body = {"client_id": $client_id, "country_code": $country_code, "options": $options, "secret": $secret, "target_access_token": $target_access_token, "target_account_id": $target_account_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1671,7 +1671,7 @@ export def "deposit-switch-get depositSwitchGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deposit_switch/get")
-  let body = {client_id: $client_id, deposit_switch_id: $deposit_switch_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "deposit_switch_id": $deposit_switch_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1700,7 +1700,7 @@ export def "deposit-switch-token-create depositSwitchTokenCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deposit_switch/token/create")
-  let body = {client_id: $client_id, deposit_switch_id: $deposit_switch_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "deposit_switch_id": $deposit_switch_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1730,7 +1730,7 @@ export def "employers-search employersSearch" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/employers/search")
-  let body = {client_id: $client_id, products: $products, query: $query, secret: $secret} | compact
+  let body = {"client_id": $client_id, "products": $products, "query": $query, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1761,7 +1761,7 @@ export def "employment-verification-get employmentVerificationGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/employment/verification/get")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1787,11 +1787,11 @@ export def "fdx-notifications fdxNotifications" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   category: string@category-completer # Category of Notification
-  notificationId: string # Id of notification
-  notificationPayload: record # Custom key-value pairs payload for a notification — shape: {customFields?: record, id?: string, idType?: "ACCOUNT"|"CUSTOMER"|"PARTY"|"MAINTENANCE"|"CONSENT"}
+  notification_id: string # Id of notification
+  notification_payload: record # Custom key-value pairs payload for a notification — shape: {customFields?: record, id?: string, idType?: "ACCOUNT"|"CUSTOMER"|"PARTY"|"MAINTENANCE"|"CONSENT"}
   --priority: string@priority-completer # Priority of notification
   publisher: record # FDX Participant - an entity or person that is a part of a FDX API transaction — shape: {homeUri?: string, logoUri?: string, name: string, registeredEntityId?: string, registeredEntityName?: string, registry?: "FDX"|"GLEIF"|"ICANN"|"PRIVATE", type: "DATA_ACCESS_PLATFORM"|"DATA_PROVIDER"|"DATA_RECIPIENT"|"INDIVIDUAL"|"MERCHANT"|"VENDOR"}
-  sentOn: string # ISO 8601 date-time in format 'YYYY-MM-DDThh:mm:ss.nnn[Z|[+|-]hh:mm]' according to [IETF RFC3339](https://xml2rfc.tools.ietf.org/public/rfc/html/rfc3339.html#anchor14) (format: date-time, e.g. 2021-07-15T14:46:41.375Z)
+  sent_on: string # ISO 8601 date-time in format 'YYYY-MM-DDThh:mm:ss.nnn[Z|[+|-]hh:mm]' according to [IETF RFC3339](https://xml2rfc.tools.ietf.org/public/rfc/html/rfc3339.html#anchor14) (format: date-time, e.g. 2021-07-15T14:46:41.375Z)
   --severity: string@severity-completer # Severity level of notification
   --subscriber: record # FDX Participant - an entity or person that is a part of a FDX API transaction — shape: {homeUri?: string, logoUri?: string, name: string, registeredEntityId?: string, registeredEntityName?: string, registry?: "FDX"|"GLEIF"|"ICANN"|"PRIVATE", type: "DATA_ACCESS_PLATFORM"|"DATA_PROVIDER"|"DATA_RECIPIENT"|"INDIVIDUAL"|"MERCHANT"|"VENDOR"}
   type: string@type-completer-1 # Type of Notification
@@ -1801,7 +1801,7 @@ export def "fdx-notifications fdxNotifications" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fdx/notifications")
-  let body = {category: $category, notificationId: $notificationId, notificationPayload: $notificationPayload, priority: $priority, publisher: $publisher, sentOn: $sentOn, severity: $severity, subscriber: $subscriber, type: $type, url: $body_url} | compact
+  let body = {"category": $category, "notificationId": $notification_id, "notificationPayload": $notification_payload, "priority": $priority, "publisher": $publisher, "sentOn": $sent_on, "severity": $severity, "subscriber": $subscriber, "type": $type, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1832,7 +1832,7 @@ export def "identity-get identityGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity/get")
-  let body = {access_token: $access_token, client_id: $client_id, options: $options, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1865,7 +1865,7 @@ export def "identity-match identityMatch" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity/match")
-  let body = {access_token: $access_token, client_id: $client_id, options: $options, secret: $secret, user: $user} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1899,7 +1899,7 @@ export def "identity-verification-create identityVerificationCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity_verification/create")
-  let body = {client_id: $client_id, gave_consent: $gave_consent, is_idempotent: $is_idempotent, is_shareable: $is_shareable, secret: $secret, template_id: $template_id, user: $user} | compact
+  let body = {"client_id": $client_id, "gave_consent": $gave_consent, "is_idempotent": $is_idempotent, "is_shareable": $is_shareable, "secret": $secret, "template_id": $template_id, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1928,7 +1928,7 @@ export def "identity-verification-get identityVerificationGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity_verification/get")
-  let body = {client_id: $client_id, identity_verification_id: $identity_verification_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "identity_verification_id": $identity_verification_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1959,7 +1959,7 @@ export def "identity-verification-list identityVerificationList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity_verification/list")
-  let body = {client_id: $client_id, client_user_id: $client_user_id, cursor: $cursor, secret: $secret, template_id: $template_id} | compact
+  let body = {"client_id": $client_id, "client_user_id": $client_user_id, "cursor": $cursor, "secret": $secret, "template_id": $template_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1992,7 +1992,7 @@ export def "identity-verification-retry identityVerificationRetry" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity_verification/retry")
-  let body = {client_id: $client_id, client_user_id: $client_user_id, secret: $secret, steps: $steps, strategy: $strategy, template_id: $template_id} | compact
+  let body = {"client_id": $client_id, "client_user_id": $client_user_id, "secret": $secret, "steps": $steps, "strategy": $strategy, "template_id": $template_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2026,7 +2026,7 @@ export def "income-verification-create incomeVerificationCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/income/verification/create")
-  let body = {client_id: $client_id, options: $options, precheck_id: $precheck_id, secret: $secret, webhook: $webhook} | compact
+  let body = {"client_id": $client_id, "options": $options, "precheck_id": $precheck_id, "secret": $secret, "webhook": $webhook} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2060,7 +2060,7 @@ export def "income-verification-documents-download incomeVerificationDocumentsDo
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/income/verification/documents/download")
-  let body = {access_token: $access_token, client_id: $client_id, document_id: $document_id, income_verification_id: $income_verification_id, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "document_id": $document_id, "income_verification_id": $income_verification_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2093,7 +2093,7 @@ export def "income-verification-paystubs-get incomeVerificationPaystubsGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/income/verification/paystubs/get")
-  let body = {access_token: $access_token, client_id: $client_id, income_verification_id: $income_verification_id, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "income_verification_id": $income_verification_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2134,7 +2134,7 @@ export def "income-verification-precheck incomeVerificationPrecheck" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/income/verification/precheck")
-  let body = {client_id: $client_id, employer: $employer, payroll_institution: $payroll_institution, secret: $secret, transactions_access_token: $transactions_access_token, transactions_access_tokens: $transactions_access_tokens, us_military_info: $us_military_info, user: $user} | compact
+  let body = {"client_id": $client_id, "employer": $employer, "payroll_institution": $payroll_institution, "secret": $secret, "transactions_access_token": $transactions_access_token, "transactions_access_tokens": $transactions_access_tokens, "us_military_info": $us_military_info, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2167,7 +2167,7 @@ export def "income-verification-taxforms-get incomeVerificationTaxformsGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/income/verification/taxforms/get")
-  let body = {access_token: $access_token, client_id: $client_id, income_verification_id: $income_verification_id, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "income_verification_id": $income_verification_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2200,7 +2200,7 @@ export def "institutions-get institutionsGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/institutions/get")
-  let body = {client_id: $client_id, count: $count, country_codes: $country_codes, offset: $offset, options: $options, secret: $secret} | compact
+  let body = {"client_id": $client_id, "count": $count, "country_codes": $country_codes, "offset": $offset, "options": $options, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2232,7 +2232,7 @@ export def "institutions-get-by-id institutionsGetById" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/institutions/get_by_id")
-  let body = {client_id: $client_id, country_codes: $country_codes, institution_id: $institution_id, options: $options, secret: $secret} | compact
+  let body = {"client_id": $client_id, "country_codes": $country_codes, "institution_id": $institution_id, "options": $options, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2265,7 +2265,7 @@ export def "institutions-search institutionsSearch" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/institutions/search")
-  let body = {client_id: $client_id, country_codes: $country_codes, options: $options, products: $products, query: $query, secret: $secret} | compact
+  let body = {"client_id": $client_id, "country_codes": $country_codes, "options": $options, "products": $products, "query": $query, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2296,7 +2296,7 @@ export def "investments-holdings-get investmentsHoldingsGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/investments/holdings/get")
-  let body = {access_token: $access_token, client_id: $client_id, options: $options, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2329,7 +2329,7 @@ export def "investments-transactions-get investmentsTransactionsGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/investments/transactions/get")
-  let body = {access_token: $access_token, client_id: $client_id, end_date: $end_date, options: $options, secret: $secret, start_date: $start_date} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "end_date": $end_date, "options": $options, "secret": $secret, "start_date": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2358,7 +2358,7 @@ export def "item-access-token-invalidate itemAccessTokenInvalidate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/access_token/invalidate")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2388,7 +2388,7 @@ export def "item-activity-list itemActivityList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/activity/list")
-  let body = {access_token: $access_token, client_id: $client_id, count: $count, cursor: $cursor, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "count": $count, "cursor": $cursor, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2416,7 +2416,7 @@ export def "item-application-list itemApplicationList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/application/list")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2449,7 +2449,7 @@ export def "item-application-scopes-update itemApplicationScopesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/application/scopes/update")
-  let body = {access_token: $access_token, application_id: $application_id, client_id: $client_id, context: $context, scopes: $scopes, secret: $secret, state: $state} | compact
+  let body = {"access_token": $access_token, "application_id": $application_id, "client_id": $client_id, "context": $context, "scopes": $scopes, "secret": $secret, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2478,7 +2478,7 @@ export def "item-get itemGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/get")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2510,7 +2510,7 @@ export def "item-import itemImport" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/import")
-  let body = {client_id: $client_id, options: $options, products: $products, secret: $secret, user_auth: $user_auth} | compact
+  let body = {"client_id": $client_id, "options": $options, "products": $products, "secret": $secret, "user_auth": $user_auth} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2539,7 +2539,7 @@ export def "item-public-token-create itemCreatePublicToken" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/public_token/create")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2568,7 +2568,7 @@ export def "item-public-token-exchange itemPublicTokenExchange" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/public_token/exchange")
-  let body = {client_id: $client_id, public_token: $public_token, secret: $secret} | compact
+  let body = {"client_id": $client_id, "public_token": $public_token, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2597,7 +2597,7 @@ export def "item-remove itemRemove" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/remove")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2627,7 +2627,7 @@ export def "item-webhook-update itemWebhookUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/webhook/update")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret, webhook: $webhook} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret, "webhook": $webhook} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2658,7 +2658,7 @@ export def "liabilities-get liabilitiesGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/liabilities/get")
-  let body = {access_token: $access_token, client_id: $client_id, options: $options, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2687,7 +2687,7 @@ export def "link-oauth-correlation-id-exchange linkOauthCorrelationIdExchange" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/link/oauth/correlation_id/exchange")
-  let body = {client_id: $client_id, link_correlation_id: $link_correlation_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "link_correlation_id": $link_correlation_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2753,7 +2753,7 @@ export def "link-token-create linkTokenCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/link/token/create")
-  let body = {access_token: $access_token, account_filters: $account_filters, additional_consented_products: $additional_consented_products, android_package_name: $android_package_name, auth: $body_auth, client_id: $client_id, client_name: $client_name, country_codes: $country_codes, deposit_switch: $deposit_switch, employment: $employment, eu_config: $eu_config, identity_verification: $identity_verification, income_verification: $income_verification, institution_data: $institution_data, institution_id: $institution_id, investments: $investments, language: $language, link_customization_name: $link_customization_name, payment_initiation: $payment_initiation, products: $products, redirect_uri: $redirect_uri, secret: $secret, transfer: $transfer, update: $update, user: $user, user_token: $user_token, webhook: $webhook} | compact
+  let body = {"access_token": $access_token, "account_filters": $account_filters, "additional_consented_products": $additional_consented_products, "android_package_name": $android_package_name, "auth": $body_auth, "client_id": $client_id, "client_name": $client_name, "country_codes": $country_codes, "deposit_switch": $deposit_switch, "employment": $employment, "eu_config": $eu_config, "identity_verification": $identity_verification, "income_verification": $income_verification, "institution_data": $institution_data, "institution_id": $institution_id, "investments": $investments, "language": $language, "link_customization_name": $link_customization_name, "payment_initiation": $payment_initiation, "products": $products, "redirect_uri": $redirect_uri, "secret": $secret, "transfer": $transfer, "update": $update, "user": $user, "user_token": $user_token, "webhook": $webhook} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2782,7 +2782,7 @@ export def "link-token-get linkTokenGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/link/token/get")
-  let body = {client_id: $client_id, link_token: $link_token, secret: $secret} | compact
+  let body = {"client_id": $client_id, "link_token": $link_token, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2813,7 +2813,7 @@ export def "link-delivery-create linkDeliveryCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/link_delivery/create")
-  let body = {client_id: $client_id, communication_methods: $communication_methods, link_token: $link_token, secret: $secret} | compact
+  let body = {"client_id": $client_id, "communication_methods": $communication_methods, "link_token": $link_token, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2842,7 +2842,7 @@ export def "link-delivery-get linkDeliveryGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/link_delivery/get")
-  let body = {client_id: $client_id, link_delivery_session_id: $link_delivery_session_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "link_delivery_session_id": $link_delivery_session_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2890,7 +2890,7 @@ export def "partner-customer-create partnerCustomerCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partner/customer/create")
-  let body = {address: $address, application_name: $application_name, assets_under_management: $assets_under_management, billing_contact: $billing_contact, client_id: $client_id, company_name: $company_name, create_link_customization: $create_link_customization, customer_support_info: $customer_support_info, is_bank_addendum_completed: $is_bank_addendum_completed, is_diligence_attested: $is_diligence_attested, legal_entity_name: $legal_entity_name, logo: $logo, products: $products, redirect_uris: $redirect_uris, secret: $secret, technical_contact: $technical_contact, website: $website} | compact
+  let body = {"address": $address, "application_name": $application_name, "assets_under_management": $assets_under_management, "billing_contact": $billing_contact, "client_id": $client_id, "company_name": $company_name, "create_link_customization": $create_link_customization, "customer_support_info": $customer_support_info, "is_bank_addendum_completed": $is_bank_addendum_completed, "is_diligence_attested": $is_diligence_attested, "legal_entity_name": $legal_entity_name, "logo": $logo, "products": $products, "redirect_uris": $redirect_uris, "secret": $secret, "technical_contact": $technical_contact, "website": $website} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2919,7 +2919,7 @@ export def "partner-customer-enable partnerCustomerEnable" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partner/customer/enable")
-  let body = {client_id: $client_id, end_customer_client_id: $end_customer_client_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "end_customer_client_id": $end_customer_client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2948,7 +2948,7 @@ export def "partner-customer-get partnerCustomerGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partner/customer/get")
-  let body = {client_id: $client_id, end_customer_client_id: $end_customer_client_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "end_customer_client_id": $end_customer_client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2977,7 +2977,7 @@ export def "partner-customer-oauth-institutions-get partnerCustomerOauthInstitut
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partner/customer/oauth_institutions/get")
-  let body = {client_id: $client_id, end_customer_client_id: $end_customer_client_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "end_customer_client_id": $end_customer_client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3006,7 +3006,7 @@ export def "partner-customer-remove partnerCustomerRemove" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partner/customer/remove")
-  let body = {client_id: $client_id, end_customer_client_id: $end_customer_client_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "end_customer_client_id": $end_customer_client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3041,7 +3041,7 @@ export def "payment-initiation-consent-create paymentInitiationConsentCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/consent/create")
-  let body = {client_id: $client_id, constraints: $constraints, options: $options, recipient_id: $recipient_id, reference: $reference, scopes: $scopes, secret: $secret} | compact
+  let body = {"client_id": $client_id, "constraints": $constraints, "options": $options, "recipient_id": $recipient_id, "reference": $reference, "scopes": $scopes, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3070,7 +3070,7 @@ export def "payment-initiation-consent-get paymentInitiationConsentGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/consent/get")
-  let body = {client_id: $client_id, consent_id: $consent_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "consent_id": $consent_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3102,7 +3102,7 @@ export def "payment-initiation-consent-payment-execute paymentInitiationConsentP
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/consent/payment/execute")
-  let body = {amount: $amount, client_id: $client_id, consent_id: $consent_id, idempotency_key: $idempotency_key, secret: $secret} | compact
+  let body = {"amount": $amount, "client_id": $client_id, "consent_id": $consent_id, "idempotency_key": $idempotency_key, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3131,7 +3131,7 @@ export def "payment-initiation-consent-revoke paymentInitiationConsentRevoke" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/consent/revoke")
-  let body = {client_id: $client_id, consent_id: $consent_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "consent_id": $consent_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3166,7 +3166,7 @@ export def "payment-initiation-payment-create paymentInitiationPaymentCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/payment/create")
-  let body = {amount: $amount, client_id: $client_id, options: $options, recipient_id: $recipient_id, reference: $reference, schedule: $schedule, secret: $secret} | compact
+  let body = {"amount": $amount, "client_id": $client_id, "options": $options, "recipient_id": $recipient_id, "reference": $reference, "schedule": $schedule, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3195,7 +3195,7 @@ export def "payment-initiation-payment-get paymentInitiationPaymentGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/payment/get")
-  let body = {client_id: $client_id, payment_id: $payment_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "payment_id": $payment_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3226,7 +3226,7 @@ export def "payment-initiation-payment-list paymentInitiationPaymentList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/payment/list")
-  let body = {client_id: $client_id, consent_id: $consent_id, count: $count, cursor: $cursor, secret: $secret} | compact
+  let body = {"client_id": $client_id, "consent_id": $consent_id, "count": $count, "cursor": $cursor, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3258,7 +3258,7 @@ export def "payment-initiation-payment-reverse paymentInitiationPaymentReverse" 
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/payment/reverse")
-  let body = {amount: $amount, client_id: $client_id, idempotency_key: $idempotency_key, payment_id: $payment_id, reference: $reference, secret: $secret} | compact
+  let body = {"amount": $amount, "client_id": $client_id, "idempotency_key": $idempotency_key, "payment_id": $payment_id, "reference": $reference, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3272,7 +3272,7 @@ export def "payment-initiation-payment-reverse paymentInitiationPaymentReverse" 
 # Docs: /link/maintain-legacy-integration/#creating-a-payment-token
 # operationId: createPaymentToken
 @deprecated
-export def "payment-initiation-payment-token-create createPaymentToken" [
+export def "payment-initiation-payment-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3289,7 +3289,7 @@ export def "payment-initiation-payment-token-create createPaymentToken" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/payment/token/create")
-  let body = {client_id: $client_id, payment_id: $payment_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "payment_id": $payment_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3322,7 +3322,7 @@ export def "payment-initiation-recipient-create paymentInitiationRecipientCreate
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/recipient/create")
-  let body = {address: $address, bacs: $bacs, client_id: $client_id, iban: $iban, name: $name, secret: $secret} | compact
+  let body = {"address": $address, "bacs": $bacs, "client_id": $client_id, "iban": $iban, "name": $name, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3351,7 +3351,7 @@ export def "payment-initiation-recipient-get paymentInitiationRecipientGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/recipient/get")
-  let body = {client_id: $client_id, recipient_id: $recipient_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "recipient_id": $recipient_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3379,7 +3379,7 @@ export def "payment-initiation-recipient-list paymentInitiationRecipientList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/recipient/list")
-  let body = {client_id: $client_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3407,7 +3407,7 @@ export def "payment-profile-create paymentProfileCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_profile/create")
-  let body = {client_id: $client_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3436,7 +3436,7 @@ export def "payment-profile-get paymentProfileGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_profile/get")
-  let body = {client_id: $client_id, payment_profile_token: $payment_profile_token, secret: $secret} | compact
+  let body = {"client_id": $client_id, "payment_profile_token": $payment_profile_token, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3465,7 +3465,7 @@ export def "payment-profile-remove paymentProfileRemove" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_profile/remove")
-  let body = {client_id: $client_id, payment_profile_token: $payment_profile_token, secret: $secret} | compact
+  let body = {"client_id": $client_id, "payment_profile_token": $payment_profile_token, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3495,7 +3495,7 @@ export def "processor-apex-processor-token-create processorApexProcessorTokenCre
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/apex/processor_token/create")
-  let body = {access_token: $access_token, account_id: $account_id, client_id: $client_id, secret: $secret} | compact
+  let body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3524,7 +3524,7 @@ export def "processor-auth-get processorAuthGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/auth/get")
-  let body = {client_id: $client_id, processor_token: $processor_token, secret: $secret} | compact
+  let body = {"client_id": $client_id, "processor_token": $processor_token, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3555,7 +3555,7 @@ export def "processor-balance-get processorBalanceGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/balance/get")
-  let body = {client_id: $client_id, options: $options, processor_token: $processor_token, secret: $secret} | compact
+  let body = {"client_id": $client_id, "options": $options, "processor_token": $processor_token, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3596,7 +3596,7 @@ export def "processor-bank-transfer-create processorBankTransferCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/bank_transfer/create")
-  let body = {ach_class: $ach_class, amount: $amount, client_id: $client_id, custom_tag: $custom_tag, description: $description, idempotency_key: $idempotency_key, iso_currency_code: $iso_currency_code, metadata: $metadata, network: $network, origination_account_id: $origination_account_id, processor_token: $processor_token, secret: $secret, type: $type, user: $user} | compact
+  let body = {"ach_class": $ach_class, "amount": $amount, "client_id": $client_id, "custom_tag": $custom_tag, "description": $description, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "metadata": $metadata, "network": $network, "origination_account_id": $origination_account_id, "processor_token": $processor_token, "secret": $secret, "type": $type, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3625,7 +3625,7 @@ export def "processor-identity-get processorIdentityGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/identity/get")
-  let body = {client_id: $client_id, processor_token: $processor_token, secret: $secret} | compact
+  let body = {"client_id": $client_id, "processor_token": $processor_token, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3660,7 +3660,7 @@ export def "processor-signal-decision-report processorSignalDecisionReport" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/signal/decision/report")
-  let body = {amount_instantly_available: $amount_instantly_available, client_id: $client_id, client_transaction_id: $client_transaction_id, days_funds_on_hold: $days_funds_on_hold, decision_outcome: $decision_outcome, initiated: $initiated, payment_method: $payment_method, processor_token: $processor_token, secret: $secret} | compact
+  let body = {"amount_instantly_available": $amount_instantly_available, "client_id": $client_id, "client_transaction_id": $client_transaction_id, "days_funds_on_hold": $days_funds_on_hold, "decision_outcome": $decision_outcome, "initiated": $initiated, "payment_method": $payment_method, "processor_token": $processor_token, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3699,7 +3699,7 @@ export def "processor-signal-evaluate processorSignalEvaluate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/signal/evaluate")
-  let body = {amount: $amount, client_id: $client_id, client_transaction_id: $client_transaction_id, client_user_id: $client_user_id, default_payment_method: $default_payment_method, device: $device, is_recurring: $is_recurring, processor_token: $processor_token, secret: $secret, user: $user, user_present: $user_present} | compact
+  let body = {"amount": $amount, "client_id": $client_id, "client_transaction_id": $client_transaction_id, "client_user_id": $client_user_id, "default_payment_method": $default_payment_method, "device": $device, "is_recurring": $is_recurring, "processor_token": $processor_token, "secret": $secret, "user": $user, "user_present": $user_present} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3731,7 +3731,7 @@ export def "processor-signal-return-report processorSignalReturnReport" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/signal/return/report")
-  let body = {client_id: $client_id, client_transaction_id: $client_transaction_id, processor_token: $processor_token, return_code: $return_code, returned_at: $returned_at, secret: $secret} | compact
+  let body = {"client_id": $client_id, "client_transaction_id": $client_transaction_id, "processor_token": $processor_token, "return_code": $return_code, "returned_at": $returned_at, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3761,7 +3761,7 @@ export def "processor-stripe-bank-account-token-create processorStripeBankAccoun
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/stripe/bank_account_token/create")
-  let body = {access_token: $access_token, account_id: $account_id, client_id: $client_id, secret: $secret} | compact
+  let body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3792,7 +3792,7 @@ export def "processor-token-create processorTokenCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/token/create")
-  let body = {access_token: $access_token, account_id: $account_id, client_id: $client_id, processor: $processor, secret: $secret} | compact
+  let body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "processor": $processor, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3821,7 +3821,7 @@ export def "sandbox-bank-transfer-fire-webhook sandboxBankTransferFireWebhook" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/bank_transfer/fire_webhook")
-  let body = {client_id: $client_id, secret: $secret, webhook: $webhook} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "webhook": $webhook} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3853,7 +3853,7 @@ export def "sandbox-bank-transfer-simulate sandboxBankTransferSimulate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/bank_transfer/simulate")
-  let body = {bank_transfer_id: $bank_transfer_id, client_id: $client_id, event_type: $event_type, failure_reason: $failure_reason, secret: $secret} | compact
+  let body = {"bank_transfer_id": $bank_transfer_id, "client_id": $client_id, "event_type": $event_type, "failure_reason": $failure_reason, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3885,7 +3885,7 @@ export def "sandbox-income-fire-webhook sandboxIncomeFireWebhook" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/income/fire_webhook")
-  let body = {client_id: $client_id, item_id: $item_id, secret: $secret, user_id: $user_id, verification_status: $verification_status, webhook: $webhook} | compact
+  let body = {"client_id": $client_id, "item_id": $item_id, "secret": $secret, "user_id": $user_id, "verification_status": $verification_status, "webhook": $webhook} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3916,7 +3916,7 @@ export def "sandbox-item-fire-webhook sandboxItemFireWebhook" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/item/fire_webhook")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret, webhook_code: $webhook_code, webhook_type: $webhook_type} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret, "webhook_code": $webhook_code, "webhook_type": $webhook_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3945,7 +3945,7 @@ export def "sandbox-item-reset-login sandboxItemResetLogin" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/item/reset_login")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3976,7 +3976,7 @@ export def "sandbox-item-set-verification-status sandboxItemSetVerificationStatu
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/item/set_verification_status")
-  let body = {access_token: $access_token, account_id: $account_id, client_id: $client_id, secret: $secret, verification_status: $verification_status} | compact
+  let body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "secret": $secret, "verification_status": $verification_status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4003,7 +4003,7 @@ export def "sandbox-oauth-select-accounts sandboxOauthSelectAccounts" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/oauth/select_accounts")
-  let body = {accounts: $accounts, oauth_state_id: $oauth_state_id} | compact
+  let body = {"accounts": $accounts, "oauth_state_id": $oauth_state_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4032,7 +4032,7 @@ export def "sandbox-payment-profile-reset-login sandboxPaymentProfileResetLogin"
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/payment_profile/reset_login")
-  let body = {client_id: $client_id, payment_profile_token: $payment_profile_token, secret: $secret} | compact
+  let body = {"client_id": $client_id, "payment_profile_token": $payment_profile_token, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4063,7 +4063,7 @@ export def "sandbox-processor-token-create sandboxProcessorTokenCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/processor_token/create")
-  let body = {client_id: $client_id, institution_id: $institution_id, options: $options, secret: $secret} | compact
+  let body = {"client_id": $client_id, "institution_id": $institution_id, "options": $options, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4096,7 +4096,7 @@ export def "sandbox-public-token-create sandboxPublicTokenCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/public_token/create")
-  let body = {client_id: $client_id, initial_products: $initial_products, institution_id: $institution_id, options: $options, secret: $secret, user_token: $user_token} | compact
+  let body = {"client_id": $client_id, "initial_products": $initial_products, "institution_id": $institution_id, "options": $options, "secret": $secret, "user_token": $user_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4125,7 +4125,7 @@ export def "sandbox-transfer-fire-webhook sandboxTransferFireWebhook" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/fire_webhook")
-  let body = {client_id: $client_id, secret: $secret, webhook: $webhook} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "webhook": $webhook} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4153,7 +4153,7 @@ export def "sandbox-transfer-repayment-simulate sandboxTransferRepaymentSimulate
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/repayment/simulate")
-  let body = {client_id: $client_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4185,7 +4185,7 @@ export def "sandbox-transfer-simulate sandboxTransferSimulate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/simulate")
-  let body = {client_id: $client_id, event_type: $event_type, failure_reason: $failure_reason, secret: $secret, transfer_id: $transfer_id} | compact
+  let body = {"client_id": $client_id, "event_type": $event_type, "failure_reason": $failure_reason, "secret": $secret, "transfer_id": $transfer_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4213,7 +4213,7 @@ export def "sandbox-transfer-sweep-simulate sandboxTransferSweepSimulate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/sweep/simulate")
-  let body = {client_id: $client_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4243,7 +4243,7 @@ export def "sandbox-transfer-test-clock-advance sandboxTransferTestClockAdvance"
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/test_clock/advance")
-  let body = {client_id: $client_id, new_virtual_time: $new_virtual_time, secret: $secret, test_clock_id: $test_clock_id} | compact
+  let body = {"client_id": $client_id, "new_virtual_time": $new_virtual_time, "secret": $secret, "test_clock_id": $test_clock_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4272,7 +4272,7 @@ export def "sandbox-transfer-test-clock-create sandboxTransferTestClockCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/test_clock/create")
-  let body = {client_id: $client_id, secret: $secret, virtual_time: $virtual_time} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "virtual_time": $virtual_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4301,7 +4301,7 @@ export def "sandbox-transfer-test-clock-get sandboxTransferTestClockGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/test_clock/get")
-  let body = {client_id: $client_id, secret: $secret, test_clock_id: $test_clock_id} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "test_clock_id": $test_clock_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4333,7 +4333,7 @@ export def "sandbox-transfer-test-clock-list sandboxTransferTestClockList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/test_clock/list")
-  let body = {client_id: $client_id, count: $count, end_virtual_time: $end_virtual_time, offset: $offset, secret: $secret, start_virtual_time: $start_virtual_time} | compact
+  let body = {"client_id": $client_id, "count": $count, "end_virtual_time": $end_virtual_time, "offset": $offset, "secret": $secret, "start_virtual_time": $start_virtual_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4367,7 +4367,7 @@ export def "signal-decision-report signalDecisionReport" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signal/decision/report")
-  let body = {amount_instantly_available: $amount_instantly_available, client_id: $client_id, client_transaction_id: $client_transaction_id, days_funds_on_hold: $days_funds_on_hold, decision_outcome: $decision_outcome, initiated: $initiated, payment_method: $payment_method, secret: $secret} | compact
+  let body = {"amount_instantly_available": $amount_instantly_available, "client_id": $client_id, "client_transaction_id": $client_transaction_id, "days_funds_on_hold": $days_funds_on_hold, "decision_outcome": $decision_outcome, "initiated": $initiated, "payment_method": $payment_method, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4407,7 +4407,7 @@ export def "signal-evaluate signalEvaluate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signal/evaluate")
-  let body = {access_token: $access_token, account_id: $account_id, amount: $amount, client_id: $client_id, client_transaction_id: $client_transaction_id, client_user_id: $client_user_id, default_payment_method: $default_payment_method, device: $device, is_recurring: $is_recurring, secret: $secret, user: $user, user_present: $user_present} | compact
+  let body = {"access_token": $access_token, "account_id": $account_id, "amount": $amount, "client_id": $client_id, "client_transaction_id": $client_transaction_id, "client_user_id": $client_user_id, "default_payment_method": $default_payment_method, "device": $device, "is_recurring": $is_recurring, "secret": $secret, "user": $user, "user_present": $user_present} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4436,7 +4436,7 @@ export def "signal-prepare signalPrepare" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signal/prepare")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4467,7 +4467,7 @@ export def "signal-return-report signalReturnReport" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signal/return/report")
-  let body = {client_id: $client_id, client_transaction_id: $client_transaction_id, return_code: $return_code, returned_at: $returned_at, secret: $secret} | compact
+  let body = {"client_id": $client_id, "client_transaction_id": $client_transaction_id, "return_code": $return_code, "returned_at": $returned_at, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4500,7 +4500,7 @@ export def "transactions-enrich transactionsEnrich" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/enrich")
-  let body = {account_type: $account_type, client_id: $client_id, options: $options, secret: $secret, transactions: $transactions} | compact
+  let body = {"account_type": $account_type, "client_id": $client_id, "options": $options, "secret": $secret, "transactions": $transactions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4533,7 +4533,7 @@ export def "transactions-get transactionsGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/get")
-  let body = {access_token: $access_token, client_id: $client_id, end_date: $end_date, options: $options, secret: $secret, start_date: $start_date} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "end_date": $end_date, "options": $options, "secret": $secret, "start_date": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4565,7 +4565,7 @@ export def "transactions-recurring-get transactionsRecurringGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/recurring/get")
-  let body = {access_token: $access_token, account_ids: $account_ids, client_id: $client_id, options: $options, secret: $secret} | compact
+  let body = {"access_token": $access_token, "account_ids": $account_ids, "client_id": $client_id, "options": $options, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4594,7 +4594,7 @@ export def "transactions-refresh transactionsRefresh" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/refresh")
-  let body = {access_token: $access_token, client_id: $client_id, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4627,7 +4627,7 @@ export def "transactions-sync transactionsSync" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/sync")
-  let body = {access_token: $access_token, client_id: $client_id, count: $count, cursor: $cursor, options: $options, secret: $secret} | compact
+  let body = {"access_token": $access_token, "client_id": $client_id, "count": $count, "cursor": $cursor, "options": $options, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4675,7 +4675,7 @@ export def "transfer-authorization-create transferAuthorizationCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/authorization/create")
-  let body = {access_token: $access_token, account_id: $account_id, ach_class: $ach_class, amount: $amount, beacon_session_id: $beacon_session_id, client_id: $client_id, device: $device, funding_account_id: $funding_account_id, idempotency_key: $idempotency_key, iso_currency_code: $iso_currency_code, network: $network, origination_account_id: $origination_account_id, originator_client_id: $originator_client_id, payment_profile_token: $payment_profile_token, secret: $secret, type: $type, user: $user, user_present: $user_present, with_guarantee: $with_guarantee} | compact
+  let body = {"access_token": $access_token, "account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "beacon_session_id": $beacon_session_id, "client_id": $client_id, "device": $device, "funding_account_id": $funding_account_id, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "network": $network, "origination_account_id": $origination_account_id, "originator_client_id": $originator_client_id, "payment_profile_token": $payment_profile_token, "secret": $secret, "type": $type, "user": $user, "user_present": $user_present, "with_guarantee": $with_guarantee} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4704,7 +4704,7 @@ export def "transfer-cancel transferCancel" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/cancel")
-  let body = {client_id: $client_id, secret: $secret, transfer_id: $transfer_id} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "transfer_id": $transfer_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4735,7 +4735,7 @@ export def "transfer-capabilities-get transferCapabilitiesGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/capabilities/get")
-  let body = {access_token: $access_token, account_id: $account_id, client_id: $client_id, payment_profile_token: $payment_profile_token, secret: $secret} | compact
+  let body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "payment_profile_token": $payment_profile_token, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4785,7 +4785,7 @@ export def "transfer-create transferCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/create")
-  let body = {access_token: $access_token, account_id: $account_id, ach_class: $ach_class, amount: $amount, authorization_id: $authorization_id, client_id: $client_id, description: $description, idempotency_key: $idempotency_key, iso_currency_code: $iso_currency_code, metadata: $metadata, network: $network, origination_account_id: $origination_account_id, payment_profile_token: $payment_profile_token, secret: $secret, type: $type, user: $user} | compact
+  let body = {"access_token": $access_token, "account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "authorization_id": $authorization_id, "client_id": $client_id, "description": $description, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "metadata": $metadata, "network": $network, "origination_account_id": $origination_account_id, "payment_profile_token": $payment_profile_token, "secret": $secret, "type": $type, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4826,7 +4826,7 @@ export def "transfer-event-list transferEventList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/event/list")
-  let body = {account_id: $account_id, client_id: $client_id, count: $count, end_date: $end_date, event_types: $event_types, funding_account_id: $funding_account_id, offset: $offset, origination_account_id: $origination_account_id, originator_client_id: $originator_client_id, secret: $secret, start_date: $start_date, sweep_id: $sweep_id, transfer_id: $transfer_id, transfer_type: $transfer_type} | compact
+  let body = {"account_id": $account_id, "client_id": $client_id, "count": $count, "end_date": $end_date, "event_types": $event_types, "funding_account_id": $funding_account_id, "offset": $offset, "origination_account_id": $origination_account_id, "originator_client_id": $originator_client_id, "secret": $secret, "start_date": $start_date, "sweep_id": $sweep_id, "transfer_id": $transfer_id, "transfer_type": $transfer_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4856,7 +4856,7 @@ export def "transfer-event-sync transferEventSync" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/event/sync")
-  let body = {after_id: $after_id, client_id: $client_id, count: $count, secret: $secret} | compact
+  let body = {"after_id": $after_id, "client_id": $client_id, "count": $count, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4885,7 +4885,7 @@ export def "transfer-get transferGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/get")
-  let body = {client_id: $client_id, secret: $secret, transfer_id: $transfer_id} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "transfer_id": $transfer_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4927,7 +4927,7 @@ export def "transfer-intent-create transferIntentCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/intent/create")
-  let body = {account_id: $account_id, ach_class: $ach_class, amount: $amount, client_id: $client_id, description: $description, funding_account_id: $funding_account_id, iso_currency_code: $iso_currency_code, metadata: $metadata, mode: $mode, network: $network, origination_account_id: $origination_account_id, require_guarantee: $require_guarantee, secret: $secret, user: $user} | compact
+  let body = {"account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "client_id": $client_id, "description": $description, "funding_account_id": $funding_account_id, "iso_currency_code": $iso_currency_code, "metadata": $metadata, "mode": $mode, "network": $network, "origination_account_id": $origination_account_id, "require_guarantee": $require_guarantee, "secret": $secret, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4956,7 +4956,7 @@ export def "transfer-intent-get transferIntentGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/intent/get")
-  let body = {client_id: $client_id, secret: $secret, transfer_intent_id: $transfer_intent_id} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "transfer_intent_id": $transfer_intent_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4992,7 +4992,7 @@ export def "transfer-list transferList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/list")
-  let body = {client_id: $client_id, count: $count, end_date: $end_date, funding_account_id: $funding_account_id, offset: $offset, origination_account_id: $origination_account_id, originator_client_id: $originator_client_id, secret: $secret, start_date: $start_date} | compact
+  let body = {"client_id": $client_id, "count": $count, "end_date": $end_date, "funding_account_id": $funding_account_id, "offset": $offset, "origination_account_id": $origination_account_id, "originator_client_id": $originator_client_id, "secret": $secret, "start_date": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5024,7 +5024,7 @@ export def "transfer-migrate-account transferMigrateAccount" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/migrate_account")
-  let body = {account_number: $account_number, account_type: $account_type, client_id: $client_id, routing_number: $routing_number, secret: $secret, wire_routing_number: $wire_routing_number} | compact
+  let body = {"account_number": $account_number, "account_type": $account_type, "client_id": $client_id, "routing_number": $routing_number, "secret": $secret, "wire_routing_number": $wire_routing_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5053,7 +5053,7 @@ export def "transfer-originator-create transferOriginatorCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/originator/create")
-  let body = {client_id: $client_id, company_name: $company_name, secret: $secret} | compact
+  let body = {"client_id": $client_id, "company_name": $company_name, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5082,7 +5082,7 @@ export def "transfer-originator-get transferOriginatorGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/originator/get")
-  let body = {client_id: $client_id, originator_client_id: $originator_client_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "originator_client_id": $originator_client_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5112,7 +5112,7 @@ export def "transfer-originator-list transferOriginatorList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/originator/list")
-  let body = {client_id: $client_id, count: $count, offset: $offset, secret: $secret} | compact
+  let body = {"client_id": $client_id, "count": $count, "offset": $offset, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5142,7 +5142,7 @@ export def "transfer-questionnaire-create transferQuestionnaireCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/questionnaire/create")
-  let body = {client_id: $client_id, originator_client_id: $originator_client_id, redirect_uri: $redirect_uri, secret: $secret} | compact
+  let body = {"client_id": $client_id, "originator_client_id": $originator_client_id, "redirect_uri": $redirect_uri, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5171,7 +5171,7 @@ export def "transfer-recurring-cancel transferRecurringCancel" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/recurring/cancel")
-  let body = {client_id: $client_id, recurring_transfer_id: $recurring_transfer_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "recurring_transfer_id": $recurring_transfer_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5218,7 +5218,7 @@ export def "transfer-recurring-create transferRecurringCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/recurring/create")
-  let body = {access_token: $access_token, account_id: $account_id, ach_class: $ach_class, amount: $amount, client_id: $client_id, description: $description, device: $device, funding_account_id: $funding_account_id, idempotency_key: $idempotency_key, iso_currency_code: $iso_currency_code, network: $network, schedule: $schedule, secret: $secret, test_clock_id: $test_clock_id, type: $type, user: $user, user_present: $user_present} | compact
+  let body = {"access_token": $access_token, "account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "client_id": $client_id, "description": $description, "device": $device, "funding_account_id": $funding_account_id, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "network": $network, "schedule": $schedule, "secret": $secret, "test_clock_id": $test_clock_id, "type": $type, "user": $user, "user_present": $user_present} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5247,7 +5247,7 @@ export def "transfer-recurring-get transferRecurringGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/recurring/get")
-  let body = {client_id: $client_id, recurring_transfer_id: $recurring_transfer_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "recurring_transfer_id": $recurring_transfer_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5280,7 +5280,7 @@ export def "transfer-recurring-list transferRecurringList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/recurring/list")
-  let body = {client_id: $client_id, count: $count, end_time: $end_time, funding_account_id: $funding_account_id, offset: $offset, secret: $secret, start_time: $start_time} | compact
+  let body = {"client_id": $client_id, "count": $count, "end_time": $end_time, "funding_account_id": $funding_account_id, "offset": $offset, "secret": $secret, "start_time": $start_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5309,7 +5309,7 @@ export def "transfer-refund-cancel transferRefundCancel" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/refund/cancel")
-  let body = {client_id: $client_id, refund_id: $refund_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "refund_id": $refund_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5340,7 +5340,7 @@ export def "transfer-refund-create transferRefundCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/refund/create")
-  let body = {amount: $amount, client_id: $client_id, idempotency_key: $idempotency_key, secret: $secret, transfer_id: $transfer_id} | compact
+  let body = {"amount": $amount, "client_id": $client_id, "idempotency_key": $idempotency_key, "secret": $secret, "transfer_id": $transfer_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5369,7 +5369,7 @@ export def "transfer-refund-get transferRefundGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/refund/get")
-  let body = {client_id: $client_id, refund_id: $refund_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "refund_id": $refund_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5401,7 +5401,7 @@ export def "transfer-repayment-list transferRepaymentList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/repayment/list")
-  let body = {client_id: $client_id, count: $count, end_date: $end_date, offset: $offset, secret: $secret, start_date: $start_date} | compact
+  let body = {"client_id": $client_id, "count": $count, "end_date": $end_date, "offset": $offset, "secret": $secret, "start_date": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5432,7 +5432,7 @@ export def "transfer-repayment-return-list transferRepaymentReturnList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/repayment/return/list")
-  let body = {client_id: $client_id, count: $count, offset: $offset, repayment_id: $repayment_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "count": $count, "offset": $offset, "repayment_id": $repayment_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5461,7 +5461,7 @@ export def "transfer-sweep-get transferSweepGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/sweep/get")
-  let body = {client_id: $client_id, secret: $secret, sweep_id: $sweep_id} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "sweep_id": $sweep_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5495,7 +5495,7 @@ export def "transfer-sweep-list transferSweepList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/sweep/list")
-  let body = {client_id: $client_id, count: $count, end_date: $end_date, funding_account_id: $funding_account_id, offset: $offset, originator_client_id: $originator_client_id, secret: $secret, start_date: $start_date} | compact
+  let body = {"client_id": $client_id, "count": $count, "end_date": $end_date, "funding_account_id": $funding_account_id, "offset": $offset, "originator_client_id": $originator_client_id, "secret": $secret, "start_date": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5524,7 +5524,7 @@ export def "user-create userCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/create")
-  let body = {client_id: $client_id, client_user_id: $client_user_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "client_user_id": $client_user_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5553,7 +5553,7 @@ export def "wallet-create walletCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/create")
-  let body = {client_id: $client_id, iso_currency_code: $iso_currency_code, secret: $secret} | compact
+  let body = {"client_id": $client_id, "iso_currency_code": $iso_currency_code, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5582,7 +5582,7 @@ export def "wallet-get walletGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/get")
-  let body = {client_id: $client_id, secret: $secret, wallet_id: $wallet_id} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "wallet_id": $wallet_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5613,7 +5613,7 @@ export def "wallet-list walletList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/list")
-  let body = {client_id: $client_id, count: $count, cursor: $cursor, iso_currency_code: $iso_currency_code, secret: $secret} | compact
+  let body = {"client_id": $client_id, "count": $count, "cursor": $cursor, "iso_currency_code": $iso_currency_code, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5648,7 +5648,7 @@ export def "wallet-transaction-execute walletTransactionExecute" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/transaction/execute")
-  let body = {amount: $amount, client_id: $client_id, counterparty: $counterparty, idempotency_key: $idempotency_key, reference: $reference, secret: $secret, wallet_id: $wallet_id} | compact
+  let body = {"amount": $amount, "client_id": $client_id, "counterparty": $counterparty, "idempotency_key": $idempotency_key, "reference": $reference, "secret": $secret, "wallet_id": $wallet_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5677,7 +5677,7 @@ export def "wallet-transaction-get walletTransactionGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/transaction/get")
-  let body = {client_id: $client_id, secret: $secret, transaction_id: $transaction_id} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5710,7 +5710,7 @@ export def "wallet-transaction-list walletTransactionList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/transaction/list")
-  let body = {client_id: $client_id, count: $count, cursor: $cursor, options: $options, secret: $secret, wallet_id: $wallet_id} | compact
+  let body = {"client_id": $client_id, "count": $count, "cursor": $cursor, "options": $options, "secret": $secret, "wallet_id": $wallet_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5723,7 +5723,7 @@ export def "wallet-transaction-list walletTransactionList" [
 # Docs: /api/products/monitor/#watchlist_screeningentitycreate
 # operationId: watchlistScreeningEntityCreate
 # --search_terms shape: {country?: string, document_number?: string, email_address?: string, entity_watchlist_program_id: string, legal_name: string, phone_number?: string, url?: string}
-export def "watchlist-screening-entity-create watchlistScreeningEntityCreate" [
+export def "watchlist-screening-entity-create watch-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5741,7 +5741,7 @@ export def "watchlist-screening-entity-create watchlistScreeningEntityCreate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/create")
-  let body = {client_id: $client_id, client_user_id: $client_user_id, search_terms: $search_terms, secret: $secret} | compact
+  let body = {"client_id": $client_id, "client_user_id": $client_user_id, "search_terms": $search_terms, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5753,7 +5753,7 @@ export def "watchlist-screening-entity-create watchlistScreeningEntityCreate" [
 # POST /watchlist_screening/entity/get
 # Docs: /api/products/monitor/#watchlist_screeningentityget
 # operationId: watchlistScreeningEntityGet
-export def "watchlist-screening-entity-get watchlistScreeningEntityGet" [
+export def "watchlist-screening-entity-get watch-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5770,7 +5770,7 @@ export def "watchlist-screening-entity-get watchlistScreeningEntityGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/get")
-  let body = {client_id: $client_id, entity_watchlist_screening_id: $entity_watchlist_screening_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5782,7 +5782,7 @@ export def "watchlist-screening-entity-get watchlistScreeningEntityGet" [
 # POST /watchlist_screening/entity/history/list
 # Docs: /api/products/monitor/#watchlist_screeningentityhistorylist
 # operationId: watchlistScreeningEntityHistoryList
-export def "watchlist-screening-entity-history-list watchlistScreeningEntityHistoryList" [
+export def "watchlist-screening-entity-history-list watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5800,7 +5800,7 @@ export def "watchlist-screening-entity-history-list watchlistScreeningEntityHist
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/history/list")
-  let body = {client_id: $client_id, cursor: $cursor, entity_watchlist_screening_id: $entity_watchlist_screening_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "cursor": $cursor, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5812,7 +5812,7 @@ export def "watchlist-screening-entity-history-list watchlistScreeningEntityHist
 # POST /watchlist_screening/entity/hit/list
 # Docs: /api/products/monitor/#watchlist_screeningentityhitlist
 # operationId: watchlistScreeningEntityHitList
-export def "watchlist-screening-entity-hit-list watchlistScreeningEntityHitList" [
+export def "watchlist-screening-entity-hit-list watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5830,7 +5830,7 @@ export def "watchlist-screening-entity-hit-list watchlistScreeningEntityHitList"
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/hit/list")
-  let body = {client_id: $client_id, cursor: $cursor, entity_watchlist_screening_id: $entity_watchlist_screening_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "cursor": $cursor, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5842,7 +5842,7 @@ export def "watchlist-screening-entity-hit-list watchlistScreeningEntityHitList"
 # POST /watchlist_screening/entity/list
 # Docs: /api/products/monitor/#watchlist_screeningentitylist
 # operationId: watchlistScreeningEntityList
-export def "watchlist-screening-entity-list watchlistScreeningEntityList" [
+export def "watchlist-screening-entity-list watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5863,7 +5863,7 @@ export def "watchlist-screening-entity-list watchlistScreeningEntityList" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/list")
-  let body = {assignee: $assignee, client_id: $client_id, client_user_id: $client_user_id, cursor: $cursor, entity_watchlist_program_id: $entity_watchlist_program_id, secret: $secret, status: $status} | compact
+  let body = {"assignee": $assignee, "client_id": $client_id, "client_user_id": $client_user_id, "cursor": $cursor, "entity_watchlist_program_id": $entity_watchlist_program_id, "secret": $secret, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5875,7 +5875,7 @@ export def "watchlist-screening-entity-list watchlistScreeningEntityList" [
 # POST /watchlist_screening/entity/program/get
 # Docs: /api/products/monitor/#watchlist_screeningentityprogramget
 # operationId: watchlistScreeningEntityProgramGet
-export def "watchlist-screening-entity-program-get watchlistScreeningEntityProgramGet" [
+export def "watchlist-screening-entity-program-get watch-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5892,7 +5892,7 @@ export def "watchlist-screening-entity-program-get watchlistScreeningEntityProgr
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/program/get")
-  let body = {client_id: $client_id, entity_watchlist_program_id: $entity_watchlist_program_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "entity_watchlist_program_id": $entity_watchlist_program_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5904,7 +5904,7 @@ export def "watchlist-screening-entity-program-get watchlistScreeningEntityProgr
 # POST /watchlist_screening/entity/program/list
 # Docs: /api/products/monitor/#watchlist_screeningentityprogramlist
 # operationId: watchlistScreeningEntityProgramList
-export def "watchlist-screening-entity-program-list watchlistScreeningEntityProgramList" [
+export def "watchlist-screening-entity-program-list watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5921,7 +5921,7 @@ export def "watchlist-screening-entity-program-list watchlistScreeningEntityProg
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/program/list")
-  let body = {client_id: $client_id, cursor: $cursor, secret: $secret} | compact
+  let body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5933,7 +5933,7 @@ export def "watchlist-screening-entity-program-list watchlistScreeningEntityProg
 # POST /watchlist_screening/entity/review/create
 # Docs: /api/products/monitor/#watchlist_screeningentityreviewcreate
 # operationId: watchlistScreeningEntityReviewCreate
-export def "watchlist-screening-entity-review-create watchlistScreeningEntityReviewCreate" [
+export def "watchlist-screening-entity-review-create watch-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5953,7 +5953,7 @@ export def "watchlist-screening-entity-review-create watchlistScreeningEntityRev
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/review/create")
-  let body = {client_id: $client_id, comment: $comment, confirmed_hits: $confirmed_hits, dismissed_hits: $dismissed_hits, entity_watchlist_screening_id: $entity_watchlist_screening_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "comment": $comment, "confirmed_hits": $confirmed_hits, "dismissed_hits": $dismissed_hits, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5965,7 +5965,7 @@ export def "watchlist-screening-entity-review-create watchlistScreeningEntityRev
 # POST /watchlist_screening/entity/review/list
 # Docs: /api/products/monitor/#watchlist_screeningentityreviewlist
 # operationId: watchlistScreeningEntityReviewList
-export def "watchlist-screening-entity-review-list watchlistScreeningEntityReviewList" [
+export def "watchlist-screening-entity-review-list watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5983,7 +5983,7 @@ export def "watchlist-screening-entity-review-list watchlistScreeningEntityRevie
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/review/list")
-  let body = {client_id: $client_id, cursor: $cursor, entity_watchlist_screening_id: $entity_watchlist_screening_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "cursor": $cursor, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5996,7 +5996,7 @@ export def "watchlist-screening-entity-review-list watchlistScreeningEntityRevie
 # Docs: /api/products/monitor/#watchlist_screeningentityupdate
 # operationId: watchlistScreeningEntityUpdate
 # --search_terms shape: {client_id: string, country?: string, document_number?: string, email_address?: string, entity_watchlist_program_id: string, legal_name?: string, phone_number?: string, secret: string, url?: string}
-export def "watchlist-screening-entity-update watchlistScreeningEntityUpdate" [
+export def "watchlist-screening-entity-update watch-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6018,7 +6018,7 @@ export def "watchlist-screening-entity-update watchlistScreeningEntityUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/update")
-  let body = {assignee: $assignee, client_id: $client_id, client_user_id: $client_user_id, entity_watchlist_screening_id: $entity_watchlist_screening_id, reset_fields: $reset_fields, search_terms: $search_terms, secret: $secret, status: $status} | compact
+  let body = {"assignee": $assignee, "client_id": $client_id, "client_user_id": $client_user_id, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "reset_fields": $reset_fields, "search_terms": $search_terms, "secret": $secret, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6031,7 +6031,7 @@ export def "watchlist-screening-entity-update watchlistScreeningEntityUpdate" [
 # Docs: /api/products/monitor/#watchlist_screeningindividualcreate
 # operationId: watchlistScreeningIndividualCreate
 # --search_terms shape: {country?: string, date_of_birth?: string, document_number?: string, legal_name: string, watchlist_program_id: string}
-export def "watchlist-screening-individual-create watchlistScreeningIndividualCreate" [
+export def "watchlist-screening-individual-create watch-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6049,7 +6049,7 @@ export def "watchlist-screening-individual-create watchlistScreeningIndividualCr
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/create")
-  let body = {client_id: $client_id, client_user_id: $client_user_id, search_terms: $search_terms, secret: $secret} | compact
+  let body = {"client_id": $client_id, "client_user_id": $client_user_id, "search_terms": $search_terms, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6061,7 +6061,7 @@ export def "watchlist-screening-individual-create watchlistScreeningIndividualCr
 # POST /watchlist_screening/individual/get
 # Docs: /api/products/monitor/#watchlist_screeningindividualget
 # operationId: watchlistScreeningIndividualGet
-export def "watchlist-screening-individual-get watchlistScreeningIndividualGet" [
+export def "watchlist-screening-individual-get watch-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6078,7 +6078,7 @@ export def "watchlist-screening-individual-get watchlistScreeningIndividualGet" 
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/get")
-  let body = {client_id: $client_id, secret: $secret, watchlist_screening_id: $watchlist_screening_id} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6090,7 +6090,7 @@ export def "watchlist-screening-individual-get watchlistScreeningIndividualGet" 
 # POST /watchlist_screening/individual/history/list
 # Docs: /api/products/monitor/#watchlist_screeningindividualhistorylist
 # operationId: watchlistScreeningIndividualHistoryList
-export def "watchlist-screening-individual-history-list watchlistScreeningIndividualHistoryList" [
+export def "watchlist-screening-individual-history-list watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6108,7 +6108,7 @@ export def "watchlist-screening-individual-history-list watchlistScreeningIndivi
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/history/list")
-  let body = {client_id: $client_id, cursor: $cursor, secret: $secret, watchlist_screening_id: $watchlist_screening_id} | compact
+  let body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6120,7 +6120,7 @@ export def "watchlist-screening-individual-history-list watchlistScreeningIndivi
 # POST /watchlist_screening/individual/hit/list
 # Docs: /api/products/monitor/#watchlist_screeningindividualhitlist
 # operationId: watchlistScreeningIndividualHitList
-export def "watchlist-screening-individual-hit-list watchlistScreeningIndividualHitList" [
+export def "watchlist-screening-individual-hit-list watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6138,7 +6138,7 @@ export def "watchlist-screening-individual-hit-list watchlistScreeningIndividual
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/hit/list")
-  let body = {client_id: $client_id, cursor: $cursor, secret: $secret, watchlist_screening_id: $watchlist_screening_id} | compact
+  let body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6150,7 +6150,7 @@ export def "watchlist-screening-individual-hit-list watchlistScreeningIndividual
 # POST /watchlist_screening/individual/list
 # Docs: /api/products/monitor/#watchlist_screeningindividuallist
 # operationId: watchlistScreeningIndividualList
-export def "watchlist-screening-individual-list watchlistScreeningIndividualList" [
+export def "watchlist-screening-individual-list watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6171,7 +6171,7 @@ export def "watchlist-screening-individual-list watchlistScreeningIndividualList
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/list")
-  let body = {assignee: $assignee, client_id: $client_id, client_user_id: $client_user_id, cursor: $cursor, secret: $secret, status: $status, watchlist_program_id: $watchlist_program_id} | compact
+  let body = {"assignee": $assignee, "client_id": $client_id, "client_user_id": $client_user_id, "cursor": $cursor, "secret": $secret, "status": $status, "watchlist_program_id": $watchlist_program_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6183,7 +6183,7 @@ export def "watchlist-screening-individual-list watchlistScreeningIndividualList
 # POST /watchlist_screening/individual/program/get
 # Docs: /api/products/monitor/#watchlist_screeningindividualprogramget
 # operationId: watchlistScreeningIndividualProgramGet
-export def "watchlist-screening-individual-program-get watchlistScreeningIndividualProgramGet" [
+export def "watchlist-screening-individual-program-get watch-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6200,7 +6200,7 @@ export def "watchlist-screening-individual-program-get watchlistScreeningIndivid
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/program/get")
-  let body = {client_id: $client_id, secret: $secret, watchlist_program_id: $watchlist_program_id} | compact
+  let body = {"client_id": $client_id, "secret": $secret, "watchlist_program_id": $watchlist_program_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6212,7 +6212,7 @@ export def "watchlist-screening-individual-program-get watchlistScreeningIndivid
 # POST /watchlist_screening/individual/program/list
 # Docs: /api/products/monitor/#watchlist_screeningindividualprogramlist
 # operationId: watchlistScreeningIndividualProgramList
-export def "watchlist-screening-individual-program-list watchlistScreeningIndividualProgramList" [
+export def "watchlist-screening-individual-program-list watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6229,7 +6229,7 @@ export def "watchlist-screening-individual-program-list watchlistScreeningIndivi
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/program/list")
-  let body = {client_id: $client_id, cursor: $cursor, secret: $secret} | compact
+  let body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6241,7 +6241,7 @@ export def "watchlist-screening-individual-program-list watchlistScreeningIndivi
 # POST /watchlist_screening/individual/review/create
 # Docs: /api/products/monitor/#watchlist_screeningindividualreviewcreate
 # operationId: watchlistScreeningIndividualReviewCreate
-export def "watchlist-screening-individual-review-create watchlistScreeningIndividualReviewCreate" [
+export def "watchlist-screening-individual-review-create watch-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6261,7 +6261,7 @@ export def "watchlist-screening-individual-review-create watchlistScreeningIndiv
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/review/create")
-  let body = {client_id: $client_id, comment: $comment, confirmed_hits: $confirmed_hits, dismissed_hits: $dismissed_hits, secret: $secret, watchlist_screening_id: $watchlist_screening_id} | compact
+  let body = {"client_id": $client_id, "comment": $comment, "confirmed_hits": $confirmed_hits, "dismissed_hits": $dismissed_hits, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6273,7 +6273,7 @@ export def "watchlist-screening-individual-review-create watchlistScreeningIndiv
 # POST /watchlist_screening/individual/review/list
 # Docs: /api/products/monitor/#watchlist_screeningindividualreviewlist
 # operationId: watchlistScreeningIndividualReviewList
-export def "watchlist-screening-individual-review-list watchlistScreeningIndividualReviewList" [
+export def "watchlist-screening-individual-review-list watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6291,7 +6291,7 @@ export def "watchlist-screening-individual-review-list watchlistScreeningIndivid
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/review/list")
-  let body = {client_id: $client_id, cursor: $cursor, secret: $secret, watchlist_screening_id: $watchlist_screening_id} | compact
+  let body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6304,7 +6304,7 @@ export def "watchlist-screening-individual-review-list watchlistScreeningIndivid
 # Docs: /api/products/monitor/#watchlist_screeningindividualupdate
 # operationId: watchlistScreeningIndividualUpdate
 # --search_terms shape: {country?: string, date_of_birth?: string, document_number?: string, legal_name?: string, watchlist_program_id?: string}
-export def "watchlist-screening-individual-update watchlistScreeningIndividualUpdate" [
+export def "watchlist-screening-individual-update watch-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6326,7 +6326,7 @@ export def "watchlist-screening-individual-update watchlistScreeningIndividualUp
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/update")
-  let body = {assignee: $assignee, client_id: $client_id, client_user_id: $client_user_id, reset_fields: $reset_fields, search_terms: $search_terms, secret: $secret, status: $status, watchlist_screening_id: $watchlist_screening_id} | compact
+  let body = {"assignee": $assignee, "client_id": $client_id, "client_user_id": $client_user_id, "reset_fields": $reset_fields, "search_terms": $search_terms, "secret": $secret, "status": $status, "watchlist_screening_id": $watchlist_screening_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6355,7 +6355,7 @@ export def "webhook-verification-key-get webhookVerificationKeyGet" [
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_verification_key/get")
-  let body = {client_id: $client_id, key_id: $key_id, secret: $secret} | compact
+  let body = {"client_id": $client_id, "key_id": $key_id, "secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

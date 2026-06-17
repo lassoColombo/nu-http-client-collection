@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-current-sensitivity-labels ListCurrentByDatabase" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-current-sensitivity-labels list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,11 +93,11 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/currentSensitivityLabels
 # operationId: ManagedDatabaseSensitivityLabels_ListCurrentByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-current-sensitivity-labels ListCurrentByDatabase" [
-  resourceGroupName: string
-  managedInstanceName: string
-  databaseName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-current-sensitivity-labels list" [
+  subscription_id: string
+  resource_group_name: string
+  managed_instance_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,7 +112,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/managedInstances/($managedInstanceName)/databases/($databaseName)/currentSensitivityLabels" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, managed_instance_name: $managed_instance_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/currentSensitivityLabels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,11 +122,11 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/recommendedSensitivityLabels
 # operationId: ManagedDatabaseSensitivityLabels_ListRecommendedByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-recommended-sensitivity-labels ListRecommendedByDatabase" [
-  resourceGroupName: string
-  managedInstanceName: string
-  databaseName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-recommended-sensitivity-labels list" [
+  subscription_id: string
+  resource_group_name: string
+  managed_instance_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,15 +135,15 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --includeDisabledRecommendations: oneof<nothing, bool> # Specifies whether to include disabled recommendations or not.
-  --skipToken: string
+  --include-disabled-recommendations: oneof<nothing, bool> # Specifies whether to include disabled recommendations or not.
+  --skip-token: string
   --filter: string # An OData filter expression that filters elements in the collection.
   --api-version: string # The API version to use for the request.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includeDisabledRecommendations" $includeDisabledRecommendations "scalar") (serialize-qp "$skipToken" $skipToken "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/managedInstances/($managedInstanceName)/databases/($databaseName)/recommendedSensitivityLabels" $qp)
+  let qp = [(serialize-qp "includeDisabledRecommendations" $include_disabled_recommendations "scalar") (serialize-qp "$skipToken" $skip_token "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, managed_instance_name: $managed_instance_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/recommendedSensitivityLabels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -153,15 +153,15 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/columns/{columnName}/sensitivityLabels/{sensitivityLabelSource}
 # operationId: ManagedDatabaseSensitivityLabels_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns-sensitivity-labels Delete" [
-  resourceGroupName: string
-  managedInstanceName: string
-  databaseName: string
-  schemaName: string
-  tableName: string
-  columnName: string
-  sensitivityLabelSource: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns-sensitivity-labels delete" [
+  subscription_id: string
+  resource_group_name: string
+  managed_instance_name: string
+  database_name: string
+  schema_name: string
+  table_name: string
+  column_name: string
+  sensitivity_label_source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/managedInstances/($managedInstanceName)/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/columns/($columnName)/sensitivityLabels/($sensitivityLabelSource)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, managed_instance_name: $managed_instance_name, database_name: $database_name, schema_name: $schema_name, table_name: $table_name, column_name: $column_name, sensitivity_label_source: $sensitivity_label_source} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/columns/{column_name}/sensitivityLabels/{sensitivity_label_source}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -185,15 +185,15 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/columns/{columnName}/sensitivityLabels/{sensitivityLabelSource}
 # operationId: ManagedDatabaseSensitivityLabels_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns-sensitivity-labels Get" [
-  resourceGroupName: string
-  managedInstanceName: string
-  databaseName: string
-  schemaName: string
-  tableName: string
-  columnName: string
-  sensitivityLabelSource: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns-sensitivity-labels get" [
+  subscription_id: string
+  resource_group_name: string
+  managed_instance_name: string
+  database_name: string
+  schema_name: string
+  table_name: string
+  column_name: string
+  sensitivity_label_source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/managedInstances/($managedInstanceName)/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/columns/($columnName)/sensitivityLabels/($sensitivityLabelSource)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, managed_instance_name: $managed_instance_name, database_name: $database_name, schema_name: $schema_name, table_name: $table_name, column_name: $column_name, sensitivity_label_source: $sensitivity_label_source} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/columns/{column_name}/sensitivityLabels/{sensitivity_label_source}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -218,15 +218,15 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/columns/{columnName}/sensitivityLabels/{sensitivityLabelSource}
 # operationId: ManagedDatabaseSensitivityLabels_CreateOrUpdate
 # --properties shape: {informationType?: string, informationTypeId?: string, labelId?: string, labelName?: string, rank?: "None"|"Low"|"Medium"|"High"|"Critical"}
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns-sensitivity-labels CreateOrUpdate" [
-  resourceGroupName: string
-  managedInstanceName: string
-  databaseName: string
-  schemaName: string
-  tableName: string
-  columnName: string
-  sensitivityLabelSource: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns-sensitivity-labels create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  managed_instance_name: string
+  database_name: string
+  schema_name: string
+  table_name: string
+  column_name: string
+  sensitivity_label_source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,8 +242,8 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/managedInstances/($managedInstanceName)/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/columns/($columnName)/sensitivityLabels/($sensitivityLabelSource)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, managed_instance_name: $managed_instance_name, database_name: $database_name, schema_name: $schema_name, table_name: $table_name, column_name: $column_name, sensitivity_label_source: $sensitivity_label_source} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/columns/{column_name}/sensitivityLabels/{sensitivity_label_source}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -254,15 +254,15 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/columns/{columnName}/sensitivityLabels/{sensitivityLabelSource}/disable
 # operationId: ManagedDatabaseSensitivityLabels_DisableRecommendation
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns-sensitivity-labels-disable DisableRecommendation" [
-  resourceGroupName: string
-  managedInstanceName: string
-  databaseName: string
-  schemaName: string
-  tableName: string
-  columnName: string
-  sensitivityLabelSource: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns-sensitivity-labels-disable disable-recommendation" [
+  subscription_id: string
+  resource_group_name: string
+  managed_instance_name: string
+  database_name: string
+  schema_name: string
+  table_name: string
+  column_name: string
+  sensitivity_label_source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/managedInstances/($managedInstanceName)/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/columns/($columnName)/sensitivityLabels/($sensitivityLabelSource)/disable" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, managed_instance_name: $managed_instance_name, database_name: $database_name, schema_name: $schema_name, table_name: $table_name, column_name: $column_name, sensitivity_label_source: $sensitivity_label_source} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/columns/{column_name}/sensitivityLabels/{sensitivity_label_source}/disable") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -286,15 +286,15 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/columns/{columnName}/sensitivityLabels/{sensitivityLabelSource}/enable
 # operationId: ManagedDatabaseSensitivityLabels_EnableRecommendation
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns-sensitivity-labels-enable EnableRecommendation" [
-  resourceGroupName: string
-  managedInstanceName: string
-  databaseName: string
-  schemaName: string
-  tableName: string
-  columnName: string
-  sensitivityLabelSource: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns-sensitivity-labels-enable enable-recommendation" [
+  subscription_id: string
+  resource_group_name: string
+  managed_instance_name: string
+  database_name: string
+  schema_name: string
+  table_name: string
+  column_name: string
+  sensitivity_label_source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/managedInstances/($managedInstanceName)/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/columns/($columnName)/sensitivityLabels/($sensitivityLabelSource)/enable" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, managed_instance_name: $managed_instance_name, database_name: $database_name, schema_name: $schema_name, table_name: $table_name, column_name: $column_name, sensitivity_label_source: $sensitivity_label_source} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/columns/{column_name}/sensitivityLabels/{sensitivity_label_source}/enable") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

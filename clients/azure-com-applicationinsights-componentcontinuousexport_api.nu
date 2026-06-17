@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-insights-components-exportconfiguration List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-insights-components-exportconfiguration list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/exportconfiguration
 # operationId: ExportConfigurations_List
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-exportconfiguration List" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-exportconfiguration list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/exportconfiguration" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/exportconfiguration") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,10 +120,10 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/exportconfiguration
 # operationId: ExportConfigurations_Create
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-exportconfiguration Create" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-exportconfiguration create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,22 +133,22 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --DestinationAccountId: string # The name of destination storage account.
-  --DestinationAddress: string # The SAS URL for the destination storage container. It must grant write permission.
-  --DestinationStorageLocationId: string # The location ID of the destination storage container.
-  --DestinationStorageSubscriptionId: string # The subscription ID of the destination storage container.
-  --DestinationType: string # The Continuous Export destination type. This has to be 'Blob'.
-  --IsEnabled: string # Set to 'true' to create a Continuous Export configuration as enabled, otherwise set it to 'false'.
-  --NotificationQueueEnabled: string # Deprecated
-  --NotificationQueueUri: string # Deprecated
-  --RecordTypes: string # The document types to be exported, as comma separated values. Allowed values include 'Requests', 'Event', 'Exceptions', 'Metrics', 'PageViews', 'PageViewPerformance', 'Rdd', 'PerformanceCounters', 'Availability', 'Messages'.
+  --destination-account-id: string # The name of destination storage account.
+  --destination-address: string # The SAS URL for the destination storage container. It must grant write permission.
+  --destination-storage-location-id: string # The location ID of the destination storage container.
+  --destination-storage-subscription-id: string # The subscription ID of the destination storage container.
+  --destination-type: string # The Continuous Export destination type. This has to be 'Blob'.
+  --is-enabled: string # Set to 'true' to create a Continuous Export configuration as enabled, otherwise set it to 'false'.
+  --notification-queue-enabled: string # Deprecated
+  --notification-queue-uri: string # Deprecated
+  --record-types: string # The document types to be exported, as comma separated values. Allowed values include 'Requests', 'Event', 'Exceptions', 'Metrics', 'PageViews', 'PageViewPerformance', 'Rdd', 'PerformanceCounters', 'Availability', 'Messages'.
 ]: any -> table<ApplicationName: string, ContainerName: string, DestinationAccountId: string, DestinationStorageLocationId: string, DestinationStorageSubscriptionId: string, DestinationType: string, ExportId: string, ExportStatus: string, InstrumentationKey: string, IsUserEnabled: string, LastGapTime: string, LastSuccessTime: string, LastUserUpdate: string, NotificationQueueEnabled: string, PermanentErrorReason: string, RecordTypes: string, ResourceGroup: string, StorageName: string, SubscriptionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/exportconfiguration" $qp)
-  let body = {DestinationAccountId: $DestinationAccountId, DestinationAddress: $DestinationAddress, DestinationStorageLocationId: $DestinationStorageLocationId, DestinationStorageSubscriptionId: $DestinationStorageSubscriptionId, DestinationType: $DestinationType, IsEnabled: $IsEnabled, NotificationQueueEnabled: $NotificationQueueEnabled, NotificationQueueUri: $NotificationQueueUri, RecordTypes: $RecordTypes} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/exportconfiguration") $qp)
+  let body = {"DestinationAccountId": $destination_account_id, "DestinationAddress": $destination_address, "DestinationStorageLocationId": $destination_storage_location_id, "DestinationStorageSubscriptionId": $destination_storage_subscription_id, "DestinationType": $destination_type, "IsEnabled": $is_enabled, "NotificationQueueEnabled": $notification_queue_enabled, "NotificationQueueUri": $notification_queue_uri, "RecordTypes": $record_types} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -159,11 +159,11 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/exportconfiguration/{exportId}
 # operationId: ExportConfigurations_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-exportconfiguration Delete" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
-  exportId: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-exportconfiguration delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  export_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/exportconfiguration/($exportId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, export_id: $export_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/exportconfiguration/{export_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -187,11 +187,11 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/exportconfiguration/{exportId}
 # operationId: ExportConfigurations_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-exportconfiguration Get" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
-  exportId: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-exportconfiguration get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  export_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/exportconfiguration/($exportId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, export_id: $export_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/exportconfiguration/{export_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -215,11 +215,11 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/exportconfiguration/{exportId}
 # operationId: ExportConfigurations_Update
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-exportconfiguration Update" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
-  exportId: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-exportconfiguration update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  export_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,22 +229,22 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --DestinationAccountId: string # The name of destination storage account.
-  --DestinationAddress: string # The SAS URL for the destination storage container. It must grant write permission.
-  --DestinationStorageLocationId: string # The location ID of the destination storage container.
-  --DestinationStorageSubscriptionId: string # The subscription ID of the destination storage container.
-  --DestinationType: string # The Continuous Export destination type. This has to be 'Blob'.
-  --IsEnabled: string # Set to 'true' to create a Continuous Export configuration as enabled, otherwise set it to 'false'.
-  --NotificationQueueEnabled: string # Deprecated
-  --NotificationQueueUri: string # Deprecated
-  --RecordTypes: string # The document types to be exported, as comma separated values. Allowed values include 'Requests', 'Event', 'Exceptions', 'Metrics', 'PageViews', 'PageViewPerformance', 'Rdd', 'PerformanceCounters', 'Availability', 'Messages'.
+  --destination-account-id: string # The name of destination storage account.
+  --destination-address: string # The SAS URL for the destination storage container. It must grant write permission.
+  --destination-storage-location-id: string # The location ID of the destination storage container.
+  --destination-storage-subscription-id: string # The subscription ID of the destination storage container.
+  --destination-type: string # The Continuous Export destination type. This has to be 'Blob'.
+  --is-enabled: string # Set to 'true' to create a Continuous Export configuration as enabled, otherwise set it to 'false'.
+  --notification-queue-enabled: string # Deprecated
+  --notification-queue-uri: string # Deprecated
+  --record-types: string # The document types to be exported, as comma separated values. Allowed values include 'Requests', 'Event', 'Exceptions', 'Metrics', 'PageViews', 'PageViewPerformance', 'Rdd', 'PerformanceCounters', 'Availability', 'Messages'.
 ]: any -> record<ApplicationName: string, ContainerName: string, DestinationAccountId: string, DestinationStorageLocationId: string, DestinationStorageSubscriptionId: string, DestinationType: string, ExportId: string, ExportStatus: string, InstrumentationKey: string, IsUserEnabled: string, LastGapTime: string, LastSuccessTime: string, LastUserUpdate: string, NotificationQueueEnabled: string, PermanentErrorReason: string, RecordTypes: string, ResourceGroup: string, StorageName: string, SubscriptionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/exportconfiguration/($exportId)" $qp)
-  let body = {DestinationAccountId: $DestinationAccountId, DestinationAddress: $DestinationAddress, DestinationStorageLocationId: $DestinationStorageLocationId, DestinationStorageSubscriptionId: $DestinationStorageSubscriptionId, DestinationType: $DestinationType, IsEnabled: $IsEnabled, NotificationQueueEnabled: $NotificationQueueEnabled, NotificationQueueUri: $NotificationQueueUri, RecordTypes: $RecordTypes} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, export_id: $export_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/exportconfiguration/{export_id}") $qp)
+  let body = {"DestinationAccountId": $destination_account_id, "DestinationAddress": $destination_address, "DestinationStorageLocationId": $destination_storage_location_id, "DestinationStorageSubscriptionId": $destination_storage_subscription_id, "DestinationType": $destination_type, "IsEnabled": $is_enabled, "NotificationQueueEnabled": $notification_queue_enabled, "NotificationQueueUri": $notification_queue_uri, "RecordTypes": $record_types} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

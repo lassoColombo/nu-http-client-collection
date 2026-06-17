@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoftinsights-guest-diagnostic-settings-associations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoftinsights-guest-diagnostic-settings-associations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.insights/guestDiagnosticSettingsAssociations
 # operationId: GuestDiagnosticsSettingsAssociation_List
-export def "subscriptions-providers-microsoftinsights-guest-diagnostic-settings-associations List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoftinsights-guest-diagnostic-settings-associations list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "subscriptions-providers-microsoftinsights-guest-diagnostic-settings-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/microsoft.insights/guestDiagnosticSettingsAssociations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.insights/guestDiagnosticSettingsAssociations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,9 +118,9 @@ export def "subscriptions-providers-microsoftinsights-guest-diagnostic-settings-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/guestDiagnosticSettingsAssociations
 # operationId: GuestDiagnosticsSettingsAssociation_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoftinsights-guest-diagnostic-settings-associations ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoftinsights-guest-diagnostic-settings-associations list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-guest-diag
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.insights/guestDiagnosticSettingsAssociations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/guestDiagnosticSettingsAssociations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,9 +144,9 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-guest-diag
 #
 # DELETE /{resourceUri}/providers/microsoft.insights/guestDiagnosticSettingsAssociation/{associationName}
 # operationId: GuestDiagnosticsSettingsAssociation_Delete
-export def "providers-microsoftinsights-guest-diagnostic-settings-association Delete" [
-  resourceUri: string
-  associationName: string
+export def "providers-microsoftinsights-guest-diagnostic-settings-association delete" [
+  resource_uri: string
+  association_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "providers-microsoftinsights-guest-diagnostic-settings-association De
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceUri)/providers/microsoft.insights/guestDiagnosticSettingsAssociation/($associationName)" $qp)
+  let full_url = (build-url $base ({resource_uri: $resource_uri, association_name: $association_name} | format pattern "/{resource_uri}/providers/microsoft.insights/guestDiagnosticSettingsAssociation/{association_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,9 +170,9 @@ export def "providers-microsoftinsights-guest-diagnostic-settings-association De
 #
 # GET /{resourceUri}/providers/microsoft.insights/guestDiagnosticSettingsAssociation/{associationName}
 # operationId: GuestDiagnosticsSettingsAssociation_Get
-export def "providers-microsoftinsights-guest-diagnostic-settings-association Get" [
-  resourceUri: string
-  associationName: string
+export def "providers-microsoftinsights-guest-diagnostic-settings-association get" [
+  resource_uri: string
+  association_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "providers-microsoftinsights-guest-diagnostic-settings-association Ge
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceUri)/providers/microsoft.insights/guestDiagnosticSettingsAssociation/($associationName)" $qp)
+  let full_url = (build-url $base ({resource_uri: $resource_uri, association_name: $association_name} | format pattern "/{resource_uri}/providers/microsoft.insights/guestDiagnosticSettingsAssociation/{association_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,9 +197,9 @@ export def "providers-microsoftinsights-guest-diagnostic-settings-association Ge
 # PATCH /{resourceUri}/providers/microsoft.insights/guestDiagnosticSettingsAssociation/{associationName}
 # operationId: GuestDiagnosticsSettingsAssociation_Update
 # --properties shape: {guestDiagnosticSettingsName: string}
-export def "providers-microsoftinsights-guest-diagnostic-settings-association Update" [
-  resourceUri: string
-  associationName: string
+export def "providers-microsoftinsights-guest-diagnostic-settings-association update" [
+  resource_uri: string
+  association_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,8 +216,8 @@ export def "providers-microsoftinsights-guest-diagnostic-settings-association Up
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceUri)/providers/microsoft.insights/guestDiagnosticSettingsAssociation/($associationName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({resource_uri: $resource_uri, association_name: $association_name} | format pattern "/{resource_uri}/providers/microsoft.insights/guestDiagnosticSettingsAssociation/{association_name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -229,9 +229,9 @@ export def "providers-microsoftinsights-guest-diagnostic-settings-association Up
 # PUT /{resourceUri}/providers/microsoft.insights/guestDiagnosticSettingsAssociation/{associationName}
 # operationId: GuestDiagnosticsSettingsAssociation_CreateOrUpdate
 # --properties shape: {guestDiagnosticSettingsName: string}
-export def "providers-microsoftinsights-guest-diagnostic-settings-association CreateOrUpdate" [
-  resourceUri: string
-  associationName: string
+export def "providers-microsoftinsights-guest-diagnostic-settings-association create-or-update" [
+  resource_uri: string
+  association_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,8 +249,8 @@ export def "providers-microsoftinsights-guest-diagnostic-settings-association Cr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceUri)/providers/microsoft.insights/guestDiagnosticSettingsAssociation/($associationName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({resource_uri: $resource_uri, association_name: $association_name} | format pattern "/{resource_uri}/providers/microsoft.insights/guestDiagnosticSettingsAssociation/{association_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

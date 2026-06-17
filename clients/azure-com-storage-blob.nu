@@ -71,7 +71,7 @@ def action-completer [] { ["Acquire" "Break" "Change" "Release" "Renew"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,10 +95,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices
 # operationId: BlobServices_List
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services List" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,7 +112,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,10 +122,10 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers
 # operationId: BlobContainers_List
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers List" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,14 +135,14 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --skipToken: string # Optional. Continuation token for the list operation.
+  --skip-token: string # Optional. Continuation token for the list operation.
   --maxpagesize: string # Optional. Specified maximum number of containers that can be included in the list.
   --filter: string # Optional. When specified, only container names starting with the filter will be listed.
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar") (serialize-qp "$maxpagesize" $maxpagesize "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/default/containers" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar") (serialize-qp "$maxpagesize" $maxpagesize "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -152,11 +152,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}
 # operationId: BlobContainers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers Delete" [
-  resourceGroupName: string
-  accountName: string
-  containerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/default/containers/($containerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -180,11 +180,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}
 # operationId: BlobContainers_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers Get" [
-  resourceGroupName: string
-  accountName: string
-  containerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/default/containers/($containerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -209,11 +209,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}
 # operationId: BlobContainers_Update
 # --properties shape: {immutabilityPolicy?: any, legalHold?: any, metadata?: record, publicAccess?: "Container"|"Blob"|"None"}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers Update" [
-  resourceGroupName: string
-  accountName: string
-  containerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,8 +229,8 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/default/containers/($containerName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -242,11 +242,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}
 # operationId: BlobContainers_Create
 # --properties shape: {immutabilityPolicy?: any, legalHold?: any, metadata?: record, publicAccess?: "Container"|"Blob"|"None"}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers Create" [
-  resourceGroupName: string
-  accountName: string
-  containerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,8 +262,8 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/default/containers/($containerName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -274,11 +274,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/clearLegalHold
 # operationId: BlobContainers_ClearLegalHold
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-clear-legal-hold ClearLegalHold" [
-  resourceGroupName: string
-  accountName: string
-  containerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-clear-legal-hold post" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,8 +294,8 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/default/containers/($containerName)/clearLegalHold" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}/clearLegalHold") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -307,11 +307,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/immutabilityPolicies/default/extend
 # operationId: BlobContainers_ExtendImmutabilityPolicy
 # --properties shape: {immutabilityPeriodSinceCreationInDays: int}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-immutability-policies-default-extend ExtendImmutabilityPolicy" [
-  resourceGroupName: string
-  accountName: string
-  containerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-immutability-policies-default-extend post" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,17 +321,17 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --If-Match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
+  --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
   properties: any # The properties of an ImmutabilityPolicy of a blob container. — shape: {immutabilityPeriodSinceCreationInDays: int}
 ]: any -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/default/containers/($containerName)/immutabilityPolicies/default/extend" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}/immutabilityPolicies/default/extend") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -342,11 +342,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/immutabilityPolicies/default/lock
 # operationId: BlobContainers_LockImmutabilityPolicy
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-immutability-policies-default-lock LockImmutabilityPolicy" [
-  resourceGroupName: string
-  accountName: string
-  containerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-immutability-policies-default-lock lock-immutability-policy" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,13 +356,13 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --If-Match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
+  --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
 ]: nothing -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/default/containers/($containerName)/immutabilityPolicies/default/lock" $qp)
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}/immutabilityPolicies/default/lock") $qp)
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -373,12 +373,12 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/immutabilityPolicies/{immutabilityPolicyName}
 # operationId: BlobContainers_DeleteImmutabilityPolicy
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-immutability-policies DeleteImmutabilityPolicy" [
-  resourceGroupName: string
-  accountName: string
-  containerName: string
-  immutabilityPolicyName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-immutability-policies delete-immutability-policy" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  container_name: string
+  immutability_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,13 +388,13 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --If-Match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
+  --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
 ]: nothing -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/default/containers/($containerName)/immutabilityPolicies/($immutabilityPolicyName)" $qp)
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, container_name: $container_name, immutability_policy_name: $immutability_policy_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}/immutabilityPolicies/{immutability_policy_name}") $qp)
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -405,12 +405,12 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/immutabilityPolicies/{immutabilityPolicyName}
 # operationId: BlobContainers_GetImmutabilityPolicy
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-immutability-policies GetImmutabilityPolicy" [
-  resourceGroupName: string
-  accountName: string
-  containerName: string
-  immutabilityPolicyName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-immutability-policies get-immutability-policy" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  container_name: string
+  immutability_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,13 +420,13 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --If-Match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
+  --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
 ]: nothing -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/default/containers/($containerName)/immutabilityPolicies/($immutabilityPolicyName)" $qp)
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, container_name: $container_name, immutability_policy_name: $immutability_policy_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}/immutabilityPolicies/{immutability_policy_name}") $qp)
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -438,12 +438,12 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/immutabilityPolicies/{immutabilityPolicyName}
 # operationId: BlobContainers_CreateOrUpdateImmutabilityPolicy
 # --properties shape: {immutabilityPeriodSinceCreationInDays: int}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-immutability-policies CreateOrUpdateImmutabilityPolicy" [
-  resourceGroupName: string
-  accountName: string
-  containerName: string
-  immutabilityPolicyName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-immutability-policies create-or-update-immutability-policy" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  container_name: string
+  immutability_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,17 +453,17 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --If-Match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
+  --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
   properties: any # The properties of an ImmutabilityPolicy of a blob container. — shape: {immutabilityPeriodSinceCreationInDays: int}
 ]: any -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/default/containers/($containerName)/immutabilityPolicies/($immutabilityPolicyName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, container_name: $container_name, immutability_policy_name: $immutability_policy_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}/immutabilityPolicies/{immutability_policy_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -474,11 +474,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/lease
 # operationId: BlobContainers_Lease
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-lease Lease" [
-  resourceGroupName: string
-  accountName: string
-  containerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-lease post" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -489,17 +489,17 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   action: string@action-completer # Specifies the lease action. Can be one of the available actions.
-  --breakPeriod: int # Optional. For a break action, proposed duration the lease should continue before it is broken, in seconds, between 0 and 60.
-  --leaseDuration: int # Required for acquire. Specifies the duration of the lease, in seconds, or negative one (-1) for a lease that never expires.
-  --leaseId: string # Identifies the lease. Can be specified in any valid GUID string format.
-  --proposedLeaseId: string # Optional for acquire, required for change. Proposed lease ID, in a GUID string format.
+  --break-period: int # Optional. For a break action, proposed duration the lease should continue before it is broken, in seconds, between 0 and 60.
+  --lease-duration: int # Required for acquire. Specifies the duration of the lease, in seconds, or negative one (-1) for a lease that never expires.
+  --lease-id: string # Identifies the lease. Can be specified in any valid GUID string format.
+  --proposed-lease-id: string # Optional for acquire, required for change. Proposed lease ID, in a GUID string format.
 ]: any -> record<leaseId: string, leaseTimeSeconds: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/default/containers/($containerName)/lease" $qp)
-  let body = {action: $action, breakPeriod: $breakPeriod, leaseDuration: $leaseDuration, leaseId: $leaseId, proposedLeaseId: $proposedLeaseId} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}/lease") $qp)
+  let body = {"action": $action, "breakPeriod": $break_period, "leaseDuration": $lease_duration, "leaseId": $lease_id, "proposedLeaseId": $proposed_lease_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -510,11 +510,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/setLegalHold
 # operationId: BlobContainers_SetLegalHold
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-set-legal-hold SetLegalHold" [
-  resourceGroupName: string
-  accountName: string
-  containerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-set-legal-hold post" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,8 +530,8 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/default/containers/($containerName)/setLegalHold" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}/setLegalHold") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -542,11 +542,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/{BlobServicesName}
 # operationId: BlobServices_GetServiceProperties
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services GetServiceProperties" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
-  BlobServicesName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services get-service-properties" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  blob_services_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,7 +560,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/($BlobServicesName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, blob_services_name: $blob_services_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/{blob_services_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -571,11 +571,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/{BlobServicesName}
 # operationId: BlobServices_SetServiceProperties
 # --properties shape: {automaticSnapshotPolicyEnabled?: bool, changeFeed?: any, cors?: any, defaultServiceVersion?: string, deleteRetentionPolicy?: any}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services SetServiceProperties" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
-  BlobServicesName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services put" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  blob_services_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -591,8 +591,8 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Storage/storageAccounts/($accountName)/blobServices/($BlobServicesName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, blob_services_name: $blob_services_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/{blob_services_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

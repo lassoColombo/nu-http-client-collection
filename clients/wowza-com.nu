@@ -74,7 +74,7 @@ def billing-mode-completer [] { ["pay_as_you_go" "twentyfour_seven"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "specs specs" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "specs get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +98,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/specs
 # operationId: specs
-export def "specs specs" [
+export def "specs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,7 +120,7 @@ export def "specs specs" [
 #
 # GET /live_streams
 # operationId: listLiveStreams
-export def "live-streams listLiveStreams" [
+export def "live-streams list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,7 +146,7 @@ export def "live-streams listLiveStreams" [
 # POST /live_streams
 # operationId: createLiveStream
 # --live_stream shape: {aspect_ratio_height: int, aspect_ratio_width: int, billing_mode: "pay_as_you_go"|"twentyfour_seven", broadcast_location: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", closed_caption_type?: "none"|"cea"|"on_text"|"both", delivery_method?: "pull"|"cdn"|"push", delivery_protocols?: list, delivery_type?: "single-bitrate"|"multi-bitrate", disable_authentication?: bool, encoder: "wowza_streaming_engine"|"wowza_gocoder"|"media_ds"|"axis"|"epiphan"|"hauppauge"|"jvc"|"live_u"|"matrox"|"newtek_tricaster"|"osprey"|"sony"|"telestream_wirecast"|"teradek_cube"|"vmix"|"x_split"|"ipcamera"|"other_rtmp"|"other_rtsp", hosted_page?: bool, hosted_page_description?: string, hosted_page_logo_image?: string, hosted_page_sharing_icons?: bool, hosted_page_title?: string, low_latency?: bool, name: string, password?: string, player_countdown?: bool, player_countdown_at?: string, player_logo_image?: string, player_logo_position?: "top-left"|"top-right"|"bottom-left"|"bottom-right", player_responsive?: bool, player_type?: string, player_video_poster_image?: string, player_width?: int, recording?: bool, remove_hosted_page_logo_image?: bool, remove_player_logo_image?: bool, remove_player_video_poster_image?: bool, source_url?: string, target_delivery_protocol?: "hls-https"|"hls-hds", transcoder_type: "transcoded"|"passthrough", use_stream_source?: bool, username?: string, video_fallback?: bool}
-export def "live-streams createLiveStream" [
+export def "live-streams create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "live-streams createLiveStream" [
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/live_streams")
-  let body = {live_stream: $live_stream} | compact
+  let body = {"live_stream": $live_stream} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -185,7 +185,7 @@ export def "live-streams delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/live_streams/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/live_streams/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -208,7 +208,7 @@ export def "live-streams showLiveStream" [
 ]: nothing -> record<live_stream: record<aspect_ratio_height: int, aspect_ratio_width: int, billing_mode: string, broadcast_location: string, closed_caption_type: string, connection_code: string, connection_code_expires_at: string, created_at: string, delivery_method: string, delivery_protocol: string, delivery_protocols: list<string>, delivery_type: string, direct_playback_urls: list<record>, encoder: string, hosted_page: bool, hosted_page_description: string, hosted_page_logo_image_url: string, hosted_page_sharing_icons: bool, hosted_page_title: string, hosted_page_url: string, id: string, low_latency: bool, name: string, player_countdown: bool, player_countdown_at: string, player_embed_code: string, player_hds_playback_url: string, player_hls_playback_url: string, player_id: string, player_logo_image_url: string, player_logo_position: string, player_responsive: bool, player_type: string, player_video_poster_image_url: string, player_width: int, recording: bool, source_connection_information: record, stream_source_id: string, stream_targets: list<record>, target_delivery_protocol: string, transcoder_type: string, updated_at: string, use_stream_source: bool, video_fallback: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/live_streams/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/live_streams/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -219,7 +219,7 @@ export def "live-streams showLiveStream" [
 # PATCH /live_streams/{id}
 # operationId: updateLiveStream
 # --live_stream shape: {aspect_ratio_height: int, aspect_ratio_width: int, closed_caption_type?: "none"|"cea"|"on_text"|"both", delivery_method?: "pull"|"cdn"|"push", delivery_protocols?: list, disable_authentication?: bool, encoder: "wowza_streaming_engine"|"wowza_gocoder"|"media_ds"|"axis"|"epiphan"|"hauppauge"|"jvc"|"live_u"|"matrox"|"newtek_tricaster"|"osprey"|"sony"|"telestream_wirecast"|"teradek_cube"|"vmix"|"x_split"|"ipcamera"|"other_rtmp"|"other_rtsp", hosted_page_description?: string, hosted_page_logo_image?: string, hosted_page_sharing_icons?: bool, hosted_page_title?: string, name: string, password?: string, player_countdown?: bool, player_countdown_at?: string, player_logo_image?: string, player_logo_position?: "top-left"|"top-right"|"bottom-left"|"bottom-right", player_responsive?: bool, player_type?: string, player_video_poster_image?: string, player_width?: int, recording?: bool, remove_hosted_page_logo_image?: bool, remove_player_logo_image?: bool, remove_player_video_poster_image?: bool, source_url?: string, target_delivery_protocol?: "hls-https"|"hls-hds", use_stream_source?: bool, username?: string, video_fallback?: bool}
-export def "live-streams updateLiveStream" [
+export def "live-streams update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,8 +234,8 @@ export def "live-streams updateLiveStream" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/live_streams/($id)")
-  let body = {live_stream: $live_stream} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/live_streams/{id}"))
+  let body = {"live_stream": $live_stream} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -259,7 +259,7 @@ export def "live-streams-regenerate-connection-code regenerateConnectionCodeLive
 ]: nothing -> record<live_stream: record<connection_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/live_streams/($id)/regenerate_connection_code")
+  let full_url = (build-url $base ({id: $id} | format pattern "/live_streams/{id}/regenerate_connection_code"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -269,7 +269,7 @@ export def "live-streams-regenerate-connection-code regenerateConnectionCodeLive
 #
 # PUT /live_streams/{id}/reset
 # operationId: resetLiveStream
-export def "live-streams-reset resetLiveStream" [
+export def "live-streams-reset reset" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,7 +282,7 @@ export def "live-streams-reset resetLiveStream" [
 ]: nothing -> record<live_stream: record<state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/live_streams/($id)/reset")
+  let full_url = (build-url $base ({id: $id} | format pattern "/live_streams/{id}/reset"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -292,7 +292,7 @@ export def "live-streams-reset resetLiveStream" [
 #
 # PUT /live_streams/{id}/start
 # operationId: startLiveStream
-export def "live-streams-start startLiveStream" [
+export def "live-streams-start start" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -305,7 +305,7 @@ export def "live-streams-start startLiveStream" [
 ]: nothing -> record<live_stream: record<state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/live_streams/($id)/start")
+  let full_url = (build-url $base ({id: $id} | format pattern "/live_streams/{id}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -328,7 +328,7 @@ export def "live-streams-state showLiveStreamState" [
 ]: nothing -> record<live_stream: record<state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/live_streams/($id)/state")
+  let full_url = (build-url $base ({id: $id} | format pattern "/live_streams/{id}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -351,7 +351,7 @@ export def "live-streams-stats showLiveStreamStats" [
 ]: nothing -> record<live_stream: record<audio_codec: record<status: string, text: string, units: string, value: string>, bits_in_rate: record<status: string, text: string, units: string, value: float>, bits_out_rate: record<status: string, text: string, units: string, value: float>, bytes_in_rate: record<status: string, text: string, units: string, value: float>, bytes_out_rate: record<status: string, text: string, units: string, value: float>, configured_bytes_out_rate: record<status: string, text: string, units: string, value: int>, connected: record<status: string, text: string, units: string, value: string>, cpu: record<status: string, text: string, units: string, value: int>, frame_rate: record<status: string, text: string, units: string, value: int>, frame_size: record<status: string, text: string, units: string, value: string>, gpu_decoder_usage: record<status: string, text: string, units: string, value: int>, gpu_driver_version: record<status: string, text: string, units: string, value: string>, gpu_encoder_usage: record<status: string, text: string, units: string, value: int>, gpu_memory_usage: record<status: string, text: string, units: string, value: int>, gpu_usage: record<status: string, text: string, units: string, value: int>, height: record<status: string, text: string, units: string, value: int>, keyframe_interval: record<status: string, text: string, units: string, value: int>, stream_target_status_OUTPUTIDX_STREAMTARGETIDX: record<status: string, text: string, units: string, value: string>, unique_views: record<status: string, text: string, units: string, value: int>, video_codec: record<status: string, text: string, units: string, value: string>, width: record<status: string, text: string, units: string, value: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/live_streams/($id)/stats")
+  let full_url = (build-url $base ({id: $id} | format pattern "/live_streams/{id}/stats"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -361,7 +361,7 @@ export def "live-streams-stats showLiveStreamStats" [
 #
 # PUT /live_streams/{id}/stop
 # operationId: stopLiveStream
-export def "live-streams-stop stopLiveStream" [
+export def "live-streams-stop stop" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -374,7 +374,7 @@ export def "live-streams-stop stopLiveStream" [
 ]: nothing -> record<live_stream: record<state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/live_streams/($id)/stop")
+  let full_url = (build-url $base ({id: $id} | format pattern "/live_streams/{id}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -397,7 +397,7 @@ export def "live-streams-thumbnail-url showLiveStreamThumbnailUrl" [
 ]: nothing -> record<live_stream: record<thumbnail_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/live_streams/($id)/thumbnail_url")
+  let full_url = (build-url $base ({id: $id} | format pattern "/live_streams/{id}/thumbnail_url"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -407,7 +407,7 @@ export def "live-streams-thumbnail-url showLiveStreamThumbnailUrl" [
 #
 # GET /players
 # operationId: listPlayers
-export def "players listPlayers" [
+export def "players list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -445,7 +445,7 @@ export def "players showPlayer" [
 ]: nothing -> record<player: record<countdown: bool, countdown_at: string, created_at: string, embed_code: string, hds_playback_url: string, hls_playback_url: string, hosted_page: bool, hosted_page_description: string, hosted_page_logo_image_url: string, hosted_page_sharing_icons: string, hosted_page_title: string, hosted_page_url: string, id: string, logo_image_url: string, logo_position: string, responsive: bool, transcoder_id: string, type: string, updated_at: string, video_poster_image_url: string, width: int>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/players/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/players/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -456,7 +456,7 @@ export def "players showPlayer" [
 # PATCH /players/{id}
 # operationId: updatePlayer
 # --player shape: {countdown?: bool, countdown_at?: string, hosted_page?: bool, hosted_page_description?: string, hosted_page_logo_image?: string, hosted_page_sharing_icons?: bool, hosted_page_title?: string, logo_image?: string, logo_position?: string, remove_hosted_page_logo_image?: bool, remove_logo_image?: bool, remove_video_poster_image?: bool, responsive?: bool, type?: string, video_poster_image?: string, width?: int}
-export def "players updatePlayer" [
+export def "players update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -471,8 +471,8 @@ export def "players updatePlayer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/players/($id)")
-  let body = {player: $player} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/players/{id}"))
+  let body = {"player": $player} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -483,7 +483,7 @@ export def "players updatePlayer" [
 #
 # POST /players/{id}/rebuild
 # operationId: requestPlayerRebuild
-export def "players-rebuild requestPlayerRebuild" [
+export def "players-rebuild request" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -496,7 +496,7 @@ export def "players-rebuild requestPlayerRebuild" [
 ]: nothing -> record<player: record<state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/players/($id)/rebuild")
+  let full_url = (build-url $base ({id: $id} | format pattern "/players/{id}/rebuild"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -519,7 +519,7 @@ export def "players-state showPlayerState" [
 ]: nothing -> record<player: record<state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/players/($id)/state")
+  let full_url = (build-url $base ({id: $id} | format pattern "/players/{id}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -529,7 +529,7 @@ export def "players-state showPlayerState" [
 #
 # GET /players/{player_id}/urls
 # operationId: listPlayerUrls
-export def "players-urls listPlayerUrls" [
+export def "players-urls list" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -542,7 +542,7 @@ export def "players-urls listPlayerUrls" [
 ]: nothing -> record<urls: table<bitrate: int, created_at: string, height: int, id: string, label: string, player_id: string, updated_at: string, url: string, width: int>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/players/($player_id)/urls")
+  let full_url = (build-url $base ({player_id: $player_id} | format pattern "/players/{player_id}/urls"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -553,7 +553,7 @@ export def "players-urls listPlayerUrls" [
 # POST /players/{player_id}/urls
 # operationId: createPlayerUrl
 # --url shape: {bitrate?: int, height?: int, label?: string, url?: string, width?: int}
-export def "players-urls createPlayerUrl" [
+export def "players-urls create" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -568,8 +568,8 @@ export def "players-urls createPlayerUrl" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/players/($player_id)/urls")
-  let body = {url: $body_url} | compact
+  let full_url = (build-url $base ({player_id: $player_id} | format pattern "/players/{player_id}/urls"))
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -594,7 +594,7 @@ export def "players-urls delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/players/($player_id)/urls/($id)")
+  let full_url = (build-url $base ({player_id: $player_id, id: $id} | format pattern "/players/{player_id}/urls/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -618,7 +618,7 @@ export def "players-urls showPlayerUrl" [
 ]: nothing -> record<url: record<bitrate: int, created_at: string, height: int, id: string, label: string, player_id: string, updated_at: string, url: string, width: int>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/players/($player_id)/urls/($id)")
+  let full_url = (build-url $base ({player_id: $player_id, id: $id} | format pattern "/players/{player_id}/urls/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -629,7 +629,7 @@ export def "players-urls showPlayerUrl" [
 # PATCH /players/{player_id}/urls/{id}
 # operationId: updatePlayerUrl
 # --url shape: {bitrate?: int, height?: int, label?: string, url?: string, width?: int}
-export def "players-urls updatePlayerUrl" [
+export def "players-urls update" [
   player_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -645,8 +645,8 @@ export def "players-urls updatePlayerUrl" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/players/($player_id)/urls/($id)")
-  let body = {url: $body_url} | compact
+  let full_url = (build-url $base ({player_id: $player_id, id: $id} | format pattern "/players/{player_id}/urls/{id}"))
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -657,7 +657,7 @@ export def "players-urls updatePlayerUrl" [
 #
 # GET /recordings
 # operationId: listRecordings
-export def "recordings listRecordings" [
+export def "recordings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,7 +695,7 @@ export def "recordings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recordings/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/recordings/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -718,7 +718,7 @@ export def "recordings showRecording" [
 ]: nothing -> record<recording: record<created_at: string, download_url: string, duration: int, file_name: string, file_size: int, id: string, reason: string, starts_at: string, state: string, transcoder_id: string, transcoder_name: string, transcoding_uptime_id: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recordings/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/recordings/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -741,7 +741,7 @@ export def "recordings-state showRecordingState" [
 ]: nothing -> record<recording: record<state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recordings/($id)/state")
+  let full_url = (build-url $base ({id: $id} | format pattern "/recordings/{id}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -751,7 +751,7 @@ export def "recordings-state showRecordingState" [
 #
 # GET /schedules
 # operationId: listSchedules
-export def "schedules listSchedules" [
+export def "schedules list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -777,7 +777,7 @@ export def "schedules listSchedules" [
 # POST /schedules
 # operationId: createSchedule
 # --schedule shape: {action_type: "start"|"stop"|"start_stop", end_repeat?: string, name: string, recurrence_data?: "sunday"|"monday"|"tuesday"|"wednesday"|"thursday"|"friday"|"saturday", recurrence_type: "once"|"recur", start_repeat?: string, start_transcoder?: string, stop_transcoder?: string, transcoder_id: string}
-export def "schedules createSchedule" [
+export def "schedules create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -792,7 +792,7 @@ export def "schedules createSchedule" [
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/schedules")
-  let body = {schedule: $schedule} | compact
+  let body = {"schedule": $schedule} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -816,7 +816,7 @@ export def "schedules delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/schedules/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/schedules/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -839,7 +839,7 @@ export def "schedules showSchedule" [
 ]: nothing -> record<schedule: record<action_type: string, created_at: string, end_repeat: string, id: string, name: string, recurrence_data: string, recurrence_type: string, start_repeat: string, start_transcoder: string, state: string, stop_transcoder: string, transcoder_id: string, transcoder_name: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/schedules/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/schedules/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -850,7 +850,7 @@ export def "schedules showSchedule" [
 # PATCH /schedules/{id}
 # operationId: updateSchedule
 # --schedule shape: {action_type: "start"|"stop"|"start_stop", end_repeat?: string, name: string, recurrence_data?: "sunday"|"monday"|"tuesday"|"wednesday"|"thursday"|"friday"|"saturday", start_repeat?: string, start_transcoder?: string, stop_transcoder?: string}
-export def "schedules updateSchedule" [
+export def "schedules update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -865,8 +865,8 @@ export def "schedules updateSchedule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/schedules/($id)")
-  let body = {schedule: $schedule} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/schedules/{id}"))
+  let body = {"schedule": $schedule} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -877,7 +877,7 @@ export def "schedules updateSchedule" [
 #
 # PUT /schedules/{id}/disable
 # operationId: disableSchedule
-export def "schedules-disable disableSchedule" [
+export def "schedules-disable disable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -890,7 +890,7 @@ export def "schedules-disable disableSchedule" [
 ]: nothing -> record<schedule: record<state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/schedules/($id)/disable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/schedules/{id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -900,7 +900,7 @@ export def "schedules-disable disableSchedule" [
 #
 # PUT /schedules/{id}/enable
 # operationId: enableSchedule
-export def "schedules-enable enableSchedule" [
+export def "schedules-enable enable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -913,7 +913,7 @@ export def "schedules-enable enableSchedule" [
 ]: nothing -> record<schedule: record<state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/schedules/($id)/enable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/schedules/{id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -936,7 +936,7 @@ export def "schedules-state showScheduleState" [
 ]: nothing -> record<schedule: record<state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/schedules/($id)/state")
+  let full_url = (build-url $base ({id: $id} | format pattern "/schedules/{id}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -946,7 +946,7 @@ export def "schedules-state showScheduleState" [
 #
 # GET /stream_sources
 # operationId: listStreamSources
-export def "stream-sources listStreamSources" [
+export def "stream-sources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -972,7 +972,7 @@ export def "stream-sources listStreamSources" [
 # POST /stream_sources
 # operationId: createStreamSource
 # --stream_source shape: {backup_ip_address?: string, ip_address?: string, location?: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", location_method: "region"|"ip_address", name: string}
-export def "stream-sources createStreamSource" [
+export def "stream-sources create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -987,7 +987,7 @@ export def "stream-sources createStreamSource" [
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stream_sources")
-  let body = {stream_source: $stream_source} | compact
+  let body = {"stream_source": $stream_source} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1001,7 +1001,7 @@ export def "stream-sources createStreamSource" [
 # operationId: addStreamSource
 # --stream_source shape: {backup_ip_address?: string, ip_address?: string, location?: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", location_method: "region"|"ip_address", name: string}
 @deprecated
-export def "stream-sources-add addStreamSource" [
+export def "stream-sources-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1016,7 +1016,7 @@ export def "stream-sources-add addStreamSource" [
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stream_sources/add")
-  let body = {stream_source: $stream_source} | compact
+  let body = {"stream_source": $stream_source} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1040,7 +1040,7 @@ export def "stream-sources delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_sources/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/stream_sources/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1063,7 +1063,7 @@ export def "stream-sources showStreamSource" [
 ]: nothing -> record<stream_source: record<backup_ip_address: string, backup_url: string, created_at: string, id: string, ip_address: string, location: string, location_method: string, name: string, password: string, playback_url: string, primary_url: string, provider: string, stream_name: string, updated_at: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_sources/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/stream_sources/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1074,7 +1074,7 @@ export def "stream-sources showStreamSource" [
 # PATCH /stream_sources/{id}
 # operationId: updateStreamSource
 # --stream_source shape: {name: string}
-export def "stream-sources updateStreamSource" [
+export def "stream-sources update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1089,8 +1089,8 @@ export def "stream-sources updateStreamSource" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_sources/($id)")
-  let body = {stream_source: $stream_source} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/stream_sources/{id}"))
+  let body = {"stream_source": $stream_source} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1101,7 +1101,7 @@ export def "stream-sources updateStreamSource" [
 #
 # GET /stream_targets
 # operationId: listStreamTargets
-export def "stream-targets listStreamTargets" [
+export def "stream-targets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1127,7 +1127,7 @@ export def "stream-targets listStreamTargets" [
 # POST /stream_targets
 # operationId: createStreamTarget
 # --stream_target shape: {backup_url?: string, chunk_size?: "2"|"4"|"6"|"8"|"10", enable_hls?: bool, enabled?: bool, hds_playback_url?: string, hls_playback_url?: string, ingest_ip_whitelist?: list, location: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", name: string, password?: string, primary_url: string, provider?: string, region_override?: "azure-westus"|"azure-eastus2"|"azure-northeurope", rtmp_playback_url?: string, source_delivery_method: "push"|"pull", source_url: string, stream_name: string, type?: "WowzaStreamTarget"|"UltraLowLatencyStreamTarget"|"CustomStreamTarget", use_cors?: bool, use_https?: bool, use_secure_ingest?: bool, username?: string}
-export def "stream-targets createStreamTarget" [
+export def "stream-targets create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1142,7 +1142,7 @@ export def "stream-targets createStreamTarget" [
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stream_targets")
-  let body = {stream_target: $stream_target} | compact
+  let body = {"stream_target": $stream_target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1156,7 +1156,7 @@ export def "stream-targets createStreamTarget" [
 # operationId: addStreamTarget
 # --stream_target shape: {chunk_size?: "2"|"4"|"6"|"8"|"10", location: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", name: string, provider?: string, type?: string, use_cors?: bool, use_https?: bool, use_secure_ingest?: bool}
 @deprecated
-export def "stream-targets-add addStreamTarget" [
+export def "stream-targets-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1171,7 +1171,7 @@ export def "stream-targets-add addStreamTarget" [
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stream_targets/add")
-  let body = {stream_target: $stream_target} | compact
+  let body = {"stream_target": $stream_target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1195,7 +1195,7 @@ export def "stream-targets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_targets/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/stream_targets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1218,7 +1218,7 @@ export def "stream-targets showStreamTarget" [
 ]: nothing -> record<stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list<string>, location: string, name: string, password: string, playback_urls: record<hls: string, wowz: string, ws: string>, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_targets/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/stream_targets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1229,7 +1229,7 @@ export def "stream-targets showStreamTarget" [
 # PATCH /stream_targets/{id}
 # operationId: updateStreamTarget
 # --stream_target shape: {backup_url?: string, chunk_size?: "2"|"4"|"6"|"8"|"10", enabled?: bool, hds_playback_url?: string, hls_playback_url?: string, ingest_ip_whitelist?: list, name?: string, password?: string, primary_url?: string, provider?: string, rtmp_playback_url?: string, source_url?: string, stream_name?: string, username?: string}
-export def "stream-targets updateStreamTarget" [
+export def "stream-targets update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1244,8 +1244,8 @@ export def "stream-targets updateStreamTarget" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_targets/($id)")
-  let body = {stream_target: $stream_target} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/stream_targets/{id}"))
+  let body = {"stream_target": $stream_target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1269,7 +1269,7 @@ export def "stream-targets-metrics-current showStreamTargetMetricsCurrent" [
 ]: nothing -> record<id: string, metrics: record<average_bytes_in: float, average_total_connections: float, created_at: string, dropped_connections: int, maximum_total_connections: int, minimum_total_connections: int, new_connections: int>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_targets/($id)/metrics/current")
+  let full_url = (build-url $base ({id: $id} | format pattern "/stream_targets/{id}/metrics/current"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1296,7 +1296,7 @@ export def "stream-targets-metrics-historic showStreamTargetMetricsHistoric" [
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/stream_targets/($id)/metrics/historic" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/stream_targets/{id}/metrics/historic") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1319,7 +1319,7 @@ export def "stream-targets-regenerate-connection-code regenerateConnectionCodeSt
 ]: nothing -> record<stream_target: record<connection_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_targets/($id)/regenerate_connection_code")
+  let full_url = (build-url $base ({id: $id} | format pattern "/stream_targets/{id}/regenerate_connection_code"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1342,7 +1342,7 @@ export def "stream-targets-geoblock showStreamTargetGeoblock" [
 ]: nothing -> record<geoblock: record<countries: list<string>, created_at: string, state: string, stream_target_id: string, type: string, updated_at: string, whitelist: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_targets/($stream_target_id)/geoblock")
+  let full_url = (build-url $base ({stream_target_id: $stream_target_id} | format pattern "/stream_targets/{stream_target_id}/geoblock"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1353,7 +1353,7 @@ export def "stream-targets-geoblock showStreamTargetGeoblock" [
 # PATCH /stream_targets/{stream_target_id}/geoblock
 # operationId: updateStreamTargetGeoblock
 # --geoblock shape: {countries?: list, type: "disabled"|"allow"|"deny", whitelist?: list}
-export def "stream-targets-geoblock updateStreamTargetGeoblock" [
+export def "stream-targets-geoblock update" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1368,8 +1368,8 @@ export def "stream-targets-geoblock updateStreamTargetGeoblock" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_targets/($stream_target_id)/geoblock")
-  let body = {geoblock: $geoblock} | compact
+  let full_url = (build-url $base ({stream_target_id: $stream_target_id} | format pattern "/stream_targets/{stream_target_id}/geoblock"))
+  let body = {"geoblock": $geoblock} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1381,7 +1381,7 @@ export def "stream-targets-geoblock updateStreamTargetGeoblock" [
 # POST /stream_targets/{stream_target_id}/geoblock
 # operationId: createStreamTargetGeoblock
 # --geoblock shape: {countries?: list, type: "disabled"|"allow"|"deny", whitelist?: list}
-export def "stream-targets-geoblock createStreamTargetGeoblock" [
+export def "stream-targets-geoblock create" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1396,8 +1396,8 @@ export def "stream-targets-geoblock createStreamTargetGeoblock" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_targets/($stream_target_id)/geoblock")
-  let body = {geoblock: $geoblock} | compact
+  let full_url = (build-url $base ({stream_target_id: $stream_target_id} | format pattern "/stream_targets/{stream_target_id}/geoblock"))
+  let body = {"geoblock": $geoblock} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1408,7 +1408,7 @@ export def "stream-targets-geoblock createStreamTargetGeoblock" [
 #
 # GET /stream_targets/{stream_target_id}/properties
 # operationId: listStreamTargetProperties
-export def "stream-targets-properties listStreamTargetProperties" [
+export def "stream-targets-properties list" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1421,7 +1421,7 @@ export def "stream-targets-properties listStreamTargetProperties" [
 ]: nothing -> record<properties: table<key: string, section: string, stream_target_id: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_targets/($stream_target_id)/properties")
+  let full_url = (build-url $base ({stream_target_id: $stream_target_id} | format pattern "/stream_targets/{stream_target_id}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1432,7 +1432,7 @@ export def "stream-targets-properties listStreamTargetProperties" [
 # POST /stream_targets/{stream_target_id}/properties
 # operationId: createStreamTargetProperty
 # --property shape: {key: "chunkSize"|"playSSL"|"relativePlaylists"|"sendSSL", section: "hls"|"playlist", value: "2"|"4"|"6"|"8"|"10"|"true"|"false"}
-export def "stream-targets-properties createStreamTargetProperty" [
+export def "stream-targets-properties create-stream-target-property" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1447,8 +1447,8 @@ export def "stream-targets-properties createStreamTargetProperty" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_targets/($stream_target_id)/properties")
-  let body = {property: $property} | compact
+  let full_url = (build-url $base ({stream_target_id: $stream_target_id} | format pattern "/stream_targets/{stream_target_id}/properties"))
+  let body = {"property": $property} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1459,7 +1459,7 @@ export def "stream-targets-properties createStreamTargetProperty" [
 #
 # DELETE /stream_targets/{stream_target_id}/properties/{id}
 # operationId: deleteStreamTargetProperty
-export def "stream-targets-properties delete" [
+export def "stream-targets-properties delete-stream-target-property" [
   stream_target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1473,7 +1473,7 @@ export def "stream-targets-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_targets/($stream_target_id)/properties/($id)")
+  let full_url = (build-url $base ({stream_target_id: $stream_target_id, id: $id} | format pattern "/stream_targets/{stream_target_id}/properties/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1497,7 +1497,7 @@ export def "stream-targets-properties showStreamTargetProperty" [
 ]: nothing -> record<property: record<key: string, section: string, stream_target_id: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_targets/($stream_target_id)/properties/($id)")
+  let full_url = (build-url $base ({stream_target_id: $stream_target_id, id: $id} | format pattern "/stream_targets/{stream_target_id}/properties/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1520,7 +1520,7 @@ export def "stream-targets-token-auth showStreamTargetTokenAuth" [
 ]: nothing -> record<token_auth: record<created_at: string, enabled: bool, stream_target_id: string, trusted_shared_secret: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_targets/($stream_target_id)/token_auth")
+  let full_url = (build-url $base ({stream_target_id: $stream_target_id} | format pattern "/stream_targets/{stream_target_id}/token_auth"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1531,7 +1531,7 @@ export def "stream-targets-token-auth showStreamTargetTokenAuth" [
 # PATCH /stream_targets/{stream_target_id}/token_auth
 # operationId: updateStreamTargetTokenAuth
 # --token_auth shape: {enabled?: bool, trusted_shared_secret?: string}
-export def "stream-targets-token-auth updateStreamTargetTokenAuth" [
+export def "stream-targets-token-auth update" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1546,8 +1546,8 @@ export def "stream-targets-token-auth updateStreamTargetTokenAuth" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_targets/($stream_target_id)/token_auth")
-  let body = {token_auth: $token_auth} | compact
+  let full_url = (build-url $base ({stream_target_id: $stream_target_id} | format pattern "/stream_targets/{stream_target_id}/token_auth"))
+  let body = {"token_auth": $token_auth} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1559,7 +1559,7 @@ export def "stream-targets-token-auth updateStreamTargetTokenAuth" [
 # POST /stream_targets/{stream_target_id}/token_auth
 # operationId: createStreamTargetTokenAuth
 # --token_auth shape: {enabled: bool, trusted_shared_secret: string}
-export def "stream-targets-token-auth createStreamTargetTokenAuth" [
+export def "stream-targets-token-auth create" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1574,8 +1574,8 @@ export def "stream-targets-token-auth createStreamTargetTokenAuth" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stream_targets/($stream_target_id)/token_auth")
-  let body = {token_auth: $token_auth} | compact
+  let full_url = (build-url $base ({stream_target_id: $stream_target_id} | format pattern "/stream_targets/{stream_target_id}/token_auth"))
+  let body = {"token_auth": $token_auth} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1586,7 +1586,7 @@ export def "stream-targets-token-auth createStreamTargetTokenAuth" [
 #
 # GET /transcoders
 # operationId: listTranscoders
-export def "transcoders listTranscoders" [
+export def "transcoders list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1612,7 +1612,7 @@ export def "transcoders listTranscoders" [
 # POST /transcoders
 # operationId: createTranscoder
 # --transcoder shape: {billing_mode: "pay_as_you_go"|"twentyfour_seven", broadcast_location: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", buffer_size?: "0"|"1000"|"2000"|"3000"|"4000"|"5000"|"6000"|"7000"|"8000", closed_caption_type?: "none"|"cea"|"on_text"|"both", delivery_method: "pull"|"cdn"|"push", delivery_protocols?: list, description?: string, disable_authentication?: bool, idle_timeout?: int, low_latency?: bool, name: string, password?: string, play_maximum_connections?: "10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20"|"21"|"22"|"23"|"24"|"25"|"26"|"27"|"28"|"29"|"30"|"31"|"32"|"33"|"34"|"35"|"36"|"37"|"38"|"39"|"40"|"41"|"42"|"43"|"44"|"45"|"46"|"47"|"48"|"49"|"50"|"51"|"52"|"53"|"54"|"55"|"56"|"57"|"58"|"59"|"60"|"61"|"62"|"63"|"64"|"65"|"66"|"67"|"68"|"69"|"70"|"71"|"72"|"73"|"74"|"75"|"76"|"77"|"78"|"79"|"80"|"81"|"82"|"83"|"84"|"85"|"86"|"87"|"88"|"89"|"90"|"91"|"92"|"93"|"94"|"95"|"96"|"97"|"98"|"99"|"100", protocol: "rtmp"|"rtsp", recording?: bool, source_url?: string, stream_extension?: string, stream_smoother?: bool, stream_source_id?: string, suppress_stream_target_start?: bool, transcoder_type: "transcoded"|"passthrough", username?: string, video_fallback?: bool, watermark?: bool, watermark_height?: int, watermark_image?: string, watermark_opacity?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20"|"21"|"22"|"23"|"24"|"25"|"26"|"27"|"28"|"29"|"30"|"31"|"32"|"33"|"34"|"35"|"36"|"37"|"38"|"39"|"40"|"41"|"42"|"43"|"44"|"45"|"46"|"47"|"48"|"49"|"50"|"51"|"52"|"53"|"54"|"55"|"56"|"57"|"58"|"59"|"60"|"61"|"62"|"63"|"64"|"65"|"66"|"67"|"68"|"69"|"70"|"71"|"72"|"73"|"74"|"75"|"76"|"77"|"78"|"79"|"80"|"81"|"82"|"83"|"84"|"85"|"86"|"87"|"88"|"89"|"90"|"91"|"92"|"93"|"94"|"95"|"96"|"97"|"98"|"99"|"100", watermark_position?: "top-left"|"top-right"|"bottom-left"|"bottom-right", watermark_width?: int}
-export def "transcoders createTranscoder" [
+export def "transcoders create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1627,7 +1627,7 @@ export def "transcoders createTranscoder" [
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transcoders")
-  let body = {transcoder: $transcoder} | compact
+  let body = {"transcoder": $transcoder} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1651,7 +1651,7 @@ export def "transcoders delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/transcoders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1674,7 +1674,7 @@ export def "transcoders showTranscoder" [
 ]: nothing -> record<transcoder: record<application_name: string, billing_mode: string, broadcast_location: string, buffer_size: int, closed_caption_type: string, created_at: string, delivery_method: string, delivery_protocols: list<string>, description: string, direct_playback_urls: list<record>, disable_authentication: bool, domain_name: string, id: string, idle_timeout: int, low_latency: bool, name: string, outputs: list<record>, password: string, play_maximum_connections: int, protocol: string, recording: bool, source_port: int, source_url: string, stream_extension: string, stream_name: string, stream_smoother: bool, stream_source_id: string, suppress_stream_target_start: bool, transcoder_type: string, updated_at: string, username: string, video_fallback: bool, watermark: bool, watermark_height: int, watermark_image_url: string, watermark_opacity: int, watermark_position: string, watermark_width: int>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/transcoders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1685,7 +1685,7 @@ export def "transcoders showTranscoder" [
 # PATCH /transcoders/{id}
 # operationId: updateTranscoder
 # --transcoder shape: {broadcast_location?: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", buffer_size?: "0"|"1000"|"2000"|"3000"|"4000"|"5000"|"6000"|"7000"|"8000", closed_caption_type?: "none"|"cea"|"on_text"|"both", delivery_method: "pull"|"cdn"|"push", delivery_protocols?: list, description?: string, disable_authentication?: bool, idle_timeout?: int, low_latency?: bool, name: string, password?: string, play_maximum_connections?: "10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20"|"21"|"22"|"23"|"24"|"25"|"26"|"27"|"28"|"29"|"30"|"31"|"32"|"33"|"34"|"35"|"36"|"37"|"38"|"39"|"40"|"41"|"42"|"43"|"44"|"45"|"46"|"47"|"48"|"49"|"50"|"51"|"52"|"53"|"54"|"55"|"56"|"57"|"58"|"59"|"60"|"61"|"62"|"63"|"64"|"65"|"66"|"67"|"68"|"69"|"70"|"71"|"72"|"73"|"74"|"75"|"76"|"77"|"78"|"79"|"80"|"81"|"82"|"83"|"84"|"85"|"86"|"87"|"88"|"89"|"90"|"91"|"92"|"93"|"94"|"95"|"96"|"97"|"98"|"99"|"100", protocol: "rtmp"|"rtsp", recording?: bool, remove_watermark_image?: bool, source_url?: string, stream_extension?: string, stream_smoother?: bool, stream_source_id?: string, suppress_stream_target_start?: bool, username?: string, video_fallback?: bool, watermark?: bool, watermark_height?: int, watermark_image?: string, watermark_opacity?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20"|"21"|"22"|"23"|"24"|"25"|"26"|"27"|"28"|"29"|"30"|"31"|"32"|"33"|"34"|"35"|"36"|"37"|"38"|"39"|"40"|"41"|"42"|"43"|"44"|"45"|"46"|"47"|"48"|"49"|"50"|"51"|"52"|"53"|"54"|"55"|"56"|"57"|"58"|"59"|"60"|"61"|"62"|"63"|"64"|"65"|"66"|"67"|"68"|"69"|"70"|"71"|"72"|"73"|"74"|"75"|"76"|"77"|"78"|"79"|"80"|"81"|"82"|"83"|"84"|"85"|"86"|"87"|"88"|"89"|"90"|"91"|"92"|"93"|"94"|"95"|"96"|"97"|"98"|"99"|"100", watermark_position?: "top-left"|"top-right"|"bottom-left"|"bottom-right", watermark_width?: int}
-export def "transcoders updateTranscoder" [
+export def "transcoders update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1700,8 +1700,8 @@ export def "transcoders updateTranscoder" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($id)")
-  let body = {transcoder: $transcoder} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/transcoders/{id}"))
+  let body = {"transcoder": $transcoder} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1712,7 +1712,7 @@ export def "transcoders updateTranscoder" [
 #
 # PUT /transcoders/{id}/disable_all_stream_targets
 # operationId: disableAllStreamTargetsTranscoder
-export def "transcoders-disable-all-stream-targets disableAllStreamTargetsTranscoder" [
+export def "transcoders-disable-all-stream-targets disable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1725,7 +1725,7 @@ export def "transcoders-disable-all-stream-targets disableAllStreamTargetsTransc
 ]: nothing -> record<transcoder: record<stream_targets: record<state: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($id)/disable_all_stream_targets")
+  let full_url = (build-url $base ({id: $id} | format pattern "/transcoders/{id}/disable_all_stream_targets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1735,7 +1735,7 @@ export def "transcoders-disable-all-stream-targets disableAllStreamTargetsTransc
 #
 # PUT /transcoders/{id}/enable_all_stream_targets
 # operationId: enableAllStreamTargetsTranscoder
-export def "transcoders-enable-all-stream-targets enableAllStreamTargetsTranscoder" [
+export def "transcoders-enable-all-stream-targets enable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1748,7 +1748,7 @@ export def "transcoders-enable-all-stream-targets enableAllStreamTargetsTranscod
 ]: nothing -> record<transcoder: record<stream_targets: record<state: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($id)/enable_all_stream_targets")
+  let full_url = (build-url $base ({id: $id} | format pattern "/transcoders/{id}/enable_all_stream_targets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1758,7 +1758,7 @@ export def "transcoders-enable-all-stream-targets enableAllStreamTargetsTranscod
 #
 # GET /transcoders/{id}/recordings
 # operationId: listTranscoderRecordings
-export def "transcoders-recordings listTranscoderRecordings" [
+export def "transcoders-recordings list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1771,7 +1771,7 @@ export def "transcoders-recordings listTranscoderRecordings" [
 ]: nothing -> record<transcoder: record<recordings: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($id)/recordings")
+  let full_url = (build-url $base ({id: $id} | format pattern "/transcoders/{id}/recordings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1781,7 +1781,7 @@ export def "transcoders-recordings listTranscoderRecordings" [
 #
 # PUT /transcoders/{id}/reset
 # operationId: resetTranscoder
-export def "transcoders-reset resetTranscoder" [
+export def "transcoders-reset reset" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1794,7 +1794,7 @@ export def "transcoders-reset resetTranscoder" [
 ]: nothing -> record<transcoder: record<state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($id)/reset")
+  let full_url = (build-url $base ({id: $id} | format pattern "/transcoders/{id}/reset"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1804,7 +1804,7 @@ export def "transcoders-reset resetTranscoder" [
 #
 # GET /transcoders/{id}/schedules
 # operationId: listTranscoderSchedules
-export def "transcoders-schedules listTranscoderSchedules" [
+export def "transcoders-schedules list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1817,7 +1817,7 @@ export def "transcoders-schedules listTranscoderSchedules" [
 ]: nothing -> record<transcoder: record<schedules: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($id)/schedules")
+  let full_url = (build-url $base ({id: $id} | format pattern "/transcoders/{id}/schedules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1827,7 +1827,7 @@ export def "transcoders-schedules listTranscoderSchedules" [
 #
 # PUT /transcoders/{id}/start
 # operationId: startTranscoder
-export def "transcoders-start startTranscoder" [
+export def "transcoders-start start" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1840,7 +1840,7 @@ export def "transcoders-start startTranscoder" [
 ]: nothing -> record<transcoder: record<state: string, transcoding_uptime_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($id)/start")
+  let full_url = (build-url $base ({id: $id} | format pattern "/transcoders/{id}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1863,7 +1863,7 @@ export def "transcoders-state showTranscoderState" [
 ]: nothing -> record<transcoder: record<state: string, transcoding_uptime_id: string, uptime_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($id)/state")
+  let full_url = (build-url $base ({id: $id} | format pattern "/transcoders/{id}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1886,7 +1886,7 @@ export def "transcoders-stats showTranscoderStats" [
 ]: nothing -> record<transcoder: record<audio_codec: record<status: string, text: string, units: string, value: string>, bits_in_rate: record<status: string, text: string, units: string, value: float>, bits_out_rate: record<status: string, text: string, units: string, value: float>, bytes_in_rate: record<status: string, text: string, units: string, value: float>, bytes_out_rate: record<status: string, text: string, units: string, value: float>, configured_bytes_out_rate: record<status: string, text: string, units: string, value: int>, connected: record<status: string, text: string, units: string, value: string>, cpu: record<status: string, text: string, units: string, value: int>, frame_rate: record<status: string, text: string, units: string, value: int>, frame_size: record<status: string, text: string, units: string, value: string>, gpu_decoder_usage: record<status: string, text: string, units: string, value: int>, gpu_driver_version: record<status: string, text: string, units: string, value: string>, gpu_encoder_usage: record<status: string, text: string, units: string, value: int>, gpu_memory_usage: record<status: string, text: string, units: string, value: int>, gpu_usage: record<status: string, text: string, units: string, value: int>, height: record<status: string, text: string, units: string, value: int>, keyframe_interval: record<status: string, text: string, units: string, value: int>, stream_target_status_OUTPUTIDX_STREAMTARGETIDX: record<status: string, text: string, units: string, value: string>, unique_views: record<status: string, text: string, units: string, value: int>, video_codec: record<status: string, text: string, units: string, value: string>, width: record<status: string, text: string, units: string, value: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($id)/stats")
+  let full_url = (build-url $base ({id: $id} | format pattern "/transcoders/{id}/stats"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1896,7 +1896,7 @@ export def "transcoders-stats showTranscoderStats" [
 #
 # PUT /transcoders/{id}/stop
 # operationId: stopTranscoder
-export def "transcoders-stop stopTranscoder" [
+export def "transcoders-stop stop" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1909,7 +1909,7 @@ export def "transcoders-stop stopTranscoder" [
 ]: nothing -> record<transcoder: record<state: string, transcoding_uptime_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($id)/stop")
+  let full_url = (build-url $base ({id: $id} | format pattern "/transcoders/{id}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1932,7 +1932,7 @@ export def "transcoders-thumbnail-url showTranscoderThumbnailUrl" [
 ]: nothing -> record<transcoder: record<thumbnail_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($id)/thumbnail_url")
+  let full_url = (build-url $base ({id: $id} | format pattern "/transcoders/{id}/thumbnail_url"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1942,7 +1942,7 @@ export def "transcoders-thumbnail-url showTranscoderThumbnailUrl" [
 #
 # GET /transcoders/{transcoder_id}/outputs
 # operationId: listTranscoderOutputs
-export def "transcoders-outputs listTranscoderOutputs" [
+export def "transcoders-outputs list" [
   transcoder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1955,7 +1955,7 @@ export def "transcoders-outputs listTranscoderOutputs" [
 ]: nothing -> record<outputs: table<aspect_ratio_height: int, aspect_ratio_width: int, bitrate_audio: int, bitrate_video: int, created_at: string, framerate_reduction: string, h264_profile: string, id: string, keyframes: string, name: string, output_stream_targets: list, passthrough_audio: bool, passthrough_video: bool, stream_format: string, transcoder_id: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/outputs")
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id} | format pattern "/transcoders/{transcoder_id}/outputs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1966,7 +1966,7 @@ export def "transcoders-outputs listTranscoderOutputs" [
 # POST /transcoders/{transcoder_id}/outputs
 # operationId: createTranscoderOutput
 # --output shape: {aspect_ratio_height?: int, aspect_ratio_width?: int, bitrate_audio?: int, bitrate_video?: int, framerate_reduction?: "0"|"1/2"|"1/4"|"1/25"|"1/30"|"1/50"|"1/60", h264_profile?: "main"|"baseline"|"high", keyframes?: "follow_source"|"25"|"30"|"50"|"60"|"100"|"120", passthrough_audio?: bool, passthrough_video?: bool, stream_format: "audiovideo"|"videoonly"|"audioonly"}
-export def "transcoders-outputs createTranscoderOutput" [
+export def "transcoders-outputs create" [
   transcoder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1981,8 +1981,8 @@ export def "transcoders-outputs createTranscoderOutput" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/outputs")
-  let body = {output: $output} | compact
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id} | format pattern "/transcoders/{transcoder_id}/outputs"))
+  let body = {"output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2007,7 +2007,7 @@ export def "transcoders-outputs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/outputs/($id)")
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, id: $id} | format pattern "/transcoders/{transcoder_id}/outputs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2031,7 +2031,7 @@ export def "transcoders-outputs showTranscoderOutput" [
 ]: nothing -> record<output: record<aspect_ratio_height: int, aspect_ratio_width: int, bitrate_audio: int, bitrate_video: int, created_at: string, framerate_reduction: string, h264_profile: string, id: string, keyframes: string, name: string, output_stream_targets: list<record>, passthrough_audio: bool, passthrough_video: bool, stream_format: string, transcoder_id: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/outputs/($id)")
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, id: $id} | format pattern "/transcoders/{transcoder_id}/outputs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2042,7 +2042,7 @@ export def "transcoders-outputs showTranscoderOutput" [
 # PATCH /transcoders/{transcoder_id}/outputs/{id}
 # operationId: updateTranscoderOutput
 # --output shape: {aspect_ratio_height?: int, aspect_ratio_width?: int, bitrate_audio?: int, bitrate_video?: int, framerate_reduction?: "0"|"1/2"|"1/4"|"1/25"|"1/30"|"1/50"|"1/60", h264_profile?: "main"|"baseline"|"high", keyframes?: "follow_source"|"25"|"30"|"50"|"60"|"100"|"120", passthrough_audio?: bool, passthrough_video?: bool, stream_format: "audiovideo"|"videoonly"|"audioonly"}
-export def "transcoders-outputs updateTranscoderOutput" [
+export def "transcoders-outputs update" [
   transcoder_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2058,8 +2058,8 @@ export def "transcoders-outputs updateTranscoderOutput" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/outputs/($id)")
-  let body = {output: $output} | compact
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, id: $id} | format pattern "/transcoders/{transcoder_id}/outputs/{id}"))
+  let body = {"output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2073,7 +2073,7 @@ export def "transcoders-outputs updateTranscoderOutput" [
 # operationId: addStreamTargetToTranscoderOutput
 # --output_stream_target shape: {stream_target_id: string, use_stream_target_backup_url?: bool}
 @deprecated
-export def "transcoders-outputs-add-stream-target addStreamTargetToTranscoderOutput" [
+export def "transcoders-outputs-add-stream-target create-stream-target-to" [
   transcoder_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2089,8 +2089,8 @@ export def "transcoders-outputs-add-stream-target addStreamTargetToTranscoderOut
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/outputs/($id)/add_stream_target")
-  let body = {output_stream_target: $output_stream_target} | compact
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, id: $id} | format pattern "/transcoders/{transcoder_id}/outputs/{id}/add_stream_target"))
+  let body = {"output_stream_target": $output_stream_target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2104,7 +2104,7 @@ export def "transcoders-outputs-add-stream-target addStreamTargetToTranscoderOut
 # operationId: removeStreamTargetToTranscoderOutput
 # --output_stream_target shape: {stream_target_id: string}
 @deprecated
-export def "transcoders-outputs-remove-stream-target removeStreamTargetToTranscoderOutput" [
+export def "transcoders-outputs-remove-stream-target delete-stream-target-to" [
   transcoder_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2120,8 +2120,8 @@ export def "transcoders-outputs-remove-stream-target removeStreamTargetToTransco
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/outputs/($id)/remove_stream_target")
-  let body = {output_stream_target: $output_stream_target} | compact
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, id: $id} | format pattern "/transcoders/{transcoder_id}/outputs/{id}/remove_stream_target"))
+  let body = {"output_stream_target": $output_stream_target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2132,7 +2132,7 @@ export def "transcoders-outputs-remove-stream-target removeStreamTargetToTransco
 #
 # GET /transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets
 # operationId: listTranscoderOutputOutputStreamTargets
-export def "transcoders-outputs-output-stream-targets listTranscoderOutputOutputStreamTargets" [
+export def "transcoders-outputs-output-stream-targets list" [
   transcoder_id: string
   output_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2146,7 +2146,7 @@ export def "transcoders-outputs-output-stream-targets listTranscoderOutputOutput
 ]: nothing -> record<created_at: string, id: string, output_id: string, stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list<string>, location: string, name: string, password: string, playback_urls: record<hls: string, wowz: string, ws: string>, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>, stream_target_id: string, updated_at: string, use_stream_target_backup_url: bool> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/outputs/($output_id)/output_stream_targets")
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, output_id: $output_id} | format pattern "/transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2157,7 +2157,7 @@ export def "transcoders-outputs-output-stream-targets listTranscoderOutputOutput
 # POST /transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets
 # operationId: createTranscoderOutputOutputStreamTarget
 # --output_stream_target shape: {stream_target_id: string, use_stream_target_backup_url?: bool}
-export def "transcoders-outputs-output-stream-targets createTranscoderOutputOutputStreamTarget" [
+export def "transcoders-outputs-output-stream-targets create" [
   transcoder_id: string
   output_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2173,8 +2173,8 @@ export def "transcoders-outputs-output-stream-targets createTranscoderOutputOutp
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/outputs/($output_id)/output_stream_targets")
-  let body = {output_stream_target: $output_stream_target} | compact
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, output_id: $output_id} | format pattern "/transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets"))
+  let body = {"output_stream_target": $output_stream_target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2200,7 +2200,7 @@ export def "transcoders-outputs-output-stream-targets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/outputs/($output_id)/output_stream_targets/($stream_target_id)")
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, output_id: $output_id, stream_target_id: $stream_target_id} | format pattern "/transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2225,7 +2225,7 @@ export def "transcoders-outputs-output-stream-targets showTranscoderOutputOutput
 ]: nothing -> record<output_stream_target: record<created_at: string, id: string, output_id: string, stream_target: record<backup_url: string, chunk_size: string, connection_code: string, connection_code_expires_at: string, created_at: string, enable_hls: bool, enabled: bool, hds_playback_url: string, hls_playback_url: string, id: string, ingest_ip_whitelist: list, location: string, name: string, password: string, playback_urls: record, primary_url: string, provider: string, region_override: string, rtmp_playback_url: string, secure_ingest_query_param: string, source_delivery_method: string, source_url: string, stream_name: string, type: string, updated_at: string, use_cors: bool, use_https: bool, use_secure_ingest: bool, username: string>, stream_target_id: string, updated_at: string, use_stream_target_backup_url: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/outputs/($output_id)/output_stream_targets/($stream_target_id)")
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, output_id: $output_id, stream_target_id: $stream_target_id} | format pattern "/transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2236,7 +2236,7 @@ export def "transcoders-outputs-output-stream-targets showTranscoderOutputOutput
 # PATCH /transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}
 # operationId: updateTranscoderOutputOutputStreamTarget
 # --output_stream_target shape: {stream_target_id: string, use_stream_target_backup_url?: bool}
-export def "transcoders-outputs-output-stream-targets updateTranscoderOutputOutputStreamTarget" [
+export def "transcoders-outputs-output-stream-targets update" [
   transcoder_id: string
   output_id: string
   stream_target_id: string
@@ -2253,8 +2253,8 @@ export def "transcoders-outputs-output-stream-targets updateTranscoderOutputOutp
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/outputs/($output_id)/output_stream_targets/($stream_target_id)")
-  let body = {output_stream_target: $output_stream_target} | compact
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, output_id: $output_id, stream_target_id: $stream_target_id} | format pattern "/transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}"))
+  let body = {"output_stream_target": $output_stream_target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2265,7 +2265,7 @@ export def "transcoders-outputs-output-stream-targets updateTranscoderOutputOutp
 #
 # PUT /transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}/disable
 # operationId: disableTranscoderOutputOutputStreamTarget
-export def "transcoders-outputs-output-stream-targets-disable disableTranscoderOutputOutputStreamTarget" [
+export def "transcoders-outputs-output-stream-targets-disable disable" [
   transcoder_id: string
   output_id: string
   stream_target_id: string
@@ -2280,7 +2280,7 @@ export def "transcoders-outputs-output-stream-targets-disable disableTranscoderO
 ]: nothing -> record<stream_target: record<state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/outputs/($output_id)/output_stream_targets/($stream_target_id)/disable")
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, output_id: $output_id, stream_target_id: $stream_target_id} | format pattern "/transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2290,7 +2290,7 @@ export def "transcoders-outputs-output-stream-targets-disable disableTranscoderO
 #
 # PUT /transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}/enable
 # operationId: enableTranscoderOutputOutputStreamTarget
-export def "transcoders-outputs-output-stream-targets-enable enableTranscoderOutputOutputStreamTarget" [
+export def "transcoders-outputs-output-stream-targets-enable enable" [
   transcoder_id: string
   output_id: string
   stream_target_id: string
@@ -2305,7 +2305,7 @@ export def "transcoders-outputs-output-stream-targets-enable enableTranscoderOut
 ]: nothing -> record<stream_target: record<state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/outputs/($output_id)/output_stream_targets/($stream_target_id)/enable")
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, output_id: $output_id, stream_target_id: $stream_target_id} | format pattern "/transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2315,7 +2315,7 @@ export def "transcoders-outputs-output-stream-targets-enable enableTranscoderOut
 #
 # PUT /transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}/restart
 # operationId: restartTranscoderOutputOutputStreamTarget
-export def "transcoders-outputs-output-stream-targets-restart restartTranscoderOutputOutputStreamTarget" [
+export def "transcoders-outputs-output-stream-targets-restart restart" [
   transcoder_id: string
   output_id: string
   stream_target_id: string
@@ -2330,7 +2330,7 @@ export def "transcoders-outputs-output-stream-targets-restart restartTranscoderO
 ]: nothing -> record<stream_target: record<state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/outputs/($output_id)/output_stream_targets/($stream_target_id)/restart")
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, output_id: $output_id, stream_target_id: $stream_target_id} | format pattern "/transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}/restart"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2340,7 +2340,7 @@ export def "transcoders-outputs-output-stream-targets-restart restartTranscoderO
 #
 # GET /transcoders/{transcoder_id}/properties
 # operationId: listTranscoderProperties
-export def "transcoders-properties listTranscoderProperties" [
+export def "transcoders-properties list" [
   transcoder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2353,7 +2353,7 @@ export def "transcoders-properties listTranscoderProperties" [
 ]: nothing -> record<properties: table<key: string, section: string, transcoder_id: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/properties")
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id} | format pattern "/transcoders/{transcoder_id}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2364,7 +2364,7 @@ export def "transcoders-properties listTranscoderProperties" [
 # POST /transcoders/{transcoder_id}/properties
 # operationId: createTranscoderProperty
 # --property shape: {key: string, section: string, value: string}
-export def "transcoders-properties createTranscoderProperty" [
+export def "transcoders-properties create-transcoder-property" [
   transcoder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2379,8 +2379,8 @@ export def "transcoders-properties createTranscoderProperty" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/properties")
-  let body = {property: $property} | compact
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id} | format pattern "/transcoders/{transcoder_id}/properties"))
+  let body = {"property": $property} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2391,7 +2391,7 @@ export def "transcoders-properties createTranscoderProperty" [
 #
 # DELETE /transcoders/{transcoder_id}/properties/{id}
 # operationId: deleteTranscoderProperty
-export def "transcoders-properties delete" [
+export def "transcoders-properties delete-transcoder-property" [
   transcoder_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2405,7 +2405,7 @@ export def "transcoders-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/properties/($id)")
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, id: $id} | format pattern "/transcoders/{transcoder_id}/properties/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2429,7 +2429,7 @@ export def "transcoders-properties showTranscoderProperty" [
 ]: nothing -> record<property: record<key: string, section: string, transcoder_id: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/properties/($id)")
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, id: $id} | format pattern "/transcoders/{transcoder_id}/properties/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2455,7 +2455,7 @@ export def "transcoders-uptimes indexUptimes" [
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/uptimes" $qp)
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id} | format pattern "/transcoders/{transcoder_id}/uptimes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2479,7 +2479,7 @@ export def "transcoders-uptimes showUptime" [
 ]: nothing -> record<billed: bool, created_at: string, ended_at: string, id: string, running: bool, started_at: string, transcoder_id: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/uptimes/($id)")
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, id: $id} | format pattern "/transcoders/{transcoder_id}/uptimes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2505,7 +2505,7 @@ export def "transcoders-uptimes-metrics-current showUptimeMetricsCurrent" [
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/uptimes/($id)/metrics/current" $qp)
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, id: $id} | format pattern "/transcoders/{transcoder_id}/uptimes/{id}/metrics/current") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2533,7 +2533,7 @@ export def "transcoders-uptimes-metrics-historic showUptimeMetricsHistoric" [
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/transcoders/($transcoder_id)/uptimes/($id)/metrics/historic" $qp)
+  let full_url = (build-url $base ({transcoder_id: $transcoder_id, id: $id} | format pattern "/transcoders/{transcoder_id}/uptimes/{id}/metrics/historic") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2688,7 +2688,7 @@ export def "usage-viewer-data-stream-targets showViewerDataStreamTarget" [
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/usage/viewer_data/stream_targets/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/usage/viewer_data/stream_targets/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -66,15 +66,15 @@ def base-url-completer [] { ["http://cur.us-east-1.amazonaws.com" "http://cur.us
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AWSOrigamiServiceGatewayService.DeleteReportDefinition"] }
-def X-Amz-Target-completer-1 [] { ["AWSOrigamiServiceGatewayService.DescribeReportDefinitions"] }
-def X-Amz-Target-completer-2 [] { ["AWSOrigamiServiceGatewayService.ModifyReportDefinition"] }
-def X-Amz-Target-completer-3 [] { ["AWSOrigamiServiceGatewayService.PutReportDefinition"] }
+def x-amz-target-completer [] { ["AWSOrigamiServiceGatewayService.DeleteReportDefinition"] }
+def x-amz-target-completer-1 [] { ["AWSOrigamiServiceGatewayService.DescribeReportDefinitions"] }
+def x-amz-target-completer-2 [] { ["AWSOrigamiServiceGatewayService.ModifyReportDefinition"] }
+def x-amz-target-completer-3 [] { ["AWSOrigamiServiceGatewayService.PutReportDefinition"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-origami-service-gateway-service-delete-report-definition DeleteReportDefinition" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-origami-service-gateway-service-delete-report-definition delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +98,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AWSOrigamiServiceGatewayService.DeleteReportDefinition
 # operationId: DeleteReportDefinition
-export def "x-amz-target-aws-origami-service-gateway-service-delete-report-definition DeleteReportDefinition" [
+export def "x-amz-target-aws-origami-service-gateway-service-delete-report-definition delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,23 +107,23 @@ export def "x-amz-target-aws-origami-service-gateway-service-delete-report-defin
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  --ReportName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  --report-name: any
 ]: any -> record<ResponseMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSOrigamiServiceGatewayService.DeleteReportDefinition")
-  let body = {ReportName: $ReportName} | compact
+  let body = {"ReportName": $report_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -134,7 +134,7 @@ export def "x-amz-target-aws-origami-service-gateway-service-delete-report-defin
 #
 # POST /#X-Amz-Target=AWSOrigamiServiceGatewayService.DescribeReportDefinitions
 # operationId: DescribeReportDefinitions
-export def "x-amz-target-aws-origami-service-gateway-service-describe-report-definitions DescribeReportDefinitions" [
+export def "x-amz-target-aws-origami-service-gateway-service-describe-report-definitions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,27 +143,27 @@ export def "x-amz-target-aws-origami-service-gateway-service-describe-report-def
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  --MaxResults: int # The maximum number of results that AWS returns for the operation.
-  --NextToken: string # A generic string.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  --max-results: int # The maximum number of results that AWS returns for the operation.
+  --next-token: string # A generic string.
 ]: any -> record<ReportDefinitions: record, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSOrigamiServiceGatewayService.DescribeReportDefinitions" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -175,7 +175,7 @@ export def "x-amz-target-aws-origami-service-gateway-service-describe-report-def
 # POST /#X-Amz-Target=AWSOrigamiServiceGatewayService.ModifyReportDefinition
 # operationId: ModifyReportDefinition
 # --ReportDefinition shape: {ReportName: string, TimeUnit: "HOURLY"|"DAILY"|"MONTHLY", Format: "textORcsv"|"Parquet", Compression: "ZIP"|"GZIP"|"Parquet", AdditionalSchemaElements: any, S3Bucket: string, S3Prefix: string, S3Region: "af-south-1"|"ap-east-1"|"ap-south-1"|"ap-southeast-1"|"ap-southeast-2"|"ap-southeast-3"|"ap-northeast-1"|"ap-northeast-2"|"ap-northeast-3"|"ca-central-1"|"eu-central-1"|"eu-west-1"|"eu-west-2"|"eu-west-3"|"eu-north-1"|"eu-south-1"|"eu-south-2"|"me-central-1"|"me-south-1"|"sa-east-1"|"us-east-1"|"us-east-2"|"us-west-1"|"us-west-2"|"cn-north-1"|"cn-northwest-1", AdditionalArtifacts?: any, RefreshClosedReports?: any, ReportVersioning?: any, BillingViewArn?: any}
-export def "x-amz-target-aws-origami-service-gateway-service-modify-report-definition ModifyReportDefinition" [
+export def "x-amz-target-aws-origami-service-gateway-service-modify-report-definition post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,24 +184,24 @@ export def "x-amz-target-aws-origami-service-gateway-service-modify-report-defin
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  ReportName: string # The name of the report that you want to create. The name must be unique, is case sensitive, and can't include spaces. 
-  ReportDefinition: record # The definition of AWS Cost and Usage Report. You can specify the report name, time unit, report format, compression format, S3 bucket, additional artifacts, and schema elements in the definition.  — shape: {ReportName: string, TimeUnit: "HOURLY"|"DAILY"|"MONTHLY", Format: "textORcsv"|"Parquet", Compression: "ZIP"|"GZIP"|"Parquet", AdditionalSchemaElements: any, S3Bucket: string, S3Prefix: string, S3Region: "af-south-1"|"ap-east-1"|"ap-south-1"|"ap-southeast-1"|"ap-southeast-2"|"ap-southeast-3"|"ap-northeast-1"|"ap-northeast-2"|"ap-northeast-3"|"ca-central-1"|"eu-central-1"|"eu-west-1"|"eu-west-2"|"eu-west-3"|"eu-north-1"|"eu-south-1"|"eu-south-2"|"me-central-1"|"me-south-1"|"sa-east-1"|"us-east-1"|"us-east-2"|"us-west-1"|"us-west-2"|"cn-north-1"|"cn-northwest-1", AdditionalArtifacts?: any, RefreshClosedReports?: any, ReportVersioning?: any, BillingViewArn?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  report_name: string # The name of the report that you want to create. The name must be unique, is case sensitive, and can't include spaces. 
+  report_definition: record # The definition of AWS Cost and Usage Report. You can specify the report name, time unit, report format, compression format, S3 bucket, additional artifacts, and schema elements in the definition.  — shape: {ReportName: string, TimeUnit: "HOURLY"|"DAILY"|"MONTHLY", Format: "textORcsv"|"Parquet", Compression: "ZIP"|"GZIP"|"Parquet", AdditionalSchemaElements: any, S3Bucket: string, S3Prefix: string, S3Region: "af-south-1"|"ap-east-1"|"ap-south-1"|"ap-southeast-1"|"ap-southeast-2"|"ap-southeast-3"|"ap-northeast-1"|"ap-northeast-2"|"ap-northeast-3"|"ca-central-1"|"eu-central-1"|"eu-west-1"|"eu-west-2"|"eu-west-3"|"eu-north-1"|"eu-south-1"|"eu-south-2"|"me-central-1"|"me-south-1"|"sa-east-1"|"us-east-1"|"us-east-2"|"us-west-1"|"us-west-2"|"cn-north-1"|"cn-northwest-1", AdditionalArtifacts?: any, RefreshClosedReports?: any, ReportVersioning?: any, BillingViewArn?: any}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSOrigamiServiceGatewayService.ModifyReportDefinition")
-  let body = {ReportName: $ReportName, ReportDefinition: $ReportDefinition} | compact
+  let body = {"ReportName": $report_name, "ReportDefinition": $report_definition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,7 +212,7 @@ export def "x-amz-target-aws-origami-service-gateway-service-modify-report-defin
 #
 # POST /#X-Amz-Target=AWSOrigamiServiceGatewayService.PutReportDefinition
 # operationId: PutReportDefinition
-export def "x-amz-target-aws-origami-service-gateway-service-put-report-definition PutReportDefinition" [
+export def "x-amz-target-aws-origami-service-gateway-service-put-report-definition update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,23 +221,23 @@ export def "x-amz-target-aws-origami-service-gateway-service-put-report-definiti
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  ReportDefinition: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  report_definition: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSOrigamiServiceGatewayService.PutReportDefinition")
-  let body = {ReportDefinition: $ReportDefinition} | compact
+  let body = {"ReportDefinition": $report_definition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

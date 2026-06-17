@@ -68,14 +68,14 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def xgafv-completer [] { ["1" "2"] }
 def alt-completer [] { ["json" "media" "proto"] }
-def courseState-completer [] { ["ACTIVE" "ARCHIVED" "COURSE_STATE_UNSPECIFIED" "DECLINED" "PROVISIONED" "SUSPENDED"] }
-def assigneeMode-completer [] { ["ALL_STUDENTS" "ASSIGNEE_MODE_UNSPECIFIED" "INDIVIDUAL_STUDENTS"] }
+def course-state-completer [] { ["ACTIVE" "ARCHIVED" "COURSE_STATE_UNSPECIFIED" "DECLINED" "PROVISIONED" "SUSPENDED"] }
+def assignee-mode-completer [] { ["ALL_STUDENTS" "ASSIGNEE_MODE_UNSPECIFIED" "INDIVIDUAL_STUDENTS"] }
 def state-completer [] { ["ANNOUNCEMENT_STATE_UNSPECIFIED" "DELETED" "DRAFT" "PUBLISHED"] }
 def state-completer-1 [] { ["COURSE_WORK_STATE_UNSPECIFIED" "DELETED" "DRAFT" "PUBLISHED"] }
-def submissionModificationMode-completer [] { ["MODIFIABLE" "MODIFIABLE_UNTIL_TURNED_IN" "SUBMISSION_MODIFICATION_MODE_UNSPECIFIED"] }
-def workType-completer [] { ["ASSIGNMENT" "COURSE_WORK_TYPE_UNSPECIFIED" "MULTIPLE_CHOICE_QUESTION" "SHORT_ANSWER_QUESTION"] }
+def submission-modification-mode-completer [] { ["MODIFIABLE" "MODIFIABLE_UNTIL_TURNED_IN" "SUBMISSION_MODIFICATION_MODE_UNSPECIFIED"] }
+def work-type-completer [] { ["ASSIGNMENT" "COURSE_WORK_TYPE_UNSPECIFIED" "MULTIPLE_CHOICE_QUESTION" "SHORT_ANSWER_QUESTION"] }
 def late-completer [] { ["LATE_ONLY" "LATE_VALUES_UNSPECIFIED" "NOT_LATE_ONLY"] }
-def courseWorkType-completer [] { ["ASSIGNMENT" "COURSE_WORK_TYPE_UNSPECIFIED" "MULTIPLE_CHOICE_QUESTION" "SHORT_ANSWER_QUESTION"] }
+def course-work-type-completer [] { ["ASSIGNMENT" "COURSE_WORK_TYPE_UNSPECIFIED" "MULTIPLE_CHOICE_QUESTION" "SHORT_ANSWER_QUESTION"] }
 def state-completer-2 [] { ["CREATED" "NEW" "RECLAIMED_BY_STUDENT" "RETURNED" "SUBMISSION_STATE_UNSPECIFIED" "TURNED_IN"] }
 def state-completer-3 [] { ["COURSEWORK_MATERIAL_STATE_UNSPECIFIED" "DELETED" "DRAFT" "PUBLISHED"] }
 def role-completer [] { ["COURSE_ROLE_UNSPECIFIED" "OWNER" "STUDENT" "TEACHER"] }
@@ -124,19 +124,19 @@ export def "courses classroomcourseslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --courseStates: list # Restricts returned courses to those in one of the specified states The default value is ACTIVE, ARCHIVED, PROVISIONED, DECLINED.
-  --pageSize: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
-  --pageToken: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
-  --studentId: string # Restricts returned courses to those having a student with the specified identifier. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
-  --teacherId: string # Restricts returned courses to those having a teacher with the specified identifier. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --course-states: list # Restricts returned courses to those in one of the specified states The default value is ACTIVE, ARCHIVED, PROVISIONED, DECLINED.
+  --page-size: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
+  --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
+  --student-id: string # Restricts returned courses to those having a student with the specified identifier. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
+  --teacher-id: string # Restricts returned courses to those having a teacher with the specified identifier. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
 ]: nothing -> record<courses: table<alternateLink: string, calendarId: string, courseGroupEmail: string, courseMaterialSets: list, courseState: string, creationTime: string, description: string, descriptionHeading: string, enrollmentCode: string, gradebookSettings: record, guardiansEnabled: bool, id: string, name: string, ownerId: string, room: string, section: string, teacherFolder: record, teacherGroupEmail: string, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "courseStates" $courseStates "multi") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "studentId" $studentId "scalar") (serialize-qp "teacherId" $teacherId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "courseStates" $course_states "multi") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "studentId" $student_id "scalar") (serialize-qp "teacherId" $teacher_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/courses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -166,36 +166,36 @@ export def "courses classroomcoursescreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --alternateLink: string # Absolute link to this course in the Classroom web UI. Read-only.
-  --calendarId: string # The Calendar ID for a calendar that all course members can see, to which Classroom adds events for course work and announcements in the course. Read-only.
-  --courseGroupEmail: string # The email address of a Google group containing all members of the course. This group does not accept email and can only be used for permissions. Read-only.
-  --courseMaterialSets: list # Sets of materials that appear on the "about" page of this course. Read-only. — item shape: {materials?: list, title?: string}
-  --courseState: string@courseState-completer # State of the course. If unspecified, the default state is `PROVISIONED`.
-  --creationTime: string # Creation time of the course. Specifying this field in a course update mask results in an error. Read-only. (format: google-datetime)
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --alternate-link: string # Absolute link to this course in the Classroom web UI. Read-only.
+  --calendar-id: string # The Calendar ID for a calendar that all course members can see, to which Classroom adds events for course work and announcements in the course. Read-only.
+  --course-group-email: string # The email address of a Google group containing all members of the course. This group does not accept email and can only be used for permissions. Read-only.
+  --course-material-sets: list # Sets of materials that appear on the "about" page of this course. Read-only. — item shape: {materials?: list, title?: string}
+  --course-state: string@course-state-completer # State of the course. If unspecified, the default state is `PROVISIONED`.
+  --creation-time: string # Creation time of the course. Specifying this field in a course update mask results in an error. Read-only. (format: google-datetime)
   --description: string # Optional description. For example, "We'll be learning about the structure of living creatures from a combination of textbooks, guest lectures, and lab work. Expect to be excited!" If set, this field must be a valid UTF-8 string and no longer than 30,000 characters.
-  --descriptionHeading: string # Optional heading for the description. For example, "Welcome to 10th Grade Biology." If set, this field must be a valid UTF-8 string and no longer than 3600 characters.
-  --enrollmentCode: string # Enrollment code to use when joining this course. Specifying this field in a course update mask results in an error. Read-only.
-  --gradebookSettings: record # The gradebook settings for a course. See the [help center article](https://support.google.com/edu/classroom/answer/9184995) for details. — shape: {calculationType?: "CALCULATION_TYPE_UNSPECIFIED"|"TOTAL_POINTS"|"WEIGHTED_CATEGORIES", displaySetting?: "DISPLAY_SETTING_UNSPECIFIED"|"SHOW_OVERALL_GRADE"|"HIDE_OVERALL_GRADE"|"SHOW_TEACHERS_ONLY", gradeCategories?: list}
-  --guardiansEnabled: oneof<nothing, bool> # Whether or not guardian notifications are enabled for this course. Read-only.
+  --description-heading: string # Optional heading for the description. For example, "Welcome to 10th Grade Biology." If set, this field must be a valid UTF-8 string and no longer than 3600 characters.
+  --enrollment-code: string # Enrollment code to use when joining this course. Specifying this field in a course update mask results in an error. Read-only.
+  --gradebook-settings: record # The gradebook settings for a course. See the [help center article](https://support.google.com/edu/classroom/answer/9184995) for details. — shape: {calculationType?: "CALCULATION_TYPE_UNSPECIFIED"|"TOTAL_POINTS"|"WEIGHTED_CATEGORIES", displaySetting?: "DISPLAY_SETTING_UNSPECIFIED"|"SHOW_OVERALL_GRADE"|"HIDE_OVERALL_GRADE"|"SHOW_TEACHERS_ONLY", gradeCategories?: list}
+  --guardians-enabled: oneof<nothing, bool> # Whether or not guardian notifications are enabled for this course. Read-only.
   --id: string # Identifier for this course assigned by Classroom. When creating a course, you may optionally set this identifier to an alias string in the request to create a corresponding alias. The `id` is still assigned by Classroom and cannot be updated after the course is created. Specifying this field in a course update mask results in an error.
   --name: string # Name of the course. For example, "10th Grade Biology". The name is required. It must be between 1 and 750 characters and a valid UTF-8 string.
-  --ownerId: string # The identifier of the owner of a course. When specified as a parameter of a create course request, this field is required. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user This must be set in a create request. Admins can also specify this field in a patch course request to transfer ownership. In other contexts, it is read-only.
+  --owner-id: string # The identifier of the owner of a course. When specified as a parameter of a create course request, this field is required. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user This must be set in a create request. Admins can also specify this field in a patch course request to transfer ownership. In other contexts, it is read-only.
   --room: string # Optional room location. For example, "301". If set, this field must be a valid UTF-8 string and no longer than 650 characters.
   --section: string # Section of the course. For example, "Period 2". If set, this field must be a valid UTF-8 string and no longer than 2800 characters.
-  --teacherFolder: record # Representation of a Google Drive folder. — shape: {alternateLink?: string, id?: string, title?: string}
-  --teacherGroupEmail: string # The email address of a Google group containing all teachers of the course. This group does not accept email and can only be used for permissions. Read-only.
-  --updateTime: string # Time of the most recent update to this course. Specifying this field in a course update mask results in an error. Read-only. (format: google-datetime)
+  --teacher-folder: record # Representation of a Google Drive folder. — shape: {alternateLink?: string, id?: string, title?: string}
+  --teacher-group-email: string # The email address of a Google group containing all teachers of the course. This group does not accept email and can only be used for permissions. Read-only.
+  --update-time: string # Time of the most recent update to this course. Specifying this field in a course update mask results in an error. Read-only. (format: google-datetime)
 ]: any -> record<alternateLink: string, calendarId: string, courseGroupEmail: string, courseMaterialSets: table<materials: list, title: string>, courseState: string, creationTime: string, description: string, descriptionHeading: string, enrollmentCode: string, gradebookSettings: record<calculationType: string, displaySetting: string, gradeCategories: list<record>>, guardiansEnabled: bool, id: string, name: string, ownerId: string, room: string, section: string, teacherFolder: record<alternateLink: string, id: string, title: string>, teacherGroupEmail: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/courses" $qp)
-  let body = {alternateLink: $alternateLink, calendarId: $calendarId, courseGroupEmail: $courseGroupEmail, courseMaterialSets: $courseMaterialSets, courseState: $courseState, creationTime: $creationTime, description: $description, descriptionHeading: $descriptionHeading, enrollmentCode: $enrollmentCode, gradebookSettings: $gradebookSettings, guardiansEnabled: $guardiansEnabled, id: $id, name: $name, ownerId: $ownerId, room: $room, section: $section, teacherFolder: $teacherFolder, teacherGroupEmail: $teacherGroupEmail, updateTime: $updateTime} | compact
+  let body = {"alternateLink": $alternate_link, "calendarId": $calendar_id, "courseGroupEmail": $course_group_email, "courseMaterialSets": $course_material_sets, "courseState": $course_state, "creationTime": $creation_time, "description": $description, "descriptionHeading": $description_heading, "enrollmentCode": $enrollment_code, "gradebookSettings": $gradebook_settings, "guardiansEnabled": $guardians_enabled, "id": $id, "name": $name, "ownerId": $owner_id, "room": $room, "section": $section, "teacherFolder": $teacher_folder, "teacherGroupEmail": $teacher_group_email, "updateTime": $update_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -207,7 +207,7 @@ export def "courses classroomcoursescreate" [
 # GET /v1/courses/{courseId}/aliases
 # operationId: classroom.courses.aliases.list
 export def "courses-aliases classroomcoursesaliaseslist" [
-  courseId: string
+  course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,17 +223,17 @@ export def "courses-aliases classroomcoursesaliaseslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --pageSize: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
-  --pageToken: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --page-size: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
+  --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
 ]: nothing -> record<aliases: table<alias: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/aliases" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id} | format pattern "/v1/courses/{course_id}/aliases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,7 +244,7 @@ export def "courses-aliases classroomcoursesaliaseslist" [
 # POST /v1/courses/{courseId}/aliases
 # operationId: classroom.courses.aliases.create
 export def "courses-aliases classroomcoursesaliasescreate" [
-  courseId: string
+  course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,18 +260,18 @@ export def "courses-aliases classroomcoursesaliasescreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --alias: string # Alias string. The format of the string indicates the desired alias scoping. * `d:` indicates a domain-scoped alias. Example: `d:math_101` * `p:` indicates a project-scoped alias. Example: `p:abc123` This field has a maximum length of 256 characters.
 ]: any -> record<alias: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/aliases" $qp)
-  let body = {alias: $alias} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id} | format pattern "/v1/courses/{course_id}/aliases") $qp)
+  let body = {"alias": $alias} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -283,7 +283,7 @@ export def "courses-aliases classroomcoursesaliasescreate" [
 # DELETE /v1/courses/{courseId}/aliases/{alias}
 # operationId: classroom.courses.aliases.delete
 export def "courses-aliases classroomcoursesaliasesdelete" [
-  courseId: string
+  course_id: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,15 +300,15 @@ export def "courses-aliases classroomcoursesaliasesdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/aliases/($alias)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, alias: $alias} | format pattern "/v1/courses/{course_id}/aliases/{alias}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -319,7 +319,7 @@ export def "courses-aliases classroomcoursesaliasesdelete" [
 # GET /v1/courses/{courseId}/announcements
 # operationId: classroom.courses.announcements.list
 export def "courses-announcements classroomcoursesannouncementslist" [
-  courseId: string
+  course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,19 +335,19 @@ export def "courses-announcements classroomcoursesannouncementslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --announcementStates: list # Restriction on the `state` of announcements returned. If this argument is left unspecified, the default value is `PUBLISHED`.
-  --orderBy: string # Optional sort ordering for results. A comma-separated list of fields with an optional sort direction keyword. Supported field is `updateTime`. Supported direction keywords are `asc` and `desc`. If not specified, `updateTime desc` is the default behavior. Examples: `updateTime asc`, `updateTime`
-  --pageSize: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
-  --pageToken: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --announcement-states: list # Restriction on the `state` of announcements returned. If this argument is left unspecified, the default value is `PUBLISHED`.
+  --order-by: string # Optional sort ordering for results. A comma-separated list of fields with an optional sort direction keyword. Supported field is `updateTime`. Supported direction keywords are `asc` and `desc`. If not specified, `updateTime desc` is the default behavior. Examples: `updateTime asc`, `updateTime`
+  --page-size: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
+  --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
 ]: nothing -> record<announcements: table<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, id: string, individualStudentsOptions: record, materials: list, scheduledTime: string, state: string, text: string, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "announcementStates" $announcementStates "multi") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/announcements" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "announcementStates" $announcement_states "multi") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id} | format pattern "/v1/courses/{course_id}/announcements") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -360,7 +360,7 @@ export def "courses-announcements classroomcoursesannouncementslist" [
 # --individualStudentsOptions shape: {studentIds?: list}
 # --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
 export def "courses-announcements classroomcoursesannouncementscreate" [
-  courseId: string
+  course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,29 +376,29 @@ export def "courses-announcements classroomcoursesannouncementscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --alternateLink: string # Absolute link to this announcement in the Classroom web UI. This is only populated if `state` is `PUBLISHED`. Read-only.
-  --assigneeMode: string@assigneeMode-completer # Assignee mode of the announcement. If unspecified, the default value is `ALL_STUDENTS`.
-  --body-courseId: string # Identifier of the course. Read-only.
-  --creationTime: string # Timestamp when this announcement was created. Read-only. (format: google-datetime)
-  --creatorUserId: string # Identifier for the user that created the announcement. Read-only.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --alternate-link: string # Absolute link to this announcement in the Classroom web UI. This is only populated if `state` is `PUBLISHED`. Read-only.
+  --assignee-mode: string@assignee-mode-completer # Assignee mode of the announcement. If unspecified, the default value is `ALL_STUDENTS`.
+  --body-course-id: string # Identifier of the course. Read-only.
+  --creation-time: string # Timestamp when this announcement was created. Read-only. (format: google-datetime)
+  --creator-user-id: string # Identifier for the user that created the announcement. Read-only.
   --id: string # Classroom-assigned identifier of this announcement, unique per course. Read-only.
-  --individualStudentsOptions: record # Assignee details about a coursework/announcement. This field is set if and only if `assigneeMode` is `INDIVIDUAL_STUDENTS`. — shape: {studentIds?: list}
+  --individual-students-options: record # Assignee details about a coursework/announcement. This field is set if and only if `assigneeMode` is `INDIVIDUAL_STUDENTS`. — shape: {studentIds?: list}
   --materials: list # Additional materials. Announcements must have no more than 20 material items. — item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
-  --scheduledTime: string # Optional timestamp when this announcement is scheduled to be published. (format: google-datetime)
+  --scheduled-time: string # Optional timestamp when this announcement is scheduled to be published. (format: google-datetime)
   --state: string@state-completer # Status of this announcement. If unspecified, the default state is `DRAFT`.
   --text: string # Description of this announcement. The text must be a valid UTF-8 string containing no more than 30,000 characters.
-  --updateTime: string # Timestamp of the most recent change to this announcement. Read-only. (format: google-datetime)
+  --update-time: string # Timestamp of the most recent change to this announcement. Read-only. (format: google-datetime)
 ]: any -> record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, text: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/announcements" $qp)
-  let body = {alternateLink: $alternateLink, assigneeMode: $assigneeMode, courseId: $body_courseId, creationTime: $creationTime, creatorUserId: $creatorUserId, id: $id, individualStudentsOptions: $individualStudentsOptions, materials: $materials, scheduledTime: $scheduledTime, state: $state, text: $text, updateTime: $updateTime} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id} | format pattern "/v1/courses/{course_id}/announcements") $qp)
+  let body = {"alternateLink": $alternate_link, "assigneeMode": $assignee_mode, "courseId": $body_course_id, "creationTime": $creation_time, "creatorUserId": $creator_user_id, "id": $id, "individualStudentsOptions": $individual_students_options, "materials": $materials, "scheduledTime": $scheduled_time, "state": $state, "text": $text, "updateTime": $update_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -410,7 +410,7 @@ export def "courses-announcements classroomcoursesannouncementscreate" [
 # DELETE /v1/courses/{courseId}/announcements/{id}
 # operationId: classroom.courses.announcements.delete
 export def "courses-announcements classroomcoursesannouncementsdelete" [
-  courseId: string
+  course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -427,15 +427,15 @@ export def "courses-announcements classroomcoursesannouncementsdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/announcements/($id)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, id: $id} | format pattern "/v1/courses/{course_id}/announcements/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -446,7 +446,7 @@ export def "courses-announcements classroomcoursesannouncementsdelete" [
 # GET /v1/courses/{courseId}/announcements/{id}
 # operationId: classroom.courses.announcements.get
 export def "courses-announcements classroomcoursesannouncementsget" [
-  courseId: string
+  course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -463,15 +463,15 @@ export def "courses-announcements classroomcoursesannouncementsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, text: string, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/announcements/($id)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, id: $id} | format pattern "/v1/courses/{course_id}/announcements/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -484,7 +484,7 @@ export def "courses-announcements classroomcoursesannouncementsget" [
 # --individualStudentsOptions shape: {studentIds?: list}
 # --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
 export def "courses-announcements classroomcoursesannouncementspatch" [
-  courseId: string
+  course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -501,30 +501,30 @@ export def "courses-announcements classroomcoursesannouncementspatch" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --updateMask: string # Mask that identifies which fields on the announcement to update. This field is required to do an update. The update fails if invalid fields are specified. If a field supports empty values, it can be cleared by specifying it in the update mask and not in the Announcement object. If a field that does not support empty values is included in the update mask and not set in the Announcement object, an `INVALID_ARGUMENT` error is returned. The following fields may be specified by teachers: * `text` * `state` * `scheduled_time`
-  --alternateLink: string # Absolute link to this announcement in the Classroom web UI. This is only populated if `state` is `PUBLISHED`. Read-only.
-  --assigneeMode: string@assigneeMode-completer # Assignee mode of the announcement. If unspecified, the default value is `ALL_STUDENTS`.
-  --body-courseId: string # Identifier of the course. Read-only.
-  --creationTime: string # Timestamp when this announcement was created. Read-only. (format: google-datetime)
-  --creatorUserId: string # Identifier for the user that created the announcement. Read-only.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --update-mask: string # Mask that identifies which fields on the announcement to update. This field is required to do an update. The update fails if invalid fields are specified. If a field supports empty values, it can be cleared by specifying it in the update mask and not in the Announcement object. If a field that does not support empty values is included in the update mask and not set in the Announcement object, an `INVALID_ARGUMENT` error is returned. The following fields may be specified by teachers: * `text` * `state` * `scheduled_time`
+  --alternate-link: string # Absolute link to this announcement in the Classroom web UI. This is only populated if `state` is `PUBLISHED`. Read-only.
+  --assignee-mode: string@assignee-mode-completer # Assignee mode of the announcement. If unspecified, the default value is `ALL_STUDENTS`.
+  --body-course-id: string # Identifier of the course. Read-only.
+  --creation-time: string # Timestamp when this announcement was created. Read-only. (format: google-datetime)
+  --creator-user-id: string # Identifier for the user that created the announcement. Read-only.
   --body-id: string # Classroom-assigned identifier of this announcement, unique per course. Read-only.
-  --individualStudentsOptions: record # Assignee details about a coursework/announcement. This field is set if and only if `assigneeMode` is `INDIVIDUAL_STUDENTS`. — shape: {studentIds?: list}
+  --individual-students-options: record # Assignee details about a coursework/announcement. This field is set if and only if `assigneeMode` is `INDIVIDUAL_STUDENTS`. — shape: {studentIds?: list}
   --materials: list # Additional materials. Announcements must have no more than 20 material items. — item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
-  --scheduledTime: string # Optional timestamp when this announcement is scheduled to be published. (format: google-datetime)
+  --scheduled-time: string # Optional timestamp when this announcement is scheduled to be published. (format: google-datetime)
   --state: string@state-completer # Status of this announcement. If unspecified, the default state is `DRAFT`.
   --text: string # Description of this announcement. The text must be a valid UTF-8 string containing no more than 30,000 characters.
-  --updateTime: string # Timestamp of the most recent change to this announcement. Read-only. (format: google-datetime)
+  --update-time: string # Timestamp of the most recent change to this announcement. Read-only. (format: google-datetime)
 ]: any -> record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, text: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/announcements/($id)" $qp)
-  let body = {alternateLink: $alternateLink, assigneeMode: $assigneeMode, courseId: $body_courseId, creationTime: $creationTime, creatorUserId: $creatorUserId, id: $body_id, individualStudentsOptions: $individualStudentsOptions, materials: $materials, scheduledTime: $scheduledTime, state: $state, text: $text, updateTime: $updateTime} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, id: $id} | format pattern "/v1/courses/{course_id}/announcements/{id}") $qp)
+  let body = {"alternateLink": $alternate_link, "assigneeMode": $assignee_mode, "courseId": $body_course_id, "creationTime": $creation_time, "creatorUserId": $creator_user_id, "id": $body_id, "individualStudentsOptions": $individual_students_options, "materials": $materials, "scheduledTime": $scheduled_time, "state": $state, "text": $text, "updateTime": $update_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -537,7 +537,7 @@ export def "courses-announcements classroomcoursesannouncementspatch" [
 # operationId: classroom.courses.announcements.modifyAssignees
 # --modifyIndividualStudentsOptions shape: {addStudentIds?: list, removeStudentIds?: list}
 export def "courses-announcements classroomcoursesannouncementsmodifyAssignees" [
-  courseId: string
+  course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,19 +554,19 @@ export def "courses-announcements classroomcoursesannouncementsmodifyAssignees" 
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --assigneeMode: string@assigneeMode-completer # Mode of the announcement describing whether it is accessible by all students or specified individual students.
-  --modifyIndividualStudentsOptions: record # Contains fields to add or remove students from a course work or announcement where the `assigneeMode` is set to `INDIVIDUAL_STUDENTS`. — shape: {addStudentIds?: list, removeStudentIds?: list}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --assignee-mode: string@assignee-mode-completer # Mode of the announcement describing whether it is accessible by all students or specified individual students.
+  --modify-individual-students-options: record # Contains fields to add or remove students from a course work or announcement where the `assigneeMode` is set to `INDIVIDUAL_STUDENTS`. — shape: {addStudentIds?: list, removeStudentIds?: list}
 ]: any -> record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, text: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/announcements/($id):modifyAssignees" $qp)
-  let body = {assigneeMode: $assigneeMode, modifyIndividualStudentsOptions: $modifyIndividualStudentsOptions} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, id: $id} | format pattern "/v1/courses/{course_id}/announcements/{id}:modifyAssignees") $qp)
+  let body = {"assigneeMode": $assignee_mode, "modifyIndividualStudentsOptions": $modify_individual_students_options} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -578,7 +578,7 @@ export def "courses-announcements classroomcoursesannouncementsmodifyAssignees" 
 # GET /v1/courses/{courseId}/courseWork
 # operationId: classroom.courses.courseWork.list
 export def "courses-course-work classroomcoursescourseWorklist" [
-  courseId: string
+  course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,19 +594,19 @@ export def "courses-course-work classroomcoursescourseWorklist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --courseWorkStates: list # Restriction on the work status to return. Only courseWork that matches is returned. If unspecified, items with a work status of `PUBLISHED` is returned.
-  --orderBy: string # Optional sort ordering for results. A comma-separated list of fields with an optional sort direction keyword. Supported fields are `updateTime` and `dueDate`. Supported direction keywords are `asc` and `desc`. If not specified, `updateTime desc` is the default behavior. Examples: `dueDate asc,updateTime desc`, `updateTime,dueDate desc`
-  --pageSize: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
-  --pageToken: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --course-work-states: list # Restriction on the work status to return. Only courseWork that matches is returned. If unspecified, items with a work status of `PUBLISHED` is returned.
+  --order-by: string # Optional sort ordering for results. A comma-separated list of fields with an optional sort direction keyword. Supported fields are `updateTime` and `dueDate`. Supported direction keywords are `asc` and `desc`. If not specified, `updateTime desc` is the default behavior. Examples: `dueDate asc,updateTime desc`, `updateTime,dueDate desc`
+  --page-size: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
+  --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
 ]: nothing -> record<courseWork: table<alternateLink: string, assigneeMode: string, assignment: record, associatedWithDeveloper: bool, courseId: string, creationTime: string, creatorUserId: string, description: string, dueDate: record, dueTime: record, gradeCategory: record, id: string, individualStudentsOptions: record, materials: list, maxPoints: float, multipleChoiceQuestion: record, scheduledTime: string, state: string, submissionModificationMode: string, title: string, topicId: string, updateTime: string, workType: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "courseWorkStates" $courseWorkStates "multi") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWork" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "courseWorkStates" $course_work_states "multi") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id} | format pattern "/v1/courses/{course_id}/courseWork") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -624,7 +624,7 @@ export def "courses-course-work classroomcoursescourseWorklist" [
 # --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
 # --multipleChoiceQuestion shape: {choices?: list}
 export def "courses-course-work classroomcoursescourseWorkcreate" [
-  courseId: string
+  course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,40 +640,40 @@ export def "courses-course-work classroomcoursescourseWorkcreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --alternateLink: string # Absolute link to this course work in the Classroom web UI. This is only populated if `state` is `PUBLISHED`. Read-only.
-  --assigneeMode: string@assigneeMode-completer # Assignee mode of the coursework. If unspecified, the default value is `ALL_STUDENTS`.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --alternate-link: string # Absolute link to this course work in the Classroom web UI. This is only populated if `state` is `PUBLISHED`. Read-only.
+  --assignee-mode: string@assignee-mode-completer # Assignee mode of the coursework. If unspecified, the default value is `ALL_STUDENTS`.
   --assignment: record # Additional details for assignments. — shape: {studentWorkFolder?: record}
-  --associatedWithDeveloper: oneof<nothing, bool> # Whether this course work item is associated with the Developer Console project making the request. See CreateCourseWork for more details. Read-only.
-  --body-courseId: string # Identifier of the course. Read-only.
-  --creationTime: string # Timestamp when this course work was created. Read-only. (format: google-datetime)
-  --creatorUserId: string # Identifier for the user that created the coursework. Read-only.
+  --associated-with-developer: oneof<nothing, bool> # Whether this course work item is associated with the Developer Console project making the request. See CreateCourseWork for more details. Read-only.
+  --body-course-id: string # Identifier of the course. Read-only.
+  --creation-time: string # Timestamp when this course work was created. Read-only. (format: google-datetime)
+  --creator-user-id: string # Identifier for the user that created the coursework. Read-only.
   --description: string # Optional description of this course work. If set, the description must be a valid UTF-8 string containing no more than 30,000 characters.
-  --dueDate: record # Represents a whole or partial calendar date, such as a birthday. The time of day and time zone are either specified elsewhere or are insignificant. The date is relative to the Gregorian Calendar. This can represent one of the following: * A full date, with non-zero year, month, and day values. * A month and day, with a zero year (for example, an anniversary). * A year on its own, with a zero month and a zero day. * A year and month, with a zero day (for example, a credit card expiration date). Related types: * google.type.TimeOfDay * google.type.DateTime * google.protobuf.Timestamp — shape: {day?: int, month?: int, year?: int}
-  --dueTime: record # Represents a time of day. The date and time zone are either not significant or are specified elsewhere. An API may choose to allow leap seconds. Related types are google.type.Date and `google.protobuf.Timestamp`. — shape: {hours?: int, minutes?: int, nanos?: int, seconds?: int}
-  --gradeCategory: record # Details for a grade category in a course. Coursework may have zero or one grade category, and the category may be used in computing the overall grade. See the [help center article](https://support.google.com/edu/classroom/answer/9184995) for details. — shape: {defaultGradeDenominator?: int, id?: string, name?: string, weight?: int}
+  --due-date: record # Represents a whole or partial calendar date, such as a birthday. The time of day and time zone are either specified elsewhere or are insignificant. The date is relative to the Gregorian Calendar. This can represent one of the following: * A full date, with non-zero year, month, and day values. * A month and day, with a zero year (for example, an anniversary). * A year on its own, with a zero month and a zero day. * A year and month, with a zero day (for example, a credit card expiration date). Related types: * google.type.TimeOfDay * google.type.DateTime * google.protobuf.Timestamp — shape: {day?: int, month?: int, year?: int}
+  --due-time: record # Represents a time of day. The date and time zone are either not significant or are specified elsewhere. An API may choose to allow leap seconds. Related types are google.type.Date and `google.protobuf.Timestamp`. — shape: {hours?: int, minutes?: int, nanos?: int, seconds?: int}
+  --grade-category: record # Details for a grade category in a course. Coursework may have zero or one grade category, and the category may be used in computing the overall grade. See the [help center article](https://support.google.com/edu/classroom/answer/9184995) for details. — shape: {defaultGradeDenominator?: int, id?: string, name?: string, weight?: int}
   --id: string # Classroom-assigned identifier of this course work, unique per course. Read-only.
-  --individualStudentsOptions: record # Assignee details about a coursework/announcement. This field is set if and only if `assigneeMode` is `INDIVIDUAL_STUDENTS`. — shape: {studentIds?: list}
+  --individual-students-options: record # Assignee details about a coursework/announcement. This field is set if and only if `assigneeMode` is `INDIVIDUAL_STUDENTS`. — shape: {studentIds?: list}
   --materials: list # Additional materials. CourseWork must have no more than 20 material items. — item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
-  --maxPoints: float # Maximum grade for this course work. If zero or unspecified, this assignment is considered ungraded. This must be a non-negative integer value. (format: double)
-  --multipleChoiceQuestion: record # Additional details for multiple-choice questions. — shape: {choices?: list}
-  --scheduledTime: string # Optional timestamp when this course work is scheduled to be published. (format: google-datetime)
+  --max-points: float # Maximum grade for this course work. If zero or unspecified, this assignment is considered ungraded. This must be a non-negative integer value. (format: double)
+  --multiple-choice-question: record # Additional details for multiple-choice questions. — shape: {choices?: list}
+  --scheduled-time: string # Optional timestamp when this course work is scheduled to be published. (format: google-datetime)
   --state: string@state-completer-1 # Status of this course work. If unspecified, the default state is `DRAFT`.
-  --submissionModificationMode: string@submissionModificationMode-completer # Setting to determine when students are allowed to modify submissions. If unspecified, the default value is `MODIFIABLE_UNTIL_TURNED_IN`.
+  --submission-modification-mode: string@submission-modification-mode-completer # Setting to determine when students are allowed to modify submissions. If unspecified, the default value is `MODIFIABLE_UNTIL_TURNED_IN`.
   --title: string # Title of this course work. The title must be a valid UTF-8 string containing between 1 and 3000 characters.
-  --topicId: string # Identifier for the topic that this coursework is associated with. Must match an existing topic in the course.
-  --updateTime: string # Timestamp of the most recent change to this course work. Read-only. (format: google-datetime)
-  --workType: string@workType-completer # Type of this course work. The type is set when the course work is created and cannot be changed.
+  --topic-id: string # Identifier for the topic that this coursework is associated with. Must match an existing topic in the course.
+  --update-time: string # Timestamp of the most recent change to this course work. Read-only. (format: google-datetime)
+  --work-type: string@work-type-completer # Type of this course work. The type is set when the course work is created and cannot be changed.
 ]: any -> record<alternateLink: string, assigneeMode: string, assignment: record<studentWorkFolder: record<alternateLink: string, id: string, title: string>>, associatedWithDeveloper: bool, courseId: string, creationTime: string, creatorUserId: string, description: string, dueDate: record<day: int, month: int, year: int>, dueTime: record<hours: int, minutes: int, nanos: int, seconds: int>, gradeCategory: record<defaultGradeDenominator: int, id: string, name: string, weight: int>, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, maxPoints: float, multipleChoiceQuestion: record<choices: list<string>>, scheduledTime: string, state: string, submissionModificationMode: string, title: string, topicId: string, updateTime: string, workType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWork" $qp)
-  let body = {alternateLink: $alternateLink, assigneeMode: $assigneeMode, assignment: $assignment, associatedWithDeveloper: $associatedWithDeveloper, courseId: $body_courseId, creationTime: $creationTime, creatorUserId: $creatorUserId, description: $description, dueDate: $dueDate, dueTime: $dueTime, gradeCategory: $gradeCategory, id: $id, individualStudentsOptions: $individualStudentsOptions, materials: $materials, maxPoints: $maxPoints, multipleChoiceQuestion: $multipleChoiceQuestion, scheduledTime: $scheduledTime, state: $state, submissionModificationMode: $submissionModificationMode, title: $title, topicId: $topicId, updateTime: $updateTime, workType: $workType} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id} | format pattern "/v1/courses/{course_id}/courseWork") $qp)
+  let body = {"alternateLink": $alternate_link, "assigneeMode": $assignee_mode, "assignment": $assignment, "associatedWithDeveloper": $associated_with_developer, "courseId": $body_course_id, "creationTime": $creation_time, "creatorUserId": $creator_user_id, "description": $description, "dueDate": $due_date, "dueTime": $due_time, "gradeCategory": $grade_category, "id": $id, "individualStudentsOptions": $individual_students_options, "materials": $materials, "maxPoints": $max_points, "multipleChoiceQuestion": $multiple_choice_question, "scheduledTime": $scheduled_time, "state": $state, "submissionModificationMode": $submission_modification_mode, "title": $title, "topicId": $topic_id, "updateTime": $update_time, "workType": $work_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -685,8 +685,8 @@ export def "courses-course-work classroomcoursescourseWorkcreate" [
 # GET /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions
 # operationId: classroom.courses.courseWork.studentSubmissions.list
 export def "courses-course-work-student-submissions classroomcoursescourseWorkstudentSubmissionslist" [
-  courseId: string
-  courseWorkId: string
+  course_id: string
+  course_work_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -702,20 +702,20 @@ export def "courses-course-work-student-submissions classroomcoursescourseWorkst
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --late: string@late-completer # Requested lateness value. If specified, returned student submissions are restricted by the requested value. If unspecified, submissions are returned regardless of `late` value.
-  --pageSize: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
-  --pageToken: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
+  --page-size: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
+  --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
   --states: list # Requested submission states. If specified, returned student submissions match one of the specified submission states.
-  --userId: string # Optional argument to restrict returned student work to those owned by the student with the specified identifier. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
+  --user-id: string # Optional argument to restrict returned student work to those owned by the student with the specified identifier. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
 ]: nothing -> record<nextPageToken: string, studentSubmissions: table<alternateLink: string, assignedGrade: float, assignmentSubmission: record, associatedWithDeveloper: bool, courseId: string, courseWorkId: string, courseWorkType: string, creationTime: string, draftGrade: float, id: string, late: bool, multipleChoiceSubmission: record, shortAnswerSubmission: record, state: string, submissionHistory: list, updateTime: string, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "late" $late "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "states" $states "multi") (serialize-qp "userId" $userId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWork/($courseWorkId)/studentSubmissions" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "late" $late "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "states" $states "multi") (serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, course_work_id: $course_work_id} | format pattern "/v1/courses/{course_id}/courseWork/{course_work_id}/studentSubmissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -726,8 +726,8 @@ export def "courses-course-work-student-submissions classroomcoursescourseWorkst
 # GET /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}
 # operationId: classroom.courses.courseWork.studentSubmissions.get
 export def "courses-course-work-student-submissions classroomcoursescourseWorkstudentSubmissionsget" [
-  courseId: string
-  courseWorkId: string
+  course_id: string
+  course_work_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -744,15 +744,15 @@ export def "courses-course-work-student-submissions classroomcoursescourseWorkst
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<alternateLink: string, assignedGrade: float, assignmentSubmission: record<attachments: list<record>>, associatedWithDeveloper: bool, courseId: string, courseWorkId: string, courseWorkType: string, creationTime: string, draftGrade: float, id: string, late: bool, multipleChoiceSubmission: record<answer: string>, shortAnswerSubmission: record<answer: string>, state: string, submissionHistory: table<gradeHistory: record, stateHistory: record>, updateTime: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWork/($courseWorkId)/studentSubmissions/($id)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, course_work_id: $course_work_id, id: $id} | format pattern "/v1/courses/{course_id}/courseWork/{course_work_id}/studentSubmissions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -767,8 +767,8 @@ export def "courses-course-work-student-submissions classroomcoursescourseWorkst
 # --shortAnswerSubmission shape: {answer?: string}
 # --submissionHistory item shape: {gradeHistory?: record, stateHistory?: record}
 export def "courses-course-work-student-submissions classroomcoursescourseWorkstudentSubmissionspatch" [
-  courseId: string
-  courseWorkId: string
+  course_id: string
+  course_work_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -785,35 +785,35 @@ export def "courses-course-work-student-submissions classroomcoursescourseWorkst
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --updateMask: string # Mask that identifies which fields on the student submission to update. This field is required to do an update. The update fails if invalid fields are specified. The following fields may be specified by teachers: * `draft_grade` * `assigned_grade`
-  --alternateLink: string # Absolute link to the submission in the Classroom web UI. Read-only.
-  --assignedGrade: float # Optional grade. If unset, no grade was set. This value must be non-negative. Decimal (that is, non-integer) values are allowed, but are rounded to two decimal places. This may be modified only by course teachers. (format: double)
-  --assignmentSubmission: record # Student work for an assignment. — shape: {attachments?: list}
-  --associatedWithDeveloper: oneof<nothing, bool> # Whether this student submission is associated with the Developer Console project making the request. See CreateCourseWork for more details. Read-only.
-  --body-courseId: string # Identifier of the course. Read-only.
-  --body-courseWorkId: string # Identifier for the course work this corresponds to. Read-only.
-  --courseWorkType: string@courseWorkType-completer # Type of course work this submission is for. Read-only.
-  --creationTime: string # Creation time of this submission. This may be unset if the student has not accessed this item. Read-only. (format: google-datetime)
-  --draftGrade: float # Optional pending grade. If unset, no grade was set. This value must be non-negative. Decimal (that is, non-integer) values are allowed, but are rounded to two decimal places. This is only visible to and modifiable by course teachers. (format: double)
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --update-mask: string # Mask that identifies which fields on the student submission to update. This field is required to do an update. The update fails if invalid fields are specified. The following fields may be specified by teachers: * `draft_grade` * `assigned_grade`
+  --alternate-link: string # Absolute link to the submission in the Classroom web UI. Read-only.
+  --assigned-grade: float # Optional grade. If unset, no grade was set. This value must be non-negative. Decimal (that is, non-integer) values are allowed, but are rounded to two decimal places. This may be modified only by course teachers. (format: double)
+  --assignment-submission: record # Student work for an assignment. — shape: {attachments?: list}
+  --associated-with-developer: oneof<nothing, bool> # Whether this student submission is associated with the Developer Console project making the request. See CreateCourseWork for more details. Read-only.
+  --body-course-id: string # Identifier of the course. Read-only.
+  --body-course-work-id: string # Identifier for the course work this corresponds to. Read-only.
+  --course-work-type: string@course-work-type-completer # Type of course work this submission is for. Read-only.
+  --creation-time: string # Creation time of this submission. This may be unset if the student has not accessed this item. Read-only. (format: google-datetime)
+  --draft-grade: float # Optional pending grade. If unset, no grade was set. This value must be non-negative. Decimal (that is, non-integer) values are allowed, but are rounded to two decimal places. This is only visible to and modifiable by course teachers. (format: double)
   --body-id: string # Classroom-assigned Identifier for the student submission. This is unique among submissions for the relevant course work. Read-only.
   --late: oneof<nothing, bool> # Whether this submission is late. Read-only.
-  --multipleChoiceSubmission: record # Student work for a multiple-choice question. — shape: {answer?: string}
-  --shortAnswerSubmission: record # Student work for a short answer question. — shape: {answer?: string}
+  --multiple-choice-submission: record # Student work for a multiple-choice question. — shape: {answer?: string}
+  --short-answer-submission: record # Student work for a short answer question. — shape: {answer?: string}
   --state: string@state-completer-2 # State of this submission. Read-only.
-  --submissionHistory: list # The history of the submission (includes state and grade histories). Read-only. — item shape: {gradeHistory?: record, stateHistory?: record}
-  --updateTime: string # Last update time of this submission. This may be unset if the student has not accessed this item. Read-only. (format: google-datetime)
-  --userId: string # Identifier for the student that owns this submission. Read-only.
+  --submission-history: list # The history of the submission (includes state and grade histories). Read-only. — item shape: {gradeHistory?: record, stateHistory?: record}
+  --update-time: string # Last update time of this submission. This may be unset if the student has not accessed this item. Read-only. (format: google-datetime)
+  --user-id: string # Identifier for the student that owns this submission. Read-only.
 ]: any -> record<alternateLink: string, assignedGrade: float, assignmentSubmission: record<attachments: list<record>>, associatedWithDeveloper: bool, courseId: string, courseWorkId: string, courseWorkType: string, creationTime: string, draftGrade: float, id: string, late: bool, multipleChoiceSubmission: record<answer: string>, shortAnswerSubmission: record<answer: string>, state: string, submissionHistory: table<gradeHistory: record, stateHistory: record>, updateTime: string, userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWork/($courseWorkId)/studentSubmissions/($id)" $qp)
-  let body = {alternateLink: $alternateLink, assignedGrade: $assignedGrade, assignmentSubmission: $assignmentSubmission, associatedWithDeveloper: $associatedWithDeveloper, courseId: $body_courseId, courseWorkId: $body_courseWorkId, courseWorkType: $courseWorkType, creationTime: $creationTime, draftGrade: $draftGrade, id: $body_id, late: $late, multipleChoiceSubmission: $multipleChoiceSubmission, shortAnswerSubmission: $shortAnswerSubmission, state: $state, submissionHistory: $submissionHistory, updateTime: $updateTime, userId: $userId} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, course_work_id: $course_work_id, id: $id} | format pattern "/v1/courses/{course_id}/courseWork/{course_work_id}/studentSubmissions/{id}") $qp)
+  let body = {"alternateLink": $alternate_link, "assignedGrade": $assigned_grade, "assignmentSubmission": $assignment_submission, "associatedWithDeveloper": $associated_with_developer, "courseId": $body_course_id, "courseWorkId": $body_course_work_id, "courseWorkType": $course_work_type, "creationTime": $creation_time, "draftGrade": $draft_grade, "id": $body_id, "late": $late, "multipleChoiceSubmission": $multiple_choice_submission, "shortAnswerSubmission": $short_answer_submission, "state": $state, "submissionHistory": $submission_history, "updateTime": $update_time, "userId": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -826,8 +826,8 @@ export def "courses-course-work-student-submissions classroomcoursescourseWorkst
 # operationId: classroom.courses.courseWork.studentSubmissions.modifyAttachments
 # --addAttachments item shape: {driveFile?: record, form?: record, link?: record, youTubeVideo?: record}
 export def "courses-course-work-student-submissions classroomcoursescourseWorkstudentSubmissionsmodifyAttachments" [
-  courseId: string
-  courseWorkId: string
+  course_id: string
+  course_work_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -844,18 +844,18 @@ export def "courses-course-work-student-submissions classroomcoursescourseWorkst
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --addAttachments: list # Attachments to add. A student submission may not have more than 20 attachments. Form attachments are not supported. — item shape: {driveFile?: record, form?: record, link?: record, youTubeVideo?: record}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --add-attachments: list # Attachments to add. A student submission may not have more than 20 attachments. Form attachments are not supported. — item shape: {driveFile?: record, form?: record, link?: record, youTubeVideo?: record}
 ]: any -> record<alternateLink: string, assignedGrade: float, assignmentSubmission: record<attachments: list<record>>, associatedWithDeveloper: bool, courseId: string, courseWorkId: string, courseWorkType: string, creationTime: string, draftGrade: float, id: string, late: bool, multipleChoiceSubmission: record<answer: string>, shortAnswerSubmission: record<answer: string>, state: string, submissionHistory: table<gradeHistory: record, stateHistory: record>, updateTime: string, userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWork/($courseWorkId)/studentSubmissions/($id):modifyAttachments" $qp)
-  let body = {addAttachments: $addAttachments} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, course_work_id: $course_work_id, id: $id} | format pattern "/v1/courses/{course_id}/courseWork/{course_work_id}/studentSubmissions/{id}:modifyAttachments") $qp)
+  let body = {"addAttachments": $add_attachments} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -867,8 +867,8 @@ export def "courses-course-work-student-submissions classroomcoursescourseWorkst
 # POST /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}:reclaim
 # operationId: classroom.courses.courseWork.studentSubmissions.reclaim
 export def "courses-course-work-student-submissions classroomcoursescourseWorkstudentSubmissionsreclaim" [
-  courseId: string
-  courseWorkId: string
+  course_id: string
+  course_work_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -885,17 +885,17 @@ export def "courses-course-work-student-submissions classroomcoursescourseWorkst
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWork/($courseWorkId)/studentSubmissions/($id):reclaim" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, course_work_id: $course_work_id, id: $id} | format pattern "/v1/courses/{course_id}/courseWork/{course_work_id}/studentSubmissions/{id}:reclaim") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -907,8 +907,8 @@ export def "courses-course-work-student-submissions classroomcoursescourseWorkst
 # POST /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}:return
 # operationId: classroom.courses.courseWork.studentSubmissions.return
 export def "courses-course-work-student-submissions classroomcoursescourseWorkstudentSubmissionsreturn" [
-  courseId: string
-  courseWorkId: string
+  course_id: string
+  course_work_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -925,17 +925,17 @@ export def "courses-course-work-student-submissions classroomcoursescourseWorkst
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWork/($courseWorkId)/studentSubmissions/($id):return" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, course_work_id: $course_work_id, id: $id} | format pattern "/v1/courses/{course_id}/courseWork/{course_work_id}/studentSubmissions/{id}:return") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -947,8 +947,8 @@ export def "courses-course-work-student-submissions classroomcoursescourseWorkst
 # POST /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}:turnIn
 # operationId: classroom.courses.courseWork.studentSubmissions.turnIn
 export def "courses-course-work-student-submissions classroomcoursescourseWorkstudentSubmissionsturnIn" [
-  courseId: string
-  courseWorkId: string
+  course_id: string
+  course_work_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -965,17 +965,17 @@ export def "courses-course-work-student-submissions classroomcoursescourseWorkst
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWork/($courseWorkId)/studentSubmissions/($id):turnIn" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, course_work_id: $course_work_id, id: $id} | format pattern "/v1/courses/{course_id}/courseWork/{course_work_id}/studentSubmissions/{id}:turnIn") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -987,7 +987,7 @@ export def "courses-course-work-student-submissions classroomcoursescourseWorkst
 # DELETE /v1/courses/{courseId}/courseWork/{id}
 # operationId: classroom.courses.courseWork.delete
 export def "courses-course-work classroomcoursescourseWorkdelete" [
-  courseId: string
+  course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1004,15 +1004,15 @@ export def "courses-course-work classroomcoursescourseWorkdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWork/($id)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, id: $id} | format pattern "/v1/courses/{course_id}/courseWork/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1023,7 +1023,7 @@ export def "courses-course-work classroomcoursescourseWorkdelete" [
 # GET /v1/courses/{courseId}/courseWork/{id}
 # operationId: classroom.courses.courseWork.get
 export def "courses-course-work classroomcoursescourseWorkget" [
-  courseId: string
+  course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1040,15 +1040,15 @@ export def "courses-course-work classroomcoursescourseWorkget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<alternateLink: string, assigneeMode: string, assignment: record<studentWorkFolder: record<alternateLink: string, id: string, title: string>>, associatedWithDeveloper: bool, courseId: string, creationTime: string, creatorUserId: string, description: string, dueDate: record<day: int, month: int, year: int>, dueTime: record<hours: int, minutes: int, nanos: int, seconds: int>, gradeCategory: record<defaultGradeDenominator: int, id: string, name: string, weight: int>, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, maxPoints: float, multipleChoiceQuestion: record<choices: list<string>>, scheduledTime: string, state: string, submissionModificationMode: string, title: string, topicId: string, updateTime: string, workType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWork/($id)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, id: $id} | format pattern "/v1/courses/{course_id}/courseWork/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1066,7 +1066,7 @@ export def "courses-course-work classroomcoursescourseWorkget" [
 # --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
 # --multipleChoiceQuestion shape: {choices?: list}
 export def "courses-course-work classroomcoursescourseWorkpatch" [
-  courseId: string
+  course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1083,41 +1083,41 @@ export def "courses-course-work classroomcoursescourseWorkpatch" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --updateMask: string # Mask that identifies which fields on the course work to update. This field is required to do an update. The update fails if invalid fields are specified. If a field supports empty values, it can be cleared by specifying it in the update mask and not in the CourseWork object. If a field that does not support empty values is included in the update mask and not set in the CourseWork object, an `INVALID_ARGUMENT` error is returned. The following fields may be specified by teachers: * `title` * `description` * `state` * `due_date` * `due_time` * `max_points` * `scheduled_time` * `submission_modification_mode` * `topic_id`
-  --alternateLink: string # Absolute link to this course work in the Classroom web UI. This is only populated if `state` is `PUBLISHED`. Read-only.
-  --assigneeMode: string@assigneeMode-completer # Assignee mode of the coursework. If unspecified, the default value is `ALL_STUDENTS`.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --update-mask: string # Mask that identifies which fields on the course work to update. This field is required to do an update. The update fails if invalid fields are specified. If a field supports empty values, it can be cleared by specifying it in the update mask and not in the CourseWork object. If a field that does not support empty values is included in the update mask and not set in the CourseWork object, an `INVALID_ARGUMENT` error is returned. The following fields may be specified by teachers: * `title` * `description` * `state` * `due_date` * `due_time` * `max_points` * `scheduled_time` * `submission_modification_mode` * `topic_id`
+  --alternate-link: string # Absolute link to this course work in the Classroom web UI. This is only populated if `state` is `PUBLISHED`. Read-only.
+  --assignee-mode: string@assignee-mode-completer # Assignee mode of the coursework. If unspecified, the default value is `ALL_STUDENTS`.
   --assignment: record # Additional details for assignments. — shape: {studentWorkFolder?: record}
-  --associatedWithDeveloper: oneof<nothing, bool> # Whether this course work item is associated with the Developer Console project making the request. See CreateCourseWork for more details. Read-only.
-  --body-courseId: string # Identifier of the course. Read-only.
-  --creationTime: string # Timestamp when this course work was created. Read-only. (format: google-datetime)
-  --creatorUserId: string # Identifier for the user that created the coursework. Read-only.
+  --associated-with-developer: oneof<nothing, bool> # Whether this course work item is associated with the Developer Console project making the request. See CreateCourseWork for more details. Read-only.
+  --body-course-id: string # Identifier of the course. Read-only.
+  --creation-time: string # Timestamp when this course work was created. Read-only. (format: google-datetime)
+  --creator-user-id: string # Identifier for the user that created the coursework. Read-only.
   --description: string # Optional description of this course work. If set, the description must be a valid UTF-8 string containing no more than 30,000 characters.
-  --dueDate: record # Represents a whole or partial calendar date, such as a birthday. The time of day and time zone are either specified elsewhere or are insignificant. The date is relative to the Gregorian Calendar. This can represent one of the following: * A full date, with non-zero year, month, and day values. * A month and day, with a zero year (for example, an anniversary). * A year on its own, with a zero month and a zero day. * A year and month, with a zero day (for example, a credit card expiration date). Related types: * google.type.TimeOfDay * google.type.DateTime * google.protobuf.Timestamp — shape: {day?: int, month?: int, year?: int}
-  --dueTime: record # Represents a time of day. The date and time zone are either not significant or are specified elsewhere. An API may choose to allow leap seconds. Related types are google.type.Date and `google.protobuf.Timestamp`. — shape: {hours?: int, minutes?: int, nanos?: int, seconds?: int}
-  --gradeCategory: record # Details for a grade category in a course. Coursework may have zero or one grade category, and the category may be used in computing the overall grade. See the [help center article](https://support.google.com/edu/classroom/answer/9184995) for details. — shape: {defaultGradeDenominator?: int, id?: string, name?: string, weight?: int}
+  --due-date: record # Represents a whole or partial calendar date, such as a birthday. The time of day and time zone are either specified elsewhere or are insignificant. The date is relative to the Gregorian Calendar. This can represent one of the following: * A full date, with non-zero year, month, and day values. * A month and day, with a zero year (for example, an anniversary). * A year on its own, with a zero month and a zero day. * A year and month, with a zero day (for example, a credit card expiration date). Related types: * google.type.TimeOfDay * google.type.DateTime * google.protobuf.Timestamp — shape: {day?: int, month?: int, year?: int}
+  --due-time: record # Represents a time of day. The date and time zone are either not significant or are specified elsewhere. An API may choose to allow leap seconds. Related types are google.type.Date and `google.protobuf.Timestamp`. — shape: {hours?: int, minutes?: int, nanos?: int, seconds?: int}
+  --grade-category: record # Details for a grade category in a course. Coursework may have zero or one grade category, and the category may be used in computing the overall grade. See the [help center article](https://support.google.com/edu/classroom/answer/9184995) for details. — shape: {defaultGradeDenominator?: int, id?: string, name?: string, weight?: int}
   --body-id: string # Classroom-assigned identifier of this course work, unique per course. Read-only.
-  --individualStudentsOptions: record # Assignee details about a coursework/announcement. This field is set if and only if `assigneeMode` is `INDIVIDUAL_STUDENTS`. — shape: {studentIds?: list}
+  --individual-students-options: record # Assignee details about a coursework/announcement. This field is set if and only if `assigneeMode` is `INDIVIDUAL_STUDENTS`. — shape: {studentIds?: list}
   --materials: list # Additional materials. CourseWork must have no more than 20 material items. — item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
-  --maxPoints: float # Maximum grade for this course work. If zero or unspecified, this assignment is considered ungraded. This must be a non-negative integer value. (format: double)
-  --multipleChoiceQuestion: record # Additional details for multiple-choice questions. — shape: {choices?: list}
-  --scheduledTime: string # Optional timestamp when this course work is scheduled to be published. (format: google-datetime)
+  --max-points: float # Maximum grade for this course work. If zero or unspecified, this assignment is considered ungraded. This must be a non-negative integer value. (format: double)
+  --multiple-choice-question: record # Additional details for multiple-choice questions. — shape: {choices?: list}
+  --scheduled-time: string # Optional timestamp when this course work is scheduled to be published. (format: google-datetime)
   --state: string@state-completer-1 # Status of this course work. If unspecified, the default state is `DRAFT`.
-  --submissionModificationMode: string@submissionModificationMode-completer # Setting to determine when students are allowed to modify submissions. If unspecified, the default value is `MODIFIABLE_UNTIL_TURNED_IN`.
+  --submission-modification-mode: string@submission-modification-mode-completer # Setting to determine when students are allowed to modify submissions. If unspecified, the default value is `MODIFIABLE_UNTIL_TURNED_IN`.
   --title: string # Title of this course work. The title must be a valid UTF-8 string containing between 1 and 3000 characters.
-  --topicId: string # Identifier for the topic that this coursework is associated with. Must match an existing topic in the course.
-  --updateTime: string # Timestamp of the most recent change to this course work. Read-only. (format: google-datetime)
-  --workType: string@workType-completer # Type of this course work. The type is set when the course work is created and cannot be changed.
+  --topic-id: string # Identifier for the topic that this coursework is associated with. Must match an existing topic in the course.
+  --update-time: string # Timestamp of the most recent change to this course work. Read-only. (format: google-datetime)
+  --work-type: string@work-type-completer # Type of this course work. The type is set when the course work is created and cannot be changed.
 ]: any -> record<alternateLink: string, assigneeMode: string, assignment: record<studentWorkFolder: record<alternateLink: string, id: string, title: string>>, associatedWithDeveloper: bool, courseId: string, creationTime: string, creatorUserId: string, description: string, dueDate: record<day: int, month: int, year: int>, dueTime: record<hours: int, minutes: int, nanos: int, seconds: int>, gradeCategory: record<defaultGradeDenominator: int, id: string, name: string, weight: int>, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, maxPoints: float, multipleChoiceQuestion: record<choices: list<string>>, scheduledTime: string, state: string, submissionModificationMode: string, title: string, topicId: string, updateTime: string, workType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWork/($id)" $qp)
-  let body = {alternateLink: $alternateLink, assigneeMode: $assigneeMode, assignment: $assignment, associatedWithDeveloper: $associatedWithDeveloper, courseId: $body_courseId, creationTime: $creationTime, creatorUserId: $creatorUserId, description: $description, dueDate: $dueDate, dueTime: $dueTime, gradeCategory: $gradeCategory, id: $body_id, individualStudentsOptions: $individualStudentsOptions, materials: $materials, maxPoints: $maxPoints, multipleChoiceQuestion: $multipleChoiceQuestion, scheduledTime: $scheduledTime, state: $state, submissionModificationMode: $submissionModificationMode, title: $title, topicId: $topicId, updateTime: $updateTime, workType: $workType} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, id: $id} | format pattern "/v1/courses/{course_id}/courseWork/{id}") $qp)
+  let body = {"alternateLink": $alternate_link, "assigneeMode": $assignee_mode, "assignment": $assignment, "associatedWithDeveloper": $associated_with_developer, "courseId": $body_course_id, "creationTime": $creation_time, "creatorUserId": $creator_user_id, "description": $description, "dueDate": $due_date, "dueTime": $due_time, "gradeCategory": $grade_category, "id": $body_id, "individualStudentsOptions": $individual_students_options, "materials": $materials, "maxPoints": $max_points, "multipleChoiceQuestion": $multiple_choice_question, "scheduledTime": $scheduled_time, "state": $state, "submissionModificationMode": $submission_modification_mode, "title": $title, "topicId": $topic_id, "updateTime": $update_time, "workType": $work_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1130,7 +1130,7 @@ export def "courses-course-work classroomcoursescourseWorkpatch" [
 # operationId: classroom.courses.courseWork.modifyAssignees
 # --modifyIndividualStudentsOptions shape: {addStudentIds?: list, removeStudentIds?: list}
 export def "courses-course-work classroomcoursescourseWorkmodifyAssignees" [
-  courseId: string
+  course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1147,19 +1147,19 @@ export def "courses-course-work classroomcoursescourseWorkmodifyAssignees" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --assigneeMode: string@assigneeMode-completer # Mode of the coursework describing whether it will be assigned to all students or specified individual students.
-  --modifyIndividualStudentsOptions: record # Contains fields to add or remove students from a course work or announcement where the `assigneeMode` is set to `INDIVIDUAL_STUDENTS`. — shape: {addStudentIds?: list, removeStudentIds?: list}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --assignee-mode: string@assignee-mode-completer # Mode of the coursework describing whether it will be assigned to all students or specified individual students.
+  --modify-individual-students-options: record # Contains fields to add or remove students from a course work or announcement where the `assigneeMode` is set to `INDIVIDUAL_STUDENTS`. — shape: {addStudentIds?: list, removeStudentIds?: list}
 ]: any -> record<alternateLink: string, assigneeMode: string, assignment: record<studentWorkFolder: record<alternateLink: string, id: string, title: string>>, associatedWithDeveloper: bool, courseId: string, creationTime: string, creatorUserId: string, description: string, dueDate: record<day: int, month: int, year: int>, dueTime: record<hours: int, minutes: int, nanos: int, seconds: int>, gradeCategory: record<defaultGradeDenominator: int, id: string, name: string, weight: int>, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, maxPoints: float, multipleChoiceQuestion: record<choices: list<string>>, scheduledTime: string, state: string, submissionModificationMode: string, title: string, topicId: string, updateTime: string, workType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWork/($id):modifyAssignees" $qp)
-  let body = {assigneeMode: $assigneeMode, modifyIndividualStudentsOptions: $modifyIndividualStudentsOptions} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, id: $id} | format pattern "/v1/courses/{course_id}/courseWork/{id}:modifyAssignees") $qp)
+  let body = {"assigneeMode": $assignee_mode, "modifyIndividualStudentsOptions": $modify_individual_students_options} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1171,7 +1171,7 @@ export def "courses-course-work classroomcoursescourseWorkmodifyAssignees" [
 # GET /v1/courses/{courseId}/courseWorkMaterials
 # operationId: classroom.courses.courseWorkMaterials.list
 export def "courses-course-work-materials classroomcoursescourseWorkMaterialslist" [
-  courseId: string
+  course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1187,21 +1187,21 @@ export def "courses-course-work-materials classroomcoursescourseWorkMaterialslis
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --courseWorkMaterialStates: list # Restriction on the work status to return. Only course work material that matches is returned. If unspecified, items with a work status of `PUBLISHED` is returned.
-  --materialDriveId: string # Optional filtering for course work material with at least one Drive material whose ID matches the provided string. If `material_link` is also specified, course work material must have materials matching both filters.
-  --materialLink: string # Optional filtering for course work material with at least one link material whose URL partially matches the provided string.
-  --orderBy: string # Optional sort ordering for results. A comma-separated list of fields with an optional sort direction keyword. Supported field is `updateTime`. Supported direction keywords are `asc` and `desc`. If not specified, `updateTime desc` is the default behavior. Examples: `updateTime asc`, `updateTime`
-  --pageSize: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
-  --pageToken: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --course-work-material-states: list # Restriction on the work status to return. Only course work material that matches is returned. If unspecified, items with a work status of `PUBLISHED` is returned.
+  --material-drive-id: string # Optional filtering for course work material with at least one Drive material whose ID matches the provided string. If `material_link` is also specified, course work material must have materials matching both filters.
+  --material-link: string # Optional filtering for course work material with at least one link material whose URL partially matches the provided string.
+  --order-by: string # Optional sort ordering for results. A comma-separated list of fields with an optional sort direction keyword. Supported field is `updateTime`. Supported direction keywords are `asc` and `desc`. If not specified, `updateTime desc` is the default behavior. Examples: `updateTime asc`, `updateTime`
+  --page-size: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
+  --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
 ]: nothing -> record<courseWorkMaterial: table<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, description: string, id: string, individualStudentsOptions: record, materials: list, scheduledTime: string, state: string, title: string, topicId: string, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "courseWorkMaterialStates" $courseWorkMaterialStates "multi") (serialize-qp "materialDriveId" $materialDriveId "scalar") (serialize-qp "materialLink" $materialLink "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWorkMaterials" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "courseWorkMaterialStates" $course_work_material_states "multi") (serialize-qp "materialDriveId" $material_drive_id "scalar") (serialize-qp "materialLink" $material_link "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id} | format pattern "/v1/courses/{course_id}/courseWorkMaterials") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1214,7 +1214,7 @@ export def "courses-course-work-materials classroomcoursescourseWorkMaterialslis
 # --individualStudentsOptions shape: {studentIds?: list}
 # --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
 export def "courses-course-work-materials classroomcoursescourseWorkMaterialscreate" [
-  courseId: string
+  course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1230,31 +1230,31 @@ export def "courses-course-work-materials classroomcoursescourseWorkMaterialscre
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --alternateLink: string # Absolute link to this course work material in the Classroom web UI. This is only populated if `state` is `PUBLISHED`. Read-only.
-  --assigneeMode: string@assigneeMode-completer # Assignee mode of the course work material. If unspecified, the default value is `ALL_STUDENTS`.
-  --body-courseId: string # Identifier of the course. Read-only.
-  --creationTime: string # Timestamp when this course work material was created. Read-only. (format: google-datetime)
-  --creatorUserId: string # Identifier for the user that created the course work material. Read-only.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --alternate-link: string # Absolute link to this course work material in the Classroom web UI. This is only populated if `state` is `PUBLISHED`. Read-only.
+  --assignee-mode: string@assignee-mode-completer # Assignee mode of the course work material. If unspecified, the default value is `ALL_STUDENTS`.
+  --body-course-id: string # Identifier of the course. Read-only.
+  --creation-time: string # Timestamp when this course work material was created. Read-only. (format: google-datetime)
+  --creator-user-id: string # Identifier for the user that created the course work material. Read-only.
   --description: string # Optional description of this course work material. The text must be a valid UTF-8 string containing no more than 30,000 characters.
   --id: string # Classroom-assigned identifier of this course work material, unique per course. Read-only.
-  --individualStudentsOptions: record # Assignee details about a coursework/announcement. This field is set if and only if `assigneeMode` is `INDIVIDUAL_STUDENTS`. — shape: {studentIds?: list}
+  --individual-students-options: record # Assignee details about a coursework/announcement. This field is set if and only if `assigneeMode` is `INDIVIDUAL_STUDENTS`. — shape: {studentIds?: list}
   --materials: list # Additional materials. A course work material must have no more than 20 material items. — item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
-  --scheduledTime: string # Optional timestamp when this course work material is scheduled to be published. (format: google-datetime)
+  --scheduled-time: string # Optional timestamp when this course work material is scheduled to be published. (format: google-datetime)
   --state: string@state-completer-3 # Status of this course work material. If unspecified, the default state is `DRAFT`.
   --title: string # Title of this course work material. The title must be a valid UTF-8 string containing between 1 and 3000 characters.
-  --topicId: string # Identifier for the topic that this course work material is associated with. Must match an existing topic in the course.
-  --updateTime: string # Timestamp of the most recent change to this course work material. Read-only. (format: google-datetime)
+  --topic-id: string # Identifier for the topic that this course work material is associated with. Must match an existing topic in the course.
+  --update-time: string # Timestamp of the most recent change to this course work material. Read-only. (format: google-datetime)
 ]: any -> record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, description: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, title: string, topicId: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWorkMaterials" $qp)
-  let body = {alternateLink: $alternateLink, assigneeMode: $assigneeMode, courseId: $body_courseId, creationTime: $creationTime, creatorUserId: $creatorUserId, description: $description, id: $id, individualStudentsOptions: $individualStudentsOptions, materials: $materials, scheduledTime: $scheduledTime, state: $state, title: $title, topicId: $topicId, updateTime: $updateTime} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id} | format pattern "/v1/courses/{course_id}/courseWorkMaterials") $qp)
+  let body = {"alternateLink": $alternate_link, "assigneeMode": $assignee_mode, "courseId": $body_course_id, "creationTime": $creation_time, "creatorUserId": $creator_user_id, "description": $description, "id": $id, "individualStudentsOptions": $individual_students_options, "materials": $materials, "scheduledTime": $scheduled_time, "state": $state, "title": $title, "topicId": $topic_id, "updateTime": $update_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1266,7 +1266,7 @@ export def "courses-course-work-materials classroomcoursescourseWorkMaterialscre
 # DELETE /v1/courses/{courseId}/courseWorkMaterials/{id}
 # operationId: classroom.courses.courseWorkMaterials.delete
 export def "courses-course-work-materials classroomcoursescourseWorkMaterialsdelete" [
-  courseId: string
+  course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1283,15 +1283,15 @@ export def "courses-course-work-materials classroomcoursescourseWorkMaterialsdel
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWorkMaterials/($id)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, id: $id} | format pattern "/v1/courses/{course_id}/courseWorkMaterials/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1302,7 +1302,7 @@ export def "courses-course-work-materials classroomcoursescourseWorkMaterialsdel
 # GET /v1/courses/{courseId}/courseWorkMaterials/{id}
 # operationId: classroom.courses.courseWorkMaterials.get
 export def "courses-course-work-materials classroomcoursescourseWorkMaterialsget" [
-  courseId: string
+  course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1319,15 +1319,15 @@ export def "courses-course-work-materials classroomcoursescourseWorkMaterialsget
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, description: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, title: string, topicId: string, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWorkMaterials/($id)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, id: $id} | format pattern "/v1/courses/{course_id}/courseWorkMaterials/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1340,7 +1340,7 @@ export def "courses-course-work-materials classroomcoursescourseWorkMaterialsget
 # --individualStudentsOptions shape: {studentIds?: list}
 # --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
 export def "courses-course-work-materials classroomcoursescourseWorkMaterialspatch" [
-  courseId: string
+  course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1357,32 +1357,32 @@ export def "courses-course-work-materials classroomcoursescourseWorkMaterialspat
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --updateMask: string # Mask that identifies which fields on the course work material to update. This field is required to do an update. The update fails if invalid fields are specified. If a field supports empty values, it can be cleared by specifying it in the update mask and not in the course work material object. If a field that does not support empty values is included in the update mask and not set in the course work material object, an `INVALID_ARGUMENT` error is returned. The following fields may be specified by teachers: * `title` * `description` * `state` * `scheduled_time` * `topic_id`
-  --alternateLink: string # Absolute link to this course work material in the Classroom web UI. This is only populated if `state` is `PUBLISHED`. Read-only.
-  --assigneeMode: string@assigneeMode-completer # Assignee mode of the course work material. If unspecified, the default value is `ALL_STUDENTS`.
-  --body-courseId: string # Identifier of the course. Read-only.
-  --creationTime: string # Timestamp when this course work material was created. Read-only. (format: google-datetime)
-  --creatorUserId: string # Identifier for the user that created the course work material. Read-only.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --update-mask: string # Mask that identifies which fields on the course work material to update. This field is required to do an update. The update fails if invalid fields are specified. If a field supports empty values, it can be cleared by specifying it in the update mask and not in the course work material object. If a field that does not support empty values is included in the update mask and not set in the course work material object, an `INVALID_ARGUMENT` error is returned. The following fields may be specified by teachers: * `title` * `description` * `state` * `scheduled_time` * `topic_id`
+  --alternate-link: string # Absolute link to this course work material in the Classroom web UI. This is only populated if `state` is `PUBLISHED`. Read-only.
+  --assignee-mode: string@assignee-mode-completer # Assignee mode of the course work material. If unspecified, the default value is `ALL_STUDENTS`.
+  --body-course-id: string # Identifier of the course. Read-only.
+  --creation-time: string # Timestamp when this course work material was created. Read-only. (format: google-datetime)
+  --creator-user-id: string # Identifier for the user that created the course work material. Read-only.
   --description: string # Optional description of this course work material. The text must be a valid UTF-8 string containing no more than 30,000 characters.
   --body-id: string # Classroom-assigned identifier of this course work material, unique per course. Read-only.
-  --individualStudentsOptions: record # Assignee details about a coursework/announcement. This field is set if and only if `assigneeMode` is `INDIVIDUAL_STUDENTS`. — shape: {studentIds?: list}
+  --individual-students-options: record # Assignee details about a coursework/announcement. This field is set if and only if `assigneeMode` is `INDIVIDUAL_STUDENTS`. — shape: {studentIds?: list}
   --materials: list # Additional materials. A course work material must have no more than 20 material items. — item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
-  --scheduledTime: string # Optional timestamp when this course work material is scheduled to be published. (format: google-datetime)
+  --scheduled-time: string # Optional timestamp when this course work material is scheduled to be published. (format: google-datetime)
   --state: string@state-completer-3 # Status of this course work material. If unspecified, the default state is `DRAFT`.
   --title: string # Title of this course work material. The title must be a valid UTF-8 string containing between 1 and 3000 characters.
-  --topicId: string # Identifier for the topic that this course work material is associated with. Must match an existing topic in the course.
-  --updateTime: string # Timestamp of the most recent change to this course work material. Read-only. (format: google-datetime)
+  --topic-id: string # Identifier for the topic that this course work material is associated with. Must match an existing topic in the course.
+  --update-time: string # Timestamp of the most recent change to this course work material. Read-only. (format: google-datetime)
 ]: any -> record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, description: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, title: string, topicId: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/courseWorkMaterials/($id)" $qp)
-  let body = {alternateLink: $alternateLink, assigneeMode: $assigneeMode, courseId: $body_courseId, creationTime: $creationTime, creatorUserId: $creatorUserId, description: $description, id: $body_id, individualStudentsOptions: $individualStudentsOptions, materials: $materials, scheduledTime: $scheduledTime, state: $state, title: $title, topicId: $topicId, updateTime: $updateTime} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, id: $id} | format pattern "/v1/courses/{course_id}/courseWorkMaterials/{id}") $qp)
+  let body = {"alternateLink": $alternate_link, "assigneeMode": $assignee_mode, "courseId": $body_course_id, "creationTime": $creation_time, "creatorUserId": $creator_user_id, "description": $description, "id": $body_id, "individualStudentsOptions": $individual_students_options, "materials": $materials, "scheduledTime": $scheduled_time, "state": $state, "title": $title, "topicId": $topic_id, "updateTime": $update_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1394,7 +1394,7 @@ export def "courses-course-work-materials classroomcoursescourseWorkMaterialspat
 # GET /v1/courses/{courseId}/students
 # operationId: classroom.courses.students.list
 export def "courses-students classroomcoursesstudentslist" [
-  courseId: string
+  course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1410,17 +1410,17 @@ export def "courses-students classroomcoursesstudentslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --pageSize: int # Maximum number of items to return. The default is 30 if unspecified or `0`. The server may return fewer than the specified number of results.
-  --pageToken: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --page-size: int # Maximum number of items to return. The default is 30 if unspecified or `0`. The server may return fewer than the specified number of results.
+  --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
 ]: nothing -> record<nextPageToken: string, students: table<courseId: string, profile: record, studentWorkFolder: record, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/students" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id} | format pattern "/v1/courses/{course_id}/students") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1433,7 +1433,7 @@ export def "courses-students classroomcoursesstudentslist" [
 # --profile shape: {emailAddress?: string, id?: string, name?: record, permissions?: list, photoUrl?: string, verifiedTeacher?: bool}
 # --studentWorkFolder shape: {alternateLink?: string, id?: string, title?: string}
 export def "courses-students classroomcoursesstudentscreate" [
-  courseId: string
+  course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1449,22 +1449,22 @@ export def "courses-students classroomcoursesstudentscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --enrollmentCode: string # Enrollment code of the course to create the student in. This code is required if userId corresponds to the requesting user; it may be omitted if the requesting user has administrative permissions to create students for any user.
-  --body-courseId: string # Identifier of the course. Read-only.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --enrollment-code: string # Enrollment code of the course to create the student in. This code is required if userId corresponds to the requesting user; it may be omitted if the requesting user has administrative permissions to create students for any user.
+  --body-course-id: string # Identifier of the course. Read-only.
   --profile: record # Global information for a user. — shape: {emailAddress?: string, id?: string, name?: record, permissions?: list, photoUrl?: string, verifiedTeacher?: bool}
-  --studentWorkFolder: record # Representation of a Google Drive folder. — shape: {alternateLink?: string, id?: string, title?: string}
-  --userId: string # Identifier of the user. When specified as a parameter of a request, this identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
+  --student-work-folder: record # Representation of a Google Drive folder. — shape: {alternateLink?: string, id?: string, title?: string}
+  --user-id: string # Identifier of the user. When specified as a parameter of a request, this identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
 ]: any -> record<courseId: string, profile: record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: list<record>, photoUrl: string, verifiedTeacher: bool>, studentWorkFolder: record<alternateLink: string, id: string, title: string>, userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "enrollmentCode" $enrollmentCode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/students" $qp)
-  let body = {courseId: $body_courseId, profile: $profile, studentWorkFolder: $studentWorkFolder, userId: $userId} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "enrollmentCode" $enrollment_code "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id} | format pattern "/v1/courses/{course_id}/students") $qp)
+  let body = {"courseId": $body_course_id, "profile": $profile, "studentWorkFolder": $student_work_folder, "userId": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1476,8 +1476,8 @@ export def "courses-students classroomcoursesstudentscreate" [
 # DELETE /v1/courses/{courseId}/students/{userId}
 # operationId: classroom.courses.students.delete
 export def "courses-students classroomcoursesstudentsdelete" [
-  courseId: string
-  userId: string
+  course_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1493,15 +1493,15 @@ export def "courses-students classroomcoursesstudentsdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/students/($userId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, user_id: $user_id} | format pattern "/v1/courses/{course_id}/students/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1512,8 +1512,8 @@ export def "courses-students classroomcoursesstudentsdelete" [
 # GET /v1/courses/{courseId}/students/{userId}
 # operationId: classroom.courses.students.get
 export def "courses-students classroomcoursesstudentsget" [
-  courseId: string
-  userId: string
+  course_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1529,15 +1529,15 @@ export def "courses-students classroomcoursesstudentsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<courseId: string, profile: record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: list<record>, photoUrl: string, verifiedTeacher: bool>, studentWorkFolder: record<alternateLink: string, id: string, title: string>, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/students/($userId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, user_id: $user_id} | format pattern "/v1/courses/{course_id}/students/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1548,7 +1548,7 @@ export def "courses-students classroomcoursesstudentsget" [
 # GET /v1/courses/{courseId}/teachers
 # operationId: classroom.courses.teachers.list
 export def "courses-teachers classroomcoursesteacherslist" [
-  courseId: string
+  course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1564,17 +1564,17 @@ export def "courses-teachers classroomcoursesteacherslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --pageSize: int # Maximum number of items to return. The default is 30 if unspecified or `0`. The server may return fewer than the specified number of results.
-  --pageToken: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --page-size: int # Maximum number of items to return. The default is 30 if unspecified or `0`. The server may return fewer than the specified number of results.
+  --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
 ]: nothing -> record<nextPageToken: string, teachers: table<courseId: string, profile: record, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/teachers" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id} | format pattern "/v1/courses/{course_id}/teachers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1586,7 +1586,7 @@ export def "courses-teachers classroomcoursesteacherslist" [
 # operationId: classroom.courses.teachers.create
 # --profile shape: {emailAddress?: string, id?: string, name?: record, permissions?: list, photoUrl?: string, verifiedTeacher?: bool}
 export def "courses-teachers classroomcoursesteacherscreate" [
-  courseId: string
+  course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1602,20 +1602,20 @@ export def "courses-teachers classroomcoursesteacherscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-courseId: string # Identifier of the course. Read-only.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --body-course-id: string # Identifier of the course. Read-only.
   --profile: record # Global information for a user. — shape: {emailAddress?: string, id?: string, name?: record, permissions?: list, photoUrl?: string, verifiedTeacher?: bool}
-  --userId: string # Identifier of the user. When specified as a parameter of a request, this identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
+  --user-id: string # Identifier of the user. When specified as a parameter of a request, this identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
 ]: any -> record<courseId: string, profile: record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: list<record>, photoUrl: string, verifiedTeacher: bool>, userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/teachers" $qp)
-  let body = {courseId: $body_courseId, profile: $profile, userId: $userId} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id} | format pattern "/v1/courses/{course_id}/teachers") $qp)
+  let body = {"courseId": $body_course_id, "profile": $profile, "userId": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1627,8 +1627,8 @@ export def "courses-teachers classroomcoursesteacherscreate" [
 # DELETE /v1/courses/{courseId}/teachers/{userId}
 # operationId: classroom.courses.teachers.delete
 export def "courses-teachers classroomcoursesteachersdelete" [
-  courseId: string
-  userId: string
+  course_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1644,15 +1644,15 @@ export def "courses-teachers classroomcoursesteachersdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/teachers/($userId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, user_id: $user_id} | format pattern "/v1/courses/{course_id}/teachers/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1663,8 +1663,8 @@ export def "courses-teachers classroomcoursesteachersdelete" [
 # GET /v1/courses/{courseId}/teachers/{userId}
 # operationId: classroom.courses.teachers.get
 export def "courses-teachers classroomcoursesteachersget" [
-  courseId: string
-  userId: string
+  course_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1680,15 +1680,15 @@ export def "courses-teachers classroomcoursesteachersget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<courseId: string, profile: record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: list<record>, photoUrl: string, verifiedTeacher: bool>, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/teachers/($userId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, user_id: $user_id} | format pattern "/v1/courses/{course_id}/teachers/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1699,7 +1699,7 @@ export def "courses-teachers classroomcoursesteachersget" [
 # GET /v1/courses/{courseId}/topics
 # operationId: classroom.courses.topics.list
 export def "courses-topics classroomcoursestopicslist" [
-  courseId: string
+  course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1715,17 +1715,17 @@ export def "courses-topics classroomcoursestopicslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --pageSize: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
-  --pageToken: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --page-size: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
+  --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
 ]: nothing -> record<nextPageToken: string, topic: table<courseId: string, name: string, topicId: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/topics" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id} | format pattern "/v1/courses/{course_id}/topics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1736,7 +1736,7 @@ export def "courses-topics classroomcoursestopicslist" [
 # POST /v1/courses/{courseId}/topics
 # operationId: classroom.courses.topics.create
 export def "courses-topics classroomcoursestopicscreate" [
-  courseId: string
+  course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1752,21 +1752,21 @@ export def "courses-topics classroomcoursestopicscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-courseId: string # Identifier of the course. Read-only.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --body-course-id: string # Identifier of the course. Read-only.
   --name: string # The name of the topic, generated by the user. Leading and trailing whitespaces, if any, are trimmed. Also, multiple consecutive whitespaces are collapsed into one inside the name. The result must be a non-empty string. Topic names are case sensitive, and must be no longer than 100 characters.
-  --topicId: string # Unique identifier for the topic. Read-only.
-  --updateTime: string # The time the topic was last updated by the system. Read-only. (format: google-datetime)
+  --topic-id: string # Unique identifier for the topic. Read-only.
+  --update-time: string # The time the topic was last updated by the system. Read-only. (format: google-datetime)
 ]: any -> record<courseId: string, name: string, topicId: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/topics" $qp)
-  let body = {courseId: $body_courseId, name: $name, topicId: $topicId, updateTime: $updateTime} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id} | format pattern "/v1/courses/{course_id}/topics") $qp)
+  let body = {"courseId": $body_course_id, "name": $name, "topicId": $topic_id, "updateTime": $update_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1778,7 +1778,7 @@ export def "courses-topics classroomcoursestopicscreate" [
 # DELETE /v1/courses/{courseId}/topics/{id}
 # operationId: classroom.courses.topics.delete
 export def "courses-topics classroomcoursestopicsdelete" [
-  courseId: string
+  course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1795,15 +1795,15 @@ export def "courses-topics classroomcoursestopicsdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/topics/($id)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, id: $id} | format pattern "/v1/courses/{course_id}/topics/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1814,7 +1814,7 @@ export def "courses-topics classroomcoursestopicsdelete" [
 # GET /v1/courses/{courseId}/topics/{id}
 # operationId: classroom.courses.topics.get
 export def "courses-topics classroomcoursestopicsget" [
-  courseId: string
+  course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1831,15 +1831,15 @@ export def "courses-topics classroomcoursestopicsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<courseId: string, name: string, topicId: string, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/topics/($id)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, id: $id} | format pattern "/v1/courses/{course_id}/topics/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1850,7 +1850,7 @@ export def "courses-topics classroomcoursestopicsget" [
 # PATCH /v1/courses/{courseId}/topics/{id}
 # operationId: classroom.courses.topics.patch
 export def "courses-topics classroomcoursestopicspatch" [
-  courseId: string
+  course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1867,22 +1867,22 @@ export def "courses-topics classroomcoursestopicspatch" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --updateMask: string # Mask that identifies which fields on the topic to update. This field is required to do an update. The update fails if invalid fields are specified. If a field supports empty values, it can be cleared by specifying it in the update mask and not in the Topic object. If a field that does not support empty values is included in the update mask and not set in the Topic object, an `INVALID_ARGUMENT` error is returned. The following fields may be specified: * `name`
-  --body-courseId: string # Identifier of the course. Read-only.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --update-mask: string # Mask that identifies which fields on the topic to update. This field is required to do an update. The update fails if invalid fields are specified. If a field supports empty values, it can be cleared by specifying it in the update mask and not in the Topic object. If a field that does not support empty values is included in the update mask and not set in the Topic object, an `INVALID_ARGUMENT` error is returned. The following fields may be specified: * `name`
+  --body-course-id: string # Identifier of the course. Read-only.
   --name: string # The name of the topic, generated by the user. Leading and trailing whitespaces, if any, are trimmed. Also, multiple consecutive whitespaces are collapsed into one inside the name. The result must be a non-empty string. Topic names are case sensitive, and must be no longer than 100 characters.
-  --topicId: string # Unique identifier for the topic. Read-only.
-  --updateTime: string # The time the topic was last updated by the system. Read-only. (format: google-datetime)
+  --topic-id: string # Unique identifier for the topic. Read-only.
+  --update-time: string # The time the topic was last updated by the system. Read-only. (format: google-datetime)
 ]: any -> record<courseId: string, name: string, topicId: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($courseId)/topics/($id)" $qp)
-  let body = {courseId: $body_courseId, name: $name, topicId: $topicId, updateTime: $updateTime} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({course_id: $course_id, id: $id} | format pattern "/v1/courses/{course_id}/topics/{id}") $qp)
+  let body = {"courseId": $body_course_id, "name": $name, "topicId": $topic_id, "updateTime": $update_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1910,15 +1910,15 @@ export def "courses classroomcoursesdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($id)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/courses/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1945,15 +1945,15 @@ export def "courses classroomcoursesget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<alternateLink: string, calendarId: string, courseGroupEmail: string, courseMaterialSets: table<materials: list, title: string>, courseState: string, creationTime: string, description: string, descriptionHeading: string, enrollmentCode: string, gradebookSettings: record<calculationType: string, displaySetting: string, gradeCategories: list<record>>, guardiansEnabled: bool, id: string, name: string, ownerId: string, room: string, section: string, teacherFolder: record<alternateLink: string, id: string, title: string>, teacherGroupEmail: string, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($id)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/courses/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1983,37 +1983,37 @@ export def "courses classroomcoursespatch" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --updateMask: string # Mask that identifies which fields on the course to update. This field is required to do an update. The update will fail if invalid fields are specified. The following fields are valid: * `name` * `section` * `descriptionHeading` * `description` * `room` * `courseState` * `ownerId` Note: patches to ownerId are treated as being effective immediately, but in practice it may take some time for the ownership transfer of all affected resources to complete. When set in a query parameter, this field should be specified as `updateMask=,,...`
-  --alternateLink: string # Absolute link to this course in the Classroom web UI. Read-only.
-  --calendarId: string # The Calendar ID for a calendar that all course members can see, to which Classroom adds events for course work and announcements in the course. Read-only.
-  --courseGroupEmail: string # The email address of a Google group containing all members of the course. This group does not accept email and can only be used for permissions. Read-only.
-  --courseMaterialSets: list # Sets of materials that appear on the "about" page of this course. Read-only. — item shape: {materials?: list, title?: string}
-  --courseState: string@courseState-completer # State of the course. If unspecified, the default state is `PROVISIONED`.
-  --creationTime: string # Creation time of the course. Specifying this field in a course update mask results in an error. Read-only. (format: google-datetime)
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --update-mask: string # Mask that identifies which fields on the course to update. This field is required to do an update. The update will fail if invalid fields are specified. The following fields are valid: * `name` * `section` * `descriptionHeading` * `description` * `room` * `courseState` * `ownerId` Note: patches to ownerId are treated as being effective immediately, but in practice it may take some time for the ownership transfer of all affected resources to complete. When set in a query parameter, this field should be specified as `updateMask=,,...`
+  --alternate-link: string # Absolute link to this course in the Classroom web UI. Read-only.
+  --calendar-id: string # The Calendar ID for a calendar that all course members can see, to which Classroom adds events for course work and announcements in the course. Read-only.
+  --course-group-email: string # The email address of a Google group containing all members of the course. This group does not accept email and can only be used for permissions. Read-only.
+  --course-material-sets: list # Sets of materials that appear on the "about" page of this course. Read-only. — item shape: {materials?: list, title?: string}
+  --course-state: string@course-state-completer # State of the course. If unspecified, the default state is `PROVISIONED`.
+  --creation-time: string # Creation time of the course. Specifying this field in a course update mask results in an error. Read-only. (format: google-datetime)
   --description: string # Optional description. For example, "We'll be learning about the structure of living creatures from a combination of textbooks, guest lectures, and lab work. Expect to be excited!" If set, this field must be a valid UTF-8 string and no longer than 30,000 characters.
-  --descriptionHeading: string # Optional heading for the description. For example, "Welcome to 10th Grade Biology." If set, this field must be a valid UTF-8 string and no longer than 3600 characters.
-  --enrollmentCode: string # Enrollment code to use when joining this course. Specifying this field in a course update mask results in an error. Read-only.
-  --gradebookSettings: record # The gradebook settings for a course. See the [help center article](https://support.google.com/edu/classroom/answer/9184995) for details. — shape: {calculationType?: "CALCULATION_TYPE_UNSPECIFIED"|"TOTAL_POINTS"|"WEIGHTED_CATEGORIES", displaySetting?: "DISPLAY_SETTING_UNSPECIFIED"|"SHOW_OVERALL_GRADE"|"HIDE_OVERALL_GRADE"|"SHOW_TEACHERS_ONLY", gradeCategories?: list}
-  --guardiansEnabled: oneof<nothing, bool> # Whether or not guardian notifications are enabled for this course. Read-only.
+  --description-heading: string # Optional heading for the description. For example, "Welcome to 10th Grade Biology." If set, this field must be a valid UTF-8 string and no longer than 3600 characters.
+  --enrollment-code: string # Enrollment code to use when joining this course. Specifying this field in a course update mask results in an error. Read-only.
+  --gradebook-settings: record # The gradebook settings for a course. See the [help center article](https://support.google.com/edu/classroom/answer/9184995) for details. — shape: {calculationType?: "CALCULATION_TYPE_UNSPECIFIED"|"TOTAL_POINTS"|"WEIGHTED_CATEGORIES", displaySetting?: "DISPLAY_SETTING_UNSPECIFIED"|"SHOW_OVERALL_GRADE"|"HIDE_OVERALL_GRADE"|"SHOW_TEACHERS_ONLY", gradeCategories?: list}
+  --guardians-enabled: oneof<nothing, bool> # Whether or not guardian notifications are enabled for this course. Read-only.
   --body-id: string # Identifier for this course assigned by Classroom. When creating a course, you may optionally set this identifier to an alias string in the request to create a corresponding alias. The `id` is still assigned by Classroom and cannot be updated after the course is created. Specifying this field in a course update mask results in an error.
   --name: string # Name of the course. For example, "10th Grade Biology". The name is required. It must be between 1 and 750 characters and a valid UTF-8 string.
-  --ownerId: string # The identifier of the owner of a course. When specified as a parameter of a create course request, this field is required. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user This must be set in a create request. Admins can also specify this field in a patch course request to transfer ownership. In other contexts, it is read-only.
+  --owner-id: string # The identifier of the owner of a course. When specified as a parameter of a create course request, this field is required. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user This must be set in a create request. Admins can also specify this field in a patch course request to transfer ownership. In other contexts, it is read-only.
   --room: string # Optional room location. For example, "301". If set, this field must be a valid UTF-8 string and no longer than 650 characters.
   --section: string # Section of the course. For example, "Period 2". If set, this field must be a valid UTF-8 string and no longer than 2800 characters.
-  --teacherFolder: record # Representation of a Google Drive folder. — shape: {alternateLink?: string, id?: string, title?: string}
-  --teacherGroupEmail: string # The email address of a Google group containing all teachers of the course. This group does not accept email and can only be used for permissions. Read-only.
-  --updateTime: string # Time of the most recent update to this course. Specifying this field in a course update mask results in an error. Read-only. (format: google-datetime)
+  --teacher-folder: record # Representation of a Google Drive folder. — shape: {alternateLink?: string, id?: string, title?: string}
+  --teacher-group-email: string # The email address of a Google group containing all teachers of the course. This group does not accept email and can only be used for permissions. Read-only.
+  --update-time: string # Time of the most recent update to this course. Specifying this field in a course update mask results in an error. Read-only. (format: google-datetime)
 ]: any -> record<alternateLink: string, calendarId: string, courseGroupEmail: string, courseMaterialSets: table<materials: list, title: string>, courseState: string, creationTime: string, description: string, descriptionHeading: string, enrollmentCode: string, gradebookSettings: record<calculationType: string, displaySetting: string, gradeCategories: list<record>>, guardiansEnabled: bool, id: string, name: string, ownerId: string, room: string, section: string, teacherFolder: record<alternateLink: string, id: string, title: string>, teacherGroupEmail: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($id)" $qp)
-  let body = {alternateLink: $alternateLink, calendarId: $calendarId, courseGroupEmail: $courseGroupEmail, courseMaterialSets: $courseMaterialSets, courseState: $courseState, creationTime: $creationTime, description: $description, descriptionHeading: $descriptionHeading, enrollmentCode: $enrollmentCode, gradebookSettings: $gradebookSettings, guardiansEnabled: $guardiansEnabled, id: $body_id, name: $name, ownerId: $ownerId, room: $room, section: $section, teacherFolder: $teacherFolder, teacherGroupEmail: $teacherGroupEmail, updateTime: $updateTime} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/courses/{id}") $qp)
+  let body = {"alternateLink": $alternate_link, "calendarId": $calendar_id, "courseGroupEmail": $course_group_email, "courseMaterialSets": $course_material_sets, "courseState": $course_state, "creationTime": $creation_time, "description": $description, "descriptionHeading": $description_heading, "enrollmentCode": $enrollment_code, "gradebookSettings": $gradebook_settings, "guardiansEnabled": $guardians_enabled, "id": $body_id, "name": $name, "ownerId": $owner_id, "room": $room, "section": $section, "teacherFolder": $teacher_folder, "teacherGroupEmail": $teacher_group_email, "updateTime": $update_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2044,36 +2044,36 @@ export def "courses classroomcoursesupdate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --alternateLink: string # Absolute link to this course in the Classroom web UI. Read-only.
-  --calendarId: string # The Calendar ID for a calendar that all course members can see, to which Classroom adds events for course work and announcements in the course. Read-only.
-  --courseGroupEmail: string # The email address of a Google group containing all members of the course. This group does not accept email and can only be used for permissions. Read-only.
-  --courseMaterialSets: list # Sets of materials that appear on the "about" page of this course. Read-only. — item shape: {materials?: list, title?: string}
-  --courseState: string@courseState-completer # State of the course. If unspecified, the default state is `PROVISIONED`.
-  --creationTime: string # Creation time of the course. Specifying this field in a course update mask results in an error. Read-only. (format: google-datetime)
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --alternate-link: string # Absolute link to this course in the Classroom web UI. Read-only.
+  --calendar-id: string # The Calendar ID for a calendar that all course members can see, to which Classroom adds events for course work and announcements in the course. Read-only.
+  --course-group-email: string # The email address of a Google group containing all members of the course. This group does not accept email and can only be used for permissions. Read-only.
+  --course-material-sets: list # Sets of materials that appear on the "about" page of this course. Read-only. — item shape: {materials?: list, title?: string}
+  --course-state: string@course-state-completer # State of the course. If unspecified, the default state is `PROVISIONED`.
+  --creation-time: string # Creation time of the course. Specifying this field in a course update mask results in an error. Read-only. (format: google-datetime)
   --description: string # Optional description. For example, "We'll be learning about the structure of living creatures from a combination of textbooks, guest lectures, and lab work. Expect to be excited!" If set, this field must be a valid UTF-8 string and no longer than 30,000 characters.
-  --descriptionHeading: string # Optional heading for the description. For example, "Welcome to 10th Grade Biology." If set, this field must be a valid UTF-8 string and no longer than 3600 characters.
-  --enrollmentCode: string # Enrollment code to use when joining this course. Specifying this field in a course update mask results in an error. Read-only.
-  --gradebookSettings: record # The gradebook settings for a course. See the [help center article](https://support.google.com/edu/classroom/answer/9184995) for details. — shape: {calculationType?: "CALCULATION_TYPE_UNSPECIFIED"|"TOTAL_POINTS"|"WEIGHTED_CATEGORIES", displaySetting?: "DISPLAY_SETTING_UNSPECIFIED"|"SHOW_OVERALL_GRADE"|"HIDE_OVERALL_GRADE"|"SHOW_TEACHERS_ONLY", gradeCategories?: list}
-  --guardiansEnabled: oneof<nothing, bool> # Whether or not guardian notifications are enabled for this course. Read-only.
+  --description-heading: string # Optional heading for the description. For example, "Welcome to 10th Grade Biology." If set, this field must be a valid UTF-8 string and no longer than 3600 characters.
+  --enrollment-code: string # Enrollment code to use when joining this course. Specifying this field in a course update mask results in an error. Read-only.
+  --gradebook-settings: record # The gradebook settings for a course. See the [help center article](https://support.google.com/edu/classroom/answer/9184995) for details. — shape: {calculationType?: "CALCULATION_TYPE_UNSPECIFIED"|"TOTAL_POINTS"|"WEIGHTED_CATEGORIES", displaySetting?: "DISPLAY_SETTING_UNSPECIFIED"|"SHOW_OVERALL_GRADE"|"HIDE_OVERALL_GRADE"|"SHOW_TEACHERS_ONLY", gradeCategories?: list}
+  --guardians-enabled: oneof<nothing, bool> # Whether or not guardian notifications are enabled for this course. Read-only.
   --body-id: string # Identifier for this course assigned by Classroom. When creating a course, you may optionally set this identifier to an alias string in the request to create a corresponding alias. The `id` is still assigned by Classroom and cannot be updated after the course is created. Specifying this field in a course update mask results in an error.
   --name: string # Name of the course. For example, "10th Grade Biology". The name is required. It must be between 1 and 750 characters and a valid UTF-8 string.
-  --ownerId: string # The identifier of the owner of a course. When specified as a parameter of a create course request, this field is required. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user This must be set in a create request. Admins can also specify this field in a patch course request to transfer ownership. In other contexts, it is read-only.
+  --owner-id: string # The identifier of the owner of a course. When specified as a parameter of a create course request, this field is required. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user This must be set in a create request. Admins can also specify this field in a patch course request to transfer ownership. In other contexts, it is read-only.
   --room: string # Optional room location. For example, "301". If set, this field must be a valid UTF-8 string and no longer than 650 characters.
   --section: string # Section of the course. For example, "Period 2". If set, this field must be a valid UTF-8 string and no longer than 2800 characters.
-  --teacherFolder: record # Representation of a Google Drive folder. — shape: {alternateLink?: string, id?: string, title?: string}
-  --teacherGroupEmail: string # The email address of a Google group containing all teachers of the course. This group does not accept email and can only be used for permissions. Read-only.
-  --updateTime: string # Time of the most recent update to this course. Specifying this field in a course update mask results in an error. Read-only. (format: google-datetime)
+  --teacher-folder: record # Representation of a Google Drive folder. — shape: {alternateLink?: string, id?: string, title?: string}
+  --teacher-group-email: string # The email address of a Google group containing all teachers of the course. This group does not accept email and can only be used for permissions. Read-only.
+  --update-time: string # Time of the most recent update to this course. Specifying this field in a course update mask results in an error. Read-only. (format: google-datetime)
 ]: any -> record<alternateLink: string, calendarId: string, courseGroupEmail: string, courseMaterialSets: table<materials: list, title: string>, courseState: string, creationTime: string, description: string, descriptionHeading: string, enrollmentCode: string, gradebookSettings: record<calculationType: string, displaySetting: string, gradeCategories: list<record>>, guardiansEnabled: bool, id: string, name: string, ownerId: string, room: string, section: string, teacherFolder: record<alternateLink: string, id: string, title: string>, teacherGroupEmail: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/courses/($id)" $qp)
-  let body = {alternateLink: $alternateLink, calendarId: $calendarId, courseGroupEmail: $courseGroupEmail, courseMaterialSets: $courseMaterialSets, courseState: $courseState, creationTime: $creationTime, description: $description, descriptionHeading: $descriptionHeading, enrollmentCode: $enrollmentCode, gradebookSettings: $gradebookSettings, guardiansEnabled: $guardiansEnabled, id: $body_id, name: $name, ownerId: $ownerId, room: $room, section: $section, teacherFolder: $teacherFolder, teacherGroupEmail: $teacherGroupEmail, updateTime: $updateTime} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/courses/{id}") $qp)
+  let body = {"alternateLink": $alternate_link, "calendarId": $calendar_id, "courseGroupEmail": $course_group_email, "courseMaterialSets": $course_material_sets, "courseState": $course_state, "creationTime": $creation_time, "description": $description, "descriptionHeading": $description_heading, "enrollmentCode": $enrollment_code, "gradebookSettings": $gradebook_settings, "guardiansEnabled": $guardians_enabled, "id": $body_id, "name": $name, "ownerId": $owner_id, "room": $room, "section": $section, "teacherFolder": $teacher_folder, "teacherGroupEmail": $teacher_group_email, "updateTime": $update_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2100,18 +2100,18 @@ export def "invitations classroominvitationslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --courseId: string # Restricts returned invitations to those for a course with the specified identifier.
-  --pageSize: int # Maximum number of items to return. The default is 500 if unspecified or `0`. The server may return fewer than the specified number of results.
-  --pageToken: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
-  --userId: string # Restricts returned invitations to those for a specific user. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --course-id: string # Restricts returned invitations to those for a course with the specified identifier.
+  --page-size: int # Maximum number of items to return. The default is 500 if unspecified or `0`. The server may return fewer than the specified number of results.
+  --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
+  --user-id: string # Restricts returned invitations to those for a specific user. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
 ]: nothing -> record<invitations: table<courseId: string, id: string, role: string, userId: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "courseId" $courseId "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "userId" $userId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "courseId" $course_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/invitations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2138,21 +2138,21 @@ export def "invitations classroominvitationscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --courseId: string # Identifier of the course to invite the user to.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --course-id: string # Identifier of the course to invite the user to.
   --id: string # Identifier assigned by Classroom. Read-only.
   --role: string@role-completer # Role to invite the user to have. Must not be `COURSE_ROLE_UNSPECIFIED`.
-  --userId: string # Identifier of the invited user. When specified as a parameter of a request, this identifier can be set to one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
+  --user-id: string # Identifier of the invited user. When specified as a parameter of a request, this identifier can be set to one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
 ]: any -> record<courseId: string, id: string, role: string, userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/invitations" $qp)
-  let body = {courseId: $courseId, id: $id, role: $role, userId: $userId} | compact
+  let body = {"courseId": $course_id, "id": $id, "role": $role, "userId": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2180,15 +2180,15 @@ export def "invitations classroominvitationsdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/invitations/($id)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/invitations/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2215,15 +2215,15 @@ export def "invitations classroominvitationsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<courseId: string, id: string, role: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/invitations/($id)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/invitations/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2250,15 +2250,15 @@ export def "invitations classroominvitationsaccept" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/invitations/($id):accept" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/invitations/{id}:accept") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2286,21 +2286,21 @@ export def "registrations classroomregistrationscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --cloudPubsubTopic: record # A reference to a Cloud Pub/Sub topic. To register for notifications, the owner of the topic must grant `classroom-notifications@system.gserviceaccount.com` the `projects.topics.publish` permission. — shape: {topicName?: string}
-  --expiryTime: string # The time until which the `Registration` is effective. This is a read-only field assigned by the server. (format: google-datetime)
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --cloud-pubsub-topic: record # A reference to a Cloud Pub/Sub topic. To register for notifications, the owner of the topic must grant `classroom-notifications@system.gserviceaccount.com` the `projects.topics.publish` permission. — shape: {topicName?: string}
+  --expiry-time: string # The time until which the `Registration` is effective. This is a read-only field assigned by the server. (format: google-datetime)
   --feed: record # A class of notifications that an application can register to receive. For example: "all roster changes for a domain". — shape: {courseRosterChangesInfo?: record, courseWorkChangesInfo?: record, feedType?: "FEED_TYPE_UNSPECIFIED"|"DOMAIN_ROSTER_CHANGES"|"COURSE_ROSTER_CHANGES"|"COURSE_WORK_CHANGES"}
-  --registrationId: string # A server-generated unique identifier for this `Registration`. Read-only.
+  --registration-id: string # A server-generated unique identifier for this `Registration`. Read-only.
 ]: any -> record<cloudPubsubTopic: record<topicName: string>, expiryTime: string, feed: record<courseRosterChangesInfo: record<courseId: string>, courseWorkChangesInfo: record<courseId: string>, feedType: string>, registrationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/registrations" $qp)
-  let body = {cloudPubsubTopic: $cloudPubsubTopic, expiryTime: $expiryTime, feed: $feed, registrationId: $registrationId} | compact
+  let body = {"cloudPubsubTopic": $cloud_pubsub_topic, "expiryTime": $expiry_time, "feed": $feed, "registrationId": $registration_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2312,7 +2312,7 @@ export def "registrations classroomregistrationscreate" [
 # DELETE /v1/registrations/{registrationId}
 # operationId: classroom.registrations.delete
 export def "registrations classroomregistrationsdelete" [
-  registrationId: string
+  registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2328,15 +2328,15 @@ export def "registrations classroomregistrationsdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/registrations/($registrationId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({registration_id: $registration_id} | format pattern "/v1/registrations/{registration_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2347,7 +2347,7 @@ export def "registrations classroomregistrationsdelete" [
 # GET /v1/userProfiles/{studentId}/guardianInvitations
 # operationId: classroom.userProfiles.guardianInvitations.list
 export def "user-profiles-guardian-invitations classroomuserProfilesguardianInvitationslist" [
-  studentId: string
+  student_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2363,19 +2363,19 @@ export def "user-profiles-guardian-invitations classroomuserProfilesguardianInvi
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --invitedEmailAddress: string # If specified, only results with the specified `invited_email_address` are returned.
-  --pageSize: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
-  --pageToken: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --invited-email-address: string # If specified, only results with the specified `invited_email_address` are returned.
+  --page-size: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
+  --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
   --states: list # If specified, only results with the specified `state` values are returned. Otherwise, results with a `state` of `PENDING` are returned.
 ]: nothing -> record<guardianInvitations: table<creationTime: string, invitationId: string, invitedEmailAddress: string, state: string, studentId: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "invitedEmailAddress" $invitedEmailAddress "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "states" $states "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/userProfiles/($studentId)/guardianInvitations" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "invitedEmailAddress" $invited_email_address "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "states" $states "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({student_id: $student_id} | format pattern "/v1/userProfiles/{student_id}/guardianInvitations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2386,7 +2386,7 @@ export def "user-profiles-guardian-invitations classroomuserProfilesguardianInvi
 # POST /v1/userProfiles/{studentId}/guardianInvitations
 # operationId: classroom.userProfiles.guardianInvitations.create
 export def "user-profiles-guardian-invitations classroomuserProfilesguardianInvitationscreate" [
-  studentId: string
+  student_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2402,22 +2402,22 @@ export def "user-profiles-guardian-invitations classroomuserProfilesguardianInvi
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --creationTime: string # The time that this invitation was created. Read-only. (format: google-datetime)
-  --invitationId: string # Unique identifier for this invitation. Read-only.
-  --invitedEmailAddress: string # Email address that the invitation was sent to. This field is only visible to domain administrators.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --creation-time: string # The time that this invitation was created. Read-only. (format: google-datetime)
+  --invitation-id: string # Unique identifier for this invitation. Read-only.
+  --invited-email-address: string # Email address that the invitation was sent to. This field is only visible to domain administrators.
   --state: string@state-completer-4 # The state that this invitation is in.
-  --body-studentId: string # ID of the student (in standard format)
+  --body-student-id: string # ID of the student (in standard format)
 ]: any -> record<creationTime: string, invitationId: string, invitedEmailAddress: string, state: string, studentId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/userProfiles/($studentId)/guardianInvitations" $qp)
-  let body = {creationTime: $creationTime, invitationId: $invitationId, invitedEmailAddress: $invitedEmailAddress, state: $state, studentId: $body_studentId} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({student_id: $student_id} | format pattern "/v1/userProfiles/{student_id}/guardianInvitations") $qp)
+  let body = {"creationTime": $creation_time, "invitationId": $invitation_id, "invitedEmailAddress": $invited_email_address, "state": $state, "studentId": $body_student_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2429,8 +2429,8 @@ export def "user-profiles-guardian-invitations classroomuserProfilesguardianInvi
 # GET /v1/userProfiles/{studentId}/guardianInvitations/{invitationId}
 # operationId: classroom.userProfiles.guardianInvitations.get
 export def "user-profiles-guardian-invitations classroomuserProfilesguardianInvitationsget" [
-  studentId: string
-  invitationId: string
+  student_id: string
+  invitation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2446,15 +2446,15 @@ export def "user-profiles-guardian-invitations classroomuserProfilesguardianInvi
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<creationTime: string, invitationId: string, invitedEmailAddress: string, state: string, studentId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/userProfiles/($studentId)/guardianInvitations/($invitationId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({student_id: $student_id, invitation_id: $invitation_id} | format pattern "/v1/userProfiles/{student_id}/guardianInvitations/{invitation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2465,8 +2465,8 @@ export def "user-profiles-guardian-invitations classroomuserProfilesguardianInvi
 # PATCH /v1/userProfiles/{studentId}/guardianInvitations/{invitationId}
 # operationId: classroom.userProfiles.guardianInvitations.patch
 export def "user-profiles-guardian-invitations classroomuserProfilesguardianInvitationspatch" [
-  studentId: string
-  invitationId: string
+  student_id: string
+  invitation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2482,23 +2482,23 @@ export def "user-profiles-guardian-invitations classroomuserProfilesguardianInvi
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --updateMask: string # Mask that identifies which fields on the course to update. This field is required to do an update. The update fails if invalid fields are specified. The following fields are valid: * `state` When set in a query parameter, this field should be specified as `updateMask=,,...`
-  --creationTime: string # The time that this invitation was created. Read-only. (format: google-datetime)
-  --body-invitationId: string # Unique identifier for this invitation. Read-only.
-  --invitedEmailAddress: string # Email address that the invitation was sent to. This field is only visible to domain administrators.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --update-mask: string # Mask that identifies which fields on the course to update. This field is required to do an update. The update fails if invalid fields are specified. The following fields are valid: * `state` When set in a query parameter, this field should be specified as `updateMask=,,...`
+  --creation-time: string # The time that this invitation was created. Read-only. (format: google-datetime)
+  --body-invitation-id: string # Unique identifier for this invitation. Read-only.
+  --invited-email-address: string # Email address that the invitation was sent to. This field is only visible to domain administrators.
   --state: string@state-completer-4 # The state that this invitation is in.
-  --body-studentId: string # ID of the student (in standard format)
+  --body-student-id: string # ID of the student (in standard format)
 ]: any -> record<creationTime: string, invitationId: string, invitedEmailAddress: string, state: string, studentId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/userProfiles/($studentId)/guardianInvitations/($invitationId)" $qp)
-  let body = {creationTime: $creationTime, invitationId: $body_invitationId, invitedEmailAddress: $invitedEmailAddress, state: $state, studentId: $body_studentId} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({student_id: $student_id, invitation_id: $invitation_id} | format pattern "/v1/userProfiles/{student_id}/guardianInvitations/{invitation_id}") $qp)
+  let body = {"creationTime": $creation_time, "invitationId": $body_invitation_id, "invitedEmailAddress": $invited_email_address, "state": $state, "studentId": $body_student_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2510,7 +2510,7 @@ export def "user-profiles-guardian-invitations classroomuserProfilesguardianInvi
 # GET /v1/userProfiles/{studentId}/guardians
 # operationId: classroom.userProfiles.guardians.list
 export def "user-profiles-guardians classroomuserProfilesguardianslist" [
-  studentId: string
+  student_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2526,18 +2526,18 @@ export def "user-profiles-guardians classroomuserProfilesguardianslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --invitedEmailAddress: string # Filter results by the email address that the original invitation was sent to, resulting in this guardian link. This filter can only be used by domain administrators.
-  --pageSize: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
-  --pageToken: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --invited-email-address: string # Filter results by the email address that the original invitation was sent to, resulting in this guardian link. This filter can only be used by domain administrators.
+  --page-size: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
+  --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
 ]: nothing -> record<guardians: table<guardianId: string, guardianProfile: record, invitedEmailAddress: string, studentId: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "invitedEmailAddress" $invitedEmailAddress "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/userProfiles/($studentId)/guardians" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "invitedEmailAddress" $invited_email_address "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({student_id: $student_id} | format pattern "/v1/userProfiles/{student_id}/guardians") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2548,8 +2548,8 @@ export def "user-profiles-guardians classroomuserProfilesguardianslist" [
 # DELETE /v1/userProfiles/{studentId}/guardians/{guardianId}
 # operationId: classroom.userProfiles.guardians.delete
 export def "user-profiles-guardians classroomuserProfilesguardiansdelete" [
-  studentId: string
-  guardianId: string
+  student_id: string
+  guardian_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2565,15 +2565,15 @@ export def "user-profiles-guardians classroomuserProfilesguardiansdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/userProfiles/($studentId)/guardians/($guardianId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({student_id: $student_id, guardian_id: $guardian_id} | format pattern "/v1/userProfiles/{student_id}/guardians/{guardian_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2584,8 +2584,8 @@ export def "user-profiles-guardians classroomuserProfilesguardiansdelete" [
 # GET /v1/userProfiles/{studentId}/guardians/{guardianId}
 # operationId: classroom.userProfiles.guardians.get
 export def "user-profiles-guardians classroomuserProfilesguardiansget" [
-  studentId: string
-  guardianId: string
+  student_id: string
+  guardian_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2601,15 +2601,15 @@ export def "user-profiles-guardians classroomuserProfilesguardiansget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<guardianId: string, guardianProfile: record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: list<record>, photoUrl: string, verifiedTeacher: bool>, invitedEmailAddress: string, studentId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/userProfiles/($studentId)/guardians/($guardianId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({student_id: $student_id, guardian_id: $guardian_id} | format pattern "/v1/userProfiles/{student_id}/guardians/{guardian_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2620,7 +2620,7 @@ export def "user-profiles-guardians classroomuserProfilesguardiansget" [
 # GET /v1/userProfiles/{userId}
 # operationId: classroom.userProfiles.get
 export def "user-profiles classroomuserProfilesget" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2636,15 +2636,15 @@ export def "user-profiles classroomuserProfilesget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: table<permission: string>, photoUrl: string, verifiedTeacher: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/userProfiles/($userId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/v1/userProfiles/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

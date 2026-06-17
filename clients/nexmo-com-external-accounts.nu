@@ -72,7 +72,7 @@ def provider-completer [] { ["messenger" "viber_service_msg" "whatsapp"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account GetAllAccounts" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GetAllAccounts
-export def "account GetAllAccounts" [
+export def "account get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,7 +122,7 @@ export def "account GetAllAccounts" [
 #
 # POST /messenger
 # operationId: CreateMessengerAccount
-export def "messenger CreateMessengerAccount" [
+export def "messenger create-messenger-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +140,7 @@ export def "messenger CreateMessengerAccount" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messenger")
-  let body = {access_token: $access_token, applications: $applications, external_id: $external_id, name: $name} | compact
+  let body = {"access_token": $access_token, "applications": $applications, "external_id": $external_id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -151,7 +151,7 @@ export def "messenger CreateMessengerAccount" [
 #
 # DELETE /messenger/{external_id}
 # operationId: DeleteMessengerAccount
-export def "messenger DeleteMessengerAccount" [
+export def "messenger delete-messenger-account" [
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -164,7 +164,7 @@ export def "messenger DeleteMessengerAccount" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messenger/($external_id)")
+  let full_url = (build-url $base ({external_id: $external_id} | format pattern "/messenger/{external_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -174,7 +174,7 @@ export def "messenger DeleteMessengerAccount" [
 #
 # GET /messenger/{external_id}
 # operationId: GetMessengerAccount
-export def "messenger GetMessengerAccount" [
+export def "messenger get-messenger-account" [
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -187,7 +187,7 @@ export def "messenger GetMessengerAccount" [
 ]: nothing -> record<access_token: string, api_key: string, applications: list<string>, external_id: string, name: string, provider: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messenger/($external_id)")
+  let full_url = (build-url $base ({external_id: $external_id} | format pattern "/messenger/{external_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,7 +197,7 @@ export def "messenger GetMessengerAccount" [
 #
 # PATCH /messenger/{external_id}
 # operationId: UpdateMessengerAccount
-export def "messenger UpdateMessengerAccount" [
+export def "messenger update-messenger-account" [
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,8 +214,8 @@ export def "messenger UpdateMessengerAccount" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messenger/($external_id)")
-  let body = {access_token: $access_token, applications: $applications, name: $name} | compact
+  let full_url = (build-url $base ({external_id: $external_id} | format pattern "/messenger/{external_id}"))
+  let body = {"access_token": $access_token, "applications": $applications, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -226,7 +226,7 @@ export def "messenger UpdateMessengerAccount" [
 #
 # GET /viber_service_msg/{external_id}
 # operationId: GetVSMAccount
-export def "viber-service-msg GetVSMAccount" [
+export def "viber-service-msg get-vsm-account" [
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -239,7 +239,7 @@ export def "viber-service-msg GetVSMAccount" [
 ]: nothing -> record<api_key: string, applications: list<string>, external_id: string, name: string, provider: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/viber_service_msg/($external_id)")
+  let full_url = (build-url $base ({external_id: $external_id} | format pattern "/viber_service_msg/{external_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -249,7 +249,7 @@ export def "viber-service-msg GetVSMAccount" [
 #
 # GET /whatsapp/{external_id}
 # operationId: GetWAAccount
-export def "whatsapp GetWAAccount" [
+export def "whatsapp get-wa-account" [
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +262,7 @@ export def "whatsapp GetWAAccount" [
 ]: nothing -> record<api_key: string, applications: list<string>, external_id: string, name: string, provider: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/whatsapp/($external_id)")
+  let full_url = (build-url $base ({external_id: $external_id} | format pattern "/whatsapp/{external_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -272,7 +272,7 @@ export def "whatsapp GetWAAccount" [
 #
 # POST /{provider}/{external_id}/applications
 # operationId: LinkApplication
-export def "applications LinkApplication" [
+export def "applications post" [
   provider: string
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -288,8 +288,8 @@ export def "applications LinkApplication" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($provider)/($external_id)/applications")
-  let body = {application: $application} | compact
+  let full_url = (build-url $base ({provider: $provider, external_id: $external_id} | format pattern "/{provider}/{external_id}/applications"))
+  let body = {"application": $application} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -300,7 +300,7 @@ export def "applications LinkApplication" [
 #
 # DELETE /{provider}/{external_id}/applications/{application_id}
 # operationId: UnliWithoutApplicationnkApplication
-export def "applications UnliWithoutApplicationnkApplication" [
+export def "applications delete" [
   provider: string
   external_id: string
   application_id: string
@@ -315,7 +315,7 @@ export def "applications UnliWithoutApplicationnkApplication" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($provider)/($external_id)/applications/($application_id)")
+  let full_url = (build-url $base ({provider: $provider, external_id: $external_id, application_id: $application_id} | format pattern "/{provider}/{external_id}/applications/{application_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

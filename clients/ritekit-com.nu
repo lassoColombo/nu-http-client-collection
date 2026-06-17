@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "emoji-auto-emojify Auto-Emojify" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "emoji-auto-emojify get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/emoji/auto-emojify
 # operationId: Auto-Emojify
-export def "emoji-auto-emojify Auto-Emojify" [
+export def "emoji-auto-emojify get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,7 +116,7 @@ export def "emoji-auto-emojify Auto-Emojify" [
 #
 # GET /v1/emoji/suggestions
 # operationId: Emoji Suggestions
-export def "emoji-suggestions Emoji-Suggestions" [
+export def "emoji-suggestions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +140,7 @@ export def "emoji-suggestions Emoji-Suggestions" [
 #
 # GET /v1/images/animate
 # operationId: Animate Image
-export def "images-animate Animate-Image" [
+export def "images-animate get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "images-animate Animate-Image" [
 #
 # GET /v1/images/logo
 # operationId: Company Logo
-export def "images-logo Company-Logo" [
+export def "images-logo get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "images-logo Company-Logo" [
 #
 # GET /v1/images/quote
 # operationId: Text to Image
-export def "images-quote Text-to-Image" [
+export def "images-quote get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,25 +200,25 @@ export def "images-quote Text-to-Image" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --quote: string # Text of the quote (e.g. If you love life, don't waste time, for time is what life is made up of)
   --author: string # Name of the author/source (e.g. Bruce Lee)
-  --fontSize: int # Font size for the quote (author font size is calculated automatically) (e.g. 60)
-  --quoteFont: string # Font-family used for quote text (e.g. Lora)
-  --quoteFontColor: string # Font color of the quote text (e.g. #4f4f4f)
-  --authorFont: string # Font-family used for author name (e.g. Lato Black)
-  --authorFontColor: string # Font color of the author (e.g. #e5e5e5)
-  --enableHighlight: int # Enable highlight on quote text (e.g. 1)
-  --highlightColor: string # Color used for highlight (e.g. #f0ea66)
-  --bgType: string # Background type (gradient/solid) (e.g. gradient)
-  --backgroundColor: string # Background color for solid background type (e.g. #000000)
-  --gradientType: string # Type of gradient background (linear/radial) (e.g. linear)
-  --gradientColor1: string # First color for gradient background type (e.g. #1ee691)
-  --gradientColor2: string # Second color for gradient background type (e.g. #1ddad6)
-  --brandLogo: string # URL of the brand logo (e.g. https://cdn.ritekit.com/assets/img/common/made-with-ritekit-white.png)
+  --font-size: int # Font size for the quote (author font size is calculated automatically) (e.g. 60)
+  --quote-font: string # Font-family used for quote text (e.g. Lora)
+  --quote-font-color: string # Font color of the quote text (e.g. #4f4f4f)
+  --author-font: string # Font-family used for author name (e.g. Lato Black)
+  --author-font-color: string # Font color of the author (e.g. #e5e5e5)
+  --enable-highlight: int # Enable highlight on quote text (e.g. 1)
+  --highlight-color: string # Color used for highlight (e.g. #f0ea66)
+  --bg-type: string # Background type (gradient/solid) (e.g. gradient)
+  --background-color: string # Background color for solid background type (e.g. #000000)
+  --gradient-type: string # Type of gradient background (linear/radial) (e.g. linear)
+  --gradient-color1: string # First color for gradient background type (e.g. #1ee691)
+  --gradient-color2: string # Second color for gradient background type (e.g. #1ddad6)
+  --brand-logo: string # URL of the brand logo (e.g. https://cdn.ritekit.com/assets/img/common/made-with-ritekit-white.png)
   --animation: string # Animation type: none, rays, glint, circle (e.g. glint)
-  --showQuoteMark: int # showing/hiding quote mark
+  --show-quote-mark: int # showing/hiding quote mark
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "quote" $quote "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "fontSize" $fontSize "scalar") (serialize-qp "quoteFont" $quoteFont "scalar") (serialize-qp "quoteFontColor" $quoteFontColor "scalar") (serialize-qp "authorFont" $authorFont "scalar") (serialize-qp "authorFontColor" $authorFontColor "scalar") (serialize-qp "enableHighlight" $enableHighlight "scalar") (serialize-qp "highlightColor" $highlightColor "scalar") (serialize-qp "bgType" $bgType "scalar") (serialize-qp "backgroundColor" $backgroundColor "scalar") (serialize-qp "gradientType" $gradientType "scalar") (serialize-qp "gradientColor1" $gradientColor1 "scalar") (serialize-qp "gradientColor2" $gradientColor2 "scalar") (serialize-qp "brandLogo" $brandLogo "scalar") (serialize-qp "animation" $animation "scalar") (serialize-qp "showQuoteMark" $showQuoteMark "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "quote" $quote "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "fontSize" $font_size "scalar") (serialize-qp "quoteFont" $quote_font "scalar") (serialize-qp "quoteFontColor" $quote_font_color "scalar") (serialize-qp "authorFont" $author_font "scalar") (serialize-qp "authorFontColor" $author_font_color "scalar") (serialize-qp "enableHighlight" $enable_highlight "scalar") (serialize-qp "highlightColor" $highlight_color "scalar") (serialize-qp "bgType" $bg_type "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "gradientType" $gradient_type "scalar") (serialize-qp "gradientColor1" $gradient_color1 "scalar") (serialize-qp "gradientColor2" $gradient_color2 "scalar") (serialize-qp "brandLogo" $brand_logo "scalar") (serialize-qp "animation" $animation "scalar") (serialize-qp "showQuoteMark" $show_quote_mark "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/images/quote" $qp)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -229,7 +229,7 @@ export def "images-quote Text-to-Image" [
 #
 # GET /v1/link/cta
 # operationId: List of CTAs
-export def "link-cta List-of-CTAs" [
+export def "link-cta get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "link-cta List-of-CTAs" [
 #
 # GET /v1/link/short-link
 # operationId: Shorten Link
-export def "link-short-link Shorten-Link" [
+export def "link-short-link get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "link-short-link Shorten-Link" [
 #
 # GET /v1/search/trending
 # operationId: Trending Hashtags
-export def "search-trending Trending-Hashtags" [
+export def "search-trending get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "search-trending Trending-Hashtags" [
 #
 # GET /v1/stats/auto-hashtag
 # operationId: Auto-Hashtag
-export def "stats-auto-hashtag Auto-Hashtag" [
+export def "stats-auto-hashtag get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,12 +311,12 @@ export def "stats-auto-hashtag Auto-Hashtag" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --post: string # Text of the post (e.g. Is artificial intelligence the future of customer service?)
-  --maxHashtags: int # Max number of hashtags. (default: 2)
-  --hashtagPosition: string # Position of hashtags: end => at the end, auto => anywhere (default: auto)
+  --max-hashtags: int # Max number of hashtags. (default: 2)
+  --hashtag-position: string # Position of hashtags: end => at the end, auto => anywhere (default: auto)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "post" $post "scalar") (serialize-qp "maxHashtags" $maxHashtags "scalar") (serialize-qp "hashtagPosition" $hashtagPosition "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "post" $post "scalar") (serialize-qp "maxHashtags" $max_hashtags "scalar") (serialize-qp "hashtagPosition" $hashtag_position "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/stats/auto-hashtag" $qp)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -327,7 +327,7 @@ export def "stats-auto-hashtag Auto-Hashtag" [
 #
 # GET /v1/stats/hashtag-suggestions
 # operationId: Hashtag Suggestions
-export def "stats-hashtag-suggestions Hashtag-Suggestions" [
+export def "stats-hashtag-suggestions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -351,7 +351,7 @@ export def "stats-hashtag-suggestions Hashtag-Suggestions" [
 #
 # GET /v1/stats/history/{hashtag}
 # operationId: Hashtag History
-export def "stats-history Hashtag-History" [
+export def "stats-history get" [
   hashtag: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -364,7 +364,7 @@ export def "stats-history Hashtag-History" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/stats/history/($hashtag)")
+  let full_url = (build-url $base ({hashtag: $hashtag} | format pattern "/v1/stats/history/{hashtag}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -374,7 +374,7 @@ export def "stats-history Hashtag-History" [
 #
 # GET /v1/stats/multiple-hashtags
 # operationId: Hashtag Stats
-export def "stats-multiple-hashtags Hashtag-Stats" [
+export def "stats-multiple-hashtags get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "stats-multiple-hashtags Hashtag-Stats" [
 #
 # GET /v2/instagram/hashtags-cleaner
 # operationId: Hashtags cleaner
-export def "instagram-hashtags-cleaner Hashtags-cleaner" [
+export def "instagram-hashtags-cleaner get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

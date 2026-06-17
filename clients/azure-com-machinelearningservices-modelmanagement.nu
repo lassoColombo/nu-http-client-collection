@@ -67,15 +67,15 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def orderby-completer [] { ["CreatedAtAsc" "CreatedAtDesc" "UpdatedAtAsc" "UpdatedAtDesc"] }
-def orderBy-completer [] { ["CreatedAtAsc" "CreatedAtDesc" "UpdatedAtAsc" "UpdatedAtDesc"] }
-def computeType-completer [] { ["ACI" "AKS" "AKSENDPOINT" "AMLCOMPUTE" "IOT" "UNKNOWN"] }
-def deploymentType-completer [] { ["Batch" "GRPCRealtimeEndpoint" "HttpRealtimeEndpoint"] }
-def keyType-completer [] { ["Primary" "Secondary"] }
+def order-by-completer [] { ["CreatedAtAsc" "CreatedAtDesc" "UpdatedAtAsc" "UpdatedAtDesc"] }
+def compute-type-completer [] { ["ACI" "AKS" "AKSENDPOINT" "AMLCOMPUTE" "IOT" "UNKNOWN"] }
+def deployment-type-completer [] { ["Batch" "GRPCRealtimeEndpoint" "HttpRealtimeEndpoint"] }
+def key-type-completer [] { ["Primary" "Secondary"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets ListQuery" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets list-query" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,9 +99,9 @@ export def commands []: nothing -> table {
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/assets
 # operationId: Assets_ListQuery
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets ListQuery" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets list-query" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -111,18 +111,18 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --runId: string # The run Id associated with the Assets.
+  --run-id: string # The run Id associated with the Assets.
   --name: string # The object name.
   --count: int # The number of items to retrieve in a page. (format: int32)
-  --skipToken: string # The continuation token to retrieve the next page.
+  --skip-token: string # The continuation token to retrieve the next page.
   --tags: string # A set of tags with which to filter the returned models.             It is a comma separated string of tags key or tags key=value             Example: tagKey1,tagKey2,tagKey3=value3
   --properties: string # A set of properties with which to filter the returned models.             It is a comma separated string of properties key and/or properties key=value             Example: propKey1,propKey2,propKey3=value3
   --orderby: string@orderby-completer # An option for specifying how to order the list. (default: CreatedAtDesc)
 ]: nothing -> record<nextLink: string, value: table<artifacts: list, createdTime: string, description: string, id: string, kvTags: record, meta: record, name: string, properties: record, runid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "runId" $runId "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "$skipToken" $skipToken "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "properties" $properties "scalar") (serialize-qp "orderby" $orderby "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/assets" $qp)
+  let qp = [(serialize-qp "runId" $run_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "$skipToken" $skip_token "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "properties" $properties "scalar") (serialize-qp "orderby" $orderby "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/assets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -133,9 +133,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 # POST /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/assets
 # operationId: Assets_Create
 # --artifacts item shape: {id?: string, prefix?: string}
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets Create" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets create" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -148,7 +148,7 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   --artifacts: list # A list of child artifacts. — item shape: {id?: string, prefix?: string}
   --description: string # The Asset description.
   --id: string # The Asset Id.
-  --kvTags: record # The Asset tag dictionary. Tags are mutable.
+  --kv-tags: record # The Asset tag dictionary. Tags are mutable.
   --meta: record # A dictionary containing metadata about the Asset.
   name: string # The name of the Asset.
   --properties: record # The Asset property dictionary. Properties are immutable.
@@ -157,8 +157,8 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/assets")
-  let body = {artifacts: $artifacts, description: $description, id: $id, kvTags: $kvTags, meta: $meta, name: $name, properties: $properties, runid: $runid} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/assets"))
+  let body = {"artifacts": $artifacts, "description": $description, "id": $id, "kvTags": $kv_tags, "meta": $meta, "name": $name, "properties": $properties, "runid": $runid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -169,9 +169,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # DELETE /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/assets/{id}
 # operationId: Assets_Delete
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets Delete" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets delete" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -185,7 +185,7 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 ]: nothing -> record<code: string, details: table<code: string, message: string, target: string>, message: string, statusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/assets/($id)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, id: $id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/assets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,9 +195,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/assets/{id}
 # operationId: Assets_QueryById
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets QueryById" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets list-by" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -211,7 +211,7 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 ]: nothing -> record<artifacts: table<id: string, prefix: string>, createdTime: string, description: string, id: string, kvTags: record, meta: record, name: string, properties: record, runid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/assets/($id)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, id: $id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/assets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,9 +221,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # PATCH /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/assets/{id}
 # operationId: Assets_Patch
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets Patch" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets update" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -239,7 +239,7 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/assets/($id)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, id: $id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/assets/{id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -250,11 +250,11 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/images/{imageId}/profiles
 # operationId: Profiles_ListQuery
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-images-profiles ListQuery" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-images-profiles list-query" [
+  subscription_id: string
+  resource_group: string
   workspace: string
-  imageId: string
+  image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,13 +268,13 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   --tags: string # A set of tags with which to filter the returned models.             It is a comma separated string of tags key or tags key=value             Example: tagKey1,tagKey2,tagKey3=value3
   --properties: string # A set of properties with which to filter the returned models.             It is a comma separated string of properties key and/or properties key=value             Example: propKey1,propKey2,propKey3=value3
   --count: int # The number of items to retrieve in a page. (format: int32)
-  --skipToken: string # The continuation token to retrieve the next page.
-  --orderBy: string@orderBy-completer # The option to order the response. (default: CreatedAtDesc)
+  --skip-token: string # The continuation token to retrieve the next page.
+  --order-by: string@order-by-completer # The option to order the response. (default: CreatedAtDesc)
 ]: nothing -> record<nextLink: string, value: table<createdTime: string, description: string, error: record, imageId: string, inputData: string, kvTags: record, name: string, profileRunResult: string, profilingErrorLogs: string, properties: record, recommendationLatencyInMs: float, recommendedCpu: float, recommendedMemoryInGB: float, state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "properties" $properties "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "$skipToken" $skipToken "scalar") (serialize-qp "orderBy" $orderBy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/images/($imageId)/profiles" $qp)
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "properties" $properties "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "$skipToken" $skip_token "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, image_id: $image_id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/images/{image_id}/profiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -284,11 +284,11 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # POST /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/images/{imageId}/profiles
 # operationId: Profiles_Create
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-images-profiles Create" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-images-profiles create" [
+  subscription_id: string
+  resource_group: string
   workspace: string
-  imageId: string
+  image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,16 +298,16 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The profile description.
-  --inputData: string # The profile input data.
-  --kvTags: record # The tags dictionary.
+  --input-data: string # The profile input data.
+  --kv-tags: record # The tags dictionary.
   name: string # The profile name.
   --properties: record # The properties dictionary.
 ]: any -> record<code: string, details: table<code: string, message: string, target: string>, message: string, statusCode: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/images/($imageId)/profiles")
-  let body = {description: $description, inputData: $inputData, kvTags: $kvTags, name: $name, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, image_id: $image_id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/images/{image_id}/profiles"))
+  let body = {"description": $description, "inputData": $input_data, "kvTags": $kv_tags, "name": $name, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -318,11 +318,11 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/images/{imageId}/profiles/{id}
 # operationId: Profiles_QueryById
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-images-profiles QueryById" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-images-profiles list-by" [
+  subscription_id: string
+  resource_group: string
   workspace: string
-  imageId: string
+  image_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,7 +335,7 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 ]: nothing -> record<createdTime: string, description: string, error: record<code: string, details: list<record>, message: string, statusCode: int>, imageId: string, inputData: string, kvTags: record, name: string, profileRunResult: string, profilingErrorLogs: string, properties: record, recommendationLatencyInMs: float, recommendedCpu: float, recommendedMemoryInGB: float, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/images/($imageId)/profiles/($id)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, image_id: $image_id, id: $id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/images/{image_id}/profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -345,9 +345,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models
 # operationId: MLModels_ListQuery
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models ListQuery" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models list-query" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -361,16 +361,16 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   --framework: string # The framework.
   --description: string # The object description.
   --count: int # The number of items to retrieve in a page. (format: int32)
-  --skipToken: string # The continuation token to retrieve the next page.
+  --skip-token: string # The continuation token to retrieve the next page.
   --tags: string # A set of tags with which to filter the returned models.             It is a comma separated string of tags key or tags key=value             Example: tagKey1,tagKey2,tagKey3=value3
   --properties: string # A set of properties with which to filter the returned models.             It is a comma separated string of properties key and/or properties key=value             Example: propKey1,propKey2,propKey3=value3
-  --runId: string # The runId which created the model.
-  --orderBy: string@orderBy-completer # An option to specify how the models are ordered in the response. (default: CreatedAtDesc)
+  --run-id: string # The runId which created the model.
+  --order-by: string@order-by-completer # An option to specify how the models are ordered in the response. (default: CreatedAtDesc)
 ]: nothing -> record<nextLink: string, value: table<createdTime: string, datasets: list, description: string, experimentName: string, framework: string, frameworkVersion: string, id: string, kvTags: record, mimeType: string, modifiedTime: string, name: string, parentModelId: string, properties: record, runId: string, unpack: bool, url: string, version: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "framework" $framework "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "$skipToken" $skipToken "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "properties" $properties "scalar") (serialize-qp "runId" $runId "scalar") (serialize-qp "orderBy" $orderBy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/models" $qp)
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "framework" $framework "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "$skipToken" $skip_token "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "properties" $properties "scalar") (serialize-qp "runId" $run_id "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -381,9 +381,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 # POST /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models
 # operationId: MLModels_Register
 # --datasets item shape: {id?: string, name?: string}
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models Register" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models create" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -395,16 +395,16 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasets: list # The list of datasets associated with the model. — item shape: {id?: string, name?: string}
   --description: string # The Model description text. (e.g. A mnist model, first version.)
-  --experimentName: string # The name of the experiment where this model was created.
+  --experiment-name: string # The name of the experiment where this model was created.
   --framework: string # The Model framework.
-  --frameworkVersion: string # The Model framework version.
+  --framework-version: string # The Model framework version.
   --id: string # The Model Id. (e.g. sklearn_mnist:1)
-  --kvTags: record # The Model tag dictionary. Items are mutable.
-  mimeType: string # The MIME type of Model content. For more details about MIME type, please open https://www.iana.org/assignments/media-types/media-types.xhtml
+  --kv-tags: record # The Model tag dictionary. Items are mutable.
+  mime_type: string # The MIME type of Model content. For more details about MIME type, please open https://www.iana.org/assignments/media-types/media-types.xhtml
   name: string # The Model name. (e.g. sklearn_mnist)
-  --parentModelId: string # The Parent Model Id. (e.g. sklearn_mnist_root:1)
+  --parent-model-id: string # The Parent Model Id. (e.g. sklearn_mnist_root:1)
   --properties: record # The Model property dictionary. Properties are immutable.
-  --runId: string # The RunId that created this model.
+  --run-id: string # The RunId that created this model.
   --unpack: oneof<nothing, bool> # Indicates whether we need to unpack the Model during docker Image creation.
   --body-url: string # The URL of the Model. Usually a SAS URL.
   --version: int # The Model version assigned by Model Management Service. (format: int64, e.g. 1)
@@ -412,8 +412,8 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/models")
-  let body = {datasets: $datasets, description: $description, experimentName: $experimentName, framework: $framework, frameworkVersion: $frameworkVersion, id: $id, kvTags: $kvTags, mimeType: $mimeType, name: $name, parentModelId: $parentModelId, properties: $properties, runId: $runId, unpack: $unpack, url: $body_url, version: $version} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models"))
+  let body = {"datasets": $datasets, "description": $description, "experimentName": $experiment_name, "framework": $framework, "frameworkVersion": $framework_version, "id": $id, "kvTags": $kv_tags, "mimeType": $mime_type, "name": $name, "parentModelId": $parent_model_id, "properties": $properties, "runId": $run_id, "unpack": $unpack, "url": $body_url, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -424,9 +424,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # DELETE /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models/{id}
 # operationId: MLModels_Delete
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models Delete" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models delete" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -440,7 +440,7 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 ]: nothing -> record<code: string, details: table<code: string, message: string, target: string>, message: string, statusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/models/($id)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, id: $id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,9 +450,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models/{id}
 # operationId: MLModels_QueryById
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models QueryById" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models list-by" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -466,7 +466,7 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 ]: nothing -> record<createdTime: string, datasets: table<id: string, name: string>, description: string, experimentName: string, framework: string, frameworkVersion: string, id: string, kvTags: record, mimeType: string, modifiedTime: string, name: string, parentModelId: string, properties: record, runId: string, unpack: bool, url: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/models/($id)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, id: $id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -476,9 +476,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # PATCH /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models/{id}
 # operationId: MLModels_Patch
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models Patch" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models update" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -494,7 +494,7 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/models/($id)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, id: $id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models/{id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -505,9 +505,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models/{id}/metrics
 # operationId: MLModels_GetMetrics
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models-metrics GetMetrics" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models-metrics get" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -518,13 +518,13 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startDate: string # The start date from which to retrieve metrics, ISO 8601 literal format.
-  --endDate: string # The end date from which to retrieve metrics, ISO 8601 literal format.
+  --start-date: string # The start date from which to retrieve metrics, ISO 8601 literal format.
+  --end-date: string # The end date from which to retrieve metrics, ISO 8601 literal format.
 ]: nothing -> record<deploymentSummary: record<successfulDeployments: int, unsuccessfulDeployments: int>, endTime: string, startTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/models/($id)/metrics" $qp)
+  let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, id: $id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models/{id}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -534,9 +534,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/operations/{id}
 # operationId: Operations_Get
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-operations Get" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-operations get" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -550,7 +550,7 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 ]: nothing -> record<createdTime: string, endTime: string, error: record<code: string, details: list<record>, message: string, statusCode: int>, id: string, operationDetails: record<subOperationState: string, subOperationType: string>, operationLog: string, operationType: string, parentRequestId: string, resourceLocation: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/operations/($id)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, id: $id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/operations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -560,9 +560,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services
 # operationId: Services_ListQuery
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services ListQuery" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services list-query" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -572,14 +572,14 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --imageId: string # The Image Id.
-  --imageName: string # The Image name.
-  --modelId: string # The Model Id.
-  --modelName: string # The Model name.
+  --image-id: string # The Image Id.
+  --image-name: string # The Image name.
+  --model-id: string # The Model Id.
+  --model-name: string # The Model name.
   --name: string # The object name.
   --count: int # The number of items to retrieve in a page. (format: int32)
-  --computeType: string # The compute environment type.
-  --skipToken: string # The continuation token to retrieve the next page.
+  --compute-type: string # The compute environment type.
+  --skip-token: string # The continuation token to retrieve the next page.
   --tags: string # A set of tags with which to filter the returned models.             It is a comma separated string of tags key or tags key=value             Example: tagKey1,tagKey2,tagKey3=value3
   --properties: string # A set of properties with which to filter the returned models.             It is a comma separated string of properties key and/or properties key=value             Example: propKey1,propKey2,propKey3=value3
   --expand: oneof<nothing, bool> # Set to True to include Model details. (default: false)
@@ -587,8 +587,8 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 ]: nothing -> record<nextLink: string, value: table<computeType: string, createdTime: string, deploymentType: string, description: string, error: record, id: string, kvTags: record, name: string, operationId: string, properties: record, state: string, updatedTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "imageId" $imageId "scalar") (serialize-qp "imageName" $imageName "scalar") (serialize-qp "modelId" $modelId "scalar") (serialize-qp "modelName" $modelName "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "computeType" $computeType "scalar") (serialize-qp "$skipToken" $skipToken "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "properties" $properties "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "orderby" $orderby "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/services" $qp)
+  let qp = [(serialize-qp "imageId" $image_id "scalar") (serialize-qp "imageName" $image_name "scalar") (serialize-qp "modelId" $model_id "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "computeType" $compute_type "scalar") (serialize-qp "$skipToken" $skip_token "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "properties" $properties "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "orderby" $orderby "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -601,9 +601,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 # operationId: Services_Create
 # --environmentImageRequest shape: {assets?: list, driverProgram?: string, environment?: record, modelIds?: list}
 # --keys shape: {primaryKey?: string, secondaryKey?: string}
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services Create" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services create" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -613,13 +613,13 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  computeType: string@computeType-completer # The compute environment type for the service. (e.g. AKS)
-  --deploymentType: string@deploymentType-completer # The deployment type for the service. (e.g. HttpRealtimeEndpoint)
+  compute_type: string@compute-type-completer # The compute environment type for the service. (e.g. AKS)
+  --deployment-type: string@deployment-type-completer # The deployment type for the service. (e.g. HttpRealtimeEndpoint)
   --description: string # The description of the service.
-  --environmentImageRequest: record # Request to create a Docker image based on Environment. — shape: {assets?: list, driverProgram?: string, environment?: record, modelIds?: list}
-  --imageId: string # The Image Id.
+  --environment-image-request: record # Request to create a Docker image based on Environment. — shape: {assets?: list, driverProgram?: string, environment?: record, modelIds?: list}
+  --image-id: string # The Image Id.
   --keys: record # shape: {primaryKey?: string, secondaryKey?: string}
-  --kvTags: record # The service tag dictionary. Tags are mutable.
+  --kv-tags: record # The service tag dictionary. Tags are mutable.
   --location: string # The location of the service.
   name: string # The service name.
   --properties: record # The service properties dictionary. Properties are immutable.
@@ -627,8 +627,8 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/services")
-  let body = {computeType: $computeType, deploymentType: $deploymentType, description: $description, environmentImageRequest: $environmentImageRequest, imageId: $imageId, keys: $keys, kvTags: $kvTags, location: $location, name: $name, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services"))
+  let body = {"computeType": $compute_type, "deploymentType": $deployment_type, "description": $description, "environmentImageRequest": $environment_image_request, "imageId": $image_id, "keys": $keys, "kvTags": $kv_tags, "location": $location, "name": $name, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -639,9 +639,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # DELETE /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}
 # operationId: Services_Delete
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services Delete" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services delete" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -655,7 +655,7 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 ]: nothing -> record<code: string, details: table<code: string, message: string, target: string>, message: string, statusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/services/($id)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, id: $id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -665,9 +665,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}
 # operationId: Services_QueryById
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services QueryById" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services list-by" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -683,7 +683,7 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/services/($id)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, id: $id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -693,9 +693,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # PATCH /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}
 # operationId: Services_Patch
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services Patch" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services update" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -711,7 +711,7 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/services/($id)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, id: $id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -722,9 +722,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # POST /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}/listkeys
 # operationId: Services_ListServiceKeys
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services-listkeys ListServiceKeys" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services-listkeys list-service-keys" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -738,7 +738,7 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 ]: nothing -> record<primaryKey: string, secondaryKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/services/($id)/listkeys")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, id: $id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}/listkeys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -748,9 +748,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # POST /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}/regenerateKeys
 # operationId: Services_RegenerateServiceKeys
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services-regenerate-keys RegenerateServiceKeys" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services-regenerate-keys post" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -761,14 +761,14 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --keyType: int@keyType-completer # Specification for which type of key to generate. (format: int32, e.g. Primary)
-  --keyValue: string # The value the key is set to.
+  --key-type: int@key-type-completer # Specification for which type of key to generate. (format: int32, e.g. Primary)
+  --key-value: string # The value the key is set to.
 ]: any -> record<primaryKey: string, secondaryKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/services/($id)/regenerateKeys")
-  let body = {keyType: $keyType, keyValue: $keyValue} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, id: $id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}/regenerateKeys"))
+  let body = {"keyType": $key_type, "keyValue": $key_value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -779,9 +779,9 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 #
 # POST /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}/token
 # operationId: Services_GetServiceToken
-export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services-token GetServiceToken" [
-  subscriptionId: string
-  resourceGroup: string
+export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services-token get" [
+  subscription_id: string
+  resource_group: string
   workspace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -795,7 +795,7 @@ export def "modelmanagement-v10-subscriptions-resource-groups-providers-microsof
 ]: nothing -> record<accessToken: string, expiryOn: int, refreshAfter: int, tokenType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modelmanagement/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.MachineLearningServices/workspaces/($workspace)/services/($id)/token")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, workspace: $workspace, id: $id} | format pattern "/modelmanagement/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}/token"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

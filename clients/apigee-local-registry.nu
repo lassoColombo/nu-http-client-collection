@@ -70,7 +70,7 @@ def accept-completer [] { ["*/*" "application/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects-locations-apis ListApis" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects-locations-apis list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/projects/{project}/locations/{location}/apis
 # operationId: Registry_ListApis
-export def "projects-locations-apis ListApis" [
+export def "projects-locations-apis list" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -105,14 +105,14 @@ export def "projects-locations-apis ListApis" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageSize: int # The maximum number of APIs to return. The service may return fewer than this value. If unspecified, at most 50 values will be returned. The maximum is 1000; values above 1000 will be coerced to 1000. (format: int32)
-  --pageToken: string # A page token, received from a previous `ListApis` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListApis` must match the call that provided the page token.
+  --page-size: int # The maximum number of APIs to return. The service may return fewer than this value. If unspecified, at most 50 values will be returned. The maximum is 1000; values above 1000 will be coerced to 1000. (format: int32)
+  --page-token: string # A page token, received from a previous `ListApis` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListApis` must match the call that provided the page token.
   --filter: string # An expression that can be used to filter the list. Filters use the Common Expression Language and can refer to all message fields.
 ]: nothing -> record<apis: table<annotations: record, availability: string, createTime: string, description: string, displayName: string, labels: record, name: string, recommendedDeployment: string, recommendedVersion: string, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis" $qp)
+  let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: $project, location: $location} | format pattern "/v1/projects/{project}/locations/{location}/apis") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,7 +122,7 @@ export def "projects-locations-apis ListApis" [
 #
 # POST /v1/projects/{project}/locations/{location}/apis
 # operationId: Registry_CreateApi
-export def "projects-locations-apis CreateApi" [
+export def "projects-locations-apis create" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -133,22 +133,22 @@ export def "projects-locations-apis CreateApi" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiId: string # Required. The ID to use for the api, which will become the final component of the api's resource name. This value should be 4-63 characters, and valid characters are /[a-z][0-9]-/. Following AIP-162, IDs must not have the form of a UUID.
+  --api-id: string # Required. The ID to use for the api, which will become the final component of the api's resource name. This value should be 4-63 characters, and valid characters are /[a-z][0-9]-/. Following AIP-162, IDs must not have the form of a UUID.
   --annotations: record # Annotations attach non-identifying metadata to resources. Annotation keys and values are less restricted than those of labels, but should be generally used for small values of broad interest. Larger, topic- specific metadata should be stored in Artifacts.
   --availability: string # A user-definable description of the availability of this service. Format: free-form, but we expect single words that describe availability, e.g. "NONE", "TESTING", "PREVIEW", "GENERAL", "DEPRECATED", "SHUTDOWN".
   --description: string # A detailed description.
-  --displayName: string # Human-meaningful name.
+  --display-name: string # Human-meaningful name.
   --labels: record # Labels attach identifying metadata to resources. Identifying metadata can be used to filter list operations. Label keys and values can be no longer than 64 characters (Unicode codepoints), can only contain lowercase letters, numeric characters, underscores and dashes. International characters are allowed. No more than 64 user labels can be associated with one resource (System labels are excluded). See https://goo.gl/xmQnxf for more information and examples of labels. System reserved label keys are prefixed with "apigeeregistry.googleapis.com/" and cannot be changed.
   --name: string # Resource name.
-  --recommendedDeployment: string # The recommended deployment of the API. Format: apis/{api}/deployments/{deployment}
-  --recommendedVersion: string # The recommended version of the API. Format: apis/{api}/versions/{version}
+  --recommended-deployment: string # The recommended deployment of the API. Format: apis/{api}/deployments/{deployment}
+  --recommended-version: string # The recommended version of the API. Format: apis/{api}/versions/{version}
 ]: any -> record<annotations: record, availability: string, createTime: string, description: string, displayName: string, labels: record, name: string, recommendedDeployment: string, recommendedVersion: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "apiId" $apiId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis" $qp)
-  let body = {annotations: $annotations, availability: $availability, description: $description, displayName: $displayName, labels: $labels, name: $name, recommendedDeployment: $recommendedDeployment, recommendedVersion: $recommendedVersion} | compact
+  let qp = [(serialize-qp "apiId" $api_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: $project, location: $location} | format pattern "/v1/projects/{project}/locations/{location}/apis") $qp)
+  let body = {"annotations": $annotations, "availability": $availability, "description": $description, "displayName": $display_name, "labels": $labels, "name": $name, "recommendedDeployment": $recommended_deployment, "recommendedVersion": $recommended_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -159,7 +159,7 @@ export def "projects-locations-apis CreateApi" [
 #
 # DELETE /v1/projects/{project}/locations/{location}/apis/{api}
 # operationId: Registry_DeleteApi
-export def "projects-locations-apis DeleteApi" [
+export def "projects-locations-apis delete" [
   project: string
   location: string
   api: string
@@ -176,7 +176,7 @@ export def "projects-locations-apis DeleteApi" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)" $qp)
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -186,7 +186,7 @@ export def "projects-locations-apis DeleteApi" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}
 # operationId: Registry_GetApi
-export def "projects-locations-apis GetApi" [
+export def "projects-locations-apis get" [
   project: string
   location: string
   api: string
@@ -201,7 +201,7 @@ export def "projects-locations-apis GetApi" [
 ]: nothing -> record<annotations: record, availability: string, createTime: string, description: string, displayName: string, labels: record, name: string, recommendedDeployment: string, recommendedVersion: string, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)")
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -211,7 +211,7 @@ export def "projects-locations-apis GetApi" [
 #
 # PATCH /v1/projects/{project}/locations/{location}/apis/{api}
 # operationId: Registry_UpdateApi
-export def "projects-locations-apis UpdateApi" [
+export def "projects-locations-apis update" [
   project: string
   location: string
   api: string
@@ -223,23 +223,23 @@ export def "projects-locations-apis UpdateApi" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updateMask: string # The list of fields to be updated. If omitted, all fields are updated that are set in the request message (fields set to default values are ignored). If a "*" is specified, all fields are updated, including fields that are unspecified/default in the request. (format: field-mask)
-  --allowMissing: oneof<nothing, bool> # If set to true, and the api is not found, a new api_versions will be created. In this situation, `update_mask` is ignored.
+  --update-mask: string # The list of fields to be updated. If omitted, all fields are updated that are set in the request message (fields set to default values are ignored). If a "*" is specified, all fields are updated, including fields that are unspecified/default in the request. (format: field-mask)
+  --allow-missing: oneof<nothing, bool> # If set to true, and the api is not found, a new api_versions will be created. In this situation, `update_mask` is ignored.
   --annotations: record # Annotations attach non-identifying metadata to resources. Annotation keys and values are less restricted than those of labels, but should be generally used for small values of broad interest. Larger, topic- specific metadata should be stored in Artifacts.
   --availability: string # A user-definable description of the availability of this service. Format: free-form, but we expect single words that describe availability, e.g. "NONE", "TESTING", "PREVIEW", "GENERAL", "DEPRECATED", "SHUTDOWN".
   --description: string # A detailed description.
-  --displayName: string # Human-meaningful name.
+  --display-name: string # Human-meaningful name.
   --labels: record # Labels attach identifying metadata to resources. Identifying metadata can be used to filter list operations. Label keys and values can be no longer than 64 characters (Unicode codepoints), can only contain lowercase letters, numeric characters, underscores and dashes. International characters are allowed. No more than 64 user labels can be associated with one resource (System labels are excluded). See https://goo.gl/xmQnxf for more information and examples of labels. System reserved label keys are prefixed with "apigeeregistry.googleapis.com/" and cannot be changed.
   --name: string # Resource name.
-  --recommendedDeployment: string # The recommended deployment of the API. Format: apis/{api}/deployments/{deployment}
-  --recommendedVersion: string # The recommended version of the API. Format: apis/{api}/versions/{version}
+  --recommended-deployment: string # The recommended deployment of the API. Format: apis/{api}/deployments/{deployment}
+  --recommended-version: string # The recommended version of the API. Format: apis/{api}/versions/{version}
 ]: any -> record<annotations: record, availability: string, createTime: string, description: string, displayName: string, labels: record, name: string, recommendedDeployment: string, recommendedVersion: string, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "updateMask" $updateMask "scalar") (serialize-qp "allowMissing" $allowMissing "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)" $qp)
-  let body = {annotations: $annotations, availability: $availability, description: $description, displayName: $displayName, labels: $labels, name: $name, recommendedDeployment: $recommendedDeployment, recommendedVersion: $recommendedVersion} | compact
+  let qp = [(serialize-qp "updateMask" $update_mask "scalar") (serialize-qp "allowMissing" $allow_missing "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}") $qp)
+  let body = {"annotations": $annotations, "availability": $availability, "description": $description, "displayName": $display_name, "labels": $labels, "name": $name, "recommendedDeployment": $recommended_deployment, "recommendedVersion": $recommended_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -250,7 +250,7 @@ export def "projects-locations-apis UpdateApi" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/deployments
 # operationId: Registry_ListApiDeployments
-export def "projects-locations-apis-deployments ListApiDeployments" [
+export def "projects-locations-apis-deployments list" [
   project: string
   location: string
   api: string
@@ -262,14 +262,14 @@ export def "projects-locations-apis-deployments ListApiDeployments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageSize: int # The maximum number of deployments to return. The service may return fewer than this value. If unspecified, at most 50 values will be returned. The maximum is 1000; values above 1000 will be coerced to 1000. (format: int32)
-  --pageToken: string # A page token, received from a previous `ListApiDeployments` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListApiDeployments` must match the call that provided the page token.
+  --page-size: int # The maximum number of deployments to return. The service may return fewer than this value. If unspecified, at most 50 values will be returned. The maximum is 1000; values above 1000 will be coerced to 1000. (format: int32)
+  --page-token: string # A page token, received from a previous `ListApiDeployments` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListApiDeployments` must match the call that provided the page token.
   --filter: string # An expression that can be used to filter the list. Filters use the Common Expression Language and can refer to all message fields.
 ]: nothing -> record<apiDeployments: table<accessGuidance: string, annotations: record, apiSpecRevision: string, createTime: string, description: string, displayName: string, endpointUri: string, externalChannelUri: string, intendedAudience: string, labels: record, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/deployments" $qp)
+  let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -279,7 +279,7 @@ export def "projects-locations-apis-deployments ListApiDeployments" [
 #
 # POST /v1/projects/{project}/locations/{location}/apis/{api}/deployments
 # operationId: Registry_CreateApiDeployment
-export def "projects-locations-apis-deployments CreateApiDeployment" [
+export def "projects-locations-apis-deployments create" [
   project: string
   location: string
   api: string
@@ -291,24 +291,24 @@ export def "projects-locations-apis-deployments CreateApiDeployment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiDeploymentId: string # Required. The ID to use for the deployment, which will become the final component of the deployment's resource name. This value should be 4-63 characters, and valid characters are /[a-z][0-9]-/. Following AIP-162, IDs must not have the form of a UUID.
-  --accessGuidance: string # Text briefly describing how to access the endpoint. Changes to this value will not affect the revision.
+  --api-deployment-id: string # Required. The ID to use for the deployment, which will become the final component of the deployment's resource name. This value should be 4-63 characters, and valid characters are /[a-z][0-9]-/. Following AIP-162, IDs must not have the form of a UUID.
+  --access-guidance: string # Text briefly describing how to access the endpoint. Changes to this value will not affect the revision.
   --annotations: record # Annotations attach non-identifying metadata to resources. Annotation keys and values are less restricted than those of labels, but should be generally used for small values of broad interest. Larger, topic- specific metadata should be stored in Artifacts.
-  --apiSpecRevision: string # The full resource name (including revision id) of the spec of the API being served by the deployment. Changes to this value will update the revision. Format: apis/{api}/deployments/{deployment}
+  --api-spec-revision: string # The full resource name (including revision id) of the spec of the API being served by the deployment. Changes to this value will update the revision. Format: apis/{api}/deployments/{deployment}
   --description: string # A detailed description.
-  --displayName: string # Human-meaningful name.
-  --endpointUri: string # The address where the deployment is serving. Changes to this value will update the revision.
-  --externalChannelUri: string # The address of the external channel of the API (e.g. the Developer Portal). Changes to this value will not affect the revision.
-  --intendedAudience: string # Text briefly identifying the intended audience of the API. Changes to this value will not affect the revision.
+  --display-name: string # Human-meaningful name.
+  --endpoint-uri: string # The address where the deployment is serving. Changes to this value will update the revision.
+  --external-channel-uri: string # The address of the external channel of the API (e.g. the Developer Portal). Changes to this value will not affect the revision.
+  --intended-audience: string # Text briefly identifying the intended audience of the API. Changes to this value will not affect the revision.
   --labels: record # Labels attach identifying metadata to resources. Identifying metadata can be used to filter list operations. Label keys and values can be no longer than 64 characters (Unicode codepoints), can only contain lowercase letters, numeric characters, underscores and dashes. International characters are allowed. No more than 64 user labels can be associated with one resource (System labels are excluded). See https://goo.gl/xmQnxf for more information and examples of labels. System reserved label keys are prefixed with "registry.googleapis.com/" and cannot be changed.
   --name: string # Resource name.
 ]: any -> record<accessGuidance: string, annotations: record, apiSpecRevision: string, createTime: string, description: string, displayName: string, endpointUri: string, externalChannelUri: string, intendedAudience: string, labels: record, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "apiDeploymentId" $apiDeploymentId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/deployments" $qp)
-  let body = {accessGuidance: $accessGuidance, annotations: $annotations, apiSpecRevision: $apiSpecRevision, description: $description, displayName: $displayName, endpointUri: $endpointUri, externalChannelUri: $externalChannelUri, intendedAudience: $intendedAudience, labels: $labels, name: $name} | compact
+  let qp = [(serialize-qp "apiDeploymentId" $api_deployment_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments") $qp)
+  let body = {"accessGuidance": $access_guidance, "annotations": $annotations, "apiSpecRevision": $api_spec_revision, "description": $description, "displayName": $display_name, "endpointUri": $endpoint_uri, "externalChannelUri": $external_channel_uri, "intendedAudience": $intended_audience, "labels": $labels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -319,7 +319,7 @@ export def "projects-locations-apis-deployments CreateApiDeployment" [
 #
 # DELETE /v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}
 # operationId: Registry_DeleteApiDeployment
-export def "projects-locations-apis-deployments DeleteApiDeployment" [
+export def "projects-locations-apis-deployments delete" [
   project: string
   location: string
   api: string
@@ -337,7 +337,7 @@ export def "projects-locations-apis-deployments DeleteApiDeployment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/deployments/($deployment)" $qp)
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, deployment: $deployment} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -347,7 +347,7 @@ export def "projects-locations-apis-deployments DeleteApiDeployment" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}
 # operationId: Registry_GetApiDeployment
-export def "projects-locations-apis-deployments GetApiDeployment" [
+export def "projects-locations-apis-deployments get" [
   project: string
   location: string
   api: string
@@ -363,7 +363,7 @@ export def "projects-locations-apis-deployments GetApiDeployment" [
 ]: nothing -> record<accessGuidance: string, annotations: record, apiSpecRevision: string, createTime: string, description: string, displayName: string, endpointUri: string, externalChannelUri: string, intendedAudience: string, labels: record, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/deployments/($deployment)")
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, deployment: $deployment} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -373,7 +373,7 @@ export def "projects-locations-apis-deployments GetApiDeployment" [
 #
 # PATCH /v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}
 # operationId: Registry_UpdateApiDeployment
-export def "projects-locations-apis-deployments UpdateApiDeployment" [
+export def "projects-locations-apis-deployments update" [
   project: string
   location: string
   api: string
@@ -386,25 +386,25 @@ export def "projects-locations-apis-deployments UpdateApiDeployment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updateMask: string # The list of fields to be updated. If omitted, all fields are updated that are set in the request message (fields set to default values are ignored). If a "*" is specified, all fields are updated, including fields that are unspecified/default in the request. (format: field-mask)
-  --allowMissing: oneof<nothing, bool> # If set to true, and the deployment is not found, a new deployment will be created. In this situation, `update_mask` is ignored.
-  --accessGuidance: string # Text briefly describing how to access the endpoint. Changes to this value will not affect the revision.
+  --update-mask: string # The list of fields to be updated. If omitted, all fields are updated that are set in the request message (fields set to default values are ignored). If a "*" is specified, all fields are updated, including fields that are unspecified/default in the request. (format: field-mask)
+  --allow-missing: oneof<nothing, bool> # If set to true, and the deployment is not found, a new deployment will be created. In this situation, `update_mask` is ignored.
+  --access-guidance: string # Text briefly describing how to access the endpoint. Changes to this value will not affect the revision.
   --annotations: record # Annotations attach non-identifying metadata to resources. Annotation keys and values are less restricted than those of labels, but should be generally used for small values of broad interest. Larger, topic- specific metadata should be stored in Artifacts.
-  --apiSpecRevision: string # The full resource name (including revision id) of the spec of the API being served by the deployment. Changes to this value will update the revision. Format: apis/{api}/deployments/{deployment}
+  --api-spec-revision: string # The full resource name (including revision id) of the spec of the API being served by the deployment. Changes to this value will update the revision. Format: apis/{api}/deployments/{deployment}
   --description: string # A detailed description.
-  --displayName: string # Human-meaningful name.
-  --endpointUri: string # The address where the deployment is serving. Changes to this value will update the revision.
-  --externalChannelUri: string # The address of the external channel of the API (e.g. the Developer Portal). Changes to this value will not affect the revision.
-  --intendedAudience: string # Text briefly identifying the intended audience of the API. Changes to this value will not affect the revision.
+  --display-name: string # Human-meaningful name.
+  --endpoint-uri: string # The address where the deployment is serving. Changes to this value will update the revision.
+  --external-channel-uri: string # The address of the external channel of the API (e.g. the Developer Portal). Changes to this value will not affect the revision.
+  --intended-audience: string # Text briefly identifying the intended audience of the API. Changes to this value will not affect the revision.
   --labels: record # Labels attach identifying metadata to resources. Identifying metadata can be used to filter list operations. Label keys and values can be no longer than 64 characters (Unicode codepoints), can only contain lowercase letters, numeric characters, underscores and dashes. International characters are allowed. No more than 64 user labels can be associated with one resource (System labels are excluded). See https://goo.gl/xmQnxf for more information and examples of labels. System reserved label keys are prefixed with "registry.googleapis.com/" and cannot be changed.
   --name: string # Resource name.
 ]: any -> record<accessGuidance: string, annotations: record, apiSpecRevision: string, createTime: string, description: string, displayName: string, endpointUri: string, externalChannelUri: string, intendedAudience: string, labels: record, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "updateMask" $updateMask "scalar") (serialize-qp "allowMissing" $allowMissing "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/deployments/($deployment)" $qp)
-  let body = {accessGuidance: $accessGuidance, annotations: $annotations, apiSpecRevision: $apiSpecRevision, description: $description, displayName: $displayName, endpointUri: $endpointUri, externalChannelUri: $externalChannelUri, intendedAudience: $intendedAudience, labels: $labels, name: $name} | compact
+  let qp = [(serialize-qp "updateMask" $update_mask "scalar") (serialize-qp "allowMissing" $allow_missing "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, deployment: $deployment} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}") $qp)
+  let body = {"accessGuidance": $access_guidance, "annotations": $annotations, "apiSpecRevision": $api_spec_revision, "description": $description, "displayName": $display_name, "endpointUri": $endpoint_uri, "externalChannelUri": $external_channel_uri, "intendedAudience": $intended_audience, "labels": $labels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -415,7 +415,7 @@ export def "projects-locations-apis-deployments UpdateApiDeployment" [
 #
 # DELETE /v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:deleteRevision
 # operationId: Registry_DeleteApiDeploymentRevision
-export def "projects-locations-apis-deployments DeleteApiDeploymentRevision" [
+export def "projects-locations-apis-deployments delete-revision" [
   project: string
   location: string
   api: string
@@ -431,7 +431,7 @@ export def "projects-locations-apis-deployments DeleteApiDeploymentRevision" [
 ]: nothing -> record<accessGuidance: string, annotations: record, apiSpecRevision: string, createTime: string, description: string, displayName: string, endpointUri: string, externalChannelUri: string, intendedAudience: string, labels: record, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/deployments/($deployment):deleteRevision")
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, deployment: $deployment} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:deleteRevision"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -441,7 +441,7 @@ export def "projects-locations-apis-deployments DeleteApiDeploymentRevision" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:listRevisions
 # operationId: Registry_ListApiDeploymentRevisions
-export def "projects-locations-apis-deployments ListApiDeploymentRevisions" [
+export def "projects-locations-apis-deployments list-revisions" [
   project: string
   location: string
   api: string
@@ -454,13 +454,13 @@ export def "projects-locations-apis-deployments ListApiDeploymentRevisions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageSize: int # The maximum number of revisions to return per page. (format: int32)
-  --pageToken: string # The page token, received from a previous ListApiDeploymentRevisions call. Provide this to retrieve the subsequent page.
+  --page-size: int # The maximum number of revisions to return per page. (format: int32)
+  --page-token: string # The page token, received from a previous ListApiDeploymentRevisions call. Provide this to retrieve the subsequent page.
 ]: nothing -> record<apiDeployments: table<accessGuidance: string, annotations: record, apiSpecRevision: string, createTime: string, description: string, displayName: string, endpointUri: string, externalChannelUri: string, intendedAudience: string, labels: record, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/deployments/($deployment):listRevisions" $qp)
+  let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, deployment: $deployment} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:listRevisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -470,7 +470,7 @@ export def "projects-locations-apis-deployments ListApiDeploymentRevisions" [
 #
 # POST /v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:rollback
 # operationId: Registry_RollbackApiDeployment
-export def "projects-locations-apis-deployments RollbackApiDeployment" [
+export def "projects-locations-apis-deployments post" [
   project: string
   location: string
   api: string
@@ -484,13 +484,13 @@ export def "projects-locations-apis-deployments RollbackApiDeployment" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Required. The deployment being rolled back.
-  revisionId: string # Required. The revision ID to roll back to. It must be a revision of the same deployment.   Example: c7cfa2a8
+  revision_id: string # Required. The revision ID to roll back to. It must be a revision of the same deployment.   Example: c7cfa2a8
 ]: any -> record<accessGuidance: string, annotations: record, apiSpecRevision: string, createTime: string, description: string, displayName: string, endpointUri: string, externalChannelUri: string, intendedAudience: string, labels: record, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/deployments/($deployment):rollback")
-  let body = {name: $name, revisionId: $revisionId} | compact
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, deployment: $deployment} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:rollback"))
+  let body = {"name": $name, "revisionId": $revision_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -501,7 +501,7 @@ export def "projects-locations-apis-deployments RollbackApiDeployment" [
 #
 # POST /v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:tagRevision
 # operationId: Registry_TagApiDeploymentRevision
-export def "projects-locations-apis-deployments TagApiDeploymentRevision" [
+export def "projects-locations-apis-deployments tag-revision" [
   project: string
   location: string
   api: string
@@ -520,8 +520,8 @@ export def "projects-locations-apis-deployments TagApiDeploymentRevision" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/deployments/($deployment):tagRevision")
-  let body = {name: $name, tag: $tag} | compact
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, deployment: $deployment} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:tagRevision"))
+  let body = {"name": $name, "tag": $tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -532,7 +532,7 @@ export def "projects-locations-apis-deployments TagApiDeploymentRevision" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/versions
 # operationId: Registry_ListApiVersions
-export def "projects-locations-apis-versions ListApiVersions" [
+export def "projects-locations-apis-versions list" [
   project: string
   location: string
   api: string
@@ -544,14 +544,14 @@ export def "projects-locations-apis-versions ListApiVersions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageSize: int # The maximum number of versions to return. The service may return fewer than this value. If unspecified, at most 50 values will be returned. The maximum is 1000; values above 1000 will be coerced to 1000. (format: int32)
-  --pageToken: string # A page token, received from a previous `ListApiVersions` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListApiVersions` must match the call that provided the page token.
+  --page-size: int # The maximum number of versions to return. The service may return fewer than this value. If unspecified, at most 50 values will be returned. The maximum is 1000; values above 1000 will be coerced to 1000. (format: int32)
+  --page-token: string # A page token, received from a previous `ListApiVersions` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListApiVersions` must match the call that provided the page token.
   --filter: string # An expression that can be used to filter the list. Filters use the Common Expression Language and can refer to all message fields.
 ]: nothing -> record<apiVersions: table<annotations: record, createTime: string, description: string, displayName: string, labels: record, name: string, state: string, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/versions" $qp)
+  let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -561,7 +561,7 @@ export def "projects-locations-apis-versions ListApiVersions" [
 #
 # POST /v1/projects/{project}/locations/{location}/apis/{api}/versions
 # operationId: Registry_CreateApiVersion
-export def "projects-locations-apis-versions CreateApiVersion" [
+export def "projects-locations-apis-versions create" [
   project: string
   location: string
   api: string
@@ -573,10 +573,10 @@ export def "projects-locations-apis-versions CreateApiVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiVersionId: string # Required. The ID to use for the version, which will become the final component of the version's resource name. This value should be 4-63 characters, and valid characters are /[a-z][0-9]-/. Following AIP-162, IDs must not have the form of a UUID.
+  --api-version-id: string # Required. The ID to use for the version, which will become the final component of the version's resource name. This value should be 4-63 characters, and valid characters are /[a-z][0-9]-/. Following AIP-162, IDs must not have the form of a UUID.
   --annotations: record # Annotations attach non-identifying metadata to resources. Annotation keys and values are less restricted than those of labels, but should be generally used for small values of broad interest. Larger, topic- specific metadata should be stored in Artifacts.
   --description: string # A detailed description.
-  --displayName: string # Human-meaningful name.
+  --display-name: string # Human-meaningful name.
   --labels: record # Labels attach identifying metadata to resources. Identifying metadata can be used to filter list operations. Label keys and values can be no longer than 64 characters (Unicode codepoints), can only contain lowercase letters, numeric characters, underscores and dashes. International characters are allowed. No more than 64 user labels can be associated with one resource (System labels are excluded). See https://goo.gl/xmQnxf for more information and examples of labels. System reserved label keys are prefixed with "apigeeregistry.googleapis.com/" and cannot be changed.
   --name: string # Resource name.
   --state: string # A user-definable description of the lifecycle phase of this API version. Format: free-form, but we expect single words that describe API maturity, e.g. "CONCEPT", "DESIGN", "DEVELOPMENT", "STAGING", "PRODUCTION", "DEPRECATED", "RETIRED".
@@ -584,9 +584,9 @@ export def "projects-locations-apis-versions CreateApiVersion" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "apiVersionId" $apiVersionId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/versions" $qp)
-  let body = {annotations: $annotations, description: $description, displayName: $displayName, labels: $labels, name: $name, state: $state} | compact
+  let qp = [(serialize-qp "apiVersionId" $api_version_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions") $qp)
+  let body = {"annotations": $annotations, "description": $description, "displayName": $display_name, "labels": $labels, "name": $name, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -597,7 +597,7 @@ export def "projects-locations-apis-versions CreateApiVersion" [
 #
 # DELETE /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}
 # operationId: Registry_DeleteApiVersion
-export def "projects-locations-apis-versions DeleteApiVersion" [
+export def "projects-locations-apis-versions delete" [
   project: string
   location: string
   api: string
@@ -615,7 +615,7 @@ export def "projects-locations-apis-versions DeleteApiVersion" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/versions/($version)" $qp)
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, version: $version} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -625,7 +625,7 @@ export def "projects-locations-apis-versions DeleteApiVersion" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}
 # operationId: Registry_GetApiVersion
-export def "projects-locations-apis-versions GetApiVersion" [
+export def "projects-locations-apis-versions get" [
   project: string
   location: string
   api: string
@@ -641,7 +641,7 @@ export def "projects-locations-apis-versions GetApiVersion" [
 ]: nothing -> record<annotations: record, createTime: string, description: string, displayName: string, labels: record, name: string, state: string, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/versions/($version)")
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, version: $version} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -651,7 +651,7 @@ export def "projects-locations-apis-versions GetApiVersion" [
 #
 # PATCH /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}
 # operationId: Registry_UpdateApiVersion
-export def "projects-locations-apis-versions UpdateApiVersion" [
+export def "projects-locations-apis-versions update" [
   project: string
   location: string
   api: string
@@ -664,11 +664,11 @@ export def "projects-locations-apis-versions UpdateApiVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updateMask: string # The list of fields to be updated. If omitted, all fields are updated that are set in the request message (fields set to default values are ignored). If a "*" is specified, all fields are updated, including fields that are unspecified/default in the request. (format: field-mask)
-  --allowMissing: oneof<nothing, bool> # If set to true, and the version is not found, a new version will be created. In this situation, `update_mask` is ignored.
+  --update-mask: string # The list of fields to be updated. If omitted, all fields are updated that are set in the request message (fields set to default values are ignored). If a "*" is specified, all fields are updated, including fields that are unspecified/default in the request. (format: field-mask)
+  --allow-missing: oneof<nothing, bool> # If set to true, and the version is not found, a new version will be created. In this situation, `update_mask` is ignored.
   --annotations: record # Annotations attach non-identifying metadata to resources. Annotation keys and values are less restricted than those of labels, but should be generally used for small values of broad interest. Larger, topic- specific metadata should be stored in Artifacts.
   --description: string # A detailed description.
-  --displayName: string # Human-meaningful name.
+  --display-name: string # Human-meaningful name.
   --labels: record # Labels attach identifying metadata to resources. Identifying metadata can be used to filter list operations. Label keys and values can be no longer than 64 characters (Unicode codepoints), can only contain lowercase letters, numeric characters, underscores and dashes. International characters are allowed. No more than 64 user labels can be associated with one resource (System labels are excluded). See https://goo.gl/xmQnxf for more information and examples of labels. System reserved label keys are prefixed with "apigeeregistry.googleapis.com/" and cannot be changed.
   --name: string # Resource name.
   --state: string # A user-definable description of the lifecycle phase of this API version. Format: free-form, but we expect single words that describe API maturity, e.g. "CONCEPT", "DESIGN", "DEVELOPMENT", "STAGING", "PRODUCTION", "DEPRECATED", "RETIRED".
@@ -676,9 +676,9 @@ export def "projects-locations-apis-versions UpdateApiVersion" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "updateMask" $updateMask "scalar") (serialize-qp "allowMissing" $allowMissing "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/versions/($version)" $qp)
-  let body = {annotations: $annotations, description: $description, displayName: $displayName, labels: $labels, name: $name, state: $state} | compact
+  let qp = [(serialize-qp "updateMask" $update_mask "scalar") (serialize-qp "allowMissing" $allow_missing "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, version: $version} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}") $qp)
+  let body = {"annotations": $annotations, "description": $description, "displayName": $display_name, "labels": $labels, "name": $name, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -689,7 +689,7 @@ export def "projects-locations-apis-versions UpdateApiVersion" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs
 # operationId: Registry_ListApiSpecs
-export def "projects-locations-apis-versions-specs ListApiSpecs" [
+export def "projects-locations-apis-versions-specs list" [
   project: string
   location: string
   api: string
@@ -702,14 +702,14 @@ export def "projects-locations-apis-versions-specs ListApiSpecs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageSize: int # The maximum number of specs to return. The service may return fewer than this value. If unspecified, at most 50 values will be returned. The maximum is 1000; values above 1000 will be coerced to 1000. (format: int32)
-  --pageToken: string # A page token, received from a previous `ListApiSpecs` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListApiSpecs` must match the call that provided the page token.
+  --page-size: int # The maximum number of specs to return. The service may return fewer than this value. If unspecified, at most 50 values will be returned. The maximum is 1000; values above 1000 will be coerced to 1000. (format: int32)
+  --page-token: string # A page token, received from a previous `ListApiSpecs` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListApiSpecs` must match the call that provided the page token.
   --filter: string # An expression that can be used to filter the list. Filters use the Common Expression Language and can refer to all message fields except contents.
 ]: nothing -> record<apiSpecs: table<annotations: record, contents: string, createTime: string, description: string, filename: string, hash: string, labels: record, mimeType: string, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string, sizeBytes: int, sourceUri: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/versions/($version)/specs" $qp)
+  let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, version: $version} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -719,7 +719,7 @@ export def "projects-locations-apis-versions-specs ListApiSpecs" [
 #
 # POST /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs
 # operationId: Registry_CreateApiSpec
-export def "projects-locations-apis-versions-specs CreateApiSpec" [
+export def "projects-locations-apis-versions-specs create" [
   project: string
   location: string
   api: string
@@ -732,22 +732,22 @@ export def "projects-locations-apis-versions-specs CreateApiSpec" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiSpecId: string # Required. The ID to use for the spec, which will become the final component of the spec's resource name. This value should be 4-63 characters, and valid characters are /[a-z][0-9]-/. Following AIP-162, IDs must not have the form of a UUID.
+  --api-spec-id: string # Required. The ID to use for the spec, which will become the final component of the spec's resource name. This value should be 4-63 characters, and valid characters are /[a-z][0-9]-/. Following AIP-162, IDs must not have the form of a UUID.
   --annotations: record # Annotations attach non-identifying metadata to resources. Annotation keys and values are less restricted than those of labels, but should be generally used for small values of broad interest. Larger, topic- specific metadata should be stored in Artifacts.
   --contents: string # Input only. The contents of the spec. Provided by API callers when specs are created or updated. To access the contents of a spec, use GetApiSpecContents. (format: bytes)
   --description: string # A detailed description.
   --filename: string # A possibly-hierarchical name used to refer to the spec from other specs.
   --labels: record # Labels attach identifying metadata to resources. Identifying metadata can be used to filter list operations. Label keys and values can be no longer than 64 characters (Unicode codepoints), can only contain lowercase letters, numeric characters, underscores and dashes. International characters are allowed. No more than 64 user labels can be associated with one resource (System labels are excluded). See https://goo.gl/xmQnxf for more information and examples of labels. System reserved label keys are prefixed with "apigeeregistry.googleapis.com/" and cannot be changed.
-  --mimeType: string # A style (format) descriptor for this spec that is specified as a Media Type (https://en.wikipedia.org/wiki/Media_type). Possible values include "application/vnd.apigee.proto", "application/vnd.apigee.openapi", and "application/vnd.apigee.graphql", with possible suffixes representing compression types. These hypothetical names are defined in the vendor tree defined in RFC6838 (https://tools.ietf.org/html/rfc6838) and are not final. Content types can specify compression. Currently only GZip compression is supported (indicated with "+gzip").
+  --mime-type: string # A style (format) descriptor for this spec that is specified as a Media Type (https://en.wikipedia.org/wiki/Media_type). Possible values include "application/vnd.apigee.proto", "application/vnd.apigee.openapi", and "application/vnd.apigee.graphql", with possible suffixes representing compression types. These hypothetical names are defined in the vendor tree defined in RFC6838 (https://tools.ietf.org/html/rfc6838) and are not final. Content types can specify compression. Currently only GZip compression is supported (indicated with "+gzip").
   --name: string # Resource name.
-  --sourceUri: string # The original source URI of the spec (if one exists). This is an external location that can be used for reference purposes but which may not be authoritative since this external resource may change after the spec is retrieved.
+  --source-uri: string # The original source URI of the spec (if one exists). This is an external location that can be used for reference purposes but which may not be authoritative since this external resource may change after the spec is retrieved.
 ]: any -> record<annotations: record, contents: string, createTime: string, description: string, filename: string, hash: string, labels: record, mimeType: string, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string, sizeBytes: int, sourceUri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "apiSpecId" $apiSpecId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/versions/($version)/specs" $qp)
-  let body = {annotations: $annotations, contents: $contents, description: $description, filename: $filename, labels: $labels, mimeType: $mimeType, name: $name, sourceUri: $sourceUri} | compact
+  let qp = [(serialize-qp "apiSpecId" $api_spec_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, version: $version} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs") $qp)
+  let body = {"annotations": $annotations, "contents": $contents, "description": $description, "filename": $filename, "labels": $labels, "mimeType": $mime_type, "name": $name, "sourceUri": $source_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -758,7 +758,7 @@ export def "projects-locations-apis-versions-specs CreateApiSpec" [
 #
 # DELETE /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}
 # operationId: Registry_DeleteApiSpec
-export def "projects-locations-apis-versions-specs DeleteApiSpec" [
+export def "projects-locations-apis-versions-specs delete" [
   project: string
   location: string
   api: string
@@ -777,7 +777,7 @@ export def "projects-locations-apis-versions-specs DeleteApiSpec" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/versions/($version)/specs/($spec)" $qp)
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, version: $version, spec: $spec} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -787,7 +787,7 @@ export def "projects-locations-apis-versions-specs DeleteApiSpec" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}
 # operationId: Registry_GetApiSpec
-export def "projects-locations-apis-versions-specs GetApiSpec" [
+export def "projects-locations-apis-versions-specs get" [
   project: string
   location: string
   api: string
@@ -804,7 +804,7 @@ export def "projects-locations-apis-versions-specs GetApiSpec" [
 ]: nothing -> record<annotations: record, contents: string, createTime: string, description: string, filename: string, hash: string, labels: record, mimeType: string, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string, sizeBytes: int, sourceUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/versions/($version)/specs/($spec)")
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, version: $version, spec: $spec} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -814,7 +814,7 @@ export def "projects-locations-apis-versions-specs GetApiSpec" [
 #
 # PATCH /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}
 # operationId: Registry_UpdateApiSpec
-export def "projects-locations-apis-versions-specs UpdateApiSpec" [
+export def "projects-locations-apis-versions-specs update" [
   project: string
   location: string
   api: string
@@ -828,23 +828,23 @@ export def "projects-locations-apis-versions-specs UpdateApiSpec" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updateMask: string # The list of fields to be updated. If omitted, all fields are updated that are set in the request message (fields set to default values are ignored). If a "*" is specified, all fields are updated, including fields that are unspecified/default in the request. (format: field-mask)
-  --allowMissing: oneof<nothing, bool> # If set to true, and the spec is not found, a new spec will be created. In this situation, `update_mask` is ignored.
+  --update-mask: string # The list of fields to be updated. If omitted, all fields are updated that are set in the request message (fields set to default values are ignored). If a "*" is specified, all fields are updated, including fields that are unspecified/default in the request. (format: field-mask)
+  --allow-missing: oneof<nothing, bool> # If set to true, and the spec is not found, a new spec will be created. In this situation, `update_mask` is ignored.
   --annotations: record # Annotations attach non-identifying metadata to resources. Annotation keys and values are less restricted than those of labels, but should be generally used for small values of broad interest. Larger, topic- specific metadata should be stored in Artifacts.
   --contents: string # Input only. The contents of the spec. Provided by API callers when specs are created or updated. To access the contents of a spec, use GetApiSpecContents. (format: bytes)
   --description: string # A detailed description.
   --filename: string # A possibly-hierarchical name used to refer to the spec from other specs.
   --labels: record # Labels attach identifying metadata to resources. Identifying metadata can be used to filter list operations. Label keys and values can be no longer than 64 characters (Unicode codepoints), can only contain lowercase letters, numeric characters, underscores and dashes. International characters are allowed. No more than 64 user labels can be associated with one resource (System labels are excluded). See https://goo.gl/xmQnxf for more information and examples of labels. System reserved label keys are prefixed with "apigeeregistry.googleapis.com/" and cannot be changed.
-  --mimeType: string # A style (format) descriptor for this spec that is specified as a Media Type (https://en.wikipedia.org/wiki/Media_type). Possible values include "application/vnd.apigee.proto", "application/vnd.apigee.openapi", and "application/vnd.apigee.graphql", with possible suffixes representing compression types. These hypothetical names are defined in the vendor tree defined in RFC6838 (https://tools.ietf.org/html/rfc6838) and are not final. Content types can specify compression. Currently only GZip compression is supported (indicated with "+gzip").
+  --mime-type: string # A style (format) descriptor for this spec that is specified as a Media Type (https://en.wikipedia.org/wiki/Media_type). Possible values include "application/vnd.apigee.proto", "application/vnd.apigee.openapi", and "application/vnd.apigee.graphql", with possible suffixes representing compression types. These hypothetical names are defined in the vendor tree defined in RFC6838 (https://tools.ietf.org/html/rfc6838) and are not final. Content types can specify compression. Currently only GZip compression is supported (indicated with "+gzip").
   --name: string # Resource name.
-  --sourceUri: string # The original source URI of the spec (if one exists). This is an external location that can be used for reference purposes but which may not be authoritative since this external resource may change after the spec is retrieved.
+  --source-uri: string # The original source URI of the spec (if one exists). This is an external location that can be used for reference purposes but which may not be authoritative since this external resource may change after the spec is retrieved.
 ]: any -> record<annotations: record, contents: string, createTime: string, description: string, filename: string, hash: string, labels: record, mimeType: string, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string, sizeBytes: int, sourceUri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "updateMask" $updateMask "scalar") (serialize-qp "allowMissing" $allowMissing "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/versions/($version)/specs/($spec)" $qp)
-  let body = {annotations: $annotations, contents: $contents, description: $description, filename: $filename, labels: $labels, mimeType: $mimeType, name: $name, sourceUri: $sourceUri} | compact
+  let qp = [(serialize-qp "updateMask" $update_mask "scalar") (serialize-qp "allowMissing" $allow_missing "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, version: $version, spec: $spec} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}") $qp)
+  let body = {"annotations": $annotations, "contents": $contents, "description": $description, "filename": $filename, "labels": $labels, "mimeType": $mime_type, "name": $name, "sourceUri": $source_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -855,7 +855,7 @@ export def "projects-locations-apis-versions-specs UpdateApiSpec" [
 #
 # DELETE /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:deleteRevision
 # operationId: Registry_DeleteApiSpecRevision
-export def "projects-locations-apis-versions-specs DeleteApiSpecRevision" [
+export def "projects-locations-apis-versions-specs delete-revision" [
   project: string
   location: string
   api: string
@@ -872,7 +872,7 @@ export def "projects-locations-apis-versions-specs DeleteApiSpecRevision" [
 ]: nothing -> record<annotations: record, contents: string, createTime: string, description: string, filename: string, hash: string, labels: record, mimeType: string, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string, sizeBytes: int, sourceUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/versions/($version)/specs/($spec):deleteRevision")
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, version: $version, spec: $spec} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:deleteRevision"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -882,7 +882,7 @@ export def "projects-locations-apis-versions-specs DeleteApiSpecRevision" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:getContents
 # operationId: Registry_GetApiSpecContents
-export def "projects-locations-apis-versions-specs GetApiSpecContents" [
+export def "projects-locations-apis-versions-specs get-contents" [
   project: string
   location: string
   api: string
@@ -900,7 +900,7 @@ export def "projects-locations-apis-versions-specs GetApiSpecContents" [
 ]: nothing -> record<code: int, details: table<_type: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/versions/($version)/specs/($spec):getContents")
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, version: $version, spec: $spec} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:getContents"))
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -910,7 +910,7 @@ export def "projects-locations-apis-versions-specs GetApiSpecContents" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:listRevisions
 # operationId: Registry_ListApiSpecRevisions
-export def "projects-locations-apis-versions-specs ListApiSpecRevisions" [
+export def "projects-locations-apis-versions-specs list-revisions" [
   project: string
   location: string
   api: string
@@ -924,13 +924,13 @@ export def "projects-locations-apis-versions-specs ListApiSpecRevisions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageSize: int # The maximum number of revisions to return per page. (format: int32)
-  --pageToken: string # The page token, received from a previous ListApiSpecRevisions call. Provide this to retrieve the subsequent page.
+  --page-size: int # The maximum number of revisions to return per page. (format: int32)
+  --page-token: string # The page token, received from a previous ListApiSpecRevisions call. Provide this to retrieve the subsequent page.
 ]: nothing -> record<apiSpecs: table<annotations: record, contents: string, createTime: string, description: string, filename: string, hash: string, labels: record, mimeType: string, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string, sizeBytes: int, sourceUri: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/versions/($version)/specs/($spec):listRevisions" $qp)
+  let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, version: $version, spec: $spec} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:listRevisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -940,7 +940,7 @@ export def "projects-locations-apis-versions-specs ListApiSpecRevisions" [
 #
 # POST /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:rollback
 # operationId: Registry_RollbackApiSpec
-export def "projects-locations-apis-versions-specs RollbackApiSpec" [
+export def "projects-locations-apis-versions-specs post" [
   project: string
   location: string
   api: string
@@ -955,13 +955,13 @@ export def "projects-locations-apis-versions-specs RollbackApiSpec" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Required. The spec being rolled back.
-  revisionId: string # Required. The revision ID to roll back to. It must be a revision of the same spec.   Example: c7cfa2a8
+  revision_id: string # Required. The revision ID to roll back to. It must be a revision of the same spec.   Example: c7cfa2a8
 ]: any -> record<annotations: record, contents: string, createTime: string, description: string, filename: string, hash: string, labels: record, mimeType: string, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string, sizeBytes: int, sourceUri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/versions/($version)/specs/($spec):rollback")
-  let body = {name: $name, revisionId: $revisionId} | compact
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, version: $version, spec: $spec} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:rollback"))
+  let body = {"name": $name, "revisionId": $revision_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -972,7 +972,7 @@ export def "projects-locations-apis-versions-specs RollbackApiSpec" [
 #
 # POST /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:tagRevision
 # operationId: Registry_TagApiSpecRevision
-export def "projects-locations-apis-versions-specs TagApiSpecRevision" [
+export def "projects-locations-apis-versions-specs tag-revision" [
   project: string
   location: string
   api: string
@@ -992,8 +992,8 @@ export def "projects-locations-apis-versions-specs TagApiSpecRevision" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/apis/($api)/versions/($version)/specs/($spec):tagRevision")
-  let body = {name: $name, tag: $tag} | compact
+  let full_url = (build-url $base ({project: $project, location: $location, api: $api, version: $version, spec: $spec} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:tagRevision"))
+  let body = {"name": $name, "tag": $tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1004,7 +1004,7 @@ export def "projects-locations-apis-versions-specs TagApiSpecRevision" [
 #
 # GET /v1/projects/{project}/locations/{location}/artifacts
 # operationId: Registry_ListArtifacts
-export def "projects-locations-artifacts ListArtifacts" [
+export def "projects-locations-artifacts list" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1015,14 +1015,14 @@ export def "projects-locations-artifacts ListArtifacts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageSize: int # The maximum number of artifacts to return. The service may return fewer than this value. If unspecified, at most 50 values will be returned. The maximum is 1000; values above 1000 will be coerced to 1000. (format: int32)
-  --pageToken: string # A page token, received from a previous `ListArtifacts` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListArtifacts` must match the call that provided the page token.
+  --page-size: int # The maximum number of artifacts to return. The service may return fewer than this value. If unspecified, at most 50 values will be returned. The maximum is 1000; values above 1000 will be coerced to 1000. (format: int32)
+  --page-token: string # A page token, received from a previous `ListArtifacts` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListArtifacts` must match the call that provided the page token.
   --filter: string # An expression that can be used to filter the list. Filters use the Common Expression Language and can refer to all message fields except contents.
 ]: nothing -> record<artifacts: table<contents: string, createTime: string, hash: string, mimeType: string, name: string, sizeBytes: int, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/artifacts" $qp)
+  let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: $project, location: $location} | format pattern "/v1/projects/{project}/locations/{location}/artifacts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1032,7 +1032,7 @@ export def "projects-locations-artifacts ListArtifacts" [
 #
 # POST /v1/projects/{project}/locations/{location}/artifacts
 # operationId: Registry_CreateArtifact
-export def "projects-locations-artifacts CreateArtifact" [
+export def "projects-locations-artifacts create" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1043,17 +1043,17 @@ export def "projects-locations-artifacts CreateArtifact" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --artifactId: string # Required. The ID to use for the artifact, which will become the final component of the artifact's resource name. This value should be 4-63 characters, and valid characters are /[a-z][0-9]-/. Following AIP-162, IDs must not have the form of a UUID.
+  --artifact-id: string # Required. The ID to use for the artifact, which will become the final component of the artifact's resource name. This value should be 4-63 characters, and valid characters are /[a-z][0-9]-/. Following AIP-162, IDs must not have the form of a UUID.
   --contents: string # Input only. The contents of the artifact. Provided by API callers when artifacts are created or replaced. To access the contents of an artifact, use GetArtifactContents. (format: bytes)
-  --mimeType: string # A content type specifier for the artifact. Content type specifiers are Media Types (https://en.wikipedia.org/wiki/Media_type) with a possible "schema" parameter that specifies a schema for the stored information. Content types can specify compression. Currently only GZip compression is supported (indicated with "+gzip").
+  --mime-type: string # A content type specifier for the artifact. Content type specifiers are Media Types (https://en.wikipedia.org/wiki/Media_type) with a possible "schema" parameter that specifies a schema for the stored information. Content types can specify compression. Currently only GZip compression is supported (indicated with "+gzip").
   --name: string # Resource name.
 ]: any -> record<contents: string, createTime: string, hash: string, mimeType: string, name: string, sizeBytes: int, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "artifactId" $artifactId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/artifacts" $qp)
-  let body = {contents: $contents, mimeType: $mimeType, name: $name} | compact
+  let qp = [(serialize-qp "artifactId" $artifact_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project: $project, location: $location} | format pattern "/v1/projects/{project}/locations/{location}/artifacts") $qp)
+  let body = {"contents": $contents, "mimeType": $mime_type, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1064,7 +1064,7 @@ export def "projects-locations-artifacts CreateArtifact" [
 #
 # DELETE /v1/projects/{project}/locations/{location}/artifacts/{artifact}
 # operationId: Registry_DeleteArtifact
-export def "projects-locations-artifacts DeleteArtifact" [
+export def "projects-locations-artifacts delete" [
   project: string
   location: string
   artifact: string
@@ -1079,7 +1079,7 @@ export def "projects-locations-artifacts DeleteArtifact" [
 ]: nothing -> record<code: int, details: table<_type: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/artifacts/($artifact)")
+  let full_url = (build-url $base ({project: $project, location: $location, artifact: $artifact} | format pattern "/v1/projects/{project}/locations/{location}/artifacts/{artifact}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1089,7 +1089,7 @@ export def "projects-locations-artifacts DeleteArtifact" [
 #
 # GET /v1/projects/{project}/locations/{location}/artifacts/{artifact}
 # operationId: Registry_GetArtifact
-export def "projects-locations-artifacts GetArtifact" [
+export def "projects-locations-artifacts get" [
   project: string
   location: string
   artifact: string
@@ -1104,7 +1104,7 @@ export def "projects-locations-artifacts GetArtifact" [
 ]: nothing -> record<contents: string, createTime: string, hash: string, mimeType: string, name: string, sizeBytes: int, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/artifacts/($artifact)")
+  let full_url = (build-url $base ({project: $project, location: $location, artifact: $artifact} | format pattern "/v1/projects/{project}/locations/{location}/artifacts/{artifact}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1114,7 +1114,7 @@ export def "projects-locations-artifacts GetArtifact" [
 #
 # PUT /v1/projects/{project}/locations/{location}/artifacts/{artifact}
 # operationId: Registry_ReplaceArtifact
-export def "projects-locations-artifacts ReplaceArtifact" [
+export def "projects-locations-artifacts update" [
   project: string
   location: string
   artifact: string
@@ -1127,14 +1127,14 @@ export def "projects-locations-artifacts ReplaceArtifact" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --contents: string # Input only. The contents of the artifact. Provided by API callers when artifacts are created or replaced. To access the contents of an artifact, use GetArtifactContents. (format: bytes)
-  --mimeType: string # A content type specifier for the artifact. Content type specifiers are Media Types (https://en.wikipedia.org/wiki/Media_type) with a possible "schema" parameter that specifies a schema for the stored information. Content types can specify compression. Currently only GZip compression is supported (indicated with "+gzip").
+  --mime-type: string # A content type specifier for the artifact. Content type specifiers are Media Types (https://en.wikipedia.org/wiki/Media_type) with a possible "schema" parameter that specifies a schema for the stored information. Content types can specify compression. Currently only GZip compression is supported (indicated with "+gzip").
   --name: string # Resource name.
 ]: any -> record<contents: string, createTime: string, hash: string, mimeType: string, name: string, sizeBytes: int, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/artifacts/($artifact)")
-  let body = {contents: $contents, mimeType: $mimeType, name: $name} | compact
+  let full_url = (build-url $base ({project: $project, location: $location, artifact: $artifact} | format pattern "/v1/projects/{project}/locations/{location}/artifacts/{artifact}"))
+  let body = {"contents": $contents, "mimeType": $mime_type, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1145,7 +1145,7 @@ export def "projects-locations-artifacts ReplaceArtifact" [
 #
 # GET /v1/projects/{project}/locations/{location}/artifacts/{artifact}:getContents
 # operationId: Registry_GetArtifactContents
-export def "projects-locations-artifacts GetArtifactContents" [
+export def "projects-locations-artifacts get-contents" [
   project: string
   location: string
   artifact: string
@@ -1161,7 +1161,7 @@ export def "projects-locations-artifacts GetArtifactContents" [
 ]: nothing -> record<code: int, details: table<_type: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/projects/($project)/locations/($location)/artifacts/($artifact):getContents")
+  let full_url = (build-url $base ({project: $project, location: $location, artifact: $artifact} | format pattern "/v1/projects/{project}/locations/{location}/artifacts/{artifact}:getContents"))
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

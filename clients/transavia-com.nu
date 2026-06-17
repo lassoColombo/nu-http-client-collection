@@ -120,7 +120,7 @@ export def "api 58d8bcb7a9e6240e200cff24" [
 # GET /countrycode/{countryCode}
 # operationId: 58d8bcb8a9e6240e200cff26
 export def "countrycode 58d8bcb8a9e6240e200cff26" [
-  countryCode: string
+  country_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,7 +133,7 @@ export def "countrycode 58d8bcb8a9e6240e200cff26" [
 ]: nothing -> table<city: string, country: record<code: string, name: string>, geoCoordinates: record<latitude: float, longitude: float>, id: string, name: string, self: record<href: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/countrycode/($countryCode)")
+  let full_url = (build-url $base ({country_code: $country_code} | format pattern "/countrycode/{country_code}"))
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -155,12 +155,12 @@ export def "nearest 58d8bcb8a9e6240e200cff27" [
   --accept: string@accept-completer # Response content type
   --latitude: string # Latitude in decimals, lower than -90.0 and higher than 90.0 is not allowed.
   --longitude: string # Longitude in decimals, lower than -180.0 and higher than 180.0 is not allowed.
-  --maxDistanceInKm: string # Maximum distance in kilometers, lower than 1 and higher than 500 is not allowed. If not set, max value is applied.
+  --max-distance-in-km: string # Maximum distance in kilometers, lower than 1 and higher than 500 is not allowed. If not set, max value is applied.
   --limit: string # Limits the result, lower than 0 is not allowed. If not set, the result is not limited.
 ]: nothing -> table<city: string, country: record<code: string, name: string>, distanceInKm: int, geoCoordinates: record<latitude: float, longitude: float>, id: string, name: string, self: record<href: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "maxDistanceInKm" $maxDistanceInKm "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "maxDistanceInKm" $max_distance_in_km "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nearest" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -182,13 +182,13 @@ export def "nearest 58d8bcb8a9e6240e200cff28" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --maxDistanceInKm: string # Maximum distance in kilometers, lower than 1 and higher than 500 is not allowed. If not set, max value is applied.
+  --max-distance-in-km: string # Maximum distance in kilometers, lower than 1 and higher than 500 is not allowed. If not set, max value is applied.
   --limit: string # Limits the result, lower than 0 is not allowed. If not set, the result is not limited.
 ]: nothing -> table<city: string, country: record<code: string, name: string>, distanceInKm: int, geoCoordinates: record<latitude: float, longitude: float>, id: string, name: string, self: record<href: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxDistanceInKm" $maxDistanceInKm "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nearest/($id)" $qp)
+  let qp = [(serialize-qp "maxDistanceInKm" $max_distance_in_km "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/nearest/{id}") $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +212,7 @@ export def "api 58d8bcb7a9e6240e200cff25" [
 ]: nothing -> record<city: string, country: record<code: string, name: string>, geoCoordinates: record<latitude: float, longitude: float>, id: string, inboundRoutes: record<href: string>, name: string, outboundRoutes: record<href: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/{id}"))
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

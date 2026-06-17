@@ -67,9 +67,9 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def status-completer [] { ["disabled" "enabled"] }
-def requestMode-completer [] { ["batch" "single"] }
-def ruleType-completer [] { ["amqp" "amqp/external" "aws/kinesis" "aws/lambda" "aws/sqs" "http" "http/azure-function" "http/cloudflare-worker" "http/google-cloud-function" "http/ifttt" "http/zapier" "unsupported"] }
-def ruleType-completer-1 [] { ["amqp" "amqp/external" "aws/kinesis" "aws/lambda" "aws/sqs" "http" "http/azure-function" "http/cloudflare-worker" "http/google-cloud-function" "http/ifttt" "http/zapier"] }
+def request-mode-completer [] { ["batch" "single"] }
+def rule-type-completer [] { ["amqp" "amqp/external" "aws/kinesis" "aws/lambda" "aws/sqs" "http" "http/azure-function" "http/cloudflare-worker" "http/google-cloud-function" "http/ifttt" "http/zapier" "unsupported"] }
+def rule-type-completer-1 [] { ["amqp" "amqp/external" "aws/kinesis" "aws/lambda" "aws/sqs" "http" "http/azure-function" "http/cloudflare-worker" "http/google-cloud-function" "http/ifttt" "http/zapier"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -110,7 +110,7 @@ export def "accounts-apps get" [
 ]: nothing -> table<_links: record, accountId: string, apnsUseSandboxEndpoint: bool, id: string, name: string, status: string, tlsOnly: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account_id)/apps")
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/apps"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -129,19 +129,19 @@ export def "accounts-apps post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apnsCertificate: string # The Apple Push Notification service certificate. (nullable)
-  --apnsPrivateKey: string # The Apple Push Notification service private key. (nullable)
-  --apnsUseSandboxEndpoint: oneof<nothing, bool> # The Apple Push Notification service sandbox endpoint. (nullable)
-  --fcmKey: string # The Firebase Cloud Messaging key. (nullable, e.g. false)
+  --apns-certificate: string # The Apple Push Notification service certificate. (nullable)
+  --apns-private-key: string # The Apple Push Notification service private key. (nullable)
+  --apns-use-sandbox-endpoint: oneof<nothing, bool> # The Apple Push Notification service sandbox endpoint. (nullable)
+  --fcm-key: string # The Firebase Cloud Messaging key. (nullable, e.g. false)
   name: string # The name of the application for your reference only. (e.g. My App)
   --status: string@status-completer # The status of the application. Can be `enabled` or `disabled`. Enabled means available to accept inbound connections and all services are available. (e.g. enabled)
-  --tlsOnly: oneof<nothing, bool> # Enforce TLS for all connections. (nullable, e.g. true)
+  --tls-only: oneof<nothing, bool> # Enforce TLS for all connections. (nullable, e.g. true)
 ]: any -> record<_links: record, accountId: string, apnsUseSandboxEndpoint: bool, id: string, name: string, status: string, tlsOnly: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account_id)/apps")
-  let body = {apnsCertificate: $apnsCertificate, apnsPrivateKey: $apnsPrivateKey, apnsUseSandboxEndpoint: $apnsUseSandboxEndpoint, fcmKey: $fcmKey, name: $name, status: $status, tlsOnly: $tlsOnly} | compact
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/apps"))
+  let body = {"apnsCertificate": $apns_certificate, "apnsPrivateKey": $apns_private_key, "apnsUseSandboxEndpoint": $apns_use_sandbox_endpoint, "fcmKey": $fcm_key, "name": $name, "status": $status, "tlsOnly": $tls_only} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -164,7 +164,7 @@ export def "apps-keys get" [
 ]: nothing -> table<appId: string, capability: record, created: int, id: string, key: string, modified: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)/keys")
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,8 +190,8 @@ export def "apps-keys post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)/keys")
-  let body = {capabilities: $capabilities, channels: $channels, name: $name} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/keys"))
+  let body = {"capabilities": $capabilities, "channels": $channels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -219,8 +219,8 @@ export def "apps-keys patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)/keys/($key_id)")
-  let body = {capabilities: $capabilities, channels: $channels, name: $name} | compact
+  let full_url = (build-url $base ({app_id: $app_id, key_id: $key_id} | format pattern "/apps/{app_id}/keys/{key_id}"))
+  let body = {"capabilities": $capabilities, "channels": $channels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -244,7 +244,7 @@ export def "apps-keys-revoke post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)/keys/($key_id)/revoke")
+  let full_url = (build-url $base ({app_id: $app_id, key_id: $key_id} | format pattern "/apps/{app_id}/keys/{key_id}/revoke"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -266,7 +266,7 @@ export def "apps-namespaces get" [
 ]: nothing -> table<authenticated: bool, created: int, id: string, modified: int, persistLast: bool, persisted: bool, pushEnabled: bool, tlsOnly: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)/namespaces")
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/namespaces"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -287,16 +287,16 @@ export def "apps-namespaces post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authenticated: oneof<nothing, bool> # If `true`, clients will not be permitted to use (including to attach, publish, or subscribe) any channels within this namespace unless they are identified, that is, authenticated using a client ID. See the <a href="https://knowledge.ably.com/authenticated-and-identified-clients">Ably Knowledge base</a> for more details. (default: false, e.g. false)
   id: string # The namespace or channel name that the channel rule will apply to. For example, if you specify `namespace` the namespace will be set to `namespace` and will match with channels `namespace:*` and `namespace`. (e.g. namespace)
-  --persistLast: oneof<nothing, bool> # If `true`, the last message published on a channel will be stored for 365 days. You can access the stored message only by using the channel rewind mechanism and attaching with rewind=1. Please note that for each message stored, an additional message is deducted from your monthly allocation. (default: false, e.g. false)
+  --persist-last: oneof<nothing, bool> # If `true`, the last message published on a channel will be stored for 365 days. You can access the stored message only by using the channel rewind mechanism and attaching with rewind=1. Please note that for each message stored, an additional message is deducted from your monthly allocation. (default: false, e.g. false)
   --persisted: oneof<nothing, bool> # If `true`, all messages on a channel will be stored for 24 hours. You can access stored messages via the History API. Please note that for each message stored, an additional message is deducted from your monthly allocation. (default: false, e.g. false)
-  --pushEnabled: oneof<nothing, bool> # If `true`, publishing messages with a push payload in the extras field is permitted and can trigger the delivery of a native push notification to registered devices for the channel. (default: false, e.g. false)
-  --tlsOnly: oneof<nothing, bool> # If `true`, only clients that are connected using TLS will be permitted to subscribe to any channels within this namespace. (default: false, e.g. false)
+  --push-enabled: oneof<nothing, bool> # If `true`, publishing messages with a push payload in the extras field is permitted and can trigger the delivery of a native push notification to registered devices for the channel. (default: false, e.g. false)
+  --tls-only: oneof<nothing, bool> # If `true`, only clients that are connected using TLS will be permitted to subscribe to any channels within this namespace. (default: false, e.g. false)
 ]: any -> record<authenticated: bool, created: int, id: string, modified: int, persistLast: bool, persisted: bool, pushEnabled: bool, tlsOnly: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)/namespaces")
-  let body = {authenticated: $authenticated, id: $id, persistLast: $persistLast, persisted: $persisted, pushEnabled: $pushEnabled, tlsOnly: $tlsOnly} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/namespaces"))
+  let body = {"authenticated": $authenticated, "id": $id, "persistLast": $persist_last, "persisted": $persisted, "pushEnabled": $push_enabled, "tlsOnly": $tls_only} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -320,7 +320,7 @@ export def "apps-namespaces delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)/namespaces/($namespace_id)")
+  let full_url = (build-url $base ({app_id: $app_id, namespace_id: $namespace_id} | format pattern "/apps/{app_id}/namespaces/{namespace_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -341,16 +341,16 @@ export def "apps-namespaces patch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --authenticated: oneof<nothing, bool> # If `true`, clients will not be permitted to use (including to attach, publish, or subscribe) any channels within this namespace unless they are identified, that is, authenticated using a client ID. See the <a href="https://knowledge.ably.com/authenticated-and-identified-clients">Ably knowledge base/a> for more details. (default: false, e.g. false)
-  --persistLast: oneof<nothing, bool> # If `true`, the last message published on a channel will be stored for 365 days. You can access the stored message only by using the channel rewind mechanism and attaching with rewind=1. Please note that for each message stored, an additional message is deducted from your monthly allocation. (default: false, e.g. false)
+  --persist-last: oneof<nothing, bool> # If `true`, the last message published on a channel will be stored for 365 days. You can access the stored message only by using the channel rewind mechanism and attaching with rewind=1. Please note that for each message stored, an additional message is deducted from your monthly allocation. (default: false, e.g. false)
   --persisted: oneof<nothing, bool> # If `true`, all messages on a channel will be stored for 24 hours. You can access stored messages via the History API. Please note that for each message stored, an additional message is deducted from your monthly allocation. (default: false, e.g. false)
-  --pushEnabled: oneof<nothing, bool> # If `true`, publishing messages with a push payload in the extras field is permitted and can trigger the delivery of a native push notification to registered devices for the channel. (default: false, e.g. false)
-  --tlsOnly: oneof<nothing, bool> # If `true`, only clients that are connected using TLS will be permitted to subscribe to any channels within this namespace. (default: false, e.g. false)
+  --push-enabled: oneof<nothing, bool> # If `true`, publishing messages with a push payload in the extras field is permitted and can trigger the delivery of a native push notification to registered devices for the channel. (default: false, e.g. false)
+  --tls-only: oneof<nothing, bool> # If `true`, only clients that are connected using TLS will be permitted to subscribe to any channels within this namespace. (default: false, e.g. false)
 ]: any -> record<authenticated: bool, created: int, id: string, modified: int, persistLast: bool, persisted: bool, pushEnabled: bool, tlsOnly: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)/namespaces/($namespace_id)")
-  let body = {authenticated: $authenticated, persistLast: $persistLast, persisted: $persisted, pushEnabled: $pushEnabled, tlsOnly: $tlsOnly} | compact
+  let full_url = (build-url $base ({app_id: $app_id, namespace_id: $namespace_id} | format pattern "/apps/{app_id}/namespaces/{namespace_id}"))
+  let body = {"authenticated": $authenticated, "persistLast": $persist_last, "persisted": $persisted, "pushEnabled": $push_enabled, "tlsOnly": $tls_only} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -373,7 +373,7 @@ export def "apps-queues get" [
 ]: nothing -> table<amqp: record<queueName: string, uri: string>, appId: string, deadletter: bool, deadletterId: string, id: string, maxLength: int, messages: record<ready: int, total: int, unacknowledged: int>, name: string, region: string, state: string, stats: record<acknowledgementRate: float, deliveryRate: float, publishRate: float>, stomp: record<destination: string, host: string, uri: string>, ttl: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)/queues")
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/queues"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -392,7 +392,7 @@ export def "apps-queues post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  maxLength: int # Message limit in number of messages. (e.g. 10000)
+  max_length: int # Message limit in number of messages. (e.g. 10000)
   name: string # A friendly name for your queue. (e.g. My queue)
   region: string # The data center region. US East (Virginia) or EU West (Ireland). Values are `us-east-1-a` or `eu-west-1-a`. (e.g. us-east-1-a)
   ttl: int # TTL in minutes. (e.g. 60)
@@ -400,8 +400,8 @@ export def "apps-queues post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)/queues")
-  let body = {maxLength: $maxLength, name: $name, region: $region, ttl: $ttl} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/queues"))
+  let body = {"maxLength": $max_length, "name": $name, "region": $region, "ttl": $ttl} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -425,7 +425,7 @@ export def "apps-queues delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)/queues/($queue_id)")
+  let full_url = (build-url $base ({app_id: $app_id, queue_id: $queue_id} | format pattern "/apps/{app_id}/queues/{queue_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -447,7 +447,7 @@ export def "apps-rules list" [
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)/rules")
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/rules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -469,13 +469,13 @@ export def "apps-rules post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --requestMode: string@requestMode-completer # This is Single Request mode or Batch Request mode. Single Request mode sends each event separately to the endpoint specified by the rule. Batch Request mode rolls up multiple events into the same request. You can read more about the difference between single and batched events in the Ably <a href="https://ably.com/documentation/general/events#batching">documentation</a>. (e.g. single)
-  ruleType: string@ruleType-completer # The type of rule. See the <a href="https://ably.com/integrations">documentation</a> for further information.
+  --request-mode: string@request-mode-completer # This is Single Request mode or Batch Request mode. Single Request mode sends each event separately to the endpoint specified by the rule. Batch Request mode rolls up multiple events into the same request. You can read more about the difference between single and batched events in the Ably <a href="https://ably.com/documentation/general/events#batching">documentation</a>. (e.g. single)
+  rule_type: string@rule-type-completer # The type of rule. See the <a href="https://ably.com/integrations">documentation</a> for further information.
   --body-source: record # shape: {channelFilter: string, type: "channel.message"|"channel.presence"|"channel.lifecycle"|"channel.occupancy"}
   --status: string@status-completer # The status of the rule. Rules can be enabled or disabled. (e.g. enabled)
   --target: record # shape: {enveloped?: bool, format: "json"|"msgpack", headers?: list, signingKeyId?: string, url: string}
   --links: record # nullable
-  --appId: string # The Ably application ID. (e.g. 28GY6a)
+  --body-app-id: string # The Ably application ID. (e.g. 28GY6a)
   --created: float # Unix timestamp representing the date and time of creation of the rule. (e.g. 1602844091815)
   --id: string # The rule ID. (e.g. 83IzAB)
   --modified: float # Unix timestamp representing the date and time of last modification of the rule. (e.g. 1614679682091)
@@ -484,8 +484,8 @@ export def "apps-rules post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)/rules")
-  let body = {requestMode: $requestMode, ruleType: $ruleType, source: $body_source, status: $status, target: $target, _links: $links, appId: $appId, created: $created, id: $id, modified: $modified, version: $version} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/rules"))
+  let body = {"requestMode": $request_mode, "ruleType": $rule_type, "source": $body_source, "status": $status, "target": $target, "_links": $links, "appId": $body_app_id, "created": $created, "id": $id, "modified": $modified, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -509,7 +509,7 @@ export def "apps-rules delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)/rules/($rule_id)")
+  let full_url = (build-url $base ({app_id: $app_id, rule_id: $rule_id} | format pattern "/apps/{app_id}/rules/{rule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -533,7 +533,7 @@ export def "apps-rules get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)/rules/($rule_id)")
+  let full_url = (build-url $base ({app_id: $app_id, rule_id: $rule_id} | format pattern "/apps/{app_id}/rules/{rule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -556,8 +556,8 @@ export def "apps-rules patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --requestMode: string@requestMode-completer # This is Single Request mode or Batch Request mode. Single Request mode sends each event separately to the endpoint specified by the rule. Batch Request mode rolls up multiple events into the same request. You can read more about the difference between single and batched events in the Ably <a href="https://ably.com/documentation/general/events#batching">documentation</a>. (e.g. single)
-  ruleType: string@ruleType-completer-1 # The type of rule. See the <a href="https://ably.com/integrations">documentation</a> for further information.
+  --request-mode: string@request-mode-completer # This is Single Request mode or Batch Request mode. Single Request mode sends each event separately to the endpoint specified by the rule. Batch Request mode rolls up multiple events into the same request. You can read more about the difference between single and batched events in the Ably <a href="https://ably.com/documentation/general/events#batching">documentation</a>. (e.g. single)
+  rule_type: string@rule-type-completer-1 # The type of rule. See the <a href="https://ably.com/integrations">documentation</a> for further information.
   --body-source: record # shape: {channelFilter: string, type: "channel.message"|"channel.presence"|"channel.lifecycle"|"channel.occupancy"}
   --status: string@status-completer # The status of the rule. Rules can be enabled or disabled. (e.g. enabled)
   --target: record # shape: {enveloped?: bool, format?: "json"|"msgpack", headers?: list, signingKeyId?: string, url?: string}
@@ -565,8 +565,8 @@ export def "apps-rules patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)/rules/($rule_id)")
-  let body = {requestMode: $requestMode, ruleType: $ruleType, source: $body_source, status: $status, target: $target} | compact
+  let full_url = (build-url $base ({app_id: $app_id, rule_id: $rule_id} | format pattern "/apps/{app_id}/rules/{rule_id}"))
+  let body = {"requestMode": $request_mode, "ruleType": $rule_type, "source": $body_source, "status": $status, "target": $target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -589,7 +589,7 @@ export def "apps delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/apps/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -608,19 +608,19 @@ export def "apps patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apnsCertificate: string # The Apple Push Notification service certificate. (nullable)
-  --apnsPrivateKey: string # The Apple Push Notification service private key. (nullable)
-  --apnsUseSandboxEndpoint: oneof<nothing, bool> # The Apple Push Notification service sandbox endpoint. (nullable)
-  --fcmKey: string # The Firebase Cloud Messaging key. (nullable, e.g. false)
+  --apns-certificate: string # The Apple Push Notification service certificate. (nullable)
+  --apns-private-key: string # The Apple Push Notification service private key. (nullable)
+  --apns-use-sandbox-endpoint: oneof<nothing, bool> # The Apple Push Notification service sandbox endpoint. (nullable)
+  --fcm-key: string # The Firebase Cloud Messaging key. (nullable, e.g. false)
   --name: string # The name of the application for your reference only. (e.g. My App)
   --status: string@status-completer # The status of the application. Can be `enabled` or `disabled`. Enabled means available to accept inbound connections and all services are available. (e.g. enabled)
-  --tlsOnly: oneof<nothing, bool> # Enforce TLS for all connections. (nullable, e.g. true)
+  --tls-only: oneof<nothing, bool> # Enforce TLS for all connections. (nullable, e.g. true)
 ]: any -> record<_links: record, accountId: string, apnsUseSandboxEndpoint: bool, id: string, name: string, status: string, tlsOnly: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($id)")
-  let body = {apnsCertificate: $apnsCertificate, apnsPrivateKey: $apnsPrivateKey, apnsUseSandboxEndpoint: $apnsUseSandboxEndpoint, fcmKey: $fcmKey, name: $name, status: $status, tlsOnly: $tlsOnly} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/apps/{id}"))
+  let body = {"apnsCertificate": $apns_certificate, "apnsPrivateKey": $apns_private_key, "apnsUseSandboxEndpoint": $apns_use_sandbox_endpoint, "fcmKey": $fcm_key, "name": $name, "status": $status, "tlsOnly": $tls_only} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -640,14 +640,14 @@ export def "apps-pkcs12 post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  p12File: string # The `.p12` file containing the app's APNs information. (format: binary)
-  p12Pass: string # The password for the corresponding `.p12` file.
+  p12_file: string # The `.p12` file containing the app's APNs information. (format: binary)
+  p12_pass: string # The password for the corresponding `.p12` file.
 ]: any -> record<_links: record, accountId: string, apnsUseSandboxEndpoint: bool, id: string, name: string, status: string, tlsOnly: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($id)/pkcs12")
-  let body = {p12File: $p12File, p12Pass: $p12Pass} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/apps/{id}/pkcs12"))
+  let body = {"p12File": $p12_file, "p12Pass": $p12_pass} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

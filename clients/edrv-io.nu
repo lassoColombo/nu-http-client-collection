@@ -119,17 +119,17 @@ export def "chargestations list" [
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-location: oneof<nothing, bool> # Populate location
   --include-evses: oneof<nothing, bool> # Populate evses
   --include-organization: oneof<nothing, bool> # Populate organization
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "organization" $organization "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "online" $online "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "public" $public "scalar") (serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_location" $include_location "scalar") (serialize-qp "include_evses" $include_evses "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "organization" $organization "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "online" $online "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "public" $public "scalar") (serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_location" $include_location "scalar") (serialize-qp "include_evses" $include_evses "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/chargestations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -140,7 +140,7 @@ export def "chargestations list" [
 #
 # POST /v1/chargestations
 # operationId: postChargeStations
-export def "chargestations post" [
+export def "chargestations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "chargestations post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/chargestations")
-  let body = {location: $location, manufacturer: $manufacturer, model: $model, protocol: $protocol, public: $public} | compact
+  let body = {"location": $location, "manufacturer": $manufacturer, "model": $model, "protocol": $protocol, "public": $public} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -183,7 +183,7 @@ export def "chargestations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/chargestations/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/chargestations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -210,7 +210,7 @@ export def "chargestations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_location" $include_location "scalar") (serialize-qp "include_evses" $include_evses "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/chargestations/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/chargestations/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -220,7 +220,7 @@ export def "chargestations get" [
 #
 # PATCH /v1/chargestations/{id}
 # operationId: patchChargeStation
-export def "chargestations patch" [
+export def "chargestations update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -239,8 +239,8 @@ export def "chargestations patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/chargestations/($id)")
-  let body = {location: $location, manufacturer: $manufacturer, model: $model, protocol: $protocol, public: $public} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/chargestations/{id}"))
+  let body = {"location": $location, "manufacturer": $manufacturer, "model": $model, "protocol": $protocol, "public": $public} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -267,7 +267,7 @@ export def "chargestations-connectors get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_evse" $include_evse "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/chargestations/($id)/connectors" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/chargestations/{id}/connectors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -291,10 +291,10 @@ export def "commands get" [
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-chargestation: oneof<nothing, bool> # Populate chargestation
   --include-driver: oneof<nothing, bool> # Populate driver
   --include-transaction: oneof<nothing, bool> # Populate transaction
@@ -302,7 +302,7 @@ export def "commands get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_chargestation" $include_chargestation "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_transaction" $include_transaction "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_chargestation" $include_chargestation "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_transaction" $include_transaction "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/commands" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -313,7 +313,7 @@ export def "commands get" [
 #
 # POST /v1/commands/cancelreservation
 # operationId: cancelreservation
-export def "commands-cancelreservation cancelreservation" [
+export def "commands-cancelreservation cancel-reservation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,7 +328,7 @@ export def "commands-cancelreservation cancelreservation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/commands/cancelreservation")
-  let body = {reservation: $reservation} | compact
+  let body = {"reservation": $reservation} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -339,7 +339,7 @@ export def "commands-cancelreservation cancelreservation" [
 #
 # DELETE /v1/commands/chargingschedule
 # operationId: deletechargingschedule
-export def "commands-chargingschedule deletechargingschedule" [
+export def "commands-chargingschedule delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "commands-chargingschedule deletechargingschedule" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/commands/chargingschedule")
-  let body = {id: $id} | compact
+  let body = {"id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -382,7 +382,7 @@ export def "commands-chargingschedule setchargingschedule" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/commands/chargingschedule")
-  let body = {connector: $connector, schedule: $schedule} | compact
+  let body = {"connector": $connector, "schedule": $schedule} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -411,7 +411,7 @@ export def "commands-remotestart remotestart" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/commands/remotestart")
-  let body = {chargestation: $chargestation, connector: $connector, driver: $driver, token: $body_token} | compact
+  let body = {"chargestation": $chargestation, "connector": $connector, "driver": $driver, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -439,7 +439,7 @@ export def "commands-remotestop remotestop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/commands/remotestop")
-  let body = {chargestation: $chargestation, driver: $driver, transaction: $transaction} | compact
+  let body = {"chargestation": $chargestation, "driver": $driver, "transaction": $transaction} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -462,14 +462,14 @@ export def "commands-reserve reserve" [
   --chargestation: string
   --connector: string
   --driver: string
-  --endDate: string
+  --end-date: string
   --body-token: string
 ]: any -> record<command: record, message: string, ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/commands/reserve")
-  let body = {chargestation: $chargestation, connector: $connector, driver: $driver, endDate: $endDate, token: $body_token} | compact
+  let body = {"chargestation": $chargestation, "connector": $connector, "driver": $driver, "endDate": $end_date, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -496,7 +496,7 @@ export def "commands-reset reset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/commands/reset")
-  let body = {chargestation: $chargestation, type: $type} | compact
+  let body = {"chargestation": $chargestation, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -507,7 +507,7 @@ export def "commands-reset reset" [
 #
 # POST /v1/commands/unlockconnector
 # operationId: unlockconnector
-export def "commands-unlockconnector unlockconnector" [
+export def "commands-unlockconnector unlock-connector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,7 +523,7 @@ export def "commands-unlockconnector unlockconnector" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/commands/unlockconnector")
-  let body = {chargestation: $chargestation, connector: $connector} | compact
+  let body = {"chargestation": $chargestation, "connector": $connector} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -547,7 +547,7 @@ export def "commands-variables get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/commands/($id)/variables")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/commands/{id}/variables"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -557,7 +557,7 @@ export def "commands-variables get" [
 #
 # PATCH /v1/commands/{id}/variables
 # operationId: patchChargeStationVariable
-export def "commands-variables patch" [
+export def "commands-variables update-charge-station" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -573,8 +573,8 @@ export def "commands-variables patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/commands/($id)/variables")
-  let body = {value: $value, variable: $variable} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/commands/{id}/variables"))
+  let body = {"value": $value, "variable": $variable} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -599,14 +599,14 @@ export def "configurations list" [
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/configurations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -617,7 +617,7 @@ export def "configurations list" [
 #
 # POST /v1/configurations
 # operationId: postConfigurations
-export def "configurations post" [
+export def "configurations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -633,7 +633,7 @@ export def "configurations post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/configurations")
-  let body = {key: $key, value: $value} | compact
+  let body = {"key": $key, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -657,7 +657,7 @@ export def "configurations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/configurations/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/configurations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -681,17 +681,17 @@ export def "connectors list" [
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-evse: oneof<nothing, bool> # Populate evse
   --include-organization: oneof<nothing, bool> # Populate organization
   --include-rate: oneof<nothing, bool> # Populate rate
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_evse" $include_evse "scalar") (serialize-qp "include_organization" $include_organization "scalar") (serialize-qp "include_rate" $include_rate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_evse" $include_evse "scalar") (serialize-qp "include_organization" $include_organization "scalar") (serialize-qp "include_rate" $include_rate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/connectors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -702,7 +702,7 @@ export def "connectors list" [
 #
 # POST /v1/connectors
 # operationId: postConnectors
-export def "connectors post" [
+export def "connectors create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,7 +722,7 @@ export def "connectors post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/connectors")
-  let body = {chargestation: $chargestation, format: $format, power: $power, power_type: $power_type, rate: $rate, type: $type} | compact
+  let body = {"chargestation": $chargestation, "format": $format, "power": $power, "power_type": $power_type, "rate": $rate, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -746,7 +746,7 @@ export def "connectors delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/connectors/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/connectors/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -773,7 +773,7 @@ export def "connectors get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_evse" $include_evse "scalar") (serialize-qp "include_organization" $include_organization "scalar") (serialize-qp "include_rate" $include_rate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/connectors/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/connectors/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -783,7 +783,7 @@ export def "connectors get" [
 #
 # PATCH /v1/connectors/{id}
 # operationId: patchConnector
-export def "connectors patch" [
+export def "connectors update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -803,8 +803,8 @@ export def "connectors patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/connectors/($id)")
-  let body = {chargestation: $chargestation, format: $format, power: $power, power_type: $power_type, rate: $rate, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/connectors/{id}"))
+  let body = {"chargestation": $chargestation, "format": $format, "power": $power, "power_type": $power_type, "rate": $rate, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -830,17 +830,17 @@ export def "drivers list" [
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-tokens: oneof<nothing, bool> # Populate tokens
   --include-group: oneof<nothing, bool> # Populate group
   --include-organization: oneof<nothing, bool> # Populate organization
 ]: nothing -> record<message: string, ok: bool, result: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "active" $active "scalar") (serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_tokens" $include_tokens "scalar") (serialize-qp "include_group" $include_group "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "active" $active "scalar") (serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_tokens" $include_tokens "scalar") (serialize-qp "include_group" $include_group "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/drivers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -853,7 +853,7 @@ export def "drivers list" [
 # operationId: postDrivers
 # --address shape: {city?: string, country?: string, postalCode?: string, streetAndNumber?: string}
 # --phone shape: {home?: string, mobile?: string, work?: string}
-export def "drivers post" [
+export def "drivers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -874,7 +874,7 @@ export def "drivers post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/drivers")
-  let body = {active: $active, address: $address, email: $email, firstname: $firstname, lastname: $lastname, phone: $phone, source: $body_source} | compact
+  let body = {"active": $active, "address": $address, "email": $email, "firstname": $firstname, "lastname": $lastname, "phone": $phone, "source": $body_source} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -898,7 +898,7 @@ export def "drivers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/drivers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/drivers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -925,7 +925,7 @@ export def "drivers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_tokens" $include_tokens "scalar") (serialize-qp "include_group" $include_group "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/drivers/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/drivers/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -937,7 +937,7 @@ export def "drivers get" [
 # operationId: patchDriver
 # --address shape: {city?: string, country?: string, postalCode?: string, streetAndNumber?: string}
 # --phone shape: {home?: string, mobile?: string, work?: string}
-export def "drivers patch" [
+export def "drivers update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -959,8 +959,8 @@ export def "drivers patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/drivers/($id)")
-  let body = {active: $active, address: $address, email: $email, firstname: $firstname, lastname: $lastname, phone: $phone, source: $body_source, tokens: $tokens} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/drivers/{id}"))
+  let body = {"active": $active, "address": $address, "email": $email, "firstname": $firstname, "lastname": $lastname, "phone": $phone, "source": $body_source, "tokens": $tokens} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -984,7 +984,7 @@ export def "location delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/location/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/location/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1010,7 +1010,7 @@ export def "location get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_chargestations" $include_chargestations "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/location/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/location/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1023,7 +1023,7 @@ export def "location get" [
 # --address shape: {city?: string, country?: string, postalCode?: string, state?: string, streetAndNumber?: string}
 # --coordinates shape: {latitude?: float, longitude?: float}
 # --openingHours shape: {0?: list, 1?: list, 2?: list, 3?: list, 4?: list, 5?: list, 6?: list}
-export def "location patch" [
+export def "location update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1037,15 +1037,15 @@ export def "location patch" [
   --address: record # shape: {city?: string, country?: string, postalCode?: string, state?: string, streetAndNumber?: string}
   --chargestations: list
   --coordinates: record # shape: {latitude?: float, longitude?: float}
-  --openingHours: record # shape: {0?: list, 1?: list, 2?: list, 3?: list, 4?: list, 5?: list, 6?: list}
-  --operatorName: string
+  --opening-hours: record # shape: {0?: list, 1?: list, 2?: list, 3?: list, 4?: list, 5?: list, 6?: list}
+  --operator-name: string
   --timezone: string
 ]: any -> record<message: string, ok: bool, result: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/location/($id)")
-  let body = {active: $active, address: $address, chargestations: $chargestations, coordinates: $coordinates, openingHours: $openingHours, operatorName: $operatorName, timezone: $timezone} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/location/{id}"))
+  let body = {"active": $active, "address": $address, "chargestations": $chargestations, "coordinates": $coordinates, "openingHours": $opening_hours, "operatorName": $operator_name, "timezone": $timezone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1070,15 +1070,15 @@ export def "locations get" [
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-organization: oneof<nothing, bool> # Populate organization
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/locations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1091,7 +1091,7 @@ export def "locations get" [
 # operationId: postLocations
 # --address shape: {city?: string, country?: string, postalCode?: string, streetAndNumber?: string}
 # --coordinates shape: {latitude?: float, longitude?: float}
-export def "locations post" [
+export def "locations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1104,13 +1104,13 @@ export def "locations post" [
   address: record # shape: {city?: string, country?: string, postalCode?: string, streetAndNumber?: string}
   --chargestations: list
   coordinates: record # shape: {latitude?: float, longitude?: float}
-  operatorName: string
+  operator_name: string
 ]: any -> record<message: string, ok: bool, result: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/locations")
-  let body = {active: $active, address: $address, chargestations: $chargestations, coordinates: $coordinates, operatorName: $operatorName} | compact
+  let body = {"active": $active, "address": $address, "chargestations": $chargestations, "coordinates": $coordinates, "operatorName": $operator_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1135,15 +1135,15 @@ export def "organizations list" [
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-locations: oneof<nothing, bool> # Populate locations
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_locations" $include_locations "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_locations" $include_locations "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/organizations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1169,7 +1169,7 @@ export def "organizations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_locations" $include_locations "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/organizations/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/organizations/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1186,7 +1186,7 @@ export def "organizations get" [
 # --support shape: {business_hours?: string, chat?: record, contact_number?: string, email?: string}
 # --supportChat shape: {id?: string, name?: string}
 # --theme shape: {colors?: record}
-export def "organizations patch" [
+export def "organizations update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1210,14 +1210,14 @@ export def "organizations patch" [
   --stripe-currency: string
   --stripe-reserve-amount: int
   --support: record # shape: {business_hours?: string, chat?: record, contact_number?: string, email?: string}
-  --supportChat: record # shape: {id?: string, name?: string}
+  --support-chat: record # shape: {id?: string, name?: string}
   --theme: record # shape: {colors?: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/organizations/($id)")
-  let body = {active: $active, address: $address, channels: $channels, configurations: $configurations, links: $links, locations: $locations, logo: $logo, name: $name, otp: $otp, stripe_connected_account_id: $stripe_connected_account_id, stripe_country: $stripe_country, stripe_currency: $stripe_currency, stripe_reserve_amount: $stripe_reserve_amount, support: $support, supportChat: $supportChat, theme: $theme} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/organizations/{id}"))
+  let body = {"active": $active, "address": $address, "channels": $channels, "configurations": $configurations, "links": $links, "locations": $locations, "logo": $logo, "name": $name, "otp": $otp, "stripe_connected_account_id": $stripe_connected_account_id, "stripe_country": $stripe_country, "stripe_currency": $stripe_currency, "stripe_reserve_amount": $stripe_reserve_amount, "support": $support, "supportChat": $support_chat, "theme": $theme} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1267,16 +1267,16 @@ export def "reservations list" [
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-chargestation: oneof<nothing, bool> # Populate chargestation
   --include-organization: oneof<nothing, bool> # Populate organization
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_chargestation" $include_chargestation "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_chargestation" $include_chargestation "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/reservations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1303,7 +1303,7 @@ export def "reservations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_chargestation" $include_chargestation "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/reservations/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/reservations/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1313,7 +1313,7 @@ export def "reservations get" [
 #
 # PATCH /v1/reservations/{id}
 # operationId: updatereservation
-export def "reservations updatereservation" [
+export def "reservations update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1325,14 +1325,14 @@ export def "reservations updatereservation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --connector: int
   --driver: string
-  --endDate: string
+  --end-date: string
   --evse: int
 ]: any -> record<message: string, ok: bool, result: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/reservations/($id)")
-  let body = {connector: $connector, driver: $driver, endDate: $endDate, evse: $evse} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/reservations/{id}"))
+  let body = {"connector": $connector, "driver": $driver, "endDate": $end_date, "evse": $evse} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1357,16 +1357,16 @@ export def "tokens list" [
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-driver: oneof<nothing, bool> # Populate driver
   --include-organization: oneof<nothing, bool> # Populate organization
 ]: nothing -> record<message: string, ok: bool, result: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1377,7 +1377,7 @@ export def "tokens list" [
 #
 # POST /v1/tokens
 # operationId: postTokens
-export def "tokens post" [
+export def "tokens create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1389,14 +1389,14 @@ export def "tokens post" [
   --active: oneof<nothing, bool> # default: true
   channel: string@channel-completer
   driver: string
-  physicalId: string
+  physical_id: string
   --type: string
 ]: any -> record<message: string, ok: bool, result: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/tokens")
-  let body = {active: $active, channel: $channel, driver: $driver, physicalId: $physicalId, type: $type} | compact
+  let body = {"active": $active, "channel": $channel, "driver": $driver, "physicalId": $physical_id, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1420,7 +1420,7 @@ export def "tokens delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/tokens/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/tokens/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1446,7 +1446,7 @@ export def "tokens get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/tokens/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/tokens/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1456,7 +1456,7 @@ export def "tokens get" [
 #
 # PATCH /v1/tokens/{id}
 # operationId: patchToken
-export def "tokens patch" [
+export def "tokens update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1469,14 +1469,14 @@ export def "tokens patch" [
   --active: oneof<nothing, bool> # default: true
   --channel: string@channel-completer
   --driver: string
-  --physicalId: string
+  --physical-id: string
   --type: string
 ]: any -> record<message: string, ok: bool, result: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/tokens/($id)")
-  let body = {active: $active, channel: $channel, driver: $driver, physicalId: $physicalId, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/tokens/{id}"))
+  let body = {"active": $active, "channel": $channel, "driver": $driver, "physicalId": $physical_id, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1502,10 +1502,10 @@ export def "transactions list" [
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-chargestation: oneof<nothing, bool> # Populate chargestation
   --include-evse: oneof<nothing, bool> # Populate evse
   --include-connector: oneof<nothing, bool> # Populate connector
@@ -1517,7 +1517,7 @@ export def "transactions list" [
 ]: nothing -> record<hasNext: bool, hasPrevious: bool, message: string, ok: bool, result: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_chargestation" $include_chargestation "scalar") (serialize-qp "include_evse" $include_evse "scalar") (serialize-qp "include_connector" $include_connector "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_token" $include_token "scalar") (serialize-qp "include_reservation" $include_reservation "scalar") (serialize-qp "include_organization" $include_organization "scalar") (serialize-qp "include_rate" $include_rate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_chargestation" $include_chargestation "scalar") (serialize-qp "include_evse" $include_evse "scalar") (serialize-qp "include_connector" $include_connector "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_token" $include_token "scalar") (serialize-qp "include_reservation" $include_reservation "scalar") (serialize-qp "include_organization" $include_organization "scalar") (serialize-qp "include_rate" $include_rate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1550,7 +1550,7 @@ export def "transactions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_chargestation" $include_chargestation "scalar") (serialize-qp "include_evse" $include_evse "scalar") (serialize-qp "include_connector" $include_connector "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_token" $include_token "scalar") (serialize-qp "include_reservation" $include_reservation "scalar") (serialize-qp "include_organization" $include_organization "scalar") (serialize-qp "include_rate" $include_rate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/transactions/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/transactions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1573,7 +1573,7 @@ export def "transactions-cost get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/transactions/($id)/cost")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/transactions/{id}/cost"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1598,17 +1598,17 @@ export def "vehicles list" [
   --paginate-enabled: oneof<nothing, bool> # Enable pagination (default: true)
   --sort-by: string # Sort data by this key (default: createdAt)
   --sort-order: string@sort-order-completer # asc to sort ascending (default is desc - descending) (default: desc)
-  --createdAtgte: string # Date as ISO String (format: date-time)
-  --createdAtlte: string # Date as ISO String (format: date-time)
-  --updatedAtgte: string # Date as ISO String (format: date-time)
-  --updatedAtlte: string # Date as ISO String (format: date-time)
+  --created-at-gte: string # Date as ISO String (format: date-time)
+  --created-at-lte: string # Date as ISO String (format: date-time)
+  --updated-at-gte: string # Date as ISO String (format: date-time)
+  --updated-at-lte: string # Date as ISO String (format: date-time)
   --include-driver: oneof<nothing, bool> # Populate driver
   --include-token: oneof<nothing, bool> # Populate token
   --include-organization: oneof<nothing, bool> # Populate organization
 ]: nothing -> record<message: string, ok: bool, result: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "active" $active "scalar") (serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $createdAtgte "scalar") (serialize-qp "createdAt[$lte]" $createdAtlte "scalar") (serialize-qp "updatedAt[$gte]" $updatedAtgte "scalar") (serialize-qp "updatedAt[$lte]" $updatedAtlte "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_token" $include_token "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "active" $active "scalar") (serialize-qp "paginate_limit" $paginate_limit "scalar") (serialize-qp "paginate_page" $paginate_page "scalar") (serialize-qp "paginate_enabled" $paginate_enabled "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "createdAt[$gte]" $created_at_gte "scalar") (serialize-qp "createdAt[$lte]" $created_at_lte "scalar") (serialize-qp "updatedAt[$gte]" $updated_at_gte "scalar") (serialize-qp "updatedAt[$lte]" $updated_at_lte "scalar") (serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_token" $include_token "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/vehicles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1636,7 +1636,7 @@ export def "vehicles get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_driver" $include_driver "scalar") (serialize-qp "include_token" $include_token "scalar") (serialize-qp "include_organization" $include_organization "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/vehicles/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/vehicles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1659,7 +1659,7 @@ export def "vehicles-battery get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/vehicles/($id)/battery")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/vehicles/{id}/battery"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1682,7 +1682,7 @@ export def "vehicles-charge get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/vehicles/($id)/charge")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/vehicles/{id}/charge"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1692,7 +1692,7 @@ export def "vehicles-charge get" [
 #
 # POST /v1/vehicles/{id}/charge
 # operationId: postCharge
-export def "vehicles-charge post" [
+export def "vehicles-charge create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1707,8 +1707,8 @@ export def "vehicles-charge post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/vehicles/($id)/charge")
-  let body = {action: $action} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/vehicles/{id}/charge"))
+  let body = {"action": $action} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1732,7 +1732,7 @@ export def "vehicles-location get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/vehicles/($id)/location")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/vehicles/{id}/location"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1755,7 +1755,7 @@ export def "vehicles-odometer get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/vehicles/($id)/odometer")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/vehicles/{id}/odometer"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

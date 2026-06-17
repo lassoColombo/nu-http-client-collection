@@ -120,7 +120,7 @@ export def "users findUser" [
 # POST /api/v1/users
 # operationId: createUserInGroup
 # --profile shape: {email?: string, firstName?: string, lastName?: string, login?: string}
-export def "users createUserInGroup" [
+export def "users create-user-in-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,7 +130,7 @@ export def "users createUserInGroup" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --activate: string # e.g. false
-  --groupIds: list
+  --group-ids: list
   --profile: record # shape: {email?: string, firstName?: string, lastName?: string, login?: string}
 ]: any -> any {
   let input = $in
@@ -138,7 +138,7 @@ export def "users createUserInGroup" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "activate" $activate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users" $qp)
-  let body = {groupIds: $groupIds, profile: $profile} | compact
+  let body = {"groupIds": $group_ids, "profile": $profile} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -149,7 +149,7 @@ export def "users createUserInGroup" [
 #
 # GET /api/v1/users/me
 # operationId: getCurrentUser
-export def "users-me get" [
+export def "users-me get-current" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "users-me get" [
 # GET /api/v1/users/{userId}
 # operationId: getUser
 export def "users get" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "users get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/users/($userId)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/v1/users/{user_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -202,7 +202,7 @@ export def "users get" [
 # operationId: setRecoveryCredential
 # --credentials shape: {recovery_question?: record}
 export def "users setRecoveryCredential" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,8 +216,8 @@ export def "users setRecoveryCredential" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/users/($userId)")
-  let body = {credentials: $credentials} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/v1/users/{user_id}"))
+  let body = {"credentials": $credentials} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -228,8 +228,8 @@ export def "users setRecoveryCredential" [
 #
 # GET /api/v1/users/{userId}/appLinks
 # operationId: getAssignedAppLinks
-export def "users-app-links get" [
-  userId: string
+export def "users-app-links get-assigned" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "users-app-links get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/users/($userId)/appLinks")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/v1/users/{user_id}/appLinks"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -257,7 +257,7 @@ export def "users-app-links get" [
 # --newPassword shape: {value?: string}
 # --oldPassword shape: {value?: string}
 export def "users-credentials-change-password changePassword" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,14 +266,14 @@ export def "users-credentials-change-password changePassword" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --newPassword: record # shape: {value?: string}
-  --oldPassword: record # shape: {value?: string}
+  --new-password: record # shape: {value?: string}
+  --old-password: record # shape: {value?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/users/($userId)/credentials/change_password")
-  let body = {newPassword: $newPassword, oldPassword: $oldPassword} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/v1/users/{user_id}/credentials/change_password"))
+  let body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -287,7 +287,7 @@ export def "users-credentials-change-password changePassword" [
 # --password shape: {value?: string}
 # --recovery_question shape: {answer?: string, question?: string}
 export def "users-credentials-change-recovery-question changeRecoveryQuestion" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,8 +302,8 @@ export def "users-credentials-change-recovery-question changeRecoveryQuestion" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/users/($userId)/credentials/change_recovery_question")
-  let body = {password: $password, recovery_question: $recovery_question} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/v1/users/{user_id}/credentials/change_recovery_question"))
+  let body = {"password": $password, "recovery_question": $recovery_question} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -315,7 +315,7 @@ export def "users-credentials-change-recovery-question changeRecoveryQuestion" [
 # POST /api/v1/users/{userId}/credentials/forgot_password
 # operationId: forgotPassword(oneTimeCode)
 export def "users-credentials-forgot-password forgotPasswordoneTimeCode" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,14 +324,14 @@ export def "users-credentials-forgot-password forgotPasswordoneTimeCode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sendEmail: string # e.g. false
+  --send-email: string # e.g. false
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sendEmail" $sendEmail "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/users/($userId)/credentials/forgot_password" $qp)
+  let qp = [(serialize-qp "sendEmail" $send_email "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/v1/users/{user_id}/credentials/forgot_password") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -342,8 +342,8 @@ export def "users-credentials-forgot-password forgotPasswordoneTimeCode" [
 #
 # GET /api/v1/users/{userId}/groups
 # operationId: getGroupsForUser
-export def "users-groups get" [
-  userId: string
+export def "users-groups get-groups-for" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +357,7 @@ export def "users-groups get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/users/($userId)/groups")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/v1/users/{user_id}/groups"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -369,7 +369,7 @@ export def "users-groups get" [
 # POST /api/v1/users/{userId}/lifecycle/activate
 # operationId: activateUser
 export def "users-lifecycle-activate activateUser" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,14 +378,14 @@ export def "users-lifecycle-activate activateUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sendEmail: string # e.g. false
+  --send-email: string # e.g. false
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sendEmail" $sendEmail "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/users/($userId)/lifecycle/activate" $qp)
+  let qp = [(serialize-qp "sendEmail" $send_email "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/v1/users/{user_id}/lifecycle/activate") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -397,7 +397,7 @@ export def "users-lifecycle-activate activateUser" [
 # POST /api/v1/users/{userId}/lifecycle/deactivate
 # operationId: deactivateUser
 export def "users-lifecycle-deactivate deactivateUser" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,7 +411,7 @@ export def "users-lifecycle-deactivate deactivateUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/users/($userId)/lifecycle/deactivate")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/v1/users/{user_id}/lifecycle/deactivate"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -423,7 +423,7 @@ export def "users-lifecycle-deactivate deactivateUser" [
 # POST /api/v1/users/{userId}/lifecycle/expire_password
 # operationId: setTempPassword
 export def "users-lifecycle-expire-password setTempPassword" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,14 +432,14 @@ export def "users-lifecycle-expire-password setTempPassword" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tempPassword: string # e.g. true
+  --temp-password: string # e.g. true
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tempPassword" $tempPassword "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/users/($userId)/lifecycle/expire_password" $qp)
+  let qp = [(serialize-qp "tempPassword" $temp_password "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/v1/users/{user_id}/lifecycle/expire_password") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -450,8 +450,8 @@ export def "users-lifecycle-expire-password setTempPassword" [
 #
 # POST /api/v1/users/{userId}/lifecycle/reset_factors
 # operationId: resetFactors
-export def "users-lifecycle-reset-factors resetFactors" [
-  userId: string
+export def "users-lifecycle-reset-factors reset" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,7 +465,7 @@ export def "users-lifecycle-reset-factors resetFactors" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/users/($userId)/lifecycle/reset_factors")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/v1/users/{user_id}/lifecycle/reset_factors"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -476,8 +476,8 @@ export def "users-lifecycle-reset-factors resetFactors" [
 #
 # POST /api/v1/users/{userId}/lifecycle/reset_password
 # operationId: resetPassword
-export def "users-lifecycle-reset-password resetPassword" [
-  userId: string
+export def "users-lifecycle-reset-password reset" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,14 +486,14 @@ export def "users-lifecycle-reset-password resetPassword" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sendEmail: string # e.g. false
+  --send-email: string # e.g. false
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sendEmail" $sendEmail "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/users/($userId)/lifecycle/reset_password" $qp)
+  let qp = [(serialize-qp "sendEmail" $send_email "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/v1/users/{user_id}/lifecycle/reset_password") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -505,7 +505,7 @@ export def "users-lifecycle-reset-password resetPassword" [
 # POST /api/v1/users/{userId}/lifecycle/suspend
 # operationId: suspendUser
 export def "users-lifecycle-suspend suspendUser" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,7 +519,7 @@ export def "users-lifecycle-suspend suspendUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/users/($userId)/lifecycle/suspend")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/v1/users/{user_id}/lifecycle/suspend"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -530,8 +530,8 @@ export def "users-lifecycle-suspend suspendUser" [
 #
 # POST /api/v1/users/{userId}/lifecycle/unlock
 # operationId: unlockUser
-export def "users-lifecycle-unlock unlockUser" [
-  userId: string
+export def "users-lifecycle-unlock unlock" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -545,7 +545,7 @@ export def "users-lifecycle-unlock unlockUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/users/($userId)/lifecycle/unlock")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/v1/users/{user_id}/lifecycle/unlock"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -557,7 +557,7 @@ export def "users-lifecycle-unlock unlockUser" [
 # POST /api/v1/users/{userId}/lifecycle/unsuspend
 # operationId: unsuspendUser
 export def "users-lifecycle-unsuspend unsuspendUser" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -571,7 +571,7 @@ export def "users-lifecycle-unsuspend unsuspendUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/users/($userId)/lifecycle/unsuspend")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/v1/users/{user_id}/lifecycle/unsuspend"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -583,7 +583,7 @@ export def "users-lifecycle-unsuspend unsuspendUser" [
 # DELETE /api/v1/users/{userId}/sessions
 # operationId: clearUserSessions
 export def "users-sessions clearUserSessions" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -597,7 +597,7 @@ export def "users-sessions clearUserSessions" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/users/($userId)/sessions")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/v1/users/{user_id}/sessions"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /content/{aspectId}
 export def "content list" [
-  aspectId: string
+  aspect_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,7 +104,7 @@ export def "content list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/content/($aspectId)")
+  let full_url = (build-url $base ({aspect_id: $aspect_id} | format pattern "/content/{aspect_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -114,8 +114,8 @@ export def "content list" [
 #
 # GET /content/{aspectId}/{civixDocumentId}
 export def "content get" [
-  aspectId: string
-  civixDocumentId: string
+  aspect_id: string
+  civix_document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,7 +127,7 @@ export def "content get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/content/($aspectId)/($civixDocumentId)")
+  let full_url = (build-url $base ({aspect_id: $aspect_id, civix_document_id: $civix_document_id} | format pattern "/content/{aspect_id}/{civix_document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -137,9 +137,9 @@ export def "content get" [
 #
 # GET /document/id/{aspectId}/{civixIndexId}/{civixDocumentId}
 export def "document-id get" [
-  aspectId: string
-  civixIndexId: string
-  civixDocumentId: string
+  aspect_id: string
+  civix_index_id: string
+  civix_document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,7 +151,7 @@ export def "document-id get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/document/id/($aspectId)/($civixIndexId)/($civixDocumentId)")
+  let full_url = (build-url $base ({aspect_id: $aspect_id, civix_index_id: $civix_index_id, civix_document_id: $civix_document_id} | format pattern "/document/id/{aspect_id}/{civix_index_id}/{civix_document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -161,10 +161,10 @@ export def "document-id get" [
 #
 # GET /document/id/{aspectId}/{civixIndexId}/{civixDocumentId}/search/{searchString}
 export def "document-id-search get" [
-  aspectId: string
-  civixIndexId: string
-  civixDocumentId: string
-  searchString: string
+  aspect_id: string
+  civix_index_id: string
+  civix_document_id: string
+  search_string: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "document-id-search get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/document/id/($aspectId)/($civixIndexId)/($civixDocumentId)/search/($searchString)")
+  let full_url = (build-url $base ({aspect_id: $aspect_id, civix_index_id: $civix_index_id, civix_document_id: $civix_document_id, search_string: $search_string} | format pattern "/document/id/{aspect_id}/{civix_index_id}/{civix_document_id}/search/{search_string}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -186,9 +186,9 @@ export def "document-id-search get" [
 #
 # GET /document/id/{aspectId}/{civixIndexId}/{civixDocumentId}/xml
 export def "document-id-xml get" [
-  aspectId: string
-  civixIndexId: string
-  civixDocumentId: string
+  aspect_id: string
+  civix_index_id: string
+  civix_document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "document-id-xml get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/document/id/($aspectId)/($civixIndexId)/($civixDocumentId)/xml")
+  let full_url = (build-url $base ({aspect_id: $aspect_id, civix_index_id: $civix_index_id, civix_document_id: $civix_document_id} | format pattern "/document/id/{aspect_id}/{civix_index_id}/{civix_document_id}/xml"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -210,10 +210,10 @@ export def "document-id-xml get" [
 #
 # GET /document/id/{aspectId}/{civixIndexId}/{civixDocumentId}/xml/search/{searchString}
 export def "document-id-xml-search get" [
-  aspectId: string
-  civixIndexId: string
-  civixDocumentId: string
-  searchString: string
+  aspect_id: string
+  civix_index_id: string
+  civix_document_id: string
+  search_string: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +225,7 @@ export def "document-id-xml-search get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/document/id/($aspectId)/($civixIndexId)/($civixDocumentId)/xml/search/($searchString)")
+  let full_url = (build-url $base ({aspect_id: $aspect_id, civix_index_id: $civix_index_id, civix_document_id: $civix_document_id, search_string: $search_string} | format pattern "/document/id/{aspect_id}/{civix_index_id}/{civix_document_id}/xml/search/{search_string}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -235,7 +235,7 @@ export def "document-id-xml-search get" [
 #
 # GET /search/{aspectId}/fullsearch
 export def "search-fullsearch get" [
-  aspectId: string
+  aspect_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,13 +247,13 @@ export def "search-fullsearch get" [
   --q: string # query term (default: water)
   --s: string # first hit (start index) (default: 0)
   --e: int # last hit (end index) (default: 20)
-  --nFrag: int # number of fragment snippets to return (< 10) (default: 5)
-  --lFrag: int # length of fragment snippets (< 200) (default: 100)
+  --n-frag: int # number of fragment snippets to return (< 10) (default: 5)
+  --l-frag: int # length of fragment snippets (< 200) (default: 100)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "s" $s "scalar") (serialize-qp "e" $e "scalar") (serialize-qp "nFrag" $nFrag "scalar") (serialize-qp "lFrag" $lFrag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/($aspectId)/fullsearch" $qp)
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "s" $s "scalar") (serialize-qp "e" $e "scalar") (serialize-qp "nFrag" $n_frag "scalar") (serialize-qp "lFrag" $l_frag "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aspect_id: $aspect_id} | format pattern "/search/{aspect_id}/fullsearch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

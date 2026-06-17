@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /order/{orderId}
 export def "order get" [
-  orderId: string
+  order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,7 +109,7 @@ export def "order get" [
 ]: nothing -> record<approvedAt: string, billingAddress: record<address: string, city: string, complement: string, countryId: string, neighbourhood: string, number: string, recipientName: string, reference: string, state: string, zipCode: string>, createdAt: string, customer: record<documentNumber: string, email: string, id: string, name: string, phones: list<record>, type: string>, freight: record<ETA: string, additionalInfo: string, chargedAmount: int, crossDockingTime: int, defaultAmount: int, scheduledPeriod: string, transitTime: int, type: string>, items: table<freight: record, giftWrap: record, id: string, name: string, promotions: list, salePrice: int, sent: bool, skuSellerId: string>, orderId: string, orderMarketplaceId: string, seller: record<id: string, name: string>, shipments: table<courier: record, cte: string, description: string, id: string, invoice: record, items: list, number: string, occurredAt: string, sellerShipmentId: string, status: string, trackingUrl: string>, shippingAddress: record<address: string, city: string, complement: string, countryId: string, neighbourhood: string, number: string, recipientName: string, reference: string, state: string, zipCode: string>, status: string, totalAmount: int, totalDiscountAmount: int, totalItemsAmount: int, totalShippingAmount: int, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/order/($orderId)")
+  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/order/{order_id}"))
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -123,7 +123,7 @@ export def "order get" [
 # --courier shape: {name: string, taxID?: string}
 # --items item shape: {quantity: int, skuSellerId: string}
 export def "order-shipment-cancel post" [
-  orderId: string
+  order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,15 +138,15 @@ export def "order-shipment-cancel post" [
   info: string # Aditional information about this shippment
   items: list # item shape: {quantity: int, skuSellerId: string}
   --number: string # Tracking Id in the courier
-  --occurredAt: string # Date time that this was created (format: date-time)
-  --sellerShipmentId: string # Unique Seller shipment Id. This must be unique across all orders and shipments
-  --tranckingUrl: string # Courier tracking URL
+  --occurred-at: string # Date time that this was created (format: date-time)
+  --seller-shipment-id: string # Unique Seller shipment Id. This must be unique across all orders and shipments
+  --trancking-url: string # Courier tracking URL
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/order/($orderId)/shipment/cancel")
-  let body = {courier: $courier, cte: $cte, info: $info, items: $items, number: $number, occurredAt: $occurredAt, sellerShipmentId: $sellerShipmentId, tranckingUrl: $tranckingUrl} | compact
+  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/order/{order_id}/shipment/cancel"))
+  let body = {"courier": $courier, "cte": $cte, "info": $info, "items": $items, "number": $number, "occurredAt": $occurred_at, "sellerShipmentId": $seller_shipment_id, "tranckingUrl": $trancking_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -161,7 +161,7 @@ export def "order-shipment-cancel post" [
 # --courier shape: {name: string, taxID?: string}
 # --invoice shape: {accessKey: string, cnpj?: string, issuedAt?: string, linkDanfe?: string, linkXml?: string, number: string, serie: string}
 export def "order-shipment-delivered post" [
-  orderId: string
+  order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,15 +176,15 @@ export def "order-shipment-delivered post" [
   invoice: any # shape: {accessKey: string, cnpj?: string, issuedAt?: string, linkDanfe?: string, linkXml?: string, number: string, serie: string}
   items: list # List of Order IDs of this items from this order that will be updated in this shipment
   --number: string # Unique id shipment Id in the courier system
-  occurredAt: string # Data da ocorrência (format: date-time)
-  sellerShipmentId: string # Unique Seller shipment Id. This must be unique across all orders and shipmnents
-  --trackingUrl: string # Courier tracking URL
+  occurred_at: string # Data da ocorrência (format: date-time)
+  seller_shipment_id: string # Unique Seller shipment Id. This must be unique across all orders and shipmnents
+  --tracking-url: string # Courier tracking URL
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/order/($orderId)/shipment/delivered")
-  let body = {courier: $courier, cte: $cte, invoice: $invoice, items: $items, number: $number, occurredAt: $occurredAt, sellerShipmentId: $sellerShipmentId, trackingUrl: $trackingUrl} | compact
+  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/order/{order_id}/shipment/delivered"))
+  let body = {"courier": $courier, "cte": $cte, "invoice": $invoice, "items": $items, "number": $number, "occurredAt": $occurred_at, "sellerShipmentId": $seller_shipment_id, "trackingUrl": $tracking_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -199,7 +199,7 @@ export def "order-shipment-delivered post" [
 # --courier shape: {name: string, taxID?: string}
 # --items item shape: {quantity: int, skuSellerId: string}
 export def "order-shipment-exchange post" [
-  orderId: string
+  order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,15 +214,15 @@ export def "order-shipment-exchange post" [
   info: string # Aditional information about this shippment
   items: list # item shape: {quantity: int, skuSellerId: string}
   --number: string # Tracking Id in the courier
-  --occurredAt: string # Date time that this was created (format: date-time)
-  --sellerShipmentId: string # Unique Seller shipment Id. This must be unique across all orders and shipments
-  --tranckingUrl: string # Courier tracking URL
+  --occurred-at: string # Date time that this was created (format: date-time)
+  --seller-shipment-id: string # Unique Seller shipment Id. This must be unique across all orders and shipments
+  --trancking-url: string # Courier tracking URL
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/order/($orderId)/shipment/exchange")
-  let body = {courier: $courier, cte: $cte, info: $info, items: $items, number: $number, occurredAt: $occurredAt, sellerShipmentId: $sellerShipmentId, tranckingUrl: $tranckingUrl} | compact
+  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/order/{order_id}/shipment/exchange"))
+  let body = {"courier": $courier, "cte": $cte, "info": $info, "items": $items, "number": $number, "occurredAt": $occurred_at, "sellerShipmentId": $seller_shipment_id, "tranckingUrl": $trancking_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -237,7 +237,7 @@ export def "order-shipment-exchange post" [
 # --courier shape: {name: string, taxID?: string}
 # --items item shape: {quantity: int, skuSellerId: string}
 export def "order-shipment-return post" [
-  orderId: string
+  order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,15 +252,15 @@ export def "order-shipment-return post" [
   info: string # Aditional information about this shippment
   items: list # item shape: {quantity: int, skuSellerId: string}
   --number: string # Tracking Id in the courier
-  --occurredAt: string # Date time that this was created (format: date-time)
-  --sellerShipmentId: string # Unique Seller shipment Id. This must be unique across all orders and shipments
-  --tranckingUrl: string # Courier tracking URL
+  --occurred-at: string # Date time that this was created (format: date-time)
+  --seller-shipment-id: string # Unique Seller shipment Id. This must be unique across all orders and shipments
+  --trancking-url: string # Courier tracking URL
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/order/($orderId)/shipment/return")
-  let body = {courier: $courier, cte: $cte, info: $info, items: $items, number: $number, occurredAt: $occurredAt, sellerShipmentId: $sellerShipmentId, tranckingUrl: $tranckingUrl} | compact
+  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/order/{order_id}/shipment/return"))
+  let body = {"courier": $courier, "cte": $cte, "info": $info, "items": $items, "number": $number, "occurredAt": $occurred_at, "sellerShipmentId": $seller_shipment_id, "tranckingUrl": $trancking_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -275,7 +275,7 @@ export def "order-shipment-return post" [
 # --courier shape: {name: string, taxID?: string}
 # --invoice shape: {accessKey: string, cnpj?: string, issuedAt?: string, linkDanfe?: string, linkXml?: string, number: string, serie: string}
 export def "order-shipment-sent post" [
-  orderId: string
+  order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,15 +290,15 @@ export def "order-shipment-sent post" [
   invoice: any # shape: {accessKey: string, cnpj?: string, issuedAt?: string, linkDanfe?: string, linkXml?: string, number: string, serie: string}
   items: list # List of Order IDs of this items from this order that will be updated in this shipment
   --number: string # Unique id shipment Id in the courier system
-  occurredAt: string # Data da ocorrência (format: date-time)
-  sellerShipmentId: string # Unique Seller shipment Id. This must be unique across all orders and shipmnents
-  --trackingUrl: string # Courier tracking URL
+  occurred_at: string # Data da ocorrência (format: date-time)
+  seller_shipment_id: string # Unique Seller shipment Id. This must be unique across all orders and shipmnents
+  --tracking-url: string # Courier tracking URL
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/order/($orderId)/shipment/sent")
-  let body = {courier: $courier, cte: $cte, invoice: $invoice, items: $items, number: $number, occurredAt: $occurredAt, sellerShipmentId: $sellerShipmentId, trackingUrl: $trackingUrl} | compact
+  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/order/{order_id}/shipment/sent"))
+  let body = {"courier": $courier, "cte": $cte, "invoice": $invoice, "items": $items, "number": $number, "occurredAt": $occurred_at, "sellerShipmentId": $seller_shipment_id, "trackingUrl": $tracking_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -382,7 +382,7 @@ export def "orders-shipments-delivered post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orders/shipments/delivered")
-  let body = {shipments: $shipments} | compact
+  let body = {"shipments": $shipments} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -438,7 +438,7 @@ export def "orders-shipments-shipped post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orders/shipments/shipped")
-  let body = {shipments: $shipments} | compact
+  let body = {"shipments": $shipments} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -656,13 +656,13 @@ export def "product post" [
   categories: list # Array of categories associated with this product
   description: string # Product description.
   --dimensions: any # shape: {height: int, length: int, weight: int, width: int}
-  --giftWrap: any # shape: {available: bool, messageSupport?: bool, value: int}
+  --gift-wrap: any # shape: {available: bool, messageSupport?: bool, value: int}
   --gtin: list # Array of product EAN and/or ISBN and/or ASIN codes
   images: list # List of valid Product image URLs. HTTP or HTTPS are valid. HTTPS is prefered.
   price: any # shape: {default: int, offer: int}
-  --productGroupId: string # Unique Product Group ID. Products with the same `productGroupId` will be grouped and displayed as a unique entry. Use `productGroupId` to group diferent SKUs that represent diferent colors, sizes, capacities, etc..
-  --productId: string # Brand Lovers Product ID. Use this to suggest a product association. This field is optional.
-  skuSellerId: string # Unique Product Id (SKU) in the seller system
+  --product-group-id: string # Unique Product Group ID. Products with the same `productGroupId` will be grouped and displayed as a unique entry. Use `productGroupId` to group diferent SKUs that represent diferent colors, sizes, capacities, etc..
+  --product-id: string # Brand Lovers Product ID. Use this to suggest a product association. This field is optional.
+  sku_seller_id: string # Unique Product Id (SKU) in the seller system
   stock: int # Number of products availble for sale from the seller. Each new successfull order will automatically reduce the number of products available.
   title: string # Product name as advertised by manufacturer. This how the product will be displayed in the Marketplace
   --videos: list # List of videos de URLs associated with this product. HTTP or HTTPS are valid. HTTPS is prefered.
@@ -671,7 +671,7 @@ export def "product post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product")
-  let body = {attributes: $attributes, brand: $brand, categories: $categories, description: $description, dimensions: $dimensions, giftWrap: $giftWrap, gtin: $gtin, images: $images, price: $price, productGroupId: $productGroupId, productId: $productId, skuSellerId: $skuSellerId, stock: $stock, title: $title, videos: $videos} | compact
+  let body = {"attributes": $attributes, "brand": $brand, "categories": $categories, "description": $description, "dimensions": $dimensions, "giftWrap": $gift_wrap, "gtin": $gtin, "images": $images, "price": $price, "productGroupId": $product_group_id, "productId": $product_id, "skuSellerId": $sku_seller_id, "stock": $stock, "title": $title, "videos": $videos} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -684,7 +684,7 @@ export def "product post" [
 #
 # GET /product/{skuSellerId}
 export def "product get" [
-  skuSellerId: string
+  sku_seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,7 +697,7 @@ export def "product get" [
 ]: nothing -> record<attributes: table<name: string, value: string>, brand: string, categories: list<string>, description: string, dimensions: record<height: int, length: int, weight: int, width: int>, errors: table<message: string, skuSellerId: string, type: string>, giftWrap: record<available: bool, messageSupport: bool, value: int>, gtin: list<string>, images: list<string>, price: record<default: int, offer: int>, productGroupId: string, skuSellerId: string, status: string, stock: int, title: string, videos: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/product/($skuSellerId)")
+  let full_url = (build-url $base ({sku_seller_id: $sku_seller_id} | format pattern "/product/{sku_seller_id}"))
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -713,7 +713,7 @@ export def "product get" [
 # --giftWrap shape: {available: bool, messageSupport?: bool, value: int}
 # --price shape: {default: int, offer: int}
 export def "product put" [
-  skuSellerId: string
+  sku_seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,13 +728,13 @@ export def "product put" [
   --categories: list # Array of categories associated with this product
   --description: string # Product text description.
   --dimensions: any # shape: {height: int, length: int, weight: int, width: int}
-  --giftWrap: any # shape: {available: bool, messageSupport?: bool, value: int}
+  --gift-wrap: any # shape: {available: bool, messageSupport?: bool, value: int}
   --gtin: list # Array of product EAN and/or ISBN and/or ASIN codes
   --images: list # List of valid Product image URLs. HTTP or HTTPS are valid. HTTPS is prefered.
   --price: any # shape: {default: int, offer: int}
-  --productGroupId: string # Unique Product Group ID. Products with the same `productGroupId` will be grouped and displayed as a unique entry. Use `productGroupId` to group diferent SKUs that represent diferent colors, sizes, capacities, etc..
-  --productId: string # Brand Lovers Product Id. Use this to recommend a product association
-  --body-skuSellerId: string # Unique Product Id (SKU) in the seller system
+  --product-group-id: string # Unique Product Group ID. Products with the same `productGroupId` will be grouped and displayed as a unique entry. Use `productGroupId` to group diferent SKUs that represent diferent colors, sizes, capacities, etc..
+  --product-id: string # Brand Lovers Product Id. Use this to recommend a product association
+  --body-sku-seller-id: string # Unique Product Id (SKU) in the seller system
   --stock: int # Number of products availble for sale from the seller. Each new successfull order will automatically reduce the number of products available.
   --title: string # Product name as advertised by manufacturer. This how the product will be displayed in the Marketplace
   --videos: list # List of videos de URLs associated with this product. HTTP or HTTPS are valid. HTTPS is prefered.
@@ -742,8 +742,8 @@ export def "product put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/product/($skuSellerId)")
-  let body = {attributes: $attributes, brand: $brand, categories: $categories, description: $description, dimensions: $dimensions, giftWrap: $giftWrap, gtin: $gtin, images: $images, price: $price, productGroupId: $productGroupId, productId: $productId, skuSellerId: $body_skuSellerId, stock: $stock, title: $title, videos: $videos} | compact
+  let full_url = (build-url $base ({sku_seller_id: $sku_seller_id} | format pattern "/product/{sku_seller_id}"))
+  let body = {"attributes": $attributes, "brand": $brand, "categories": $categories, "description": $description, "dimensions": $dimensions, "giftWrap": $gift_wrap, "gtin": $gtin, "images": $images, "price": $price, "productGroupId": $product_group_id, "productId": $product_id, "skuSellerId": $body_sku_seller_id, "stock": $stock, "title": $title, "videos": $videos} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -756,7 +756,7 @@ export def "product put" [
 #
 # PUT /product/{skuSellerId}/prices
 export def "product-prices put" [
-  skuSellerId: string
+  sku_seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,8 +772,8 @@ export def "product-prices put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/product/($skuSellerId)/prices")
-  let body = {default: $default, offer: $offer} | compact
+  let full_url = (build-url $base ({sku_seller_id: $sku_seller_id} | format pattern "/product/{sku_seller_id}/prices"))
+  let body = {"default": $default, "offer": $offer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -786,7 +786,7 @@ export def "product-prices put" [
 #
 # PUT /product/{skuSellerId}/status
 export def "product-status put" [
-  skuSellerId: string
+  sku_seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -801,8 +801,8 @@ export def "product-status put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/product/($skuSellerId)/status")
-  let body = {active: $active} | compact
+  let full_url = (build-url $base ({sku_seller_id: $sku_seller_id} | format pattern "/product/{sku_seller_id}/status"))
+  let body = {"active": $active} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -815,7 +815,7 @@ export def "product-status put" [
 #
 # PUT /product/{skuSellerId}/stock
 export def "product-stock put" [
-  skuSellerId: string
+  sku_seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -825,14 +825,14 @@ export def "product-stock put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
-  --crossDockingTime: int # Time it will take to manufacture, prepare or setup this product. Time must be provided in seconds. For example 1 day should be informed as 86400. This time will be included in the product ETA informed to the customer (default: 0)
+  --cross-docking-time: int # Time it will take to manufacture, prepare or setup this product. Time must be provided in seconds. For example 1 day should be informed as 86400. This time will be included in the product ETA informed to the customer (default: 0)
   quantity: int # Stock available
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/product/($skuSellerId)/stock")
-  let body = {crossDockingTime: $crossDockingTime, quantity: $quantity} | compact
+  let full_url = (build-url $base ({sku_seller_id: $sku_seller_id} | format pattern "/product/{sku_seller_id}/stock"))
+  let body = {"crossDockingTime": $cross_docking_time, "quantity": $quantity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1050,14 +1050,14 @@ export def "ticket post" [
   --description: string # Trouble ticked brief description
   --body-from: string # Friendly name of the person sending this message, if not provided the seller `name` will be used
   --message: any # shape: {body: string, visibility: string}
-  orderId: string # Unique order Id that this trouble ticket belongs to
+  order_id: string # Unique order Id that this trouble ticket belongs to
   type: string # Trouble ticket type.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ticket")
-  let body = {body: $body_body, customer: $customer, description: $description, from: $body_from, message: $message, orderId: $orderId, type: $type} | compact
+  let body = {"body": $body_body, "customer": $customer, "description": $description, "from": $body_from, "message": $message, "orderId": $order_id, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1070,7 +1070,7 @@ export def "ticket post" [
 #
 # POST /ticket/{ticketId}/message
 export def "ticket-message post" [
-  ticketId: string
+  ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1086,8 +1086,8 @@ export def "ticket-message post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ticket/($ticketId)/message")
-  let body = {body: $body_body, visibility: $visibility} | compact
+  let full_url = (build-url $base ({ticket_id: $ticket_id} | format pattern "/ticket/{ticket_id}/message"))
+  let body = {"body": $body_body, "visibility": $visibility} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1100,7 +1100,7 @@ export def "ticket-message post" [
 #
 # GET /ticket/{ticketId}/messages
 export def "ticket-messages get" [
-  ticketId: string
+  ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1116,7 +1116,7 @@ export def "ticket-messages get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ticket/($ticketId)/messages" $qp)
+  let full_url = (build-url $base ({ticket_id: $ticket_id} | format pattern "/ticket/{ticket_id}/messages") $qp)
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1128,7 +1128,7 @@ export def "ticket-messages get" [
 #
 # PUT /ticket/{ticketId}/status
 export def "ticket-status put" [
-  ticketId: string
+  ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1138,13 +1138,13 @@ export def "ticket-status put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
-  ticketStatus: string # New trouble ticket status. Valid options are `REOPENED`, `CLOSED`
+  ticket_status: string # New trouble ticket status. Valid options are `REOPENED`, `CLOSED`
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ticket/($ticketId)/status")
-  let body = {ticketStatus: $ticketStatus} | compact
+  let full_url = (build-url $base ({ticket_id: $ticket_id} | format pattern "/ticket/{ticket_id}/status"))
+  let body = {"ticketStatus": $ticket_status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

@@ -66,13 +66,13 @@ def base-url-completer [] { ["http://ec2-instance-connect.us-east-1.amazonaws.co
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AWSEC2InstanceConnectService.SendSSHPublicKey"] }
-def X-Amz-Target-completer-1 [] { ["AWSEC2InstanceConnectService.SendSerialConsoleSSHPublicKey"] }
+def x-amz-target-completer [] { ["AWSEC2InstanceConnectService.SendSSHPublicKey"] }
+def x-amz-target-completer-1 [] { ["AWSEC2InstanceConnectService.SendSerialConsoleSSHPublicKey"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-awsec2-instance-connect-service-send-ssh-public-key SendSSHPublicKey" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-awsec2-instance-connect-service-send-ssh-public-key send" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AWSEC2InstanceConnectService.SendSSHPublicKey
 # operationId: SendSSHPublicKey
-export def "x-amz-target-awsec2-instance-connect-service-send-ssh-public-key SendSSHPublicKey" [
+export def "x-amz-target-awsec2-instance-connect-service-send-ssh-public-key send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,26 +105,26 @@ export def "x-amz-target-awsec2-instance-connect-service-send-ssh-public-key Sen
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  InstanceId: any
-  InstanceOSUser: any
-  SSHPublicKey: any
-  --AvailabilityZone: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  instance_id: any
+  instance_os_user: any
+  ssh_public_key: any
+  --availability-zone: any
 ]: any -> record<RequestId: record, Success: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSEC2InstanceConnectService.SendSSHPublicKey")
-  let body = {InstanceId: $InstanceId, InstanceOSUser: $InstanceOSUser, SSHPublicKey: $SSHPublicKey, AvailabilityZone: $AvailabilityZone} | compact
+  let body = {"InstanceId": $instance_id, "InstanceOSUser": $instance_os_user, "SSHPublicKey": $ssh_public_key, "AvailabilityZone": $availability_zone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -135,7 +135,7 @@ export def "x-amz-target-awsec2-instance-connect-service-send-ssh-public-key Sen
 #
 # POST /#X-Amz-Target=AWSEC2InstanceConnectService.SendSerialConsoleSSHPublicKey
 # operationId: SendSerialConsoleSSHPublicKey
-export def "x-amz-target-awsec2-instance-connect-service-send-serial-console-ssh-public-key SendSerialConsoleSSHPublicKey" [
+export def "x-amz-target-awsec2-instance-connect-service-send-serial-console-ssh-public-key send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -144,25 +144,25 @@ export def "x-amz-target-awsec2-instance-connect-service-send-serial-console-ssh
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  InstanceId: any
-  --SerialPort: any
-  SSHPublicKey: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  instance_id: any
+  --serial-port: any
+  ssh_public_key: any
 ]: any -> record<RequestId: record, Success: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSEC2InstanceConnectService.SendSerialConsoleSSHPublicKey")
-  let body = {InstanceId: $InstanceId, SerialPort: $SerialPort, SSHPublicKey: $SSHPublicKey} | compact
+  let body = {"InstanceId": $instance_id, "SerialPort": $serial_port, "SSHPublicKey": $ssh_public_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

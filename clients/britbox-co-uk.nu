@@ -73,7 +73,7 @@ def item-type-completer [] { ["channel" "customAsset" "episode" "link" "movie" "
 def show-item-type-completer [] { ["episode" "season" "show"] }
 def expand-completer [] { ["ancestors" "parent"] }
 def order-by-completer [] { ["date-added" "date-modified"] }
-def cookieType-completer [] { ["Persistent" "Session"] }
+def cookie-type-completer [] { ["Persistent" "Session"] }
 def provider-completer [] { ["Facebook"] }
 def expand-completer-1 [] { ["all" "ancestors" "children" "parent"] }
 def select-season-completer [] { ["first" "latest"] }
@@ -135,7 +135,7 @@ export def "account get" [
 # PATCH /account
 # operationId: updateAccount
 # --address shape: {addressLine1?: string, addressLine2?: string, city?: string, country?: string, postcode?: string, state?: string}
-export def "account updateAccount" [
+export def "account update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,20 +147,20 @@ export def "account updateAccount" [
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   --address: record # shape: {addressLine1?: string, addressLine2?: string, city?: string, country?: string, postcode?: string, state?: string}
-  --defaultPaymentInstrumentId: string # The id of the payment instrument to use by default for account transactions.  **DEPRECATED** The property `defaultPaymentMethodId` is now preferred.
-  --defaultPaymentMethodId: string # The id of the payment method to use by default for account transactions.
-  --firstName: string # The first name of the account holder.
-  --lastName: string # The last name of the account holder.
-  --minRatingPlaybackGuard: string # The classification rating defining the minimum rating level a user should be forced to enter the account pin code for playback. Anything at this rating level or above will require the pin for playback.  e.g. AUOFLC-MA15+  If you want to disable this guard pass an empty string or `null`.
+  --default-payment-instrument-id: string # The id of the payment instrument to use by default for account transactions.  **DEPRECATED** The property `defaultPaymentMethodId` is now preferred.
+  --default-payment-method-id: string # The id of the payment method to use by default for account transactions.
+  --first-name: string # The first name of the account holder.
+  --last-name: string # The last name of the account holder.
+  --min-rating-playback-guard: string # The classification rating defining the minimum rating level a user should be forced to enter the account pin code for playback. Anything at this rating level or above will require the pin for playback.  e.g. AUOFLC-MA15+  If you want to disable this guard pass an empty string or `null`.
   --segments: list # The segments an account should be placed under
-  --trackingEnabled: oneof<nothing, bool> # Whether usage tracking is associated with an account or anonymous.
+  --tracking-enabled: oneof<nothing, bool> # Whether usage tracking is associated with an account or anonymous.
 ]: any -> record<code: int, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account" $qp)
-  let body = {address: $address, defaultPaymentInstrumentId: $defaultPaymentInstrumentId, defaultPaymentMethodId: $defaultPaymentMethodId, firstName: $firstName, lastName: $lastName, minRatingPlaybackGuard: $minRatingPlaybackGuard, segments: $segments, trackingEnabled: $trackingEnabled} | compact
+  let body = {"address": $address, "defaultPaymentInstrumentId": $default_payment_instrument_id, "defaultPaymentMethodId": $default_payment_method_id, "firstName": $first_name, "lastName": $last_name, "minRatingPlaybackGuard": $min_rating_playback_guard, "segments": $segments, "trackingEnabled": $tracking_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -196,7 +196,7 @@ export def "account-billing-methods list" [
 #
 # POST /account/billing/methods
 # operationId: addPaymentMethod
-export def "account-billing-methods addPaymentMethod" [
+export def "account-billing-methods create-payment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "account-billing-methods addPaymentMethod" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  --makeDefault: oneof<nothing, bool> # Whether this payment method should become the account default when  making purchases.  Note that if this is the first payment method of type Card being added to an account then it will become the default whether this property is true or false.
+  --make-default: oneof<nothing, bool> # Whether this payment method should become the account default when  making purchases.  Note that if this is the first payment method of type Card being added to an account then it will become the default whether this property is true or false.
   --body-token: string # The payment provider token representing a payment method, obtained by submitting payment method details to your third party provider.
   type: string@type-completer # The type of payment method.
 ]: any -> record<balance: float, brand: string, currency: string, description: string, expiryMonth: float, expiryYear: float, id: string, lastDigits: float, type: string> {
@@ -216,7 +216,7 @@ export def "account-billing-methods addPaymentMethod" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/billing/methods" $qp)
-  let body = {makeDefault: $makeDefault, token: $body_token, type: $type} | compact
+  let body = {"makeDefault": $make_default, "token": $body_token, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -227,7 +227,7 @@ export def "account-billing-methods addPaymentMethod" [
 #
 # DELETE /account/billing/methods/{id}
 # operationId: removePaymentMethod
-export def "account-billing-methods removePaymentMethod" [
+export def "account-billing-methods delete-payment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -243,7 +243,7 @@ export def "account-billing-methods removePaymentMethod" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/billing/methods/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/account/billing/methods/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,7 +253,7 @@ export def "account-billing-methods removePaymentMethod" [
 #
 # GET /account/billing/methods/{id}
 # operationId: getPaymentMethod
-export def "account-billing-methods get" [
+export def "account-billing-methods get-payment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +269,7 @@ export def "account-billing-methods get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/billing/methods/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/account/billing/methods/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -315,17 +315,17 @@ export def "account-billing-purchases makePurchase" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  --itemId: string # The identifier of the item to purchase. Both `itemId` and `offerId` are required for item purchases.
-  --offerId: string # The identifier of the item offer to purchase. Both `itemId` and `offerId` are required for item purchases.
-  --paymentMethodId: string # The identifier of the payment method to use. If omitted, or if purchasing a plan, the default payment method will be used.
-  --planId: string # The identifier of the plan to purchase.
+  --item-id: string # The identifier of the item to purchase. Both `itemId` and `offerId` are required for item purchases.
+  --offer-id: string # The identifier of the item offer to purchase. Both `itemId` and `offerId` are required for item purchases.
+  --payment-method-id: string # The identifier of the payment method to use. If omitted, or if purchasing a plan, the default payment method will be used.
+  --plan-id: string # The identifier of the plan to purchase.
 ]: any -> record<deliveryType: string, exclusionRules: table<description: string, device: string, excludeAirplay: bool, excludeChromecast: bool, excludeDelivery: string, excludeMinResolution: string>, maxDownloads: int, maxPlays: int, ownership: string, playPeriod: int, rentalPeriod: int, resolution: string, scopes: list<string>, activationDate: string, classification: record<code: string, name: string>, creationDate: string, expirationDate: string, itemId: string, itemType: string, mediaDuration: int, planId: string, playCount: int, remainingDownloads: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/billing/purchases" $qp)
-  let body = {itemId: $itemId, offerId: $offerId, paymentMethodId: $paymentMethodId, planId: $planId} | compact
+  let body = {"itemId": $item_id, "offerId": $offer_id, "paymentMethodId": $payment_method_id, "planId": $plan_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -336,7 +336,7 @@ export def "account-billing-purchases makePurchase" [
 #
 # DELETE /account/billing/subscriptions/{id}
 # operationId: cancelSubscription
-export def "account-billing-subscriptions cancelSubscription" [
+export def "account-billing-subscriptions cancel" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +352,7 @@ export def "account-billing-subscriptions cancelSubscription" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/billing/subscriptions/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/account/billing/subscriptions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -362,7 +362,7 @@ export def "account-billing-subscriptions cancelSubscription" [
 #
 # PUT /account/billing/subscriptions/{id}
 # operationId: updateSubscription
-export def "account-billing-subscriptions updateSubscription" [
+export def "account-billing-subscriptions update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -372,14 +372,14 @@ export def "account-billing-subscriptions updateSubscription" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --planId: string # The id of the plan to switch to if switching plans.
+  --plan-id: string # The id of the plan to switch to if switching plans.
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
 ]: nothing -> record<code: int, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/billing/subscriptions/($id)" $qp)
+  let qp = [(serialize-qp "planId" $plan_id "scalar") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/account/billing/subscriptions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -414,7 +414,7 @@ export def "account-devices list" [
 #
 # POST /account/devices
 # operationId: registerDevice
-export def "account-devices registerDevice" [
+export def "account-devices create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "account-devices registerDevice" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/devices" $qp)
-  let body = {id: $id, name: $name, type: $type} | compact
+  let body = {"id": $id, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -463,7 +463,7 @@ export def "account-devices-authorization authorizeDevice" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/devices/authorization" $qp)
-  let body = {code: $code} | compact
+  let body = {"code": $code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -490,7 +490,7 @@ export def "account-devices deregisterDevice" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/devices/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/account/devices/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -516,7 +516,7 @@ export def "account-devices get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/devices/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/account/devices/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -526,7 +526,7 @@ export def "account-devices get" [
 #
 # PUT /account/devices/{id}/name
 # operationId: renameDevice
-export def "account-devices-name renameDevice" [
+export def "account-devices-name rename" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -543,7 +543,7 @@ export def "account-devices-name renameDevice" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/devices/($id)/name" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/account/devices/{id}/name") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -578,7 +578,7 @@ export def "account-entitlements get" [
 #
 # GET /account/items/{id}/videos
 # operationId: getItemMediaFiles
-export def "account-items-videos get" [
+export def "account-items-videos get-item-media-files" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -600,7 +600,7 @@ export def "account-items-videos get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "delivery" $delivery "csv") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "formats" $formats "csv") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/items/($id)/videos" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/account/items/{id}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -610,7 +610,7 @@ export def "account-items-videos get" [
 #
 # GET /account/items/{id}/videos-guarded
 # operationId: getItemMediaFilesGuarded
-export def "account-items-videos-guarded get" [
+export def "account-items-videos-guarded get-item-media-files" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -632,7 +632,7 @@ export def "account-items-videos-guarded get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "delivery" $delivery "csv") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "formats" $formats "csv") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/items/($id)/videos-guarded" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/account/items/{id}/videos-guarded") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -679,14 +679,14 @@ export def "account-password changePassword" [
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   password: string # The new password for the account.
-  profileToken: string # The ITV profile token.
+  profile_token: string # The ITV profile token.
 ]: any -> record<code: int, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/password" $qp)
-  let body = {password: $password, profileToken: $profileToken} | compact
+  let body = {"password": $password, "profileToken": $profile_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -715,7 +715,7 @@ export def "account-pin changePin" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/pin" $qp)
-  let body = {pin: $pin} | compact
+  let body = {"pin": $pin} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -751,7 +751,7 @@ export def "account-profile get" [
 #
 # GET /account/profile/bookmarks
 # operationId: getBookmarks
-export def "account-profile-bookmarks list" [
+export def "account-profile-bookmarks get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -808,8 +808,8 @@ export def "account-profile-bookmarks-list get" [
 #
 # DELETE /account/profile/bookmarks/{itemId}
 # operationId: deleteItemBookmark
-export def "account-profile-bookmarks delete" [
-  itemId: string
+export def "account-profile-bookmarks delete-item" [
+  item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -824,7 +824,7 @@ export def "account-profile-bookmarks delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/profile/bookmarks/($itemId)" $qp)
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/account/profile/bookmarks/{item_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -834,8 +834,8 @@ export def "account-profile-bookmarks delete" [
 #
 # GET /account/profile/bookmarks/{itemId}
 # operationId: getItemBookmark
-export def "account-profile-bookmarks get" [
-  itemId: string
+export def "account-profile-bookmarks get-item" [
+  item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -850,7 +850,7 @@ export def "account-profile-bookmarks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/profile/bookmarks/($itemId)" $qp)
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/account/profile/bookmarks/{item_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -861,7 +861,7 @@ export def "account-profile-bookmarks get" [
 # PUT /account/profile/bookmarks/{itemId}
 # operationId: bookmarkItem
 export def "account-profile-bookmarks bookmarkItem" [
-  itemId: string
+  item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -876,7 +876,7 @@ export def "account-profile-bookmarks bookmarkItem" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/profile/bookmarks/($itemId)" $qp)
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/account/profile/bookmarks/{item_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -919,8 +919,8 @@ export def "account-profile-continue-watching-list get" [
 #
 # GET /account/profile/items/{itemId}/next
 # operationId: getNextPlaybackItem
-export def "account-profile-items-next get" [
-  itemId: string
+export def "account-profile-items-next get-next-playback" [
+  item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,7 +940,7 @@ export def "account-profile-items-next get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/profile/items/($itemId)/next" $qp)
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/account/profile/items/{item_id}/next") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -950,7 +950,7 @@ export def "account-profile-items-next get" [
 #
 # GET /account/profile/ratings
 # operationId: getRatings
-export def "account-profile-ratings list" [
+export def "account-profile-ratings get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1008,8 +1008,8 @@ export def "account-profile-ratings-list get" [
 #
 # GET /account/profile/ratings/{itemId}
 # operationId: getItemRating
-export def "account-profile-ratings get" [
-  itemId: string
+export def "account-profile-ratings get-item" [
+  item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1024,7 +1024,7 @@ export def "account-profile-ratings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/profile/ratings/($itemId)" $qp)
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/account/profile/ratings/{item_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1035,7 +1035,7 @@ export def "account-profile-ratings get" [
 # PUT /account/profile/ratings/{itemId}
 # operationId: rateItem
 export def "account-profile-ratings rateItem" [
-  itemId: string
+  item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1051,7 +1051,7 @@ export def "account-profile-ratings rateItem" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rating" $rating "scalar") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/profile/ratings/($itemId)" $qp)
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/account/profile/ratings/{item_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1087,7 +1087,7 @@ export def "account-profile-watched delete" [
 #
 # GET /account/profile/watched
 # operationId: getWatched
-export def "account-profile-watched list" [
+export def "account-profile-watched get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1146,8 +1146,8 @@ export def "account-profile-watched-list get" [
 #
 # GET /account/profile/watched/{itemId}
 # operationId: getItemWatchedStatus
-export def "account-profile-watched get" [
-  itemId: string
+export def "account-profile-watched get-item-watched-status" [
+  item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1162,7 +1162,7 @@ export def "account-profile-watched get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/profile/watched/($itemId)" $qp)
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/account/profile/watched/{item_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1173,7 +1173,7 @@ export def "account-profile-watched get" [
 # PUT /account/profile/watched/{itemId}
 # operationId: setItemWatchedStatus
 export def "account-profile-watched setItemWatchedStatus" [
-  itemId: string
+  item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1189,7 +1189,7 @@ export def "account-profile-watched setItemWatchedStatus" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/profile/watched/($itemId)" $qp)
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/account/profile/watched/{item_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1199,7 +1199,7 @@ export def "account-profile-watched setItemWatchedStatus" [
 #
 # POST /account/profiles
 # operationId: createProfile
-export def "account-profiles createProfile" [
+export def "account-profiles create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1210,10 +1210,10 @@ export def "account-profiles createProfile" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  --languageCode: string # The code of the preferred language for the profile. Must be a valid ISO language code e.g. "en-US" and must match the code of one of the languages specified in the app config. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
+  --language-code: string # The code of the preferred language for the profile. Must be a valid ISO language code e.g. "en-US" and must match the code of one of the languages specified in the app config. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   name: string # The unique name of the profile.
-  --pinEnabled: oneof<nothing, bool> # Whether an account pin is required to enter the profile.  If no account pin is defined this has no impact.  (default: false)
-  --purchaseEnabled: oneof<nothing, bool> # Whether the profile can make purchases with the account payment options. (default: true)
+  --pin-enabled: oneof<nothing, bool> # Whether an account pin is required to enter the profile.  If no account pin is defined this has no impact.  (default: false)
+  --purchase-enabled: oneof<nothing, bool> # Whether the profile can make purchases with the account payment options. (default: true)
   --segments: list # The segments a profile should be placed under
 ]: any -> record<color: string, heroAutoplay: bool, heroWithAudio: bool, id: string, isActive: bool, languageCode: string, marketingEnabled: bool, maxRatingContentFilter: record<code: string, name: string>, minRatingPlaybackGuard: record<code: string, name: string>, name: string, pinEnabled: bool, purchaseEnabled: bool, segments: list<string>, bookmarked: record, rated: record, watched: record> {
   let input = $in
@@ -1221,7 +1221,7 @@ export def "account-profiles createProfile" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/profiles" $qp)
-  let body = {languageCode: $languageCode, name: $name, pinEnabled: $pinEnabled, purchaseEnabled: $purchaseEnabled, segments: $segments} | compact
+  let body = {"languageCode": $language_code, "name": $name, "pinEnabled": $pin_enabled, "purchaseEnabled": $purchase_enabled, "segments": $segments} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1232,7 +1232,7 @@ export def "account-profiles createProfile" [
 #
 # DELETE /account/profiles/{id}
 # operationId: deleteProfileWithId
-export def "account-profiles delete" [
+export def "account-profiles delete-profile-with" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1248,7 +1248,7 @@ export def "account-profiles delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/profiles/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/account/profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1258,7 +1258,7 @@ export def "account-profiles delete" [
 #
 # GET /account/profiles/{id}
 # operationId: getProfileWithId
-export def "account-profiles get" [
+export def "account-profiles get-profile-with" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1274,7 +1274,7 @@ export def "account-profiles get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/profiles/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/account/profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1284,7 +1284,7 @@ export def "account-profiles get" [
 #
 # PATCH /account/profiles/{id}
 # operationId: updateProfileWithId
-export def "account-profiles updateProfileWithId" [
+export def "account-profiles update-profile-with" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1296,20 +1296,20 @@ export def "account-profiles updateProfileWithId" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  --heroAutoplay: oneof<nothing, bool> # Sets the Hero row clip auto playback enabled
-  --heroWithAudio: oneof<nothing, bool> # Sets the Hero row clip auto playback audio enabled
-  --languageCode: string # The code of the preferred language for the profile. Must be a valid ISO language code e.g. "en-US" and must match the code of one of the languages specified in the app config. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
+  --hero-autoplay: oneof<nothing, bool> # Sets the Hero row clip auto playback enabled
+  --hero-with-audio: oneof<nothing, bool> # Sets the Hero row clip auto playback audio enabled
+  --language-code: string # The code of the preferred language for the profile. Must be a valid ISO language code e.g. "en-US" and must match the code of one of the languages specified in the app config. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   --name: string # The unique name of the profile.
-  --pinEnabled: oneof<nothing, bool> # Whether an account pin is required to enter the profile.  If no account pin is defined this has no impact.
-  --purchaseEnabled: oneof<nothing, bool> # Whether the profile can make purchases with the account payment options.
+  --pin-enabled: oneof<nothing, bool> # Whether an account pin is required to enter the profile.  If no account pin is defined this has no impact.
+  --purchase-enabled: oneof<nothing, bool> # Whether the profile can make purchases with the account payment options.
   --segments: list # The segments a profile should be placed under
 ]: any -> record<code: int, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/profiles/($id)" $qp)
-  let body = {heroAutoplay: $heroAutoplay, heroWithAudio: $heroWithAudio, languageCode: $languageCode, name: $name, pinEnabled: $pinEnabled, purchaseEnabled: $purchaseEnabled, segments: $segments} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/account/profiles/{id}") $qp)
+  let body = {"heroAutoplay": $hero_autoplay, "heroWithAudio": $hero_with_audio, "languageCode": $language_code, "name": $name, "pinEnabled": $pin_enabled, "purchaseEnabled": $purchase_enabled, "segments": $segments} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1320,7 +1320,7 @@ export def "account-profiles updateProfileWithId" [
 #
 # POST /account/request-email-verification
 # operationId: requestEmailVerification
-export def "account-request-email-verification requestEmailVerification" [
+export def "account-request-email-verification request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1370,7 +1370,7 @@ export def "authorization signOut" [
 #
 # POST /authorization
 # operationId: getAccountToken
-export def "authorization post" [
+export def "authorization get-account-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1381,7 +1381,7 @@ export def "authorization post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  --cookieType: string@cookieType-completer # If you specify a cookie type then a content filter cookie will be returned along with the token(s). This is only intended for web based clients which need to pass the cookies to a server to render a page based on the user's content filters e.g subscription code.  If type `Session` the cookie will be session based. If type `Persistent` the cookie will have a medium term lifespan. If undefined no cookies will be set.
+  --cookie-type: string@cookie-type-completer # If you specify a cookie type then a content filter cookie will be returned along with the token(s). This is only intended for web based clients which need to pass the cookies to a server to render a page based on the user's content filters e.g subscription code.  If type `Session` the cookie will be session based. If type `Persistent` the cookie will have a medium term lifespan. If undefined no cookies will be set.
   email: string # The email associated with the account.
   password: string # The password associated with the account.
   scopes: list # The scope(s) of the tokens required. For each scope listed an Account and Profile token of that scope will be returned
@@ -1391,7 +1391,7 @@ export def "authorization post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authorization" $qp)
-  let body = {cookieType: $cookieType, email: $email, password: $password, scopes: $scopes} | compact
+  let body = {"cookieType": $cookie_type, "email": $email, "password": $password, "scopes": $scopes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1402,7 +1402,7 @@ export def "authorization post" [
 #
 # POST /authorization/device
 # operationId: getAccountTokenByCode
-export def "authorization-device post" [
+export def "authorization-device get-account-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1422,7 +1422,7 @@ export def "authorization-device post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authorization/device" $qp)
-  let body = {code: $code, id: $id, scopes: $scopes} | compact
+  let body = {"code": $code, "id": $id, "scopes": $scopes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1453,7 +1453,7 @@ export def "authorization-device-code generateDeviceAuthorizationCode" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authorization/device/code" $qp)
-  let body = {id: $id, name: $name, type: $type} | compact
+  let body = {"id": $id, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1464,7 +1464,7 @@ export def "authorization-device-code generateDeviceAuthorizationCode" [
 #
 # POST /authorization/profile
 # operationId: getProfileToken
-export def "authorization-profile post" [
+export def "authorization-profile get-profile-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1475,9 +1475,9 @@ export def "authorization-profile post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  --cookieType: string@cookieType-completer # If you specify a cookie type then a content filter cookie will be returned along with the token(s). This is only intended for web based clients which need to pass the cookies to a server to render a page based on the user's content filters e.g subscription code.  If type `Session` the cookie will be session based. If type `Persistent` the cookie will have a medium term lifespan. If undefined no cookies will be set.
+  --cookie-type: string@cookie-type-completer # If you specify a cookie type then a content filter cookie will be returned along with the token(s). This is only intended for web based clients which need to pass the cookies to a server to render a page based on the user's content filters e.g subscription code.  If type `Session` the cookie will be session based. If type `Persistent` the cookie will have a medium term lifespan. If undefined no cookies will be set.
   --pin: string # The pin associated with this profile, if any.
-  profileId: string # The id of the profile the token should grant access rights to.
+  profile_id: string # The id of the profile the token should grant access rights to.
   scopes: list # The scope(s) of the token(s) required.
 ]: any -> table<accountCreated: bool, expirationDate: string, refreshable: bool, type: string, value: string> {
   let input = $in
@@ -1485,7 +1485,7 @@ export def "authorization-profile post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authorization/profile" $qp)
-  let body = {cookieType: $cookieType, pin: $pin, profileId: $profileId, scopes: $scopes} | compact
+  let body = {"cookieType": $cookie_type, "pin": $pin, "profileId": $profile_id, "scopes": $scopes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1496,7 +1496,7 @@ export def "authorization-profile post" [
 #
 # POST /authorization/refresh
 # operationId: refreshToken
-export def "authorization-refresh refreshToken" [
+export def "authorization-refresh refresh-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1507,7 +1507,7 @@ export def "authorization-refresh refreshToken" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  --cookieType: string@cookieType-completer # If you specify a cookie type then a content filter cookie will be returned along with the token(s). This is only intended for web based clients which need to pass the cookies to a server to render a page based on the user's content filters e.g subscription code.  If type `Session` the cookie will be session based. If type `Persistent` the cookie will have a medium term lifespan. If undefined no cookies will be set.
+  --cookie-type: string@cookie-type-completer # If you specify a cookie type then a content filter cookie will be returned along with the token(s). This is only intended for web based clients which need to pass the cookies to a server to render a page based on the user's content filters e.g subscription code.  If type `Session` the cookie will be session based. If type `Persistent` the cookie will have a medium term lifespan. If undefined no cookies will be set.
   --body-token: string # The token to refresh.
 ]: any -> record<accountCreated: bool, expirationDate: string, refreshable: bool, type: string, value: string> {
   let input = $in
@@ -1515,7 +1515,7 @@ export def "authorization-refresh refreshToken" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authorization/refresh" $qp)
-  let body = {cookieType: $cookieType, token: $body_token} | compact
+  let body = {"cookieType": $cookie_type, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1537,8 +1537,8 @@ export def "authorization-sso singleSignOn" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  --cookieType: string@cookieType-completer # If you specify a cookie type then a content filter cookie will be returned along with the token(s). This is only intended for web based clients which need to pass the cookies to a server to render a page based on the user's content filters e.g subscription code.  If type `Session` the cookie will be session based. If type `Persistent` the cookie will have a medium term lifespan. If undefined no cookies will be set.
-  --linkAccounts: oneof<nothing, bool> # When a user attempts to sign in using single-sign-on, we may find an account created previously through the manual sign up flow with the same email. If this is the case then an option to link the two accounts can be made available.  If this flag is set to true then accounts will be linked automatically.  If this flag is not set or set to false and an existing account is found  then an http 401 with subcode `6001` will be returned. Client apps can then present the option to link the accounts. If the user decides to accept, then the same call can be repeated with this flag set to true.
+  --cookie-type: string@cookie-type-completer # If you specify a cookie type then a content filter cookie will be returned along with the token(s). This is only intended for web based clients which need to pass the cookies to a server to render a page based on the user's content filters e.g subscription code.  If type `Session` the cookie will be session based. If type `Persistent` the cookie will have a medium term lifespan. If undefined no cookies will be set.
+  --link-accounts: oneof<nothing, bool> # When a user attempts to sign in using single-sign-on, we may find an account created previously through the manual sign up flow with the same email. If this is the case then an option to link the two accounts can be made available.  If this flag is set to true then accounts will be linked automatically.  If this flag is not set or set to false and an existing account is found  then an http 401 with subcode `6001` will be returned. Client apps can then present the option to link the accounts. If the user decides to accept, then the same call can be repeated with this flag set to true.
   provider: string@provider-completer # The third party single-sign-on provider.
   --scopes: list # The scope(s) of the tokens required. For each scope listed an Account and Profile token of that scope will be returned.
   --body-token: string # A token from the third party single-sign-on provider e.g. an identity token from Facebook.
@@ -1548,7 +1548,7 @@ export def "authorization-sso singleSignOn" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authorization/sso" $qp)
-  let body = {cookieType: $cookieType, linkAccounts: $linkAccounts, provider: $provider, scopes: $scopes, token: $body_token} | compact
+  let body = {"cookieType": $cookie_type, "linkAccounts": $link_accounts, "provider": $provider, "scopes": $scopes, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1560,7 +1560,7 @@ export def "authorization-sso singleSignOn" [
 # GET /bt/plan/{token}
 # operationId: getPlanByToken
 export def "bt-plan get" [
-  token: string
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1574,7 +1574,7 @@ export def "bt-plan get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bt/plan/($token)" $qp)
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/bt/plan/{token_arg}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1618,7 +1618,7 @@ export def "bt-token-assign assignToken" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  profileToken: string # The ITV profile token
+  profile_token: string # The ITV profile token
   --body-token: string # The validated userToken.
 ]: any -> any {
   let input = $in
@@ -1626,7 +1626,7 @@ export def "bt-token-assign assignToken" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bt/token/assign" $qp)
-  let body = {profileToken: $profileToken, token: $body_token} | compact
+  let body = {"profileToken": $profile_token, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1637,7 +1637,7 @@ export def "bt-token-assign assignToken" [
 #
 # GET /bt/token/validate
 # operationId: checkUserToken
-export def "bt-token-validate checkUserToken" [
+export def "bt-token-validate check-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1663,7 +1663,7 @@ export def "bt-token-validate checkUserToken" [
 #
 # GET /check-subscription/{id}
 # operationId: getSubscriptionData
-export def "check-subscription get" [
+export def "check-subscription get-subscription-data" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1676,7 +1676,7 @@ export def "check-subscription get" [
 ]: nothing -> record<itvData_purchased: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/check-subscription/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/check-subscription/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1686,7 +1686,7 @@ export def "check-subscription get" [
 #
 # GET /config
 # operationId: getAppConfig
-export def "config get" [
+export def "config get-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1716,7 +1716,7 @@ export def "config get" [
 #
 # GET /ee-bt/eligibility
 # operationId: checkEeBtEligibility
-export def "ee-bt-eligibility checkEeBtEligibility" [
+export def "ee-bt-eligibility check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1750,17 +1750,17 @@ export def "ee-msisdn assignMsisdn" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  eeProductId: string # Product id from /ee/offers
+  ee_product_id: string # Product id from /ee/offers
   msisdn: string # The validated msisdn.
-  profileToken: string # The ITV profile token
-  trackingHeader: string # trackingHeader
+  profile_token: string # The ITV profile token
+  tracking_header: string # trackingHeader
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ee/msisdn" $qp)
-  let body = {eeProductId: $eeProductId, msisdn: $msisdn, profileToken: $profileToken, trackingHeader: $trackingHeader} | compact
+  let body = {"eeProductId": $ee_product_id, "msisdn": $msisdn, "profileToken": $profile_token, "trackingHeader": $tracking_header} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1771,7 +1771,7 @@ export def "ee-msisdn assignMsisdn" [
 #
 # POST /ee/offers
 # operationId: getEligibleOffers
-export def "ee-offers post" [
+export def "ee-offers get-eligible" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1782,16 +1782,16 @@ export def "ee-offers post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  accessToken: string # EE API authorization Token received from GET /ee/token/create.
+  access_token: string # EE API authorization Token received from GET /ee/token/create.
   msisdn: string # The msisdn.
-  --trackingHeader: string # trackingHeader.
+  --tracking-header: string # trackingHeader.
 ]: any -> record<eligibleOffers: table<name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ee/offers" $qp)
-  let body = {accessToken: $accessToken, msisdn: $msisdn, trackingHeader: $trackingHeader} | compact
+  let body = {"accessToken": $access_token, "msisdn": $msisdn, "trackingHeader": $tracking_header} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1802,7 +1802,7 @@ export def "ee-offers post" [
 #
 # POST /ee/pin
 # operationId: validatePinRequest
-export def "ee-pin validatePinRequest" [
+export def "ee-pin validate-pin-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1813,17 +1813,17 @@ export def "ee-pin validatePinRequest" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  accessToken: string # EE API authorization Token received from GET /ee/token/create.
+  access_token: string # EE API authorization Token received from GET /ee/token/create.
   pin: string # The pin entered by a user. 6 digits
-  pinReference: string # The pinReference.
-  --trackingHeader: string # Tracking header to be able to search logs for a specific user requests. If not provided it will be generated. FE should store it for later user.
+  pin_reference: string # The pinReference.
+  --tracking-header: string # Tracking header to be able to search logs for a specific user requests. If not provided it will be generated. FE should store it for later user.
 ]: any -> record<pinValid: string, trackingHeader: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ee/pin" $qp)
-  let body = {accessToken: $accessToken, pin: $pin, pinReference: $pinReference, trackingHeader: $trackingHeader} | compact
+  let body = {"accessToken": $access_token, "pin": $pin, "pinReference": $pin_reference, "trackingHeader": $tracking_header} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1834,7 +1834,7 @@ export def "ee-pin validatePinRequest" [
 #
 # PUT /ee/pin
 # operationId: createPinRequest
-export def "ee-pin createPinRequest" [
+export def "ee-pin create-pin-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1845,16 +1845,16 @@ export def "ee-pin createPinRequest" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  accessToken: string # EE API authorization Token received from GET /ee/token/create.
+  access_token: string # EE API authorization Token received from GET /ee/token/create.
   msisdn: string # The msisdn.
-  --trackingHeader: string # trackingHeader
+  --tracking-header: string # trackingHeader
 ]: any -> record<pinReference: string, trackingHeader: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ee/pin" $qp)
-  let body = {accessToken: $accessToken, msisdn: $msisdn, trackingHeader: $trackingHeader} | compact
+  let body = {"accessToken": $access_token, "msisdn": $msisdn, "trackingHeader": $tracking_header} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1903,7 +1903,7 @@ export def "ee-plans get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ee/plans/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/ee/plans/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1913,7 +1913,7 @@ export def "ee-plans get" [
 #
 # GET /ee/token/create
 # operationId: createToken
-export def "ee-token-create createToken" [
+export def "ee-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1958,7 +1958,7 @@ export def "items get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "select_season" $select_season "scalar") (serialize-qp "use_custom_id" $use_custom_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/items/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/items/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1968,7 +1968,7 @@ export def "items get" [
 #
 # GET /items/{id}/children
 # operationId: getItemChildrenList
-export def "items-children get" [
+export def "items-children get-item-children-list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1991,7 +1991,7 @@ export def "items-children get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/items/($id)/children" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/items/{id}/children") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2001,7 +2001,7 @@ export def "items-children get" [
 #
 # GET /items/{id}/related
 # operationId: getItemRelatedList
-export def "items-related get" [
+export def "items-related get-item-related-list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2023,7 +2023,7 @@ export def "items-related get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/items/($id)/related" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/items/{id}/related") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2033,7 +2033,7 @@ export def "items-related get" [
 #
 # GET /items/{id}/videos
 # operationId: getPublicItemMediaFiles
-export def "items-videos get" [
+export def "items-videos get-public-item-media-files" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2055,7 +2055,7 @@ export def "items-videos get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "delivery" $delivery "csv") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "formats" $formats "csv") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/items/($id)/videos" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/items/{id}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2065,8 +2065,8 @@ export def "items-videos get" [
 #
 # GET /items/{itemId}/next
 # operationId: getAnonNextPlaybackItem
-export def "items-next get" [
-  itemId: string
+export def "items-next get-anon-next-playback" [
+  item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2085,7 +2085,7 @@ export def "items-next get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/items/($itemId)/next" $qp)
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/items/{item_id}/next") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2095,7 +2095,7 @@ export def "items-next get" [
 #
 # POST /itv/billinghistory/{platform}
 # operationId: getBillingHistory
-export def "itv-billinghistory post" [
+export def "itv-billinghistory get" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2106,14 +2106,14 @@ export def "itv-billinghistory post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  profileToken: string # The ITV profile token.
+  profile_token: string # The ITV profile token.
 ]: any -> record<payment_history: table<card: record, charge: record, invoice: record, subscription: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/billinghistory/($platform)" $qp)
-  let body = {profileToken: $profileToken} | compact
+  let full_url = (build-url $base ({platform: $platform} | format pattern "/itv/billinghistory/{platform}") $qp)
+  let body = {"profileToken": $profile_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2124,7 +2124,7 @@ export def "itv-billinghistory post" [
 #
 # POST /itv/cards/{platform}
 # operationId: getCardDetails
-export def "itv-cards post" [
+export def "itv-cards get-card-details" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2135,14 +2135,14 @@ export def "itv-cards post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  profileToken: string # The ITV profile token.
+  profile_token: string # The ITV profile token.
 ]: any -> record<card_type: string, exp_month: int, exp_year: int, last4: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/cards/($platform)" $qp)
-  let body = {profileToken: $profileToken} | compact
+  let full_url = (build-url $base ({platform: $platform} | format pattern "/itv/cards/{platform}") $qp)
+  let body = {"profileToken": $profile_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2164,15 +2164,15 @@ export def "itv-cards changeCardDetails" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  cardToken: string # The credit card token.
-  profileToken: string # The ITV profile token.
+  card_token: string # The credit card token.
+  profile_token: string # The ITV profile token.
 ]: any -> record<code: int, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/cards/($platform)" $qp)
-  let body = {cardToken: $cardToken, profileToken: $profileToken} | compact
+  let full_url = (build-url $base ({platform: $platform} | format pattern "/itv/cards/{platform}") $qp)
+  let body = {"cardToken": $card_token, "profileToken": $profile_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2195,14 +2195,14 @@ export def "itv-changeemail changeEmail" [
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   email: string # New email address for account/profile.
-  profileToken: string # The ITV profile token.
+  profile_token: string # The ITV profile token.
 ]: any -> record<code: int, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/itv/changeemail" $qp)
-  let body = {email: $email, profileToken: $profileToken} | compact
+  let body = {"email": $email, "profileToken": $profile_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2224,15 +2224,15 @@ export def "itv-changemarketing changeMarketing" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  --emailOptIn: oneof<nothing, bool> # Updated marketing preferences for account/profile.
-  profileToken: string # The ITV profile token.
+  --email-opt-in: oneof<nothing, bool> # Updated marketing preferences for account/profile.
+  profile_token: string # The ITV profile token.
 ]: any -> record<code: int, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/itv/changemarketing" $qp)
-  let body = {emailOptIn: $emailOptIn, profileToken: $profileToken} | compact
+  let body = {"emailOptIn": $email_opt_in, "profileToken": $profile_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2243,7 +2243,7 @@ export def "itv-changemarketing changeMarketing" [
 #
 # POST /itv/deleteaccount
 # operationId: deleteAccount
-export def "itv-deleteaccount post" [
+export def "itv-deleteaccount delete-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2254,14 +2254,14 @@ export def "itv-deleteaccount post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  profileToken: string # The ITV profile token.
+  profile_token: string # The ITV profile token.
 ]: any -> record<code: int, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/itv/deleteaccount" $qp)
-  let body = {profileToken: $profileToken} | compact
+  let body = {"profileToken": $profile_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2335,7 +2335,7 @@ export def "itv-feature-flag get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/featureFlag/($feature)" $qp)
+  let full_url = (build-url $base ({feature: $feature} | format pattern "/itv/featureFlag/{feature}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2355,15 +2355,15 @@ export def "itv-googlepay-subscription googlePaySubscription" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  purchaseToken: string # the unique identifier for this purchase
-  subscriptionItem: string # the SKU of the item from the play console
+  purchase_token: string # the unique identifier for this purchase
+  subscription_item: string # the SKU of the item from the play console
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/itv/googlepay/subscription" $qp)
-  let body = {purchaseToken: $purchaseToken, subscriptionItem: $subscriptionItem} | compact
+  let body = {"purchaseToken": $purchase_token, "subscriptionItem": $subscription_item} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2374,7 +2374,7 @@ export def "itv-googlepay-subscription googlePaySubscription" [
 #
 # GET /itv/had/entitlements
 # operationId: checkPreviousEntitlements
-export def "itv-had-entitlements checkPreviousEntitlements" [
+export def "itv-had-entitlements check-previous" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2398,7 +2398,7 @@ export def "itv-had-entitlements checkPreviousEntitlements" [
 #
 # POST /itv/items/clips
 # operationId: getItemsMediaClipFiles
-export def "itv-items-clips post" [
+export def "itv-items-clips get-items-media-clip-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2416,7 +2416,7 @@ export def "itv-items-clips post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/itv/items/clips" $qp)
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2427,7 +2427,7 @@ export def "itv-items-clips post" [
 #
 # POST /itv/items/downloadable
 # operationId: getItemDownloadables
-export def "itv-items-downloadable post" [
+export def "itv-items-downloadable get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2445,7 +2445,7 @@ export def "itv-items-downloadable post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/itv/items/downloadable" $qp)
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2456,7 +2456,7 @@ export def "itv-items-downloadable post" [
 #
 # GET /itv/itemsummary/{externalId}
 export def "itv-itemsummary get" [
-  externalId: string
+  external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2468,7 +2468,7 @@ export def "itv-itemsummary get" [
 ]: nothing -> record<code: int, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/itv/itemsummary/($externalId)")
+  let full_url = (build-url $base ({external_id: $external_id} | format pattern "/itv/itemsummary/{external_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2514,7 +2514,7 @@ export def "itv-page get" [
 #
 # POST /itv/pinauthorization
 # operationId: getAccountTokenWithPin
-export def "itv-pinauthorization post" [
+export def "itv-pinauthorization get-account-token-with-pin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2525,7 +2525,7 @@ export def "itv-pinauthorization post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  --cookieType: string@cookieType-completer # If you specify a cookie type then a content filter cookie will be returned along with the token(s). This is only intended for web based clients which need to pass the cookies to a server to render a page based on the user's content filters e.g subscription code.  If type `Session` the cookie will be session based. If type `Persistent` the cookie will have a medium term lifespan. If undefined no cookies will be set.
+  --cookie-type: string@cookie-type-completer # If you specify a cookie type then a content filter cookie will be returned along with the token(s). This is only intended for web based clients which need to pass the cookies to a server to render a page based on the user's content filters e.g subscription code.  If type `Session` the cookie will be session based. If type `Persistent` the cookie will have a medium term lifespan. If undefined no cookies will be set.
   pin: string # The 4-digit parental control pin.
   --scopes: list # The scope(s) of the token(s) required.
 ]: any -> table<accountCreated: bool, expirationDate: string, refreshable: bool, type: string, value: string> {
@@ -2534,7 +2534,7 @@ export def "itv-pinauthorization post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/itv/pinauthorization" $qp)
-  let body = {cookieType: $cookieType, pin: $pin, scopes: $scopes} | compact
+  let body = {"cookieType": $cookie_type, "pin": $pin, "scopes": $scopes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2556,14 +2556,14 @@ export def "itv-plan upgradePlan" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  planId: string # The identifier of the plan to purchase.
+  plan_id: string # The identifier of the plan to purchase.
 ]: any -> record<code: int, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/plan/($platform)" $qp)
-  let body = {planId: $planId} | compact
+  let full_url = (build-url $base ({platform: $platform} | format pattern "/itv/plan/{platform}") $qp)
+  let body = {"planId": $plan_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2588,7 +2588,7 @@ export def "itv-plans get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/plans/($platform)" $qp)
+  let full_url = (build-url $base ({platform: $platform} | format pattern "/itv/plans/{platform}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2621,7 +2621,7 @@ export def "itv-profile get" [
 #
 # PUT /itv/profile
 # operationId: updateProfile
-export def "itv-profile updateProfile" [
+export def "itv-profile update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2632,12 +2632,12 @@ export def "itv-profile updateProfile" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  --dateOfBirth: string # The date of birth.
+  --date-of-birth: string # The date of birth.
   --email: string # The email address.
-  --firstName: string # Last name.
-  --lastName: string # First name.
+  --first-name: string # Last name.
+  --last-name: string # First name.
   --postcode: string # The postal code.
-  profileToken: string # The ITV profile token.
+  profile_token: string # The ITV profile token.
   --title: string # The title.
 ]: any -> record<code: int, message: string> {
   let input = $in
@@ -2645,7 +2645,7 @@ export def "itv-profile updateProfile" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/itv/profile" $qp)
-  let body = {dateOfBirth: $dateOfBirth, email: $email, firstName: $firstName, lastName: $lastName, postcode: $postcode, profileToken: $profileToken, title: $title} | compact
+  let body = {"dateOfBirth": $date_of_birth, "email": $email, "firstName": $first_name, "lastName": $last_name, "postcode": $postcode, "profileToken": $profile_token, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2656,7 +2656,7 @@ export def "itv-profile updateProfile" [
 #
 # GET /itv/profile/recommendation/list
 # operationId: getRecommendedList
-export def "itv-profile-recommendation-list get" [
+export def "itv-profile-recommendation-list get-recommended" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2687,7 +2687,7 @@ export def "itv-profile-recommendation-list get" [
 #
 # POST /itv/profiletoken
 # operationId: getItvProfileToken
-export def "itv-profiletoken post" [
+export def "itv-profiletoken get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2704,7 +2704,7 @@ export def "itv-profiletoken post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/itv/profiletoken" $qp)
-  let body = {password: $password} | compact
+  let body = {"password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2725,14 +2725,14 @@ export def "itv-purchase delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  profileToken: string # The ITV profile token.
+  profile_token: string # The ITV profile token.
 ]: any -> record<code: int, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/purchase/($platform)" $qp)
-  let body = {profileToken: $profileToken} | compact
+  let full_url = (build-url $base ({platform: $platform} | format pattern "/itv/purchase/{platform}") $qp)
+  let body = {"profileToken": $profile_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2743,7 +2743,7 @@ export def "itv-purchase delete" [
 #
 # GET /itv/purchase/{platform}
 # operationId: getCurrentSubscription
-export def "itv-purchase get" [
+export def "itv-purchase get-current-subscription" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2758,7 +2758,7 @@ export def "itv-purchase get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/purchase/($platform)" $qp)
+  let full_url = (build-url $base ({platform: $platform} | format pattern "/itv/purchase/{platform}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2779,17 +2779,17 @@ export def "itv-purchase confirmPurchase" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  cardToken: string # The credit card token.
-  planId: string # The identifier of the plan to purchase.
-  profileToken: string # The ITV profile token.
+  card_token: string # The credit card token.
+  plan_id: string # The identifier of the plan to purchase.
+  profile_token: string # The ITV profile token.
   --voucher: string # A coupon/voucher for a discount.
 ]: any -> record<customerId: string, planId: string, subscriptionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/purchase/($platform)" $qp)
-  let body = {cardToken: $cardToken, planId: $planId, profileToken: $profileToken, voucher: $voucher} | compact
+  let full_url = (build-url $base ({platform: $platform} | format pattern "/itv/purchase/{platform}") $qp)
+  let body = {"cardToken": $card_token, "planId": $plan_id, "profileToken": $profile_token, "voucher": $voucher} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2811,18 +2811,18 @@ export def "itv-purchase-strong confirmPurchaseStrong" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  --paymentMethodFromToken: string # A paymentMethodFromToken.
-  --paymentMethodId: string # A paymentMethodId from Stripe.
-  planId: string # The identifier of the plan to purchase.
-  profileToken: string # The ITV profile token.
+  --payment-method-from-token: string # A paymentMethodFromToken.
+  --payment-method-id: string # A paymentMethodId from Stripe.
+  plan_id: string # The identifier of the plan to purchase.
+  profile_token: string # The ITV profile token.
   --voucher: string # A coupon/voucher for a discount.
 ]: any -> record<clientSecret: string, customerId: string, intentId: string, intentType: string, planId: string, status: string, subscriptionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/purchase/($platform)/strong" $qp)
-  let body = {paymentMethodFromToken: $paymentMethodFromToken, paymentMethodId: $paymentMethodId, planId: $planId, profileToken: $profileToken, voucher: $voucher} | compact
+  let full_url = (build-url $base ({platform: $platform} | format pattern "/itv/purchase/{platform}/strong") $qp)
+  let body = {"paymentMethodFromToken": $payment_method_from_token, "paymentMethodId": $payment_method_id, "planId": $plan_id, "profileToken": $profile_token, "voucher": $voucher} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2844,18 +2844,18 @@ export def "itv-purchase-withoffer confirmPurchaseWithOffer" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  couponId: string # A coupon/voucher for a discount. Can be retrieved from GET itv/voucher/{platform} endpoint
-  --paymentMethodFromToken: string # A paymentMethodFromToken.
-  --paymentMethodId: string # A paymentMethodId from Stripe.
-  planId: string # The identifier of the plan to purchase.
-  profileToken: string # The ITV profile token.
+  coupon_id: string # A coupon/voucher for a discount. Can be retrieved from GET itv/voucher/{platform} endpoint
+  --payment-method-from-token: string # A paymentMethodFromToken.
+  --payment-method-id: string # A paymentMethodId from Stripe.
+  plan_id: string # The identifier of the plan to purchase.
+  profile_token: string # The ITV profile token.
 ]: any -> record<clientSecret: string, customerId: string, intentId: string, intentType: string, paymentMethodId: string, status: string, subscriptionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/purchase/($platform)/withoffer" $qp)
-  let body = {couponId: $couponId, paymentMethodFromToken: $paymentMethodFromToken, paymentMethodId: $paymentMethodId, planId: $planId, profileToken: $profileToken} | compact
+  let full_url = (build-url $base ({platform: $platform} | format pattern "/itv/purchase/{platform}/withoffer") $qp)
+  let body = {"couponId": $coupon_id, "paymentMethodFromToken": $payment_method_from_token, "paymentMethodId": $payment_method_id, "planId": $plan_id, "profileToken": $profile_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2876,13 +2876,13 @@ export def "itv-resubscribe resubscribe" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --planId: string # The id of the plan to renew.
+  --plan-id: string # The id of the plan to renew.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/resubscribe/($platform)" $qp)
+  let qp = [(serialize-qp "planId" $plan_id "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({platform: $platform} | format pattern "/itv/resubscribe/{platform}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2915,7 +2915,7 @@ export def "itv-roku-plans get" [
 #
 # POST /itv/roku/transaction/{transactionid}
 # operationId: executeTransaction
-export def "itv-roku-transaction executeTransaction" [
+export def "itv-roku-transaction exec-ute" [
   transactionid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2926,14 +2926,14 @@ export def "itv-roku-transaction executeTransaction" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  profileToken: string # The ITV profile token.
+  profile_token: string # The ITV profile token.
 ]: any -> record<code: int, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/roku/transaction/($transactionid)" $qp)
-  let body = {profileToken: $profileToken} | compact
+  let full_url = (build-url $base ({transactionid: $transactionid} | format pattern "/itv/roku/transaction/{transactionid}") $qp)
+  let body = {"profileToken": $profile_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2995,7 +2995,7 @@ export def "itv-save-offer activateSaveOffer" [
 #
 # GET /itv/subscription/fullpricerenewal
 # operationId: getFullPriceRenewal
-export def "itv-subscription-fullpricerenewal get" [
+export def "itv-subscription-fullpricerenewal get-full-price-renewal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3034,7 +3034,7 @@ export def "itv-subscription-status get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/subscription/status/($platform)" $qp)
+  let full_url = (build-url $base ({platform: $platform} | format pattern "/itv/subscription/status/{platform}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3092,7 +3092,7 @@ export def "itv-upcominginvoice get" [
 #
 # PUT /itv/updateIntent/strong/{platform}
 # operationId: updatePaymentIntentStrong
-export def "itv-update-intent-strong updatePaymentIntentStrong" [
+export def "itv-update-intent-strong update-payment" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3103,16 +3103,16 @@ export def "itv-update-intent-strong updatePaymentIntentStrong" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  --paymentMethodFromToken: string # A paymentMethodFromToken.
-  --paymentMethodId: string # The paymentMethodId from Stripe.
-  profileToken: string # The ITV profile token.
+  --payment-method-from-token: string # A paymentMethodFromToken.
+  --payment-method-id: string # The paymentMethodId from Stripe.
+  profile_token: string # The ITV profile token.
 ]: any -> record<clientSecret: string, intentId: string, intentType: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/updateIntent/strong/($platform)" $qp)
-  let body = {paymentMethodFromToken: $paymentMethodFromToken, paymentMethodId: $paymentMethodId, profileToken: $profileToken} | compact
+  let full_url = (build-url $base ({platform: $platform} | format pattern "/itv/updateIntent/strong/{platform}") $qp)
+  let body = {"paymentMethodFromToken": $payment_method_from_token, "paymentMethodId": $payment_method_id, "profileToken": $profile_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3123,7 +3123,7 @@ export def "itv-update-intent-strong updatePaymentIntentStrong" [
 #
 # PUT /itv/updatePayment/strong/{platform}
 # operationId: updatePaymentMethodStrong
-export def "itv-update-payment-strong updatePaymentMethodStrong" [
+export def "itv-update-payment-strong update-payment-method" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3134,16 +3134,16 @@ export def "itv-update-payment-strong updatePaymentMethodStrong" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  --paymentMethodFromToken: string # A paymentMethodFromToken.
-  --paymentMethodId: string # The paymentMethodId from Stripe.
-  profileToken: string # The ITV profile token.
+  --payment-method-from-token: string # A paymentMethodFromToken.
+  --payment-method-id: string # The paymentMethodId from Stripe.
+  profile_token: string # The ITV profile token.
 ]: any -> record<code: int, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/updatePayment/strong/($platform)" $qp)
-  let body = {paymentMethodFromToken: $paymentMethodFromToken, paymentMethodId: $paymentMethodId, profileToken: $profileToken} | compact
+  let full_url = (build-url $base ({platform: $platform} | format pattern "/itv/updatePayment/strong/{platform}") $qp)
+  let body = {"paymentMethodFromToken": $payment_method_from_token, "paymentMethodId": $payment_method_id, "profileToken": $profile_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3155,8 +3155,8 @@ export def "itv-update-payment-strong updatePaymentMethodStrong" [
 # GET /itv/voucher/{planId}/{voucherId}
 # operationId: getVoucherById
 export def "itv-voucher get" [
-  voucherId: string
-  planId: string
+  plan_id: string
+  voucher_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3170,7 +3170,7 @@ export def "itv-voucher get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/voucher/($planId)/($voucherId)" $qp)
+  let full_url = (build-url $base ({plan_id: $plan_id, voucher_id: $voucher_id} | format pattern "/itv/voucher/{plan_id}/{voucher_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3180,7 +3180,7 @@ export def "itv-voucher get" [
 #
 # POST /itv/voucher/{platform}
 # operationId: checkVoucher
-export def "itv-voucher checkVoucher" [
+export def "itv-voucher check" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3197,8 +3197,8 @@ export def "itv-voucher checkVoucher" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/itv/voucher/($platform)" $qp)
-  let body = {voucher: $voucher} | compact
+  let full_url = (build-url $base ({platform: $platform} | format pattern "/itv/voucher/{platform}") $qp)
+  let body = {"voucher": $voucher} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3269,7 +3269,7 @@ export def "lists get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "param" $param "scalar") (serialize-qp "item_type" $item_type "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/lists/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3333,7 +3333,7 @@ export def "plans get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/plans/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/plans/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3343,7 +3343,7 @@ export def "plans get" [
 #
 # POST /register
 # operationId: register
-export def "register register" [
+export def "register post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3355,9 +3355,9 @@ export def "register register" [
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   email: string
-  --firstName: string
-  --languageCode: string # The code of the preferred language for the primary profile. Must be a valid ISO language code e.g. "en-US" and must match the code of one of the languages specified in the app config. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-  --lastName: string
+  --first-name: string
+  --language-code: string # The code of the preferred language for the primary profile. Must be a valid ISO language code e.g. "en-US" and must match the code of one of the languages specified in the app config. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
+  --last-name: string
   --marketing: oneof<nothing, bool> # Whether to receive marketing material or not. Default to true. (default: true)
   password: string
   --pin: string # The primary account pin.
@@ -3368,7 +3368,7 @@ export def "register register" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/register" $qp)
-  let body = {email: $email, firstName: $firstName, languageCode: $languageCode, lastName: $lastName, marketing: $marketing, password: $password, pin: $pin, segments: $segments} | compact
+  let body = {"email": $email, "firstName": $first_name, "languageCode": $language_code, "lastName": $last_name, "marketing": $marketing, "password": $password, "pin": $pin, "segments": $segments} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3397,7 +3397,7 @@ export def "request-password-reset forgotPassword" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/request-password-reset" $qp)
-  let body = {email: $email} | compact
+  let body = {"email": $email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3408,7 +3408,7 @@ export def "request-password-reset forgotPassword" [
 #
 # POST /reset-password
 # operationId: resetPassword
-export def "reset-password resetPassword" [
+export def "reset-password reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3420,14 +3420,14 @@ export def "reset-password resetPassword" [
   --ff: list # The set of opt in feature flags which cause breaking changes to responses.  While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time.  These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version.  ### Flags  - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support.  See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response.  Parameter value is case-insensitive and should be   - a valid 2 letter language code without region such as en, de   - or with region such as en_us, en_au  If undefined then defaults to 'en', unless the server has been configured with a custom default.  See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   password: string # The new password for the account.
-  resetToken: string # The ITV reset token.
+  reset_token: string # The ITV reset token.
 ]: any -> record<code: int, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reset-password" $qp)
-  let body = {password: $password, resetToken: $resetToken} | compact
+  let body = {"password": $password, "resetToken": $reset_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3438,7 +3438,7 @@ export def "reset-password resetPassword" [
 #
 # GET /samsung-preview
 # operationId: getPublicPreview
-export def "samsung-preview get" [
+export def "samsung-preview get-public" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3493,7 +3493,7 @@ export def "schedules get" [
 #
 # GET /search
 # operationId: search
-export def "search search" [
+export def "search get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3526,7 +3526,7 @@ export def "search search" [
 #
 # POST /verify-email
 # operationId: verifyEmail
-export def "verify-email verifyEmail" [
+export def "verify-email verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

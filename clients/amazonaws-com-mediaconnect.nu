@@ -66,16 +66,16 @@ def base-url-completer [] { ["http://mediaconnect.us-east-1.amazonaws.com" "http
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def bridgePlacement-completer [] { ["AVAILABLE" "LOCKED"] }
-def mediaStreamType-completer [] { ["ancillary-data" "audio" "video"] }
+def bridge-placement-completer [] { ["AVAILABLE" "LOCKED"] }
+def media-stream-type-completer [] { ["ancillary-data" "audio" "video"] }
 def protocol-completer [] { ["cdi" "fujitsu-qos" "rist" "rtp" "rtp-fec" "srt-caller" "srt-listener" "st2110-jpegxs" "udp" "zixi-pull" "zixi-push"] }
-def entitlementStatus-completer [] { ["DISABLED" "ENABLED"] }
-def desiredState-completer [] { ["ACTIVE" "DELETED" "STANDBY"] }
+def entitlement-status-completer [] { ["DISABLED" "ENABLED"] }
+def desired-state-completer [] { ["ACTIVE" "DELETED" "STANDBY"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bridges-outputs AddBridgeOutputs" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bridges-outputs create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,8 +100,8 @@ export def commands []: nothing -> table {
 # POST /v1/bridges/{bridgeArn}/outputs
 # operationId: AddBridgeOutputs
 # --outputs item shape: {NetworkOutput?: any}
-export def "bridges-outputs AddBridgeOutputs" [
-  bridgeArn: string
+export def "bridges-outputs create" [
+  bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,22 +110,22 @@ export def "bridges-outputs AddBridgeOutputs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   outputs: list # The outputs that you want to add to this bridge. — item shape: {NetworkOutput?: any}
 ]: any -> record<BridgeArn: record, Outputs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/bridges/($bridgeArn)/outputs")
-  let body = {outputs: $outputs} | compact
+  let full_url = (build-url $base ({bridge_arn: $bridge_arn} | format pattern "/v1/bridges/{bridge_arn}/outputs"))
+  let body = {"outputs": $outputs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -137,8 +137,8 @@ export def "bridges-outputs AddBridgeOutputs" [
 # POST /v1/bridges/{bridgeArn}/sources
 # operationId: AddBridgeSources
 # --sources item shape: {FlowSource?: any, NetworkSource?: any}
-export def "bridges-sources AddBridgeSources" [
-  bridgeArn: string
+export def "bridges-sources create" [
+  bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,22 +147,22 @@ export def "bridges-sources AddBridgeSources" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   sources: list # The sources that you want to add to this bridge. — item shape: {FlowSource?: any, NetworkSource?: any}
 ]: any -> record<BridgeArn: record, Sources: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/bridges/($bridgeArn)/sources")
-  let body = {sources: $sources} | compact
+  let full_url = (build-url $base ({bridge_arn: $bridge_arn} | format pattern "/v1/bridges/{bridge_arn}/sources"))
+  let body = {"sources": $sources} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -174,8 +174,8 @@ export def "bridges-sources AddBridgeSources" [
 # POST /v1/flows/{flowArn}/mediaStreams
 # operationId: AddFlowMediaStreams
 # --mediaStreams item shape: {Attributes?: any, ClockRate?: any, Description?: any, MediaStreamId: any, MediaStreamName: any, MediaStreamType: any, VideoFormat?: any}
-export def "flows-media-streams AddFlowMediaStreams" [
-  flowArn: string
+export def "flows-media-streams create" [
+  flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,22 +184,22 @@ export def "flows-media-streams AddFlowMediaStreams" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  mediaStreams: list # The media streams that you want to add to the flow. — item shape: {Attributes?: any, ClockRate?: any, Description?: any, MediaStreamId: any, MediaStreamName: any, MediaStreamType: any, VideoFormat?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  media_streams: list # The media streams that you want to add to the flow. — item shape: {Attributes?: any, ClockRate?: any, Description?: any, MediaStreamId: any, MediaStreamName: any, MediaStreamType: any, VideoFormat?: any}
 ]: any -> record<FlowArn: record, MediaStreams: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)/mediaStreams")
-  let body = {mediaStreams: $mediaStreams} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn} | format pattern "/v1/flows/{flow_arn}/mediaStreams"))
+  let body = {"mediaStreams": $media_streams} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -211,8 +211,8 @@ export def "flows-media-streams AddFlowMediaStreams" [
 # POST /v1/flows/{flowArn}/outputs
 # operationId: AddFlowOutputs
 # --outputs item shape: {CidrAllowList?: any, Description?: any, Destination?: any, Encryption?: any, MaxLatency?: any, MediaStreamOutputConfigurations?: any, MinLatency?: any, Name?: any, Port?: any, Protocol: any, RemoteId?: any, SenderControlPort?: any, SmoothingLatency?: any, StreamId?: any, VpcInterfaceAttachment?: any}
-export def "flows-outputs AddFlowOutputs" [
-  flowArn: string
+export def "flows-outputs create" [
+  flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,22 +221,22 @@ export def "flows-outputs AddFlowOutputs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   outputs: list # A list of outputs that you want to add. — item shape: {CidrAllowList?: any, Description?: any, Destination?: any, Encryption?: any, MaxLatency?: any, MediaStreamOutputConfigurations?: any, MinLatency?: any, Name?: any, Port?: any, Protocol: any, RemoteId?: any, SenderControlPort?: any, SmoothingLatency?: any, StreamId?: any, VpcInterfaceAttachment?: any}
 ]: any -> record<FlowArn: record, Outputs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)/outputs")
-  let body = {outputs: $outputs} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn} | format pattern "/v1/flows/{flow_arn}/outputs"))
+  let body = {"outputs": $outputs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -248,8 +248,8 @@ export def "flows-outputs AddFlowOutputs" [
 # POST /v1/flows/{flowArn}/source
 # operationId: AddFlowSources
 # --sources item shape: {Decryption?: any, Description?: any, EntitlementArn?: any, IngestPort?: any, MaxBitrate?: any, MaxLatency?: any, MaxSyncBuffer?: any, MediaStreamSourceConfigurations?: any, MinLatency?: any, Name?: any, Protocol?: any, SenderControlPort?: any, SenderIpAddress?: any, SourceListenerAddress?: any, SourceListenerPort?: any, StreamId?: any, VpcInterfaceName?: any, WhitelistCidr?: any, GatewayBridgeSource?: any}
-export def "flows-source AddFlowSources" [
-  flowArn: string
+export def "flows-source create" [
+  flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,22 +258,22 @@ export def "flows-source AddFlowSources" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   sources: list # A list of sources that you want to add. — item shape: {Decryption?: any, Description?: any, EntitlementArn?: any, IngestPort?: any, MaxBitrate?: any, MaxLatency?: any, MaxSyncBuffer?: any, MediaStreamSourceConfigurations?: any, MinLatency?: any, Name?: any, Protocol?: any, SenderControlPort?: any, SenderIpAddress?: any, SourceListenerAddress?: any, SourceListenerPort?: any, StreamId?: any, VpcInterfaceName?: any, WhitelistCidr?: any, GatewayBridgeSource?: any}
 ]: any -> record<FlowArn: record, Sources: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)/source")
-  let body = {sources: $sources} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn} | format pattern "/v1/flows/{flow_arn}/source"))
+  let body = {"sources": $sources} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -285,8 +285,8 @@ export def "flows-source AddFlowSources" [
 # POST /v1/flows/{flowArn}/vpcInterfaces
 # operationId: AddFlowVpcInterfaces
 # --vpcInterfaces item shape: {Name: any, NetworkInterfaceType?: any, RoleArn: any, SecurityGroupIds: any, SubnetId: any}
-export def "flows-vpc-interfaces AddFlowVpcInterfaces" [
-  flowArn: string
+export def "flows-vpc-interfaces create" [
+  flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,22 +295,22 @@ export def "flows-vpc-interfaces AddFlowVpcInterfaces" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  vpcInterfaces: list # A list of VPC interfaces that you want to add. — item shape: {Name: any, NetworkInterfaceType?: any, RoleArn: any, SecurityGroupIds: any, SubnetId: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  vpc_interfaces: list # A list of VPC interfaces that you want to add. — item shape: {Name: any, NetworkInterfaceType?: any, RoleArn: any, SecurityGroupIds: any, SubnetId: any}
 ]: any -> record<FlowArn: record, VpcInterfaces: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)/vpcInterfaces")
-  let body = {vpcInterfaces: $vpcInterfaces} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn} | format pattern "/v1/flows/{flow_arn}/vpcInterfaces"))
+  let body = {"vpcInterfaces": $vpc_interfaces} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -326,7 +326,7 @@ export def "flows-vpc-interfaces AddFlowVpcInterfaces" [
 # --outputs item shape: {NetworkOutput?: any}
 # --sourceFailoverConfig shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
 # --sources item shape: {FlowSource?: any, NetworkSource?: any}
-export def "bridges CreateBridge" [
+export def "bridges create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,28 +335,28 @@ export def "bridges CreateBridge" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --egressGatewayBridge: record # Create a bridge with the egress bridge type. An egress bridge is a cloud-to-ground bridge. The content comes from an existing MediaConnect flow and is delivered to your premises. — shape: {MaxBitrate?: any}
-  --ingressGatewayBridge: record # Create a bridge with the ingress bridge type. An ingress bridge is a ground-to-cloud bridge. The content originates at your premises and is delivered to the cloud. — shape: {MaxBitrate?: any, MaxOutputs?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --egress-gateway-bridge: record # Create a bridge with the egress bridge type. An egress bridge is a cloud-to-ground bridge. The content comes from an existing MediaConnect flow and is delivered to your premises. — shape: {MaxBitrate?: any}
+  --ingress-gateway-bridge: record # Create a bridge with the ingress bridge type. An ingress bridge is a ground-to-cloud bridge. The content originates at your premises and is delivered to the cloud. — shape: {MaxBitrate?: any, MaxOutputs?: any}
   name: string # The name of the bridge. This name can not be modified after the bridge is created.
   --outputs: list # The outputs that you want to add to this bridge. — item shape: {NetworkOutput?: any}
-  placementArn: string # The bridge placement Amazon Resource Number (ARN).
-  --sourceFailoverConfig: record # The settings for source failover. — shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
+  placement_arn: string # The bridge placement Amazon Resource Number (ARN).
+  --source-failover-config: record # The settings for source failover. — shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
   sources: list # The sources that you want to add to this bridge. — item shape: {FlowSource?: any, NetworkSource?: any}
 ]: any -> record<Bridge: record<BridgeArn: record, BridgeMessages: record, BridgeState: record, EgressGatewayBridge: record<InstanceId: record, MaxBitrate: record>, IngressGatewayBridge: record<InstanceId: record, MaxBitrate: record, MaxOutputs: record>, Name: record, Outputs: record, PlacementArn: record, SourceFailoverConfig: record<FailoverMode: record, RecoveryWindow: record, SourcePriority: record, State: record>, Sources: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/bridges")
-  let body = {egressGatewayBridge: $egressGatewayBridge, ingressGatewayBridge: $ingressGatewayBridge, name: $name, outputs: $outputs, placementArn: $placementArn, sourceFailoverConfig: $sourceFailoverConfig, sources: $sources} | compact
+  let body = {"egressGatewayBridge": $egress_gateway_bridge, "ingressGatewayBridge": $ingress_gateway_bridge, "name": $name, "outputs": $outputs, "placementArn": $placement_arn, "sourceFailoverConfig": $source_failover_config, "sources": $sources} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -367,7 +367,7 @@ export def "bridges CreateBridge" [
 #
 # GET /v1/bridges
 # operationId: ListBridges
-export def "bridges ListBridges" [
+export def "bridges list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,24 +376,24 @@ export def "bridges ListBridges" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterArn: string # Filter the list results to display only the bridges associated with the selected Amazon Resource Name (ARN).
-  --maxResults: int # The maximum number of results to return per API request. For example, you submit a ListBridges request with MaxResults set at 5. Although 20 items match your request, the service returns no more than the first 5 items. (The service also returns a NextToken value that you can use to fetch the next batch of results.) The service might return fewer results than the MaxResults value. If MaxResults is not included in the request, the service defaults to pagination with a maximum of 10 results per page.
-  --nextToken: string # The token that identifies which batch of results that you want to see. For example, you submit a ListBridges request with MaxResults set at 5. The service returns the first batch of results (up to 5) and a NextToken value. To see the next batch of results, you can submit the ListBridges request a second time and specify the NextToken value.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --filter-arn: string # Filter the list results to display only the bridges associated with the selected Amazon Resource Name (ARN).
+  --max-results: int # The maximum number of results to return per API request. For example, you submit a ListBridges request with MaxResults set at 5. Although 20 items match your request, the service returns no more than the first 5 items. (The service also returns a NextToken value that you can use to fetch the next batch of results.) The service might return fewer results than the MaxResults value. If MaxResults is not included in the request, the service defaults to pagination with a maximum of 10 results per page.
+  --next-token: string # The token that identifies which batch of results that you want to see. For example, you submit a ListBridges request with MaxResults set at 5. The service returns the first batch of results (up to 5) and a NextToken value. To see the next batch of results, you can submit the ListBridges request a second time and specify the NextToken value.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Bridges: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filterArn" $filterArn "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filterArn" $filter_arn "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/bridges" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -412,7 +412,7 @@ export def "bridges ListBridges" [
 # --sources item shape: {Decryption?: any, Description?: any, EntitlementArn?: any, IngestPort?: any, MaxBitrate?: any, MaxLatency?: any, MaxSyncBuffer?: any, MediaStreamSourceConfigurations?: any, MinLatency?: any, Name?: any, Protocol?: any, SenderControlPort?: any, SenderIpAddress?: any, SourceListenerAddress?: any, SourceListenerPort?: any, StreamId?: any, VpcInterfaceName?: any, WhitelistCidr?: any, GatewayBridgeSource?: any}
 # --vpcInterfaces item shape: {Name: any, NetworkInterfaceType?: any, RoleArn: any, SecurityGroupIds: any, SubnetId: any}
 # --maintenance shape: {MaintenanceDay?: any, MaintenanceStartHour?: any}
-export def "flows CreateFlow" [
+export def "flows create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,31 +421,31 @@ export def "flows CreateFlow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --availabilityZone: string # The Availability Zone that you want to create the flow in. These options are limited to the Availability Zones within the current AWS Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --availability-zone: string # The Availability Zone that you want to create the flow in. These options are limited to the Availability Zones within the current AWS Region.
   --entitlements: list # The entitlements that you want to grant on a flow. — item shape: {DataTransferSubscriberFeePercent?: any, Description?: any, Encryption?: any, EntitlementStatus?: any, Name?: any, Subscribers: any}
-  --mediaStreams: list # The media streams that you want to add to the flow. You can associate these media streams with sources and outputs on the flow. — item shape: {Attributes?: any, ClockRate?: any, Description?: any, MediaStreamId: any, MediaStreamName: any, MediaStreamType: any, VideoFormat?: any}
+  --media-streams: list # The media streams that you want to add to the flow. You can associate these media streams with sources and outputs on the flow. — item shape: {Attributes?: any, ClockRate?: any, Description?: any, MediaStreamId: any, MediaStreamName: any, MediaStreamType: any, VideoFormat?: any}
   name: string # The name of the flow.
   --outputs: list # The outputs that you want to add to this flow. — item shape: {CidrAllowList?: any, Description?: any, Destination?: any, Encryption?: any, MaxLatency?: any, MediaStreamOutputConfigurations?: any, MinLatency?: any, Name?: any, Port?: any, Protocol: any, RemoteId?: any, SenderControlPort?: any, SmoothingLatency?: any, StreamId?: any, VpcInterfaceAttachment?: any}
   --body-source: record # The settings for the source of the flow. — shape: {Decryption?: any, Description?: any, EntitlementArn?: any, IngestPort?: any, MaxBitrate?: any, MaxLatency?: any, MaxSyncBuffer?: any, MediaStreamSourceConfigurations?: any, MinLatency?: any, Name?: any, Protocol?: any, SenderControlPort?: any, SenderIpAddress?: any, SourceListenerAddress?: any, SourceListenerPort?: any, StreamId?: any, VpcInterfaceName?: any, WhitelistCidr?: any, GatewayBridgeSource?: any}
-  --sourceFailoverConfig: record # The settings for source failover. — shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
+  --source-failover-config: record # The settings for source failover. — shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
   --sources: list # item shape: {Decryption?: any, Description?: any, EntitlementArn?: any, IngestPort?: any, MaxBitrate?: any, MaxLatency?: any, MaxSyncBuffer?: any, MediaStreamSourceConfigurations?: any, MinLatency?: any, Name?: any, Protocol?: any, SenderControlPort?: any, SenderIpAddress?: any, SourceListenerAddress?: any, SourceListenerPort?: any, StreamId?: any, VpcInterfaceName?: any, WhitelistCidr?: any, GatewayBridgeSource?: any}
-  --vpcInterfaces: list # The VPC interfaces you want on the flow. — item shape: {Name: any, NetworkInterfaceType?: any, RoleArn: any, SecurityGroupIds: any, SubnetId: any}
+  --vpc-interfaces: list # The VPC interfaces you want on the flow. — item shape: {Name: any, NetworkInterfaceType?: any, RoleArn: any, SecurityGroupIds: any, SubnetId: any}
   --maintenance: record # Create maintenance setting for a flow — shape: {MaintenanceDay?: any, MaintenanceStartHour?: any}
 ]: any -> record<Flow: record<AvailabilityZone: record, Description: record, EgressIp: record, Entitlements: record, FlowArn: record, MediaStreams: record, Name: record, Outputs: record, Source: record<DataTransferSubscriberFeePercent: record, Decryption: record, Description: record, EntitlementArn: record, IngestIp: record, IngestPort: record, MediaStreamSourceConfigurations: record, Name: record, SenderControlPort: record, SenderIpAddress: record, SourceArn: record, Transport: record, VpcInterfaceName: record, WhitelistCidr: record, GatewayBridgeSource: record>, SourceFailoverConfig: record<FailoverMode: record, RecoveryWindow: record, SourcePriority: record, State: record>, Sources: record, Status: record, VpcInterfaces: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartHour: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/flows")
-  let body = {availabilityZone: $availabilityZone, entitlements: $entitlements, mediaStreams: $mediaStreams, name: $name, outputs: $outputs, source: $body_source, sourceFailoverConfig: $sourceFailoverConfig, sources: $sources, vpcInterfaces: $vpcInterfaces, maintenance: $maintenance} | compact
+  let body = {"availabilityZone": $availability_zone, "entitlements": $entitlements, "mediaStreams": $media_streams, "name": $name, "outputs": $outputs, "source": $body_source, "sourceFailoverConfig": $source_failover_config, "sources": $sources, "vpcInterfaces": $vpc_interfaces, "maintenance": $maintenance} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -456,7 +456,7 @@ export def "flows CreateFlow" [
 #
 # GET /v1/flows
 # operationId: ListFlows
-export def "flows ListFlows" [
+export def "flows list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,23 +465,23 @@ export def "flows ListFlows" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: int # The maximum number of results to return per API request. For example, you submit a ListFlows request with MaxResults set at 5. Although 20 items match your request, the service returns no more than the first 5 items. (The service also returns a NextToken value that you can use to fetch the next batch of results.) The service might return fewer results than the MaxResults value. If MaxResults is not included in the request, the service defaults to pagination with a maximum of 10 results per page.
-  --nextToken: string # The token that identifies which batch of results that you want to see. For example, you submit a ListFlows request with MaxResults set at 5. The service returns the first batch of results (up to 5) and a NextToken value. To see the next batch of results, you can submit the ListFlows request a second time and specify the NextToken value.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: int # The maximum number of results to return per API request. For example, you submit a ListFlows request with MaxResults set at 5. Although 20 items match your request, the service returns no more than the first 5 items. (The service also returns a NextToken value that you can use to fetch the next batch of results.) The service might return fewer results than the MaxResults value. If MaxResults is not included in the request, the service defaults to pagination with a maximum of 10 results per page.
+  --next-token: string # The token that identifies which batch of results that you want to see. For example, you submit a ListFlows request with MaxResults set at 5. The service returns the first batch of results (up to 5) and a NextToken value. To see the next batch of results, you can submit the ListFlows request a second time and specify the NextToken value.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Flows: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/flows" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -493,7 +493,7 @@ export def "flows ListFlows" [
 # POST /v1/gateways
 # operationId: CreateGateway
 # --networks item shape: {CidrBlock: any, Name: any}
-export def "gateways CreateGateway" [
+export def "gateways create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,14 +502,14 @@ export def "gateways CreateGateway" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  egressCidrBlocks: list # The range of IP addresses that are allowed to contribute content or initiate output requests for flows communicating with this gateway. These IP addresses should be in the form of a Classless Inter-Domain Routing (CIDR) block; for example, 10.0.0.0/16.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  egress_cidr_blocks: list # The range of IP addresses that are allowed to contribute content or initiate output requests for flows communicating with this gateway. These IP addresses should be in the form of a Classless Inter-Domain Routing (CIDR) block; for example, 10.0.0.0/16.
   name: string # The name of the gateway. This name can not be modified after the gateway is created.
   networks: list # The list of networks that you want to add. — item shape: {CidrBlock: any, Name: any}
 ]: any -> record<Gateway: record<EgressCidrBlocks: record, GatewayArn: record, GatewayMessages: record, GatewayState: record, Name: record, Networks: record>> {
@@ -517,9 +517,9 @@ export def "gateways CreateGateway" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/gateways")
-  let body = {egressCidrBlocks: $egressCidrBlocks, name: $name, networks: $networks} | compact
+  let body = {"egressCidrBlocks": $egress_cidr_blocks, "name": $name, "networks": $networks} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -530,7 +530,7 @@ export def "gateways CreateGateway" [
 #
 # GET /v1/gateways
 # operationId: ListGateways
-export def "gateways ListGateways" [
+export def "gateways list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,23 +539,23 @@ export def "gateways ListGateways" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: int # The maximum number of results to return per API request. For example, you submit a ListGateways request with MaxResults set at 5. Although 20 items match your request, the service returns no more than the first 5 items. (The service also returns a NextToken value that you can use to fetch the next batch of results.) The service might return fewer results than the MaxResults value. If MaxResults is not included in the request, the service defaults to pagination with a maximum of 10 results per page.
-  --nextToken: string # The token that identifies which batch of results that you want to see. For example, you submit a ListGateways request with MaxResults set at 5. The service returns the first batch of results (up to 5) and a NextToken value. To see the next batch of results, you can submit the ListGateways request a second time and specify the NextToken value.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: int # The maximum number of results to return per API request. For example, you submit a ListGateways request with MaxResults set at 5. Although 20 items match your request, the service returns no more than the first 5 items. (The service also returns a NextToken value that you can use to fetch the next batch of results.) The service might return fewer results than the MaxResults value. If MaxResults is not included in the request, the service defaults to pagination with a maximum of 10 results per page.
+  --next-token: string # The token that identifies which batch of results that you want to see. For example, you submit a ListGateways request with MaxResults set at 5. The service returns the first batch of results (up to 5) and a NextToken value. To see the next batch of results, you can submit the ListGateways request a second time and specify the NextToken value.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Gateways: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/gateways" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -566,8 +566,8 @@ export def "gateways ListGateways" [
 #
 # DELETE /v1/bridges/{bridgeArn}
 # operationId: DeleteBridge
-export def "bridges DeleteBridge" [
-  bridgeArn: string
+export def "bridges delete" [
+  bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -576,18 +576,18 @@ export def "bridges DeleteBridge" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<BridgeArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/bridges/($bridgeArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bridge_arn: $bridge_arn} | format pattern "/v1/bridges/{bridge_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -598,8 +598,8 @@ export def "bridges DeleteBridge" [
 #
 # GET /v1/bridges/{bridgeArn}
 # operationId: DescribeBridge
-export def "bridges DescribeBridge" [
-  bridgeArn: string
+export def "bridges get" [
+  bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,18 +608,18 @@ export def "bridges DescribeBridge" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Bridge: record<BridgeArn: record, BridgeMessages: record, BridgeState: record, EgressGatewayBridge: record<InstanceId: record, MaxBitrate: record>, IngressGatewayBridge: record<InstanceId: record, MaxBitrate: record, MaxOutputs: record>, Name: record, Outputs: record, PlacementArn: record, SourceFailoverConfig: record<FailoverMode: record, RecoveryWindow: record, SourcePriority: record, State: record>, Sources: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/bridges/($bridgeArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bridge_arn: $bridge_arn} | format pattern "/v1/bridges/{bridge_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -633,8 +633,8 @@ export def "bridges DescribeBridge" [
 # --egressGatewayBridge shape: {MaxBitrate?: any}
 # --ingressGatewayBridge shape: {MaxBitrate?: any, MaxOutputs?: any}
 # --sourceFailoverConfig shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
-export def "bridges UpdateBridge" [
-  bridgeArn: string
+export def "bridges update" [
+  bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,24 +643,24 @@ export def "bridges UpdateBridge" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --egressGatewayBridge: record # shape: {MaxBitrate?: any}
-  --ingressGatewayBridge: record # shape: {MaxBitrate?: any, MaxOutputs?: any}
-  --sourceFailoverConfig: record # The settings for source failover. — shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --egress-gateway-bridge: record # shape: {MaxBitrate?: any}
+  --ingress-gateway-bridge: record # shape: {MaxBitrate?: any, MaxOutputs?: any}
+  --source-failover-config: record # The settings for source failover. — shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
 ]: any -> record<Bridge: record<BridgeArn: record, BridgeMessages: record, BridgeState: record, EgressGatewayBridge: record<InstanceId: record, MaxBitrate: record>, IngressGatewayBridge: record<InstanceId: record, MaxBitrate: record, MaxOutputs: record>, Name: record, Outputs: record, PlacementArn: record, SourceFailoverConfig: record<FailoverMode: record, RecoveryWindow: record, SourcePriority: record, State: record>, Sources: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/bridges/($bridgeArn)")
-  let body = {egressGatewayBridge: $egressGatewayBridge, ingressGatewayBridge: $ingressGatewayBridge, sourceFailoverConfig: $sourceFailoverConfig} | compact
+  let full_url = (build-url $base ({bridge_arn: $bridge_arn} | format pattern "/v1/bridges/{bridge_arn}"))
+  let body = {"egressGatewayBridge": $egress_gateway_bridge, "ingressGatewayBridge": $ingress_gateway_bridge, "sourceFailoverConfig": $source_failover_config} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -671,8 +671,8 @@ export def "bridges UpdateBridge" [
 #
 # DELETE /v1/flows/{flowArn}
 # operationId: DeleteFlow
-export def "flows DeleteFlow" [
-  flowArn: string
+export def "flows delete" [
+  flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,18 +681,18 @@ export def "flows DeleteFlow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<FlowArn: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn} | format pattern "/v1/flows/{flow_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -703,8 +703,8 @@ export def "flows DeleteFlow" [
 #
 # GET /v1/flows/{flowArn}
 # operationId: DescribeFlow
-export def "flows DescribeFlow" [
-  flowArn: string
+export def "flows get" [
+  flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,18 +713,18 @@ export def "flows DescribeFlow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Flow: record<AvailabilityZone: record, Description: record, EgressIp: record, Entitlements: record, FlowArn: record, MediaStreams: record, Name: record, Outputs: record, Source: record<DataTransferSubscriberFeePercent: record, Decryption: record, Description: record, EntitlementArn: record, IngestIp: record, IngestPort: record, MediaStreamSourceConfigurations: record, Name: record, SenderControlPort: record, SenderIpAddress: record, SourceArn: record, Transport: record, VpcInterfaceName: record, WhitelistCidr: record, GatewayBridgeSource: record>, SourceFailoverConfig: record<FailoverMode: record, RecoveryWindow: record, SourcePriority: record, State: record>, Sources: record, Status: record, VpcInterfaces: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartHour: record>>, Messages: record<Errors: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn} | format pattern "/v1/flows/{flow_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -737,8 +737,8 @@ export def "flows DescribeFlow" [
 # operationId: UpdateFlow
 # --sourceFailoverConfig shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
 # --maintenance shape: {MaintenanceDay?: any, MaintenanceScheduledDate?: any, MaintenanceStartHour?: any}
-export def "flows UpdateFlow" [
-  flowArn: string
+export def "flows update" [
+  flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,23 +747,23 @@ export def "flows UpdateFlow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --sourceFailoverConfig: record # The settings for source failover. — shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --source-failover-config: record # The settings for source failover. — shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
   --maintenance: record # Update maintenance setting for a flow — shape: {MaintenanceDay?: any, MaintenanceScheduledDate?: any, MaintenanceStartHour?: any}
 ]: any -> record<Flow: record<AvailabilityZone: record, Description: record, EgressIp: record, Entitlements: record, FlowArn: record, MediaStreams: record, Name: record, Outputs: record, Source: record<DataTransferSubscriberFeePercent: record, Decryption: record, Description: record, EntitlementArn: record, IngestIp: record, IngestPort: record, MediaStreamSourceConfigurations: record, Name: record, SenderControlPort: record, SenderIpAddress: record, SourceArn: record, Transport: record, VpcInterfaceName: record, WhitelistCidr: record, GatewayBridgeSource: record>, SourceFailoverConfig: record<FailoverMode: record, RecoveryWindow: record, SourcePriority: record, State: record>, Sources: record, Status: record, VpcInterfaces: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartHour: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)")
-  let body = {sourceFailoverConfig: $sourceFailoverConfig, maintenance: $maintenance} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn} | format pattern "/v1/flows/{flow_arn}"))
+  let body = {"sourceFailoverConfig": $source_failover_config, "maintenance": $maintenance} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -774,8 +774,8 @@ export def "flows UpdateFlow" [
 #
 # DELETE /v1/gateways/{gatewayArn}
 # operationId: DeleteGateway
-export def "gateways DeleteGateway" [
-  gatewayArn: string
+export def "gateways delete" [
+  gateway_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -784,18 +784,18 @@ export def "gateways DeleteGateway" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<GatewayArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/gateways/($gatewayArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({gateway_arn: $gateway_arn} | format pattern "/v1/gateways/{gateway_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -806,8 +806,8 @@ export def "gateways DeleteGateway" [
 #
 # GET /v1/gateways/{gatewayArn}
 # operationId: DescribeGateway
-export def "gateways DescribeGateway" [
-  gatewayArn: string
+export def "gateways get" [
+  gateway_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -816,18 +816,18 @@ export def "gateways DescribeGateway" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Gateway: record<EgressCidrBlocks: record, GatewayArn: record, GatewayMessages: record, GatewayState: record, Name: record, Networks: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/gateways/($gatewayArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({gateway_arn: $gateway_arn} | format pattern "/v1/gateways/{gateway_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -838,8 +838,8 @@ export def "gateways DescribeGateway" [
 #
 # DELETE /v1/gateway-instances/{gatewayInstanceArn}
 # operationId: DeregisterGatewayInstance
-export def "gateway-instances DeregisterGatewayInstance" [
-  gatewayInstanceArn: string
+export def "gateway-instances delete" [
+  gateway_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -849,19 +849,19 @@ export def "gateway-instances DeregisterGatewayInstance" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool> # Force the deregistration of an instance. Force will deregister an instance, even if there are bridges running on it.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<GatewayInstanceArn: record, InstanceState: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/gateway-instances/($gatewayInstanceArn)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({gateway_instance_arn: $gateway_instance_arn} | format pattern "/v1/gateway-instances/{gateway_instance_arn}") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -872,8 +872,8 @@ export def "gateway-instances DeregisterGatewayInstance" [
 #
 # GET /v1/gateway-instances/{gatewayInstanceArn}
 # operationId: DescribeGatewayInstance
-export def "gateway-instances DescribeGatewayInstance" [
-  gatewayInstanceArn: string
+export def "gateway-instances get" [
+  gateway_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -882,18 +882,18 @@ export def "gateway-instances DescribeGatewayInstance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<GatewayInstance: record<BridgePlacement: record, ConnectionStatus: record, GatewayArn: record, GatewayInstanceArn: record, InstanceId: record, InstanceMessages: record, InstanceState: record, RunningBridgeCount: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/gateway-instances/($gatewayInstanceArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({gateway_instance_arn: $gateway_instance_arn} | format pattern "/v1/gateway-instances/{gateway_instance_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -904,8 +904,8 @@ export def "gateway-instances DescribeGatewayInstance" [
 #
 # PUT /v1/gateway-instances/{gatewayInstanceArn}
 # operationId: UpdateGatewayInstance
-export def "gateway-instances UpdateGatewayInstance" [
-  gatewayInstanceArn: string
+export def "gateway-instances update" [
+  gateway_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -914,22 +914,22 @@ export def "gateway-instances UpdateGatewayInstance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --bridgePlacement: string@bridgePlacement-completer # The availability of the instance to host new bridges. The bridgePlacement property can be LOCKED or AVAILABLE. If it is LOCKED, no new bridges can be deployed to this instance. If it is AVAILABLE, new bridges can be added to this instance.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --bridge-placement: string@bridge-placement-completer # The availability of the instance to host new bridges. The bridgePlacement property can be LOCKED or AVAILABLE. If it is LOCKED, no new bridges can be deployed to this instance. If it is AVAILABLE, new bridges can be added to this instance.
 ]: any -> record<BridgePlacement: record, GatewayInstanceArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/gateway-instances/($gatewayInstanceArn)")
-  let body = {bridgePlacement: $bridgePlacement} | compact
+  let full_url = (build-url $base ({gateway_instance_arn: $gateway_instance_arn} | format pattern "/v1/gateway-instances/{gateway_instance_arn}"))
+  let body = {"bridgePlacement": $bridge_placement} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -940,8 +940,8 @@ export def "gateway-instances UpdateGatewayInstance" [
 #
 # GET /v1/offerings/{offeringArn}
 # operationId: DescribeOffering
-export def "offerings DescribeOffering" [
-  offeringArn: string
+export def "offerings get" [
+  offering_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -950,18 +950,18 @@ export def "offerings DescribeOffering" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Offering: record<CurrencyCode: record, Duration: record, DurationUnits: record, OfferingArn: record, OfferingDescription: record, PricePerUnit: record, PriceUnits: record, ResourceSpecification: record<ReservedBitrate: record, ResourceType: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/offerings/($offeringArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({offering_arn: $offering_arn} | format pattern "/v1/offerings/{offering_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -972,8 +972,8 @@ export def "offerings DescribeOffering" [
 #
 # POST /v1/offerings/{offeringArn}
 # operationId: PurchaseOffering
-export def "offerings PurchaseOffering" [
-  offeringArn: string
+export def "offerings post" [
+  offering_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -982,23 +982,23 @@ export def "offerings PurchaseOffering" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  reservationName: string # The name that you want to use for the reservation.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  reservation_name: string # The name that you want to use for the reservation.
   start: string # The date and time that you want the reservation to begin, in Coordinated Universal Time (UTC). You can specify any date and time between 12:00am on the first day of the current month to the current time on today's date, inclusive. Specify the start in a 24-hour notation. Use the following format: YYYY-MM-DDTHH:mm:SSZ, where T and Z are literal characters. For example, to specify 11:30pm on March 5, 2020, enter 2020-03-05T23:30:00Z.
 ]: any -> record<Reservation: record<CurrencyCode: record, Duration: record, DurationUnits: record, End: record, OfferingArn: record, OfferingDescription: record, PricePerUnit: record, PriceUnits: record, ReservationArn: record, ReservationName: record, ReservationState: record, ResourceSpecification: record<ReservedBitrate: record, ResourceType: record>, Start: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/offerings/($offeringArn)")
-  let body = {reservationName: $reservationName, start: $start} | compact
+  let full_url = (build-url $base ({offering_arn: $offering_arn} | format pattern "/v1/offerings/{offering_arn}"))
+  let body = {"reservationName": $reservation_name, "start": $start} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1009,8 +1009,8 @@ export def "offerings PurchaseOffering" [
 #
 # GET /v1/reservations/{reservationArn}
 # operationId: DescribeReservation
-export def "reservations DescribeReservation" [
-  reservationArn: string
+export def "reservations get" [
+  reservation_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1019,18 +1019,18 @@ export def "reservations DescribeReservation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Reservation: record<CurrencyCode: record, Duration: record, DurationUnits: record, End: record, OfferingArn: record, OfferingDescription: record, PricePerUnit: record, PriceUnits: record, ReservationArn: record, ReservationName: record, ReservationState: record, ResourceSpecification: record<ReservedBitrate: record, ResourceType: record>, Start: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/reservations/($reservationArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({reservation_arn: $reservation_arn} | format pattern "/v1/reservations/{reservation_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1042,8 +1042,8 @@ export def "reservations DescribeReservation" [
 # POST /v1/flows/{flowArn}/entitlements
 # operationId: GrantFlowEntitlements
 # --entitlements item shape: {DataTransferSubscriberFeePercent?: any, Description?: any, Encryption?: any, EntitlementStatus?: any, Name?: any, Subscribers: any}
-export def "flows-entitlements GrantFlowEntitlements" [
-  flowArn: string
+export def "flows-entitlements post" [
+  flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,22 +1052,22 @@ export def "flows-entitlements GrantFlowEntitlements" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   entitlements: list # The list of entitlements that you want to grant. — item shape: {DataTransferSubscriberFeePercent?: any, Description?: any, Encryption?: any, EntitlementStatus?: any, Name?: any, Subscribers: any}
 ]: any -> record<Entitlements: record, FlowArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)/entitlements")
-  let body = {entitlements: $entitlements} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn} | format pattern "/v1/flows/{flow_arn}/entitlements"))
+  let body = {"entitlements": $entitlements} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1078,7 +1078,7 @@ export def "flows-entitlements GrantFlowEntitlements" [
 #
 # GET /v1/entitlements
 # operationId: ListEntitlements
-export def "entitlements ListEntitlements" [
+export def "entitlements list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1087,23 +1087,23 @@ export def "entitlements ListEntitlements" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: int # The maximum number of results to return per API request. For example, you submit a ListEntitlements request with MaxResults set at 5. Although 20 items match your request, the service returns no more than the first 5 items. (The service also returns a NextToken value that you can use to fetch the next batch of results.) The service might return fewer results than the MaxResults value. If MaxResults is not included in the request, the service defaults to pagination with a maximum of 20 results per page.
-  --nextToken: string # The token that identifies which batch of results that you want to see. For example, you submit a ListEntitlements request with MaxResults set at 5. The service returns the first batch of results (up to 5) and a NextToken value. To see the next batch of results, you can submit the ListEntitlements request a second time and specify the NextToken value.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: int # The maximum number of results to return per API request. For example, you submit a ListEntitlements request with MaxResults set at 5. Although 20 items match your request, the service returns no more than the first 5 items. (The service also returns a NextToken value that you can use to fetch the next batch of results.) The service might return fewer results than the MaxResults value. If MaxResults is not included in the request, the service defaults to pagination with a maximum of 20 results per page.
+  --next-token: string # The token that identifies which batch of results that you want to see. For example, you submit a ListEntitlements request with MaxResults set at 5. The service returns the first batch of results (up to 5) and a NextToken value. To see the next batch of results, you can submit the ListEntitlements request a second time and specify the NextToken value.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Entitlements: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/entitlements" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1114,7 +1114,7 @@ export def "entitlements ListEntitlements" [
 #
 # GET /v1/gateway-instances
 # operationId: ListGatewayInstances
-export def "gateway-instances ListGatewayInstances" [
+export def "gateway-instances list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1123,24 +1123,24 @@ export def "gateway-instances ListGatewayInstances" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterArn: string # Filter the list results to display only the instances associated with the selected Gateway Amazon Resource Name (ARN).
-  --maxResults: int # The maximum number of results to return per API request. For example, you submit a ListInstances request with MaxResults set at 5. Although 20 items match your request, the service returns no more than the first 5 items. (The service also returns a NextToken value that you can use to fetch the next batch of results.) The service might return fewer results than the MaxResults value. If MaxResults is not included in the request, the service defaults to pagination with a maximum of 10 results per page.
-  --nextToken: string # The token that identifies which batch of results that you want to see. For example, you submit a ListInstances request with MaxResults set at 5. The service returns the first batch of results (up to 5) and a NextToken value. To see the next batch of results, you can submit the ListInstances request a second time and specify the NextToken value.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --filter-arn: string # Filter the list results to display only the instances associated with the selected Gateway Amazon Resource Name (ARN).
+  --max-results: int # The maximum number of results to return per API request. For example, you submit a ListInstances request with MaxResults set at 5. Although 20 items match your request, the service returns no more than the first 5 items. (The service also returns a NextToken value that you can use to fetch the next batch of results.) The service might return fewer results than the MaxResults value. If MaxResults is not included in the request, the service defaults to pagination with a maximum of 10 results per page.
+  --next-token: string # The token that identifies which batch of results that you want to see. For example, you submit a ListInstances request with MaxResults set at 5. The service returns the first batch of results (up to 5) and a NextToken value. To see the next batch of results, you can submit the ListInstances request a second time and specify the NextToken value.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Instances: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filterArn" $filterArn "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filterArn" $filter_arn "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/gateway-instances" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1151,7 +1151,7 @@ export def "gateway-instances ListGatewayInstances" [
 #
 # GET /v1/offerings
 # operationId: ListOfferings
-export def "offerings ListOfferings" [
+export def "offerings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1160,23 +1160,23 @@ export def "offerings ListOfferings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: int # The maximum number of results to return per API request. For example, you submit a ListOfferings request with MaxResults set at 5. Although 20 items match your request, the service returns no more than the first 5 items. (The service also returns a NextToken value that you can use to fetch the next batch of results.) The service might return fewer results than the MaxResults value. If MaxResults is not included in the request, the service defaults to pagination with a maximum of 10 results per page.
-  --nextToken: string # The token that identifies which batch of results that you want to see. For example, you submit a ListOfferings request with MaxResults set at 5. The service returns the first batch of results (up to 5) and a NextToken value. To see the next batch of results, you can submit the ListOfferings request a second time and specify the NextToken value.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: int # The maximum number of results to return per API request. For example, you submit a ListOfferings request with MaxResults set at 5. Although 20 items match your request, the service returns no more than the first 5 items. (The service also returns a NextToken value that you can use to fetch the next batch of results.) The service might return fewer results than the MaxResults value. If MaxResults is not included in the request, the service defaults to pagination with a maximum of 10 results per page.
+  --next-token: string # The token that identifies which batch of results that you want to see. For example, you submit a ListOfferings request with MaxResults set at 5. The service returns the first batch of results (up to 5) and a NextToken value. To see the next batch of results, you can submit the ListOfferings request a second time and specify the NextToken value.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<NextToken: record, Offerings: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/offerings" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1187,7 +1187,7 @@ export def "offerings ListOfferings" [
 #
 # GET /v1/reservations
 # operationId: ListReservations
-export def "reservations ListReservations" [
+export def "reservations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1196,23 +1196,23 @@ export def "reservations ListReservations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: int # The maximum number of results to return per API request. For example, you submit a ListReservations request with MaxResults set at 5. Although 20 items match your request, the service returns no more than the first 5 items. (The service also returns a NextToken value that you can use to fetch the next batch of results.) The service might return fewer results than the MaxResults value. If MaxResults is not included in the request, the service defaults to pagination with a maximum of 10 results per page.
-  --nextToken: string # The token that identifies which batch of results that you want to see. For example, you submit a ListReservations request with MaxResults set at 5. The service returns the first batch of results (up to 5) and a NextToken value. To see the next batch of results, you can submit the ListOfferings request a second time and specify the NextToken value.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: int # The maximum number of results to return per API request. For example, you submit a ListReservations request with MaxResults set at 5. Although 20 items match your request, the service returns no more than the first 5 items. (The service also returns a NextToken value that you can use to fetch the next batch of results.) The service might return fewer results than the MaxResults value. If MaxResults is not included in the request, the service defaults to pagination with a maximum of 10 results per page.
+  --next-token: string # The token that identifies which batch of results that you want to see. For example, you submit a ListReservations request with MaxResults set at 5. The service returns the first batch of results (up to 5) and a NextToken value. To see the next batch of results, you can submit the ListOfferings request a second time and specify the NextToken value.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<NextToken: record, Reservations: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/reservations" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1223,8 +1223,8 @@ export def "reservations ListReservations" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags ListTagsForResource" [
-  resourceArn: string
+export def "tags list-tags-for-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1233,18 +1233,18 @@ export def "tags ListTagsForResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($resourceArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1255,8 +1255,8 @@ export def "tags ListTagsForResource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags TagResource" [
-  resourceArn: string
+export def "tags tag-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1265,22 +1265,22 @@ export def "tags TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   tags: record # A map from tag keys to values. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($resourceArn)")
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1291,9 +1291,9 @@ export def "tags TagResource" [
 #
 # DELETE /v1/bridges/{bridgeArn}/outputs/{outputName}
 # operationId: RemoveBridgeOutput
-export def "bridges-outputs RemoveBridgeOutput" [
-  bridgeArn: string
-  outputName: string
+export def "bridges-outputs delete" [
+  bridge_arn: string
+  output_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1302,18 +1302,18 @@ export def "bridges-outputs RemoveBridgeOutput" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<BridgeArn: record, OutputName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/bridges/($bridgeArn)/outputs/($outputName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bridge_arn: $bridge_arn, output_name: $output_name} | format pattern "/v1/bridges/{bridge_arn}/outputs/{output_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1325,9 +1325,9 @@ export def "bridges-outputs RemoveBridgeOutput" [
 # PUT /v1/bridges/{bridgeArn}/outputs/{outputName}
 # operationId: UpdateBridgeOutput
 # --networkOutput shape: {IpAddress?: any, NetworkName?: any, Port?: any, Protocol?: any, Ttl?: any}
-export def "bridges-outputs UpdateBridgeOutput" [
-  bridgeArn: string
-  outputName: string
+export def "bridges-outputs update" [
+  bridge_arn: string
+  output_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1336,22 +1336,22 @@ export def "bridges-outputs UpdateBridgeOutput" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --networkOutput: record # Update an existing network output. — shape: {IpAddress?: any, NetworkName?: any, Port?: any, Protocol?: any, Ttl?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --network-output: record # Update an existing network output. — shape: {IpAddress?: any, NetworkName?: any, Port?: any, Protocol?: any, Ttl?: any}
 ]: any -> record<BridgeArn: record, Output: record<FlowOutput: record<FlowArn: record, FlowSourceArn: record, Name: record>, NetworkOutput: record<IpAddress: record, Name: record, NetworkName: record, Port: record, Protocol: record, Ttl: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/bridges/($bridgeArn)/outputs/($outputName)")
-  let body = {networkOutput: $networkOutput} | compact
+  let full_url = (build-url $base ({bridge_arn: $bridge_arn, output_name: $output_name} | format pattern "/v1/bridges/{bridge_arn}/outputs/{output_name}"))
+  let body = {"networkOutput": $network_output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1362,9 +1362,9 @@ export def "bridges-outputs UpdateBridgeOutput" [
 #
 # DELETE /v1/bridges/{bridgeArn}/sources/{sourceName}
 # operationId: RemoveBridgeSource
-export def "bridges-sources RemoveBridgeSource" [
-  bridgeArn: string
-  sourceName: string
+export def "bridges-sources delete" [
+  bridge_arn: string
+  source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1373,18 +1373,18 @@ export def "bridges-sources RemoveBridgeSource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<BridgeArn: record, SourceName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/bridges/($bridgeArn)/sources/($sourceName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bridge_arn: $bridge_arn, source_name: $source_name} | format pattern "/v1/bridges/{bridge_arn}/sources/{source_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1397,9 +1397,9 @@ export def "bridges-sources RemoveBridgeSource" [
 # operationId: UpdateBridgeSource
 # --flowSource shape: {FlowArn?: any, FlowVpcInterfaceAttachment?: any}
 # --networkSource shape: {MulticastIp?: any, NetworkName?: any, Port?: any, Protocol?: any}
-export def "bridges-sources UpdateBridgeSource" [
-  bridgeArn: string
-  sourceName: string
+export def "bridges-sources update" [
+  bridge_arn: string
+  source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1408,23 +1408,23 @@ export def "bridges-sources UpdateBridgeSource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --flowSource: record # Update the flow source of the bridge. — shape: {FlowArn?: any, FlowVpcInterfaceAttachment?: any}
-  --networkSource: record # Update the network source of the bridge. — shape: {MulticastIp?: any, NetworkName?: any, Port?: any, Protocol?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --flow-source: record # Update the flow source of the bridge. — shape: {FlowArn?: any, FlowVpcInterfaceAttachment?: any}
+  --network-source: record # Update the network source of the bridge. — shape: {MulticastIp?: any, NetworkName?: any, Port?: any, Protocol?: any}
 ]: any -> record<BridgeArn: record, Source: record<FlowSource: record<FlowArn: record, FlowVpcInterfaceAttachment: record, Name: record, OutputArn: record>, NetworkSource: record<MulticastIp: record, Name: record, NetworkName: record, Port: record, Protocol: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/bridges/($bridgeArn)/sources/($sourceName)")
-  let body = {flowSource: $flowSource, networkSource: $networkSource} | compact
+  let full_url = (build-url $base ({bridge_arn: $bridge_arn, source_name: $source_name} | format pattern "/v1/bridges/{bridge_arn}/sources/{source_name}"))
+  let body = {"flowSource": $flow_source, "networkSource": $network_source} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1435,9 +1435,9 @@ export def "bridges-sources UpdateBridgeSource" [
 #
 # DELETE /v1/flows/{flowArn}/mediaStreams/{mediaStreamName}
 # operationId: RemoveFlowMediaStream
-export def "flows-media-streams RemoveFlowMediaStream" [
-  flowArn: string
-  mediaStreamName: string
+export def "flows-media-streams delete" [
+  flow_arn: string
+  media_stream_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1446,18 +1446,18 @@ export def "flows-media-streams RemoveFlowMediaStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<FlowArn: record, MediaStreamName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)/mediaStreams/($mediaStreamName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn, media_stream_name: $media_stream_name} | format pattern "/v1/flows/{flow_arn}/mediaStreams/{media_stream_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1469,9 +1469,9 @@ export def "flows-media-streams RemoveFlowMediaStream" [
 # PUT /v1/flows/{flowArn}/mediaStreams/{mediaStreamName}
 # operationId: UpdateFlowMediaStream
 # --attributes shape: {Fmtp?: any, Lang?: any}
-export def "flows-media-streams UpdateFlowMediaStream" [
-  flowArn: string
-  mediaStreamName: string
+export def "flows-media-streams update" [
+  flow_arn: string
+  media_stream_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1480,26 +1480,26 @@ export def "flows-media-streams UpdateFlowMediaStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --attributes: record # Attributes that are related to the media stream. — shape: {Fmtp?: any, Lang?: any}
-  --clockRate: int # The sample rate (in Hz) for the stream. If the media stream type is video or ancillary data, set this value to 90000. If the media stream type is audio, set this value to either 48000 or 96000.
+  --clock-rate: int # The sample rate (in Hz) for the stream. If the media stream type is video or ancillary data, set this value to 90000. If the media stream type is audio, set this value to either 48000 or 96000.
   --description: string # Description
-  --mediaStreamType: string@mediaStreamType-completer # The type of media stream.
-  --videoFormat: string # The resolution of the video.
+  --media-stream-type: string@media-stream-type-completer # The type of media stream.
+  --video-format: string # The resolution of the video.
 ]: any -> record<FlowArn: record, MediaStream: record<Attributes: record<Fmtp: record, Lang: record>, ClockRate: record, Description: record, Fmt: record, MediaStreamId: record, MediaStreamName: record, MediaStreamType: record, VideoFormat: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)/mediaStreams/($mediaStreamName)")
-  let body = {attributes: $attributes, clockRate: $clockRate, description: $description, mediaStreamType: $mediaStreamType, videoFormat: $videoFormat} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn, media_stream_name: $media_stream_name} | format pattern "/v1/flows/{flow_arn}/mediaStreams/{media_stream_name}"))
+  let body = {"attributes": $attributes, "clockRate": $clock_rate, "description": $description, "mediaStreamType": $media_stream_type, "videoFormat": $video_format} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1510,9 +1510,9 @@ export def "flows-media-streams UpdateFlowMediaStream" [
 #
 # DELETE /v1/flows/{flowArn}/outputs/{outputArn}
 # operationId: RemoveFlowOutput
-export def "flows-outputs RemoveFlowOutput" [
-  flowArn: string
-  outputArn: string
+export def "flows-outputs delete" [
+  flow_arn: string
+  output_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1521,18 +1521,18 @@ export def "flows-outputs RemoveFlowOutput" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<FlowArn: record, OutputArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)/outputs/($outputArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn, output_arn: $output_arn} | format pattern "/v1/flows/{flow_arn}/outputs/{output_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1546,9 +1546,9 @@ export def "flows-outputs RemoveFlowOutput" [
 # --encryption shape: {Algorithm?: any, ConstantInitializationVector?: any, DeviceId?: any, KeyType?: any, Region?: any, ResourceId?: any, RoleArn?: any, SecretArn?: any, Url?: any}
 # --mediaStreamOutputConfigurations item shape: {DestinationConfigurations?: any, EncodingName: any, EncodingParameters?: any, MediaStreamName: any}
 # --vpcInterfaceAttachment shape: {VpcInterfaceName?: any}
-export def "flows-outputs UpdateFlowOutput" [
-  flowArn: string
-  outputArn: string
+export def "flows-outputs update" [
+  flow_arn: string
+  output_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1557,36 +1557,36 @@ export def "flows-outputs UpdateFlowOutput" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --cidrAllowList: list # The range of IP addresses that should be allowed to initiate output requests to this flow. These IP addresses should be in the form of a Classless Inter-Domain Routing (CIDR) block; for example, 10.0.0.0/16.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --cidr-allow-list: list # The range of IP addresses that should be allowed to initiate output requests to this flow. These IP addresses should be in the form of a Classless Inter-Domain Routing (CIDR) block; for example, 10.0.0.0/16.
   --description: string # A description of the output. This description appears only on the AWS Elemental MediaConnect console and will not be seen by the end user.
   --destination: string # The IP address where you want to send the output.
   --encryption: record # Information about the encryption of the flow. — shape: {Algorithm?: any, ConstantInitializationVector?: any, DeviceId?: any, KeyType?: any, Region?: any, ResourceId?: any, RoleArn?: any, SecretArn?: any, Url?: any}
-  --maxLatency: int # The maximum latency in milliseconds. This parameter applies only to RIST-based, Zixi-based, and Fujitsu-based streams.
-  --mediaStreamOutputConfigurations: list # The media streams that are associated with the output, and the parameters for those associations. — item shape: {DestinationConfigurations?: any, EncodingName: any, EncodingParameters?: any, MediaStreamName: any}
-  --minLatency: int # The minimum latency in milliseconds for SRT-based streams. In streams that use the SRT protocol, this value that you set on your MediaConnect source or output represents the minimal potential latency of that connection. The latency of the stream is set to the highest number between the sender’s minimum latency and the receiver’s minimum latency.
+  --max-latency: int # The maximum latency in milliseconds. This parameter applies only to RIST-based, Zixi-based, and Fujitsu-based streams.
+  --media-stream-output-configurations: list # The media streams that are associated with the output, and the parameters for those associations. — item shape: {DestinationConfigurations?: any, EncodingName: any, EncodingParameters?: any, MediaStreamName: any}
+  --min-latency: int # The minimum latency in milliseconds for SRT-based streams. In streams that use the SRT protocol, this value that you set on your MediaConnect source or output represents the minimal potential latency of that connection. The latency of the stream is set to the highest number between the sender’s minimum latency and the receiver’s minimum latency.
   --port: int # The port to use when content is distributed to this output.
   --protocol: string@protocol-completer # The protocol to use for the output.
-  --remoteId: string # The remote ID for the Zixi-pull stream.
-  --senderControlPort: int # The port that the flow uses to send outbound requests to initiate connection with the sender.
-  --senderIpAddress: string # The IP address that the flow communicates with to initiate connection with the sender.
-  --smoothingLatency: int # The smoothing latency in milliseconds for RIST, RTP, and RTP-FEC streams.
-  --streamId: string # The stream ID that you want to use for this transport. This parameter applies only to Zixi and SRT caller-based streams.
-  --vpcInterfaceAttachment: record # The settings for attaching a VPC interface to an resource. — shape: {VpcInterfaceName?: any}
+  --remote-id: string # The remote ID for the Zixi-pull stream.
+  --sender-control-port: int # The port that the flow uses to send outbound requests to initiate connection with the sender.
+  --sender-ip-address: string # The IP address that the flow communicates with to initiate connection with the sender.
+  --smoothing-latency: int # The smoothing latency in milliseconds for RIST, RTP, and RTP-FEC streams.
+  --stream-id: string # The stream ID that you want to use for this transport. This parameter applies only to Zixi and SRT caller-based streams.
+  --vpc-interface-attachment: record # The settings for attaching a VPC interface to an resource. — shape: {VpcInterfaceName?: any}
 ]: any -> record<FlowArn: record, Output: record<DataTransferSubscriberFeePercent: record, Description: record, Destination: record, Encryption: record<Algorithm: record, ConstantInitializationVector: record, DeviceId: record, KeyType: record, Region: record, ResourceId: record, RoleArn: record, SecretArn: record, Url: record>, EntitlementArn: record, ListenerAddress: record, MediaLiveInputArn: record, MediaStreamOutputConfigurations: record, Name: record, OutputArn: record, Port: record, Transport: record<CidrAllowList: record, MaxBitrate: record, MaxLatency: record, MaxSyncBuffer: record, MinLatency: record, Protocol: record, RemoteId: record, SenderControlPort: record, SenderIpAddress: record, SmoothingLatency: record, SourceListenerAddress: record, SourceListenerPort: record, StreamId: record>, VpcInterfaceAttachment: record<VpcInterfaceName: record>, BridgeArn: record, BridgePorts: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)/outputs/($outputArn)")
-  let body = {cidrAllowList: $cidrAllowList, description: $description, destination: $destination, encryption: $encryption, maxLatency: $maxLatency, mediaStreamOutputConfigurations: $mediaStreamOutputConfigurations, minLatency: $minLatency, port: $port, protocol: $protocol, remoteId: $remoteId, senderControlPort: $senderControlPort, senderIpAddress: $senderIpAddress, smoothingLatency: $smoothingLatency, streamId: $streamId, vpcInterfaceAttachment: $vpcInterfaceAttachment} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn, output_arn: $output_arn} | format pattern "/v1/flows/{flow_arn}/outputs/{output_arn}"))
+  let body = {"cidrAllowList": $cidr_allow_list, "description": $description, "destination": $destination, "encryption": $encryption, "maxLatency": $max_latency, "mediaStreamOutputConfigurations": $media_stream_output_configurations, "minLatency": $min_latency, "port": $port, "protocol": $protocol, "remoteId": $remote_id, "senderControlPort": $sender_control_port, "senderIpAddress": $sender_ip_address, "smoothingLatency": $smoothing_latency, "streamId": $stream_id, "vpcInterfaceAttachment": $vpc_interface_attachment} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1597,9 +1597,9 @@ export def "flows-outputs UpdateFlowOutput" [
 #
 # DELETE /v1/flows/{flowArn}/source/{sourceArn}
 # operationId: RemoveFlowSource
-export def "flows-source RemoveFlowSource" [
-  flowArn: string
-  sourceArn: string
+export def "flows-source delete" [
+  flow_arn: string
+  source_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1608,18 +1608,18 @@ export def "flows-source RemoveFlowSource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<FlowArn: record, SourceArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)/source/($sourceArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn, source_arn: $source_arn} | format pattern "/v1/flows/{flow_arn}/source/{source_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1633,9 +1633,9 @@ export def "flows-source RemoveFlowSource" [
 # --decryption shape: {Algorithm?: any, ConstantInitializationVector?: any, DeviceId?: any, KeyType?: any, Region?: any, ResourceId?: any, RoleArn?: any, SecretArn?: any, Url?: any}
 # --mediaStreamSourceConfigurations item shape: {EncodingName: any, InputConfigurations?: any, MediaStreamName: any}
 # --gatewayBridgeSource shape: {BridgeArn?: any, VpcInterfaceAttachment?: any}
-export def "flows-source UpdateFlowSource" [
-  flowArn: string
-  sourceArn: string
+export def "flows-source update" [
+  flow_arn: string
+  source_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1644,39 +1644,39 @@ export def "flows-source UpdateFlowSource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --decryption: record # Information about the encryption of the flow. — shape: {Algorithm?: any, ConstantInitializationVector?: any, DeviceId?: any, KeyType?: any, Region?: any, ResourceId?: any, RoleArn?: any, SecretArn?: any, Url?: any}
   --description: string # A description for the source. This value is not used or seen outside of the current AWS Elemental MediaConnect account.
-  --entitlementArn: string # The ARN of the entitlement that allows you to subscribe to this flow. The entitlement is set by the flow originator, and the ARN is generated as part of the originator's flow.
-  --ingestPort: int # The port that the flow will be listening on for incoming content.
-  --maxBitrate: int # The smoothing max bitrate (in bps) for RIST, RTP, and RTP-FEC streams.
-  --maxLatency: int # The maximum latency in milliseconds. This parameter applies only to RIST-based, Zixi-based, and Fujitsu-based streams.
-  --maxSyncBuffer: int # The size of the buffer (in milliseconds) to use to sync incoming source data.
-  --mediaStreamSourceConfigurations: list # The media streams that are associated with the source, and the parameters for those associations. — item shape: {EncodingName: any, InputConfigurations?: any, MediaStreamName: any}
-  --minLatency: int # The minimum latency in milliseconds for SRT-based streams. In streams that use the SRT protocol, this value that you set on your MediaConnect source or output represents the minimal potential latency of that connection. The latency of the stream is set to the highest number between the sender’s minimum latency and the receiver’s minimum latency.
+  --entitlement-arn: string # The ARN of the entitlement that allows you to subscribe to this flow. The entitlement is set by the flow originator, and the ARN is generated as part of the originator's flow.
+  --ingest-port: int # The port that the flow will be listening on for incoming content.
+  --max-bitrate: int # The smoothing max bitrate (in bps) for RIST, RTP, and RTP-FEC streams.
+  --max-latency: int # The maximum latency in milliseconds. This parameter applies only to RIST-based, Zixi-based, and Fujitsu-based streams.
+  --max-sync-buffer: int # The size of the buffer (in milliseconds) to use to sync incoming source data.
+  --media-stream-source-configurations: list # The media streams that are associated with the source, and the parameters for those associations. — item shape: {EncodingName: any, InputConfigurations?: any, MediaStreamName: any}
+  --min-latency: int # The minimum latency in milliseconds for SRT-based streams. In streams that use the SRT protocol, this value that you set on your MediaConnect source or output represents the minimal potential latency of that connection. The latency of the stream is set to the highest number between the sender’s minimum latency and the receiver’s minimum latency.
   --protocol: string@protocol-completer # The protocol that is used by the source.
-  --senderControlPort: int # The port that the flow uses to send outbound requests to initiate connection with the sender.
-  --senderIpAddress: string # The IP address that the flow communicates with to initiate connection with the sender.
-  --sourceListenerAddress: string # Source IP or domain name for SRT-caller protocol.
-  --sourceListenerPort: int # Source port for SRT-caller protocol.
-  --streamId: string # The stream ID that you want to use for this transport. This parameter applies only to Zixi and SRT caller-based streams.
-  --vpcInterfaceName: string # The name of the VPC interface to use for this source.
-  --whitelistCidr: string # The range of IP addresses that should be allowed to contribute content to your source. These IP addresses should be in the form of a Classless Inter-Domain Routing (CIDR) block; for example, 10.0.0.0/16.
-  --gatewayBridgeSource: record # The source configuration for cloud flows receiving a stream from a bridge. — shape: {BridgeArn?: any, VpcInterfaceAttachment?: any}
+  --sender-control-port: int # The port that the flow uses to send outbound requests to initiate connection with the sender.
+  --sender-ip-address: string # The IP address that the flow communicates with to initiate connection with the sender.
+  --source-listener-address: string # Source IP or domain name for SRT-caller protocol.
+  --source-listener-port: int # Source port for SRT-caller protocol.
+  --stream-id: string # The stream ID that you want to use for this transport. This parameter applies only to Zixi and SRT caller-based streams.
+  --vpc-interface-name: string # The name of the VPC interface to use for this source.
+  --whitelist-cidr: string # The range of IP addresses that should be allowed to contribute content to your source. These IP addresses should be in the form of a Classless Inter-Domain Routing (CIDR) block; for example, 10.0.0.0/16.
+  --gateway-bridge-source: record # The source configuration for cloud flows receiving a stream from a bridge. — shape: {BridgeArn?: any, VpcInterfaceAttachment?: any}
 ]: any -> record<FlowArn: record, Source: record<DataTransferSubscriberFeePercent: record, Decryption: record<Algorithm: record, ConstantInitializationVector: record, DeviceId: record, KeyType: record, Region: record, ResourceId: record, RoleArn: record, SecretArn: record, Url: record>, Description: record, EntitlementArn: record, IngestIp: record, IngestPort: record, MediaStreamSourceConfigurations: record, Name: record, SenderControlPort: record, SenderIpAddress: record, SourceArn: record, Transport: record<CidrAllowList: record, MaxBitrate: record, MaxLatency: record, MaxSyncBuffer: record, MinLatency: record, Protocol: record, RemoteId: record, SenderControlPort: record, SenderIpAddress: record, SmoothingLatency: record, SourceListenerAddress: record, SourceListenerPort: record, StreamId: record>, VpcInterfaceName: record, WhitelistCidr: record, GatewayBridgeSource: record<BridgeArn: record, VpcInterfaceAttachment: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)/source/($sourceArn)")
-  let body = {decryption: $decryption, description: $description, entitlementArn: $entitlementArn, ingestPort: $ingestPort, maxBitrate: $maxBitrate, maxLatency: $maxLatency, maxSyncBuffer: $maxSyncBuffer, mediaStreamSourceConfigurations: $mediaStreamSourceConfigurations, minLatency: $minLatency, protocol: $protocol, senderControlPort: $senderControlPort, senderIpAddress: $senderIpAddress, sourceListenerAddress: $sourceListenerAddress, sourceListenerPort: $sourceListenerPort, streamId: $streamId, vpcInterfaceName: $vpcInterfaceName, whitelistCidr: $whitelistCidr, gatewayBridgeSource: $gatewayBridgeSource} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn, source_arn: $source_arn} | format pattern "/v1/flows/{flow_arn}/source/{source_arn}"))
+  let body = {"decryption": $decryption, "description": $description, "entitlementArn": $entitlement_arn, "ingestPort": $ingest_port, "maxBitrate": $max_bitrate, "maxLatency": $max_latency, "maxSyncBuffer": $max_sync_buffer, "mediaStreamSourceConfigurations": $media_stream_source_configurations, "minLatency": $min_latency, "protocol": $protocol, "senderControlPort": $sender_control_port, "senderIpAddress": $sender_ip_address, "sourceListenerAddress": $source_listener_address, "sourceListenerPort": $source_listener_port, "streamId": $stream_id, "vpcInterfaceName": $vpc_interface_name, "whitelistCidr": $whitelist_cidr, "gatewayBridgeSource": $gateway_bridge_source} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1687,9 +1687,9 @@ export def "flows-source UpdateFlowSource" [
 #
 # DELETE /v1/flows/{flowArn}/vpcInterfaces/{vpcInterfaceName}
 # operationId: RemoveFlowVpcInterface
-export def "flows-vpc-interfaces RemoveFlowVpcInterface" [
-  flowArn: string
-  vpcInterfaceName: string
+export def "flows-vpc-interfaces delete" [
+  flow_arn: string
+  vpc_interface_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1698,18 +1698,18 @@ export def "flows-vpc-interfaces RemoveFlowVpcInterface" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<FlowArn: record, NonDeletedNetworkInterfaceIds: record, VpcInterfaceName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)/vpcInterfaces/($vpcInterfaceName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn, vpc_interface_name: $vpc_interface_name} | format pattern "/v1/flows/{flow_arn}/vpcInterfaces/{vpc_interface_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1720,9 +1720,9 @@ export def "flows-vpc-interfaces RemoveFlowVpcInterface" [
 #
 # DELETE /v1/flows/{flowArn}/entitlements/{entitlementArn}
 # operationId: RevokeFlowEntitlement
-export def "flows-entitlements RevokeFlowEntitlement" [
-  entitlementArn: string
-  flowArn: string
+export def "flows-entitlements delete" [
+  flow_arn: string
+  entitlement_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1731,18 +1731,18 @@ export def "flows-entitlements RevokeFlowEntitlement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<EntitlementArn: record, FlowArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)/entitlements/($entitlementArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn, entitlement_arn: $entitlement_arn} | format pattern "/v1/flows/{flow_arn}/entitlements/{entitlement_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1754,9 +1754,9 @@ export def "flows-entitlements RevokeFlowEntitlement" [
 # PUT /v1/flows/{flowArn}/entitlements/{entitlementArn}
 # operationId: UpdateFlowEntitlement
 # --encryption shape: {Algorithm?: any, ConstantInitializationVector?: any, DeviceId?: any, KeyType?: any, Region?: any, ResourceId?: any, RoleArn?: any, SecretArn?: any, Url?: any}
-export def "flows-entitlements UpdateFlowEntitlement" [
-  entitlementArn: string
-  flowArn: string
+export def "flows-entitlements update" [
+  flow_arn: string
+  entitlement_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1765,25 +1765,25 @@ export def "flows-entitlements UpdateFlowEntitlement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --description: string # A description of the entitlement. This description appears only on the AWS Elemental MediaConnect console and will not be seen by the subscriber or end user.
   --encryption: record # Information about the encryption of the flow. — shape: {Algorithm?: any, ConstantInitializationVector?: any, DeviceId?: any, KeyType?: any, Region?: any, ResourceId?: any, RoleArn?: any, SecretArn?: any, Url?: any}
-  --entitlementStatus: string@entitlementStatus-completer # An indication of whether you want to enable the entitlement to allow access, or disable it to stop streaming content to the subscriber’s flow temporarily. If you don’t specify the entitlementStatus field in your request, MediaConnect leaves the value unchanged.
+  --entitlement-status: string@entitlement-status-completer # An indication of whether you want to enable the entitlement to allow access, or disable it to stop streaming content to the subscriber’s flow temporarily. If you don’t specify the entitlementStatus field in your request, MediaConnect leaves the value unchanged.
   --subscribers: list # The AWS account IDs that you want to share your content with. The receiving accounts (subscribers) will be allowed to create their own flow using your content as the source.
 ]: any -> record<Entitlement: record<DataTransferSubscriberFeePercent: record, Description: record, Encryption: record<Algorithm: record, ConstantInitializationVector: record, DeviceId: record, KeyType: record, Region: record, ResourceId: record, RoleArn: record, SecretArn: record, Url: record>, EntitlementArn: record, EntitlementStatus: record, Name: record, Subscribers: record>, FlowArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/($flowArn)/entitlements/($entitlementArn)")
-  let body = {description: $description, encryption: $encryption, entitlementStatus: $entitlementStatus, subscribers: $subscribers} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn, entitlement_arn: $entitlement_arn} | format pattern "/v1/flows/{flow_arn}/entitlements/{entitlement_arn}"))
+  let body = {"description": $description, "encryption": $encryption, "entitlementStatus": $entitlement_status, "subscribers": $subscribers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1794,8 +1794,8 @@ export def "flows-entitlements UpdateFlowEntitlement" [
 #
 # POST /v1/flows/start/{flowArn}
 # operationId: StartFlow
-export def "flows-start StartFlow" [
-  flowArn: string
+export def "flows-start start" [
+  flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1804,18 +1804,18 @@ export def "flows-start StartFlow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<FlowArn: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/start/($flowArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn} | format pattern "/v1/flows/start/{flow_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1826,8 +1826,8 @@ export def "flows-start StartFlow" [
 #
 # POST /v1/flows/stop/{flowArn}
 # operationId: StopFlow
-export def "flows-stop StopFlow" [
-  flowArn: string
+export def "flows-stop stop" [
+  flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1836,18 +1836,18 @@ export def "flows-stop StopFlow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<FlowArn: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/flows/stop/($flowArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({flow_arn: $flow_arn} | format pattern "/v1/flows/stop/{flow_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1858,8 +1858,8 @@ export def "flows-stop StopFlow" [
 #
 # DELETE /tags/{resourceArn}#tagKeys
 # operationId: UntagResource
-export def "tags UntagResource" [
-  resourceArn: string
+export def "tags untag-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1868,20 +1868,20 @@ export def "tags UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tagKeys: list # The keys of the tags to be removed.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --tag-keys: list # The keys of the tags to be removed.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tagKeys" $tagKeys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($resourceArn)#tagKeys" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}#tagKeys") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1892,8 +1892,8 @@ export def "tags UntagResource" [
 #
 # PUT /v1/bridges/{bridgeArn}/state
 # operationId: UpdateBridgeState
-export def "bridges-state UpdateBridgeState" [
-  bridgeArn: string
+export def "bridges-state update" [
+  bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1902,22 +1902,22 @@ export def "bridges-state UpdateBridgeState" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  desiredState: string@desiredState-completer
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  desired_state: string@desired-state-completer
 ]: any -> record<BridgeArn: record, DesiredState: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/bridges/($bridgeArn)/state")
-  let body = {desiredState: $desiredState} | compact
+  let full_url = (build-url $base ({bridge_arn: $bridge_arn} | format pattern "/v1/bridges/{bridge_arn}/state"))
+  let body = {"desiredState": $desired_state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

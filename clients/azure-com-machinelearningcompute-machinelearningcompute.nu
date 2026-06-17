@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-machine-learning-compute-operations ListAvailableOperations" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-machine-learning-compute-operations list-available" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.MachineLearningCompute/operations
 # operationId: MachineLearningCompute_ListAvailableOperations
-export def "providers-microsoft-machine-learning-compute-operations ListAvailableOperations" [
+export def "providers-microsoft-machine-learning-compute-operations list-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-machine-learning-compute-operations ListAvailabl
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MachineLearningCompute/operationalizationClusters
 # operationId: OperationalizationClusters_ListBySubscriptionId
-export def "subscriptions-providers-microsoft-machine-learning-compute-operationalization-clusters ListBySubscriptionId" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-machine-learning-compute-operationalization-clusters list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,7 +133,7 @@ export def "subscriptions-providers-microsoft-machine-learning-compute-operation
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.MachineLearningCompute/operationalizationClusters" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MachineLearningCompute/operationalizationClusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,9 +143,9 @@ export def "subscriptions-providers-microsoft-machine-learning-compute-operation
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningCompute/operationalizationClusters
 # operationId: OperationalizationClusters_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningCompute/operationalizationClusters" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningCompute/operationalizationClusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,10 +170,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{clusterName}
 # operationId: OperationalizationClusters_Delete
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters delete" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,12 +183,12 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the Microsoft.MachineLearningCompute resource provider API to use.
-  --deleteAll: oneof<nothing, bool> # If true, deletes all resources associated with this cluster.
+  --delete-all: oneof<nothing, bool> # If true, deletes all resources associated with this cluster.
 ]: nothing -> record<error: record<code: string, details: list<record>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "deleteAll" $deleteAll "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningCompute/operationalizationClusters/($clusterName)" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "deleteAll" $delete_all "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{cluster_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,10 +198,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{clusterName}
 # operationId: OperationalizationClusters_Get
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters get" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningCompute/operationalizationClusters/($clusterName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{cluster_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -225,10 +225,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{clusterName}
 # operationId: OperationalizationClusters_Update
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters update" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,8 +244,8 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningCompute/operationalizationClusters/($clusterName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{cluster_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -257,10 +257,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{clusterName}
 # operationId: OperationalizationClusters_CreateOrUpdate
 # --properties shape: {appInsights?: record, clusterType: "ACS"|"Local", containerRegistry?: record, containerService?: record, description?: string, globalServiceConfiguration?: record, storageAccount?: record}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,8 +278,8 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningCompute/operationalizationClusters/($clusterName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{cluster_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -290,10 +290,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{clusterName}/checkSystemServicesUpdatesAvailable
 # operationId: OperationalizationClusters_CheckSystemServicesUpdatesAvailable
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters-check-system-services-updates-available CheckSystemServicesUpdatesAvailable" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters-check-system-services-updates-available check" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,7 +307,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningCompute/operationalizationClusters/($clusterName)/checkSystemServicesUpdatesAvailable" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{cluster_name}/checkSystemServicesUpdatesAvailable") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -317,10 +317,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{clusterName}/listKeys
 # operationId: OperationalizationClusters_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters-list-keys ListKeys" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters-list-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningCompute/operationalizationClusters/($clusterName)/listKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{cluster_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,10 +344,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{clusterName}/updateSystemServices
 # operationId: OperationalizationClusters_UpdateSystemServices
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters-update-system-services UpdateSystemServices" [
-  subscriptionId: string
-  resourceGroupName: string
-  clusterName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters-update-system-services update" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,7 +361,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningCompute/operationalizationClusters/($clusterName)/updateSystemServices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{cluster_name}/updateSystemServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

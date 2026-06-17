@@ -152,7 +152,7 @@ export def "resources-campaigns get" [
 ]: nothing -> record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: table<contactEmail: string, description: string, endDate: string, id: int, name: string, source: record, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/resources/campaigns/($id).json")
+  let full_url = (build-url $base ({id: $id} | format pattern "/resources/campaigns/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -178,7 +178,7 @@ export def "resources-campaigns-mediajson get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/campaigns/($id)/media.json" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/resources/campaigns/{id}/media.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,12 +198,12 @@ export def "resources-campaigns-syndicate-format get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --displayMethod: string # Method used to render an html request. Accepts one: [mv, list, feed] (format: )
+  --display-method: string # Method used to render an html request. Accepts one: [mv, list, feed] (format: )
 ]: nothing -> record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: table<content: string, description: string, id: int, mediaType: string, name: string, sourceUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "displayMethod" $displayMethod "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/campaigns/($id)/syndicate.($format)" $qp)
+  let qp = [(serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id, format: $format} | format pattern "/resources/campaigns/{id}/syndicate.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,7 +250,7 @@ export def "resources-languages get" [
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/resources/languages/($id).json")
+  let full_url = (build-url $base ({id: $id} | format pattern "/resources/languages/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -272,59 +272,59 @@ export def "resources-mediajson get" [
   --offset: int # The offset of the records set to return for pagination. (format: int32)
   --qp-sort: string # * Set of fields to sort the records by. (format: )
   --order: string # * The ascending or descending order. (format: )
-  --mediaTypes: string # Find all media items belonging to the specified media type[s]. (format: )
+  --media-types: string # Find all media items belonging to the specified media type[s]. (format: )
   --name: string # Find all media items containing the provided name, case insensitive. (format: )
-  --collectionId: int # Restrict filtering to media items in a specific collection. (format: int32)
-  --nameContains: string # Find all media items containing the partial name, case insensitive. (format: )
-  --descriptionContains: string # Find all media items containing the provided partial description, case insensitive. (format: )
-  --sourceUrl: string # Find all media items which have the provided sourceUrl, case insensitive. (format: )
-  --sourceUrlContains: string # Find all media items which contain the provided partial sourceUrl, case insensitive. (format: )
-  --customThumbnailUrl: string # Find all media items which have the provided customThumbnailUrl, case insensitive. (format: )
-  --customThumbnailUrlContains: string # Find all media items which contain the provided partial customThumbnailUrl, case insensitive. (format: )
-  --dateContentAuthored: string # Find all media items authored on the provided day (RFC 3339, time ignored). (format: date)
-  --dateContentUpdated: string # Find all media items updated on the provided day (RFC 3339, time ignored). (format: date)
-  --dateContentPublished: string # Find all media items published on the provided day (RFC 3339, time ignored). (format: date)
-  --dateContentReviewed: string # Find all media items reviewed on the provided day (RFC 3339, time ignored). (format: date)
-  --dateSyndicationCaptured: string # Find all media items syndicated on the provided day (RFC 3339, time ignored). (format: date)
-  --dateSyndicationUpdated: string # Find all media items updated through the syndication system on the provided day, (RFC 3339, time ignored). (format: date)
-  --contentAuthoredSinceDate: string # Find all media items authored since the provided day (RFC 3339, time ignored). (format: date)
-  --contentAuthoredBeforeDate: string # Find all media items authored before the provided day (RFC 3339, time ignored). (format: date)
-  --contentAuthoredInRange: string # Find all media items authored between the provided start and end days (RFC 3339, comma separated, time ignored). (format: )
-  --contentUpdatedSinceDate: string # Find all media items updated since the provided day (RFC 3339, time ignored). (format: date)
-  --contentUpdatedBeforeDate: string # Find all media items updated before the provided day (RFC 3339, time ignored). (format: date)
-  --contentUpdatedInRange: string # Find all media items updated between the provided start and end days (RFC 3339, comma separated, time ignored). (format: )
-  --contentPublishedSinceDate: string # Find all media items updated since the provided day (RFC 3339, time ignored). (format: date)
-  --contentPublishedBeforeDate: string # Find all media items published before the provided day (RFC 3339, time ignored). (format: date)
-  --contentPublishedInRange: string # Find all media items published between the provided start and end days (RFC 3339, comma separated, time ignored). (format: )
-  --contentReviewedSinceDate: string # Find all media items reviewed since the provided day (RFC 3339, time ignored). (format: date)
-  --contentReviewedBeforeDate: string # Find all media items reviewed before the provided day (RFC 3339, time ignored). (format: date)
-  --contentReviewedInRange: string # Find all media items reviewed between the provided start and end days (RFC 3339, comma separated, time ignored). (format: )
-  --syndicationCapturedSinceDate: string # Find all media items authored since the provided day (RFC 3339, time ignored). (format: date)
-  --syndicationCapturedBeforeDate: string # Find all media items authored before the provided day (RFC 3339, time ignored). (format: date)
-  --syndicationCapturedInRange: string # Find all media items authored between the provided start and end days (RFC 3339, comma separated, time ignored). (format: )
-  --syndicationUpdatedSinceDate: string # Find all media items updated since the provided day, (RFC 3339, time ignored). (format: date)
-  --syndicationUpdatedBeforeDate: string # Find all media items updated before the provided day, (RFC 3339, time ignored). (format: date)
-  --syndicationUpdatedInRange: string # Find all media items updated between the provided start and end days, (RFC 3339, comma separated, time ignored). (format: )
-  --syndicationVisibleSinceDate: string # Find all media items visible since the provided day, (RFC 3339, time ignored). (format: date)
-  --syndicationVisibleBeforeDate: string # Find all media items visible before the provided day, (RFC 3339, time ignored). (format: date)
-  --syndicationVisibleInRange: string # Find all media items visible between the provided start and end days, (RFC 3339, comma separated, time ignored). (format: date)
-  --languageId: int # Find all media items written in the language specified by Id. (format: int64)
-  --languageName: string # Find all media items written in the language specified by name, case insensitive. (format: )
-  --languageIsoCode: string # Find all media items written in the language specified by 639-2 isoCode , case insensitive. (format: )
+  --collection-id: int # Restrict filtering to media items in a specific collection. (format: int32)
+  --name-contains: string # Find all media items containing the partial name, case insensitive. (format: )
+  --description-contains: string # Find all media items containing the provided partial description, case insensitive. (format: )
+  --source-url: string # Find all media items which have the provided sourceUrl, case insensitive. (format: )
+  --source-url-contains: string # Find all media items which contain the provided partial sourceUrl, case insensitive. (format: )
+  --custom-thumbnail-url: string # Find all media items which have the provided customThumbnailUrl, case insensitive. (format: )
+  --custom-thumbnail-url-contains: string # Find all media items which contain the provided partial customThumbnailUrl, case insensitive. (format: )
+  --date-content-authored: string # Find all media items authored on the provided day (RFC 3339, time ignored). (format: date)
+  --date-content-updated: string # Find all media items updated on the provided day (RFC 3339, time ignored). (format: date)
+  --date-content-published: string # Find all media items published on the provided day (RFC 3339, time ignored). (format: date)
+  --date-content-reviewed: string # Find all media items reviewed on the provided day (RFC 3339, time ignored). (format: date)
+  --date-syndication-captured: string # Find all media items syndicated on the provided day (RFC 3339, time ignored). (format: date)
+  --date-syndication-updated: string # Find all media items updated through the syndication system on the provided day, (RFC 3339, time ignored). (format: date)
+  --content-authored-since-date: string # Find all media items authored since the provided day (RFC 3339, time ignored). (format: date)
+  --content-authored-before-date: string # Find all media items authored before the provided day (RFC 3339, time ignored). (format: date)
+  --content-authored-in-range: string # Find all media items authored between the provided start and end days (RFC 3339, comma separated, time ignored). (format: )
+  --content-updated-since-date: string # Find all media items updated since the provided day (RFC 3339, time ignored). (format: date)
+  --content-updated-before-date: string # Find all media items updated before the provided day (RFC 3339, time ignored). (format: date)
+  --content-updated-in-range: string # Find all media items updated between the provided start and end days (RFC 3339, comma separated, time ignored). (format: )
+  --content-published-since-date: string # Find all media items updated since the provided day (RFC 3339, time ignored). (format: date)
+  --content-published-before-date: string # Find all media items published before the provided day (RFC 3339, time ignored). (format: date)
+  --content-published-in-range: string # Find all media items published between the provided start and end days (RFC 3339, comma separated, time ignored). (format: )
+  --content-reviewed-since-date: string # Find all media items reviewed since the provided day (RFC 3339, time ignored). (format: date)
+  --content-reviewed-before-date: string # Find all media items reviewed before the provided day (RFC 3339, time ignored). (format: date)
+  --content-reviewed-in-range: string # Find all media items reviewed between the provided start and end days (RFC 3339, comma separated, time ignored). (format: )
+  --syndication-captured-since-date: string # Find all media items authored since the provided day (RFC 3339, time ignored). (format: date)
+  --syndication-captured-before-date: string # Find all media items authored before the provided day (RFC 3339, time ignored). (format: date)
+  --syndication-captured-in-range: string # Find all media items authored between the provided start and end days (RFC 3339, comma separated, time ignored). (format: )
+  --syndication-updated-since-date: string # Find all media items updated since the provided day, (RFC 3339, time ignored). (format: date)
+  --syndication-updated-before-date: string # Find all media items updated before the provided day, (RFC 3339, time ignored). (format: date)
+  --syndication-updated-in-range: string # Find all media items updated between the provided start and end days, (RFC 3339, comma separated, time ignored). (format: )
+  --syndication-visible-since-date: string # Find all media items visible since the provided day, (RFC 3339, time ignored). (format: date)
+  --syndication-visible-before-date: string # Find all media items visible before the provided day, (RFC 3339, time ignored). (format: date)
+  --syndication-visible-in-range: string # Find all media items visible between the provided start and end days, (RFC 3339, comma separated, time ignored). (format: date)
+  --language-id: int # Find all media items written in the language specified by Id. (format: int64)
+  --language-name: string # Find all media items written in the language specified by name, case insensitive. (format: )
+  --language-iso-code: string # Find all media items written in the language specified by 639-2 isoCode , case insensitive. (format: )
   --hash: string # Find all media items which match the provided hash, case insensitive. (format: )
-  --hashContains: string # Find all media items which match the provided partial hash, case insensitive. (format: )
-  --sourceId: int # Find all media items that belong to the source specified by Id. (format: int64)
-  --sourceName: string # Find all media items that belong to the source specified by name, case insensitive. (format: )
-  --sourceNameContains: string # Find all media items that belong to the source specified by partial name, case insensitive. (format: )
-  --sourceAcronym: string # Find all media items that belong to the source specified by acronym, case insensitive. (format: )
-  --sourceAcronymContains: string # Find all media items that belong to the source specified by partial acronym, case insensitive. (format: )
-  --tagIds: string # Find only media items tagged with the specified tag Ids. (format: )
-  --restrictToSet: string # Find only media from within the supplied list of Ids. (format: )
-  --createdBy: string # Find all media items containing the createdBy value. (format: )
+  --hash-contains: string # Find all media items which match the provided partial hash, case insensitive. (format: )
+  --source-id: int # Find all media items that belong to the source specified by Id. (format: int64)
+  --source-name: string # Find all media items that belong to the source specified by name, case insensitive. (format: )
+  --source-name-contains: string # Find all media items that belong to the source specified by partial name, case insensitive. (format: )
+  --source-acronym: string # Find all media items that belong to the source specified by acronym, case insensitive. (format: )
+  --source-acronym-contains: string # Find all media items that belong to the source specified by partial acronym, case insensitive. (format: )
+  --tag-ids: string # Find only media items tagged with the specified tag Ids. (format: )
+  --restrict-to-set: string # Find only media from within the supplied list of Ids. (format: )
+  --created-by: string # Find all media items containing the createdBy value. (format: )
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "mediaTypes" $mediaTypes "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "collectionId" $collectionId "scalar") (serialize-qp "nameContains" $nameContains "scalar") (serialize-qp "descriptionContains" $descriptionContains "scalar") (serialize-qp "sourceUrl" $sourceUrl "scalar") (serialize-qp "sourceUrlContains" $sourceUrlContains "scalar") (serialize-qp "customThumbnailUrl" $customThumbnailUrl "scalar") (serialize-qp "customThumbnailUrlContains" $customThumbnailUrlContains "scalar") (serialize-qp "dateContentAuthored" $dateContentAuthored "scalar") (serialize-qp "dateContentUpdated" $dateContentUpdated "scalar") (serialize-qp "dateContentPublished" $dateContentPublished "scalar") (serialize-qp "dateContentReviewed" $dateContentReviewed "scalar") (serialize-qp "dateSyndicationCaptured" $dateSyndicationCaptured "scalar") (serialize-qp "dateSyndicationUpdated" $dateSyndicationUpdated "scalar") (serialize-qp "contentAuthoredSinceDate" $contentAuthoredSinceDate "scalar") (serialize-qp "contentAuthoredBeforeDate" $contentAuthoredBeforeDate "scalar") (serialize-qp "contentAuthoredInRange" $contentAuthoredInRange "scalar") (serialize-qp "contentUpdatedSinceDate" $contentUpdatedSinceDate "scalar") (serialize-qp "contentUpdatedBeforeDate" $contentUpdatedBeforeDate "scalar") (serialize-qp "contentUpdatedInRange" $contentUpdatedInRange "scalar") (serialize-qp "contentPublishedSinceDate" $contentPublishedSinceDate "scalar") (serialize-qp "contentPublishedBeforeDate" $contentPublishedBeforeDate "scalar") (serialize-qp "contentPublishedInRange" $contentPublishedInRange "scalar") (serialize-qp "contentReviewedSinceDate" $contentReviewedSinceDate "scalar") (serialize-qp "contentReviewedBeforeDate" $contentReviewedBeforeDate "scalar") (serialize-qp "contentReviewedInRange" $contentReviewedInRange "scalar") (serialize-qp "syndicationCapturedSinceDate" $syndicationCapturedSinceDate "scalar") (serialize-qp "syndicationCapturedBeforeDate" $syndicationCapturedBeforeDate "scalar") (serialize-qp "syndicationCapturedInRange" $syndicationCapturedInRange "scalar") (serialize-qp "syndicationUpdatedSinceDate" $syndicationUpdatedSinceDate "scalar") (serialize-qp "syndicationUpdatedBeforeDate" $syndicationUpdatedBeforeDate "scalar") (serialize-qp "syndicationUpdatedInRange" $syndicationUpdatedInRange "scalar") (serialize-qp "syndicationVisibleSinceDate" $syndicationVisibleSinceDate "scalar") (serialize-qp "syndicationVisibleBeforeDate" $syndicationVisibleBeforeDate "scalar") (serialize-qp "syndicationVisibleInRange" $syndicationVisibleInRange "scalar") (serialize-qp "languageId" $languageId "scalar") (serialize-qp "languageName" $languageName "scalar") (serialize-qp "languageIsoCode" $languageIsoCode "scalar") (serialize-qp "hash" $hash "scalar") (serialize-qp "hashContains" $hashContains "scalar") (serialize-qp "sourceId" $sourceId "scalar") (serialize-qp "sourceName" $sourceName "scalar") (serialize-qp "sourceNameContains" $sourceNameContains "scalar") (serialize-qp "sourceAcronym" $sourceAcronym "scalar") (serialize-qp "sourceAcronymContains" $sourceAcronymContains "scalar") (serialize-qp "tagIds" $tagIds "scalar") (serialize-qp "restrictToSet" $restrictToSet "scalar") (serialize-qp "createdBy" $createdBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "mediaTypes" $media_types "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "nameContains" $name_contains "scalar") (serialize-qp "descriptionContains" $description_contains "scalar") (serialize-qp "sourceUrl" $source_url "scalar") (serialize-qp "sourceUrlContains" $source_url_contains "scalar") (serialize-qp "customThumbnailUrl" $custom_thumbnail_url "scalar") (serialize-qp "customThumbnailUrlContains" $custom_thumbnail_url_contains "scalar") (serialize-qp "dateContentAuthored" $date_content_authored "scalar") (serialize-qp "dateContentUpdated" $date_content_updated "scalar") (serialize-qp "dateContentPublished" $date_content_published "scalar") (serialize-qp "dateContentReviewed" $date_content_reviewed "scalar") (serialize-qp "dateSyndicationCaptured" $date_syndication_captured "scalar") (serialize-qp "dateSyndicationUpdated" $date_syndication_updated "scalar") (serialize-qp "contentAuthoredSinceDate" $content_authored_since_date "scalar") (serialize-qp "contentAuthoredBeforeDate" $content_authored_before_date "scalar") (serialize-qp "contentAuthoredInRange" $content_authored_in_range "scalar") (serialize-qp "contentUpdatedSinceDate" $content_updated_since_date "scalar") (serialize-qp "contentUpdatedBeforeDate" $content_updated_before_date "scalar") (serialize-qp "contentUpdatedInRange" $content_updated_in_range "scalar") (serialize-qp "contentPublishedSinceDate" $content_published_since_date "scalar") (serialize-qp "contentPublishedBeforeDate" $content_published_before_date "scalar") (serialize-qp "contentPublishedInRange" $content_published_in_range "scalar") (serialize-qp "contentReviewedSinceDate" $content_reviewed_since_date "scalar") (serialize-qp "contentReviewedBeforeDate" $content_reviewed_before_date "scalar") (serialize-qp "contentReviewedInRange" $content_reviewed_in_range "scalar") (serialize-qp "syndicationCapturedSinceDate" $syndication_captured_since_date "scalar") (serialize-qp "syndicationCapturedBeforeDate" $syndication_captured_before_date "scalar") (serialize-qp "syndicationCapturedInRange" $syndication_captured_in_range "scalar") (serialize-qp "syndicationUpdatedSinceDate" $syndication_updated_since_date "scalar") (serialize-qp "syndicationUpdatedBeforeDate" $syndication_updated_before_date "scalar") (serialize-qp "syndicationUpdatedInRange" $syndication_updated_in_range "scalar") (serialize-qp "syndicationVisibleSinceDate" $syndication_visible_since_date "scalar") (serialize-qp "syndicationVisibleBeforeDate" $syndication_visible_before_date "scalar") (serialize-qp "syndicationVisibleInRange" $syndication_visible_in_range "scalar") (serialize-qp "languageId" $language_id "scalar") (serialize-qp "languageName" $language_name "scalar") (serialize-qp "languageIsoCode" $language_iso_code "scalar") (serialize-qp "hash" $hash "scalar") (serialize-qp "hashContains" $hash_contains "scalar") (serialize-qp "sourceId" $source_id "scalar") (serialize-qp "sourceName" $source_name "scalar") (serialize-qp "sourceNameContains" $source_name_contains "scalar") (serialize-qp "sourceAcronym" $source_acronym "scalar") (serialize-qp "sourceAcronymContains" $source_acronym_contains "scalar") (serialize-qp "tagIds" $tag_ids "scalar") (serialize-qp "restrictToSet" $restrict_to_set "scalar") (serialize-qp "createdBy" $created_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/media.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -375,7 +375,7 @@ export def "resources-media-most-popular-media-format get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/media/mostPopularMedia.($format)" $qp)
+  let full_url = (build-url $base ({format: $format} | format pattern "/resources/media/mostPopularMedia.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -422,7 +422,7 @@ export def "resources-media get" [
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/resources/media/($id).json")
+  let full_url = (build-url $base ({id: $id} | format pattern "/resources/media/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -441,12 +441,12 @@ export def "resources-media-content get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --calledByBuild: oneof<nothing, bool> # The method that called this method (format: )
+  --called-by-build: oneof<nothing, bool> # The method that called this method (format: )
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "calledByBuild" $calledByBuild "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/media/($id)/content" $qp)
+  let qp = [(serialize-qp "calledByBuild" $called_by_build "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/resources/media/{id}/content") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -468,16 +468,16 @@ export def "resources-media-embedjson get" [
   --flavor: string # Currently supports 'iframe', defaults to 'javascript'. (format: )
   --width: int # The width of the generated iframe. (format: int32)
   --height: int # The height of the generated iframe. (format: int32)
-  --iframeName: string # The name of the iframe element (format: )
-  --excludeJquery: oneof<nothing, bool> # Should a reference to the JQuery Library be omitted? (format: , default: false)
-  --excludeDiv: oneof<nothing, bool> # Should the div to insert content into be omitted? (format: , default: false)
-  --divId: string # Should the div to insert content into have a specific name? (format: )
-  --displayMethod: string # Method used to render an html request. Accepts one: [mv, list, feed] (format: )
+  --iframe-name: string # The name of the iframe element (format: )
+  --exclude-jquery: oneof<nothing, bool> # Should a reference to the JQuery Library be omitted? (format: , default: false)
+  --exclude-div: oneof<nothing, bool> # Should the div to insert content into be omitted? (format: , default: false)
+  --div-id: string # Should the div to insert content into have a specific name? (format: )
+  --display-method: string # Method used to render an html request. Accepts one: [mv, list, feed] (format: )
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "flavor" $flavor "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "iframeName" $iframeName "scalar") (serialize-qp "excludeJquery" $excludeJquery "scalar") (serialize-qp "excludeDiv" $excludeDiv "scalar") (serialize-qp "divId" $divId "scalar") (serialize-qp "displayMethod" $displayMethod "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/media/($id)/embed.json" $qp)
+  let qp = [(serialize-qp "flavor" $flavor "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "iframeName" $iframe_name "scalar") (serialize-qp "excludeJquery" $exclude_jquery "scalar") (serialize-qp "excludeDiv" $exclude_div "scalar") (serialize-qp "divId" $div_id "scalar") (serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/resources/media/{id}/embed.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -499,7 +499,7 @@ export def "resources-media-previewjpg get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/resources/media/($id)/preview.jpg")
+  let full_url = (build-url $base ({id: $id} | format pattern "/resources/media/{id}/preview.jpg"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -526,7 +526,7 @@ export def "resources-media-related-media-format get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/media/($id)/relatedMedia.($format)" $qp)
+  let full_url = (build-url $base ({id: $id, format: $format} | format pattern "/resources/media/{id}/relatedMedia.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -546,22 +546,22 @@ export def "resources-media-syndicate-format get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cssClass: string # The css class to target for extraction. (format: , default: syndicate)
-  --stripStyles: oneof<nothing, bool> # Remove in-line styles from content. (format: , default: false)
-  --stripScripts: oneof<nothing, bool> # Remove script tags from content. (format: , default: false)
-  --stripImages: oneof<nothing, bool> # Remove image tags from content. (format: , default: false)
-  --stripBreaks: oneof<nothing, bool> # Remove break tags from content. (format: , default: false)
-  --stripClasses: oneof<nothing, bool> # Remove class attributes from content (except 'syndicate'). (format: , default: false)
+  --css-class: string # The css class to target for extraction. (format: , default: syndicate)
+  --strip-styles: oneof<nothing, bool> # Remove in-line styles from content. (format: , default: false)
+  --strip-scripts: oneof<nothing, bool> # Remove script tags from content. (format: , default: false)
+  --strip-images: oneof<nothing, bool> # Remove image tags from content. (format: , default: false)
+  --strip-breaks: oneof<nothing, bool> # Remove break tags from content. (format: , default: false)
+  --strip-classes: oneof<nothing, bool> # Remove class attributes from content (except 'syndicate'). (format: , default: false)
   --font-size: int # Set font size (in points) of p, div, and span tags. (format: int32)
-  --imageFloat: string # Accepts valid CSS float options, such as 'left' or 'right'. Will inject a style into the content before rendering. (format: )
-  --imageMargin: string # Accepts 4 CSV values representing pixel sizes of margin similar to CSS. Default format is 'north,east,south,west' - for example '0,10,10,0' would put a 10 pixel margin on the right and bottom sides of an image. Will inject a style into the content before rendering. (format: )
+  --image-float: string # Accepts valid CSS float options, such as 'left' or 'right'. Will inject a style into the content before rendering. (format: )
+  --image-margin: string # Accepts 4 CSV values representing pixel sizes of margin similar to CSS. Default format is 'north,east,south,west' - for example '0,10,10,0' would put a 10 pixel margin on the right and bottom sides of an image. Will inject a style into the content before rendering. (format: )
   --autoplay: oneof<nothing, bool> # If content is a video, the embeded video will auto play when loaded. (format: , default: true)
   --rel: oneof<nothing, bool> # If content is a video, related items will be shown at the end of playback. (format: , default: false)
 ]: nothing -> record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: table<content: string, description: string, id: int, mediaType: string, name: string, sourceUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cssClass" $cssClass "scalar") (serialize-qp "stripStyles" $stripStyles "scalar") (serialize-qp "stripScripts" $stripScripts "scalar") (serialize-qp "stripImages" $stripImages "scalar") (serialize-qp "stripBreaks" $stripBreaks "scalar") (serialize-qp "stripClasses" $stripClasses "scalar") (serialize-qp "font-size" $font_size "scalar") (serialize-qp "imageFloat" $imageFloat "scalar") (serialize-qp "imageMargin" $imageMargin "scalar") (serialize-qp "autoplay" $autoplay "scalar") (serialize-qp "rel" $rel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/media/($id)/syndicate.($format)" $qp)
+  let qp = [(serialize-qp "cssClass" $css_class "scalar") (serialize-qp "stripStyles" $strip_styles "scalar") (serialize-qp "stripScripts" $strip_scripts "scalar") (serialize-qp "stripImages" $strip_images "scalar") (serialize-qp "stripBreaks" $strip_breaks "scalar") (serialize-qp "stripClasses" $strip_classes "scalar") (serialize-qp "font-size" $font_size "scalar") (serialize-qp "imageFloat" $image_float "scalar") (serialize-qp "imageMargin" $image_margin "scalar") (serialize-qp "autoplay" $autoplay "scalar") (serialize-qp "rel" $rel "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id, format: $format} | format pattern "/resources/media/{id}/syndicate.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -583,7 +583,7 @@ export def "resources-media-thumbnailjpg get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/resources/media/($id)/thumbnail.jpg")
+  let full_url = (build-url $base ({id: $id} | format pattern "/resources/media/{id}/thumbnail.jpg"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -605,7 +605,7 @@ export def "resources-media-youtube-meta-datajson get" [
 ]: nothing -> record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/resources/media/($id)/youtubeMetaData.json")
+  let full_url = (build-url $base ({id: $id} | format pattern "/resources/media/{id}/youtubeMetaData.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -627,7 +627,7 @@ export def "resources-media-types-format get" [
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/resources/mediaTypes.($format)")
+  let full_url = (build-url $base ({format: $format} | format pattern "/resources/mediaTypes.{format}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -674,7 +674,7 @@ export def "resources-sources get" [
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/resources/sources/($id).json")
+  let full_url = (build-url $base ({id: $id} | format pattern "/resources/sources/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -694,12 +694,12 @@ export def "resources-sources-syndicate-format get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --displayMethod: string # Method used to render an html request. Accepts one: [mv, list, feed] (format: )
+  --display-method: string # Method used to render an html request. Accepts one: [mv, list, feed] (format: )
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "displayMethod" $displayMethod "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/sources/($id)/syndicate.($format)" $qp)
+  let qp = [(serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id, format: $format} | format pattern "/resources/sources/{id}/syndicate.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -722,15 +722,15 @@ export def "resources-tags-format get" [
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # Return records starting at the offset index. (format: int32)
   --name: string # Return tags[s] matching the supplied name (format: )
-  --nameContains: string # Return tags which contain the supplied partial name. (format: )
-  --mediaId: int # Return tags associated with the supplied media id. (format: int64)
-  --typeId: int # Return tags belonging to the supplied tag type id. (format: int64)
-  --typeName: string # Return tags belonging to the supplied tag type name. (format: )
+  --name-contains: string # Return tags which contain the supplied partial name. (format: )
+  --media-id: int # Return tags associated with the supplied media id. (format: int64)
+  --type-id: int # Return tags belonging to the supplied tag type id. (format: int64)
+  --type-name: string # Return tags belonging to the supplied tag type name. (format: )
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "nameContains" $nameContains "scalar") (serialize-qp "mediaId" $mediaId "scalar") (serialize-qp "typeId" $typeId "scalar") (serialize-qp "typeName" $typeName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/tags.($format)" $qp)
+  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "nameContains" $name_contains "scalar") (serialize-qp "mediaId" $media_id "scalar") (serialize-qp "typeId" $type_id "scalar") (serialize-qp "typeName" $type_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({format: $format} | format pattern "/resources/tags.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -752,7 +752,7 @@ export def "resources-tags-tag-languages-format get" [
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/resources/tags/tagLanguages.($format)")
+  let full_url = (build-url $base ({format: $format} | format pattern "/resources/tags/tagLanguages.{format}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -774,7 +774,7 @@ export def "resources-tags-tag-types-format get" [
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/resources/tags/tagTypes.($format)")
+  let full_url = (build-url $base ({format: $format} | format pattern "/resources/tags/tagTypes.{format}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -797,7 +797,7 @@ export def "resources-tags get" [
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/resources/tags/($id).($format)")
+  let full_url = (build-url $base ({id: $id, format: $format} | format pattern "/resources/tags/{id}.{format}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -824,7 +824,7 @@ export def "resources-tags-media-format get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/tags/($id)/media.($format)" $qp)
+  let full_url = (build-url $base ({id: $id, format: $format} | format pattern "/resources/tags/{id}/media.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -851,7 +851,7 @@ export def "resources-tags-related-format get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/tags/($id)/related.($format)" $qp)
+  let full_url = (build-url $base ({id: $id, format: $format} | format pattern "/resources/tags/{id}/related.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -871,12 +871,12 @@ export def "resources-tags-syndicate-format get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --displayMethod: string # Method used to render an html request. Accepts one: [mv, list, feed] (format: )
+  --display-method: string # Method used to render an html request. Accepts one: [mv, list, feed] (format: )
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "displayMethod" $displayMethod "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/tags/($id)/syndicate.($format)" $qp)
+  let qp = [(serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id, format: $format} | format pattern "/resources/tags/{id}/syndicate.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -895,12 +895,12 @@ export def "resources-user-media-lists get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --displayMethod: string # Method used to render an html request. Accepts one: [mv, list, feed] (format: int64)
+  --display-method: string # Method used to render an html request. Accepts one: [mv, list, feed] (format: int64)
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "displayMethod" $displayMethod "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/userMediaLists/($id).json" $qp)
+  let qp = [(serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/resources/userMediaLists/{id}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

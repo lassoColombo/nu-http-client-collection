@@ -79,7 +79,7 @@ def sort-order-completer [] { ["recency" "relevancy"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2-compliance-jobs listBatchComplianceJobs" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2-compliance-jobs list-batch" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -104,7 +104,7 @@ export def commands []: nothing -> table {
 # GET /2/compliance/jobs
 # Docs: https://developer.twitter.com/en/docs/twitter-api/compliance/batch-compliance/api-reference/get-compliance-jobs
 # operationId: listBatchComplianceJobs
-export def "2-compliance-jobs listBatchComplianceJobs" [
+export def "2-compliance-jobs list-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,11 +116,11 @@ export def "2-compliance-jobs listBatchComplianceJobs" [
   --accept: string@accept-completer # Response content type
   --type: string@type-completer # Type of Compliance Job to list.
   --status: string@status-completer # Status of Compliance Job to list.
-  --compliance-jobfields: list # A comma separated list of ComplianceJob fields to display. (e.g. [created_at, download_expires_at, download_url, id, name, resumable, status, type, upload_expires_at, upload_url])
+  --compliance-job-fields: list # A comma separated list of ComplianceJob fields to display. (e.g. [created_at, download_expires_at, download_url, id, name, resumable, status, type, upload_expires_at, upload_url])
 ]: nothing -> record<data: table<created_at: string, download_expires_at: string, download_url: string, id: string, name: string, status: string, type: string, upload_expires_at: string, upload_url: string>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "compliance_job.fields" $compliance_jobfields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "compliance_job.fields" $compliance_job_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/compliance/jobs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -132,7 +132,7 @@ export def "2-compliance-jobs listBatchComplianceJobs" [
 # POST /2/compliance/jobs
 # Docs: https://developer.twitter.com/en/docs/twitter-api/compliance/batch-compliance/api-reference/post-compliance-jobs
 # operationId: createBatchComplianceJob
-export def "2-compliance-jobs createBatchComplianceJob" [
+export def "2-compliance-jobs create-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,7 +150,7 @@ export def "2-compliance-jobs createBatchComplianceJob" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2/compliance/jobs")
-  let body = {name: $name, resumable: $resumable, type: $type} | compact
+  let body = {"name": $name, "resumable": $resumable, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -162,7 +162,7 @@ export def "2-compliance-jobs createBatchComplianceJob" [
 # GET /2/compliance/jobs/{id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/compliance/batch-compliance/api-reference/get-compliance-jobs-id
 # operationId: getBatchComplianceJob
-export def "2-compliance-jobs get" [
+export def "2-compliance-jobs get-batch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -173,12 +173,12 @@ export def "2-compliance-jobs get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --compliance-jobfields: list # A comma separated list of ComplianceJob fields to display. (e.g. [created_at, download_expires_at, download_url, id, name, resumable, status, type, upload_expires_at, upload_url])
+  --compliance-job-fields: list # A comma separated list of ComplianceJob fields to display. (e.g. [created_at, download_expires_at, download_url, id, name, resumable, status, type, upload_expires_at, upload_url])
 ]: nothing -> record<data: record<created_at: string, download_expires_at: string, download_url: string, id: string, name: string, status: string, type: string, upload_expires_at: string, upload_url: string>, errors: table<detail: string, status: int, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "compliance_job.fields" $compliance_jobfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/compliance/jobs/($id)" $qp)
+  let qp = [(serialize-qp "compliance_job.fields" $compliance_job_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/compliance/jobs/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -206,7 +206,7 @@ export def "2-dm-conversations dmConversationIdCreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2/dm_conversations")
-  let body = {conversation_type: $conversation_type, message: $message, participant_ids: $participant_ids} | compact
+  let body = {"conversation_type": $conversation_type, "message": $message, "participant_ids": $participant_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -217,7 +217,7 @@ export def "2-dm-conversations dmConversationIdCreate" [
 #
 # GET /2/dm_conversations/with/{participant_id}/dm_events
 # operationId: getDmConversationsWithParticipantIdDmEvents
-export def "2-dm-conversations-with-dm-events get" [
+export def "2-dm-conversations-with-dm-events get-dm-conversations-with-participant" [
   participant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -231,16 +231,16 @@ export def "2-dm-conversations-with-dm-events get" [
   --max-results: int # The maximum number of results. (format: int32, default: 100)
   --pagination-token: string # This parameter is used to get a specified 'page' of results.
   --event-types: list # The set of event_types to include in the results. (default: [MessageCreate, ParticipantsLeave, ParticipantsJoin], e.g. [MessageCreate, ParticipantsLeave])
-  --dm-eventfields: list # A comma separated list of DmEvent fields to display. (e.g. [attachments, created_at, dm_conversation_id, event_type, id, participant_ids, referenced_tweets, sender_id, text])
+  --dm-event-fields: list # A comma separated list of DmEvent fields to display. (e.g. [attachments, created_at, dm_conversation_id, event_type, id, participant_ids, referenced_tweets, sender_id, text])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, participant_ids, referenced_tweets.id, sender_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: table<attachments: record, created_at: string, dm_conversation_id: string, event_type: string, id: string, participant_ids: list, referenced_tweets: list, sender_id: string, text: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "event_types" $event_types "csv") (serialize-qp "dm_event.fields" $dm_eventfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/dm_conversations/with/($participant_id)/dm_events" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "event_types" $event_types "csv") (serialize-qp "dm_event.fields" $dm_event_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({participant_id: $participant_id} | format pattern "/2/dm_conversations/with/{participant_id}/dm_events") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -268,8 +268,8 @@ export def "2-dm-conversations-with-messages dmConversationWithUserEventIdCreate
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/dm_conversations/with/($participant_id)/messages")
-  let body = {attachments: $attachments, text: $text} | compact
+  let full_url = (build-url $base ({participant_id: $participant_id} | format pattern "/2/dm_conversations/with/{participant_id}/messages"))
+  let body = {"attachments": $attachments, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -298,8 +298,8 @@ export def "2-dm-conversations-messages dmConversationByIdEventIdCreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/dm_conversations/($dm_conversation_id)/messages")
-  let body = {attachments: $attachments, text: $text} | compact
+  let full_url = (build-url $base ({dm_conversation_id: $dm_conversation_id} | format pattern "/2/dm_conversations/{dm_conversation_id}/messages"))
+  let body = {"attachments": $attachments, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -324,16 +324,16 @@ export def "2-dm-conversations-dm-events get" [
   --max-results: int # The maximum number of results. (format: int32, default: 100)
   --pagination-token: string # This parameter is used to get a specified 'page' of results.
   --event-types: list # The set of event_types to include in the results. (default: [MessageCreate, ParticipantsLeave, ParticipantsJoin], e.g. [MessageCreate, ParticipantsLeave])
-  --dm-eventfields: list # A comma separated list of DmEvent fields to display. (e.g. [attachments, created_at, dm_conversation_id, event_type, id, participant_ids, referenced_tweets, sender_id, text])
+  --dm-event-fields: list # A comma separated list of DmEvent fields to display. (e.g. [attachments, created_at, dm_conversation_id, event_type, id, participant_ids, referenced_tweets, sender_id, text])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, participant_ids, referenced_tweets.id, sender_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: table<attachments: record, created_at: string, dm_conversation_id: string, event_type: string, id: string, participant_ids: list, referenced_tweets: list, sender_id: string, text: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "event_types" $event_types "csv") (serialize-qp "dm_event.fields" $dm_eventfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/dm_conversations/($id)/dm_events" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "event_types" $event_types "csv") (serialize-qp "dm_event.fields" $dm_event_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/dm_conversations/{id}/dm_events") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -356,15 +356,15 @@ export def "2-dm-events get" [
   --max-results: int # The maximum number of results. (format: int32, default: 100)
   --pagination-token: string # This parameter is used to get a specified 'page' of results.
   --event-types: list # The set of event_types to include in the results. (default: [MessageCreate, ParticipantsLeave, ParticipantsJoin], e.g. [MessageCreate, ParticipantsLeave])
-  --dm-eventfields: list # A comma separated list of DmEvent fields to display. (e.g. [attachments, created_at, dm_conversation_id, event_type, id, participant_ids, referenced_tweets, sender_id, text])
+  --dm-event-fields: list # A comma separated list of DmEvent fields to display. (e.g. [attachments, created_at, dm_conversation_id, event_type, id, participant_ids, referenced_tweets, sender_id, text])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, participant_ids, referenced_tweets.id, sender_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: table<attachments: record, created_at: string, dm_conversation_id: string, event_type: string, id: string, participant_ids: list, referenced_tweets: list, sender_id: string, text: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "event_types" $event_types "csv") (serialize-qp "dm_event.fields" $dm_eventfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "event_types" $event_types "csv") (serialize-qp "dm_event.fields" $dm_event_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/dm_events" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -376,7 +376,7 @@ export def "2-dm-events get" [
 # POST /2/lists
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/manage-lists/api-reference/post-lists
 # operationId: listIdCreate
-export def "2-lists listIdCreate" [
+export def "2-lists list-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,7 +394,7 @@ export def "2-lists listIdCreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2/lists")
-  let body = {description: $description, name: $name, private: $private} | compact
+  let body = {"description": $description, "name": $name, "private": $private} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -406,7 +406,7 @@ export def "2-lists listIdCreate" [
 # DELETE /2/lists/{id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/manage-lists/api-reference/delete-lists-id
 # operationId: listIdDelete
-export def "2-lists listIdDelete" [
+export def "2-lists list-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -420,7 +420,7 @@ export def "2-lists listIdDelete" [
 ]: nothing -> record<data: record<deleted: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/lists/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/lists/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -431,7 +431,7 @@ export def "2-lists listIdDelete" [
 # GET /2/lists/{id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-lookup/api-reference/get-lists-id
 # operationId: listIdGet
-export def "2-lists listIdGet" [
+export def "2-lists list-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -442,14 +442,14 @@ export def "2-lists listIdGet" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --listfields: list # A comma separated list of List fields to display. (e.g. [created_at, description, follower_count, id, member_count, name, owner_id, private])
+  --list-fields: list # A comma separated list of List fields to display. (e.g. [created_at, description, follower_count, id, member_count, name, owner_id, private])
   --expansions: list # A comma separated list of fields to expand. (e.g. [owner_id])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
 ]: nothing -> record<data: record<created_at: string, description: string, follower_count: int, id: string, member_count: int, name: string, owner_id: string, private: bool>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "list.fields" $listfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $userfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/lists/($id)" $qp)
+  let qp = [(serialize-qp "list.fields" $list_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/lists/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -460,7 +460,7 @@ export def "2-lists listIdGet" [
 # PUT /2/lists/{id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/manage-lists/api-reference/put-lists-id
 # operationId: listIdUpdate
-export def "2-lists listIdUpdate" [
+export def "2-lists list-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -478,8 +478,8 @@ export def "2-lists listIdUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/lists/($id)")
-  let body = {description: $description, name: $name, private: $private} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/lists/{id}"))
+  let body = {"description": $description, "name": $name, "private": $private} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -491,7 +491,7 @@ export def "2-lists listIdUpdate" [
 # GET /2/lists/{id}/followers
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/follows/api-reference/get-users-id-followers
 # operationId: listGetFollowers
-export def "2-lists-followers listGetFollowers" [
+export def "2-lists-followers list-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -504,14 +504,14 @@ export def "2-lists-followers listGetFollowers" [
   --accept: string@accept-completer # Response content type
   --max-results: int # The maximum number of results. (format: int32, default: 100)
   --pagination-token: string # This parameter is used to get a specified 'page' of results.
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/lists/($id)/followers" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/lists/{id}/followers") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -522,7 +522,7 @@ export def "2-lists-followers listGetFollowers" [
 # GET /2/lists/{id}/members
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-members/api-reference/get-users-id-list_memberships
 # operationId: listGetMembers
-export def "2-lists-members listGetMembers" [
+export def "2-lists-members list-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -535,14 +535,14 @@ export def "2-lists-members listGetMembers" [
   --accept: string@accept-completer # Response content type
   --max-results: int # The maximum number of results. (format: int32, default: 100)
   --pagination-token: string # This parameter is used to get a specified 'page' of results.
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/lists/($id)/members" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/lists/{id}/members") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -553,7 +553,7 @@ export def "2-lists-members listGetMembers" [
 # POST /2/lists/{id}/members
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-members/api-reference/post-lists-id-members
 # operationId: listAddMember
-export def "2-lists-members listAddMember" [
+export def "2-lists-members list-add" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -569,8 +569,8 @@ export def "2-lists-members listAddMember" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/lists/($id)/members")
-  let body = {user_id: $user_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/lists/{id}/members"))
+  let body = {"user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -582,7 +582,7 @@ export def "2-lists-members listAddMember" [
 # DELETE /2/lists/{id}/members/{user_id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-members/api-reference/delete-lists-id-members-user_id
 # operationId: listRemoveMember
-export def "2-lists-members listRemoveMember" [
+export def "2-lists-members list-remove" [
   id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -597,7 +597,7 @@ export def "2-lists-members listRemoveMember" [
 ]: nothing -> record<data: record<is_member: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/lists/($id)/members/($user_id)")
+  let full_url = (build-url $base ({id: $id, user_id: $user_id} | format pattern "/2/lists/{id}/members/{user_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -608,7 +608,7 @@ export def "2-lists-members listRemoveMember" [
 # GET /2/lists/{id}/tweets
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-tweets/api-reference/get-lists-id-tweets
 # operationId: listsIdTweets
-export def "2-lists-tweets listsIdTweets" [
+export def "2-lists-tweets list-s" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -621,17 +621,17 @@ export def "2-lists-tweets listsIdTweets" [
   --accept: string@accept-completer # Response content type
   --max-results: int # The maximum number of results. (format: int32, default: 100)
   --pagination-token: string # This parameter is used to get the next 'page' of results.
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --pollfields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --placefields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --poll-fields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --place-fields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
 ]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/lists/($id)/tweets" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/lists/{id}/tweets") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -641,7 +641,7 @@ export def "2-lists-tweets listsIdTweets" [
 #
 # GET /2/openapi.json
 # operationId: getOpenApiSpec
-export def "2-openapijson get" [
+export def "2-openapijson get-open-api-spec" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -675,14 +675,14 @@ export def "2-spaces findSpacesByIds" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --ids: list # The list of Space IDs to return.
-  --spacefields: list # A comma separated list of Space fields to display. (e.g. [created_at, creator_id, ended_at, host_ids, id, invited_user_ids, is_ticketed, lang, participant_count, scheduled_start, speaker_ids, started_at, state, subscriber_count, title, topic_ids, updated_at])
+  --space-fields: list # A comma separated list of Space fields to display. (e.g. [created_at, creator_id, ended_at, host_ids, id, invited_user_ids, is_ticketed, lang, participant_count, scheduled_start, speaker_ids, started_at, state, subscriber_count, title, topic_ids, updated_at])
   --expansions: list # A comma separated list of fields to expand. (e.g. [creator_id, host_ids, invited_user_ids, speaker_ids, topic_ids])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --topicfields: list # A comma separated list of Topic fields to display. (e.g. [description, id, name])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --topic-fields: list # A comma separated list of Topic fields to display. (e.g. [description, id, name])
 ]: nothing -> record<data: table<created_at: string, creator_id: string, ended_at: string, host_ids: list, id: string, invited_user_ids: list, is_ticketed: bool, lang: string, participant_count: int, scheduled_start: string, speaker_ids: list, started_at: string, state: string, subscriber_count: int, title: string, topics: list, updated_at: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "space.fields" $spacefields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "topic.fields" $topicfields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "space.fields" $space_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "topic.fields" $topic_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/spaces" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -705,14 +705,14 @@ export def "2-spaces-by-creator-ids findSpacesByCreatorIds" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --user-ids: list # The IDs of Users to search through.
-  --spacefields: list # A comma separated list of Space fields to display. (e.g. [created_at, creator_id, ended_at, host_ids, id, invited_user_ids, is_ticketed, lang, participant_count, scheduled_start, speaker_ids, started_at, state, subscriber_count, title, topic_ids, updated_at])
+  --space-fields: list # A comma separated list of Space fields to display. (e.g. [created_at, creator_id, ended_at, host_ids, id, invited_user_ids, is_ticketed, lang, participant_count, scheduled_start, speaker_ids, started_at, state, subscriber_count, title, topic_ids, updated_at])
   --expansions: list # A comma separated list of fields to expand. (e.g. [creator_id, host_ids, invited_user_ids, speaker_ids, topic_ids])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --topicfields: list # A comma separated list of Topic fields to display. (e.g. [description, id, name])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --topic-fields: list # A comma separated list of Topic fields to display. (e.g. [description, id, name])
 ]: nothing -> record<data: table<created_at: string, creator_id: string, ended_at: string, host_ids: list, id: string, invited_user_ids: list, is_ticketed: bool, lang: string, participant_count: int, scheduled_start: string, speaker_ids: list, started_at: string, state: string, subscriber_count: int, title: string, topics: list, updated_at: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user_ids" $user_ids "multi") (serialize-qp "space.fields" $spacefields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "topic.fields" $topicfields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "user_ids" $user_ids "multi") (serialize-qp "space.fields" $space_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "topic.fields" $topic_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/spaces/by/creator_ids" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -724,7 +724,7 @@ export def "2-spaces-by-creator-ids findSpacesByCreatorIds" [
 # GET /2/spaces/search
 # Docs: https://developer.twitter.com/en/docs/twitter-api/spaces/search/api-reference/get-spaces-search
 # operationId: searchSpaces
-export def "2-spaces-search searchSpaces" [
+export def "2-spaces-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,14 +737,14 @@ export def "2-spaces-search searchSpaces" [
   --query: string # The search query. (e.g. crypto)
   --state: string@state-completer # The state of Spaces to search for. (default: all)
   --max-results: int # The number of results to return. (format: int32, default: 100)
-  --spacefields: list # A comma separated list of Space fields to display. (e.g. [created_at, creator_id, ended_at, host_ids, id, invited_user_ids, is_ticketed, lang, participant_count, scheduled_start, speaker_ids, started_at, state, subscriber_count, title, topic_ids, updated_at])
+  --space-fields: list # A comma separated list of Space fields to display. (e.g. [created_at, creator_id, ended_at, host_ids, id, invited_user_ids, is_ticketed, lang, participant_count, scheduled_start, speaker_ids, started_at, state, subscriber_count, title, topic_ids, updated_at])
   --expansions: list # A comma separated list of fields to expand. (e.g. [creator_id, host_ids, invited_user_ids, speaker_ids, topic_ids])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --topicfields: list # A comma separated list of Topic fields to display. (e.g. [description, id, name])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --topic-fields: list # A comma separated list of Topic fields to display. (e.g. [description, id, name])
 ]: nothing -> record<data: table<created_at: string, creator_id: string, ended_at: string, host_ids: list, id: string, invited_user_ids: list, is_ticketed: bool, lang: string, participant_count: int, scheduled_start: string, speaker_ids: list, started_at: string, state: string, subscriber_count: int, title: string, topics: list, updated_at: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "space.fields" $spacefields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "topic.fields" $topicfields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "space.fields" $space_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "topic.fields" $topic_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/spaces/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -767,15 +767,15 @@ export def "2-spaces findSpaceById" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --spacefields: list # A comma separated list of Space fields to display. (e.g. [created_at, creator_id, ended_at, host_ids, id, invited_user_ids, is_ticketed, lang, participant_count, scheduled_start, speaker_ids, started_at, state, subscriber_count, title, topic_ids, updated_at])
+  --space-fields: list # A comma separated list of Space fields to display. (e.g. [created_at, creator_id, ended_at, host_ids, id, invited_user_ids, is_ticketed, lang, participant_count, scheduled_start, speaker_ids, started_at, state, subscriber_count, title, topic_ids, updated_at])
   --expansions: list # A comma separated list of fields to expand. (e.g. [creator_id, host_ids, invited_user_ids, speaker_ids, topic_ids])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --topicfields: list # A comma separated list of Topic fields to display. (e.g. [description, id, name])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --topic-fields: list # A comma separated list of Topic fields to display. (e.g. [description, id, name])
 ]: nothing -> record<data: record<created_at: string, creator_id: string, ended_at: string, host_ids: list<string>, id: string, invited_user_ids: list<string>, is_ticketed: bool, lang: string, participant_count: int, scheduled_start: string, speaker_ids: list<string>, started_at: string, state: string, subscriber_count: int, title: string, topics: list<record>, updated_at: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "space.fields" $spacefields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "topic.fields" $topicfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/spaces/($id)" $qp)
+  let qp = [(serialize-qp "space.fields" $space_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "topic.fields" $topic_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/spaces/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -799,14 +799,14 @@ export def "2-spaces-buyers spaceBuyers" [
   --accept: string@accept-completer # Response content type
   --pagination-token: string # This parameter is used to get a specified 'page' of results.
   --max-results: int # The maximum number of results. (format: int32, default: 100)
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/spaces/($id)/buyers" $qp)
+  let qp = [(serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/spaces/{id}/buyers") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -829,17 +829,17 @@ export def "2-spaces-tweets spaceTweets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --max-results: int # The number of Tweets to fetch from the provided space. If not provided, the value will default to the maximum of 100. (format: int32, default: 100, e.g. 25)
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --pollfields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --placefields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --poll-fields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --place-fields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
 ]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/spaces/($id)/tweets" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/spaces/{id}/tweets") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -861,16 +861,16 @@ export def "2-tweets findTweetsById" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --ids: list # A comma separated list of Tweet IDs. Up to 100 are allowed in a single request.
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --pollfields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --placefields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --poll-fields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --place-fields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
 ]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -886,7 +886,7 @@ export def "2-tweets findTweetsById" [
 # --media shape: {media_ids: list, tagged_user_ids?: list}
 # --poll shape: {duration_minutes: int, options: list, reply_settings?: "following"|"mentionedUsers"}
 # --reply shape: {exclude_reply_user_ids?: list, in_reply_to_tweet_id: string}
-export def "2-tweets createTweet" [
+export def "2-tweets create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -912,7 +912,7 @@ export def "2-tweets createTweet" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2/tweets")
-  let body = {card_uri: $card_uri, direct_message_deep_link: $direct_message_deep_link, for_super_followers_only: $for_super_followers_only, geo: $geo, media: $media, nullcast: $nullcast, poll: $poll, quote_tweet_id: $quote_tweet_id, reply: $reply, reply_settings: $reply_settings, text: $text} | compact
+  let body = {"card_uri": $card_uri, "direct_message_deep_link": $direct_message_deep_link, "for_super_followers_only": $for_super_followers_only, "geo": $geo, "media": $media, "nullcast": $nullcast, "poll": $poll, "quote_tweet_id": $quote_tweet_id, "reply": $reply, "reply_settings": $reply_settings, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -970,11 +970,11 @@ export def "2-tweets-counts-all tweetCountsFullArchiveSearch" [
   --next-token: string # This parameter is used to get the next 'page' of results. The value used with the parameter is pulled directly from the response provided by the API, and should not be modified.
   --pagination-token: string # This parameter is used to get the next 'page' of results. The value used with the parameter is pulled directly from the response provided by the API, and should not be modified.
   --granularity: string@granularity-completer # The granularity for the search counts results. (default: hour)
-  --search-countfields: list # A comma separated list of SearchCount fields to display. (e.g. [end, start, tweet_count])
+  --search-count-fields: list # A comma separated list of SearchCount fields to display. (e.g. [end, start, tweet_count])
 ]: nothing -> record<data: table<end: string, start: string, tweet_count: int>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<newest_id: string, next_token: string, oldest_id: string, total_tweet_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "search_count.fields" $search_countfields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "search_count.fields" $search_count_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/counts/all" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1004,11 +1004,11 @@ export def "2-tweets-counts-recent tweetCountsRecentSearch" [
   --next-token: string # This parameter is used to get the next 'page' of results. The value used with the parameter is pulled directly from the response provided by the API, and should not be modified.
   --pagination-token: string # This parameter is used to get the next 'page' of results. The value used with the parameter is pulled directly from the response provided by the API, and should not be modified.
   --granularity: string@granularity-completer # The granularity for the search counts results. (default: hour)
-  --search-countfields: list # A comma separated list of SearchCount fields to display. (e.g. [end, start, tweet_count])
+  --search-count-fields: list # A comma separated list of SearchCount fields to display. (e.g. [end, start, tweet_count])
 ]: nothing -> record<data: table<end: string, start: string, tweet_count: int>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<newest_id: string, next_token: string, oldest_id: string, total_tweet_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "search_count.fields" $search_countfields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "search_count.fields" $search_count_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/counts/recent" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1033,16 +1033,16 @@ export def "2-tweets-firehose-stream get" [
   --partition: int # The partition number. (format: int32)
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The earliest UTC timestamp to which the Tweets will be provided. (format: date-time, e.g. 2021-02-14T18:40:40.000Z)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The latest UTC timestamp to which the Tweets will be provided. (format: date-time, e.g. 2021-02-14T18:40:40.000Z)
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --pollfields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --placefields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --poll-fields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --place-fields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
 ]: nothing -> record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/firehose/stream" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1092,16 +1092,16 @@ export def "2-tweets-sample-stream sampleStream" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --backfill-minutes: int # The number of minutes of backfill requested. (format: int32)
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --pollfields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --placefields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --poll-fields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --place-fields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
 ]: nothing -> record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/sample/stream" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1126,16 +1126,16 @@ export def "2-tweets-sample10-stream get" [
   --partition: int # The partition number. (format: int32)
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The earliest UTC timestamp to which the Tweets will be provided. (format: date-time, e.g. 2021-02-14T18:40:40.000Z)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The latest UTC timestamp to which the Tweets will be provided. (format: date-time, e.g. 2021-02-14T18:40:40.000Z)
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --pollfields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --placefields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --poll-fields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --place-fields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
 ]: nothing -> record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/sample10/stream" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1166,16 +1166,16 @@ export def "2-tweets-search-all tweetsFullarchiveSearch" [
   --next-token: string # This parameter is used to get the next 'page' of results. The value used with the parameter is pulled directly from the response provided by the API, and should not be modified.
   --pagination-token: string # This parameter is used to get the next 'page' of results. The value used with the parameter is pulled directly from the response provided by the API, and should not be modified.
   --sort-order: string@sort-order-completer # This order in which to return results.
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --pollfields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --placefields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --poll-fields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --place-fields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
 ]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/search/all" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1206,16 +1206,16 @@ export def "2-tweets-search-recent tweetsRecentSearch" [
   --next-token: string # This parameter is used to get the next 'page' of results. The value used with the parameter is pulled directly from the response provided by the API, and should not be modified.
   --pagination-token: string # This parameter is used to get the next 'page' of results. The value used with the parameter is pulled directly from the response provided by the API, and should not be modified.
   --sort-order: string@sort-order-completer # This order in which to return results.
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --pollfields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --placefields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --poll-fields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --place-fields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
 ]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/search/recent" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1227,7 +1227,7 @@ export def "2-tweets-search-recent tweetsRecentSearch" [
 # GET /2/tweets/search/stream
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/filtered-stream/api-reference/get-tweets-search-stream
 # operationId: searchStream
-export def "2-tweets-search-stream searchStream" [
+export def "2-tweets-search-stream list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1240,16 +1240,16 @@ export def "2-tweets-search-stream searchStream" [
   --backfill-minutes: int # The number of minutes of backfill requested. (format: int32)
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The earliest UTC timestamp from which the Tweets will be provided. (format: date-time, e.g. 2021-02-01T18:40:40.000Z)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The latest UTC timestamp to which the Tweets will be provided. (format: date-time, e.g. 2021-02-14T18:40:40.000Z)
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --pollfields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --placefields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --poll-fields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --place-fields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
 ]: nothing -> record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, matching_rules: table<id: string, tag: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/search/stream" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1291,7 +1291,7 @@ export def "2-tweets-search-stream-rules get" [
 # operationId: addOrDeleteRules
 # --add item shape: {tag?: string, value: string}
 # --delete shape: {ids?: list, values?: list}
-export def "2-tweets-search-stream-rules addOrDeleteRules" [
+export def "2-tweets-search-stream-rules create-or-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1310,7 +1310,7 @@ export def "2-tweets-search-stream-rules addOrDeleteRules" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dry_run" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/search/stream/rules" $qp)
-  let body = {add: $add, delete: $delete} | compact
+  let body = {"add": $add, "delete": $delete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1336,7 +1336,7 @@ export def "2-tweets delete" [
 ]: nothing -> record<data: record<deleted: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/tweets/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/tweets/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1358,17 +1358,17 @@ export def "2-tweets findTweetById" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --pollfields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --placefields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --poll-fields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --place-fields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
 ]: nothing -> record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/tweets/($id)" $qp)
+  let qp = [(serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/tweets/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1392,14 +1392,14 @@ export def "2-tweets-liking-users tweetsIdLikingUsers" [
   --accept: string@accept-completer # Response content type
   --max-results: int # The maximum number of results. (format: int32, default: 100)
   --pagination-token: string # This parameter is used to get the next 'page' of results.
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/tweets/($id)/liking_users" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/tweets/{id}/liking_users") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1424,17 +1424,17 @@ export def "2-tweets-quote-tweets findTweetsThatQuoteATweet" [
   --max-results: int # The maximum number of results to be returned. (format: int32, default: 10)
   --pagination-token: string # This parameter is used to get a specified 'page' of results.
   --exclude: list # The set of entities to exclude (e.g. 'replies' or 'retweets'). (e.g. [replies, retweets])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --pollfields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --placefields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --poll-fields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --place-fields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
 ]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "exclude" $exclude "csv") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/tweets/($id)/quote_tweets" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "exclude" $exclude "csv") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/tweets/{id}/quote_tweets") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1458,14 +1458,14 @@ export def "2-tweets-retweeted-by tweetsIdRetweetingUsers" [
   --accept: string@accept-completer # Response content type
   --max-results: int # The maximum number of results. (format: int32, default: 100)
   --pagination-token: string # This parameter is used to get the next 'page' of results.
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/tweets/($id)/retweeted_by" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/tweets/{id}/retweeted_by") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1492,8 +1492,8 @@ export def "2-tweets-hidden hideReplyById" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/tweets/($tweet_id)/hidden")
-  let body = {hidden: $hidden} | compact
+  let full_url = (build-url $base ({tweet_id: $tweet_id} | format pattern "/2/tweets/{tweet_id}/hidden"))
+  let body = {"hidden": $hidden} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1516,13 +1516,13 @@ export def "2-users findUsersById" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --ids: list # A list of User IDs, comma-separated. You can specify up to 100 IDs. (e.g. 2244994945,6253282,12)
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/users" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1545,13 +1545,13 @@ export def "2-users-by findUsersByUsername" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --usernames: list # A list of usernames, comma-separated. (e.g. TwitterDev,TwitterAPI)
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "usernames" $usernames "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "usernames" $usernames "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/users/by" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1574,14 +1574,14 @@ export def "2-users-by-username findUserByUsername" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: record<created_at: string, description: string, entities: record<description: record, url: record>, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record<followers_count: int, following_count: int, listed_count: int, tweet_count: int>, url: string, username: string, verified: bool, verified_type: string, withheld: record<country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.fields" $userfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/users/by/username/($username)" $qp)
+  let qp = [(serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({username: $username} | format pattern "/2/users/by/username/{username}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1630,13 +1630,13 @@ export def "2-users-me findMyUser" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: record<created_at: string, description: string, entities: record<description: record, url: record>, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record<followers_count: int, following_count: int, listed_count: int, tweet_count: int>, url: string, username: string, verified: bool, verified_type: string, withheld: record<country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.fields" $userfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/users/me" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1659,14 +1659,14 @@ export def "2-users findUserById" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: record<created_at: string, description: string, entities: record<description: record, url: record>, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record<followers_count: int, following_count: int, listed_count: int, tweet_count: int>, url: string, username: string, verified: bool, verified_type: string, withheld: record<country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.fields" $userfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/users/($id)" $qp)
+  let qp = [(serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1690,14 +1690,14 @@ export def "2-users-blocking usersIdBlocking" [
   --accept: string@accept-completer # Response content type
   --max-results: int # The maximum number of results. (format: int32)
   --pagination-token: string # This parameter is used to get a specified 'page' of results.
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/users/($id)/blocking" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/blocking") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1724,8 +1724,8 @@ export def "2-users-blocking usersIdBlock" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/users/($id)/blocking")
-  let body = {target_user_id: $target_user_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/blocking"))
+  let body = {"target_user_id": $target_user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1750,17 +1750,17 @@ export def "2-users-bookmarks get" [
   --accept: string@accept-completer # Response content type
   --max-results: int # The maximum number of results. (format: int32)
   --pagination-token: string # This parameter is used to get the next 'page' of results.
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --pollfields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --placefields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --poll-fields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --place-fields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
 ]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/users/($id)/bookmarks" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/bookmarks") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1771,7 +1771,7 @@ export def "2-users-bookmarks get" [
 # POST /2/users/{id}/bookmarks
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/bookmarks/api-reference/post-users-id-bookmarks
 # operationId: postUsersIdBookmarks
-export def "2-users-bookmarks post" [
+export def "2-users-bookmarks create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1787,8 +1787,8 @@ export def "2-users-bookmarks post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/users/($id)/bookmarks")
-  let body = {tweet_id: $tweet_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/bookmarks"))
+  let body = {"tweet_id": $tweet_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1815,7 +1815,7 @@ export def "2-users-bookmarks usersIdBookmarksDelete" [
 ]: nothing -> record<data: record<bookmarked: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/users/($id)/bookmarks/($tweet_id)")
+  let full_url = (build-url $base ({id: $id, tweet_id: $tweet_id} | format pattern "/2/users/{id}/bookmarks/{tweet_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1839,14 +1839,14 @@ export def "2-users-followed-lists userFollowedLists" [
   --accept: string@accept-completer # Response content type
   --max-results: int # The maximum number of results. (format: int32, default: 100)
   --pagination-token: string # This parameter is used to get a specified 'page' of results.
-  --listfields: list # A comma separated list of List fields to display. (e.g. [created_at, description, follower_count, id, member_count, name, owner_id, private])
+  --list-fields: list # A comma separated list of List fields to display. (e.g. [created_at, description, follower_count, id, member_count, name, owner_id, private])
   --expansions: list # A comma separated list of fields to expand. (e.g. [owner_id])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, follower_count: int, id: string, member_count: int, name: string, owner_id: string, private: bool>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "list.fields" $listfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $userfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/users/($id)/followed_lists" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "list.fields" $list_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/followed_lists") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1857,7 +1857,7 @@ export def "2-users-followed-lists userFollowedLists" [
 # POST /2/users/{id}/followed_lists
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-follows/api-reference/post-users-id-followed-lists
 # operationId: listUserFollow
-export def "2-users-followed-lists listUserFollow" [
+export def "2-users-followed-lists list-user-follow" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1873,8 +1873,8 @@ export def "2-users-followed-lists listUserFollow" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/users/($id)/followed_lists")
-  let body = {list_id: $list_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/followed_lists"))
+  let body = {"list_id": $list_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1886,7 +1886,7 @@ export def "2-users-followed-lists listUserFollow" [
 # DELETE /2/users/{id}/followed_lists/{list_id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-follows/api-reference/delete-users-id-followed-lists-list_id
 # operationId: listUserUnfollow
-export def "2-users-followed-lists listUserUnfollow" [
+export def "2-users-followed-lists list-user-unfollow" [
   id: string
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1901,7 +1901,7 @@ export def "2-users-followed-lists listUserUnfollow" [
 ]: nothing -> record<data: record<following: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/users/($id)/followed_lists/($list_id)")
+  let full_url = (build-url $base ({id: $id, list_id: $list_id} | format pattern "/2/users/{id}/followed_lists/{list_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1925,14 +1925,14 @@ export def "2-users-followers usersIdFollowers" [
   --accept: string@accept-completer # Response content type
   --max-results: int # The maximum number of results. (format: int32)
   --pagination-token: string # This parameter is used to get a specified 'page' of results.
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/users/($id)/followers" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/followers") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1956,14 +1956,14 @@ export def "2-users-following usersIdFollowing" [
   --accept: string@accept-completer # Response content type
   --max-results: int # The maximum number of results. (format: int32)
   --pagination-token: string # This parameter is used to get a specified 'page' of results.
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/users/($id)/following" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/following") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1990,8 +1990,8 @@ export def "2-users-following usersIdFollow" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/users/($id)/following")
-  let body = {target_user_id: $target_user_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/following"))
+  let body = {"target_user_id": $target_user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2016,17 +2016,17 @@ export def "2-users-liked-tweets usersIdLikedTweets" [
   --accept: string@accept-completer # Response content type
   --max-results: int # The maximum number of results. (format: int32)
   --pagination-token: string # This parameter is used to get the next 'page' of results.
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --pollfields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --placefields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --poll-fields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --place-fields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
 ]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/users/($id)/liked_tweets" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/liked_tweets") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2053,8 +2053,8 @@ export def "2-users-likes usersIdLike" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/users/($id)/likes")
-  let body = {tweet_id: $tweet_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/likes"))
+  let body = {"tweet_id": $tweet_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2081,7 +2081,7 @@ export def "2-users-likes usersIdUnlike" [
 ]: nothing -> record<data: record<liked: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/users/($id)/likes/($tweet_id)")
+  let full_url = (build-url $base ({id: $id, tweet_id: $tweet_id} | format pattern "/2/users/{id}/likes/{tweet_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2105,14 +2105,14 @@ export def "2-users-list-memberships get" [
   --accept: string@accept-completer # Response content type
   --max-results: int # The maximum number of results. (format: int32, default: 100)
   --pagination-token: string # This parameter is used to get a specified 'page' of results.
-  --listfields: list # A comma separated list of List fields to display. (e.g. [created_at, description, follower_count, id, member_count, name, owner_id, private])
+  --list-fields: list # A comma separated list of List fields to display. (e.g. [created_at, description, follower_count, id, member_count, name, owner_id, private])
   --expansions: list # A comma separated list of fields to expand. (e.g. [owner_id])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, follower_count: int, id: string, member_count: int, name: string, owner_id: string, private: bool>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "list.fields" $listfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $userfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/users/($id)/list_memberships" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "list.fields" $list_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/list_memberships") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2140,17 +2140,17 @@ export def "2-users-mentions usersIdMentions" [
   --pagination-token: string # This parameter is used to get the next 'page' of results.
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The earliest UTC timestamp from which the Tweets will be provided. The since_id parameter takes precedence if it is also specified. (format: date-time, e.g. 2021-02-01T18:40:40.000Z)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The latest UTC timestamp to which the Tweets will be provided. The until_id parameter takes precedence if it is also specified. (format: date-time, e.g. 2021-02-14T18:40:40.000Z)
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --pollfields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --placefields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --poll-fields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --place-fields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
 ]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/users/($id)/mentions" $qp)
+  let qp = [(serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/mentions") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2174,14 +2174,14 @@ export def "2-users-muting usersIdMuting" [
   --accept: string@accept-completer # Response content type
   --max-results: int # The maximum number of results. (format: int32, default: 100)
   --pagination-token: string # This parameter is used to get the next 'page' of results.
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweetfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/users/($id)/muting" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/muting") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2208,8 +2208,8 @@ export def "2-users-muting usersIdMute" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/users/($id)/muting")
-  let body = {target_user_id: $target_user_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/muting"))
+  let body = {"target_user_id": $target_user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2221,7 +2221,7 @@ export def "2-users-muting usersIdMute" [
 # GET /2/users/{id}/owned_lists
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-lookup/api-reference/get-users-id-owned_lists
 # operationId: listUserOwnedLists
-export def "2-users-owned-lists listUserOwnedLists" [
+export def "2-users-owned-lists list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2234,14 +2234,14 @@ export def "2-users-owned-lists listUserOwnedLists" [
   --accept: string@accept-completer # Response content type
   --max-results: int # The maximum number of results. (format: int32, default: 100)
   --pagination-token: string # This parameter is used to get a specified 'page' of results.
-  --listfields: list # A comma separated list of List fields to display. (e.g. [created_at, description, follower_count, id, member_count, name, owner_id, private])
+  --list-fields: list # A comma separated list of List fields to display. (e.g. [created_at, description, follower_count, id, member_count, name, owner_id, private])
   --expansions: list # A comma separated list of fields to expand. (e.g. [owner_id])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, follower_count: int, id: string, member_count: int, name: string, owner_id: string, private: bool>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "list.fields" $listfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $userfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/users/($id)/owned_lists" $qp)
+  let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "list.fields" $list_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/owned_lists") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2252,7 +2252,7 @@ export def "2-users-owned-lists listUserOwnedLists" [
 # GET /2/users/{id}/pinned_lists
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/pinned-lists/api-reference/get-users-id-pinned_lists
 # operationId: listUserPinnedLists
-export def "2-users-pinned-lists listUserPinnedLists" [
+export def "2-users-pinned-lists list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2263,14 +2263,14 @@ export def "2-users-pinned-lists listUserPinnedLists" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --listfields: list # A comma separated list of List fields to display. (e.g. [created_at, description, follower_count, id, member_count, name, owner_id, private])
+  --list-fields: list # A comma separated list of List fields to display. (e.g. [created_at, description, follower_count, id, member_count, name, owner_id, private])
   --expansions: list # A comma separated list of fields to expand. (e.g. [owner_id])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, follower_count: int, id: string, member_count: int, name: string, owner_id: string, private: bool>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "list.fields" $listfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $userfields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/users/($id)/pinned_lists" $qp)
+  let qp = [(serialize-qp "list.fields" $list_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/pinned_lists") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2281,7 +2281,7 @@ export def "2-users-pinned-lists listUserPinnedLists" [
 # POST /2/users/{id}/pinned_lists
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/pinned-lists/api-reference/post-users-id-pinned-lists
 # operationId: listUserPin
-export def "2-users-pinned-lists listUserPin" [
+export def "2-users-pinned-lists list-user-pin" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2297,8 +2297,8 @@ export def "2-users-pinned-lists listUserPin" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/users/($id)/pinned_lists")
-  let body = {list_id: $list_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/pinned_lists"))
+  let body = {"list_id": $list_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2310,7 +2310,7 @@ export def "2-users-pinned-lists listUserPin" [
 # DELETE /2/users/{id}/pinned_lists/{list_id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/pinned-lists/api-reference/delete-users-id-pinned-lists-list_id
 # operationId: listUserUnpin
-export def "2-users-pinned-lists listUserUnpin" [
+export def "2-users-pinned-lists list-user-unpin" [
   id: string
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2325,7 +2325,7 @@ export def "2-users-pinned-lists listUserUnpin" [
 ]: nothing -> record<data: record<pinned: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/users/($id)/pinned_lists/($list_id)")
+  let full_url = (build-url $base ({id: $id, list_id: $list_id} | format pattern "/2/users/{id}/pinned_lists/{list_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2352,8 +2352,8 @@ export def "2-users-retweets usersIdRetweets" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/users/($id)/retweets")
-  let body = {tweet_id: $tweet_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/retweets"))
+  let body = {"tweet_id": $tweet_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2380,7 +2380,7 @@ export def "2-users-retweets usersIdUnretweets" [
 ]: nothing -> record<data: record<retweeted: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/users/($id)/retweets/($source_tweet_id)")
+  let full_url = (build-url $base ({id: $id, source_tweet_id: $source_tweet_id} | format pattern "/2/users/{id}/retweets/{source_tweet_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2409,17 +2409,17 @@ export def "2-users-timelines-reverse-chronological usersIdTimeline" [
   --exclude: list # The set of entities to exclude (e.g. 'replies' or 'retweets'). (e.g. [replies, retweets])
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The earliest UTC timestamp from which the Tweets will be provided. The since_id parameter takes precedence if it is also specified. (format: date-time, e.g. 2021-02-01T18:40:40.000Z)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The latest UTC timestamp to which the Tweets will be provided. The until_id parameter takes precedence if it is also specified. (format: date-time, e.g. 2021-02-14T18:40:40.000Z)
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --pollfields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --placefields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --poll-fields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --place-fields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
 ]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "exclude" $exclude "csv") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/users/($id)/timelines/reverse_chronological" $qp)
+  let qp = [(serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "exclude" $exclude "csv") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/timelines/reverse_chronological") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2448,17 +2448,17 @@ export def "2-users-tweets usersIdTweets" [
   --exclude: list # The set of entities to exclude (e.g. 'replies' or 'retweets'). (e.g. [replies, retweets])
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The earliest UTC timestamp from which the Tweets will be provided. The since_id parameter takes precedence if it is also specified. (format: date-time, e.g. 2021-02-01T18:40:40.000Z)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The latest UTC timestamp to which the Tweets will be provided. The until_id parameter takes precedence if it is also specified. (format: date-time, e.g. 2021-02-14T18:40:40.000Z)
-  --tweetfields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
+  --tweet-fields: list # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
-  --mediafields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
-  --pollfields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
-  --userfields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-  --placefields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
+  --media-fields: list # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
+  --poll-fields: list # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
+  --user-fields: list # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
+  --place-fields: list # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
 ]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, previous_token: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "exclude" $exclude "csv") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweetfields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $mediafields "csv") (serialize-qp "poll.fields" $pollfields "csv") (serialize-qp "user.fields" $userfields "csv") (serialize-qp "place.fields" $placefields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/2/users/($id)/tweets" $qp)
+  let qp = [(serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "exclude" $exclude "csv") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/2/users/{id}/tweets") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2484,7 +2484,7 @@ export def "2-users-blocking usersIdUnblock" [
 ]: nothing -> record<data: record<blocking: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/users/($source_user_id)/blocking/($target_user_id)")
+  let full_url = (build-url $base ({source_user_id: $source_user_id, target_user_id: $target_user_id} | format pattern "/2/users/{source_user_id}/blocking/{target_user_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2510,7 +2510,7 @@ export def "2-users-following usersIdUnfollow" [
 ]: nothing -> record<data: record<following: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/users/($source_user_id)/following/($target_user_id)")
+  let full_url = (build-url $base ({source_user_id: $source_user_id, target_user_id: $target_user_id} | format pattern "/2/users/{source_user_id}/following/{target_user_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2536,7 +2536,7 @@ export def "2-users-muting usersIdUnmute" [
 ]: nothing -> record<data: record<muting: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/2/users/($source_user_id)/muting/($target_user_id)")
+  let full_url = (build-url $base ({source_user_id: $source_user_id, target_user_id: $target_user_id} | format pattern "/2/users/{source_user_id}/muting/{target_user_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

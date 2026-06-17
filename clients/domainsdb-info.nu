@@ -108,16 +108,16 @@ export def "domains-search item" [
   --domain: string # Domain includes
   --zone: string # In Zone
   --country: string # Hosting Country
-  --isDead: oneof<nothing, bool> # Dead or Not, default not
-  --A: string # A record includes
-  --NS: string # NS record includes
-  --CNAME: string # CNAME record includes
-  --MX: string # MX record includes
-  --TXT: string # TXT record includes
+  --is-dead: oneof<nothing, bool> # Dead or Not, default not
+  --a: string # A record includes
+  --ns: string # NS record includes
+  --cname: string # CNAME record includes
+  --mx: string # MX record includes
+  --txt: string # TXT record includes
 ]: nothing -> record<next_page: string, time: string, total: int, domains: table<A: list, CNAME: list, MX: list, NS: list, TXT: list, country: string, create_date: string, domain: string, isDead: string, update_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "zone" $zone "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "isDead" $isDead "scalar") (serialize-qp "A" $A "scalar") (serialize-qp "NS" $NS "scalar") (serialize-qp "CNAME" $CNAME "scalar") (serialize-qp "MX" $MX "scalar") (serialize-qp "TXT" $TXT "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "zone" $zone "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "isDead" $is_dead "scalar") (serialize-qp "A" $a "scalar") (serialize-qp "NS" $ns "scalar") (serialize-qp "CNAME" $cname "scalar") (serialize-qp "MX" $mx "scalar") (serialize-qp "TXT" $txt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/domains/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -144,17 +144,17 @@ export def "domains-tld item" [
   --limit: int # Results per page (default: 50)
   --domain: string # Domain includes
   --country: string # Hosting Country
-  --isDead: oneof<nothing, bool> # Dead or Not, default not
-  --A: string # A record includes
-  --NS: string # NS record includes
-  --CNAME: string # CNAME record includes
-  --MX: string # MX record includes
-  --TXT: string # TXT record includes
+  --is-dead: oneof<nothing, bool> # Dead or Not, default not
+  --a: string # A record includes
+  --ns: string # NS record includes
+  --cname: string # CNAME record includes
+  --mx: string # MX record includes
+  --txt: string # TXT record includes
 ]: nothing -> record<next_page: string, time: string, total: int, domains: table<A: list, CNAME: list, MX: list, NS: list, TXT: list, country: string, create_date: string, domain: string, isDead: string, update_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "isDead" $isDead "scalar") (serialize-qp "A" $A "scalar") (serialize-qp "NS" $NS "scalar") (serialize-qp "CNAME" $CNAME "scalar") (serialize-qp "MX" $MX "scalar") (serialize-qp "TXT" $TXT "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/tld/($zone_id)" $qp)
+  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "isDead" $is_dead "scalar") (serialize-qp "A" $a "scalar") (serialize-qp "NS" $ns "scalar") (serialize-qp "CNAME" $cname "scalar") (serialize-qp "MX" $mx "scalar") (serialize-qp "TXT" $txt "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({zone_id: $zone_id} | format pattern "/domains/tld/{zone_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,7 +179,7 @@ export def "domains-tld-download get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/tld/($zone_id)/download" $qp)
+  let full_url = (build-url $base ({zone_id: $zone_id} | format pattern "/domains/tld/{zone_id}/download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,17 +204,17 @@ export def "domains-tld-search get" [
   --limit: int # Results per page (default: 50)
   --domain: string # Domain includes
   --country: string # Hosting Country
-  --isDead: oneof<nothing, bool> # Dead or Not, default not
-  --A: string # A record includes
-  --NS: string # NS record includes
-  --CNAME: string # CNAME record includes
-  --MX: string # MX record includes
-  --TXT: string # TXT record includes
+  --is-dead: oneof<nothing, bool> # Dead or Not, default not
+  --a: string # A record includes
+  --ns: string # NS record includes
+  --cname: string # CNAME record includes
+  --mx: string # MX record includes
+  --txt: string # TXT record includes
 ]: nothing -> record<next_page: string, time: string, total: int, domains: table<A: list, CNAME: list, MX: list, NS: list, TXT: list, country: string, create_date: string, domain: string, isDead: string, update_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "isDead" $isDead "scalar") (serialize-qp "A" $A "scalar") (serialize-qp "NS" $NS "scalar") (serialize-qp "CNAME" $CNAME "scalar") (serialize-qp "MX" $MX "scalar") (serialize-qp "TXT" $TXT "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/tld/($zone_id)/search" $qp)
+  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "isDead" $is_dead "scalar") (serialize-qp "A" $a "scalar") (serialize-qp "NS" $ns "scalar") (serialize-qp "CNAME" $cname "scalar") (serialize-qp "MX" $mx "scalar") (serialize-qp "TXT" $txt "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({zone_id: $zone_id} | format pattern "/domains/tld/{zone_id}/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,7 +411,7 @@ export def "info-stat item" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/info/stat/($zone)" $qp)
+  let full_url = (build-url $base ({zone: $zone} | format pattern "/info/stat/{zone}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -457,7 +457,7 @@ export def "info-tld get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/info/tld/($zone)" $qp)
+  let full_url = (build-url $base ({zone: $zone} | format pattern "/info/tld/{zone}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

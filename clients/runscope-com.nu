@@ -150,7 +150,7 @@ export def "buckets post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/buckets")
-  let body = {name: $name, team_id: $team_id} | compact
+  let body = {"name": $name, "team_id": $team_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -161,7 +161,7 @@ export def "buckets post" [
 #
 # DELETE /buckets/{bucketKey}
 export def "buckets delete" [
-  bucketKey: string
+  bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "buckets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)")
+  let full_url = (build-url $base ({bucket_key: $bucket_key} | format pattern "/buckets/{bucket_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,7 +183,7 @@ export def "buckets delete" [
 #
 # GET /buckets/{bucketKey}
 export def "buckets get" [
-  bucketKey: string
+  bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "buckets get" [
 ]: nothing -> record<auth_token: string, collections_url: string, default: bool, key: string, messages_url: string, name: string, team: record<id: string, name: string>, tests_url: string, trigger_url: string, verify_ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)")
+  let full_url = (build-url $base ({bucket_key: $bucket_key} | format pattern "/buckets/{bucket_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -205,7 +205,7 @@ export def "buckets get" [
 #
 # GET /buckets/{bucketKey}/environments
 export def "buckets-environments get" [
-  bucketKey: string
+  bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "buckets-environments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/environments")
+  let full_url = (build-url $base ({bucket_key: $bucket_key} | format pattern "/buckets/{bucket_key}/environments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -229,7 +229,7 @@ export def "buckets-environments get" [
 # --integrations item shape: {description?: string, id?: string, type?: string, uuid?: string}
 # --remote_agents item shape: {agent_id?: string, name?: string, version?: string}
 export def "buckets-environments post" [
-  bucketKey: string
+  bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,8 +264,8 @@ export def "buckets-environments post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/environments")
-  let body = {auth: $body_auth, client_certificate: $client_certificate, emails: $emails, exported_at: $exported_at, headers: $headers, id: $id, initial_script_hash: $initial_script_hash, initial_variables: $initial_variables, integrations: $integrations, name: $name, parent_environment_id: $parent_environment_id, preserve_cookies: $preserve_cookies, regions: $regions, remote_agents: $remote_agents, retry_on_failure: $retry_on_failure, script: $script, script_library: $script_library, stop_on_failure: $stop_on_failure, test_id: $test_id, verify_ssl: $verify_ssl, version: $version, webhooks: $webhooks} | compact
+  let full_url = (build-url $base ({bucket_key: $bucket_key} | format pattern "/buckets/{bucket_key}/environments"))
+  let body = {"auth": $body_auth, "client_certificate": $client_certificate, "emails": $emails, "exported_at": $exported_at, "headers": $headers, "id": $id, "initial_script_hash": $initial_script_hash, "initial_variables": $initial_variables, "integrations": $integrations, "name": $name, "parent_environment_id": $parent_environment_id, "preserve_cookies": $preserve_cookies, "regions": $regions, "remote_agents": $remote_agents, "retry_on_failure": $retry_on_failure, "script": $script, "script_library": $script_library, "stop_on_failure": $stop_on_failure, "test_id": $test_id, "verify_ssl": $verify_ssl, "version": $version, "webhooks": $webhooks} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -278,8 +278,8 @@ export def "buckets-environments post" [
 # --integrations item shape: {description?: string, id?: string, type?: string, uuid?: string}
 # --remote_agents item shape: {agent_id?: string, name?: string, version?: string}
 export def "buckets-environments put" [
-  bucketKey: string
-  environmentId: string
+  bucket_key: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,8 +314,8 @@ export def "buckets-environments put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/environments/($environmentId)")
-  let body = {auth: $body_auth, client_certificate: $client_certificate, emails: $emails, exported_at: $exported_at, headers: $headers, id: $id, initial_script_hash: $initial_script_hash, initial_variables: $initial_variables, integrations: $integrations, name: $name, parent_environment_id: $parent_environment_id, preserve_cookies: $preserve_cookies, regions: $regions, remote_agents: $remote_agents, retry_on_failure: $retry_on_failure, script: $script, script_library: $script_library, stop_on_failure: $stop_on_failure, test_id: $test_id, verify_ssl: $verify_ssl, version: $version, webhooks: $webhooks} | compact
+  let full_url = (build-url $base ({bucket_key: $bucket_key, environment_id: $environment_id} | format pattern "/buckets/{bucket_key}/environments/{environment_id}"))
+  let body = {"auth": $body_auth, "client_certificate": $client_certificate, "emails": $emails, "exported_at": $exported_at, "headers": $headers, "id": $id, "initial_script_hash": $initial_script_hash, "initial_variables": $initial_variables, "integrations": $integrations, "name": $name, "parent_environment_id": $parent_environment_id, "preserve_cookies": $preserve_cookies, "regions": $regions, "remote_agents": $remote_agents, "retry_on_failure": $retry_on_failure, "script": $script, "script_library": $script_library, "stop_on_failure": $stop_on_failure, "test_id": $test_id, "verify_ssl": $verify_ssl, "version": $version, "webhooks": $webhooks} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -326,7 +326,7 @@ export def "buckets-environments put" [
 #
 # GET /buckets/{bucketKey}/errors
 export def "buckets-errors get" [
-  bucketKey: string
+  bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,7 +342,7 @@ export def "buckets-errors get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/buckets/($bucketKey)/errors" $qp)
+  let full_url = (build-url $base ({bucket_key: $bucket_key} | format pattern "/buckets/{bucket_key}/errors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -352,7 +352,7 @@ export def "buckets-errors get" [
 #
 # DELETE /buckets/{bucketKey}/messages
 export def "buckets-messages delete" [
-  bucketKey: string
+  bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "buckets-messages delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/messages")
+  let full_url = (build-url $base ({bucket_key: $bucket_key} | format pattern "/buckets/{bucket_key}/messages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -374,7 +374,7 @@ export def "buckets-messages delete" [
 #
 # GET /buckets/{bucketKey}/messages
 export def "buckets-messages list" [
-  bucketKey: string
+  bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,7 +390,7 @@ export def "buckets-messages list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/buckets/($bucketKey)/messages" $qp)
+  let full_url = (build-url $base ({bucket_key: $bucket_key} | format pattern "/buckets/{bucket_key}/messages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -402,7 +402,7 @@ export def "buckets-messages list" [
 # --request shape: {body?: string, body_encoding?: string, form?: string, headers?: string, method?: string, timestamp?: float, url?: string}
 # --response shape: {body?: string, body_encoding?: string, headers?: string, reason?: string, response_time?: float, status?: int, timestamp?: float}
 export def "buckets-messages post" [
-  bucketKey: string
+  bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,8 +417,8 @@ export def "buckets-messages post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/messages")
-  let body = {request: $request, response: $response} | compact
+  let full_url = (build-url $base ({bucket_key: $bucket_key} | format pattern "/buckets/{bucket_key}/messages"))
+  let body = {"request": $request, "response": $response} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -429,8 +429,8 @@ export def "buckets-messages post" [
 #
 # GET /buckets/{bucketKey}/messages/{messageId}
 export def "buckets-messages get" [
-  bucketKey: string
-  messageId: string
+  bucket_key: string
+  message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -442,7 +442,7 @@ export def "buckets-messages get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/messages/($messageId)")
+  let full_url = (build-url $base ({bucket_key: $bucket_key, message_id: $message_id} | format pattern "/buckets/{bucket_key}/messages/{message_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -452,7 +452,7 @@ export def "buckets-messages get" [
 #
 # GET /buckets/{bucketKey}/tests
 export def "buckets-tests list" [
-  bucketKey: string
+  bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -464,7 +464,7 @@ export def "buckets-tests list" [
 ]: nothing -> record<data: table<created_at: int, created_by: record, default_environment_id: string, description: string, id: string, last_run: record, name: string, trigger_url: string>, meta: record<status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/tests")
+  let full_url = (build-url $base ({bucket_key: $bucket_key} | format pattern "/buckets/{bucket_key}/tests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -475,7 +475,7 @@ export def "buckets-tests list" [
 # POST /buckets/{bucketKey}/tests
 # --created_by shape: {email?: string, id?: string, name?: string}
 export def "buckets-tests post" [
-  bucketKey: string
+  bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,8 +496,8 @@ export def "buckets-tests post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/tests")
-  let body = {created_at: $created_at, created_by: $created_by, default_environment_id: $default_environment_id, description: $description, id: $id, last_run: $last_run, name: $name, trigger_url: $trigger_url} | compact
+  let full_url = (build-url $base ({bucket_key: $bucket_key} | format pattern "/buckets/{bucket_key}/tests"))
+  let body = {"created_at": $created_at, "created_by": $created_by, "default_environment_id": $default_environment_id, "description": $description, "id": $id, "last_run": $last_run, "name": $name, "trigger_url": $trigger_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -508,8 +508,8 @@ export def "buckets-tests post" [
 #
 # DELETE /buckets/{bucketKey}/tests/{testId}
 export def "buckets-tests delete" [
-  bucketKey: string
-  testId: string
+  bucket_key: string
+  test_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -521,7 +521,7 @@ export def "buckets-tests delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/tests/($testId)")
+  let full_url = (build-url $base ({bucket_key: $bucket_key, test_id: $test_id} | format pattern "/buckets/{bucket_key}/tests/{test_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -531,8 +531,8 @@ export def "buckets-tests delete" [
 #
 # GET /buckets/{bucketKey}/tests/{testId}
 export def "buckets-tests get" [
-  bucketKey: string
-  testId: string
+  bucket_key: string
+  test_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -544,7 +544,7 @@ export def "buckets-tests get" [
 ]: nothing -> record<environments: record<auth: string, client_certificate: string, emails: record, exported_at: int, headers: record, id: string, initial_script_hash: string, initial_variables: record, integrations: list<record>, name: string, parent_environment_id: string, preserve_cookies: bool, regions: list<string>, remote_agents: list<record>, retry_on_failure: bool, script: string, script_library: list<string>, stop_on_failure: bool, test_id: string, verify_ssl: bool, version: string, webhooks: string>, exported_at: int, last_run: record, schedules: table<environment_id: string, exported_at: int, id: string, interval: string, note: string, version: string>, steps: list<record>, version: string, created_at: int, created_by: record<email: string, id: string, name: string>, default_environment_id: string, description: string, id: string, name: string, trigger_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/tests/($testId)")
+  let full_url = (build-url $base ({bucket_key: $bucket_key, test_id: $test_id} | format pattern "/buckets/{bucket_key}/tests/{test_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -554,8 +554,8 @@ export def "buckets-tests get" [
 #
 # PUT /buckets/{bucketKey}/tests/{testId}
 export def "buckets-tests put" [
-  bucketKey: string
-  testId: string
+  bucket_key: string
+  test_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -567,7 +567,7 @@ export def "buckets-tests put" [
 ]: nothing -> record<environments: record<auth: string, client_certificate: string, emails: record, exported_at: int, headers: record, id: string, initial_script_hash: string, initial_variables: record, integrations: list<record>, name: string, parent_environment_id: string, preserve_cookies: bool, regions: list<string>, remote_agents: list<record>, retry_on_failure: bool, script: string, script_library: list<string>, stop_on_failure: bool, test_id: string, verify_ssl: bool, version: string, webhooks: string>, exported_at: int, last_run: record, schedules: table<environment_id: string, exported_at: int, id: string, interval: string, note: string, version: string>, steps: list<record>, version: string, created_at: int, created_by: record<email: string, id: string, name: string>, default_environment_id: string, description: string, id: string, name: string, trigger_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/tests/($testId)")
+  let full_url = (build-url $base ({bucket_key: $bucket_key, test_id: $test_id} | format pattern "/buckets/{bucket_key}/tests/{test_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -577,8 +577,8 @@ export def "buckets-tests put" [
 #
 # GET /buckets/{bucketKey}/tests/{testId}/environments
 export def "buckets-tests-environments get" [
-  bucketKey: string
-  testId: string
+  bucket_key: string
+  test_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,7 +590,7 @@ export def "buckets-tests-environments get" [
 ]: nothing -> record<data: table<auth: string, client_certificate: string, emails: record, exported_at: int, headers: record, id: string, initial_script_hash: string, initial_variables: record, integrations: list, name: string, parent_environment_id: string, preserve_cookies: bool, regions: list, remote_agents: list, retry_on_failure: bool, script: string, script_library: list, stop_on_failure: bool, test_id: string, verify_ssl: bool, version: string, webhooks: string>, meta: record<status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/tests/($testId)/environments")
+  let full_url = (build-url $base ({bucket_key: $bucket_key, test_id: $test_id} | format pattern "/buckets/{bucket_key}/tests/{test_id}/environments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -602,8 +602,8 @@ export def "buckets-tests-environments get" [
 # --integrations item shape: {description?: string, id?: string, type?: string, uuid?: string}
 # --remote_agents item shape: {agent_id?: string, name?: string, version?: string}
 export def "buckets-tests-environments post" [
-  bucketKey: string
-  testId: string
+  bucket_key: string
+  test_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,7 +630,7 @@ export def "buckets-tests-environments post" [
   --script: string
   --script-library: list # The list of ids for scripts, part of the script libraries, being used for this environment.
   --stop-on-failure: oneof<nothing, bool> # Stop executing the test after the first failed step.
-  --test-id: string # The unique identifier for this test.
+  --body-test-id: string # The unique identifier for this test.
   --verify-ssl: oneof<nothing, bool> # Validate all SSL certificates on any HTTPS connections.
   --version: string
   --webhooks: string
@@ -638,8 +638,8 @@ export def "buckets-tests-environments post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/tests/($testId)/environments")
-  let body = {auth: $body_auth, client_certificate: $client_certificate, emails: $emails, exported_at: $exported_at, headers: $headers, id: $id, initial_script_hash: $initial_script_hash, initial_variables: $initial_variables, integrations: $integrations, name: $name, parent_environment_id: $parent_environment_id, preserve_cookies: $preserve_cookies, regions: $regions, remote_agents: $remote_agents, retry_on_failure: $retry_on_failure, script: $script, script_library: $script_library, stop_on_failure: $stop_on_failure, test_id: $test_id, verify_ssl: $verify_ssl, version: $version, webhooks: $webhooks} | compact
+  let full_url = (build-url $base ({bucket_key: $bucket_key, test_id: $test_id} | format pattern "/buckets/{bucket_key}/tests/{test_id}/environments"))
+  let body = {"auth": $body_auth, "client_certificate": $client_certificate, "emails": $emails, "exported_at": $exported_at, "headers": $headers, "id": $id, "initial_script_hash": $initial_script_hash, "initial_variables": $initial_variables, "integrations": $integrations, "name": $name, "parent_environment_id": $parent_environment_id, "preserve_cookies": $preserve_cookies, "regions": $regions, "remote_agents": $remote_agents, "retry_on_failure": $retry_on_failure, "script": $script, "script_library": $script_library, "stop_on_failure": $stop_on_failure, "test_id": $body_test_id, "verify_ssl": $verify_ssl, "version": $version, "webhooks": $webhooks} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -652,9 +652,9 @@ export def "buckets-tests-environments post" [
 # --integrations item shape: {description?: string, id?: string, type?: string, uuid?: string}
 # --remote_agents item shape: {agent_id?: string, name?: string, version?: string}
 export def "buckets-tests-environments put" [
-  bucketKey: string
-  testId: string
-  environmentId: string
+  bucket_key: string
+  test_id: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,7 +681,7 @@ export def "buckets-tests-environments put" [
   --script: string
   --script-library: list # The list of ids for scripts, part of the script libraries, being used for this environment.
   --stop-on-failure: oneof<nothing, bool> # Stop executing the test after the first failed step.
-  --test-id: string # The unique identifier for this test.
+  --body-test-id: string # The unique identifier for this test.
   --verify-ssl: oneof<nothing, bool> # Validate all SSL certificates on any HTTPS connections.
   --version: string
   --webhooks: string
@@ -689,8 +689,8 @@ export def "buckets-tests-environments put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/tests/($testId)/environments/($environmentId)")
-  let body = {auth: $body_auth, client_certificate: $client_certificate, emails: $emails, exported_at: $exported_at, headers: $headers, id: $id, initial_script_hash: $initial_script_hash, initial_variables: $initial_variables, integrations: $integrations, name: $name, parent_environment_id: $parent_environment_id, preserve_cookies: $preserve_cookies, regions: $regions, remote_agents: $remote_agents, retry_on_failure: $retry_on_failure, script: $script, script_library: $script_library, stop_on_failure: $stop_on_failure, test_id: $test_id, verify_ssl: $verify_ssl, version: $version, webhooks: $webhooks} | compact
+  let full_url = (build-url $base ({bucket_key: $bucket_key, test_id: $test_id, environment_id: $environment_id} | format pattern "/buckets/{bucket_key}/tests/{test_id}/environments/{environment_id}"))
+  let body = {"auth": $body_auth, "client_certificate": $client_certificate, "emails": $emails, "exported_at": $exported_at, "headers": $headers, "id": $id, "initial_script_hash": $initial_script_hash, "initial_variables": $initial_variables, "integrations": $integrations, "name": $name, "parent_environment_id": $parent_environment_id, "preserve_cookies": $preserve_cookies, "regions": $regions, "remote_agents": $remote_agents, "retry_on_failure": $retry_on_failure, "script": $script, "script_library": $script_library, "stop_on_failure": $stop_on_failure, "test_id": $body_test_id, "verify_ssl": $verify_ssl, "version": $version, "webhooks": $webhooks} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -701,8 +701,8 @@ export def "buckets-tests-environments put" [
 #
 # GET /buckets/{bucketKey}/tests/{testId}/metrics
 export def "buckets-tests-metrics get" [
-  bucketKey: string
-  testId: string
+  bucket_key: string
+  test_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -714,7 +714,7 @@ export def "buckets-tests-metrics get" [
 ]: nothing -> record<changes_from_last_period: record, environment_uuid: string, region: string, response_times: table<avg_response_time_ms: int, success_ratio: int, timestamp: int>, this_time_period: record, timeframe: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/tests/($testId)/metrics")
+  let full_url = (build-url $base ({bucket_key: $bucket_key, test_id: $test_id} | format pattern "/buckets/{bucket_key}/tests/{test_id}/metrics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -724,8 +724,8 @@ export def "buckets-tests-metrics get" [
 #
 # GET /buckets/{bucketKey}/tests/{testId}/steps
 export def "buckets-tests-steps get" [
-  bucketKey: string
-  testId: string
+  bucket_key: string
+  test_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,7 +737,7 @@ export def "buckets-tests-steps get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/tests/($testId)/steps")
+  let full_url = (build-url $base ({bucket_key: $bucket_key, test_id: $test_id} | format pattern "/buckets/{bucket_key}/tests/{test_id}/steps"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -747,8 +747,8 @@ export def "buckets-tests-steps get" [
 #
 # POST /buckets/{bucketKey}/tests/{testId}/steps
 export def "buckets-tests-steps post" [
-  bucketKey: string
-  testId: string
+  bucket_key: string
+  test_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -762,8 +762,8 @@ export def "buckets-tests-steps post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/tests/($testId)/steps")
-  let body = {step_type: $step_type} | compact
+  let full_url = (build-url $base ({bucket_key: $bucket_key, test_id: $test_id} | format pattern "/buckets/{bucket_key}/tests/{test_id}/steps"))
+  let body = {"step_type": $step_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -774,9 +774,9 @@ export def "buckets-tests-steps post" [
 #
 # DELETE /buckets/{bucketKey}/tests/{testId}/steps/{stepId}
 export def "buckets-tests-steps delete" [
-  bucketKey: string
-  testId: string
-  stepId: string
+  bucket_key: string
+  test_id: string
+  step_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,7 +788,7 @@ export def "buckets-tests-steps delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/tests/($testId)/steps/($stepId)")
+  let full_url = (build-url $base ({bucket_key: $bucket_key, test_id: $test_id, step_id: $step_id} | format pattern "/buckets/{bucket_key}/tests/{test_id}/steps/{step_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -798,9 +798,9 @@ export def "buckets-tests-steps delete" [
 #
 # PUT /buckets/{bucketKey}/tests/{testId}/steps/{stepId}
 export def "buckets-tests-steps put" [
-  bucketKey: string
-  testId: string
-  stepId: string
+  bucket_key: string
+  test_id: string
+  step_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -814,8 +814,8 @@ export def "buckets-tests-steps put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketKey)/tests/($testId)/steps/($stepId)")
-  let body = {step_type: $step_type} | compact
+  let full_url = (build-url $base ({bucket_key: $bucket_key, test_id: $test_id, step_id: $step_id} | format pattern "/buckets/{bucket_key}/tests/{test_id}/steps/{step_id}"))
+  let body = {"step_type": $step_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -826,7 +826,7 @@ export def "buckets-tests-steps put" [
 #
 # GET /teams/{teamId}/agents
 export def "teams-agents get" [
-  teamId: string
+  team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -838,7 +838,7 @@ export def "teams-agents get" [
 ]: nothing -> table<agent_id: string, name: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($teamId)/agents")
+  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/agents"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -848,7 +848,7 @@ export def "teams-agents get" [
 #
 # GET /teams/{teamId}/integrations
 export def "teams-integrations get" [
-  teamId: string
+  team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -860,7 +860,7 @@ export def "teams-integrations get" [
 ]: nothing -> record<data: table<description: string, id: string, type: string, uuid: string>, meta: record<status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($teamId)/integrations")
+  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/integrations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -870,7 +870,7 @@ export def "teams-integrations get" [
 #
 # GET /teams/{teamId}/people
 export def "teams-people get" [
-  teamId: string
+  team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -882,7 +882,7 @@ export def "teams-people get" [
 ]: nothing -> table<email: string, id: string, name: string, teams: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($teamId)/people")
+  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/people"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

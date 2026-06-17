@@ -146,7 +146,7 @@ export def "key register" [
 # DELETE /key/{PK}
 # operationId: key_revoke
 export def "key revoke" [
-  PK: string
+  pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "key revoke" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "secret" $secret "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/key/($PK)" $qp)
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/key/{pk}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,7 +171,7 @@ export def "key revoke" [
 # GET /key/{PK}
 # operationId: key_retrieve
 export def "key get" [
-  PK: string
+  pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "key get" [
 ]: nothing -> record<since: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/key/($PK)")
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/key/{pk}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -193,7 +193,7 @@ export def "key get" [
 #
 # HEAD /key/{PK}
 export def "key head" [
-  PK: string
+  pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "key head" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/key/($PK)")
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/key/{pk}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -216,7 +216,7 @@ export def "key head" [
 # POST /key/{PK}
 # operationId: key_update
 export def "key update" [
-  PK: string
+  pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "key update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/key/($PK)")
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/key/{pk}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -242,7 +242,7 @@ export def "key update" [
 # PUT /key/{PK}
 # operationId: key_bind
 export def "key bind" [
-  PK: string
+  pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "key bind" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/key/($PK)")
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/key/{pk}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -334,7 +334,7 @@ export def "scope delete" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scope/($job)")
+  let full_url = (build-url $base ({job: $job} | format pattern "/scope/{job}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -358,7 +358,7 @@ export def "scope get" [
 ]: nothing -> record<exp: int, field: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scope/($job)")
+  let full_url = (build-url $base ({job: $job} | format pattern "/scope/{job}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -381,7 +381,7 @@ export def "scope head" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scope/($job)")
+  let full_url = (build-url $base ({job: $job} | format pattern "/scope/{job}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -404,7 +404,7 @@ export def "scope confirm" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scope/($job)")
+  let full_url = (build-url $base ({job: $job} | format pattern "/scope/{job}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -427,7 +427,7 @@ export def "scope update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scope/($job)")
+  let full_url = (build-url $base ({job: $job} | format pattern "/scope/{job}"))
   let accept_val = "application/jwt"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

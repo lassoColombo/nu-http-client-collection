@@ -66,12 +66,12 @@ def base-url-completer [] { ["https://frontline-api.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
 # Completers for enum parameters
-def State-completer [] { ["active" "deactivated"] }
+def state-completer [] { ["active" "deactivated"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "users FetchUser" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "users get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,8 +95,8 @@ export def commands []: nothing -> table {
 #
 # GET /v1/Users/{Sid}
 # operationId: FetchUser
-export def "users FetchUser" [
-  Sid: string
+export def "users get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "users FetchUser" [
 ]: nothing -> record<avatar: string, friendly_name: string, identity: string, is_available: bool, sid: string, state: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://frontline-api.twilio.com")
-  let full_url = (build-url $base $"/v1/Users/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Users/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,8 +118,8 @@ export def "users FetchUser" [
 #
 # POST /v1/Users/{Sid}
 # operationId: UpdateUser
-export def "users UpdateUser" [
-  Sid: string
+export def "users update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,16 +128,16 @@ export def "users UpdateUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Avatar: string # The avatar URL which will be shown in Frontline application.
-  --FriendlyName: string # The string that you assigned to describe the User.
-  --IsAvailable: oneof<nothing, bool> # Whether the User is available for new conversations. Set to `false` to prevent User from receiving new inbound conversations if you are using [Pool Routing](https://www.twilio.com/docs/frontline/handle-incoming-conversations#3-pool-routing).
-  --State: string@State-completer
+  --avatar: string # The avatar URL which will be shown in Frontline application.
+  --friendly-name: string # The string that you assigned to describe the User.
+  --is-available: oneof<nothing, bool> # Whether the User is available for new conversations. Set to `false` to prevent User from receiving new inbound conversations if you are using [Pool Routing](https://www.twilio.com/docs/frontline/handle-incoming-conversations#3-pool-routing).
+  --state: string@state-completer
 ]: any -> record<avatar: string, friendly_name: string, identity: string, is_available: bool, sid: string, state: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://frontline-api.twilio.com")
-  let full_url = (build-url $base $"/v1/Users/($Sid)")
-  let body = {Avatar: $Avatar, FriendlyName: $FriendlyName, IsAvailable: $IsAvailable, State: $State} | compact
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Users/{sid}"))
+  let body = {"Avatar": $avatar, "FriendlyName": $friendly_name, "IsAvailable": $is_available, "State": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

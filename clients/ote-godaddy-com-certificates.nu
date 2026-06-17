@@ -65,9 +65,9 @@ def base-url-completer [] { ["http://localhost//api.ote-godaddy.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def productType-completer [] { ["DV_SSL" "DV_WILDCARD_SSL" "EV_SSL" "OV_CS" "OV_DS" "OV_SSL" "OV_WILDCARD_SSL" "UCC_DV_SSL" "UCC_EV_SSL" "UCC_OV_SSL"] }
-def rootType-completer [] { ["GODADDY_SHA_1" "GODADDY_SHA_2" "STARFIELD_SHA_1" "STARFIELD_SHA_2"] }
-def slotSize-completer [] { ["FIFTEEN" "FIFTY" "FIVE" "FOURTY" "ONE_HUNDRED" "TEN" "THIRTY" "TWENTY"] }
+def product-type-completer [] { ["DV_SSL" "DV_WILDCARD_SSL" "EV_SSL" "OV_CS" "OV_DS" "OV_SSL" "OV_WILDCARD_SSL" "UCC_DV_SSL" "UCC_EV_SSL" "UCC_OV_SSL"] }
+def root-type-completer [] { ["GODADDY_SHA_1" "GODADDY_SHA_2" "STARFIELD_SHA_1" "STARFIELD_SHA_2"] }
+def slot-size-completer [] { ["FIFTEEN" "FIFTY" "FIVE" "FOURTY" "ONE_HUNDRED" "TEN" "THIRTY" "TWENTY"] }
 def reason-completer [] { ["AFFILIATION_CHANGED" "CESSATION_OF_OPERATION" "KEY_COMPROMISE" "PRIVILEGE_WITHDRAWN" "SUPERSEDED"] }
 def theme-completer [] { ["DARK" "LIGHT"] }
 
@@ -109,26 +109,26 @@ export def "certificates create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Market-Id: string # Setting locale for communications such as emails and error messages
-  --callbackUrl: string # Required if client would like to receive stateful actions via callback during certificate lifecyle
-  --commonName: string # Name to be secured in certificate. If provided, CN field in CSR will be ignored.
+  --x-market-id: string # Setting locale for communications such as emails and error messages
+  --callback-url: string # Required if client would like to receive stateful actions via callback during certificate lifecyle
+  --common-name: string # Name to be secured in certificate. If provided, CN field in CSR will be ignored.
   contact: any # shape: {email: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, phone: string, suffix?: string}
   csr: string # Certificate Signing Request
-  --intelVPro: oneof<nothing, bool> # Only used for OV (default: false)
+  --intel-v-pro: oneof<nothing, bool> # Only used for OV (default: false)
   --organization: any # shape: {address?: any, assumedName?: string, name: string, phone: string, registrationAgent?: string, registrationNumber?: string}
   period: int # Number of years for certificate validity period
-  productType: string@productType-completer # Type of product requesting a certificate. Only required non-renewal
-  --rootType: string@rootType-completer # Root Type. Depending on certificate expiration date, SHA_1 not be allowed. Will default to SHA_2 if expiration date exceeds sha1 allowed date (default: STARFIELD_SHA_2)
-  --slotSize: string@slotSize-completer # Number of subject alternative names(SAN) to be included in certificate 
-  --subjectAlternativeNames: list # Subject Alternative names. Collection of subjectAlternativeNames to be included in certificate.
+  product_type: string@product-type-completer # Type of product requesting a certificate. Only required non-renewal
+  --root-type: string@root-type-completer # Root Type. Depending on certificate expiration date, SHA_1 not be allowed. Will default to SHA_2 if expiration date exceeds sha1 allowed date (default: STARFIELD_SHA_2)
+  --slot-size: string@slot-size-completer # Number of subject alternative names(SAN) to be included in certificate 
+  --subject-alternative-names: list # Subject Alternative names. Collection of subjectAlternativeNames to be included in certificate.
 ]: any -> record<certificateId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/certificates")
-  let body = {callbackUrl: $callbackUrl, commonName: $commonName, contact: $contact, csr: $csr, intelVPro: $intelVPro, organization: $organization, period: $period, productType: $productType, rootType: $rootType, slotSize: $slotSize, subjectAlternativeNames: $subjectAlternativeNames} | compact
+  let body = {"callbackUrl": $callback_url, "commonName": $common_name, "contact": $contact, "csr": $csr, "intelVPro": $intel_v_pro, "organization": $organization, "period": $period, "productType": $product_type, "rootType": $root_type, "slotSize": $slot_size, "subjectAlternativeNames": $subject_alternative_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Market-Id": $X_Market_Id} | compact
+  let extra_headers = {"X-Market-Id": $x_market_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -150,26 +150,26 @@ export def "certificates-validate validate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Market-Id: string # Setting locale for communications such as emails and error messages
-  --callbackUrl: string # Required if client would like to receive stateful actions via callback during certificate lifecyle
-  --commonName: string # Name to be secured in certificate. If provided, CN field in CSR will be ignored.
+  --x-market-id: string # Setting locale for communications such as emails and error messages
+  --callback-url: string # Required if client would like to receive stateful actions via callback during certificate lifecyle
+  --common-name: string # Name to be secured in certificate. If provided, CN field in CSR will be ignored.
   contact: any # shape: {email: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, phone: string, suffix?: string}
   csr: string # Certificate Signing Request
-  --intelVPro: oneof<nothing, bool> # Only used for OV (default: false)
+  --intel-v-pro: oneof<nothing, bool> # Only used for OV (default: false)
   --organization: any # shape: {address?: any, assumedName?: string, name: string, phone: string, registrationAgent?: string, registrationNumber?: string}
   period: int # Number of years for certificate validity period
-  productType: string@productType-completer # Type of product requesting a certificate. Only required non-renewal
-  --rootType: string@rootType-completer # Root Type. Depending on certificate expiration date, SHA_1 not be allowed. Will default to SHA_2 if expiration date exceeds sha1 allowed date (default: STARFIELD_SHA_2)
-  --slotSize: string@slotSize-completer # Number of subject alternative names(SAN) to be included in certificate 
-  --subjectAlternativeNames: list # Subject Alternative names. Collection of subjectAlternativeNames to be included in certificate.
+  product_type: string@product-type-completer # Type of product requesting a certificate. Only required non-renewal
+  --root-type: string@root-type-completer # Root Type. Depending on certificate expiration date, SHA_1 not be allowed. Will default to SHA_2 if expiration date exceeds sha1 allowed date (default: STARFIELD_SHA_2)
+  --slot-size: string@slot-size-completer # Number of subject alternative names(SAN) to be included in certificate 
+  --subject-alternative-names: list # Subject Alternative names. Collection of subjectAlternativeNames to be included in certificate.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/certificates/validate")
-  let body = {callbackUrl: $callbackUrl, commonName: $commonName, contact: $contact, csr: $csr, intelVPro: $intelVPro, organization: $organization, period: $period, productType: $productType, rootType: $rootType, slotSize: $slotSize, subjectAlternativeNames: $subjectAlternativeNames} | compact
+  let body = {"callbackUrl": $callback_url, "commonName": $common_name, "contact": $contact, "csr": $csr, "intelVPro": $intel_v_pro, "organization": $organization, "period": $period, "productType": $product_type, "rootType": $root_type, "slotSize": $slot_size, "subjectAlternativeNames": $subject_alternative_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Market-Id": $X_Market_Id} | compact
+  let extra_headers = {"X-Market-Id": $x_market_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -181,7 +181,7 @@ export def "certificates-validate validate" [
 # GET /v1/certificates/{certificateId}
 # operationId: certificate_get
 export def "certificates get" [
-  certificateId: string
+  certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "certificates get" [
 ]: nothing -> record<certificateId: string, commonName: string, contact: record<email: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, phone: string, suffix: string>, createdAt: string, deniedReason: string, organization: record<address: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, assumedName: string, jurisdictionOfIncorporation: record<city: string, country: string, county: string, state: string>, name: string, phone: string, registrationAgent: string, registrationNumber: string>, period: int, productType: string, progress: int, revokedAt: string, rootType: string, serialNumber: string, serialNumberHex: string, slotSize: string, status: string, subjectAlternativeNames: table<status: string, subjectAlternativeName: string>, validEnd: string, validStart: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/certificates/($certificateId)")
+  let full_url = (build-url $base ({certificate_id: $certificate_id} | format pattern "/v1/certificates/{certificate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,7 +204,7 @@ export def "certificates get" [
 # GET /v1/certificates/{certificateId}/actions
 # operationId: certificate_action_retrieve
 export def "certificates-actions get" [
-  certificateId: string
+  certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "certificates-actions get" [
 ]: nothing -> table<createdAt: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/certificates/($certificateId)/actions")
+  let full_url = (build-url $base ({certificate_id: $certificate_id} | format pattern "/v1/certificates/{certificate_id}/actions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -227,7 +227,7 @@ export def "certificates-actions get" [
 # DELETE /v1/certificates/{certificateId}/callback
 # operationId: certificate_callback_delete
 export def "certificates-callback delete" [
-  certificateId: string
+  certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "certificates-callback delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/certificates/($certificateId)/callback")
+  let full_url = (build-url $base ({certificate_id: $certificate_id} | format pattern "/v1/certificates/{certificate_id}/callback"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,7 +250,7 @@ export def "certificates-callback delete" [
 # GET /v1/certificates/{certificateId}/callback
 # operationId: certificate_callback_get
 export def "certificates-callback get" [
-  certificateId: string
+  certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "certificates-callback get" [
 ]: nothing -> record<callbackUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/certificates/($certificateId)/callback")
+  let full_url = (build-url $base ({certificate_id: $certificate_id} | format pattern "/v1/certificates/{certificate_id}/callback"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -273,7 +273,7 @@ export def "certificates-callback get" [
 # PUT /v1/certificates/{certificateId}/callback
 # operationId: certificate_callback_replace
 export def "certificates-callback replace" [
-  certificateId: string
+  certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,12 +282,12 @@ export def "certificates-callback replace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --callbackUrl: string # Callback url registered/replaced to receive stateful actions
+  --callback-url: string # Callback url registered/replaced to receive stateful actions
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "callbackUrl" $callbackUrl "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/certificates/($certificateId)/callback" $qp)
+  let qp = [(serialize-qp "callbackUrl" $callback_url "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({certificate_id: $certificate_id} | format pattern "/v1/certificates/{certificate_id}/callback") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -298,7 +298,7 @@ export def "certificates-callback replace" [
 # POST /v1/certificates/{certificateId}/cancel
 # operationId: certificate_cancel
 export def "certificates-cancel cancel" [
-  certificateId: string
+  certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -310,7 +310,7 @@ export def "certificates-cancel cancel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/certificates/($certificateId)/cancel")
+  let full_url = (build-url $base ({certificate_id: $certificate_id} | format pattern "/v1/certificates/{certificate_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -321,7 +321,7 @@ export def "certificates-cancel cancel" [
 # GET /v1/certificates/{certificateId}/download
 # operationId: certificate_download
 export def "certificates-download download" [
-  certificateId: string
+  certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "certificates-download download" [
 ]: nothing -> record<pems: record<certificate: string, cross: string, intermediate: string, root: string>, serialNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/certificates/($certificateId)/download")
+  let full_url = (build-url $base ({certificate_id: $certificate_id} | format pattern "/v1/certificates/{certificate_id}/download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,7 +344,7 @@ export def "certificates-download download" [
 # GET /v1/certificates/{certificateId}/email/history
 # operationId: certificate_email_history
 export def "certificates-email-history history" [
-  certificateId: string
+  certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,7 +356,7 @@ export def "certificates-email-history history" [
 ]: nothing -> record<accountId: int, body: string, dateEntered: string, fromType: string, id: int, recipients: string, subject: string, templateType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/certificates/($certificateId)/email/history")
+  let full_url = (build-url $base ({certificate_id: $certificate_id} | format pattern "/v1/certificates/{certificate_id}/email/history"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -366,9 +366,9 @@ export def "certificates-email-history history" [
 #
 # POST /v1/certificates/{certificateId}/email/resend/{emailAddress}
 # operationId: certificate_alternate_email_address
-export def "certificates-email-resend address-by-certificateId-emailAddress" [
-  certificateId: string
-  emailAddress: string
+export def "certificates-email-resend create-ress-by-certificateId-emailAddress" [
+  certificate_id: string
+  email_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,7 +380,7 @@ export def "certificates-email-resend address-by-certificateId-emailAddress" [
 ]: nothing -> record<accountId: int, body: string, dateEntered: string, fromType: string, id: int, recipients: string, subject: string, templateType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/certificates/($certificateId)/email/resend/($emailAddress)")
+  let full_url = (build-url $base ({certificate_id: $certificate_id, email_address: $email_address} | format pattern "/v1/certificates/{certificate_id}/email/resend/{email_address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -391,8 +391,8 @@ export def "certificates-email-resend address-by-certificateId-emailAddress" [
 # POST /v1/certificates/{certificateId}/email/{emailId}/resend
 # operationId: certificate_resend_email
 export def "certificates-email-resend email" [
-  certificateId: string
-  emailId: string
+  certificate_id: string
+  email_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,7 +404,7 @@ export def "certificates-email-resend email" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/certificates/($certificateId)/email/($emailId)/resend")
+  let full_url = (build-url $base ({certificate_id: $certificate_id, email_id: $email_id} | format pattern "/v1/certificates/{certificate_id}/email/{email_id}/resend"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -414,10 +414,10 @@ export def "certificates-email-resend email" [
 #
 # POST /v1/certificates/{certificateId}/email/{emailId}/resend/{emailAddress}
 # operationId: certificate_resend_email_address
-export def "certificates-email-resend address-by-certificateId-emailId-emailAddress" [
-  certificateId: string
-  emailId: string
-  emailAddress: string
+export def "certificates-email-resend create-ress-by-certificateId-emailId-emailAddress" [
+  certificate_id: string
+  email_id: string
+  email_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,7 +429,7 @@ export def "certificates-email-resend address-by-certificateId-emailId-emailAddr
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/certificates/($certificateId)/email/($emailId)/resend/($emailAddress)")
+  let full_url = (build-url $base ({certificate_id: $certificate_id, email_id: $email_id, email_address: $email_address} | format pattern "/v1/certificates/{certificate_id}/email/{email_id}/resend/{email_address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -440,7 +440,7 @@ export def "certificates-email-resend address-by-certificateId-emailId-emailAddr
 # POST /v1/certificates/{certificateId}/reissue
 # operationId: certificate_reissue
 export def "certificates-reissue reissue" [
-  certificateId: string
+  certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -449,19 +449,19 @@ export def "certificates-reissue reissue" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --callbackUrl: string # Required if client would like to receive stateful action via callback during certificate lifecyle
-  --commonName: string # The common name of certificate to be secured (default: Existing common name)
+  --callback-url: string # Required if client would like to receive stateful action via callback during certificate lifecyle
+  --common-name: string # The common name of certificate to be secured (default: Existing common name)
   --csr: string # Certificate Signing Request. (default: Existing CSR)
-  --delayExistingRevoke: int # In hours, time to delay revoking existing certificate after issuance of new certificate. If revokeExistingCertOnIssuance is enabled, this value will be ignored (default: 72)
-  --forceDomainRevetting: list # Optional field. Domain verification will be required for each domain listed here. Specify a value of * to indicate that all domains associated with the request should have their domain information reverified.
-  --rootType: string@rootType-completer # Root Type. Depending on certificate expiration date, SHA_1 not be allowed. Will default to SHA_2 if expiration date exceeds sha1 allowed date (default: GODADDY_SHA_1)
-  --subjectAlternativeNames: list # Only used for UCC products. An array of subject alternative names to include in certificate.
+  --delay-existing-revoke: int # In hours, time to delay revoking existing certificate after issuance of new certificate. If revokeExistingCertOnIssuance is enabled, this value will be ignored (default: 72)
+  --force-domain-revetting: list # Optional field. Domain verification will be required for each domain listed here. Specify a value of * to indicate that all domains associated with the request should have their domain information reverified.
+  --root-type: string@root-type-completer # Root Type. Depending on certificate expiration date, SHA_1 not be allowed. Will default to SHA_2 if expiration date exceeds sha1 allowed date (default: GODADDY_SHA_1)
+  --subject-alternative-names: list # Only used for UCC products. An array of subject alternative names to include in certificate.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/certificates/($certificateId)/reissue")
-  let body = {callbackUrl: $callbackUrl, commonName: $commonName, csr: $csr, delayExistingRevoke: $delayExistingRevoke, forceDomainRevetting: $forceDomainRevetting, rootType: $rootType, subjectAlternativeNames: $subjectAlternativeNames} | compact
+  let full_url = (build-url $base ({certificate_id: $certificate_id} | format pattern "/v1/certificates/{certificate_id}/reissue"))
+  let body = {"callbackUrl": $callback_url, "commonName": $common_name, "csr": $csr, "delayExistingRevoke": $delay_existing_revoke, "forceDomainRevetting": $force_domain_revetting, "rootType": $root_type, "subjectAlternativeNames": $subject_alternative_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -473,7 +473,7 @@ export def "certificates-reissue reissue" [
 # POST /v1/certificates/{certificateId}/renew
 # operationId: certificate_renew
 export def "certificates-renew renew" [
-  certificateId: string
+  certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,18 +482,18 @@ export def "certificates-renew renew" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --callbackUrl: string # Required if client would like to receive stateful actions via callback during certificate lifecyle
-  --commonName: string # The common name of certificate to be secured (default: Existing common name)
+  --callback-url: string # Required if client would like to receive stateful actions via callback during certificate lifecyle
+  --common-name: string # The common name of certificate to be secured (default: Existing common name)
   --csr: string # Certificate Signing Request. (default: Existing CSR)
   --period: int # Number of years for certificate validity period, if different from previous certificate (default: 0)
-  --rootType: string@rootType-completer # Root Type. Depending on certificate expiration date, SHA_1 not be allowed. Will default to SHA_2 if expiration date exceeds sha1 allowed date (default: GODADDY_SHA_1)
-  --subjectAlternativeNames: list # Only used for UCC products. An array of subject alternative names to include in certificate. Not including a subject alternative name that was in the previous certificate will remove it from the renewed certificate.
+  --root-type: string@root-type-completer # Root Type. Depending on certificate expiration date, SHA_1 not be allowed. Will default to SHA_2 if expiration date exceeds sha1 allowed date (default: GODADDY_SHA_1)
+  --subject-alternative-names: list # Only used for UCC products. An array of subject alternative names to include in certificate. Not including a subject alternative name that was in the previous certificate will remove it from the renewed certificate.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/certificates/($certificateId)/renew")
-  let body = {callbackUrl: $callbackUrl, commonName: $commonName, csr: $csr, period: $period, rootType: $rootType, subjectAlternativeNames: $subjectAlternativeNames} | compact
+  let full_url = (build-url $base ({certificate_id: $certificate_id} | format pattern "/v1/certificates/{certificate_id}/renew"))
+  let body = {"callbackUrl": $callback_url, "commonName": $common_name, "csr": $csr, "period": $period, "rootType": $root_type, "subjectAlternativeNames": $subject_alternative_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -505,7 +505,7 @@ export def "certificates-renew renew" [
 # POST /v1/certificates/{certificateId}/revoke
 # operationId: certificate_revoke
 export def "certificates-revoke revoke" [
-  certificateId: string
+  certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,8 +519,8 @@ export def "certificates-revoke revoke" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/certificates/($certificateId)/revoke")
-  let body = {reason: $reason} | compact
+  let full_url = (build-url $base ({certificate_id: $certificate_id} | format pattern "/v1/certificates/{certificate_id}/revoke"))
+  let body = {"reason": $reason} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -532,7 +532,7 @@ export def "certificates-revoke revoke" [
 # GET /v1/certificates/{certificateId}/siteSeal
 # operationId: certificate_siteseal_get
 export def "certificates-site-seal get" [
-  certificateId: string
+  certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,7 +547,7 @@ export def "certificates-site-seal get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "theme" $theme "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/certificates/($certificateId)/siteSeal" $qp)
+  let full_url = (build-url $base ({certificate_id: $certificate_id} | format pattern "/v1/certificates/{certificate_id}/siteSeal") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -557,8 +557,8 @@ export def "certificates-site-seal get" [
 #
 # POST /v1/certificates/{certificateId}/verifyDomainControl
 # operationId: certificate_verifydomaincontrol
-export def "certificates-verify-domain-control verifydomaincontrol" [
-  certificateId: string
+export def "certificates-verify-domain-control verify-domaincontrol" [
+  certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,7 +570,7 @@ export def "certificates-verify-domain-control verifydomaincontrol" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/certificates/($certificateId)/verifyDomainControl")
+  let full_url = (build-url $base ({certificate_id: $certificate_id} | format pattern "/v1/certificates/{certificate_id}/verifyDomainControl"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -589,12 +589,12 @@ export def "certificates entitlement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --entitlementId: string # Entitlement id to lookup
+  --entitlement-id: string # Entitlement id to lookup
   --latest: oneof<nothing, bool> # Fetch only the most recent certificate (default: true)
 ]: nothing -> table<certificateId: string, commonName: string, contact: record<email: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, phone: string, suffix: string>, createdAt: string, deniedReason: string, organization: record<address: record, assumedName: string, jurisdictionOfIncorporation: record, name: string, phone: string, registrationAgent: string, registrationNumber: string>, period: int, productType: string, progress: int, revokedAt: string, rootType: string, serialNumber: string, serialNumberHex: string, slotSize: string, status: string, subjectAlternativeNames: list<record>, validEnd: string, validStart: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "entitlementId" $entitlementId "scalar") (serialize-qp "latest" $latest "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "entitlementId" $entitlement_id "scalar") (serialize-qp "latest" $latest "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/certificates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -614,11 +614,11 @@ export def "certificates-download entitlement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --entitlementId: string # Entitlement id to download
+  --entitlement-id: string # Entitlement id to download
 ]: nothing -> record<pems: record<certificate: string, cross: string, intermediate: string, root: string>, serialNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "entitlementId" $entitlementId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "entitlementId" $entitlement_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/certificates/download" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -629,8 +629,8 @@ export def "certificates-download entitlement" [
 #
 # GET /v2/customers/{customerId}/certificates
 # operationId: getCustomerCertificatesByCustomerId
-export def "customers-certificates list" [
-  customerId: string
+export def "customers-certificates get" [
+  customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,7 +645,7 @@ export def "customers-certificates list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/customers/($customerId)/certificates" $qp)
+  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/v2/customers/{customer_id}/certificates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -656,7 +656,7 @@ export def "customers-certificates list" [
 # GET /v2/customers/{customerId}/certificates/acme/externalAccountBinding
 # operationId: getAcmeExternalAccountBinding
 export def "customers-certificates-acme-external-account-binding get" [
-  customerId: string
+  customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,7 +668,7 @@ export def "customers-certificates-acme-external-account-binding get" [
 ]: nothing -> record<directoryUrl: string, hmacKey: string, keyId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/customers/($customerId)/certificates/acme/externalAccountBinding")
+  let full_url = (build-url $base ({customer_id: $customer_id} | format pattern "/v2/customers/{customer_id}/certificates/acme/externalAccountBinding"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -678,9 +678,9 @@ export def "customers-certificates-acme-external-account-binding get" [
 #
 # GET /v2/customers/{customerId}/certificates/{certificateId}
 # operationId: getCertificateDetailByCertIdentifier
-export def "customers-certificates get" [
-  customerId: string
-  certificateId: string
+export def "customers-certificates get-certificate-detail" [
+  customer_id: string
+  certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,7 +692,7 @@ export def "customers-certificates get" [
 ]: nothing -> record<certificateId: string, commonName: string, completedAt: string, contact: record<email: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, phone: string, suffix: string>, createdAt: string, csr: string, deniedReason: string, organization: record<address: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, assumedName: string, jurisdictionOfIncorporation: record<city: string, country: string, county: string, state: string>, name: string, phone: string, registrationAgent: string, registrationNumber: string>, period: int, progress: int, renewalAvailable: bool, revokedAt: string, rootType: string, serialNumber: string, serialNumberHex: string, slotSize: string, status: string, subjectAlternativeNames: list<string>, type: string, validEndAt: string, validStartAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/customers/($customerId)/certificates/($certificateId)")
+  let full_url = (build-url $base ({customer_id: $customer_id, certificate_id: $certificate_id} | format pattern "/v2/customers/{customer_id}/certificates/{certificate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -702,9 +702,9 @@ export def "customers-certificates get" [
 #
 # GET /v2/customers/{customerId}/certificates/{certificateId}/domainVerifications
 # operationId: getDomainInformationByCertificateId
-export def "customers-certificates-domain-verifications list" [
-  customerId: string
-  certificateId: string
+export def "customers-certificates-domain-verifications get-domain-information" [
+  customer_id: string
+  certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +716,7 @@ export def "customers-certificates-domain-verifications list" [
 ]: nothing -> table<createdAt: string, dceToken: string, domain: string, domainEntityId: int, modifiedAt: string, status: string, type: string, usage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/customers/($customerId)/certificates/($certificateId)/domainVerifications")
+  let full_url = (build-url $base ({customer_id: $customer_id, certificate_id: $certificate_id} | format pattern "/v2/customers/{customer_id}/certificates/{certificate_id}/domainVerifications"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -726,9 +726,9 @@ export def "customers-certificates-domain-verifications list" [
 #
 # GET /v2/customers/{customerId}/certificates/{certificateId}/domainVerifications/{domain}
 # operationId: getDomainDetailsByDomain
-export def "customers-certificates-domain-verifications get" [
-  customerId: string
-  certificateId: string
+export def "customers-certificates-domain-verifications get-details" [
+  customer_id: string
+  certificate_id: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -741,7 +741,7 @@ export def "customers-certificates-domain-verifications get" [
 ]: nothing -> record<createdAt: string, dceToken: string, domain: string, domainEntityId: int, modifiedAt: string, status: string, type: string, usage: string, certificateAuthorityAuthorization: record<completedAt: string, queryPaths: list<string>, recommendations: list<string>, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/customers/($customerId)/certificates/($certificateId)/domainVerifications/($domain)")
+  let full_url = (build-url $base ({customer_id: $customer_id, certificate_id: $certificate_id, domain: $domain} | format pattern "/v2/customers/{customer_id}/certificates/{certificate_id}/domainVerifications/{domain}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

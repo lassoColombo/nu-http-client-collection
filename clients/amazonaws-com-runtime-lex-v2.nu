@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bots-bot-aliases-bot-locales-sessions DeleteSession" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bots-bot-aliases-bot-locales-sessions delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,11 +93,11 @@ export def commands []: nothing -> table {
 #
 # DELETE /bots/{botId}/botAliases/{botAliasId}/botLocales/{localeId}/sessions/{sessionId}
 # operationId: DeleteSession
-export def "bots-bot-aliases-bot-locales-sessions DeleteSession" [
-  botId: string
-  botAliasId: string
-  localeId: string
-  sessionId: string
+export def "bots-bot-aliases-bot-locales-sessions delete" [
+  bot_id: string
+  bot_alias_id: string
+  locale_id: string
+  session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,18 +106,18 @@ export def "bots-bot-aliases-bot-locales-sessions DeleteSession" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<botId: record, botAliasId: record, localeId: record, sessionId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botAliases/($botAliasId)/botLocales/($localeId)/sessions/($sessionId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_alias_id: $bot_alias_id, locale_id: $locale_id, session_id: $session_id} | format pattern "/bots/{bot_id}/botAliases/{bot_alias_id}/botLocales/{locale_id}/sessions/{session_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -128,11 +128,11 @@ export def "bots-bot-aliases-bot-locales-sessions DeleteSession" [
 #
 # GET /bots/{botId}/botAliases/{botAliasId}/botLocales/{localeId}/sessions/{sessionId}
 # operationId: GetSession
-export def "bots-bot-aliases-bot-locales-sessions GetSession" [
-  botId: string
-  botAliasId: string
-  localeId: string
-  sessionId: string
+export def "bots-bot-aliases-bot-locales-sessions get" [
+  bot_id: string
+  bot_alias_id: string
+  locale_id: string
+  session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,18 +141,18 @@ export def "bots-bot-aliases-bot-locales-sessions GetSession" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<sessionId: record, messages: record, interpretations: record, sessionState: record<dialogAction: record<type: record, slotToElicit: record, slotElicitationStyle: record, subSlotToElicit: record>, intent: record<name: record, slots: record, state: record, confirmationState: record>, activeContexts: record, sessionAttributes: record, originatingRequestId: record, runtimeHints: record<slotHints: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botAliases/($botAliasId)/botLocales/($localeId)/sessions/($sessionId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_alias_id: $bot_alias_id, locale_id: $locale_id, session_id: $session_id} | format pattern "/bots/{bot_id}/botAliases/{bot_alias_id}/botLocales/{locale_id}/sessions/{session_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -165,11 +165,11 @@ export def "bots-bot-aliases-bot-locales-sessions GetSession" [
 # operationId: PutSession
 # --messages item shape: {content?: any, contentType: any, imageResponseCard?: record}
 # --sessionState shape: {dialogAction?: any, intent?: any, activeContexts?: any, sessionAttributes?: any, originatingRequestId?: any, runtimeHints?: any}
-export def "bots-bot-aliases-bot-locales-sessions PutSession" [
-  botId: string
-  botAliasId: string
-  localeId: string
-  sessionId: string
+export def "bots-bot-aliases-bot-locales-sessions update" [
+  bot_id: string
+  bot_alias_id: string
+  locale_id: string
+  session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,25 +178,25 @@ export def "bots-bot-aliases-bot-locales-sessions PutSession" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --ResponseContentType: string # <p>The message that Amazon Lex V2 returns in the response can be either text or speech depending on the value of this parameter. </p> <ul> <li> <p>If the value is <code>text/plain; charset=utf-8</code>, Amazon Lex V2 returns text in the response.</p> </li> </ul>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --response-content-type: string # <p>The message that Amazon Lex V2 returns in the response can be either text or speech depending on the value of this parameter. </p> <ul> <li> <p>If the value is <code>text/plain; charset=utf-8</code>, Amazon Lex V2 returns text in the response.</p> </li> </ul>
   --messages: list # A list of messages to send to the user. Messages are sent in the order that they are defined in the list. — item shape: {content?: any, contentType: any, imageResponseCard?: record}
-  sessionState: record # The state of the user's session with Amazon Lex V2. — shape: {dialogAction?: any, intent?: any, activeContexts?: any, sessionAttributes?: any, originatingRequestId?: any, runtimeHints?: any}
-  --requestAttributes: record # <p>Request-specific information passed between Amazon Lex V2 and the client application.</p> <p>The namespace <code>x-amz-lex:</code> is reserved for special attributes. Don't create any request attributes with the prefix <code>x-amz-lex:</code>.</p>
+  session_state: record # The state of the user's session with Amazon Lex V2. — shape: {dialogAction?: any, intent?: any, activeContexts?: any, sessionAttributes?: any, originatingRequestId?: any, runtimeHints?: any}
+  --request-attributes: record # <p>Request-specific information passed between Amazon Lex V2 and the client application.</p> <p>The namespace <code>x-amz-lex:</code> is reserved for special attributes. Don't create any request attributes with the prefix <code>x-amz-lex:</code>.</p>
 ]: any -> record<audioStream: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botAliases/($botAliasId)/botLocales/($localeId)/sessions/($sessionId)")
-  let body = {messages: $messages, sessionState: $sessionState, requestAttributes: $requestAttributes} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_alias_id: $bot_alias_id, locale_id: $locale_id, session_id: $session_id} | format pattern "/bots/{bot_id}/botAliases/{bot_alias_id}/botLocales/{locale_id}/sessions/{session_id}"))
+  let body = {"messages": $messages, "sessionState": $session_state, "requestAttributes": $request_attributes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "ResponseContentType": $ResponseContentType} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "ResponseContentType": $response_content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -208,11 +208,11 @@ export def "bots-bot-aliases-bot-locales-sessions PutSession" [
 # POST /bots/{botId}/botAliases/{botAliasId}/botLocales/{localeId}/sessions/{sessionId}/text
 # operationId: RecognizeText
 # --sessionState shape: {dialogAction?: any, intent?: any, activeContexts?: any, sessionAttributes?: any, originatingRequestId?: any, runtimeHints?: any}
-export def "bots-bot-aliases-bot-locales-sessions-text RecognizeText" [
-  botId: string
-  botAliasId: string
-  localeId: string
-  sessionId: string
+export def "bots-bot-aliases-bot-locales-sessions-text post" [
+  bot_id: string
+  bot_alias_id: string
+  locale_id: string
+  session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,24 +221,24 @@ export def "bots-bot-aliases-bot-locales-sessions-text RecognizeText" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   text: string # The text that the user entered. Amazon Lex V2 interprets this text. (format: password)
-  --sessionState: record # The state of the user's session with Amazon Lex V2. — shape: {dialogAction?: any, intent?: any, activeContexts?: any, sessionAttributes?: any, originatingRequestId?: any, runtimeHints?: any}
-  --requestAttributes: record # <p>Request-specific information passed between the client application and Amazon Lex V2 </p> <p>The namespace <code>x-amz-lex:</code> is reserved for special attributes. Don't create any request attributes with the prefix <code>x-amz-lex:</code>.</p>
+  --session-state: record # The state of the user's session with Amazon Lex V2. — shape: {dialogAction?: any, intent?: any, activeContexts?: any, sessionAttributes?: any, originatingRequestId?: any, runtimeHints?: any}
+  --request-attributes: record # <p>Request-specific information passed between the client application and Amazon Lex V2 </p> <p>The namespace <code>x-amz-lex:</code> is reserved for special attributes. Don't create any request attributes with the prefix <code>x-amz-lex:</code>.</p>
 ]: any -> record<messages: record, sessionState: record<dialogAction: record<type: record, slotToElicit: record, slotElicitationStyle: record, subSlotToElicit: record>, intent: record<name: record, slots: record, state: record, confirmationState: record>, activeContexts: record, sessionAttributes: record, originatingRequestId: record, runtimeHints: record<slotHints: record>>, interpretations: record, requestAttributes: record, sessionId: record, recognizedBotMember: record<botId: record, botName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botAliases/($botAliasId)/botLocales/($localeId)/sessions/($sessionId)/text")
-  let body = {text: $text, sessionState: $sessionState, requestAttributes: $requestAttributes} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_alias_id: $bot_alias_id, locale_id: $locale_id, session_id: $session_id} | format pattern "/bots/{bot_id}/botAliases/{bot_alias_id}/botLocales/{locale_id}/sessions/{session_id}/text"))
+  let body = {"text": $text, "sessionState": $session_state, "requestAttributes": $request_attributes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -249,11 +249,11 @@ export def "bots-bot-aliases-bot-locales-sessions-text RecognizeText" [
 #
 # POST /bots/{botId}/botAliases/{botAliasId}/botLocales/{localeId}/sessions/{sessionId}/utterance#Content-Type
 # operationId: RecognizeUtterance
-export def "bots-bot-aliases-bot-locales-sessions-utterance-content-type RecognizeUtterance" [
-  botId: string
-  botAliasId: string
-  localeId: string
-  sessionId: string
+export def "bots-bot-aliases-bot-locales-sessions-utterance-content-type post" [
+  bot_id: string
+  bot_alias_id: string
+  locale_id: string
+  session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,26 +262,26 @@ export def "bots-bot-aliases-bot-locales-sessions-utterance-content-type Recogni
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --x-amz-lex-session-state: string # <p>Sets the state of the session with the user. You can use this to set the current intent, attributes, context, and dialog action. Use the dialog action to determine the next step that Amazon Lex V2 should use in the conversation with the user.</p> <p>The <code>sessionState</code> field must be compressed using gzip and then base64 encoded before sending to Amazon Lex V2.</p>
   --x-amz-lex-request-attributes: string # <p>Request-specific information passed between the client application and Amazon Lex V2 </p> <p>The namespace <code>x-amz-lex:</code> is reserved for special attributes. Don't create any request attributes for prefix <code>x-amz-lex:</code>.</p> <p>The <code>requestAttributes</code> field must be compressed using gzip and then base64 encoded before sending to Amazon Lex V2.</p>
-  --Content-Type: string # <p>Indicates the format for audio input or that the content is text. The header must start with one of the following prefixes:</p> <ul> <li> <p>PCM format, audio data must be in little-endian byte order.</p> <ul> <li> <p>audio/l16; rate=16000; channels=1</p> </li> <li> <p>audio/x-l16; sample-rate=16000; channel-count=1</p> </li> <li> <p>audio/lpcm; sample-rate=8000; sample-size-bits=16; channel-count=1; is-big-endian=false</p> </li> </ul> </li> <li> <p>Opus format</p> <ul> <li> <p>audio/x-cbr-opus-with-preamble;preamble-size=0;bit-rate=256000;frame-size-milliseconds=4</p> </li> </ul> </li> <li> <p>Text format</p> <ul> <li> <p>text/plain; charset=utf-8</p> </li> </ul> </li> </ul>
-  --Response-Content-Type: string # <p>The message that Amazon Lex V2 returns in the response can be either text or speech based on the <code>responseContentType</code> value.</p> <ul> <li> <p>If the value is <code>text/plain;charset=utf-8</code>, Amazon Lex V2 returns text in the response.</p> </li> <li> <p>If the value begins with <code>audio/</code>, Amazon Lex V2 returns speech in the response. Amazon Lex V2 uses Amazon Polly to generate the speech using the configuration that you specified in the <code>responseContentType</code> parameter. For example, if you specify <code>audio/mpeg</code> as the value, Amazon Lex V2 returns speech in the MPEG format.</p> </li> <li> <p>If the value is <code>audio/pcm</code>, the speech returned is <code>audio/pcm</code> at 16 KHz in 16-bit, little-endian format.</p> </li> <li> <p>The following are the accepted values:</p> <ul> <li> <p>audio/mpeg</p> </li> <li> <p>audio/ogg</p> </li> <li> <p>audio/pcm (16 KHz)</p> </li> <li> <p>audio/* (defaults to mpeg)</p> </li> <li> <p>text/plain; charset=utf-8</p> </li> </ul> </li> </ul>
-  --inputStream: string # User input in PCM or Opus audio format or text format as described in the <code>requestContentType</code> parameter.
+  --content-type: string # <p>Indicates the format for audio input or that the content is text. The header must start with one of the following prefixes:</p> <ul> <li> <p>PCM format, audio data must be in little-endian byte order.</p> <ul> <li> <p>audio/l16; rate=16000; channels=1</p> </li> <li> <p>audio/x-l16; sample-rate=16000; channel-count=1</p> </li> <li> <p>audio/lpcm; sample-rate=8000; sample-size-bits=16; channel-count=1; is-big-endian=false</p> </li> </ul> </li> <li> <p>Opus format</p> <ul> <li> <p>audio/x-cbr-opus-with-preamble;preamble-size=0;bit-rate=256000;frame-size-milliseconds=4</p> </li> </ul> </li> <li> <p>Text format</p> <ul> <li> <p>text/plain; charset=utf-8</p> </li> </ul> </li> </ul>
+  --response-content-type: string # <p>The message that Amazon Lex V2 returns in the response can be either text or speech based on the <code>responseContentType</code> value.</p> <ul> <li> <p>If the value is <code>text/plain;charset=utf-8</code>, Amazon Lex V2 returns text in the response.</p> </li> <li> <p>If the value begins with <code>audio/</code>, Amazon Lex V2 returns speech in the response. Amazon Lex V2 uses Amazon Polly to generate the speech using the configuration that you specified in the <code>responseContentType</code> parameter. For example, if you specify <code>audio/mpeg</code> as the value, Amazon Lex V2 returns speech in the MPEG format.</p> </li> <li> <p>If the value is <code>audio/pcm</code>, the speech returned is <code>audio/pcm</code> at 16 KHz in 16-bit, little-endian format.</p> </li> <li> <p>The following are the accepted values:</p> <ul> <li> <p>audio/mpeg</p> </li> <li> <p>audio/ogg</p> </li> <li> <p>audio/pcm (16 KHz)</p> </li> <li> <p>audio/* (defaults to mpeg)</p> </li> <li> <p>text/plain; charset=utf-8</p> </li> </ul> </li> </ul>
+  --input-stream: string # User input in PCM or Opus audio format or text format as described in the <code>requestContentType</code> parameter.
 ]: any -> record<audioStream: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botAliases/($botAliasId)/botLocales/($localeId)/sessions/($sessionId)/utterance#Content-Type")
-  let body = {inputStream: $inputStream} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_alias_id: $bot_alias_id, locale_id: $locale_id, session_id: $session_id} | format pattern "/bots/{bot_id}/botAliases/{bot_alias_id}/botLocales/{locale_id}/sessions/{session_id}/utterance#Content-Type"))
+  let body = {"inputStream": $input_stream} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "x-amz-lex-session-state": $x_amz_lex_session_state, "x-amz-lex-request-attributes": $x_amz_lex_request_attributes, "Content-Type": $Content_Type, "Response-Content-Type": $Response_Content_Type} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-lex-session-state": $x_amz_lex_session_state, "x-amz-lex-request-attributes": $x_amz_lex_request_attributes, "Content-Type": $content_type, "Response-Content-Type": $response_content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

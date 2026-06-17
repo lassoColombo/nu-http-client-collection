@@ -67,12 +67,12 @@ def base-url-completer [] { ["http://api.wmata.com/Bus.svc" "https://api.wmata.c
 def auth-scheme-completer [] { ["api_key" "query-api_key"] }
 
 # Completers for enum parameters
-def RouteID-completer [] { ["70"] }
-def IncludingVariations-completer [] { ["false" "true"] }
-def StopID-completer [] { ["1001195"] }
-def Lat-completer [] { ["38.878586"] }
-def Lon-completer [] { ["-76.989626"] }
-def Radius-completer [] { ["500"] }
+def route-id-completer [] { ["70"] }
+def including-variations-completer [] { ["false" "true"] }
+def stop-id-completer [] { ["1001195"] }
+def lat-completer [] { ["38.878586"] }
+def lon-completer [] { ["-76.989626"] }
+def radius-completer [] { ["500"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -110,14 +110,14 @@ export def "bus-positions 5476362a281d830c946a3d6e" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RouteID: string@RouteID-completer # Bus route, e.g.: 70, 10A. (default: 70)
-  --Lat: string # Center point Latitude, required if Longitude and Radius are specified.
-  --Lon: string # Center point Longitude, required if Latitude and Radius are specified.
-  --Radius: string # Radius (meters) to include in the search area, required if Latitude and Longitude are specified.
+  --route-id: string@route-id-completer # Bus route, e.g.: 70, 10A. (default: 70)
+  --lat: string # Center point Latitude, required if Longitude and Radius are specified.
+  --lon: string # Center point Longitude, required if Latitude and Radius are specified.
+  --radius: string # Radius (meters) to include in the search area, required if Latitude and Longitude are specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "RouteID" $RouteID "scalar") (serialize-qp "Lat" $Lat "scalar") (serialize-qp "Lon" $Lon "scalar") (serialize-qp "Radius" $Radius "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "RouteID" $route_id "scalar") (serialize-qp "Lat" $lat "scalar") (serialize-qp "Lon" $lon "scalar") (serialize-qp "Radius" $radius "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/BusPositions" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -137,12 +137,12 @@ export def "route-details 5476362a281d830c946a3d6f" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RouteID: string@RouteID-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
-  --Date: string # Date in YYYY-MM-DD format for which to retrieve route and stop information.  Defaults to today's date unless specified.
+  --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
+  --date: string # Date in YYYY-MM-DD format for which to retrieve route and stop information.  Defaults to today's date unless specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "RouteID" $RouteID "scalar") (serialize-qp "Date" $Date "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "RouteID" $route_id "scalar") (serialize-qp "Date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/RouteDetails" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -162,13 +162,13 @@ export def "route-schedule 5476362a281d830c946a3d71" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RouteID: string@RouteID-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
-  --Date: string # Date in YYYY-MM-DD format for which to retrieve schedule.  Defaults to today's date unless specified.
-  --IncludingVariations: oneof<nothing, bool> # Whether or not to include variations.  For example, if B30 is specified, include all variations such as B30v1, B30v2, etc. (default: false)
+  --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
+  --date: string # Date in YYYY-MM-DD format for which to retrieve schedule.  Defaults to today's date unless specified.
+  --including-variations: oneof<nothing, bool> # Whether or not to include variations.  For example, if B30 is specified, include all variations such as B30v1, B30v2, etc. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "RouteID" $RouteID "scalar") (serialize-qp "Date" $Date "scalar") (serialize-qp "IncludingVariations" $IncludingVariations "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "RouteID" $route_id "scalar") (serialize-qp "Date" $date "scalar") (serialize-qp "IncludingVariations" $including_variations "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/RouteSchedule" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -210,12 +210,12 @@ export def "stop-schedule 5476362a281d830c946a3d72" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --StopID: string@StopID-completer # 7-digit regional stop ID. (default: 1001195)
-  --Date: string # Date in YYYY-MM-DD format for which to retrieve schedule.  Defaults to today's date unless specified.
+  --stop-id: string@stop-id-completer # 7-digit regional stop ID. (default: 1001195)
+  --date: string # Date in YYYY-MM-DD format for which to retrieve schedule.  Defaults to today's date unless specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "StopID" $StopID "scalar") (serialize-qp "Date" $Date "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "StopID" $stop_id "scalar") (serialize-qp "Date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/StopSchedule" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -235,13 +235,13 @@ export def "stops 5476362a281d830c946a3d73" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Lat: string@Lat-completer # Center point Latitude, required if Longitude and Radius are specified.
-  --Lon: string@Lon-completer # Center point Longitude, required if Latitude and Radius are specified.
-  --Radius: string@Radius-completer # Radius (feet) to include in the search area, required if Latitude and Longitude are specified.
+  --lat: string@lat-completer # Center point Latitude, required if Longitude and Radius are specified.
+  --lon: string@lon-completer # Center point Longitude, required if Latitude and Radius are specified.
+  --radius: string@radius-completer # Radius (feet) to include in the search area, required if Latitude and Longitude are specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Lat" $Lat "scalar") (serialize-qp "Lon" $Lon "scalar") (serialize-qp "Radius" $Radius "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Lat" $lat "scalar") (serialize-qp "Lon" $lon "scalar") (serialize-qp "Radius" $radius "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Stops" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -261,14 +261,14 @@ export def "json-j-bus-positions 5476362a281d830c946a3d68" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RouteID: string@RouteID-completer # Base bus route, e.g.: 70, 10A. (default: 70)
-  --Lat: float # Center point Latitude, required if Longitude and Radius are specified.
-  --Lon: float # Center point Longitude, required if Latitude and Radius are specified.
-  --Radius: float # Radius (meters) to include in the search area, required if Latitude and Longitude are specified.
+  --route-id: string@route-id-completer # Base bus route, e.g.: 70, 10A. (default: 70)
+  --lat: float # Center point Latitude, required if Longitude and Radius are specified.
+  --lon: float # Center point Longitude, required if Latitude and Radius are specified.
+  --radius: float # Radius (meters) to include in the search area, required if Latitude and Longitude are specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "RouteID" $RouteID "scalar") (serialize-qp "Lat" $Lat "scalar") (serialize-qp "Lon" $Lon "scalar") (serialize-qp "Radius" $Radius "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "RouteID" $route_id "scalar") (serialize-qp "Lat" $lat "scalar") (serialize-qp "Lon" $lon "scalar") (serialize-qp "Radius" $radius "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jBusPositions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -288,12 +288,12 @@ export def "json-j-route-details 5476362a281d830c946a3d69" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RouteID: string@RouteID-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
-  --Date: string # Date in YYYY-MM-DD format for which to retrieve route and stop information.  Defaults to today's date unless specified.
+  --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
+  --date: string # Date in YYYY-MM-DD format for which to retrieve route and stop information.  Defaults to today's date unless specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "RouteID" $RouteID "scalar") (serialize-qp "Date" $Date "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "RouteID" $route_id "scalar") (serialize-qp "Date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jRouteDetails" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -313,13 +313,13 @@ export def "json-j-route-schedule 5476362a281d830c946a3d6b" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RouteID: string@RouteID-completer # Bus route variant, e.g.: 70, 10A, 10Av1, etc. (default: 70)
-  --Date: string # Date in YYYY-MM-DD format for which to retrieve schedule.  Defaults to today's date unless specified.
-  --IncludingVariations: oneof<nothing, bool> # Whether or not to include variations if a base route is specified in RouteID.  For example, if B30 is specified and IncludingVariations is set to true, data for all variations of B30 such as B30v1, B30v2, etc. will be returned. (default: false)
+  --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1, etc. (default: 70)
+  --date: string # Date in YYYY-MM-DD format for which to retrieve schedule.  Defaults to today's date unless specified.
+  --including-variations: oneof<nothing, bool> # Whether or not to include variations if a base route is specified in RouteID.  For example, if B30 is specified and IncludingVariations is set to true, data for all variations of B30 such as B30v1, B30v2, etc. will be returned. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "RouteID" $RouteID "scalar") (serialize-qp "Date" $Date "scalar") (serialize-qp "IncludingVariations" $IncludingVariations "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "RouteID" $route_id "scalar") (serialize-qp "Date" $date "scalar") (serialize-qp "IncludingVariations" $including_variations "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jRouteSchedule" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -361,12 +361,12 @@ export def "json-j-stop-schedule 5476362a281d830c946a3d6c" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --StopID: string@StopID-completer # 7-digit regional stop ID. (default: 1001195)
-  --Date: string # Date in YYYY-MM-DD format for which to retrieve schedule.  Defaults to today's date unless specified.
+  --stop-id: string@stop-id-completer # 7-digit regional stop ID. (default: 1001195)
+  --date: string # Date in YYYY-MM-DD format for which to retrieve schedule.  Defaults to today's date unless specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "StopID" $StopID "scalar") (serialize-qp "Date" $Date "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "StopID" $stop_id "scalar") (serialize-qp "Date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jStopSchedule" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -386,13 +386,13 @@ export def "json-j-stops 5476362a281d830c946a3d6d" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Lat: float@Lat-completer # Center point Latitude, required if Longitude and Radius are specified.
-  --Lon: float@Lon-completer # Center point Longitude, required if Latitude and Radius are specified.
-  --Radius: float@Radius-completer # Radius (meters) to include in the search area, required if Latitude and Longitude are specified.
+  --lat: float@lat-completer # Center point Latitude, required if Longitude and Radius are specified.
+  --lon: float@lon-completer # Center point Longitude, required if Latitude and Radius are specified.
+  --radius: float@radius-completer # Radius (meters) to include in the search area, required if Latitude and Longitude are specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Lat" $Lat "scalar") (serialize-qp "Lon" $Lon "scalar") (serialize-qp "Radius" $Radius "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Lat" $lat "scalar") (serialize-qp "Lon" $lon "scalar") (serialize-qp "Radius" $radius "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jStops" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "child child" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "child get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /child/{uuid}
 # operationId: get_child
-export def "child child" [
+export def "child get" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -105,7 +105,7 @@ export def "child child" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/child/($uuid)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/child/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -137,7 +137,7 @@ export def "generate-uuid uuid" [
 #
 # GET /info
 # operationId: get_info
-export def "info info" [
+export def "info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "list-project project" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/list/project/($start)/($end)")
+  let full_url = (build-url $base ({start: $start, end: $end} | format pattern "/list/project/{start}/{end}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,7 +183,7 @@ export def "list-project project" [
 #
 # GET /list/publisher/{start}/{end}
 # operationId: get_list_publisher
-export def "list-publisher publisher" [
+export def "list-publisher publish-er" [
   start: int
   end: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -197,7 +197,7 @@ export def "list-publisher publisher" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/list/publisher/($start)/($end)")
+  let full_url = (build-url $base ({start: $start, end: $end} | format pattern "/list/publisher/{start}/{end}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,7 +207,7 @@ export def "list-publisher publisher" [
 #
 # GET /lookup/{uuid}
 # operationId: get_lookup
-export def "lookup lookup" [
+export def "lookup get" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +220,7 @@ export def "lookup lookup" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lookup/($uuid)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/lookup/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,7 +244,7 @@ export def "namespace-finduuid namespacefinduuid" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/namespace/finduuid/($namespace)/($namespaceid)")
+  let full_url = (build-url $base ({namespace: $namespace, namespaceid: $namespaceid} | format pattern "/namespace/finduuid/{namespace}/{namespaceid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -289,7 +289,7 @@ export def "namespace-getid namespacegetid" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/namespace/getid/($namespace)")
+  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/namespace/getid/{namespace}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,7 +299,7 @@ export def "namespace-getid namespacegetid" [
 #
 # GET /parent/{uuid}
 # operationId: get_parent
-export def "parent parent" [
+export def "parent get" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -312,7 +312,7 @@ export def "parent parent" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/parent/($uuid)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/parent/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -322,7 +322,7 @@ export def "parent parent" [
 #
 # POST /propose
 # operationId: post_propose
-export def "propose propose" [
+export def "propose post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +357,7 @@ export def "relationships-expanded relationshipsexpanded" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/relationships/expanded/($uuid)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/relationships/expanded/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -367,7 +367,7 @@ export def "relationships-expanded relationshipsexpanded" [
 #
 # GET /relationships/{uuid}
 # operationId: get_relationships
-export def "relationships relationships" [
+export def "relationships get" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -380,7 +380,7 @@ export def "relationships relationships" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/relationships/($uuid)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/relationships/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -390,7 +390,7 @@ export def "relationships relationships" [
 #
 # GET /search/{searchquery}
 # operationId: get_search
-export def "search search" [
+export def "search get" [
   searchquery: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -403,7 +403,7 @@ export def "search search" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/search/($searchquery)")
+  let full_url = (build-url $base ({searchquery: $searchquery} | format pattern "/search/{searchquery}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs ListByAutomationAccount" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs list-by" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,10 +94,10 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/compilationjobs
 # Docs: http://aka.ms/azureautomationsdk/compilationjoboperations
 # operationId: DscCompilationJob_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs ListByAutomationAccount" [
-  resourceGroupName: string
-  automationAccountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs list-by" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,7 +112,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/compilationjobs" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/compilationjobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -123,11 +123,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/compilationjobs/{compilationJobName}
 # Docs: http://aka.ms/azureautomationsdk/dsccompilationjoboperations
 # operationId: DscCompilationJob_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs Get" [
-  resourceGroupName: string
-  automationAccountName: string
-  compilationJobName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs get" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  compilation_job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,7 +141,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/compilationjobs/($compilationJobName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, compilation_job_name: $compilation_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/compilationjobs/{compilation_job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -153,11 +153,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/dscconfigurationcompilejoboperations
 # operationId: DscCompilationJob_Create
 # --properties shape: {configuration: any, incrementNodeConfigurationBuild?: bool, parameters?: record}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs Create" [
-  resourceGroupName: string
-  automationAccountName: string
-  compilationJobName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs create" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  compilation_job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,8 +176,8 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/compilationjobs/($compilationJobName)" $qp)
-  let body = {location: $location, name: $name, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, compilation_job_name: $compilation_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/compilationjobs/{compilation_job_name}") $qp)
+  let body = {"location": $location, "name": $name, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -189,11 +189,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/compilationjobs/{jobId}/streams
 # Docs: http://aka.ms/azureautomationsdk/jobstreamoperations
 # operationId: DscCompilationJobStream_ListByJob
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs-streams ListByJob" [
-  resourceGroupName: string
-  automationAccountName: string
-  jobId: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs-streams list-by-job" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/compilationjobs/($jobId)/streams" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, job_id: $job_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/compilationjobs/{job_id}/streams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -218,12 +218,12 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/compilationjobs/{jobId}/streams/{jobStreamId}
 # Docs: http://aka.ms/azureautomationsdk/jobstreamoperations
 # operationId: DscCompilationJob_GetStream
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs-streams GetStream" [
-  resourceGroupName: string
-  automationAccountName: string
-  jobId: string
-  jobStreamId: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs-streams get" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  job_id: string
+  job_stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/compilationjobs/($jobId)/streams/($jobStreamId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, job_id: $job_id, job_stream_id: $job_stream_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/compilationjobs/{job_id}/streams/{job_stream_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

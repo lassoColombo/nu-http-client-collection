@@ -113,15 +113,15 @@ export def "accounts manufacturersaccountslanguagesproductCertificationsdelete" 
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,15 +148,15 @@ export def "accounts manufacturersaccountslanguagesproductCertificationsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<brand: string, certification: table<authority: string, link: string, logo: string, name: string, validUntil: string, value: string>, countryCode: list<string>, destinationStatuses: table<destination: string, status: string>, issues: table<attribute: string, description: string, destination: string, resolution: string, severity: string, timestamp: string, title: string, type: string>, mpn: list<string>, name: string, productCode: list<string>, productType: list<string>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -186,26 +186,26 @@ export def "accounts manufacturersaccountslanguagesproductCertificationspatch" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --updateMask: string # Optional. The list of fields to update according to aip.dev/134. However, only full update is supported as of right now. Therefore, it can be either ignored or set to "*". Setting any other values will returns UNIMPLEMENTED error.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --update-mask: string # Optional. The list of fields to update according to aip.dev/134. However, only full update is supported as of right now. Therefore, it can be either ignored or set to "*". Setting any other values will returns UNIMPLEMENTED error.
   --brand: string # Required. This is the product's brand name. The brand is used to help identify your product.
   --certification: list # Required. A list of certifications to link to the described product. — item shape: {authority?: string, link?: string, logo?: string, name?: string, validUntil?: string, value?: string}
-  --countryCode: list # Optional. A 2-letter country code (ISO 3166-1 Alpha 2).
+  --country-code: list # Optional. A 2-letter country code (ISO 3166-1 Alpha 2).
   --mpn: list # Optional. These are the Manufacturer Part Numbers (MPN). MPNs are used to uniquely identify a specific product among all products from the same manufacturer
   --body-name: string # Required. The unique name identifier of a product certification Format: accounts/{account}/languages/{language_code}/productCertifications/{id} Where `id` is a some unique identifier and `language_code` is a 2-letter ISO 639-1 code of a Shopping supported language according to https://support.google.com/merchants/answer/160637.
-  --productCode: list # Optional. Another name for GTIN.
-  --productType: list # Optional. These are your own product categorization system in your product data.
+  --product-code: list # Optional. Another name for GTIN.
+  --product-type: list # Optional. These are your own product categorization system in your product data.
   --title: string # Required. This is to clearly identify the product you are certifying.
 ]: any -> record<brand: string, certification: table<authority: string, link: string, logo: string, name: string, validUntil: string, value: string>, countryCode: list<string>, destinationStatuses: table<destination: string, status: string>, issues: table<attribute: string, description: string, destination: string, resolution: string, severity: string, timestamp: string, title: string, type: string>, mpn: list<string>, name: string, productCode: list<string>, productType: list<string>, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name)" $qp)
-  let body = {brand: $brand, certification: $certification, countryCode: $countryCode, mpn: $mpn, name: $body_name, productCode: $productCode, productType: $productType, title: $title} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let body = {"brand": $brand, "certification": $certification, "countryCode": $country_code, "mpn": $mpn, "name": $body_name, "productCode": $product_code, "productType": $product_type, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -233,17 +233,17 @@ export def "product-certifications manufacturersaccountslanguagesproductCertific
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --pageSize: int # Optional. The maximum number of product certifications to return. The service may return fewer than this value. If unspecified, at most 50 product certifications will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
-  --pageToken: string # Optional. A page token, received from a previous `ListProductCertifications` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListProductCertifications` must match the call that provided the page token. Required if requesting the second or higher page.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --page-size: int # Optional. The maximum number of product certifications to return. The service may return fewer than this value. If unspecified, at most 50 product certifications will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
+  --page-token: string # Optional. A page token, received from a previous `ListProductCertifications` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListProductCertifications` must match the call that provided the page token. Required if requesting the second or higher page.
 ]: nothing -> record<nextPageToken: string, productCertifications: table<brand: string, certification: list, countryCode: list, destinationStatuses: list, issues: list, mpn: list, name: string, productCode: list, productType: list, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/productCertifications" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/productCertifications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -270,18 +270,18 @@ export def "products manufacturersaccountsproductslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --include: list # The information to be included in the response. Only sections listed here will be returned.
-  --pageSize: int # Maximum number of product statuses to return in the response, used for paging.
-  --pageToken: string # The token returned by the previous request.
+  --page-size: int # Maximum number of product statuses to return in the response, used for paging.
+  --page-token: string # The token returned by the previous request.
 ]: nothing -> record<nextPageToken: string, products: table<attributes: record, contentLanguage: string, destinationStatuses: list, issues: list, name: string, parent: string, productId: string, targetCountry: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "include" $include "multi") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/products" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "include" $include "multi") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/products") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -309,15 +309,15 @@ export def "products manufacturersaccountsproductsdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/products/($name)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent, name: $name} | format pattern "/v1/{parent}/products/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -345,16 +345,16 @@ export def "products manufacturersaccountsproductsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --include: list # The information to be included in the response. Only sections listed here will be returned.
 ]: nothing -> record<attributes: record<additionalImageLink: list<record>, ageGroup: string, brand: string, capacity: record<unit: string, value: string>, color: string, count: record<unit: string, value: string>, description: string, disclosureDate: string, excludedDestination: list<string>, featureDescription: list<record>, flavor: string, format: string, gender: string, grocery: record<activeIngredients: string, alcoholByVolume: float, allergens: string, derivedNutritionClaim: list, directions: string, indications: string, ingredients: string, nutritionClaim: list, storageInstructions: string>, gtin: list<string>, imageLink: record<imageUrl: string, status: string, type: string>, includedDestination: list<string>, itemGroupId: string, material: string, mpn: string, nutrition: record<addedSugars: record, addedSugarsDailyPercentage: float, calcium: record, calciumDailyPercentage: float, cholesterol: record, cholesterolDailyPercentage: float, dietaryFiber: record, dietaryFiberDailyPercentage: float, energy: record, energyFromFat: record, folateDailyPercentage: float, folateFolicAcid: record, folateMcgDfe: float, iron: record, ironDailyPercentage: float, monounsaturatedFat: record, nutritionFactMeasure: string, polyols: record, polyunsaturatedFat: record, potassium: record, potassiumDailyPercentage: float, preparedSizeDescription: string, protein: record, proteinDailyPercentage: float, saturatedFat: record, saturatedFatDailyPercentage: float, servingSizeDescription: string, servingSizeMeasure: record, servingsPerContainer: string, sodium: record, sodiumDailyPercentage: float, starch: record, totalCarbohydrate: record, totalCarbohydrateDailyPercentage: float, totalFat: record, totalFatDailyPercentage: float, totalSugars: record, totalSugarsDailyPercentage: float, transFat: record, transFatDailyPercentage: float, vitaminD: record, vitaminDDailyPercentage: float, voluntaryNutritionFact: list>, pattern: string, productDetail: list<record>, productHighlight: list<string>, productLine: string, productName: string, productPageUrl: string, productType: list<string>, releaseDate: string, richProductContent: list<string>, scent: string, size: string, sizeSystem: string, sizeType: list<string>, suggestedRetailPrice: record<amount: string, currency: string>, targetClientId: string, theme: string, title: string, videoLink: list<string>>, contentLanguage: string, destinationStatuses: table<destination: string, status: string>, issues: table<attribute: string, description: string, destination: string, resolution: string, severity: string, timestamp: string, title: string, type: string>, name: string, parent: string, productId: string, targetCountry: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "include" $include "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/products/($name)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "include" $include "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent, name: $name} | format pattern "/v1/{parent}/products/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -391,56 +391,56 @@ export def "products manufacturersaccountsproductsupdate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --additionalImageLink: list # The additional images of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#addlimage. — item shape: {imageUrl?: string, status?: "STATUS_UNSPECIFIED"|"PENDING_PROCESSING"|"PENDING_CRAWL"|"OK"|"ROBOTED"|"XROBOTED"|"CRAWL_ERROR"|"PROCESSING_ERROR"|"DECODING_ERROR"|"TOO_BIG"|"CRAWL_SKIPPED"|"HOSTLOADED"|"HTTP_404", type?: "TYPE_UNSPECIFIED"|"CRAWLED"|"UPLOADED"}
-  --ageGroup: string # The target age group of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#agegroup.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --additional-image-link: list # The additional images of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#addlimage. — item shape: {imageUrl?: string, status?: "STATUS_UNSPECIFIED"|"PENDING_PROCESSING"|"PENDING_CRAWL"|"OK"|"ROBOTED"|"XROBOTED"|"CRAWL_ERROR"|"PROCESSING_ERROR"|"DECODING_ERROR"|"TOO_BIG"|"CRAWL_SKIPPED"|"HOSTLOADED"|"HTTP_404", type?: "TYPE_UNSPECIFIED"|"CRAWLED"|"UPLOADED"}
+  --age-group: string # The target age group of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#agegroup.
   --brand: string # The brand name of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#brand.
   --capacity: record # The capacity of a product. For more information, see https://support.google.com/manufacturers/answer/6124116#capacity. — shape: {unit?: string, value?: string}
   --color: string # The color of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#color.
   --count: record # The number of products in a single package. For more information, see https://support.google.com/manufacturers/answer/6124116#count. — shape: {unit?: string, value?: string}
   --description: string # The description of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#description.
-  --disclosureDate: string # The disclosure date of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#disclosure.
-  --excludedDestination: list # A list of excluded destinations such as "ClientExport", "ClientShoppingCatalog" or "PartnerShoppingCatalog". For more information, see https://support.google.com/manufacturers/answer/7443550
-  --featureDescription: list # The rich format description of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#featuredesc. — item shape: {headline?: string, image?: record, text?: string}
+  --disclosure-date: string # The disclosure date of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#disclosure.
+  --excluded-destination: list # A list of excluded destinations such as "ClientExport", "ClientShoppingCatalog" or "PartnerShoppingCatalog". For more information, see https://support.google.com/manufacturers/answer/7443550
+  --feature-description: list # The rich format description of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#featuredesc. — item shape: {headline?: string, image?: record, text?: string}
   --flavor: string # The flavor of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#flavor.
   --format: string # The format of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#format.
   --gender: string # The target gender of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#gender.
   --grocery: record # shape: {activeIngredients?: string, alcoholByVolume?: float, allergens?: string, derivedNutritionClaim?: list, directions?: string, indications?: string, ingredients?: string, nutritionClaim?: list, storageInstructions?: string}
   --gtin: list # The Global Trade Item Number (GTIN) of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#gtin.
-  --imageLink: record # An image. — shape: {imageUrl?: string, status?: "STATUS_UNSPECIFIED"|"PENDING_PROCESSING"|"PENDING_CRAWL"|"OK"|"ROBOTED"|"XROBOTED"|"CRAWL_ERROR"|"PROCESSING_ERROR"|"DECODING_ERROR"|"TOO_BIG"|"CRAWL_SKIPPED"|"HOSTLOADED"|"HTTP_404", type?: "TYPE_UNSPECIFIED"|"CRAWLED"|"UPLOADED"}
-  --includedDestination: list # A list of included destinations such as "ClientExport", "ClientShoppingCatalog" or "PartnerShoppingCatalog". For more information, see https://support.google.com/manufacturers/answer/7443550
-  --itemGroupId: string # The item group id of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#itemgroupid.
+  --image-link: record # An image. — shape: {imageUrl?: string, status?: "STATUS_UNSPECIFIED"|"PENDING_PROCESSING"|"PENDING_CRAWL"|"OK"|"ROBOTED"|"XROBOTED"|"CRAWL_ERROR"|"PROCESSING_ERROR"|"DECODING_ERROR"|"TOO_BIG"|"CRAWL_SKIPPED"|"HOSTLOADED"|"HTTP_404", type?: "TYPE_UNSPECIFIED"|"CRAWLED"|"UPLOADED"}
+  --included-destination: list # A list of included destinations such as "ClientExport", "ClientShoppingCatalog" or "PartnerShoppingCatalog". For more information, see https://support.google.com/manufacturers/answer/7443550
+  --item-group-id: string # The item group id of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#itemgroupid.
   --material: string # The material of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#material.
   --mpn: string # The Manufacturer Part Number (MPN) of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#mpn.
   --nutrition: record # shape: {addedSugars?: record, addedSugarsDailyPercentage?: float, calcium?: record, calciumDailyPercentage?: float, cholesterol?: record, cholesterolDailyPercentage?: float, dietaryFiber?: record, dietaryFiberDailyPercentage?: float, energy?: record, energyFromFat?: record, folateDailyPercentage?: float, folateFolicAcid?: record, folateMcgDfe?: float, iron?: record, ironDailyPercentage?: float, monounsaturatedFat?: record, nutritionFactMeasure?: string, polyols?: record, polyunsaturatedFat?: record, potassium?: record, potassiumDailyPercentage?: float, preparedSizeDescription?: string, protein?: record, proteinDailyPercentage?: float, saturatedFat?: record, saturatedFatDailyPercentage?: float, servingSizeDescription?: string, servingSizeMeasure?: record, servingsPerContainer?: string, sodium?: record, sodiumDailyPercentage?: float, starch?: record, totalCarbohydrate?: record, totalCarbohydrateDailyPercentage?: float, totalFat?: record, totalFatDailyPercentage?: float, totalSugars?: record, totalSugarsDailyPercentage?: float, transFat?: record, transFatDailyPercentage?: float, vitaminD?: record, vitaminDDailyPercentage?: float, voluntaryNutritionFact?: list}
   --pattern: string # The pattern of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#pattern.
-  --productDetail: list # The details of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#productdetail. — item shape: {attributeName?: string, attributeValue?: string, sectionName?: string}
-  --productHighlight: list # The product highlights. For more information, see https://support.google.com/manufacturers/answer/10066942
-  --productLine: string # The name of the group of products related to the product. For more information, see https://support.google.com/manufacturers/answer/6124116#productline.
-  --productName: string # The canonical name of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#productname.
-  --productPageUrl: string # The URL of the detail page of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#productpage.
-  --productType: list # The type or category of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#producttype.
-  --releaseDate: string # The release date of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#release.
-  --richProductContent: list # Rich product content. For more information, see https://support.google.com/manufacturers/answer/9389865
+  --product-detail: list # The details of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#productdetail. — item shape: {attributeName?: string, attributeValue?: string, sectionName?: string}
+  --product-highlight: list # The product highlights. For more information, see https://support.google.com/manufacturers/answer/10066942
+  --product-line: string # The name of the group of products related to the product. For more information, see https://support.google.com/manufacturers/answer/6124116#productline.
+  --product-name: string # The canonical name of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#productname.
+  --product-page-url: string # The URL of the detail page of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#productpage.
+  --product-type: list # The type or category of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#producttype.
+  --release-date: string # The release date of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#release.
+  --rich-product-content: list # Rich product content. For more information, see https://support.google.com/manufacturers/answer/9389865
   --scent: string # The scent of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#scent.
   --size: string # The size of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#size.
-  --sizeSystem: string # The size system of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#sizesystem.
-  --sizeType: list # The size type of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#sizetype.
-  --suggestedRetailPrice: record # A price. — shape: {amount?: string, currency?: string}
-  --targetClientId: string # The target client id. Should only be used in the accounts of the data partners. For more information, see https://support.google.com/manufacturers/answer/10857344
+  --size-system: string # The size system of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#sizesystem.
+  --size-type: list # The size type of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#sizetype.
+  --suggested-retail-price: record # A price. — shape: {amount?: string, currency?: string}
+  --target-client-id: string # The target client id. Should only be used in the accounts of the data partners. For more information, see https://support.google.com/manufacturers/answer/10857344
   --theme: string # The theme of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#theme.
   --title: string # The title of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#title.
-  --videoLink: list # The videos of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#video.
+  --video-link: list # The videos of the product. For more information, see https://support.google.com/manufacturers/answer/6124116#video.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/products/($name)" $qp)
-  let body = {additionalImageLink: $additionalImageLink, ageGroup: $ageGroup, brand: $brand, capacity: $capacity, color: $color, count: $count, description: $description, disclosureDate: $disclosureDate, excludedDestination: $excludedDestination, featureDescription: $featureDescription, flavor: $flavor, format: $format, gender: $gender, grocery: $grocery, gtin: $gtin, imageLink: $imageLink, includedDestination: $includedDestination, itemGroupId: $itemGroupId, material: $material, mpn: $mpn, nutrition: $nutrition, pattern: $pattern, productDetail: $productDetail, productHighlight: $productHighlight, productLine: $productLine, productName: $productName, productPageUrl: $productPageUrl, productType: $productType, releaseDate: $releaseDate, richProductContent: $richProductContent, scent: $scent, size: $size, sizeSystem: $sizeSystem, sizeType: $sizeType, suggestedRetailPrice: $suggestedRetailPrice, targetClientId: $targetClientId, theme: $theme, title: $title, videoLink: $videoLink} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent, name: $name} | format pattern "/v1/{parent}/products/{name}") $qp)
+  let body = {"additionalImageLink": $additional_image_link, "ageGroup": $age_group, "brand": $brand, "capacity": $capacity, "color": $color, "count": $count, "description": $description, "disclosureDate": $disclosure_date, "excludedDestination": $excluded_destination, "featureDescription": $feature_description, "flavor": $flavor, "format": $format, "gender": $gender, "grocery": $grocery, "gtin": $gtin, "imageLink": $image_link, "includedDestination": $included_destination, "itemGroupId": $item_group_id, "material": $material, "mpn": $mpn, "nutrition": $nutrition, "pattern": $pattern, "productDetail": $product_detail, "productHighlight": $product_highlight, "productLine": $product_line, "productName": $product_name, "productPageUrl": $product_page_url, "productType": $product_type, "releaseDate": $release_date, "richProductContent": $rich_product_content, "scent": $scent, "size": $size, "sizeSystem": $size_system, "sizeType": $size_type, "suggestedRetailPrice": $suggested_retail_price, "targetClientId": $target_client_id, "theme": $theme, "title": $title, "videoLink": $video_link} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

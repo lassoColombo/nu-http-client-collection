@@ -108,7 +108,7 @@ export def "stories get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($section).($format)" $qp)
+  let full_url = (build-url $base ({section: $section, format: $format} | format pattern "/{section}.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "roto-baller-articles RotoballerArticles" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "roto-baller-articles get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /{format}/RotoBallerArticles
 # operationId: RotoballerArticles
-export def "roto-baller-articles RotoballerArticles" [
+export def "roto-baller-articles get" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -107,7 +107,7 @@ export def "roto-baller-articles RotoballerArticles" [
 ]: nothing -> table<ArticleID: int, Author: string, Content: string, Players: list<record>, Source: string, TermsOfUse: string, Title: string, Updated: string, Url: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/RotoBallerArticles")
+  let full_url = (build-url $base ({format: $format} | format pattern "/{format}/RotoBallerArticles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -117,7 +117,7 @@ export def "roto-baller-articles RotoballerArticles" [
 #
 # GET /{format}/RotoBallerArticlesByDate/{date}
 # operationId: RotoballerArticlesByDate
-export def "roto-baller-articles-by-date RotoballerArticlesByDate" [
+export def "roto-baller-articles-by-date get" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -131,7 +131,7 @@ export def "roto-baller-articles-by-date RotoballerArticlesByDate" [
 ]: nothing -> table<ArticleID: int, Author: string, Content: string, Players: list<record>, Source: string, TermsOfUse: string, Title: string, Updated: string, Url: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/RotoBallerArticlesByDate/($date)")
+  let full_url = (build-url $base ({format: $format, date: $date} | format pattern "/{format}/RotoBallerArticlesByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -141,7 +141,7 @@ export def "roto-baller-articles-by-date RotoballerArticlesByDate" [
 #
 # GET /{format}/RotoBallerArticlesByPlayerID/{playerid}
 # operationId: RotoballerArticlesByPlayer
-export def "roto-baller-articles-by-player-id RotoballerArticlesByPlayer" [
+export def "roto-baller-articles-by-player-id get" [
   format: string
   playerid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -155,7 +155,7 @@ export def "roto-baller-articles-by-player-id RotoballerArticlesByPlayer" [
 ]: nothing -> table<ArticleID: int, Author: string, Content: string, Players: list<record>, Source: string, TermsOfUse: string, Title: string, Updated: string, Url: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/RotoBallerArticlesByPlayerID/($playerid)")
+  let full_url = (build-url $base ({format: $format, playerid: $playerid} | format pattern "/{format}/RotoBallerArticlesByPlayerID/{playerid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

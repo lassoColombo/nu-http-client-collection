@@ -71,7 +71,7 @@ def accept-completer [] { ["application/json" "text/yaml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "versions-publish-anon versions-publish-anon" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "versions-publish-anon version-s" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # POST /versions/publish/anon
 # operationId: POST_versions-publish-anon
-export def "versions-publish-anon versions-publish-anon" [
+export def "versions-publish-anon version-s" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,14 +104,14 @@ export def "versions-publish-anon versions-publish-anon" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --specData: any
+  --spec-data: any
   --body-url: string
 ]: any -> record<url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/versions/publish/anon")
-  let body = {specData: $specData, url: $body_url} | compact
+  let body = {"specData": $spec_data, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -122,8 +122,8 @@ export def "versions-publish-anon versions-publish-anon" [
 #
 # GET /versions/{versionId}/export/{format}
 # operationId: GET_versions-versionId-export-format
-export def "versions-export versions-versionId-export-format" [
-  versionId: string
+export def "versions-export version-s" [
+  version_id: string
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -137,7 +137,7 @@ export def "versions-export versions-versionId-export-format" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/versions/($versionId)/export/($format)")
+  let full_url = (build-url $base ({version_id: $version_id, format: $format} | format pattern "/versions/{version_id}/export/{format}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,8 +148,8 @@ export def "versions-export versions-versionId-export-format" [
 # PUT /versions/{versionId}/import
 # operationId: PUT_versions-versionId-import
 # --options shape: {removeExtraEndpoints?: bool, removeExtraSchemas?: bool, removeExtraTextSections?: bool, removeExtraTraits?: bool}
-export def "versions-import versions-versionId-import" [
-  versionId: string
+export def "versions-import version-s" [
+  version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,14 +159,14 @@ export def "versions-import versions-versionId-import" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --options: record # shape: {removeExtraEndpoints?: bool, removeExtraSchemas?: bool, removeExtraTextSections?: bool, removeExtraTraits?: bool}
-  --specData: any
+  --spec-data: any
   --body-url: string
 ]: any -> record<data: record<endpointCount: float, format: string, projectId: string, schemaCount: float, testCount: float, textSectionCount: float, traitCount: float, versionId: string, workspaceId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/versions/($versionId)/import")
-  let body = {options: $options, specData: $specData, url: $body_url} | compact
+  let full_url = (build-url $base ({version_id: $version_id} | format pattern "/versions/{version_id}/import"))
+  let body = {"options": $options, "specData": $spec_data, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -177,8 +177,8 @@ export def "versions-import versions-versionId-import" [
 #
 # POST /versions/{versionId}/publish
 # operationId: POST_versions-versionId-publish
-export def "versions-publish versions-versionId-publish" [
-  versionId: string
+export def "versions-publish version-s" [
+  version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "versions-publish versions-versionId-publish" [
 ]: nothing -> record<customDomain: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/versions/($versionId)/publish")
+  let full_url = (build-url $base ({version_id: $version_id} | format pattern "/versions/{version_id}/publish"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -200,8 +200,8 @@ export def "versions-publish versions-versionId-publish" [
 #
 # PUT /versions/{versionId}/unpublish
 # operationId: PUT_versions-versionId-unpublish
-export def "versions-unpublish versions-versionId-unpublish" [
-  versionId: string
+export def "versions-unpublish version-s" [
+  version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "versions-unpublish versions-versionId-unpublish" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/versions/($versionId)/unpublish")
+  let full_url = (build-url $base ({version_id: $version_id} | format pattern "/versions/{version_id}/unpublish"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

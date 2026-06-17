@@ -106,7 +106,7 @@ export def "archive get" [
 ]: nothing -> record<response: record<docs: list<record>, meta: record<hits: int, offset: int, time: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($year)/($month).json")
+  let full_url = (build-url $base ({year: $year, month: $month} | format pattern "/{year}/{month}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

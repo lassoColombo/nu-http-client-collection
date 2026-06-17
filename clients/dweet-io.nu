@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alert-when createAlertGET" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alert-when create-alert-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /alert/{who}/when/{thing}/{condition}
 # operationId: createAlertGET
-export def "alert-when createAlertGET" [
+export def "alert-when create-alert-get" [
   who: string
   thing: string
   condition: string
@@ -109,7 +109,7 @@ export def "alert-when createAlertGET" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/alert/($who)/when/($thing)/($condition)" $qp)
+  let full_url = (build-url $base ({who: $who, thing: $thing, condition: $condition} | format pattern "/alert/{who}/when/{thing}/{condition}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -135,7 +135,7 @@ export def "dweet-for post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dweet/for/($thing)" $qp)
+  let full_url = (build-url $base ({thing: $thing} | format pattern "/dweet/for/{thing}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -162,7 +162,7 @@ export def "dweet-quietly-for post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dweet/quietly/for/($thing)" $qp)
+  let full_url = (build-url $base ({thing: $thing} | format pattern "/dweet/quietly/for/{thing}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -188,7 +188,7 @@ export def "get-alert-for get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/get/alert/for/($thing)" $qp)
+  let full_url = (build-url $base ({thing: $thing} | format pattern "/get/alert/for/{thing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +212,7 @@ export def "get-dweets-for get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/get/dweets/for/($thing)" $qp)
+  let full_url = (build-url $base ({thing: $thing} | format pattern "/get/dweets/for/{thing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -237,7 +237,7 @@ export def "get-latest-dweet-for get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/get/latest/dweet/for/($thing)" $qp)
+  let full_url = (build-url $base ({thing: $thing} | format pattern "/get/latest/dweet/for/{thing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,12 +260,12 @@ export def "get-stored-alerts-for get" [
   --key: string # A valid key for a locked thing. If the thing is not locked, this can be ignored.
   --date: string # The calendar date (YYYY-MM-DD) from which you'd like to start your query.  The response will be a maximum of one day.
   --hour: string # The hour of the day represented in the date parameter in 24-hour (00-23) format.  If this parameter is included, a maximum of 1 hour will be returned starting at this hour.
-  --responseType: string # Current valid parameters for this are 'csv' and 'json'.  If this parameter is left blank, all responses default to hapi-json dweet-speak.
+  --response-type: string # Current valid parameters for this are 'csv' and 'json'.  If this parameter is left blank, all responses default to hapi-json dweet-speak.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "hour" $hour "scalar") (serialize-qp "responseType" $responseType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/get/stored/alerts/for/($thing)" $qp)
+  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "hour" $hour "scalar") (serialize-qp "responseType" $response_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({thing: $thing} | format pattern "/get/stored/alerts/for/{thing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -287,12 +287,12 @@ export def "get-stored-dweets-for get" [
   --key: string # A valid key for a locked thing. If the thing is not locked, this can be ignored.
   --date: string # The calendar date (YYYY-MM-DD) from which you'd like to start your query.  The response will be a maximum of one day.
   --hour: string # The hour of the day represented in the date parameter in 24-hour (00-23) format.  If this parameter is included, a maximum of 1 hour will be returned starting at this hour.
-  --responseType: string # Current valid parameters for this are 'csv' and 'json'.  If this parameter is left blank, all responses default to hapi-json dweet-speak.
+  --response-type: string # Current valid parameters for this are 'csv' and 'json'.  If this parameter is left blank, all responses default to hapi-json dweet-speak.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "hour" $hour "scalar") (serialize-qp "responseType" $responseType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/get/stored/dweets/for/($thing)" $qp)
+  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "hour" $hour "scalar") (serialize-qp "responseType" $response_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({thing: $thing} | format pattern "/get/stored/dweets/for/{thing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -302,7 +302,7 @@ export def "get-stored-dweets-for get" [
 #
 # GET /listen/for/dweets/from/{thing}
 # operationId: listenForDweets
-export def "listen-for-dweets-from listenForDweets" [
+export def "listen-for-dweets-from list-en" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -315,7 +315,7 @@ export def "listen-for-dweets-from listenForDweets" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listen/for/dweets/from/($thing)")
+  let full_url = (build-url $base ({thing: $thing} | format pattern "/listen/for/dweets/from/{thing}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -325,7 +325,7 @@ export def "listen-for-dweets-from listenForDweets" [
 #
 # GET /lock/{thing}
 # operationId: lockThing
-export def "lock lockThing" [
+export def "lock get" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -341,7 +341,7 @@ export def "lock lockThing" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lock" $lock "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lock/($thing)" $qp)
+  let full_url = (build-url $base ({thing: $thing} | format pattern "/lock/{thing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -351,7 +351,7 @@ export def "lock lockThing" [
 #
 # GET /remove/alert/for/{thing}
 # operationId: removeAlert
-export def "remove-alert-for removeAlert" [
+export def "remove-alert-for delete" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -366,7 +366,7 @@ export def "remove-alert-for removeAlert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/remove/alert/for/($thing)" $qp)
+  let full_url = (build-url $base ({thing: $thing} | format pattern "/remove/alert/for/{thing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -376,7 +376,7 @@ export def "remove-alert-for removeAlert" [
 #
 # GET /remove/lock/{lock}
 # operationId: removeLock
-export def "remove-lock removeLock" [
+export def "remove-lock delete" [
   lock: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -391,7 +391,7 @@ export def "remove-lock removeLock" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/remove/lock/($lock)" $qp)
+  let full_url = (build-url $base ({lock: $lock} | format pattern "/remove/lock/{lock}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -401,7 +401,7 @@ export def "remove-lock removeLock" [
 #
 # GET /unlock/{thing}
 # operationId: unlockThing
-export def "unlock unlockThing" [
+export def "unlock get" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -416,7 +416,7 @@ export def "unlock unlockThing" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/unlock/($thing)" $qp)
+  let full_url = (build-url $base ({thing: $thing} | format pattern "/unlock/{thing}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

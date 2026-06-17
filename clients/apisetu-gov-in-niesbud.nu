@@ -107,16 +107,16 @@ export def "skcer-certificate skcer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {COURSE_NO: string, FullName: string, certificate_type: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {COURSE_NO: string, FullName: string, certificate_type: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/skcer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
+  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

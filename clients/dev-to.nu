@@ -77,7 +77,7 @@ def reactable-type-completer [] { ["Article" "Comment" "User"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-users post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-users create-admin-users-create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # POST /api/admin/users
 # operationId: postAdminUsersCreate
-export def "admin-users post" [
+export def "admin-users create-admin-users-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,7 +117,7 @@ export def "admin-users post" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/admin/users")
-  let body = {email: $email, name: $name} | compact
+  let body = {"email": $email, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -161,7 +161,7 @@ export def "articles get" [
 # POST /api/articles
 # operationId: createArticle
 # --article shape: {body_markdown?: string, canonical_url?: string, description?: string, main_image?: string, organization_id?: int, published?: bool, series?: string, tags?: string, title?: string}
-export def "articles createArticle" [
+export def "articles create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "articles createArticle" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/articles")
-  let body = {article: $article} | compact
+  let body = {"article": $article} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,7 +212,7 @@ export def "articles-latest get" [
 #
 # GET /api/articles/me
 # operationId: getUserArticles
-export def "articles-me get" [
+export def "articles-me get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "articles-me get" [
 #
 # GET /api/articles/me/all
 # operationId: getUserAllArticles
-export def "articles-me-all get" [
+export def "articles-me-all get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "articles-me-all get" [
 #
 # GET /api/articles/me/published
 # operationId: getUserPublishedArticles
-export def "articles-me-published get" [
+export def "articles-me-published get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,7 +287,7 @@ export def "articles-me-published get" [
 #
 # GET /api/articles/me/unpublished
 # operationId: getUserUnpublishedArticles
-export def "articles-me-unpublished get" [
+export def "articles-me-unpublished get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "articles get-by-id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/articles/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/articles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -336,7 +336,7 @@ export def "articles get-by-id" [
 # PUT /api/articles/{id}
 # operationId: updateArticle
 # --article shape: {body_markdown?: string, canonical_url?: string, description?: string, main_image?: string, organization_id?: int, published?: bool, series?: string, tags?: string, title?: string}
-export def "articles updateArticle" [
+export def "articles update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -351,8 +351,8 @@ export def "articles updateArticle" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/articles/($id)")
-  let body = {article: $article} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/articles/{id}"))
+  let body = {"article": $article} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -363,7 +363,7 @@ export def "articles updateArticle" [
 #
 # PUT /api/articles/{id}/unpublish
 # operationId: unpublishArticle
-export def "articles-unpublish unpublishArticle" [
+export def "articles-unpublish delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,7 +378,7 @@ export def "articles-unpublish unpublishArticle" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "note" $note "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/articles/($id)/unpublish" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/articles/{id}/unpublish") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -402,7 +402,7 @@ export def "articles get-by-username-slug" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/articles/($username)/($slug)")
+  let full_url = (build-url $base ({username: $username, slug: $slug} | format pattern "/api/articles/{username}/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,7 +450,7 @@ export def "comments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/comments/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/comments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -504,7 +504,7 @@ export def "display-ads post" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/display_ads")
-  let body = {approved: $approved, body_markdown: $body_markdown, creator_id: $creator_id, display_to: $display_to, name: $name, organization_id: $organization_id, placement_area: $placement_area, published: $published, tag_list: $tag_list, type_of: $type_of} | compact
+  let body = {"approved": $approved, "body_markdown": $body_markdown, "creator_id": $creator_id, "display_to": $display_to, "name": $name, "organization_id": $organization_id, "placement_area": $placement_area, "published": $published, "tag_list": $tag_list, "type_of": $type_of} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -527,7 +527,7 @@ export def "display-ads get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/display_ads/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/display_ads/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -559,8 +559,8 @@ export def "display-ads put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/display_ads/($id)")
-  let body = {approved: $approved, body_markdown: $body_markdown, creator_id: $creator_id, display_to: $display_to, name: $name, organization_id: $organization_id, placement_area: $placement_area, published: $published, tag_list: $tag_list} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/display_ads/{id}"))
+  let body = {"approved": $approved, "body_markdown": $body_markdown, "creator_id": $creator_id, "display_to": $display_to, "name": $name, "organization_id": $organization_id, "placement_area": $placement_area, "published": $published, "tag_list": $tag_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -583,7 +583,7 @@ export def "display-ads-unpublish put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/display_ads/($id)/unpublish")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/display_ads/{id}/unpublish"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -619,7 +619,7 @@ export def "followers-users get" [
 #
 # GET /api/follows/tags
 # operationId: getFollowedTags
-export def "follows-tags get" [
+export def "follows-tags get-followed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -654,7 +654,7 @@ export def "organizations get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/organizations/($username)")
+  let full_url = (build-url $base ({username: $username} | format pattern "/api/organizations/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -664,7 +664,7 @@ export def "organizations get" [
 #
 # GET /api/organizations/{username}/articles
 # operationId: getOrgArticles
-export def "organizations-articles get" [
+export def "organizations-articles get-org" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -680,7 +680,7 @@ export def "organizations-articles get" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/organizations/($username)/articles" $qp)
+  let full_url = (build-url $base ({username: $username} | format pattern "/api/organizations/{username}/articles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -690,7 +690,7 @@ export def "organizations-articles get" [
 #
 # GET /api/organizations/{username}/users
 # operationId: getOrgUsers
-export def "organizations-users get" [
+export def "organizations-users get-org" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -706,7 +706,7 @@ export def "organizations-users get" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/organizations/($username)/users" $qp)
+  let full_url = (build-url $base ({username: $username} | format pattern "/api/organizations/{username}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -757,7 +757,7 @@ export def "pages post" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/pages")
-  let body = {body_json: $body_json, body_markdown: $body_markdown, description: $description, is_top_level_path: $is_top_level_path, slug: $slug, template: $template, title: $title} | compact
+  let body = {"body_json": $body_json, "body_markdown": $body_markdown, "description": $description, "is_top_level_path": $is_top_level_path, "slug": $slug, "template": $template, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -780,7 +780,7 @@ export def "pages delete" [
 ]: nothing -> record<body_json: string, body_markdown: string, description: string, is_top_level_path: bool, slug: string, social_image: record, template: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/pages/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/pages/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -802,7 +802,7 @@ export def "pages get" [
 ]: nothing -> record<body_json: string, body_markdown: string, description: string, is_top_level_path: bool, slug: string, social_image: record, template: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/pages/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/pages/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -833,8 +833,8 @@ export def "pages put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/pages/($id)")
-  let body = {body_json: $body_json, body_markdown: $body_markdown, description: $description, is_top_level_path: $is_top_level_path, slug: $slug, social_image: $social_image, template: $template, title: $title} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/pages/{id}"))
+  let body = {"body_json": $body_json, "body_markdown": $body_markdown, "description": $description, "is_top_level_path": $is_top_level_path, "slug": $slug, "social_image": $social_image, "template": $template, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -884,7 +884,7 @@ export def "profile-images get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/profile_images/($username)")
+  let full_url = (build-url $base ({username: $username} | format pattern "/api/profile_images/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1029,7 +1029,7 @@ export def "users get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/users/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1052,7 +1052,7 @@ export def "users-suspend suspendUser" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/users/($id)/suspend")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/users/{id}/suspend"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1062,7 +1062,7 @@ export def "users-suspend suspendUser" [
 #
 # PUT /api/users/{id}/unpublish
 # operationId: unpublishUser
-export def "users-unpublish unpublishUser" [
+export def "users-unpublish delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1075,7 +1075,7 @@ export def "users-unpublish unpublishUser" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/users/($id)/unpublish")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/users/{id}/unpublish"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1085,7 +1085,7 @@ export def "users-unpublish unpublishUser" [
 #
 # GET /api/videos
 # operationId: videos
-export def "videos videos" [
+export def "videos get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

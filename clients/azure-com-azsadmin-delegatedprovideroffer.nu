@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-subscriptions-admin-delegated-providers-offers List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-subscriptions-admin-delegated-providers-offers list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,9 +93,9 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Subscriptions.Admin/delegatedProviders/{delegatedProviderSubscriptionId}/offers
 # operationId: DelegatedProviderOffers_List
-export def "subscriptions-providers-microsoft-subscriptions-admin-delegated-providers-offers List" [
-  subscriptionId: string
-  delegatedProviderSubscriptionId: string
+export def "subscriptions-providers-microsoft-subscriptions-admin-delegated-providers-offers list" [
+  subscription_id: string
+  delegated_provider_subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,7 +109,7 @@ export def "subscriptions-providers-microsoft-subscriptions-admin-delegated-prov
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Subscriptions.Admin/delegatedProviders/($delegatedProviderSubscriptionId)/offers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, delegated_provider_subscription_id: $delegated_provider_subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Subscriptions.Admin/delegatedProviders/{delegated_provider_subscription_id}/offers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,9 +119,9 @@ export def "subscriptions-providers-microsoft-subscriptions-admin-delegated-prov
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Subscriptions.Admin/delegatedProviders/{delegatedProviderSubscriptionId}/offers/{offer}
 # operationId: DelegatedProviderOffers_Get
-export def "subscriptions-providers-microsoft-subscriptions-admin-delegated-providers-offers Get" [
-  subscriptionId: string
-  delegatedProviderSubscriptionId: string
+export def "subscriptions-providers-microsoft-subscriptions-admin-delegated-providers-offers get" [
+  subscription_id: string
+  delegated_provider_subscription_id: string
   offer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -136,7 +136,7 @@ export def "subscriptions-providers-microsoft-subscriptions-admin-delegated-prov
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Subscriptions.Admin/delegatedProviders/($delegatedProviderSubscriptionId)/offers/($offer)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, delegated_provider_subscription_id: $delegated_provider_subscription_id, offer: $offer} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Subscriptions.Admin/delegatedProviders/{delegated_provider_subscription_id}/offers/{offer}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

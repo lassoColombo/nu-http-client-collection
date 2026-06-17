@@ -111,7 +111,7 @@ export def "screenshots-comparison-parallel get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "tolerance" $tolerance "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/screenshots/($target_screenshot_test_id)/($target_version_id)/comparison/parallel/($base_version_id)" $qp)
+  let full_url = (build-url $base ({target_screenshot_test_id: $target_screenshot_test_id, target_version_id: $target_version_id, base_version_id: $base_version_id} | format pattern "/screenshots/{target_screenshot_test_id}/{target_version_id}/comparison/parallel/{base_version_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -139,7 +139,7 @@ export def "screenshots-comparison list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "tolerance" $tolerance "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/screenshots/($target_screenshot_test_id)/($target_version_id)/comparison/($base_result_id)" $qp)
+  let full_url = (build-url $base ({target_screenshot_test_id: $target_screenshot_test_id, target_version_id: $target_version_id, base_result_id: $base_result_id} | format pattern "/screenshots/{target_screenshot_test_id}/{target_version_id}/comparison/{base_result_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -168,7 +168,7 @@ export def "screenshots-comparison get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "tolerance" $tolerance "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/screenshots/($target_screenshot_test_id)/($target_version_id)/($target_result_id)/comparison/($base_result_id)" $qp)
+  let full_url = (build-url $base ({target_screenshot_test_id: $target_screenshot_test_id, target_version_id: $target_version_id, target_result_id: $target_result_id, base_result_id: $base_result_id} | format pattern "/screenshots/{target_screenshot_test_id}/{target_version_id}/{target_result_id}/comparison/{base_result_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

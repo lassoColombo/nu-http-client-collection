@@ -111,14 +111,14 @@ export def "account-access-consents post" [
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
-  Data: record # shape: {ExpirationDateTime?: string, Permissions: list, TransactionFromDateTime?: string, TransactionToDateTime?: string}
-  Risk: record # The Risk section is sent by the initiating party to the ASPSP. It is used to specify additional details for risk scoring for Account Info.
+  data: record # shape: {ExpirationDateTime?: string, Permissions: list, TransactionFromDateTime?: string, TransactionToDateTime?: string}
+  risk: record # The Risk section is sent by the initiating party to the ASPSP. It is used to specify additional details for risk scoring for Account Info.
 ]: any -> record<Data: record<ConsentId: string, CreationDateTime: string, ExpirationDateTime: string, Permissions: list<string>, Status: string, StatusUpdateDateTime: string, TransactionFromDateTime: string, TransactionToDateTime: string>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>, Risk: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account-access-consents")
-  let body = {Data: $Data, Risk: $Risk} | compact
+  let body = {"Data": $data, "Risk": $risk} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "x-customer-user-agent": $x_customer_user_agent, "sandbox-id": $sandbox_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -131,7 +131,7 @@ export def "account-access-consents post" [
 #
 # DELETE /account-access-consents/{consentId}
 export def "account-access-consents delete" [
-  consentId: string
+  consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -148,7 +148,7 @@ export def "account-access-consents delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account-access-consents/($consentId)")
+  let full_url = (build-url $base ({consent_id: $consent_id} | format pattern "/account-access-consents/{consent_id}"))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "x-customer-user-agent": $x_customer_user_agent, "sandbox-id": $sandbox_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -160,7 +160,7 @@ export def "account-access-consents delete" [
 #
 # GET /account-access-consents/{consentId}
 export def "account-access-consents get" [
-  consentId: string
+  consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "account-access-consents get" [
 ]: nothing -> record<Data: record<ConsentId: string, CreationDateTime: string, ExpirationDateTime: string, Permissions: list<string>, Status: string, StatusUpdateDateTime: string, TransactionFromDateTime: string, TransactionToDateTime: string>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>, Risk: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account-access-consents/($consentId)")
+  let full_url = (build-url $base ({consent_id: $consent_id} | format pattern "/account-access-consents/{consent_id}"))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "x-customer-user-agent": $x_customer_user_agent, "sandbox-id": $sandbox_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
@@ -219,7 +219,7 @@ export def "accounts list" [
 #
 # GET /accounts/{accountId}
 export def "accounts get" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "accounts get" [
 ]: nothing -> record<Data: record<Account: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountId)")
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}"))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "x-customer-user-agent": $x_customer_user_agent, "sandbox-id": $sandbox_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
@@ -249,7 +249,7 @@ export def "accounts get" [
 #
 # GET /accounts/{accountId}/balances
 export def "accounts-balances get" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "accounts-balances get" [
 ]: nothing -> record<Data: record<Balance: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountId)/balances")
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/balances"))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "x-customer-user-agent": $x_customer_user_agent, "sandbox-id": $sandbox_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
@@ -279,7 +279,7 @@ export def "accounts-balances get" [
 #
 # GET /accounts/{accountId}/beneficiaries
 export def "accounts-beneficiaries get" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -297,7 +297,7 @@ export def "accounts-beneficiaries get" [
 ]: nothing -> record<Data: record<Beneficiary: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountId)/beneficiaries")
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/beneficiaries"))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "x-customer-user-agent": $x_customer_user_agent, "sandbox-id": $sandbox_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
@@ -309,7 +309,7 @@ export def "accounts-beneficiaries get" [
 #
 # GET /accounts/{accountId}/parties
 export def "accounts-parties get" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "accounts-parties get" [
 ]: nothing -> record<Data: record<Party: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountId)/parties")
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/parties"))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "x-customer-user-agent": $x_customer_user_agent, "sandbox-id": $sandbox_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
@@ -339,7 +339,7 @@ export def "accounts-parties get" [
 #
 # GET /accounts/{accountId}/party
 export def "accounts-party get" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +357,7 @@ export def "accounts-party get" [
 ]: nothing -> record<Data: record<Party: record<Name: string, PartyId: string>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountId)/party")
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/party"))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "x-customer-user-agent": $x_customer_user_agent, "sandbox-id": $sandbox_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
@@ -369,7 +369,7 @@ export def "accounts-party get" [
 #
 # GET /accounts/{accountId}/scheduled-payments
 export def "accounts-scheduled-payments get" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -387,7 +387,7 @@ export def "accounts-scheduled-payments get" [
 ]: nothing -> record<Data: record<ScheduledPayment: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountId)/scheduled-payments")
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/scheduled-payments"))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "x-customer-user-agent": $x_customer_user_agent, "sandbox-id": $sandbox_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
@@ -399,7 +399,7 @@ export def "accounts-scheduled-payments get" [
 #
 # GET /accounts/{accountId}/standing-orders
 export def "accounts-standing-orders get" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,7 +417,7 @@ export def "accounts-standing-orders get" [
 ]: nothing -> record<Data: record<StandingOrder: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountId)/standing-orders")
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/standing-orders"))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "x-customer-user-agent": $x_customer_user_agent, "sandbox-id": $sandbox_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
@@ -429,7 +429,7 @@ export def "accounts-standing-orders get" [
 #
 # GET /accounts/{accountId}/statements
 export def "accounts-statements list" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,8 +439,8 @@ export def "accounts-statements list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fromStatementDateTime: string # The UTC ISO 8601 Date Time to filter statements FROM NB Time component is optional - set to 00:00:00 for just Date. If the Date Time contains a timezone, the ASPSP must ignore the timezone component. (nullable, format: date-time)
-  --toStatementDateTime: string # The UTC ISO 8601 Date Time to filter statements TO NB Time component is optional - set to 00:00:00 for just Date. If the Date Time contains a timezone, the ASPSP must ignore the timezone component. (nullable, format: date-time)
+  --from-statement-date-time: string # The UTC ISO 8601 Date Time to filter statements FROM NB Time component is optional - set to 00:00:00 for just Date. If the Date Time contains a timezone, the ASPSP must ignore the timezone component. (nullable, format: date-time)
+  --to-statement-date-time: string # The UTC ISO 8601 Date Time to filter statements TO NB Time component is optional - set to 00:00:00 for just Date. If the Date Time contains a timezone, the ASPSP must ignore the timezone component. (nullable, format: date-time)
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
@@ -449,8 +449,8 @@ export def "accounts-statements list" [
 ]: nothing -> record<Data: record<Statement: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fromStatementDateTime" $fromStatementDateTime "scalar") (serialize-qp "toStatementDateTime" $toStatementDateTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($accountId)/statements" $qp)
+  let qp = [(serialize-qp "fromStatementDateTime" $from_statement_date_time "scalar") (serialize-qp "toStatementDateTime" $to_statement_date_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/statements") $qp)
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "x-customer-user-agent": $x_customer_user_agent, "sandbox-id": $sandbox_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
@@ -462,8 +462,8 @@ export def "accounts-statements list" [
 #
 # GET /accounts/{accountId}/statements/{statementId}
 export def "accounts-statements get" [
-  accountId: string
-  statementId: string
+  account_id: string
+  statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,7 +481,7 @@ export def "accounts-statements get" [
 ]: nothing -> record<Data: record<Statement: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountId)/statements/($statementId)")
+  let full_url = (build-url $base ({account_id: $account_id, statement_id: $statement_id} | format pattern "/accounts/{account_id}/statements/{statement_id}"))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "x-customer-user-agent": $x_customer_user_agent, "sandbox-id": $sandbox_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
@@ -493,8 +493,8 @@ export def "accounts-statements get" [
 #
 # GET /accounts/{accountId}/statements/{statementId}/file
 export def "accounts-statements-file get" [
-  accountId: string
-  statementId: string
+  account_id: string
+  statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -511,7 +511,7 @@ export def "accounts-statements-file get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountId)/statements/($statementId)/file")
+  let full_url = (build-url $base ({account_id: $account_id, statement_id: $statement_id} | format pattern "/accounts/{account_id}/statements/{statement_id}/file"))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "x-customer-user-agent": $x_customer_user_agent, "sandbox-id": $sandbox_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/pdf"
@@ -523,8 +523,8 @@ export def "accounts-statements-file get" [
 #
 # GET /accounts/{accountId}/statements/{statementId}/transactions
 export def "accounts-statements-transactions get" [
-  accountId: string
-  statementId: string
+  account_id: string
+  statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -542,7 +542,7 @@ export def "accounts-statements-transactions get" [
 ]: nothing -> record<Data: record<Transaction: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountId)/statements/($statementId)/transactions")
+  let full_url = (build-url $base ({account_id: $account_id, statement_id: $statement_id} | format pattern "/accounts/{account_id}/statements/{statement_id}/transactions"))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "x-customer-user-agent": $x_customer_user_agent, "sandbox-id": $sandbox_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
@@ -554,7 +554,7 @@ export def "accounts-statements-transactions get" [
 #
 # GET /accounts/{accountId}/transactions
 export def "accounts-transactions get" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,8 +564,8 @@ export def "accounts-transactions get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --fromBookingDateTime: string # The UTC ISO 8601 Date Time to filter transactions FROM NB Time component is optional - set to 00:00:00 for just Date. If the Date Time contains a timezone, the ASPSP must ignore the timezone component. (nullable, format: date-time)
-  --toBookingDateTime: string # The UTC ISO 8601 Date Time to filter transactions TO NB Time component is optional - set to 00:00:00 for just Date. If the Date Time contains a timezone, the ASPSP must ignore the timezone component. (nullable, format: date-time)
+  --from-booking-date-time: string # The UTC ISO 8601 Date Time to filter transactions FROM NB Time component is optional - set to 00:00:00 for just Date. If the Date Time contains a timezone, the ASPSP must ignore the timezone component. (nullable, format: date-time)
+  --to-booking-date-time: string # The UTC ISO 8601 Date Time to filter transactions TO NB Time component is optional - set to 00:00:00 for just Date. If the Date Time contains a timezone, the ASPSP must ignore the timezone component. (nullable, format: date-time)
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP. All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below: Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
@@ -574,8 +574,8 @@ export def "accounts-transactions get" [
 ]: nothing -> record<Data: record<Transaction: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fromBookingDateTime" $fromBookingDateTime "scalar") (serialize-qp "toBookingDateTime" $toBookingDateTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($accountId)/transactions" $qp)
+  let qp = [(serialize-qp "fromBookingDateTime" $from_booking_date_time "scalar") (serialize-qp "toBookingDateTime" $to_booking_date_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/transactions") $qp)
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "x-customer-user-agent": $x_customer_user_agent, "sandbox-id": $sandbox_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
@@ -625,13 +625,13 @@ export def "sandbox post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  sandboxId: string # Sandbox Id
+  sandbox_id: string # Sandbox Id
 ]: any -> record<sandboxId: string, users: table<accounts: list, cards: list, retryCacheEntries: list, userId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox")
-  let body = {sandboxId: $sandboxId} | compact
+  let body = {"sandboxId": $sandbox_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -651,14 +651,14 @@ export def "sandbox put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  sandboxId: string # Sandbox id
+  sandbox_id: string # Sandbox id
   --users: list # List of users (nullable) — item shape: {accounts?: list, cards?: list, retryCacheEntries?: list, userId?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox")
-  let body = {sandboxId: $sandboxId, users: $users} | compact
+  let body = {"sandboxId": $sandbox_id, "users": $users} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -669,7 +669,7 @@ export def "sandbox put" [
 #
 # DELETE /sandbox/{sandboxId}
 export def "sandbox delete" [
-  sandboxId: string
+  sandbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,7 +681,7 @@ export def "sandbox delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sandbox/($sandboxId)")
+  let full_url = (build-url $base ({sandbox_id: $sandbox_id} | format pattern "/sandbox/{sandbox_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -691,7 +691,7 @@ export def "sandbox delete" [
 #
 # GET /sandbox/{sandboxId}
 export def "sandbox get" [
-  sandboxId: string
+  sandbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -704,7 +704,7 @@ export def "sandbox get" [
 ]: nothing -> record<sandboxId: string, users: table<accounts: list, cards: list, retryCacheEntries: list, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sandbox/($sandboxId)")
+  let full_url = (build-url $base ({sandbox_id: $sandbox_id} | format pattern "/sandbox/{sandbox_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

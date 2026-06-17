@@ -65,18 +65,18 @@ def base-url-completer [] { ["https://azure.local"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def appendMode-completer [] { ["autocreate"] }
+def append-mode-completer [] { ["autocreate"] }
 def op-completer [] { ["CONCURRENTAPPEND"] }
-def syncFlag-completer [] { ["CLOSE" "DATA" "METADATA"] }
-def Transfer-Encoding-completer [] { ["chunked"] }
-def expiryOption-completer [] { ["Absolute" "NeverExpire" "RelativeToCreationDate" "RelativeToNow"] }
+def sync-flag-completer [] { ["CLOSE" "DATA" "METADATA"] }
+def transfer-encoding-completer [] { ["chunked"] }
+def expiry-option-completer [] { ["Absolute" "NeverExpire" "RelativeToCreationDate" "RelativeToNow"] }
 def op-completer-1 [] { ["SETEXPIRY"] }
 def op-completer-2 [] { ["CHECKACCESS"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "web-hdfs-ext ConcurrentAppend" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "web-hdfs-ext post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,7 +100,7 @@ export def commands []: nothing -> table {
 #
 # POST /WebHdfsExt/{path}
 # operationId: FileSystem_ConcurrentAppend
-export def "web-hdfs-ext ConcurrentAppend" [
+export def "web-hdfs-ext post" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -110,20 +110,20 @@ export def "web-hdfs-ext ConcurrentAppend" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --appendMode: string@appendMode-completer # Indicates the concurrent append call should create the file if it doesn't exist or just open the existing file for append
+  --append-mode: string@append-mode-completer # Indicates the concurrent append call should create the file if it doesn't exist or just open the existing file for append
   --op: string@op-completer # The constant value for the operation.
-  --syncFlag: string@syncFlag-completer # Optionally indicates what to do after completion of the concurrent append. DATA indicates that more data will be sent immediately by the client, the file handle should remain open/locked, and file metadata (including file length, last modified time) should NOT get updated. METADATA indicates that more data will be sent immediately by the client, the file handle should remain open/locked, and file metadata should get updated. CLOSE indicates that the client is done sending data, the file handle should be closed/unlocked, and file metadata should get updated. (default: DATA)
+  --sync-flag: string@sync-flag-completer # Optionally indicates what to do after completion of the concurrent append. DATA indicates that more data will be sent immediately by the client, the file handle should remain open/locked, and file metadata (including file length, last modified time) should NOT get updated. METADATA indicates that more data will be sent immediately by the client, the file handle should remain open/locked, and file metadata should get updated. CLOSE indicates that the client is done sending data, the file handle should be closed/unlocked, and file metadata should get updated. (default: DATA)
   --api-version: string # Client Api Version.
-  --Transfer-Encoding: string@Transfer-Encoding-completer # Indicates the data being sent to the server is being streamed in chunks.
+  --transfer-encoding: string@transfer-encoding-completer # Indicates the data being sent to the server is being streamed in chunks.
   --body: record
 ]: any -> record<remoteException: record<exception: string, javaClassName: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "appendMode" $appendMode "scalar") (serialize-qp "op" $op "scalar") (serialize-qp "syncFlag" $syncFlag "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/WebHdfsExt/($path)" $qp)
+  let qp = [(serialize-qp "appendMode" $append_mode "scalar") (serialize-qp "op" $op "scalar") (serialize-qp "syncFlag" $sync_flag "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({path: $path} | format pattern "/WebHdfsExt/{path}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Transfer-Encoding": $Transfer_Encoding} | compact
+  let extra_headers = {"Transfer-Encoding": $transfer_encoding} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -134,7 +134,7 @@ export def "web-hdfs-ext ConcurrentAppend" [
 #
 # PUT /WebHdfsExt/{path}
 # operationId: FileSystem_SetFileExpiry
-export def "web-hdfs-ext SetFileExpiry" [
+export def "web-hdfs-ext put" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -144,15 +144,15 @@ export def "web-hdfs-ext SetFileExpiry" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --expiryOption: string@expiryOption-completer # Indicates the type of expiration to use for the file: 1. NeverExpire: ExpireTime is ignored. 2. RelativeToNow: ExpireTime is an integer in milliseconds representing the expiration date relative to when file expiration is updated. 3. RelativeToCreationDate: ExpireTime is an integer in milliseconds representing the expiration date relative to file creation. 4. Absolute: ExpireTime is an integer in milliseconds, as a Unix timestamp relative to 1/1/1970 00:00:00.
-  --expireTime: int # The time that the file will expire, corresponding to the ExpiryOption that was set. (format: int64)
+  --expiry-option: string@expiry-option-completer # Indicates the type of expiration to use for the file: 1. NeverExpire: ExpireTime is ignored. 2. RelativeToNow: ExpireTime is an integer in milliseconds representing the expiration date relative to when file expiration is updated. 3. RelativeToCreationDate: ExpireTime is an integer in milliseconds representing the expiration date relative to file creation. 4. Absolute: ExpireTime is an integer in milliseconds, as a Unix timestamp relative to 1/1/1970 00:00:00.
+  --expire-time: int # The time that the file will expire, corresponding to the ExpiryOption that was set. (format: int64)
   --op: string@op-completer-1 # The constant value for the operation.
   --api-version: string # Client Api Version.
 ]: nothing -> record<remoteException: record<exception: string, javaClassName: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expiryOption" $expiryOption "scalar") (serialize-qp "expireTime" $expireTime "scalar") (serialize-qp "op" $op "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/WebHdfsExt/($path)" $qp)
+  let qp = [(serialize-qp "expiryOption" $expiry_option "scalar") (serialize-qp "expireTime" $expire_time "scalar") (serialize-qp "op" $op "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({path: $path} | format pattern "/WebHdfsExt/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -162,7 +162,7 @@ export def "web-hdfs-ext SetFileExpiry" [
 #
 # GET /webhdfs/v1/{path}
 # operationId: FileSystem_CheckAccess
-export def "webhdfs CheckAccess" [
+export def "webhdfs check-access" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,7 +179,7 @@ export def "webhdfs CheckAccess" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fsaction" $fsaction "scalar") (serialize-qp "op" $op "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/webhdfs/v1/($path)" $qp)
+  let full_url = (build-url $base ({path: $path} | format pattern "/webhdfs/v1/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

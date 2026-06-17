@@ -105,7 +105,7 @@ export def "components imageComponentsGET" [
 ]: nothing -> record<components: record<engine: record<url: string>, equipments: record, paint: record<lowerPaint: record, upperPaint: record>, rim: record<code: string, url: string>, trim: record<code: string, url: string>, upholstery: record<code: string, url: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($finorvin)/components")
+  let full_url = (build-url $base ({finorvin: $finorvin} | format pattern "/{finorvin}/components"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -128,7 +128,7 @@ export def "components-engine imageComponentsEngineGET" [
 ]: nothing -> record<engine: record<url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($finorvin)/components/engine")
+  let full_url = (build-url $base ({finorvin: $finorvin} | format pattern "/{finorvin}/components/engine"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -151,7 +151,7 @@ export def "components-equipments imageComponentsEquipmentsGET" [
 ]: nothing -> record<equipments: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($finorvin)/components/equipments")
+  let full_url = (build-url $base ({finorvin: $finorvin} | format pattern "/{finorvin}/components/equipments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -174,7 +174,7 @@ export def "components-paint imageComponentsPaintGET" [
 ]: nothing -> record<paint: record<lowerPaint: record<code: string, url: string>, upperPaint: record<code: string, url: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($finorvin)/components/paint")
+  let full_url = (build-url $base ({finorvin: $finorvin} | format pattern "/{finorvin}/components/paint"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,7 +197,7 @@ export def "components-rim imageComponentsRimGET" [
 ]: nothing -> record<rim: record<code: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($finorvin)/components/rim")
+  let full_url = (build-url $base ({finorvin: $finorvin} | format pattern "/{finorvin}/components/rim"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -220,7 +220,7 @@ export def "components-trim imageComponentsTrimGET" [
 ]: nothing -> record<trim: record<code: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($finorvin)/components/trim")
+  let full_url = (build-url $base ({finorvin: $finorvin} | format pattern "/{finorvin}/components/trim"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -243,7 +243,7 @@ export def "components-upholstery imageComponentsUpholsteryGET" [
 ]: nothing -> record<upholstery: record<code: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($finorvin)/components/upholstery")
+  let full_url = (build-url $base ({finorvin: $finorvin} | format pattern "/{finorvin}/components/upholstery"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -264,13 +264,13 @@ export def "vehicle imageVehicleGET" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --perspectives: string # One or more perspectives as a comma separated String list e.g. 'EXT000,EXT010,INT1'.  The following perspectives are available:   * EXT000-EXT350: EXT000 defines the front view, EXT010 defines a rotation of 10 degress and so forth.   * INT1-INT4: These are the 4 available interior perspectives.                                   The default value is EXT020,INT1 if no value is provided. (default: EXT020,INT1)
-  --roofOpen: oneof<nothing, bool> # Set 'true', if you are looking for images with the roof open. This option is only valid for cabrios. Default is 'false'. (default: false)
+  --roof-open: oneof<nothing, bool> # Set 'true', if you are looking for images with the roof open. This option is only valid for cabrios. Default is 'false'. (default: false)
   --night: oneof<nothing, bool> # Set 'true', if you are looking for images with a darker background and the vehicle's headlights turned on. Default is 'false'. (default: false)
 ]: nothing -> record<vehicle: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "perspectives" $perspectives "scalar") (serialize-qp "roofOpen" $roofOpen "scalar") (serialize-qp "night" $night "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($finorvin)/vehicle" $qp)
+  let qp = [(serialize-qp "perspectives" $perspectives "scalar") (serialize-qp "roofOpen" $roof_open "scalar") (serialize-qp "night" $night "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({finorvin: $finorvin} | format pattern "/{finorvin}/vehicle") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -105,14 +105,14 @@ export def "attributes-computed get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool> # Can only be used by admins or managers to fetch all entities
-  --userId: int # Standard users can use this only with their own _userId_
-  --deviceId: int # Standard users can use this only with _deviceId_s, they have access to
-  --groupId: int # Standard users can use this only with _groupId_s, they have access to
+  --user-id: int # Standard users can use this only with their own _userId_
+  --device-id: int # Standard users can use this only with _deviceId_s, they have access to
+  --group-id: int # Standard users can use this only with _groupId_s, they have access to
   --refresh: oneof<nothing, bool>
 ]: nothing -> table<attribute: string, description: string, expression: string, id: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "deviceId" $deviceId "scalar") (serialize-qp "groupId" $groupId "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attributes/computed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -141,7 +141,7 @@ export def "attributes-computed post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/attributes/computed")
-  let body = {attribute: $attribute, description: $description, expression: $expression, id: $id, type: $type} | compact
+  let body = {"attribute": $attribute, "description": $description, "expression": $expression, "id": $id, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -164,7 +164,7 @@ export def "attributes-computed delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/attributes/computed/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/attributes/computed/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -192,8 +192,8 @@ export def "attributes-computed put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/attributes/computed/($id)")
-  let body = {attribute: $attribute, description: $description, expression: $expression, id: $body_id, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/attributes/computed/{id}"))
+  let body = {"attribute": $attribute, "description": $description, "expression": $expression, "id": $body_id, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -213,11 +213,11 @@ export def "calendars get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool> # Can only be used by admins or managers to fetch all entities
-  --userId: int # Standard users can use this only with their own _userId_
+  --user-id: int # Standard users can use this only with their own _userId_
 ]: nothing -> table<attributes: record, data: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $userId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calendars" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -245,7 +245,7 @@ export def "calendars post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calendars")
-  let body = {attributes: $attributes, data: $data, id: $id, name: $name} | compact
+  let body = {"attributes": $attributes, "data": $data, "id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -268,7 +268,7 @@ export def "calendars delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calendars/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/calendars/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -295,8 +295,8 @@ export def "calendars put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calendars/($id)")
-  let body = {attributes: $attributes, data: $data, id: $body_id, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/calendars/{id}"))
+  let body = {"attributes": $attributes, "data": $data, "id": $body_id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -316,14 +316,14 @@ export def "commands get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool> # Can only be used by admins or managers to fetch all entities
-  --userId: int # Standard users can use this only with their own _userId_
-  --deviceId: int # Standard users can use this only with _deviceId_s, they have access to
-  --groupId: int # Standard users can use this only with _groupId_s, they have access to
+  --user-id: int # Standard users can use this only with their own _userId_
+  --device-id: int # Standard users can use this only with _deviceId_s, they have access to
+  --group-id: int # Standard users can use this only with _groupId_s, they have access to
   --refresh: oneof<nothing, bool>
 ]: nothing -> table<attributes: record, description: string, deviceId: int, id: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "deviceId" $deviceId "scalar") (serialize-qp "groupId" $groupId "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/commands" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -344,7 +344,7 @@ export def "commands post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: record
   --description: string
-  --deviceId: int
+  --device-id: int
   --id: int
   --type: string
 ]: any -> record<attributes: record, description: string, deviceId: int, id: int, type: string> {
@@ -352,7 +352,7 @@ export def "commands post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/commands")
-  let body = {attributes: $attributes, description: $description, deviceId: $deviceId, id: $id, type: $type} | compact
+  let body = {"attributes": $attributes, "description": $description, "deviceId": $device_id, "id": $id, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -371,11 +371,11 @@ export def "commands-send get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --deviceId: int # Standard users can use this only with _deviceId_s, they have access to
+  --device-id: int # Standard users can use this only with _deviceId_s, they have access to
 ]: nothing -> table<attributes: record, description: string, deviceId: int, id: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deviceId" $deviceId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "deviceId" $device_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/commands/send" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -396,7 +396,7 @@ export def "commands-send post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: record
   --description: string
-  --deviceId: int
+  --device-id: int
   --id: int
   --type: string
 ]: any -> record<attributes: record, description: string, deviceId: int, id: int, type: string> {
@@ -404,7 +404,7 @@ export def "commands-send post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/commands/send")
-  let body = {attributes: $attributes, description: $description, deviceId: $deviceId, id: $id, type: $type} | compact
+  let body = {"attributes": $attributes, "description": $description, "deviceId": $device_id, "id": $id, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -423,13 +423,13 @@ export def "commands-types get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --deviceId: int # Internal device identifier. Only works if device has already reported some locations
+  --device-id: int # Internal device identifier. Only works if device has already reported some locations
   --protocol: string # Protocol name. Can be used instead of device id
-  --textChannel: oneof<nothing, bool> # When `true` return SMS commands. If not specified or `false` return data commands
+  --text-channel: oneof<nothing, bool> # When `true` return SMS commands. If not specified or `false` return data commands
 ]: nothing -> table<type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deviceId" $deviceId "scalar") (serialize-qp "protocol" $protocol "scalar") (serialize-qp "textChannel" $textChannel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "deviceId" $device_id "scalar") (serialize-qp "protocol" $protocol "scalar") (serialize-qp "textChannel" $text_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/commands/types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -452,7 +452,7 @@ export def "commands delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/commands/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/commands/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -473,15 +473,15 @@ export def "commands put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: record
   --description: string
-  --deviceId: int
+  --device-id: int
   --body-id: int
   --type: string
 ]: any -> record<attributes: record, description: string, deviceId: int, id: int, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/commands/($id)")
-  let body = {attributes: $attributes, description: $description, deviceId: $deviceId, id: $body_id, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/commands/{id}"))
+  let body = {"attributes": $attributes, "description": $description, "deviceId": $device_id, "id": $body_id, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -501,13 +501,13 @@ export def "devices get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool> # Can only be used by admins or managers to fetch all entities
-  --userId: int # Standard users can use this only with their own _userId_
+  --user-id: int # Standard users can use this only with their own _userId_
   --id: int # To fetch one or more devices. Multiple params can be passed like `id=31&id=42`
-  --uniqueId: string # To fetch one or more devices. Multiple params can be passed like `uniqueId=333331&uniqieId=44442`
+  --unique-id: string # To fetch one or more devices. Multiple params can be passed like `uniqueId=333331&uniqieId=44442`
 ]: nothing -> table<attributes: record, category: string, contact: string, disabled: bool, geofenceIds: list<int>, groupId: int, id: int, lastUpdate: string, model: string, name: string, phone: string, positionId: int, status: string, uniqueId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "uniqueId" $uniqueId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "uniqueId" $unique_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/devices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -530,22 +530,22 @@ export def "devices post" [
   --category: string
   --contact: string
   --disabled: oneof<nothing, bool>
-  --geofenceIds: list
-  --groupId: int
+  --geofence-ids: list
+  --group-id: int
   --id: int
-  --lastUpdate: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
+  --last-update: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
   --model: string
   --name: string
   --phone: string
-  --positionId: int
+  --position-id: int
   --status: string
-  --uniqueId: string
+  --unique-id: string
 ]: any -> record<attributes: record, category: string, contact: string, disabled: bool, geofenceIds: list<int>, groupId: int, id: int, lastUpdate: string, model: string, name: string, phone: string, positionId: int, status: string, uniqueId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/devices")
-  let body = {attributes: $attributes, category: $category, contact: $contact, disabled: $disabled, geofenceIds: $geofenceIds, groupId: $groupId, id: $id, lastUpdate: $lastUpdate, model: $model, name: $name, phone: $phone, positionId: $positionId, status: $status, uniqueId: $uniqueId} | compact
+  let body = {"attributes": $attributes, "category": $category, "contact": $contact, "disabled": $disabled, "geofenceIds": $geofence_ids, "groupId": $group_id, "id": $id, "lastUpdate": $last_update, "model": $model, "name": $name, "phone": $phone, "positionId": $position_id, "status": $status, "uniqueId": $unique_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -568,7 +568,7 @@ export def "devices delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/devices/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/devices/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -591,22 +591,22 @@ export def "devices put" [
   --category: string
   --contact: string
   --disabled: oneof<nothing, bool>
-  --geofenceIds: list
-  --groupId: int
+  --geofence-ids: list
+  --group-id: int
   --body-id: int
-  --lastUpdate: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
+  --last-update: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
   --model: string
   --name: string
   --phone: string
-  --positionId: int
+  --position-id: int
   --status: string
-  --uniqueId: string
+  --unique-id: string
 ]: any -> record<attributes: record, category: string, contact: string, disabled: bool, geofenceIds: list<int>, groupId: int, id: int, lastUpdate: string, model: string, name: string, phone: string, positionId: int, status: string, uniqueId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/devices/($id)")
-  let body = {attributes: $attributes, category: $category, contact: $contact, disabled: $disabled, geofenceIds: $geofenceIds, groupId: $groupId, id: $body_id, lastUpdate: $lastUpdate, model: $model, name: $name, phone: $phone, positionId: $positionId, status: $status, uniqueId: $uniqueId} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/devices/{id}"))
+  let body = {"attributes": $attributes, "category": $category, "contact": $contact, "disabled": $disabled, "geofenceIds": $geofence_ids, "groupId": $group_id, "id": $body_id, "lastUpdate": $last_update, "model": $model, "name": $name, "phone": $phone, "positionId": $position_id, "status": $status, "uniqueId": $unique_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -626,15 +626,15 @@ export def "devices-accumulators put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --deviceId: int
+  --device-id: int
   --hours: float
-  --totalDistance: float # in meters
+  --total-distance: float # in meters
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/devices/($id)/accumulators")
-  let body = {deviceId: $deviceId, hours: $hours, totalDistance: $totalDistance} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/devices/{id}/accumulators"))
+  let body = {"deviceId": $device_id, "hours": $hours, "totalDistance": $total_distance} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -654,14 +654,14 @@ export def "drivers get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool> # Can only be used by admins or managers to fetch all entities
-  --userId: int # Standard users can use this only with their own _userId_
-  --deviceId: int # Standard users can use this only with _deviceId_s, they have access to
-  --groupId: int # Standard users can use this only with _groupId_s, they have access to
+  --user-id: int # Standard users can use this only with their own _userId_
+  --device-id: int # Standard users can use this only with _deviceId_s, they have access to
+  --group-id: int # Standard users can use this only with _groupId_s, they have access to
   --refresh: oneof<nothing, bool>
 ]: nothing -> table<attributes: record, id: int, name: string, uniqueId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "deviceId" $deviceId "scalar") (serialize-qp "groupId" $groupId "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/drivers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -683,13 +683,13 @@ export def "drivers post" [
   --attributes: record
   --id: int
   --name: string
-  --uniqueId: string
+  --unique-id: string
 ]: any -> record<attributes: record, id: int, name: string, uniqueId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/drivers")
-  let body = {attributes: $attributes, id: $id, name: $name, uniqueId: $uniqueId} | compact
+  let body = {"attributes": $attributes, "id": $id, "name": $name, "uniqueId": $unique_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -712,7 +712,7 @@ export def "drivers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/drivers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/drivers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -734,13 +734,13 @@ export def "drivers put" [
   --attributes: record
   --body-id: int
   --name: string
-  --uniqueId: string
+  --unique-id: string
 ]: any -> record<attributes: record, id: int, name: string, uniqueId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/drivers/($id)")
-  let body = {attributes: $attributes, id: $body_id, name: $name, uniqueId: $uniqueId} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/drivers/{id}"))
+  let body = {"attributes": $attributes, "id": $body_id, "name": $name, "uniqueId": $unique_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -761,7 +761,7 @@ export def "events get" [
 ]: nothing -> record<attributes: record, deviceId: int, eventTime: string, geofenceId: int, id: int, maintenanceId: int, positionId: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/events/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -780,14 +780,14 @@ export def "geofences get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool> # Can only be used by admins or managers to fetch all entities
-  --userId: int # Standard users can use this only with their own _userId_
-  --deviceId: int # Standard users can use this only with _deviceId_s, they have access to
-  --groupId: int # Standard users can use this only with _groupId_s, they have access to
+  --user-id: int # Standard users can use this only with their own _userId_
+  --device-id: int # Standard users can use this only with _deviceId_s, they have access to
+  --group-id: int # Standard users can use this only with _groupId_s, they have access to
   --refresh: oneof<nothing, bool>
 ]: nothing -> table<area: string, attributes: record, calendarId: int, description: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "deviceId" $deviceId "scalar") (serialize-qp "groupId" $groupId "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geofences" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -808,7 +808,7 @@ export def "geofences post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --area: string
   --attributes: record
-  --calendarId: int
+  --calendar-id: int
   --description: string
   --id: int
   --name: string
@@ -817,7 +817,7 @@ export def "geofences post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/geofences")
-  let body = {area: $area, attributes: $attributes, calendarId: $calendarId, description: $description, id: $id, name: $name} | compact
+  let body = {"area": $area, "attributes": $attributes, "calendarId": $calendar_id, "description": $description, "id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -840,7 +840,7 @@ export def "geofences delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/geofences/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/geofences/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -861,7 +861,7 @@ export def "geofences put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --area: string
   --attributes: record
-  --calendarId: int
+  --calendar-id: int
   --description: string
   --body-id: int
   --name: string
@@ -869,8 +869,8 @@ export def "geofences put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/geofences/($id)")
-  let body = {area: $area, attributes: $attributes, calendarId: $calendarId, description: $description, id: $body_id, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/geofences/{id}"))
+  let body = {"area": $area, "attributes": $attributes, "calendarId": $calendar_id, "description": $description, "id": $body_id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -890,11 +890,11 @@ export def "groups get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool> # Can only be used by admins or managers to fetch all entities
-  --userId: int # Standard users can use this only with their own _userId_
+  --user-id: int # Standard users can use this only with their own _userId_
 ]: nothing -> table<attributes: record, groupId: int, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $userId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -914,7 +914,7 @@ export def "groups post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: record
-  --groupId: int
+  --group-id: int
   --id: int
   --name: string
 ]: any -> record<attributes: record, groupId: int, id: int, name: string> {
@@ -922,7 +922,7 @@ export def "groups post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/groups")
-  let body = {attributes: $attributes, groupId: $groupId, id: $id, name: $name} | compact
+  let body = {"attributes": $attributes, "groupId": $group_id, "id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -945,7 +945,7 @@ export def "groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -965,15 +965,15 @@ export def "groups put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: record
-  --groupId: int
+  --group-id: int
   --body-id: int
   --name: string
 ]: any -> record<attributes: record, groupId: int, id: int, name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($id)")
-  let body = {attributes: $attributes, groupId: $groupId, id: $body_id, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}"))
+  let body = {"attributes": $attributes, "groupId": $group_id, "id": $body_id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -993,14 +993,14 @@ export def "maintenance get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool> # Can only be used by admins or managers to fetch all entities
-  --userId: int # Standard users can use this only with their own _userId_
-  --deviceId: int # Standard users can use this only with _deviceId_s, they have access to
-  --groupId: int # Standard users can use this only with _groupId_s, they have access to
+  --user-id: int # Standard users can use this only with their own _userId_
+  --device-id: int # Standard users can use this only with _deviceId_s, they have access to
+  --group-id: int # Standard users can use this only with _groupId_s, they have access to
   --refresh: oneof<nothing, bool>
 ]: nothing -> table<attributes: record, id: int, name: string, period: float, start: float, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "deviceId" $deviceId "scalar") (serialize-qp "groupId" $groupId "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/maintenance" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1030,7 +1030,7 @@ export def "maintenance post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/maintenance")
-  let body = {attributes: $attributes, id: $id, name: $name, period: $period, start: $start, type: $type} | compact
+  let body = {"attributes": $attributes, "id": $id, "name": $name, "period": $period, "start": $start, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1053,7 +1053,7 @@ export def "maintenance delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/maintenance/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/maintenance/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1082,8 +1082,8 @@ export def "maintenance put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/maintenance/($id)")
-  let body = {attributes: $attributes, id: $body_id, name: $name, period: $period, start: $start, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/maintenance/{id}"))
+  let body = {"attributes": $attributes, "id": $body_id, "name": $name, "period": $period, "start": $start, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1103,14 +1103,14 @@ export def "notifications get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool> # Can only be used by admins or managers to fetch all entities
-  --userId: int # Standard users can use this only with their own _userId_
-  --deviceId: int # Standard users can use this only with _deviceId_s, they have access to
-  --groupId: int # Standard users can use this only with _groupId_s, they have access to
+  --user-id: int # Standard users can use this only with their own _userId_
+  --device-id: int # Standard users can use this only with _deviceId_s, they have access to
+  --group-id: int # Standard users can use this only with _groupId_s, they have access to
   --refresh: oneof<nothing, bool>
 ]: nothing -> table<always: bool, attributes: record, calendarId: int, id: int, mail: bool, sms: bool, type: string, web: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $userId "scalar") (serialize-qp "deviceId" $deviceId "scalar") (serialize-qp "groupId" $groupId "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notifications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1131,7 +1131,7 @@ export def "notifications post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --always: oneof<nothing, bool>
   --attributes: record
-  --calendarId: int
+  --calendar-id: int
   --id: int
   --mail: oneof<nothing, bool>
   --sms: oneof<nothing, bool>
@@ -1142,7 +1142,7 @@ export def "notifications post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notifications")
-  let body = {always: $always, attributes: $attributes, calendarId: $calendarId, id: $id, mail: $mail, sms: $sms, type: $type, web: $web} | compact
+  let body = {"always": $always, "attributes": $attributes, "calendarId": $calendar_id, "id": $id, "mail": $mail, "sms": $sms, "type": $type, "web": $web} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1207,7 +1207,7 @@ export def "notifications delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notifications/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/notifications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1228,7 +1228,7 @@ export def "notifications put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --always: oneof<nothing, bool>
   --attributes: record
-  --calendarId: int
+  --calendar-id: int
   --body-id: int
   --mail: oneof<nothing, bool>
   --sms: oneof<nothing, bool>
@@ -1238,8 +1238,8 @@ export def "notifications put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notifications/($id)")
-  let body = {always: $always, attributes: $attributes, calendarId: $calendarId, id: $body_id, mail: $mail, sms: $sms, type: $type, web: $web} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/notifications/{id}"))
+  let body = {"always": $always, "attributes": $attributes, "calendarId": $calendar_id, "id": $body_id, "mail": $mail, "sms": $sms, "type": $type, "web": $web} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1258,21 +1258,21 @@ export def "permissions delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --attributeId: int # Computed Attribute Id, can be second parameter only
-  --calendarId: int # Calendar Id, can be second parameter only and only in combination with userId
-  --deviceId: int # Device Id, can be first parameter or second only in combination with userId
-  --driverId: int # Driver Id, can be second parameter only
-  --geofenceId: int # Geofence Id, can be second parameter only
-  --groupId: int # Group Id, can be first parameter or second only in combination with userId
-  --managedUserId: int # User Id, can be second parameter only and only in combination with userId
-  --notificationId: int # Notification Id, can be second parameter only
-  --userId: int # User Id, can be only first parameter
+  --attribute-id: int # Computed Attribute Id, can be second parameter only
+  --calendar-id: int # Calendar Id, can be second parameter only and only in combination with userId
+  --device-id: int # Device Id, can be first parameter or second only in combination with userId
+  --driver-id: int # Driver Id, can be second parameter only
+  --geofence-id: int # Geofence Id, can be second parameter only
+  --group-id: int # Group Id, can be first parameter or second only in combination with userId
+  --managed-user-id: int # User Id, can be second parameter only and only in combination with userId
+  --notification-id: int # Notification Id, can be second parameter only
+  --user-id: int # User Id, can be only first parameter
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/permissions")
-  let body = {attributeId: $attributeId, calendarId: $calendarId, deviceId: $deviceId, driverId: $driverId, geofenceId: $geofenceId, groupId: $groupId, managedUserId: $managedUserId, notificationId: $notificationId, userId: $userId} | compact
+  let body = {"attributeId": $attribute_id, "calendarId": $calendar_id, "deviceId": $device_id, "driverId": $driver_id, "geofenceId": $geofence_id, "groupId": $group_id, "managedUserId": $managed_user_id, "notificationId": $notification_id, "userId": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1291,21 +1291,21 @@ export def "permissions post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --attributeId: int # Computed Attribute Id, can be second parameter only
-  --calendarId: int # Calendar Id, can be second parameter only and only in combination with userId
-  --deviceId: int # Device Id, can be first parameter or second only in combination with userId
-  --driverId: int # Driver Id, can be second parameter only
-  --geofenceId: int # Geofence Id, can be second parameter only
-  --groupId: int # Group Id, can be first parameter or second only in combination with userId
-  --managedUserId: int # User Id, can be second parameter only and only in combination with userId
-  --notificationId: int # Notification Id, can be second parameter only
-  --userId: int # User Id, can be only first parameter
+  --attribute-id: int # Computed Attribute Id, can be second parameter only
+  --calendar-id: int # Calendar Id, can be second parameter only and only in combination with userId
+  --device-id: int # Device Id, can be first parameter or second only in combination with userId
+  --driver-id: int # Driver Id, can be second parameter only
+  --geofence-id: int # Geofence Id, can be second parameter only
+  --group-id: int # Group Id, can be first parameter or second only in combination with userId
+  --managed-user-id: int # User Id, can be second parameter only and only in combination with userId
+  --notification-id: int # Notification Id, can be second parameter only
+  --user-id: int # User Id, can be only first parameter
 ]: any -> record<attributeId: int, calendarId: int, deviceId: int, driverId: int, geofenceId: int, groupId: int, managedUserId: int, notificationId: int, userId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/permissions")
-  let body = {attributeId: $attributeId, calendarId: $calendarId, deviceId: $deviceId, driverId: $driverId, geofenceId: $geofenceId, groupId: $groupId, managedUserId: $managedUserId, notificationId: $notificationId, userId: $userId} | compact
+  let body = {"attributeId": $attribute_id, "calendarId": $calendar_id, "deviceId": $device_id, "driverId": $driver_id, "geofenceId": $geofence_id, "groupId": $group_id, "managedUserId": $managed_user_id, "notificationId": $notification_id, "userId": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1325,14 +1325,14 @@ export def "positions get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --deviceId: int # _deviceId_ is optional, but requires the _from_ and _to_ parameters when used
+  --device-id: int # _deviceId_ is optional, but requires the _from_ and _to_ parameters when used
   --qp-from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
   --qp-to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
   --id: int # To fetch one or more positions. Multiple params can be passed like `id=31&id=42`
 ]: nothing -> table<accuracy: float, address: string, altitude: float, attributes: record, course: float, deviceId: int, deviceTime: string, fixTime: string, id: int, latitude: float, longitude: float, network: record, outdated: bool, protocol: string, serverTime: string, speed: float, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deviceId" $deviceId "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "deviceId" $device_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/positions" $qp)
   let accept_val = ($accept | default "application/gpx+xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1352,15 +1352,15 @@ export def "reports-events get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --deviceId: list
-  --groupId: list
+  --device-id: list
+  --group-id: list
   --type: list # % can be used to return events of all types
   --qp-from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
   --qp-to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
 ]: nothing -> table<attributes: record, deviceId: int, eventTime: string, geofenceId: int, id: int, maintenanceId: int, positionId: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deviceId" $deviceId "multi") (serialize-qp "groupId" $groupId "multi") (serialize-qp "type" $type "csv") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "deviceId" $device_id "multi") (serialize-qp "groupId" $group_id "multi") (serialize-qp "type" $type "csv") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/events" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1380,14 +1380,14 @@ export def "reports-route get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --deviceId: list
-  --groupId: list
+  --device-id: list
+  --group-id: list
   --qp-from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
   --qp-to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
 ]: nothing -> table<accuracy: float, address: string, altitude: float, attributes: record, course: float, deviceId: int, deviceTime: string, fixTime: string, id: int, latitude: float, longitude: float, network: record, outdated: bool, protocol: string, serverTime: string, speed: float, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deviceId" $deviceId "multi") (serialize-qp "groupId" $groupId "multi") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "deviceId" $device_id "multi") (serialize-qp "groupId" $group_id "multi") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/route" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1407,14 +1407,14 @@ export def "reports-stops get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --deviceId: list
-  --groupId: list
+  --device-id: list
+  --group-id: list
   --qp-from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
   --qp-to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
 ]: nothing -> table<address: string, deviceId: int, deviceName: string, duration: int, endTime: string, engineHours: int, lat: float, lon: float, spentFuel: float, startTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deviceId" $deviceId "multi") (serialize-qp "groupId" $groupId "multi") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "deviceId" $device_id "multi") (serialize-qp "groupId" $group_id "multi") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/stops" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1434,14 +1434,14 @@ export def "reports-summary get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --deviceId: list
-  --groupId: list
+  --device-id: list
+  --group-id: list
   --qp-from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
   --qp-to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
 ]: nothing -> table<averageSpeed: float, deviceId: int, deviceName: string, distance: float, engineHours: int, maxSpeed: float, spentFuel: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deviceId" $deviceId "multi") (serialize-qp "groupId" $groupId "multi") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "deviceId" $device_id "multi") (serialize-qp "groupId" $group_id "multi") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/summary" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1461,14 +1461,14 @@ export def "reports-trips get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --deviceId: list
-  --groupId: list
+  --device-id: list
+  --group-id: list
   --qp-from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
   --qp-to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
 ]: nothing -> table<averageSpeed: float, deviceId: int, deviceName: string, distance: float, driverName: string, driverUniqueId: int, duration: int, endAddress: string, endLat: float, endLon: float, endTime: string, maxSpeed: float, spentFuel: float, startAddress: string, startLat: float, startLon: float, startTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deviceId" $deviceId "multi") (serialize-qp "groupId" $groupId "multi") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "deviceId" $device_id "multi") (serialize-qp "groupId" $group_id "multi") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/trips" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1509,20 +1509,20 @@ export def "server put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: record
-  --bingKey: string
-  --coordinateFormat: string
-  --deviceReadonly: oneof<nothing, bool>
-  --forceSettings: oneof<nothing, bool>
+  --bing-key: string
+  --coordinate-format: string
+  --device-readonly: oneof<nothing, bool>
+  --force-settings: oneof<nothing, bool>
   --id: int
   --latitude: float
-  --limitCommands: oneof<nothing, bool>
+  --limit-commands: oneof<nothing, bool>
   --longitude: float
   --map: string
-  --mapUrl: string
-  --poiLayer: string
+  --map-url: string
+  --poi-layer: string
   --readonly: oneof<nothing, bool>
   --registration: oneof<nothing, bool>
-  --twelveHourFormat: oneof<nothing, bool>
+  --twelve-hour-format: oneof<nothing, bool>
   --version: string
   --zoom: int
 ]: any -> record<attributes: record, bingKey: string, coordinateFormat: string, deviceReadonly: bool, forceSettings: bool, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, mapUrl: string, poiLayer: string, readonly: bool, registration: bool, twelveHourFormat: bool, version: string, zoom: int> {
@@ -1530,7 +1530,7 @@ export def "server put" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/server")
-  let body = {attributes: $attributes, bingKey: $bingKey, coordinateFormat: $coordinateFormat, deviceReadonly: $deviceReadonly, forceSettings: $forceSettings, id: $id, latitude: $latitude, limitCommands: $limitCommands, longitude: $longitude, map: $map, mapUrl: $mapUrl, poiLayer: $poiLayer, readonly: $readonly, registration: $registration, twelveHourFormat: $twelveHourFormat, version: $version, zoom: $zoom} | compact
+  let body = {"attributes": $attributes, "bingKey": $bing_key, "coordinateFormat": $coordinate_format, "deviceReadonly": $device_readonly, "forceSettings": $force_settings, "id": $id, "latitude": $latitude, "limitCommands": $limit_commands, "longitude": $longitude, "map": $map, "mapUrl": $map_url, "poiLayer": $poi_layer, "readonly": $readonly, "registration": $registration, "twelveHourFormat": $twelve_hour_format, "version": $version, "zoom": $zoom} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1600,7 +1600,7 @@ export def "session post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/session")
-  let body = {email: $email, password: $password} | compact
+  let body = {"email": $email, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1643,11 +1643,11 @@ export def "users get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userId: string # Can only be used by admin or manager users
+  --user-id: string # Can only be used by admin or manager users
 ]: nothing -> table<administrator: bool, attributes: record, coordinateFormat: string, deviceLimit: int, deviceReadonly: bool, disabled: bool, email: string, expirationTime: string, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, name: string, password: string, phone: string, poiLayer: string, readonly: bool, twelveHourFormat: bool, userLimit: int, zoom: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userId" $userId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1668,31 +1668,31 @@ export def "users post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --administrator: oneof<nothing, bool>
   --attributes: record
-  --coordinateFormat: string
-  --deviceLimit: int
-  --deviceReadonly: oneof<nothing, bool>
+  --coordinate-format: string
+  --device-limit: int
+  --device-readonly: oneof<nothing, bool>
   --disabled: oneof<nothing, bool>
   --email: string
-  --expirationTime: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
+  --expiration-time: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
   --id: int
   --latitude: float
-  --limitCommands: oneof<nothing, bool>
+  --limit-commands: oneof<nothing, bool>
   --longitude: float
   --map: string
   --name: string
   --password: string
   --phone: string
-  --poiLayer: string
+  --poi-layer: string
   --readonly: oneof<nothing, bool>
-  --twelveHourFormat: oneof<nothing, bool>
-  --userLimit: int
+  --twelve-hour-format: oneof<nothing, bool>
+  --user-limit: int
   --zoom: int
 ]: any -> record<administrator: bool, attributes: record, coordinateFormat: string, deviceLimit: int, deviceReadonly: bool, disabled: bool, email: string, expirationTime: string, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, name: string, password: string, phone: string, poiLayer: string, readonly: bool, twelveHourFormat: bool, userLimit: int, zoom: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users")
-  let body = {administrator: $administrator, attributes: $attributes, coordinateFormat: $coordinateFormat, deviceLimit: $deviceLimit, deviceReadonly: $deviceReadonly, disabled: $disabled, email: $email, expirationTime: $expirationTime, id: $id, latitude: $latitude, limitCommands: $limitCommands, longitude: $longitude, map: $map, name: $name, password: $password, phone: $phone, poiLayer: $poiLayer, readonly: $readonly, twelveHourFormat: $twelveHourFormat, userLimit: $userLimit, zoom: $zoom} | compact
+  let body = {"administrator": $administrator, "attributes": $attributes, "coordinateFormat": $coordinate_format, "deviceLimit": $device_limit, "deviceReadonly": $device_readonly, "disabled": $disabled, "email": $email, "expirationTime": $expiration_time, "id": $id, "latitude": $latitude, "limitCommands": $limit_commands, "longitude": $longitude, "map": $map, "name": $name, "password": $password, "phone": $phone, "poiLayer": $poi_layer, "readonly": $readonly, "twelveHourFormat": $twelve_hour_format, "userLimit": $user_limit, "zoom": $zoom} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1715,7 +1715,7 @@ export def "users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1736,31 +1736,31 @@ export def "users put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --administrator: oneof<nothing, bool>
   --attributes: record
-  --coordinateFormat: string
-  --deviceLimit: int
-  --deviceReadonly: oneof<nothing, bool>
+  --coordinate-format: string
+  --device-limit: int
+  --device-readonly: oneof<nothing, bool>
   --disabled: oneof<nothing, bool>
   --email: string
-  --expirationTime: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
+  --expiration-time: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
   --body-id: int
   --latitude: float
-  --limitCommands: oneof<nothing, bool>
+  --limit-commands: oneof<nothing, bool>
   --longitude: float
   --map: string
   --name: string
   --password: string
   --phone: string
-  --poiLayer: string
+  --poi-layer: string
   --readonly: oneof<nothing, bool>
-  --twelveHourFormat: oneof<nothing, bool>
-  --userLimit: int
+  --twelve-hour-format: oneof<nothing, bool>
+  --user-limit: int
   --zoom: int
 ]: any -> record<administrator: bool, attributes: record, coordinateFormat: string, deviceLimit: int, deviceReadonly: bool, disabled: bool, email: string, expirationTime: string, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, name: string, password: string, phone: string, poiLayer: string, readonly: bool, twelveHourFormat: bool, userLimit: int, zoom: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)")
-  let body = {administrator: $administrator, attributes: $attributes, coordinateFormat: $coordinateFormat, deviceLimit: $deviceLimit, deviceReadonly: $deviceReadonly, disabled: $disabled, email: $email, expirationTime: $expirationTime, id: $body_id, latitude: $latitude, limitCommands: $limitCommands, longitude: $longitude, map: $map, name: $name, password: $password, phone: $phone, poiLayer: $poiLayer, readonly: $readonly, twelveHourFormat: $twelveHourFormat, userLimit: $userLimit, zoom: $zoom} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}"))
+  let body = {"administrator": $administrator, "attributes": $attributes, "coordinateFormat": $coordinate_format, "deviceLimit": $device_limit, "deviceReadonly": $device_readonly, "disabled": $disabled, "email": $email, "expirationTime": $expiration_time, "id": $body_id, "latitude": $latitude, "limitCommands": $limit_commands, "longitude": $longitude, "map": $map, "name": $name, "password": $password, "phone": $phone, "poiLayer": $poi_layer, "readonly": $readonly, "twelveHourFormat": $twelve_hour_format, "userLimit": $user_limit, "zoom": $zoom} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

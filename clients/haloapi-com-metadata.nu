@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-subscription-
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "h5-metadata-campaign-missions Halo-5-Campaign-Missions" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "h5-metadata-campaign-missions get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /h5/metadata/campaign-missions
 # operationId: Halo-5-Campaign-Missions
-export def "h5-metadata-campaign-missions Halo-5-Campaign-Missions" [
+export def "h5-metadata-campaign-missions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,12 +103,12 @@ export def "h5-metadata-campaign-missions Halo-5-Campaign-Missions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/campaign-missions")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -119,7 +119,7 @@ export def "h5-metadata-campaign-missions Halo-5-Campaign-Missions" [
 #
 # GET /h5/metadata/commendations
 # operationId: Halo-5-Commendations
-export def "h5-metadata-commendations Halo-5-Commendations" [
+export def "h5-metadata-commendations get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,12 +128,12 @@ export def "h5-metadata-commendations Halo-5-Commendations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/commendations")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -144,7 +144,7 @@ export def "h5-metadata-commendations Halo-5-Commendations" [
 #
 # GET /h5/metadata/company-commendations
 # operationId: Halo-5-Company-Commendations
-export def "h5-metadata-company-commendations Halo-5-Company-Commendations" [
+export def "h5-metadata-company-commendations get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,12 +153,12 @@ export def "h5-metadata-company-commendations Halo-5-Company-Commendations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/company-commendations")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -169,7 +169,7 @@ export def "h5-metadata-company-commendations Halo-5-Company-Commendations" [
 #
 # GET /h5/metadata/csr-designations
 # operationId: Halo-5-CSR-Designations
-export def "h5-metadata-csr-designations Halo-5-CSR-Designations" [
+export def "h5-metadata-csr-designations get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,12 +178,12 @@ export def "h5-metadata-csr-designations Halo-5-CSR-Designations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/csr-designations")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -194,7 +194,7 @@ export def "h5-metadata-csr-designations Halo-5-CSR-Designations" [
 #
 # GET /h5/metadata/enemies
 # operationId: Halo-5-Enemies
-export def "h5-metadata-enemies Halo-5-Enemies" [
+export def "h5-metadata-enemies get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,12 +203,12 @@ export def "h5-metadata-enemies Halo-5-Enemies" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/enemies")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -219,7 +219,7 @@ export def "h5-metadata-enemies Halo-5-Enemies" [
 #
 # GET /h5/metadata/flexible-stats
 # operationId: Halo-5-Flexible-Stats
-export def "h5-metadata-flexible-stats Halo-5-Flexible-Stats" [
+export def "h5-metadata-flexible-stats get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,12 +228,12 @@ export def "h5-metadata-flexible-stats Halo-5-Flexible-Stats" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/flexible-stats")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -244,7 +244,7 @@ export def "h5-metadata-flexible-stats Halo-5-Flexible-Stats" [
 #
 # GET /h5/metadata/game-base-variants
 # operationId: Halo-5-Game-Base-Variants
-export def "h5-metadata-game-base-variants Halo-5-Game-Base-Variants" [
+export def "h5-metadata-game-base-variants get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,12 +253,12 @@ export def "h5-metadata-game-base-variants Halo-5-Game-Base-Variants" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/game-base-variants")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -269,7 +269,7 @@ export def "h5-metadata-game-base-variants Halo-5-Game-Base-Variants" [
 #
 # GET /h5/metadata/game-variants/{id}
 # operationId: Halo-5-Game-Variant
-export def "h5-metadata-game-variants Halo-5-Game-Variant" [
+export def "h5-metadata-game-variants get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -279,12 +279,12 @@ export def "h5-metadata-game-variants Halo-5-Game-Variant" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/h5/metadata/game-variants/($id)")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/h5/metadata/game-variants/{id}"))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -295,7 +295,7 @@ export def "h5-metadata-game-variants Halo-5-Game-Variant" [
 #
 # GET /h5/metadata/impulses
 # operationId: Halo-5-Impulses
-export def "h5-metadata-impulses Halo-5-Impulses" [
+export def "h5-metadata-impulses get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,12 +304,12 @@ export def "h5-metadata-impulses Halo-5-Impulses" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/impulses")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -320,7 +320,7 @@ export def "h5-metadata-impulses Halo-5-Impulses" [
 #
 # GET /h5/metadata/map-variants/{id}
 # operationId: Halo-5-Map-Variant
-export def "h5-metadata-map-variants Halo-5-Map-Variant" [
+export def "h5-metadata-map-variants get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,12 +330,12 @@ export def "h5-metadata-map-variants Halo-5-Map-Variant" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/h5/metadata/map-variants/($id)")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/h5/metadata/map-variants/{id}"))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -346,7 +346,7 @@ export def "h5-metadata-map-variants Halo-5-Map-Variant" [
 #
 # GET /h5/metadata/maps
 # operationId: Halo-5-Maps
-export def "h5-metadata-maps Halo-5-Maps" [
+export def "h5-metadata-maps get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,12 +355,12 @@ export def "h5-metadata-maps Halo-5-Maps" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/maps")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -371,7 +371,7 @@ export def "h5-metadata-maps Halo-5-Maps" [
 #
 # GET /h5/metadata/medals
 # operationId: Halo-5-Medals
-export def "h5-metadata-medals Halo-5-Medals" [
+export def "h5-metadata-medals get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,12 +380,12 @@ export def "h5-metadata-medals Halo-5-Medals" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/medals")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -396,7 +396,7 @@ export def "h5-metadata-medals Halo-5-Medals" [
 #
 # GET /h5/metadata/playlists
 # operationId: Halo-5-Playlists
-export def "h5-metadata-playlists Halo-5-Playlists" [
+export def "h5-metadata-playlists get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,12 +405,12 @@ export def "h5-metadata-playlists Halo-5-Playlists" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/playlists")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -421,7 +421,7 @@ export def "h5-metadata-playlists Halo-5-Playlists" [
 #
 # GET /h5/metadata/requisition-packs/{id}
 # operationId: Halo-5-Requisition-Pack
-export def "h5-metadata-requisition-packs Halo-5-Requisition-Pack" [
+export def "h5-metadata-requisition-packs get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,12 +431,12 @@ export def "h5-metadata-requisition-packs Halo-5-Requisition-Pack" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/h5/metadata/requisition-packs/($id)")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/h5/metadata/requisition-packs/{id}"))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -447,7 +447,7 @@ export def "h5-metadata-requisition-packs Halo-5-Requisition-Pack" [
 #
 # GET /h5/metadata/requisitions/{id}
 # operationId: Halo-5-Requisition
-export def "h5-metadata-requisitions Halo-5-Requisition" [
+export def "h5-metadata-requisitions get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -457,12 +457,12 @@ export def "h5-metadata-requisitions Halo-5-Requisition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/h5/metadata/requisitions/($id)")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/h5/metadata/requisitions/{id}"))
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -473,7 +473,7 @@ export def "h5-metadata-requisitions Halo-5-Requisition" [
 #
 # GET /h5/metadata/seasons
 # operationId: Halo-5-Seasons
-export def "h5-metadata-seasons Halo-5-Seasons" [
+export def "h5-metadata-seasons get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,12 +482,12 @@ export def "h5-metadata-seasons Halo-5-Seasons" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/seasons")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -498,7 +498,7 @@ export def "h5-metadata-seasons Halo-5-Seasons" [
 #
 # GET /h5/metadata/skulls
 # operationId: Halo-5-Skulls
-export def "h5-metadata-skulls Halo-5-Skulls" [
+export def "h5-metadata-skulls get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,12 +507,12 @@ export def "h5-metadata-skulls Halo-5-Skulls" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/skulls")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -523,7 +523,7 @@ export def "h5-metadata-skulls Halo-5-Skulls" [
 #
 # GET /h5/metadata/spartan-ranks
 # operationId: Halo-5-Spartan-Ranks
-export def "h5-metadata-spartan-ranks Halo-5-Spartan-Ranks" [
+export def "h5-metadata-spartan-ranks get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -532,12 +532,12 @@ export def "h5-metadata-spartan-ranks Halo-5-Spartan-Ranks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/spartan-ranks")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -548,7 +548,7 @@ export def "h5-metadata-spartan-ranks Halo-5-Spartan-Ranks" [
 #
 # GET /h5/metadata/team-colors
 # operationId: Halo-5-Team-Colors
-export def "h5-metadata-team-colors Halo-5-Team-Colors" [
+export def "h5-metadata-team-colors get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -557,12 +557,12 @@ export def "h5-metadata-team-colors Halo-5-Team-Colors" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/team-colors")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -573,7 +573,7 @@ export def "h5-metadata-team-colors Halo-5-Team-Colors" [
 #
 # GET /h5/metadata/vehicles
 # operationId: Halo-5-Vehicles
-export def "h5-metadata-vehicles Halo-5-Vehicles" [
+export def "h5-metadata-vehicles get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -582,12 +582,12 @@ export def "h5-metadata-vehicles Halo-5-Vehicles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/vehicles")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -598,7 +598,7 @@ export def "h5-metadata-vehicles Halo-5-Vehicles" [
 #
 # GET /h5/metadata/weapons
 # operationId: Halo-5-Weapons
-export def "h5-metadata-weapons Halo-5-Weapons" [
+export def "h5-metadata-weapons get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,12 +607,12 @@ export def "h5-metadata-weapons Halo-5-Weapons" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/h5/metadata/weapons")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -623,7 +623,7 @@ export def "h5-metadata-weapons Halo-5-Weapons" [
 #
 # GET /hw2/campaign-levels
 # operationId: Halo-Wars-2-Campaign-Levels
-export def "hw2-campaign-levels Halo-Wars-2-Campaign-Levels" [
+export def "hw2-campaign-levels get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,14 +632,14 @@ export def "hw2-campaign-levels Halo-Wars-2-Campaign-Levels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --Accept-Language: string # The desired language for the Metadata.
+  --start-at: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/campaign-levels" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -650,7 +650,7 @@ export def "hw2-campaign-levels Halo-Wars-2-Campaign-Levels" [
 #
 # GET /hw2/campaign-logs
 # operationId: Halo-Wars-2-Campaign-Logs
-export def "hw2-campaign-logs Halo-Wars-2-Campaign-Logs" [
+export def "hw2-campaign-logs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,11 +659,11 @@ export def "hw2-campaign-logs Halo-Wars-2-Campaign-Logs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
+  --start-at: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/campaign-logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -674,7 +674,7 @@ export def "hw2-campaign-logs Halo-Wars-2-Campaign-Logs" [
 #
 # GET /hw2/card-keywords
 # operationId: Halo-Wars-2-Card-Keywords
-export def "hw2-card-keywords Halo-Wars-2-Card-Keywords" [
+export def "hw2-card-keywords get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -683,14 +683,14 @@ export def "hw2-card-keywords Halo-Wars-2-Card-Keywords" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --Accept-Language: string # The desired language for the Metadata.
+  --start-at: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/card-keywords" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -701,7 +701,7 @@ export def "hw2-card-keywords Halo-Wars-2-Card-Keywords" [
 #
 # GET /hw2/cards
 # operationId: Halo-Wars-2-Cards
-export def "hw2-cards Halo-Wars-2-Cards" [
+export def "hw2-cards get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -710,14 +710,14 @@ export def "hw2-cards Halo-Wars-2-Cards" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --Accept-Language: string # The desired language for the Metadata.
+  --start-at: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/cards" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -728,7 +728,7 @@ export def "hw2-cards Halo-Wars-2-Cards" [
 #
 # GET /hw2/csr-designations
 # operationId: Halo-Wars-2-CSR-Designations
-export def "hw2-csr-designations Halo-Wars-2-CSR-Designations" [
+export def "hw2-csr-designations get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,14 +737,14 @@ export def "hw2-csr-designations Halo-Wars-2-CSR-Designations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --Accept-Language: string # The desired language for the Metadata.
+  --start-at: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/csr-designations" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -755,7 +755,7 @@ export def "hw2-csr-designations Halo-Wars-2-CSR-Designations" [
 #
 # GET /hw2/difficulties
 # operationId: Halo-Wars-2-Difficulties
-export def "hw2-difficulties Halo-Wars-2-Difficulties" [
+export def "hw2-difficulties get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -764,14 +764,14 @@ export def "hw2-difficulties Halo-Wars-2-Difficulties" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --Accept-Language: string # The desired language for the Metadata.
+  --start-at: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/difficulties" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -782,7 +782,7 @@ export def "hw2-difficulties Halo-Wars-2-Difficulties" [
 #
 # GET /hw2/game-object-categories
 # operationId: Halo-Wars-2-Game-Object-Categories
-export def "hw2-game-object-categories Halo-Wars-2-Game-Object-Categories" [
+export def "hw2-game-object-categories get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -791,11 +791,11 @@ export def "hw2-game-object-categories Halo-Wars-2-Game-Object-Categories" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
+  --start-at: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/game-object-categories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -806,7 +806,7 @@ export def "hw2-game-object-categories Halo-Wars-2-Game-Object-Categories" [
 #
 # GET /hw2/game-objects
 # operationId: Halo-Wars-2-Game-Objects
-export def "hw2-game-objects Halo-Wars-2-Game-Objects" [
+export def "hw2-game-objects get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -815,14 +815,14 @@ export def "hw2-game-objects Halo-Wars-2-Game-Objects" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --Accept-Language: string # The desired language for the Metadata.
+  --start-at: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/game-objects" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -833,7 +833,7 @@ export def "hw2-game-objects Halo-Wars-2-Game-Objects" [
 #
 # GET /hw2/leader-powers
 # operationId: Halo-Wars-2-Leader-Powers
-export def "hw2-leader-powers Halo-Wars-2-Leader-Powers" [
+export def "hw2-leader-powers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,14 +842,14 @@ export def "hw2-leader-powers Halo-Wars-2-Leader-Powers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --Accept-Language: string # The desired language for the Metadata.
+  --start-at: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/leader-powers" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -860,7 +860,7 @@ export def "hw2-leader-powers Halo-Wars-2-Leader-Powers" [
 #
 # GET /hw2/leaders
 # operationId: Halo-Wars-2-Leaders
-export def "hw2-leaders Halo-Wars-2-Leaders" [
+export def "hw2-leaders get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -869,14 +869,14 @@ export def "hw2-leaders Halo-Wars-2-Leaders" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --Accept-Language: string # The desired language for the Metadata.
+  --start-at: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/leaders" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -887,7 +887,7 @@ export def "hw2-leaders Halo-Wars-2-Leaders" [
 #
 # GET /hw2/maps
 # operationId: Halo-Wars-2-Maps
-export def "hw2-maps Halo-Wars-2-Maps" [
+export def "hw2-maps get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -896,14 +896,14 @@ export def "hw2-maps Halo-Wars-2-Maps" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --Accept-Language: string # The desired language for the Metadata.
+  --start-at: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/maps" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -914,7 +914,7 @@ export def "hw2-maps Halo-Wars-2-Maps" [
 #
 # GET /hw2/packs
 # operationId: Halo-Wars-2-Packs
-export def "hw2-packs Halo-Wars-2-Packs" [
+export def "hw2-packs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -923,14 +923,14 @@ export def "hw2-packs Halo-Wars-2-Packs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --Accept-Language: string # The desired language for the Metadata.
+  --start-at: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/packs" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -941,7 +941,7 @@ export def "hw2-packs Halo-Wars-2-Packs" [
 #
 # GET /hw2/playlists
 # operationId: Halo-Wars-2-Playlists
-export def "hw2-playlists Halo-Wars-2-Playlists" [
+export def "hw2-playlists get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -950,14 +950,14 @@ export def "hw2-playlists Halo-Wars-2-Playlists" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --Accept-Language: string # The desired language for the Metadata.
+  --start-at: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/playlists" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -968,7 +968,7 @@ export def "hw2-playlists Halo-Wars-2-Playlists" [
 #
 # GET /hw2/seasons
 # operationId: Halo-Wars-2-Seasons
-export def "hw2-seasons Halo-Wars-2-Seasons" [
+export def "hw2-seasons get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -977,14 +977,14 @@ export def "hw2-seasons Halo-Wars-2-Seasons" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --Accept-Language: string # The desired language for the Metadata.
+  --start-at: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/seasons" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -995,7 +995,7 @@ export def "hw2-seasons Halo-Wars-2-Seasons" [
 #
 # GET /hw2/spartan-ranks
 # operationId: Halo-Wars-2-Spartan-Ranks
-export def "hw2-spartan-ranks Halo-Wars-2-Spartan-Ranks" [
+export def "hw2-spartan-ranks get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1004,14 +1004,14 @@ export def "hw2-spartan-ranks Halo-Wars-2-Spartan-Ranks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --Accept-Language: string # The desired language for the Metadata.
+  --start-at: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/spartan-ranks" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1022,7 +1022,7 @@ export def "hw2-spartan-ranks Halo-Wars-2-Spartan-Ranks" [
 #
 # GET /hw2/techs
 # operationId: Halo-Wars-2-Techs
-export def "hw2-techs Halo-Wars-2-Techs" [
+export def "hw2-techs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1031,14 +1031,14 @@ export def "hw2-techs Halo-Wars-2-Techs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --Accept-Language: string # The desired language for the Metadata.
+  --start-at: float # When specified, this indicates the index of the item to start at.  When omitted, 0 is assumed.  When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
+  --accept-language: string # The desired language for the Metadata.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hw2/techs" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

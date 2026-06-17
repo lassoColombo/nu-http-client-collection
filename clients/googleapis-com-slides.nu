@@ -68,8 +68,8 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def xgafv-completer [] { ["1" "2"] }
 def alt-completer [] { ["json" "media" "proto"] }
-def thumbnailPropertiesmimeType-completer [] { ["PNG"] }
-def thumbnailPropertiesthumbnailSize-completer [] { ["LARGE" "MEDIUM" "SMALL" "THUMBNAIL_SIZE_UNSPECIFIED"] }
+def thumbnail-properties-mime-type-completer [] { ["PNG"] }
+def thumbnail-properties-thumbnail-size-completer [] { ["LARGE" "MEDIUM" "SMALL" "THUMBNAIL_SIZE_UNSPECIFIED"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -119,26 +119,26 @@ export def "presentations slidespresentationscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --layouts: list # The layouts in the presentation. A layout is a template that determines how content is arranged and styled on the slides that inherit from that layout. — item shape: {layoutProperties?: record, masterProperties?: record, notesProperties?: record, objectId?: string, pageElements?: list, pageProperties?: record, pageType?: "SLIDE"|"MASTER"|"LAYOUT"|"NOTES"|"NOTES_MASTER", revisionId?: string, slideProperties?: record}
   --locale: string # The locale of the presentation, as an IETF BCP 47 language tag.
   --masters: list # The slide masters in the presentation. A slide master contains all common page elements and the common properties for a set of layouts. They serve three purposes: - Placeholder shapes on a master contain the default text styles and shape properties of all placeholder shapes on pages that use that master. - The master page properties define the common page properties inherited by its layouts. - Any other shapes on the master slide appear on all slides using that master, regardless of their layout. — item shape: {layoutProperties?: record, masterProperties?: record, notesProperties?: record, objectId?: string, pageElements?: list, pageProperties?: record, pageType?: "SLIDE"|"MASTER"|"LAYOUT"|"NOTES"|"NOTES_MASTER", revisionId?: string, slideProperties?: record}
-  --notesMaster: record # A page in a presentation. — shape: {layoutProperties?: record, masterProperties?: record, notesProperties?: record, objectId?: string, pageElements?: list, pageProperties?: record, pageType?: "SLIDE"|"MASTER"|"LAYOUT"|"NOTES"|"NOTES_MASTER", revisionId?: string, slideProperties?: record}
-  --pageSize: record # A width and height. — shape: {height?: record, width?: record}
-  --presentationId: string # The ID of the presentation.
-  --revisionId: string # Output only. The revision ID of the presentation. Can be used in update requests to assert the presentation revision hasn't changed since the last read operation. Only populated if the user has edit access to the presentation. The revision ID is not a sequential number but a nebulous string. The format of the revision ID may change over time, so it should be treated opaquely. A returned revision ID is only guaranteed to be valid for 24 hours after it has been returned and cannot be shared across users. If the revision ID is unchanged between calls, then the presentation has not changed. Conversely, a changed ID (for the same presentation and user) usually means the presentation has been updated. However, a changed ID can also be due to internal factors such as ID format changes.
+  --notes-master: record # A page in a presentation. — shape: {layoutProperties?: record, masterProperties?: record, notesProperties?: record, objectId?: string, pageElements?: list, pageProperties?: record, pageType?: "SLIDE"|"MASTER"|"LAYOUT"|"NOTES"|"NOTES_MASTER", revisionId?: string, slideProperties?: record}
+  --page-size: record # A width and height. — shape: {height?: record, width?: record}
+  --presentation-id: string # The ID of the presentation.
+  --revision-id: string # Output only. The revision ID of the presentation. Can be used in update requests to assert the presentation revision hasn't changed since the last read operation. Only populated if the user has edit access to the presentation. The revision ID is not a sequential number but a nebulous string. The format of the revision ID may change over time, so it should be treated opaquely. A returned revision ID is only guaranteed to be valid for 24 hours after it has been returned and cannot be shared across users. If the revision ID is unchanged between calls, then the presentation has not changed. Conversely, a changed ID (for the same presentation and user) usually means the presentation has been updated. However, a changed ID can also be due to internal factors such as ID format changes.
   --slides: list # The slides in the presentation. A slide inherits properties from a slide layout. — item shape: {layoutProperties?: record, masterProperties?: record, notesProperties?: record, objectId?: string, pageElements?: list, pageProperties?: record, pageType?: "SLIDE"|"MASTER"|"LAYOUT"|"NOTES"|"NOTES_MASTER", revisionId?: string, slideProperties?: record}
   --title: string # The title of the presentation.
 ]: any -> record<layouts: table<layoutProperties: record, masterProperties: record, notesProperties: record, objectId: string, pageElements: list, pageProperties: record, pageType: string, revisionId: string, slideProperties: record>, locale: string, masters: table<layoutProperties: record, masterProperties: record, notesProperties: record, objectId: string, pageElements: list, pageProperties: record, pageType: string, revisionId: string, slideProperties: record>, notesMaster: record<layoutProperties: record<displayName: string, masterObjectId: string, name: string>, masterProperties: record<displayName: string>, notesProperties: record<speakerNotesObjectId: string>, objectId: string, pageElements: list<record>, pageProperties: record<colorScheme: record, pageBackgroundFill: record>, pageType: string, revisionId: string, slideProperties: record<isSkipped: bool, layoutObjectId: string, masterObjectId: string, notesPage: any>>, pageSize: record<height: record<magnitude: float, unit: string>, width: record<magnitude: float, unit: string>>, presentationId: string, revisionId: string, slides: table<layoutProperties: record, masterProperties: record, notesProperties: record, objectId: string, pageElements: list, pageProperties: record, pageType: string, revisionId: string, slideProperties: record>, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/presentations" $qp)
-  let body = {layouts: $layouts, locale: $locale, masters: $masters, notesMaster: $notesMaster, pageSize: $pageSize, presentationId: $presentationId, revisionId: $revisionId, slides: $slides, title: $title} | compact
+  let body = {"layouts": $layouts, "locale": $locale, "masters": $masters, "notesMaster": $notes_master, "pageSize": $page_size, "presentationId": $presentation_id, "revisionId": $revision_id, "slides": $slides, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -150,7 +150,7 @@ export def "presentations slidespresentationscreate" [
 # GET /v1/presentations/{presentationId}
 # operationId: slides.presentations.get
 export def "presentations slidespresentationsget" [
-  presentationId: string
+  presentation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,15 +166,15 @@ export def "presentations slidespresentationsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<layouts: table<layoutProperties: record, masterProperties: record, notesProperties: record, objectId: string, pageElements: list, pageProperties: record, pageType: string, revisionId: string, slideProperties: record>, locale: string, masters: table<layoutProperties: record, masterProperties: record, notesProperties: record, objectId: string, pageElements: list, pageProperties: record, pageType: string, revisionId: string, slideProperties: record>, notesMaster: record<layoutProperties: record<displayName: string, masterObjectId: string, name: string>, masterProperties: record<displayName: string>, notesProperties: record<speakerNotesObjectId: string>, objectId: string, pageElements: list<record>, pageProperties: record<colorScheme: record, pageBackgroundFill: record>, pageType: string, revisionId: string, slideProperties: record<isSkipped: bool, layoutObjectId: string, masterObjectId: string, notesPage: any>>, pageSize: record<height: record<magnitude: float, unit: string>, width: record<magnitude: float, unit: string>>, presentationId: string, revisionId: string, slides: table<layoutProperties: record, masterProperties: record, notesProperties: record, objectId: string, pageElements: list, pageProperties: record, pageType: string, revisionId: string, slideProperties: record>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/presentations/($presentationId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({presentation_id: $presentation_id} | format pattern "/v1/presentations/{presentation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -185,8 +185,8 @@ export def "presentations slidespresentationsget" [
 # GET /v1/presentations/{presentationId}/pages/{pageObjectId}
 # operationId: slides.presentations.pages.get
 export def "presentations-pages slidespresentationspagesget" [
-  presentationId: string
-  pageObjectId: string
+  presentation_id: string
+  page_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,15 +202,15 @@ export def "presentations-pages slidespresentationspagesget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<layoutProperties: record<displayName: string, masterObjectId: string, name: string>, masterProperties: record<displayName: string>, notesProperties: record<speakerNotesObjectId: string>, objectId: string, pageElements: table<description: string, elementGroup: record, image: record, line: record, objectId: string, shape: record, sheetsChart: record, size: record, table: record, title: string, transform: record, video: record, wordArt: record>, pageProperties: record<colorScheme: record<colors: list>, pageBackgroundFill: record<propertyState: string, solidFill: record, stretchedPictureFill: record>>, pageType: string, revisionId: string, slideProperties: record<isSkipped: bool, layoutObjectId: string, masterObjectId: string, notesPage: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/presentations/($presentationId)/pages/($pageObjectId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({presentation_id: $presentation_id, page_object_id: $page_object_id} | format pattern "/v1/presentations/{presentation_id}/pages/{page_object_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,8 +221,8 @@ export def "presentations-pages slidespresentationspagesget" [
 # GET /v1/presentations/{presentationId}/pages/{pageObjectId}/thumbnail
 # operationId: slides.presentations.pages.getThumbnail
 export def "presentations-pages-thumbnail slidespresentationspagesgetThumbnail" [
-  presentationId: string
-  pageObjectId: string
+  presentation_id: string
+  page_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,17 +238,17 @@ export def "presentations-pages-thumbnail slidespresentationspagesgetThumbnail" 
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --thumbnailPropertiesmimeType: string@thumbnailPropertiesmimeType-completer # The optional mime type of the thumbnail image. If you don't specify the mime type, the mime type defaults to PNG.
-  --thumbnailPropertiesthumbnailSize: string@thumbnailPropertiesthumbnailSize-completer # The optional thumbnail image size. If you don't specify the size, the server chooses a default size of the image.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --thumbnail-properties-mime-type: string@thumbnail-properties-mime-type-completer # The optional mime type of the thumbnail image. If you don't specify the mime type, the mime type defaults to PNG.
+  --thumbnail-properties-thumbnail-size: string@thumbnail-properties-thumbnail-size-completer # The optional thumbnail image size. If you don't specify the size, the server chooses a default size of the image.
 ]: nothing -> record<contentUrl: string, height: int, width: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "thumbnailProperties.mimeType" $thumbnailPropertiesmimeType "scalar") (serialize-qp "thumbnailProperties.thumbnailSize" $thumbnailPropertiesthumbnailSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/presentations/($presentationId)/pages/($pageObjectId)/thumbnail" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "thumbnailProperties.mimeType" $thumbnail_properties_mime_type "scalar") (serialize-qp "thumbnailProperties.thumbnailSize" $thumbnail_properties_thumbnail_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({presentation_id: $presentation_id, page_object_id: $page_object_id} | format pattern "/v1/presentations/{presentation_id}/pages/{page_object_id}/thumbnail") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -261,7 +261,7 @@ export def "presentations-pages-thumbnail slidespresentationspagesgetThumbnail" 
 # --requests item shape: {createImage?: record, createLine?: record, createParagraphBullets?: record, createShape?: record, createSheetsChart?: record, createSlide?: record, createTable?: record, createVideo?: record, deleteObject?: record, deleteParagraphBullets?: record, deleteTableColumn?: record, deleteTableRow?: record, deleteText?: record, duplicateObject?: record, groupObjects?: record, insertTableColumns?: record, insertTableRows?: record, insertText?: record, mergeTableCells?: record, refreshSheetsChart?: record, replaceAllShapesWithImage?: record, replaceAllShapesWithSheetsChart?: record, replaceAllText?: record, replaceImage?: record, rerouteLine?: record, ungroupObjects?: record, unmergeTableCells?: record, updateImageProperties?: record, updateLineCategory?: record, updateLineProperties?: record, updatePageElementAltText?: record, updatePageElementTransform?: record, updatePageElementsZOrder?: record, updatePageProperties?: record, updateParagraphStyle?: record, updateShapeProperties?: record, updateSlideProperties?: record, updateSlidesPosition?: record, updateTableBorderProperties?: record, updateTableCellProperties?: record, updateTableColumnProperties?: record, updateTableRowProperties?: record, updateTextStyle?: record, updateVideoProperties?: record}
 # --writeControl shape: {requiredRevisionId?: string}
 export def "presentations slidespresentationsbatchUpdate" [
-  presentationId: string
+  presentation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,19 +277,19 @@ export def "presentations slidespresentationsbatchUpdate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --requests: list # A list of updates to apply to the presentation. — item shape: {createImage?: record, createLine?: record, createParagraphBullets?: record, createShape?: record, createSheetsChart?: record, createSlide?: record, createTable?: record, createVideo?: record, deleteObject?: record, deleteParagraphBullets?: record, deleteTableColumn?: record, deleteTableRow?: record, deleteText?: record, duplicateObject?: record, groupObjects?: record, insertTableColumns?: record, insertTableRows?: record, insertText?: record, mergeTableCells?: record, refreshSheetsChart?: record, replaceAllShapesWithImage?: record, replaceAllShapesWithSheetsChart?: record, replaceAllText?: record, replaceImage?: record, rerouteLine?: record, ungroupObjects?: record, unmergeTableCells?: record, updateImageProperties?: record, updateLineCategory?: record, updateLineProperties?: record, updatePageElementAltText?: record, updatePageElementTransform?: record, updatePageElementsZOrder?: record, updatePageProperties?: record, updateParagraphStyle?: record, updateShapeProperties?: record, updateSlideProperties?: record, updateSlidesPosition?: record, updateTableBorderProperties?: record, updateTableCellProperties?: record, updateTableColumnProperties?: record, updateTableRowProperties?: record, updateTextStyle?: record, updateVideoProperties?: record}
-  --writeControl: record # Provides control over how write requests are executed. — shape: {requiredRevisionId?: string}
+  --write-control: record # Provides control over how write requests are executed. — shape: {requiredRevisionId?: string}
 ]: any -> record<presentationId: string, replies: table<createImage: record, createLine: record, createShape: record, createSheetsChart: record, createSlide: record, createTable: record, createVideo: record, duplicateObject: record, groupObjects: record, replaceAllShapesWithImage: record, replaceAllShapesWithSheetsChart: record, replaceAllText: record>, writeControl: record<requiredRevisionId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/presentations/($presentationId):batchUpdate" $qp)
-  let body = {requests: $requests, writeControl: $writeControl} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({presentation_id: $presentation_id} | format pattern "/v1/presentations/{presentation_id}:batchUpdate") $qp)
+  let body = {"requests": $requests, "writeControl": $write_control} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

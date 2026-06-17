@@ -66,20 +66,20 @@ def base-url-completer [] { ["https://ip-messaging.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
 # Completers for enum parameters
-def Type-completer [] { ["apn" "fcm" "gcm"] }
-def Type-completer-1 [] { ["private" "public"] }
-def X-Twilio-Webhook-Enabled-completer [] { ["false" "true"] }
-def Order-completer [] { ["asc" "desc"] }
-def ConfigurationMethod-completer [] { ["GET" "POST"] }
-def Type-completer-2 [] { ["studio" "trigger" "webhook"] }
-def Type-completer-3 [] { ["channel" "deployment"] }
-def NotificationLevel-completer [] { ["default" "muted"] }
-def WebhookMethod-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] }
+def type-completer [] { ["apn" "fcm" "gcm"] }
+def type-completer-1 [] { ["private" "public"] }
+def x-twilio-webhook-enabled-completer [] { ["false" "true"] }
+def order-completer [] { ["asc" "desc"] }
+def configuration-method-completer [] { ["GET" "POST"] }
+def type-completer-2 [] { ["studio" "trigger" "webhook"] }
+def type-completer-3 [] { ["channel" "deployment"] }
+def notification-level-completer [] { ["default" "muted"] }
+def webhook-method-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "credentials ListCredential" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "credentials list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -102,7 +102,7 @@ export def commands []: nothing -> table {
 # GET /v2/Credentials
 #
 # operationId: ListCredential
-export def "credentials ListCredential" [
+export def "credentials list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,13 +111,13 @@ export def "credentials ListCredential" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<credentials: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sandbox: string, sid: string, type: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/Credentials" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -127,7 +127,7 @@ export def "credentials ListCredential" [
 # POST /v2/Credentials
 #
 # operationId: CreateCredential
-export def "credentials CreateCredential" [
+export def "credentials create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,19 +136,19 @@ export def "credentials CreateCredential" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ApiKey: string
-  --Certificate: string
-  --FriendlyName: string
-  --PrivateKey: string
-  --Sandbox: oneof<nothing, bool>
-  --Secret: string
-  Type: string@Type-completer
+  --api-key: string
+  --certificate: string
+  --friendly-name: string
+  --private-key: string
+  --sandbox: oneof<nothing, bool>
+  --secret: string
+  type: string@type-completer
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sandbox: string, sid: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
   let full_url = (build-url $base "/v2/Credentials")
-  let body = {ApiKey: $ApiKey, Certificate: $Certificate, FriendlyName: $FriendlyName, PrivateKey: $PrivateKey, Sandbox: $Sandbox, Secret: $Secret, Type: $Type} | compact
+  let body = {"ApiKey": $api_key, "Certificate": $certificate, "FriendlyName": $friendly_name, "PrivateKey": $private_key, "Sandbox": $sandbox, "Secret": $secret, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -158,8 +158,8 @@ export def "credentials CreateCredential" [
 # DELETE /v2/Credentials/{Sid}
 #
 # operationId: DeleteCredential
-export def "credentials DeleteCredential" [
-  Sid: string
+export def "credentials delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "credentials DeleteCredential" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Credentials/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/Credentials/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -180,8 +180,8 @@ export def "credentials DeleteCredential" [
 # GET /v2/Credentials/{Sid}
 #
 # operationId: FetchCredential
-export def "credentials FetchCredential" [
-  Sid: string
+export def "credentials get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "credentials FetchCredential" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sandbox: string, sid: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Credentials/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/Credentials/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,8 +202,8 @@ export def "credentials FetchCredential" [
 # POST /v2/Credentials/{Sid}
 #
 # operationId: UpdateCredential
-export def "credentials UpdateCredential" [
-  Sid: string
+export def "credentials update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,18 +212,18 @@ export def "credentials UpdateCredential" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ApiKey: string
-  --Certificate: string
-  --FriendlyName: string
-  --PrivateKey: string
-  --Sandbox: oneof<nothing, bool>
-  --Secret: string
+  --api-key: string
+  --certificate: string
+  --friendly-name: string
+  --private-key: string
+  --sandbox: oneof<nothing, bool>
+  --secret: string
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sandbox: string, sid: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Credentials/($Sid)")
-  let body = {ApiKey: $ApiKey, Certificate: $Certificate, FriendlyName: $FriendlyName, PrivateKey: $PrivateKey, Sandbox: $Sandbox, Secret: $Secret} | compact
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/Credentials/{sid}"))
+  let body = {"ApiKey": $api_key, "Certificate": $certificate, "FriendlyName": $friendly_name, "PrivateKey": $private_key, "Sandbox": $sandbox, "Secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -233,7 +233,7 @@ export def "credentials UpdateCredential" [
 # GET /v2/Services
 #
 # operationId: ListService
-export def "services ListService" [
+export def "services list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,13 +242,13 @@ export def "services ListService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, services: table<account_sid: string, consumption_report_interval: int, date_created: string, date_updated: string, default_channel_creator_role_sid: string, default_channel_role_sid: string, default_service_role_sid: string, friendly_name: string, limits: any, links: record, media: any, notifications: any, post_webhook_retry_count: int, post_webhook_url: string, pre_webhook_retry_count: int, pre_webhook_url: string, reachability_enabled: bool, read_status_enabled: bool, sid: string, typing_indicator_timeout: int, url: string, webhook_filters: list, webhook_method: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/Services" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -258,7 +258,7 @@ export def "services ListService" [
 # POST /v2/Services
 #
 # operationId: CreateService
-export def "services CreateService" [
+export def "services create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,13 +267,13 @@ export def "services CreateService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  FriendlyName: string
+  friendly_name: string
 ]: any -> record<account_sid: string, consumption_report_interval: int, date_created: string, date_updated: string, default_channel_creator_role_sid: string, default_channel_role_sid: string, default_service_role_sid: string, friendly_name: string, limits: any, links: record, media: any, notifications: any, post_webhook_retry_count: int, post_webhook_url: string, pre_webhook_retry_count: int, pre_webhook_url: string, reachability_enabled: bool, read_status_enabled: bool, sid: string, typing_indicator_timeout: int, url: string, webhook_filters: list<string>, webhook_method: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
   let full_url = (build-url $base "/v2/Services")
-  let body = {FriendlyName: $FriendlyName} | compact
+  let body = {"FriendlyName": $friendly_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -283,8 +283,8 @@ export def "services CreateService" [
 # GET /v2/Services/{ServiceSid}/Bindings
 #
 # operationId: ListBinding
-export def "services-bindings ListBinding" [
-  ServiceSid: string
+export def "services-bindings list" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,16 +293,16 @@ export def "services-bindings ListBinding" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --BindingType: list
-  --Identity: list
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --binding-type: list
+  --identity: list
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<bindings: table<account_sid: string, binding_type: string, credential_sid: string, date_created: string, date_updated: string, endpoint: string, identity: string, links: record, message_types: list, service_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let qp = [(serialize-qp "BindingType" $BindingType "multi") (serialize-qp "Identity" $Identity "multi") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Bindings" $qp)
+  let qp = [(serialize-qp "BindingType" $binding_type "multi") (serialize-qp "Identity" $identity "multi") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v2/Services/{service_sid}/Bindings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -311,9 +311,9 @@ export def "services-bindings ListBinding" [
 # DELETE /v2/Services/{ServiceSid}/Bindings/{Sid}
 #
 # operationId: DeleteBinding
-export def "services-bindings DeleteBinding" [
-  ServiceSid: string
-  Sid: string
+export def "services-bindings delete" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "services-bindings DeleteBinding" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Bindings/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Bindings/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -334,9 +334,9 @@ export def "services-bindings DeleteBinding" [
 # GET /v2/Services/{ServiceSid}/Bindings/{Sid}
 #
 # operationId: FetchBinding
-export def "services-bindings FetchBinding" [
-  ServiceSid: string
-  Sid: string
+export def "services-bindings get" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,7 +348,7 @@ export def "services-bindings FetchBinding" [
 ]: nothing -> record<account_sid: string, binding_type: string, credential_sid: string, date_created: string, date_updated: string, endpoint: string, identity: string, links: record, message_types: list<string>, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Bindings/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Bindings/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -357,8 +357,8 @@ export def "services-bindings FetchBinding" [
 # GET /v2/Services/{ServiceSid}/Channels
 #
 # operationId: ListChannel
-export def "services-channels ListChannel" [
-  ServiceSid: string
+export def "services-channels list" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,15 +367,15 @@ export def "services-channels ListChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Type: list
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --type: list
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<channels: table<account_sid: string, attributes: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, links: record, members_count: int, messages_count: int, service_sid: string, sid: string, type: string, unique_name: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let qp = [(serialize-qp "Type" $Type "multi") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels" $qp)
+  let qp = [(serialize-qp "Type" $type "multi") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v2/Services/{service_sid}/Channels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -384,8 +384,8 @@ export def "services-channels ListChannel" [
 # POST /v2/Services/{ServiceSid}/Channels
 #
 # operationId: CreateChannel
-export def "services-channels CreateChannel" [
-  ServiceSid: string
+export def "services-channels create" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,22 +394,22 @@ export def "services-channels CreateChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
-  --Attributes: string
-  --CreatedBy: string
-  --DateCreated: string # format: date-time
-  --DateUpdated: string # format: date-time
-  --FriendlyName: string
-  --Type: string@Type-completer-1
-  --UniqueName: string
+  --x-twilio-webhook-enabled: string@x-twilio-webhook-enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
+  --attributes: string
+  --created-by: string
+  --date-created: string # format: date-time
+  --date-updated: string # format: date-time
+  --friendly-name: string
+  --type: string@type-completer-1
+  --unique-name: string
 ]: any -> record<account_sid: string, attributes: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, links: record, members_count: int, messages_count: int, service_sid: string, sid: string, type: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels")
-  let body = {Attributes: $Attributes, CreatedBy: $CreatedBy, DateCreated: $DateCreated, DateUpdated: $DateUpdated, FriendlyName: $FriendlyName, Type: $Type, UniqueName: $UniqueName} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v2/Services/{service_sid}/Channels"))
+  let body = {"Attributes": $attributes, "CreatedBy": $created_by, "DateCreated": $date_created, "DateUpdated": $date_updated, "FriendlyName": $friendly_name, "Type": $type, "UniqueName": $unique_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Twilio-Webhook-Enabled": $X_Twilio_Webhook_Enabled} | compact
+  let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -419,9 +419,9 @@ export def "services-channels CreateChannel" [
 # GET /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Invites
 #
 # operationId: ListInvite
-export def "services-channels-invites ListInvite" [
-  ServiceSid: string
-  ChannelSid: string
+export def "services-channels-invites list" [
+  service_sid: string
+  channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,15 +430,15 @@ export def "services-channels-invites ListInvite" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Identity: list
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --identity: list
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<invites: table<account_sid: string, channel_sid: string, created_by: string, date_created: string, date_updated: string, identity: string, role_sid: string, service_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let qp = [(serialize-qp "Identity" $Identity "multi") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Invites" $qp)
+  let qp = [(serialize-qp "Identity" $identity "multi") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Invites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -447,9 +447,9 @@ export def "services-channels-invites ListInvite" [
 # POST /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Invites
 #
 # operationId: CreateInvite
-export def "services-channels-invites CreateInvite" [
-  ServiceSid: string
-  ChannelSid: string
+export def "services-channels-invites create" [
+  service_sid: string
+  channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,14 +458,14 @@ export def "services-channels-invites CreateInvite" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Identity: string
-  --RoleSid: string
+  identity: string
+  --role-sid: string
 ]: any -> record<account_sid: string, channel_sid: string, created_by: string, date_created: string, date_updated: string, identity: string, role_sid: string, service_sid: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Invites")
-  let body = {Identity: $Identity, RoleSid: $RoleSid} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Invites"))
+  let body = {"Identity": $identity, "RoleSid": $role_sid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -475,10 +475,10 @@ export def "services-channels-invites CreateInvite" [
 # DELETE /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Invites/{Sid}
 #
 # operationId: DeleteInvite
-export def "services-channels-invites DeleteInvite" [
-  ServiceSid: string
-  ChannelSid: string
-  Sid: string
+export def "services-channels-invites delete" [
+  service_sid: string
+  channel_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,7 +490,7 @@ export def "services-channels-invites DeleteInvite" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Invites/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Invites/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -499,10 +499,10 @@ export def "services-channels-invites DeleteInvite" [
 # GET /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Invites/{Sid}
 #
 # operationId: FetchInvite
-export def "services-channels-invites FetchInvite" [
-  ServiceSid: string
-  ChannelSid: string
-  Sid: string
+export def "services-channels-invites get" [
+  service_sid: string
+  channel_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,7 +514,7 @@ export def "services-channels-invites FetchInvite" [
 ]: nothing -> record<account_sid: string, channel_sid: string, created_by: string, date_created: string, date_updated: string, identity: string, role_sid: string, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Invites/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Invites/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -523,9 +523,9 @@ export def "services-channels-invites FetchInvite" [
 # GET /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Members
 #
 # operationId: ListMember
-export def "services-channels-members ListMember" [
-  ServiceSid: string
-  ChannelSid: string
+export def "services-channels-members list" [
+  service_sid: string
+  channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,15 +534,15 @@ export def "services-channels-members ListMember" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Identity: list
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --identity: list
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<members: table<account_sid: string, attributes: string, channel_sid: string, date_created: string, date_updated: string, identity: string, last_consumed_message_index: int, last_consumption_timestamp: string, role_sid: string, service_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let qp = [(serialize-qp "Identity" $Identity "multi") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Members" $qp)
+  let qp = [(serialize-qp "Identity" $identity "multi") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -551,9 +551,9 @@ export def "services-channels-members ListMember" [
 # POST /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Members
 #
 # operationId: CreateMember
-export def "services-channels-members CreateMember" [
-  ServiceSid: string
-  ChannelSid: string
+export def "services-channels-members create" [
+  service_sid: string
+  channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,22 +562,22 @@ export def "services-channels-members CreateMember" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
-  --Attributes: string
-  --DateCreated: string # format: date-time
-  --DateUpdated: string # format: date-time
-  Identity: string
-  --LastConsumedMessageIndex: int # nullable
-  --LastConsumptionTimestamp: string # format: date-time
-  --RoleSid: string
+  --x-twilio-webhook-enabled: string@x-twilio-webhook-enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
+  --attributes: string
+  --date-created: string # format: date-time
+  --date-updated: string # format: date-time
+  identity: string
+  --last-consumed-message-index: int # nullable
+  --last-consumption-timestamp: string # format: date-time
+  --role-sid: string
 ]: any -> record<account_sid: string, attributes: string, channel_sid: string, date_created: string, date_updated: string, identity: string, last_consumed_message_index: int, last_consumption_timestamp: string, role_sid: string, service_sid: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Members")
-  let body = {Attributes: $Attributes, DateCreated: $DateCreated, DateUpdated: $DateUpdated, Identity: $Identity, LastConsumedMessageIndex: $LastConsumedMessageIndex, LastConsumptionTimestamp: $LastConsumptionTimestamp, RoleSid: $RoleSid} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Members"))
+  let body = {"Attributes": $attributes, "DateCreated": $date_created, "DateUpdated": $date_updated, "Identity": $identity, "LastConsumedMessageIndex": $last_consumed_message_index, "LastConsumptionTimestamp": $last_consumption_timestamp, "RoleSid": $role_sid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Twilio-Webhook-Enabled": $X_Twilio_Webhook_Enabled} | compact
+  let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -587,10 +587,10 @@ export def "services-channels-members CreateMember" [
 # DELETE /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Members/{Sid}
 #
 # operationId: DeleteMember
-export def "services-channels-members DeleteMember" [
-  ServiceSid: string
-  ChannelSid: string
-  Sid: string
+export def "services-channels-members delete" [
+  service_sid: string
+  channel_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,12 +599,12 @@ export def "services-channels-members DeleteMember" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
+  --x-twilio-webhook-enabled: string@x-twilio-webhook-enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Members/($Sid)")
-  let extra_headers = {"X-Twilio-Webhook-Enabled": $X_Twilio_Webhook_Enabled} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Members/{sid}"))
+  let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -614,10 +614,10 @@ export def "services-channels-members DeleteMember" [
 # GET /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Members/{Sid}
 #
 # operationId: FetchMember
-export def "services-channels-members FetchMember" [
-  ServiceSid: string
-  ChannelSid: string
-  Sid: string
+export def "services-channels-members get" [
+  service_sid: string
+  channel_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,7 +629,7 @@ export def "services-channels-members FetchMember" [
 ]: nothing -> record<account_sid: string, attributes: string, channel_sid: string, date_created: string, date_updated: string, identity: string, last_consumed_message_index: int, last_consumption_timestamp: string, role_sid: string, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Members/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Members/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -638,10 +638,10 @@ export def "services-channels-members FetchMember" [
 # POST /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Members/{Sid}
 #
 # operationId: UpdateMember
-export def "services-channels-members UpdateMember" [
-  ServiceSid: string
-  ChannelSid: string
-  Sid: string
+export def "services-channels-members update" [
+  service_sid: string
+  channel_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -650,21 +650,21 @@ export def "services-channels-members UpdateMember" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
-  --Attributes: string
-  --DateCreated: string # format: date-time
-  --DateUpdated: string # format: date-time
-  --LastConsumedMessageIndex: int # nullable
-  --LastConsumptionTimestamp: string # format: date-time
-  --RoleSid: string
+  --x-twilio-webhook-enabled: string@x-twilio-webhook-enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
+  --attributes: string
+  --date-created: string # format: date-time
+  --date-updated: string # format: date-time
+  --last-consumed-message-index: int # nullable
+  --last-consumption-timestamp: string # format: date-time
+  --role-sid: string
 ]: any -> record<account_sid: string, attributes: string, channel_sid: string, date_created: string, date_updated: string, identity: string, last_consumed_message_index: int, last_consumption_timestamp: string, role_sid: string, service_sid: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Members/($Sid)")
-  let body = {Attributes: $Attributes, DateCreated: $DateCreated, DateUpdated: $DateUpdated, LastConsumedMessageIndex: $LastConsumedMessageIndex, LastConsumptionTimestamp: $LastConsumptionTimestamp, RoleSid: $RoleSid} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Members/{sid}"))
+  let body = {"Attributes": $attributes, "DateCreated": $date_created, "DateUpdated": $date_updated, "LastConsumedMessageIndex": $last_consumed_message_index, "LastConsumptionTimestamp": $last_consumption_timestamp, "RoleSid": $role_sid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Twilio-Webhook-Enabled": $X_Twilio_Webhook_Enabled} | compact
+  let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -674,9 +674,9 @@ export def "services-channels-members UpdateMember" [
 # GET /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Messages
 #
 # operationId: ListMessage
-export def "services-channels-messages ListMessage" [
-  ServiceSid: string
-  ChannelSid: string
+export def "services-channels-messages list" [
+  service_sid: string
+  channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -685,15 +685,15 @@ export def "services-channels-messages ListMessage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Order: string@Order-completer
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --order: string@order-completer
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<messages: table<account_sid: string, attributes: string, body: string, channel_sid: string, date_created: string, date_updated: string, from: string, index: int, last_updated_by: string, media: any, service_sid: string, sid: string, to: string, type: string, url: string, was_edited: bool>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let qp = [(serialize-qp "Order" $Order "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Messages" $qp)
+  let qp = [(serialize-qp "Order" $order "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Messages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -702,9 +702,9 @@ export def "services-channels-messages ListMessage" [
 # POST /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Messages
 #
 # operationId: CreateMessage
-export def "services-channels-messages CreateMessage" [
-  ServiceSid: string
-  ChannelSid: string
+export def "services-channels-messages create" [
+  service_sid: string
+  channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,22 +713,22 @@ export def "services-channels-messages CreateMessage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
-  --Attributes: string
-  --Body: string
-  --DateCreated: string # format: date-time
-  --DateUpdated: string # format: date-time
-  --From: string
-  --LastUpdatedBy: string
-  --MediaSid: string
+  --x-twilio-webhook-enabled: string@x-twilio-webhook-enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
+  --attributes: string
+  --body-body: string
+  --date-created: string # format: date-time
+  --date-updated: string # format: date-time
+  --body-from: string
+  --last-updated-by: string
+  --media-sid: string
 ]: any -> record<account_sid: string, attributes: string, body: string, channel_sid: string, date_created: string, date_updated: string, from: string, index: int, last_updated_by: string, media: any, service_sid: string, sid: string, to: string, type: string, url: string, was_edited: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Messages")
-  let body = {Attributes: $Attributes, Body: $Body, DateCreated: $DateCreated, DateUpdated: $DateUpdated, From: $From, LastUpdatedBy: $LastUpdatedBy, MediaSid: $MediaSid} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Messages"))
+  let body = {"Attributes": $attributes, "Body": $body_body, "DateCreated": $date_created, "DateUpdated": $date_updated, "From": $body_from, "LastUpdatedBy": $last_updated_by, "MediaSid": $media_sid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Twilio-Webhook-Enabled": $X_Twilio_Webhook_Enabled} | compact
+  let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -738,10 +738,10 @@ export def "services-channels-messages CreateMessage" [
 # DELETE /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Messages/{Sid}
 #
 # operationId: DeleteMessage
-export def "services-channels-messages DeleteMessage" [
-  ServiceSid: string
-  ChannelSid: string
-  Sid: string
+export def "services-channels-messages delete" [
+  service_sid: string
+  channel_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,12 +750,12 @@ export def "services-channels-messages DeleteMessage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
+  --x-twilio-webhook-enabled: string@x-twilio-webhook-enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Messages/($Sid)")
-  let extra_headers = {"X-Twilio-Webhook-Enabled": $X_Twilio_Webhook_Enabled} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Messages/{sid}"))
+  let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -765,10 +765,10 @@ export def "services-channels-messages DeleteMessage" [
 # GET /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Messages/{Sid}
 #
 # operationId: FetchMessage
-export def "services-channels-messages FetchMessage" [
-  ServiceSid: string
-  ChannelSid: string
-  Sid: string
+export def "services-channels-messages get" [
+  service_sid: string
+  channel_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -780,7 +780,7 @@ export def "services-channels-messages FetchMessage" [
 ]: nothing -> record<account_sid: string, attributes: string, body: string, channel_sid: string, date_created: string, date_updated: string, from: string, index: int, last_updated_by: string, media: any, service_sid: string, sid: string, to: string, type: string, url: string, was_edited: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Messages/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Messages/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -789,10 +789,10 @@ export def "services-channels-messages FetchMessage" [
 # POST /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Messages/{Sid}
 #
 # operationId: UpdateMessage
-export def "services-channels-messages UpdateMessage" [
-  ServiceSid: string
-  ChannelSid: string
-  Sid: string
+export def "services-channels-messages update" [
+  service_sid: string
+  channel_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -801,21 +801,21 @@ export def "services-channels-messages UpdateMessage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
-  --Attributes: string
-  --Body: string
-  --DateCreated: string # format: date-time
-  --DateUpdated: string # format: date-time
-  --From: string
-  --LastUpdatedBy: string
+  --x-twilio-webhook-enabled: string@x-twilio-webhook-enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
+  --attributes: string
+  --body-body: string
+  --date-created: string # format: date-time
+  --date-updated: string # format: date-time
+  --body-from: string
+  --last-updated-by: string
 ]: any -> record<account_sid: string, attributes: string, body: string, channel_sid: string, date_created: string, date_updated: string, from: string, index: int, last_updated_by: string, media: any, service_sid: string, sid: string, to: string, type: string, url: string, was_edited: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Messages/($Sid)")
-  let body = {Attributes: $Attributes, Body: $Body, DateCreated: $DateCreated, DateUpdated: $DateUpdated, From: $From, LastUpdatedBy: $LastUpdatedBy} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Messages/{sid}"))
+  let body = {"Attributes": $attributes, "Body": $body_body, "DateCreated": $date_created, "DateUpdated": $date_updated, "From": $body_from, "LastUpdatedBy": $last_updated_by} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Twilio-Webhook-Enabled": $X_Twilio_Webhook_Enabled} | compact
+  let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -825,9 +825,9 @@ export def "services-channels-messages UpdateMessage" [
 # GET /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Webhooks
 #
 # operationId: ListChannelWebhook
-export def "services-channels-webhooks ListChannelWebhook" [
-  ServiceSid: string
-  ChannelSid: string
+export def "services-channels-webhooks list" [
+  service_sid: string
+  channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -836,14 +836,14 @@ export def "services-channels-webhooks ListChannelWebhook" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, webhooks: table<account_sid: string, channel_sid: string, configuration: any, date_created: string, date_updated: string, service_sid: string, sid: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Webhooks" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Webhooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -852,9 +852,9 @@ export def "services-channels-webhooks ListChannelWebhook" [
 # POST /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Webhooks
 #
 # operationId: CreateChannelWebhook
-export def "services-channels-webhooks CreateChannelWebhook" [
-  ServiceSid: string
-  ChannelSid: string
+export def "services-channels-webhooks create" [
+  service_sid: string
+  channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -863,19 +863,19 @@ export def "services-channels-webhooks CreateChannelWebhook" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ConfigurationFilters: list
-  --ConfigurationFlowSid: string
-  --ConfigurationMethod: string@ConfigurationMethod-completer
-  --ConfigurationRetryCount: int
-  --ConfigurationTriggers: list
-  --ConfigurationUrl: string
-  Type: string@Type-completer-2
+  --configuration-filters: list
+  --configuration-flow-sid: string
+  --configuration-method: string@configuration-method-completer
+  --configuration-retry-count: int
+  --configuration-triggers: list
+  --configuration-url: string
+  type: string@type-completer-2
 ]: any -> record<account_sid: string, channel_sid: string, configuration: any, date_created: string, date_updated: string, service_sid: string, sid: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Webhooks")
-  let body = {Configuration.Filters: $ConfigurationFilters, Configuration.FlowSid: $ConfigurationFlowSid, Configuration.Method: $ConfigurationMethod, Configuration.RetryCount: $ConfigurationRetryCount, Configuration.Triggers: $ConfigurationTriggers, Configuration.Url: $ConfigurationUrl, Type: $Type} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Webhooks"))
+  let body = {"Configuration.Filters": $configuration_filters, "Configuration.FlowSid": $configuration_flow_sid, "Configuration.Method": $configuration_method, "Configuration.RetryCount": $configuration_retry_count, "Configuration.Triggers": $configuration_triggers, "Configuration.Url": $configuration_url, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -885,10 +885,10 @@ export def "services-channels-webhooks CreateChannelWebhook" [
 # DELETE /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Webhooks/{Sid}
 #
 # operationId: DeleteChannelWebhook
-export def "services-channels-webhooks DeleteChannelWebhook" [
-  ServiceSid: string
-  ChannelSid: string
-  Sid: string
+export def "services-channels-webhooks delete" [
+  service_sid: string
+  channel_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -900,7 +900,7 @@ export def "services-channels-webhooks DeleteChannelWebhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Webhooks/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Webhooks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -909,10 +909,10 @@ export def "services-channels-webhooks DeleteChannelWebhook" [
 # GET /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Webhooks/{Sid}
 #
 # operationId: FetchChannelWebhook
-export def "services-channels-webhooks FetchChannelWebhook" [
-  ServiceSid: string
-  ChannelSid: string
-  Sid: string
+export def "services-channels-webhooks get" [
+  service_sid: string
+  channel_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -924,7 +924,7 @@ export def "services-channels-webhooks FetchChannelWebhook" [
 ]: nothing -> record<account_sid: string, channel_sid: string, configuration: any, date_created: string, date_updated: string, service_sid: string, sid: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Webhooks/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Webhooks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -933,10 +933,10 @@ export def "services-channels-webhooks FetchChannelWebhook" [
 # POST /v2/Services/{ServiceSid}/Channels/{ChannelSid}/Webhooks/{Sid}
 #
 # operationId: UpdateChannelWebhook
-export def "services-channels-webhooks UpdateChannelWebhook" [
-  ServiceSid: string
-  ChannelSid: string
-  Sid: string
+export def "services-channels-webhooks update" [
+  service_sid: string
+  channel_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -945,18 +945,18 @@ export def "services-channels-webhooks UpdateChannelWebhook" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ConfigurationFilters: list
-  --ConfigurationFlowSid: string
-  --ConfigurationMethod: string@ConfigurationMethod-completer
-  --ConfigurationRetryCount: int
-  --ConfigurationTriggers: list
-  --ConfigurationUrl: string
+  --configuration-filters: list
+  --configuration-flow-sid: string
+  --configuration-method: string@configuration-method-completer
+  --configuration-retry-count: int
+  --configuration-triggers: list
+  --configuration-url: string
 ]: any -> record<account_sid: string, channel_sid: string, configuration: any, date_created: string, date_updated: string, service_sid: string, sid: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($ChannelSid)/Webhooks/($Sid)")
-  let body = {Configuration.Filters: $ConfigurationFilters, Configuration.FlowSid: $ConfigurationFlowSid, Configuration.Method: $ConfigurationMethod, Configuration.RetryCount: $ConfigurationRetryCount, Configuration.Triggers: $ConfigurationTriggers, Configuration.Url: $ConfigurationUrl} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, channel_sid: $channel_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Webhooks/{sid}"))
+  let body = {"Configuration.Filters": $configuration_filters, "Configuration.FlowSid": $configuration_flow_sid, "Configuration.Method": $configuration_method, "Configuration.RetryCount": $configuration_retry_count, "Configuration.Triggers": $configuration_triggers, "Configuration.Url": $configuration_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -966,9 +966,9 @@ export def "services-channels-webhooks UpdateChannelWebhook" [
 # DELETE /v2/Services/{ServiceSid}/Channels/{Sid}
 #
 # operationId: DeleteChannel
-export def "services-channels DeleteChannel" [
-  ServiceSid: string
-  Sid: string
+export def "services-channels delete" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -977,12 +977,12 @@ export def "services-channels DeleteChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
+  --x-twilio-webhook-enabled: string@x-twilio-webhook-enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($Sid)")
-  let extra_headers = {"X-Twilio-Webhook-Enabled": $X_Twilio_Webhook_Enabled} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Channels/{sid}"))
+  let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -992,9 +992,9 @@ export def "services-channels DeleteChannel" [
 # GET /v2/Services/{ServiceSid}/Channels/{Sid}
 #
 # operationId: FetchChannel
-export def "services-channels FetchChannel" [
-  ServiceSid: string
-  Sid: string
+export def "services-channels get" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1006,7 +1006,7 @@ export def "services-channels FetchChannel" [
 ]: nothing -> record<account_sid: string, attributes: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, links: record, members_count: int, messages_count: int, service_sid: string, sid: string, type: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Channels/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1015,9 +1015,9 @@ export def "services-channels FetchChannel" [
 # POST /v2/Services/{ServiceSid}/Channels/{Sid}
 #
 # operationId: UpdateChannel
-export def "services-channels UpdateChannel" [
-  ServiceSid: string
-  Sid: string
+export def "services-channels update" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1026,21 +1026,21 @@ export def "services-channels UpdateChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
-  --Attributes: string
-  --CreatedBy: string
-  --DateCreated: string # format: date-time
-  --DateUpdated: string # format: date-time
-  --FriendlyName: string
-  --UniqueName: string
+  --x-twilio-webhook-enabled: string@x-twilio-webhook-enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
+  --attributes: string
+  --created-by: string
+  --date-created: string # format: date-time
+  --date-updated: string # format: date-time
+  --friendly-name: string
+  --unique-name: string
 ]: any -> record<account_sid: string, attributes: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, links: record, members_count: int, messages_count: int, service_sid: string, sid: string, type: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Channels/($Sid)")
-  let body = {Attributes: $Attributes, CreatedBy: $CreatedBy, DateCreated: $DateCreated, DateUpdated: $DateUpdated, FriendlyName: $FriendlyName, UniqueName: $UniqueName} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Channels/{sid}"))
+  let body = {"Attributes": $attributes, "CreatedBy": $created_by, "DateCreated": $date_created, "DateUpdated": $date_updated, "FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Twilio-Webhook-Enabled": $X_Twilio_Webhook_Enabled} | compact
+  let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1050,8 +1050,8 @@ export def "services-channels UpdateChannel" [
 # GET /v2/Services/{ServiceSid}/Roles
 #
 # operationId: ListRole
-export def "services-roles ListRole" [
-  ServiceSid: string
+export def "services-roles list" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1060,14 +1060,14 @@ export def "services-roles ListRole" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, roles: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list, service_sid: string, sid: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Roles" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v2/Services/{service_sid}/Roles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1076,8 +1076,8 @@ export def "services-roles ListRole" [
 # POST /v2/Services/{ServiceSid}/Roles
 #
 # operationId: CreateRole
-export def "services-roles CreateRole" [
-  ServiceSid: string
+export def "services-roles create" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1086,15 +1086,15 @@ export def "services-roles CreateRole" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  FriendlyName: string
-  Permission: list
-  Type: string@Type-completer-3
+  friendly_name: string
+  permission: list
+  type: string@type-completer-3
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list<string>, service_sid: string, sid: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Roles")
-  let body = {FriendlyName: $FriendlyName, Permission: $Permission, Type: $Type} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v2/Services/{service_sid}/Roles"))
+  let body = {"FriendlyName": $friendly_name, "Permission": $permission, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1104,9 +1104,9 @@ export def "services-roles CreateRole" [
 # DELETE /v2/Services/{ServiceSid}/Roles/{Sid}
 #
 # operationId: DeleteRole
-export def "services-roles DeleteRole" [
-  ServiceSid: string
-  Sid: string
+export def "services-roles delete" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1118,7 +1118,7 @@ export def "services-roles DeleteRole" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Roles/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Roles/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1127,9 +1127,9 @@ export def "services-roles DeleteRole" [
 # GET /v2/Services/{ServiceSid}/Roles/{Sid}
 #
 # operationId: FetchRole
-export def "services-roles FetchRole" [
-  ServiceSid: string
-  Sid: string
+export def "services-roles get" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1141,7 +1141,7 @@ export def "services-roles FetchRole" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list<string>, service_sid: string, sid: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Roles/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Roles/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1150,9 +1150,9 @@ export def "services-roles FetchRole" [
 # POST /v2/Services/{ServiceSid}/Roles/{Sid}
 #
 # operationId: UpdateRole
-export def "services-roles UpdateRole" [
-  ServiceSid: string
-  Sid: string
+export def "services-roles update" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1161,13 +1161,13 @@ export def "services-roles UpdateRole" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Permission: list
+  permission: list
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list<string>, service_sid: string, sid: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Roles/($Sid)")
-  let body = {Permission: $Permission} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Roles/{sid}"))
+  let body = {"Permission": $permission} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1177,8 +1177,8 @@ export def "services-roles UpdateRole" [
 # GET /v2/Services/{ServiceSid}/Users
 #
 # operationId: ListUser
-export def "services-users ListUser" [
-  ServiceSid: string
+export def "services-users list" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1187,14 +1187,14 @@ export def "services-users ListUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, users: table<account_sid: string, attributes: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, joined_channels_count: int, links: record, role_sid: string, service_sid: string, sid: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Users" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v2/Services/{service_sid}/Users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1203,8 +1203,8 @@ export def "services-users ListUser" [
 # POST /v2/Services/{ServiceSid}/Users
 #
 # operationId: CreateUser
-export def "services-users CreateUser" [
-  ServiceSid: string
+export def "services-users create" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1213,19 +1213,19 @@ export def "services-users CreateUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
-  --Attributes: string
-  --FriendlyName: string
-  Identity: string
-  --RoleSid: string
+  --x-twilio-webhook-enabled: string@x-twilio-webhook-enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
+  --attributes: string
+  --friendly-name: string
+  identity: string
+  --role-sid: string
 ]: any -> record<account_sid: string, attributes: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, joined_channels_count: int, links: record, role_sid: string, service_sid: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Users")
-  let body = {Attributes: $Attributes, FriendlyName: $FriendlyName, Identity: $Identity, RoleSid: $RoleSid} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v2/Services/{service_sid}/Users"))
+  let body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Identity": $identity, "RoleSid": $role_sid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Twilio-Webhook-Enabled": $X_Twilio_Webhook_Enabled} | compact
+  let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1235,9 +1235,9 @@ export def "services-users CreateUser" [
 # DELETE /v2/Services/{ServiceSid}/Users/{Sid}
 #
 # operationId: DeleteUser
-export def "services-users DeleteUser" [
-  ServiceSid: string
-  Sid: string
+export def "services-users delete" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1249,7 +1249,7 @@ export def "services-users DeleteUser" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Users/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Users/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1258,9 +1258,9 @@ export def "services-users DeleteUser" [
 # GET /v2/Services/{ServiceSid}/Users/{Sid}
 #
 # operationId: FetchUser
-export def "services-users FetchUser" [
-  ServiceSid: string
-  Sid: string
+export def "services-users get" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1272,7 +1272,7 @@ export def "services-users FetchUser" [
 ]: nothing -> record<account_sid: string, attributes: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, joined_channels_count: int, links: record, role_sid: string, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Users/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Users/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1281,9 +1281,9 @@ export def "services-users FetchUser" [
 # POST /v2/Services/{ServiceSid}/Users/{Sid}
 #
 # operationId: UpdateUser
-export def "services-users UpdateUser" [
-  ServiceSid: string
-  Sid: string
+export def "services-users update" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1292,18 +1292,18 @@ export def "services-users UpdateUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
-  --Attributes: string
-  --FriendlyName: string
-  --RoleSid: string
+  --x-twilio-webhook-enabled: string@x-twilio-webhook-enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
+  --attributes: string
+  --friendly-name: string
+  --role-sid: string
 ]: any -> record<account_sid: string, attributes: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, joined_channels_count: int, links: record, role_sid: string, service_sid: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Users/($Sid)")
-  let body = {Attributes: $Attributes, FriendlyName: $FriendlyName, RoleSid: $RoleSid} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Users/{sid}"))
+  let body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "RoleSid": $role_sid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Twilio-Webhook-Enabled": $X_Twilio_Webhook_Enabled} | compact
+  let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1313,9 +1313,9 @@ export def "services-users UpdateUser" [
 # GET /v2/Services/{ServiceSid}/Users/{UserSid}/Bindings
 #
 # operationId: ListUserBinding
-export def "services-users-bindings ListUserBinding" [
-  ServiceSid: string
-  UserSid: string
+export def "services-users-bindings list" [
+  service_sid: string
+  user_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1324,15 +1324,15 @@ export def "services-users-bindings ListUserBinding" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --BindingType: list
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --binding-type: list
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<bindings: table<account_sid: string, binding_type: string, credential_sid: string, date_created: string, date_updated: string, endpoint: string, identity: string, message_types: list, service_sid: string, sid: string, url: string, user_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let qp = [(serialize-qp "BindingType" $BindingType "multi") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Users/($UserSid)/Bindings" $qp)
+  let qp = [(serialize-qp "BindingType" $binding_type "multi") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid, user_sid: $user_sid} | format pattern "/v2/Services/{service_sid}/Users/{user_sid}/Bindings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1341,10 +1341,10 @@ export def "services-users-bindings ListUserBinding" [
 # DELETE /v2/Services/{ServiceSid}/Users/{UserSid}/Bindings/{Sid}
 #
 # operationId: DeleteUserBinding
-export def "services-users-bindings DeleteUserBinding" [
-  ServiceSid: string
-  UserSid: string
-  Sid: string
+export def "services-users-bindings delete" [
+  service_sid: string
+  user_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1356,7 +1356,7 @@ export def "services-users-bindings DeleteUserBinding" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Users/($UserSid)/Bindings/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, user_sid: $user_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Users/{user_sid}/Bindings/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1365,10 +1365,10 @@ export def "services-users-bindings DeleteUserBinding" [
 # GET /v2/Services/{ServiceSid}/Users/{UserSid}/Bindings/{Sid}
 #
 # operationId: FetchUserBinding
-export def "services-users-bindings FetchUserBinding" [
-  ServiceSid: string
-  UserSid: string
-  Sid: string
+export def "services-users-bindings get" [
+  service_sid: string
+  user_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1380,7 +1380,7 @@ export def "services-users-bindings FetchUserBinding" [
 ]: nothing -> record<account_sid: string, binding_type: string, credential_sid: string, date_created: string, date_updated: string, endpoint: string, identity: string, message_types: list<string>, service_sid: string, sid: string, url: string, user_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Users/($UserSid)/Bindings/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, user_sid: $user_sid, sid: $sid} | format pattern "/v2/Services/{service_sid}/Users/{user_sid}/Bindings/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1389,9 +1389,9 @@ export def "services-users-bindings FetchUserBinding" [
 # GET /v2/Services/{ServiceSid}/Users/{UserSid}/Channels
 #
 # operationId: ListUserChannel
-export def "services-users-channels ListUserChannel" [
-  ServiceSid: string
-  UserSid: string
+export def "services-users-channels list" [
+  service_sid: string
+  user_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1400,14 +1400,14 @@ export def "services-users-channels ListUserChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<channels: table<account_sid: string, channel_sid: string, last_consumed_message_index: int, links: record, member_sid: string, notification_level: string, service_sid: string, status: string, unread_messages_count: int, url: string, user_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Users/($UserSid)/Channels" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid, user_sid: $user_sid} | format pattern "/v2/Services/{service_sid}/Users/{user_sid}/Channels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1416,10 +1416,10 @@ export def "services-users-channels ListUserChannel" [
 # DELETE /v2/Services/{ServiceSid}/Users/{UserSid}/Channels/{ChannelSid}
 #
 # operationId: DeleteUserChannel
-export def "services-users-channels DeleteUserChannel" [
-  ServiceSid: string
-  UserSid: string
-  ChannelSid: string
+export def "services-users-channels delete" [
+  service_sid: string
+  user_sid: string
+  channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1431,7 +1431,7 @@ export def "services-users-channels DeleteUserChannel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Users/($UserSid)/Channels/($ChannelSid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, user_sid: $user_sid, channel_sid: $channel_sid} | format pattern "/v2/Services/{service_sid}/Users/{user_sid}/Channels/{channel_sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1440,10 +1440,10 @@ export def "services-users-channels DeleteUserChannel" [
 # GET /v2/Services/{ServiceSid}/Users/{UserSid}/Channels/{ChannelSid}
 #
 # operationId: FetchUserChannel
-export def "services-users-channels FetchUserChannel" [
-  ServiceSid: string
-  UserSid: string
-  ChannelSid: string
+export def "services-users-channels get" [
+  service_sid: string
+  user_sid: string
+  channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1455,7 +1455,7 @@ export def "services-users-channels FetchUserChannel" [
 ]: nothing -> record<account_sid: string, channel_sid: string, last_consumed_message_index: int, links: record, member_sid: string, notification_level: string, service_sid: string, status: string, unread_messages_count: int, url: string, user_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Users/($UserSid)/Channels/($ChannelSid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, user_sid: $user_sid, channel_sid: $channel_sid} | format pattern "/v2/Services/{service_sid}/Users/{user_sid}/Channels/{channel_sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1464,10 +1464,10 @@ export def "services-users-channels FetchUserChannel" [
 # POST /v2/Services/{ServiceSid}/Users/{UserSid}/Channels/{ChannelSid}
 #
 # operationId: UpdateUserChannel
-export def "services-users-channels UpdateUserChannel" [
-  ServiceSid: string
-  UserSid: string
-  ChannelSid: string
+export def "services-users-channels update" [
+  service_sid: string
+  user_sid: string
+  channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1476,15 +1476,15 @@ export def "services-users-channels UpdateUserChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --LastConsumedMessageIndex: int # nullable
-  --LastConsumptionTimestamp: string # format: date-time
-  --NotificationLevel: string@NotificationLevel-completer
+  --last-consumed-message-index: int # nullable
+  --last-consumption-timestamp: string # format: date-time
+  --notification-level: string@notification-level-completer
 ]: any -> record<account_sid: string, channel_sid: string, last_consumed_message_index: int, links: record, member_sid: string, notification_level: string, service_sid: string, status: string, unread_messages_count: int, url: string, user_sid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($ServiceSid)/Users/($UserSid)/Channels/($ChannelSid)")
-  let body = {LastConsumedMessageIndex: $LastConsumedMessageIndex, LastConsumptionTimestamp: $LastConsumptionTimestamp, NotificationLevel: $NotificationLevel} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, user_sid: $user_sid, channel_sid: $channel_sid} | format pattern "/v2/Services/{service_sid}/Users/{user_sid}/Channels/{channel_sid}"))
+  let body = {"LastConsumedMessageIndex": $last_consumed_message_index, "LastConsumptionTimestamp": $last_consumption_timestamp, "NotificationLevel": $notification_level} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1494,8 +1494,8 @@ export def "services-users-channels UpdateUserChannel" [
 # DELETE /v2/Services/{Sid}
 #
 # operationId: DeleteService
-export def "services DeleteService" [
-  Sid: string
+export def "services delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1507,7 +1507,7 @@ export def "services DeleteService" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/Services/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1516,8 +1516,8 @@ export def "services DeleteService" [
 # GET /v2/Services/{Sid}
 #
 # operationId: FetchService
-export def "services FetchService" [
-  Sid: string
+export def "services get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1529,7 +1529,7 @@ export def "services FetchService" [
 ]: nothing -> record<account_sid: string, consumption_report_interval: int, date_created: string, date_updated: string, default_channel_creator_role_sid: string, default_channel_role_sid: string, default_service_role_sid: string, friendly_name: string, limits: any, links: record, media: any, notifications: any, post_webhook_retry_count: int, post_webhook_url: string, pre_webhook_retry_count: int, pre_webhook_url: string, reachability_enabled: bool, read_status_enabled: bool, sid: string, typing_indicator_timeout: int, url: string, webhook_filters: list<string>, webhook_method: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/Services/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1538,8 +1538,8 @@ export def "services FetchService" [
 # POST /v2/Services/{Sid}
 #
 # operationId: UpdateService
-export def "services UpdateService" [
-  Sid: string
+export def "services update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1548,43 +1548,43 @@ export def "services UpdateService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ConsumptionReportInterval: int
-  --DefaultChannelCreatorRoleSid: string
-  --DefaultChannelRoleSid: string
-  --DefaultServiceRoleSid: string
-  --FriendlyName: string
-  --LimitsChannelMembers: int
-  --LimitsUserChannels: int
-  --MediaCompatibilityMessage: string
-  --NotificationsAddedToChannelEnabled: oneof<nothing, bool>
-  --NotificationsAddedToChannelSound: string
-  --NotificationsAddedToChannelTemplate: string
-  --NotificationsInvitedToChannelEnabled: oneof<nothing, bool>
-  --NotificationsInvitedToChannelSound: string
-  --NotificationsInvitedToChannelTemplate: string
-  --NotificationsLogEnabled: oneof<nothing, bool>
-  --NotificationsNewMessageBadgeCountEnabled: oneof<nothing, bool>
-  --NotificationsNewMessageEnabled: oneof<nothing, bool>
-  --NotificationsNewMessageSound: string
-  --NotificationsNewMessageTemplate: string
-  --NotificationsRemovedFromChannelEnabled: oneof<nothing, bool>
-  --NotificationsRemovedFromChannelSound: string
-  --NotificationsRemovedFromChannelTemplate: string
-  --PostWebhookRetryCount: int
-  --PostWebhookUrl: string # format: uri
-  --PreWebhookRetryCount: int
-  --PreWebhookUrl: string # format: uri
-  --ReachabilityEnabled: oneof<nothing, bool>
-  --ReadStatusEnabled: oneof<nothing, bool>
-  --TypingIndicatorTimeout: int
-  --WebhookFilters: list
-  --WebhookMethod: string@WebhookMethod-completer # format: http-method
+  --consumption-report-interval: int
+  --default-channel-creator-role-sid: string
+  --default-channel-role-sid: string
+  --default-service-role-sid: string
+  --friendly-name: string
+  --limits-channel-members: int
+  --limits-user-channels: int
+  --media-compatibility-message: string
+  --notifications-added-to-channel-enabled: oneof<nothing, bool>
+  --notifications-added-to-channel-sound: string
+  --notifications-added-to-channel-template: string
+  --notifications-invited-to-channel-enabled: oneof<nothing, bool>
+  --notifications-invited-to-channel-sound: string
+  --notifications-invited-to-channel-template: string
+  --notifications-log-enabled: oneof<nothing, bool>
+  --notifications-new-message-badge-count-enabled: oneof<nothing, bool>
+  --notifications-new-message-enabled: oneof<nothing, bool>
+  --notifications-new-message-sound: string
+  --notifications-new-message-template: string
+  --notifications-removed-from-channel-enabled: oneof<nothing, bool>
+  --notifications-removed-from-channel-sound: string
+  --notifications-removed-from-channel-template: string
+  --post-webhook-retry-count: int
+  --post-webhook-url: string # format: uri
+  --pre-webhook-retry-count: int
+  --pre-webhook-url: string # format: uri
+  --reachability-enabled: oneof<nothing, bool>
+  --read-status-enabled: oneof<nothing, bool>
+  --typing-indicator-timeout: int
+  --webhook-filters: list
+  --webhook-method: string@webhook-method-completer # format: http-method
 ]: any -> record<account_sid: string, consumption_report_interval: int, date_created: string, date_updated: string, default_channel_creator_role_sid: string, default_channel_role_sid: string, default_service_role_sid: string, friendly_name: string, limits: any, links: record, media: any, notifications: any, post_webhook_retry_count: int, post_webhook_url: string, pre_webhook_retry_count: int, pre_webhook_url: string, reachability_enabled: bool, read_status_enabled: bool, sid: string, typing_indicator_timeout: int, url: string, webhook_filters: list<string>, webhook_method: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://ip-messaging.twilio.com")
-  let full_url = (build-url $base $"/v2/Services/($Sid)")
-  let body = {ConsumptionReportInterval: $ConsumptionReportInterval, DefaultChannelCreatorRoleSid: $DefaultChannelCreatorRoleSid, DefaultChannelRoleSid: $DefaultChannelRoleSid, DefaultServiceRoleSid: $DefaultServiceRoleSid, FriendlyName: $FriendlyName, Limits.ChannelMembers: $LimitsChannelMembers, Limits.UserChannels: $LimitsUserChannels, Media.CompatibilityMessage: $MediaCompatibilityMessage, Notifications.AddedToChannel.Enabled: $NotificationsAddedToChannelEnabled, Notifications.AddedToChannel.Sound: $NotificationsAddedToChannelSound, Notifications.AddedToChannel.Template: $NotificationsAddedToChannelTemplate, Notifications.InvitedToChannel.Enabled: $NotificationsInvitedToChannelEnabled, Notifications.InvitedToChannel.Sound: $NotificationsInvitedToChannelSound, Notifications.InvitedToChannel.Template: $NotificationsInvitedToChannelTemplate, Notifications.LogEnabled: $NotificationsLogEnabled, Notifications.NewMessage.BadgeCountEnabled: $NotificationsNewMessageBadgeCountEnabled, Notifications.NewMessage.Enabled: $NotificationsNewMessageEnabled, Notifications.NewMessage.Sound: $NotificationsNewMessageSound, Notifications.NewMessage.Template: $NotificationsNewMessageTemplate, Notifications.RemovedFromChannel.Enabled: $NotificationsRemovedFromChannelEnabled, Notifications.RemovedFromChannel.Sound: $NotificationsRemovedFromChannelSound, Notifications.RemovedFromChannel.Template: $NotificationsRemovedFromChannelTemplate, PostWebhookRetryCount: $PostWebhookRetryCount, PostWebhookUrl: $PostWebhookUrl, PreWebhookRetryCount: $PreWebhookRetryCount, PreWebhookUrl: $PreWebhookUrl, ReachabilityEnabled: $ReachabilityEnabled, ReadStatusEnabled: $ReadStatusEnabled, TypingIndicatorTimeout: $TypingIndicatorTimeout, WebhookFilters: $WebhookFilters, WebhookMethod: $WebhookMethod} | compact
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/Services/{sid}"))
+  let body = {"ConsumptionReportInterval": $consumption_report_interval, "DefaultChannelCreatorRoleSid": $default_channel_creator_role_sid, "DefaultChannelRoleSid": $default_channel_role_sid, "DefaultServiceRoleSid": $default_service_role_sid, "FriendlyName": $friendly_name, "Limits.ChannelMembers": $limits_channel_members, "Limits.UserChannels": $limits_user_channels, "Media.CompatibilityMessage": $media_compatibility_message, "Notifications.AddedToChannel.Enabled": $notifications_added_to_channel_enabled, "Notifications.AddedToChannel.Sound": $notifications_added_to_channel_sound, "Notifications.AddedToChannel.Template": $notifications_added_to_channel_template, "Notifications.InvitedToChannel.Enabled": $notifications_invited_to_channel_enabled, "Notifications.InvitedToChannel.Sound": $notifications_invited_to_channel_sound, "Notifications.InvitedToChannel.Template": $notifications_invited_to_channel_template, "Notifications.LogEnabled": $notifications_log_enabled, "Notifications.NewMessage.BadgeCountEnabled": $notifications_new_message_badge_count_enabled, "Notifications.NewMessage.Enabled": $notifications_new_message_enabled, "Notifications.NewMessage.Sound": $notifications_new_message_sound, "Notifications.NewMessage.Template": $notifications_new_message_template, "Notifications.RemovedFromChannel.Enabled": $notifications_removed_from_channel_enabled, "Notifications.RemovedFromChannel.Sound": $notifications_removed_from_channel_sound, "Notifications.RemovedFromChannel.Template": $notifications_removed_from_channel_template, "PostWebhookRetryCount": $post_webhook_retry_count, "PostWebhookUrl": $post_webhook_url, "PreWebhookRetryCount": $pre_webhook_retry_count, "PreWebhookUrl": $pre_webhook_url, "ReachabilityEnabled": $reachability_enabled, "ReadStatusEnabled": $read_status_enabled, "TypingIndicatorTimeout": $typing_indicator_timeout, "WebhookFilters": $webhook_filters, "WebhookMethod": $webhook_method} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -72,7 +72,7 @@ def fields-completer [] { ["*"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "templeton-hive SubmitHiveJob" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "templeton-hive submit-hive-job" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # POST /templeton/v1/hive
 # operationId: Job_SubmitHiveJob
-export def "templeton-hive SubmitHiveJob" [
+export def "templeton-hive submit-hive-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,13 +105,13 @@ export def "templeton-hive SubmitHiveJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
   --body: record
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/hive" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -123,7 +123,7 @@ export def "templeton-hive SubmitHiveJob" [
 #
 # GET /templeton/v1/jobs
 # operationId: Job_List
-export def "templeton-jobs List" [
+export def "templeton-jobs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,13 +132,13 @@ export def "templeton-jobs List" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
   --showall: string@showall-completer # If showall is set to 'true', the request will return all jobs the user has permission to view, not only the jobs belonging to the user.
   --fields: string@fields-completer # If fields set to '*', the request will return full details of the job. Currently the value can only be '*'.
 ]: nothing -> table<detail: record<callback: record, completed: string, exitValue: int, id: string, msg: record, parentId: string, percentComplete: string, profile: record, status: record, user: string, userargs: record>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar") (serialize-qp "showall" $showall "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $user_name "scalar") (serialize-qp "showall" $showall "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/jobs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -149,8 +149,8 @@ export def "templeton-jobs List" [
 #
 # DELETE /templeton/v1/jobs/{jobId}
 # operationId: Job_Kill
-export def "templeton-jobs Kill" [
-  jobId: string
+export def "templeton-jobs kill" [
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,12 +159,12 @@ export def "templeton-jobs Kill" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
 ]: nothing -> record<callback: record, completed: string, exitValue: int, id: string, msg: record, parentId: string, percentComplete: string, profile: record<jobFile: string, jobID: record<id: int, jtIdentifier: string>, jobId: string, jobName: string, queueName: string, url: string, user: string>, status: record<cleanupProgress: float, failureInfo: string, finishTime: int, historyFile: string, jobACLs: any, jobComplete: bool, jobFile: string, jobID: record<id: int, jtIdentifier: string>, jobId: string, jobName: string, jobPriority: string, mapProgress: float, neededMem: int, numReservedSlots: int, numUsedSlots: int, priority: string, queue: string, reduceProgress: float, reservedMem: int, retired: bool, runState: int, schedulingInfo: string, setupProgress: float, startTime: int, state: string, trackingUrl: string, uber: bool, usedMem: int, username: string>, user: string, userargs: record<arg: list<string>, callback: record, define: list<string>, enablelog: string, execute: string, file: record, files: record, jar: string, statusdir: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/templeton/v1/jobs/($jobId)" $qp)
+  let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/templeton/v1/jobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -174,8 +174,8 @@ export def "templeton-jobs Kill" [
 #
 # GET /templeton/v1/jobs/{jobId}
 # operationId: Job_Get
-export def "templeton-jobs Get" [
-  jobId: string
+export def "templeton-jobs get" [
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,13 +184,13 @@ export def "templeton-jobs Get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
   --fields: string@fields-completer # If fields set to '*', the request will return full details of the job. Currently the value can only be '*'.
 ]: nothing -> record<callback: record, completed: string, exitValue: int, id: string, msg: record, parentId: string, percentComplete: string, profile: record<jobFile: string, jobID: record<id: int, jtIdentifier: string>, jobId: string, jobName: string, queueName: string, url: string, user: string>, status: record<cleanupProgress: float, failureInfo: string, finishTime: int, historyFile: string, jobACLs: any, jobComplete: bool, jobFile: string, jobID: record<id: int, jtIdentifier: string>, jobId: string, jobName: string, jobPriority: string, mapProgress: float, neededMem: int, numReservedSlots: int, numUsedSlots: int, priority: string, queue: string, reduceProgress: float, reservedMem: int, retired: bool, runState: int, schedulingInfo: string, setupProgress: float, startTime: int, state: string, trackingUrl: string, uber: bool, usedMem: int, username: string>, user: string, userargs: record<arg: list<string>, callback: record, define: list<string>, enablelog: string, execute: string, file: record, files: record, jar: string, statusdir: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/templeton/v1/jobs/($jobId)" $qp)
+  let qp = [(serialize-qp "user.name" $user_name "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/templeton/v1/jobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -200,7 +200,7 @@ export def "templeton-jobs Get" [
 #
 # GET /templeton/v1/jobs?op=LISTAFTERID
 # operationId: Job_ListAfterJobId
-export def "templeton-jobs-op-listafterid ListAfterJobId" [
+export def "templeton-jobs-op-listafterid list-after" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "templeton-jobs-op-listafterid ListAfterJobId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
   --jobid: string # JobId from where to list jobs.
   --numrecords: int # Number of jobs to fetch. (format: int32)
   --showall: string@showall-completer # If showall is set to 'true', the request will return all jobs the user has permission to view, not only the jobs belonging to the user.
@@ -217,7 +217,7 @@ export def "templeton-jobs-op-listafterid ListAfterJobId" [
 ]: nothing -> table<detail: record<callback: record, completed: string, exitValue: int, id: string, msg: record, parentId: string, percentComplete: string, profile: record, status: record, user: string, userargs: record>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar") (serialize-qp "jobid" $jobid "scalar") (serialize-qp "numrecords" $numrecords "scalar") (serialize-qp "showall" $showall "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $user_name "scalar") (serialize-qp "jobid" $jobid "scalar") (serialize-qp "numrecords" $numrecords "scalar") (serialize-qp "showall" $showall "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/jobs?op=LISTAFTERID" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -228,7 +228,7 @@ export def "templeton-jobs-op-listafterid ListAfterJobId" [
 #
 # POST /templeton/v1/mapreduce/jar
 # operationId: Job_SubmitMapReduceJob
-export def "templeton-mapreduce-jar SubmitMapReduceJob" [
+export def "templeton-mapreduce-jar submit-map-reduce-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,13 +237,13 @@ export def "templeton-mapreduce-jar SubmitMapReduceJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
   --body: record
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/mapreduce/jar" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -255,7 +255,7 @@ export def "templeton-mapreduce-jar SubmitMapReduceJob" [
 #
 # POST /templeton/v1/mapreduce/streaming
 # operationId: Job_SubmitMapReduceStreamingJob
-export def "templeton-mapreduce-streaming SubmitMapReduceStreamingJob" [
+export def "templeton-mapreduce-streaming submit-map-reduce-streaming-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,13 +264,13 @@ export def "templeton-mapreduce-streaming SubmitMapReduceStreamingJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
   --body: record
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/mapreduce/streaming" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -282,7 +282,7 @@ export def "templeton-mapreduce-streaming SubmitMapReduceStreamingJob" [
 #
 # POST /templeton/v1/pig
 # operationId: Job_SubmitPigJob
-export def "templeton-pig SubmitPigJob" [
+export def "templeton-pig submit-pig-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,13 +291,13 @@ export def "templeton-pig SubmitPigJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
   --body: record
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/pig" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -309,7 +309,7 @@ export def "templeton-pig SubmitPigJob" [
 #
 # POST /templeton/v1/sqoop
 # operationId: Job_SubmitSqoopJob
-export def "templeton-sqoop SubmitSqoopJob" [
+export def "templeton-sqoop submit-sqoop-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,13 +318,13 @@ export def "templeton-sqoop SubmitSqoopJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The user name used for running job.
+  --user-name: string # The user name used for running job.
   --body: record
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user.name" $username "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/sqoop" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -336,8 +336,8 @@ export def "templeton-sqoop SubmitSqoopJob" [
 #
 # GET /ws/v1/cluster/apps/{appId}/state
 # operationId: Job_GetAppState
-export def "ws-cluster-apps-state GetAppState" [
-  appId: string
+export def "ws-cluster-apps-state get" [
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,7 +349,7 @@ export def "ws-cluster-apps-state GetAppState" [
 ]: nothing -> record<state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ws/v1/cluster/apps/($appId)/state")
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/ws/v1/cluster/apps/{app_id}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

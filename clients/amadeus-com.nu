@@ -65,7 +65,7 @@ def base-url-completer [] { ["https://test.api.amadeus.com/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def travelClass-completer [] { ["BUSINESS" "ECONOMY" "FIRST" "PREMIUM_ECONOMY"] }
+def travel-class-completer [] { ["BUSINESS" "ECONOMY" "FIRST" "PREMIUM_ECONOMY"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -103,24 +103,24 @@ export def "shopping-flight-offers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --originLocationCode: string # city/airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx) from which the traveler will depart, e.g. BOS for Boston (e.g. SYD)
-  --destinationLocationCode: string # city/airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx) to which the traveler is going, e.g. PAR for Paris (e.g. BKK)
-  --departureDate: string # the date on which the traveler will depart from the origin to go to the destination. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2017-12-25 (format: date, e.g. 2021-02-01)
-  --returnDate: string # the date on which the traveler will depart from the destination to return to the origin. If this parameter is not specified, only one-way itineraries are found. If this parameter is specified, only round-trip itineraries are found. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2018-02-28 (format: date)
+  --origin-location-code: string # city/airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx) from which the traveler will depart, e.g. BOS for Boston (e.g. SYD)
+  --destination-location-code: string # city/airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx) to which the traveler is going, e.g. PAR for Paris (e.g. BKK)
+  --departure-date: string # the date on which the traveler will depart from the origin to go to the destination. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2017-12-25 (format: date, e.g. 2021-02-01)
+  --return-date: string # the date on which the traveler will depart from the destination to return to the origin. If this parameter is not specified, only one-way itineraries are found. If this parameter is specified, only round-trip itineraries are found. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2018-02-28 (format: date)
   --adults: int # the number of adult travelers (age 12 or older on date of departure). (default: 1)
   --children: int # the number of child travelers (older than age 2 and younger than age 12 on date of departure) who will each have their own separate seat. If specified, this number should be greater than or equal to 0
   --infants: int # the number of infant travelers (whose age is less or equal to 2 on date of departure). Infants travel on the lap of an adult traveler, and thus the number of infants must not exceed the number of adults. If specified, this number should be greater than or equal to 0
-  --travelClass: string@travelClass-completer # most of the flight time should be spent in a cabin of this quality or higher. The accepted travel class is economy, premium economy, business or first class. If no travel class is specified, the search considers any travel class
-  --includedAirlineCodes: string # This option ensures that the system will only consider these airlines. This can not be cumulated with parameter excludedAirlineCodes.  Airlines are specified as [IATA airline codes](http://www.iata.org/publications/Pages/code-search.aspx) and are comma-separated, e.g. 6X,7X,8X
-  --excludedAirlineCodes: string # This option ensures that the system will ignore these airlines. This can not be cumulated with parameter includedAirlineCodes.  Airlines are specified as [IATA airline codes](http://www.iata.org/publications/Pages/code-search.aspx) and are comma-separated, e.g. 6X,7X,8X
-  --nonStop: oneof<nothing, bool> # if set to true, the search will find only flights going from the origin to the destination with no stop in between (default: false)
-  --currencyCode: string # the preferred currency for the flight offers. Currency is specified in the [ISO 4217](https://en.wikipedia.org/wiki/ISO_4217) format, e.g. EUR for Euro
-  --maxPrice: int # maximum price per traveler. By default, no limit is applied. If specified, the value should be a positive number with no decimals
+  --travel-class: string@travel-class-completer # most of the flight time should be spent in a cabin of this quality or higher. The accepted travel class is economy, premium economy, business or first class. If no travel class is specified, the search considers any travel class
+  --included-airline-codes: string # This option ensures that the system will only consider these airlines. This can not be cumulated with parameter excludedAirlineCodes.  Airlines are specified as [IATA airline codes](http://www.iata.org/publications/Pages/code-search.aspx) and are comma-separated, e.g. 6X,7X,8X
+  --excluded-airline-codes: string # This option ensures that the system will ignore these airlines. This can not be cumulated with parameter includedAirlineCodes.  Airlines are specified as [IATA airline codes](http://www.iata.org/publications/Pages/code-search.aspx) and are comma-separated, e.g. 6X,7X,8X
+  --non-stop: oneof<nothing, bool> # if set to true, the search will find only flights going from the origin to the destination with no stop in between (default: false)
+  --currency-code: string # the preferred currency for the flight offers. Currency is specified in the [ISO 4217](https://en.wikipedia.org/wiki/ISO_4217) format, e.g. EUR for Euro
+  --max-price: int # maximum price per traveler. By default, no limit is applied. If specified, the value should be a positive number with no decimals
   --max: int # maximum number of flight offers to return. If specified, the value should be greater than or equal to 1 (default: 250)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "originLocationCode" $originLocationCode "scalar") (serialize-qp "destinationLocationCode" $destinationLocationCode "scalar") (serialize-qp "departureDate" $departureDate "scalar") (serialize-qp "returnDate" $returnDate "scalar") (serialize-qp "adults" $adults "scalar") (serialize-qp "children" $children "scalar") (serialize-qp "infants" $infants "scalar") (serialize-qp "travelClass" $travelClass "scalar") (serialize-qp "includedAirlineCodes" $includedAirlineCodes "scalar") (serialize-qp "excludedAirlineCodes" $excludedAirlineCodes "scalar") (serialize-qp "nonStop" $nonStop "scalar") (serialize-qp "currencyCode" $currencyCode "scalar") (serialize-qp "maxPrice" $maxPrice "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "originLocationCode" $origin_location_code "scalar") (serialize-qp "destinationLocationCode" $destination_location_code "scalar") (serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "returnDate" $return_date "scalar") (serialize-qp "adults" $adults "scalar") (serialize-qp "children" $children "scalar") (serialize-qp "infants" $infants "scalar") (serialize-qp "travelClass" $travel_class "scalar") (serialize-qp "includedAirlineCodes" $included_airline_codes "scalar") (serialize-qp "excludedAirlineCodes" $excluded_airline_codes "scalar") (serialize-qp "nonStop" $non_stop "scalar") (serialize-qp "currencyCode" $currency_code "scalar") (serialize-qp "maxPrice" $max_price "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shopping/flight-offers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -131,7 +131,7 @@ export def "shopping-flight-offers get" [
 #
 # POST /shopping/flight-offers
 # operationId: searchFlightOffers
-export def "shopping-flight-offers searchFlightOffers" [
+export def "shopping-flight-offers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +140,7 @@ export def "shopping-flight-offers searchFlightOffers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-HTTP-Method-Override: string # the HTTP method to apply
+  --x-http-method-override: string # the HTTP method to apply
   --body: record
 ]: any -> any {
   let input = $in
@@ -148,7 +148,7 @@ export def "shopping-flight-offers searchFlightOffers" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shopping/flight-offers")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-HTTP-Method-Override": $X_HTTP_Method_Override} | compact
+  let extra_headers = {"X-HTTP-Method-Override": $x_http_method_override} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

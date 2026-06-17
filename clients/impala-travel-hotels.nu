@@ -67,12 +67,12 @@ def base-url-completer [] { ["https://sandbox.impala.travel/v1" "https://api.imp
 def auth-scheme-completer [] { ["x-api-key" "bearer"] }
 
 # Completers for enum parameters
-def paymentType-completer [] { ["API"] }
+def payment-type-completer [] { ["API"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bookings listBookings" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bookings list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /bookings
 # operationId: listBookings
-export def "bookings listBookings" [
+export def "bookings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,11 +111,11 @@ export def "bookings listBookings" [
   --updated: record # Allows for filtering based on the date and time the booking was last updated, in ISO 8601 format (e.g. `2020-11-04T17:37:37Z`) and UTC timezone. Available modifiers include less than (`lt`), greater than (`gt`), lower than or equal to (`lte`), greater than or equal to (`gte`) and equal to (`eq`). Usage example: `?updated[lte]=2020-11-04T19:37:37Z&updated[gte]=2020-11-04T15:56:37.000Z` (e.g. {eq: 2020-11-04T15:56:37.000Z, gt: 2020-11-04T15:56:37.000Z, gte: 2020-11-04T15:56:37.000Z, lt: 2020-11-04T15:56:37.000Z, lte: 2020-11-04T15:56:37.000Z})
   --size: float # Pagination size. Defaults to 100 if omitted. (format: int32, default: 100)
   --offset: float # Pagination offset. Defaults to 0 if omitted. (format: int32, default: 0)
-  --sortBy: string # Order in which the results should be sorted. Currently allows you to sort by `createdAt` and `updatedAt`. Specify multiple paramaters by separating with commas (default: createdAt:asc, e.g. createdAt:desc,updatedAt:asc)
+  --sort-by: string # Order in which the results should be sorted. Currently allows you to sort by `createdAt` and `updatedAt`. Specify multiple paramaters by separating with commas (default: createdAt:asc, e.g. createdAt:desc,updatedAt:asc)
 ]: nothing -> record<data: table<bookedRooms: list, bookingId: string, cancellation: record, contact: record, createdAt: string, end: string, hotel: record, hotelConfirmationCode: string, notes: record, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string>, pagination: record<count: float, next: string, prev: string, total: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "deepObject") (serialize-qp "end" $end "deepObject") (serialize-qp "created" $created "deepObject") (serialize-qp "updated" $updated "deepObject") (serialize-qp "size" $size "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sortBy" $sortBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "deepObject") (serialize-qp "end" $end "deepObject") (serialize-qp "created" $created "deepObject") (serialize-qp "updated" $updated "deepObject") (serialize-qp "size" $size "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sortBy" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bookings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -128,7 +128,7 @@ export def "bookings listBookings" [
 # operationId: createBooking
 # --notes shape: {fromGuest?: string, fromSeller?: string}
 # --rooms item shape: {adults: float, notes?: record, rateId: string}
-export def "bookings createBooking" [
+export def "bookings create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,10 +137,10 @@ export def "bookings createBooking" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  bookingContact: any # Details of your guest (will be provided to the hotel in case of questions).
+  booking_contact: any # Details of your guest (will be provided to the hotel in case of questions).
   end: string # The last day of the desired stay range in ISO 8601 format YYYY-MM-DD. (format: date)
   --notes: record # Notes allow sellers to their guests to communicate relevant information to the hotel. — shape: {fromGuest?: string, fromSeller?: string}
-  --paymentType: string@paymentType-completer # How will the guest make payment for this booking?
+  --payment-type: string@payment-type-completer # How will the guest make payment for this booking?
   rooms: list # List of room type identifiers to be booked. — item shape: {adults: float, notes?: record, rateId: string}
   start: string # The first day of the desired stay range in ISO 8601 format YYYY-MM-DD. (format: date)
 ]: any -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
@@ -148,7 +148,7 @@ export def "bookings createBooking" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bookings")
-  let body = {bookingContact: $bookingContact, end: $end, notes: $notes, paymentType: $paymentType, rooms: $rooms, start: $start} | compact
+  let body = {"bookingContact": $booking_contact, "end": $end, "notes": $notes, "paymentType": $payment_type, "rooms": $rooms, "start": $start} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -159,8 +159,8 @@ export def "bookings createBooking" [
 #
 # DELETE /bookings/{bookingId}
 # operationId: cancelBooking
-export def "bookings cancelBooking" [
-  bookingId: string
+export def "bookings cancel" [
+  booking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +172,7 @@ export def "bookings cancelBooking" [
 ]: nothing -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bookings/($bookingId)")
+  let full_url = (build-url $base ({booking_id: $booking_id} | format pattern "/bookings/{booking_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -182,8 +182,8 @@ export def "bookings cancelBooking" [
 #
 # GET /bookings/{bookingId}
 # operationId: retrieveBooking
-export def "bookings retrieveBooking" [
-  bookingId: string
+export def "bookings retrieve" [
+  booking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "bookings retrieveBooking" [
 ]: nothing -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bookings/($bookingId)")
+  let full_url = (build-url $base ({booking_id: $booking_id} | format pattern "/bookings/{booking_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,8 +207,8 @@ export def "bookings retrieveBooking" [
 # operationId: updateBooking
 # --notes shape: {fromGuest?: string, fromSeller?: string}
 # --rooms item shape: {adults: float, notes?: record, rateId: string}
-export def "bookings updateBooking" [
-  bookingId: string
+export def "bookings update" [
+  booking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,19 +217,19 @@ export def "bookings updateBooking" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  bookingContact: any # Details of your guest (will be provided to the hotel in case of questions).
+  booking_contact: any # Details of your guest (will be provided to the hotel in case of questions).
   end: string # The last day of the desired stay range in ISO 8601 format YYYY-MM-DD. (format: date)
   --notes: record # Notes allow sellers to their guests to communicate relevant information to the hotel. — shape: {fromGuest?: string, fromSeller?: string}
-  --paymentType: string@paymentType-completer # How will the guest make payment for this booking?
+  --payment-type: string@payment-type-completer # How will the guest make payment for this booking?
   rooms: list # List of room type identifiers to be booked. — item shape: {adults: float, notes?: record, rateId: string}
   start: string # The first day of the desired stay range in ISO 8601 format YYYY-MM-DD. (format: date)
-  updateBookingVersionAtTimestamp: string # The timestamp of when the booking was last updated (format: date-time, e.g. 2020-12-20T11:01:30.745Z)
+  update_booking_version_at_timestamp: string # The timestamp of when the booking was last updated (format: date-time, e.g. 2020-12-20T11:01:30.745Z)
 ]: any -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bookings/($bookingId)")
-  let body = {bookingContact: $bookingContact, end: $end, notes: $notes, paymentType: $paymentType, rooms: $rooms, start: $start, updateBookingVersionAtTimestamp: $updateBookingVersionAtTimestamp} | compact
+  let full_url = (build-url $base ({booking_id: $booking_id} | format pattern "/bookings/{booking_id}"))
+  let body = {"bookingContact": $booking_contact, "end": $end, "notes": $notes, "paymentType": $payment_type, "rooms": $rooms, "start": $start, "updateBookingVersionAtTimestamp": $update_booking_version_at_timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -241,8 +241,8 @@ export def "bookings updateBooking" [
 # PUT /bookings/{bookingId}/booking-contact
 # operationId: updateBookingContact
 # --bookingContact shape: {email: string, firstName: string, lastName: string}
-export def "bookings-booking-contact updateBookingContact" [
-  bookingId: string
+export def "bookings-booking-contact update" [
+  booking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,14 +251,14 @@ export def "bookings-booking-contact updateBookingContact" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  bookingContact: record # Information on a person and their contact details. — shape: {email: string, firstName: string, lastName: string}
-  updateBookingVersionAtTimestamp: string # The timestamp of when the booking was last updated (format: date-time, e.g. 2020-12-20T11:01:30.745Z)
+  booking_contact: record # Information on a person and their contact details. — shape: {email: string, firstName: string, lastName: string}
+  update_booking_version_at_timestamp: string # The timestamp of when the booking was last updated (format: date-time, e.g. 2020-12-20T11:01:30.745Z)
 ]: any -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bookings/($bookingId)/booking-contact")
-  let body = {bookingContact: $bookingContact, updateBookingVersionAtTimestamp: $updateBookingVersionAtTimestamp} | compact
+  let full_url = (build-url $base ({booking_id: $booking_id} | format pattern "/bookings/{booking_id}/booking-contact"))
+  let body = {"bookingContact": $booking_contact, "updateBookingVersionAtTimestamp": $update_booking_version_at_timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -269,7 +269,7 @@ export def "bookings-booking-contact updateBookingContact" [
 #
 # GET /hotels
 # operationId: listHotels
-export def "hotels listHotels" [
+export def "hotels list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,23 +279,23 @@ export def "hotels listHotels" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: record # Allows for filtering based on the property name. Available modifiers include equal to (`eq`) or case insensitive search (`like`). Usage example: `?name[like]=palace` (e.g. {eq: Minimalist Palace, like: palace})
-  --starRating: record # Allows for filtering based on the starRating of a property. Available modifiers include less than (`lt`), greater than (`gt`), less than or equal to (`lte`), greater than or equal to (`gte`) and equal to (`eq`). Usage example: `?starRating[gt]=3&starRating[lt]=5` (e.g. {eq: 4, gt: 3, gte: 4, lt: 4, lte: 3})
+  --star-rating: record # Allows for filtering based on the starRating of a property. Available modifiers include less than (`lt`), greater than (`gt`), less than or equal to (`lte`), greater than or equal to (`gte`) and equal to (`eq`). Usage example: `?starRating[gt]=3&starRating[lt]=5` (e.g. {eq: 4, gt: 3, gte: 4, lt: 4, lte: 3})
   --country: record # Allows for filtering based on the country of a property. The only available modifier for this parameter is equal to (`eq`). Usage example: `?country[eq]=GBR` (e.g. {eq: GBR})
   --start: string # The arrival day of the desired stay range in ISO 8601 format (`YYYY-MM-DD`). (e.g. 2021-05-20)
   --end: string # The departure day of the desired stay range in ISO 8601 format (`YYYY-MM-DD`). (e.g. 2021-05-22)
   --latitude: float # The WGS 84 latitude of the location to search around (e.g. `58.386186`). (format: double, e.g. 58.386186)
   --longitude: float # The WGS 84 longitude of the location to search around (e.g. `-9.952549`). (format: double, e.g. -9.952549)
   --radius: int # The distance (in meters) to search around the specified location (e.g. `10000` for 10 km). (format: int32, e.g. 25000)
-  --hotelIds: list # A comma-separated list of hotel ids you wish to filter by (e.g. `60a06628-2c71-44bf-9685-efbd2df4179e,60a06628-2c71-44bf-9685-efbd2df4179e`). (e.g. [0e25533a-2db2-4894-9db1-4c1ff92d798c,77c272b6-18e6-4036-b9c3-7fc5454e3f6a])
+  --hotel-ids: list # A comma-separated list of hotel ids you wish to filter by (e.g. `60a06628-2c71-44bf-9685-efbd2df4179e,60a06628-2c71-44bf-9685-efbd2df4179e`). (e.g. [0e25533a-2db2-4894-9db1-4c1ff92d798c,77c272b6-18e6-4036-b9c3-7fc5454e3f6a])
   --created: record # Allows for filtering based on the date and time when this hotel was first added to the Impala platform, in ISO 8601 format (e.g. `2020-11-04T17:37:37Z`) and UTC timezone. Available modifiers include less than (`lt`), greater than (`gt`), lower than or equal to (`lte`), greater than or equal to (`gte`) and equal to (`eq`). Usage example: `?created[lte]=2020-11-04T19:37:37Z&created[gte]=2020-11-04T15:56:37.000Z` (e.g. {eq: 2020-11-04T15:56:37.000Z, gt: 2020-11-04T15:56:37.000Z, gte: 2020-11-04T15:56:37.000Z, lt: 2020-11-04T15:56:37.000Z, lte: 2020-11-04T15:56:37.000Z})
   --updated: record # Allows for filtering based on the date and time the content of this hotel was last updated, in ISO 8601 format (e.g. `2020-11-04T17:37:37Z`) and UTC timezone. Available modifiers include less than (`lt`), greater than (`gt`), lower than or equal to (`lte`), greater than or equal to (`gte`) and equal to (`eq`). Usage example: `?updated[lte]=2020-11-04T19:37:37Z&updated[gte]=2020-11-04T15:56:37.000Z` (e.g. {eq: 2020-11-04T15:56:37.000Z, gt: 2020-11-04T15:56:37.000Z, gte: 2020-11-04T15:56:37.000Z, lt: 2020-11-04T15:56:37.000Z, lte: 2020-11-04T15:56:37.000Z})
   --size: float # Number of hotels returned on a given page (pagination). (format: int32, default: 25, e.g. 40)
   --offset: float # Offset from the first hotel in the result (for pagination). (format: int32, default: 0, e.g. 25)
-  --sortBy: string # Order in which the results should be sorted. Currently allows you to sort by `name` (alphabetical), star `rating`, and `distance_m` in meters from the specified latitude/longitude. Allows for a comma-separated list of of arguments with modifiers for `:asc` (ascending) and `:desc` (descending) ordering. (default: createdAt:desc, e.g. name:asc,distance_m:desc)
+  --sort-by: string # Order in which the results should be sorted. Currently allows you to sort by `name` (alphabetical), star `rating`, and `distance_m` in meters from the specified latitude/longitude. Allows for a comma-separated list of of arguments with modifiers for `:asc` (ascending) and `:desc` (descending) ordering. (default: createdAt:desc, e.g. name:asc,distance_m:desc)
 ]: nothing -> record<data: table<address: record, amenities: list, checkIn: record, checkOut: record, contractable: bool, createdAt: string, currency: string, description: record, emails: list, externalUrls: list, hotelId: string, images: list, location: record, name: string, phoneNumbers: list, roomCount: float, roomTypes: list, starRating: float, termsAndConditions: string, timezone: string, updatedAt: string, websiteUrl: string>, pagination: record<count: float, next: string, prev: string, total: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "deepObject") (serialize-qp "starRating" $starRating "deepObject") (serialize-qp "country" $country "deepObject") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "hotelIds" $hotelIds "csv") (serialize-qp "created" $created "deepObject") (serialize-qp "updated" $updated "deepObject") (serialize-qp "size" $size "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sortBy" $sortBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "deepObject") (serialize-qp "starRating" $star_rating "deepObject") (serialize-qp "country" $country "deepObject") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "hotelIds" $hotel_ids "csv") (serialize-qp "created" $created "deepObject") (serialize-qp "updated" $updated "deepObject") (serialize-qp "size" $size "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sortBy" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hotels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -306,8 +306,8 @@ export def "hotels listHotels" [
 #
 # GET /hotels/{hotelId}
 # operationId: retrieveHotel
-export def "hotels retrieveHotel" [
-  hotelId: string
+export def "hotels retrieve" [
+  hotel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,7 +322,7 @@ export def "hotels retrieveHotel" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hotels/($hotelId)" $qp)
+  let full_url = (build-url $base ({hotel_id: $hotel_id} | format pattern "/hotels/{hotel_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -332,8 +332,8 @@ export def "hotels retrieveHotel" [
 #
 # GET /hotels/{hotelId}/rate-plans
 # operationId: listRatePlansForHotel
-export def "hotels-rate-plans listRatePlansForHotel" [
-  hotelId: string
+export def "hotels-rate-plans list-rate-plans-for" [
+  hotel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,17 +342,17 @@ export def "hotels-rate-plans listRatePlansForHotel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updatedAt: record # Returns rate plans changed after the supplied date. (e.g. {eq: 2022-11-04T15:56:37.000Z, gt: 2022-11-04T15:56:37.000Z, gte: 2022-11-04T15:56:37.000Z, lt: 2022-11-04T15:56:37.000Z, lte: 2022-11-04T15:56:37.000Z})
+  --updated-at: record # Returns rate plans changed after the supplied date. (e.g. {eq: 2022-11-04T15:56:37.000Z, gt: 2022-11-04T15:56:37.000Z, gte: 2022-11-04T15:56:37.000Z, lt: 2022-11-04T15:56:37.000Z, lte: 2022-11-04T15:56:37.000Z})
   --size: float # Number of rate plans returned on a given page (pagination). (format: int32, default: 25, e.g. 40)
   --offset: float # Offset from the first rate plan in the result (for pagination). (format: int32, default: 0, e.g. 25)
   --start: string # Start date of the considered time window for the returned rate plan. (e.g. 2022-05-12)
   --end: string # Start date of the considered time window for the returned rate plan. (e.g. 2022-05-12)
-  --roomId: string # The UUID of room for which rate plans are being fetched. (format: uuid, e.g. 6d3a255d-3b22-48a4-8076-3ae3d0ade3d7)
+  --room-id: string # The UUID of room for which rate plans are being fetched. (format: uuid, e.g. 6d3a255d-3b22-48a4-8076-3ae3d0ade3d7)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "updatedAt" $updatedAt "deepObject") (serialize-qp "size" $size "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "roomId" $roomId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hotels/($hotelId)/rate-plans" $qp)
+  let qp = [(serialize-qp "updatedAt" $updated_at "deepObject") (serialize-qp "size" $size "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "roomId" $room_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({hotel_id: $hotel_id} | format pattern "/hotels/{hotel_id}/rate-plans") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -362,9 +362,9 @@ export def "hotels-rate-plans listRatePlansForHotel" [
 #
 # GET /hotels/{hotelId}/rate-plans/{ratePlanId}
 # operationId: listRatePlanForHotelForRatePlanId
-export def "hotels-rate-plans listRatePlanForHotelForRatePlanId" [
-  hotelId: string
-  ratePlanId: int
+export def "hotels-rate-plans list-rate-plan-for-hotel-for" [
+  hotel_id: string
+  rate_plan_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,17 +373,17 @@ export def "hotels-rate-plans listRatePlanForHotelForRatePlanId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updatedAt: record # Returns rate plans changed after the supplied date. (e.g. {eq: 2022-11-04T15:56:37.000Z, gt: 2022-11-04T15:56:37.000Z, gte: 2022-11-04T15:56:37.000Z, lt: 2022-11-04T15:56:37.000Z, lte: 2022-11-04T15:56:37.000Z})
+  --updated-at: record # Returns rate plans changed after the supplied date. (e.g. {eq: 2022-11-04T15:56:37.000Z, gt: 2022-11-04T15:56:37.000Z, gte: 2022-11-04T15:56:37.000Z, lt: 2022-11-04T15:56:37.000Z, lte: 2022-11-04T15:56:37.000Z})
   --size: float # Number of rate plans returned on a given page (pagination). (format: int32, default: 25, e.g. 40)
   --offset: float # Offset from the first rate plan in the result (for pagination). (format: int32, default: 0, e.g. 25)
   --start: string # Start date of the considered time window for the returned rate plan. (e.g. 2022-05-12)
   --end: string # Start date of the considered time window for the returned rate plan. (e.g. 2022-05-12)
-  --roomTypeId: string # The uuid of room for which rate plans are being fetched. (format: uuid, e.g. 6d3a255d-3b22-48a4-8076-3ae3d0ade3d7)
+  --room-type-id: string # The uuid of room for which rate plans are being fetched. (format: uuid, e.g. 6d3a255d-3b22-48a4-8076-3ae3d0ade3d7)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "updatedAt" $updatedAt "deepObject") (serialize-qp "size" $size "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "roomTypeId" $roomTypeId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hotels/($hotelId)/rate-plans/($ratePlanId)" $qp)
+  let qp = [(serialize-qp "updatedAt" $updated_at "deepObject") (serialize-qp "size" $size "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "roomTypeId" $room_type_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({hotel_id: $hotel_id, rate_plan_id: $rate_plan_id} | format pattern "/hotels/{hotel_id}/rate-plans/{rate_plan_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cards cards" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cards get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /cards
 # operationId: cards
-export def "cards cards" [
+export def "cards get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,7 +115,7 @@ export def "cards cards" [
 # GET /cards/{cardId}
 # operationId: findPetsByTags
 export def "cards findPetsByTags" [
-  cardId: string
+  card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,7 +127,7 @@ export def "cards findPetsByTags" [
 ]: nothing -> record<abilities: table<effect: string, name: string, type: string>, attacks: table<cost: list, damage: float, effect: string, name: string>, category: string, description: string, dexId: list<float>, energyType: string, evolveFrom: string, hp: float, id: string, illustrator: string, image: string, item: record<effect: string, name: string>, legal: record<expanded: bool, standard: bool>, level: float, localId: string, name: string, rarity: string, regulationMark: string, resistances: list<list<record>>, retreat: float, set: record<cardCount: record<official: float, total: float>, id: string, logo: string, name: string, symbol: string>, stage: string, suffix: string, trainerType: string, types: list<string>, variants: record<firstEdition: bool, holo: bool, normal: bool, reverse: bool, wPromo: bool>, weaknesses: list<list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/cards/($cardId)")
+  let full_url = (build-url $base ({card_id: $card_id} | format pattern "/cards/{card_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -166,7 +166,7 @@ export def "categories get" [
 ]: nothing -> record<cards: table<id: string, image: string, localId: string, name: string>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/categories/($category)")
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -193,7 +193,7 @@ export def "dex-ids list" [
 
 # GET /dex-ids/{dexId}
 export def "dex-ids get" [
-  dexId: string
+  dex_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "dex-ids get" [
 ]: nothing -> table<id: string, image: string, localId: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dex-ids/($dexId)")
+  let full_url = (build-url $base ({dex_id: $dex_id} | format pattern "/dex-ids/{dex_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,7 +244,7 @@ export def "energy-types get" [
 ]: nothing -> table<id: string, image: string, localId: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/energy-types/($energy_type)")
+  let full_url = (build-url $base ({energy_type: $energy_type} | format pattern "/energy-types/{energy_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -283,7 +283,7 @@ export def "hp get" [
 ]: nothing -> record<cards: table<id: string, image: string, localId: string, name: string>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/hp/($hp)")
+  let full_url = (build-url $base ({hp: $hp} | format pattern "/hp/{hp}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -322,7 +322,7 @@ export def "illustrators get" [
 ]: nothing -> record<cards: table<id: string, image: string, localId: string, name: string>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/illustrators/($illustrator)")
+  let full_url = (build-url $base ({illustrator: $illustrator} | format pattern "/illustrators/{illustrator}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -361,7 +361,7 @@ export def "rarities get" [
 ]: nothing -> record<cards: table<id: string, image: string, localId: string, name: string>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rarities/($rarity)")
+  let full_url = (build-url $base ({rarity: $rarity} | format pattern "/rarities/{rarity}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -400,7 +400,7 @@ export def "regulation-marks get" [
 ]: nothing -> table<id: string, image: string, localId: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/regulation-marks/($regulation_mark)")
+  let full_url = (build-url $base ({regulation_mark: $regulation_mark} | format pattern "/regulation-marks/{regulation_mark}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -439,7 +439,7 @@ export def "retreats get" [
 ]: nothing -> record<cards: table<id: string, image: string, localId: string, name: string>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/retreats/($retreat)")
+  let full_url = (build-url $base ({retreat: $retreat} | format pattern "/retreats/{retreat}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -478,7 +478,7 @@ export def "series get" [
 ]: nothing -> record<id: string, logo: string, name: string, sets: table<cardCount: record, id: string, logo: string, name: string, symbol: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($serie)")
+  let full_url = (build-url $base ({serie: $serie} | format pattern "/series/{serie}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -517,7 +517,7 @@ export def "sets get-by-set" [
 ]: nothing -> record<cardCount: record<firstEd: float, holo: float, normal: float, official: float, reverse: float, total: float>, cards: table<id: string, image: string, localId: string, name: string>, id: string, logo: string, name: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sets/($set)")
+  let full_url = (build-url $base ({set: $set} | format pattern "/sets/{set}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -526,7 +526,7 @@ export def "sets get-by-set" [
 # GET /sets/{set}/{cardLocalId}
 export def "sets get-by-set-cardLocalId" [
   set: string
-  cardLocalId: string
+  card_local_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +538,7 @@ export def "sets get-by-set-cardLocalId" [
 ]: nothing -> record<abilities: table<effect: string, name: string, type: string>, attacks: table<cost: list, damage: float, effect: string, name: string>, category: string, description: string, dexId: list<float>, energyType: string, evolveFrom: string, hp: float, id: string, illustrator: string, image: string, item: record<effect: string, name: string>, legal: record<expanded: bool, standard: bool>, level: float, localId: string, name: string, rarity: string, regulationMark: string, resistances: list<list<record>>, retreat: float, set: record<cardCount: record<official: float, total: float>, id: string, logo: string, name: string, symbol: string>, stage: string, suffix: string, trainerType: string, types: list<string>, variants: record<firstEdition: bool, holo: bool, normal: bool, reverse: bool, wPromo: bool>, weaknesses: list<list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sets/($set)/($cardLocalId)")
+  let full_url = (build-url $base ({set: $set, card_local_id: $card_local_id} | format pattern "/sets/{set}/{card_local_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -577,7 +577,7 @@ export def "stages get" [
 ]: nothing -> table<id: string, image: string, localId: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stages/($stage)")
+  let full_url = (build-url $base ({stage: $stage} | format pattern "/stages/{stage}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -616,7 +616,7 @@ export def "suffixes get" [
 ]: nothing -> table<id: string, image: string, localId: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/suffixes/($suffix)")
+  let full_url = (build-url $base ({suffix: $suffix} | format pattern "/suffixes/{suffix}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -655,7 +655,7 @@ export def "trainer-types get" [
 ]: nothing -> table<id: string, image: string, localId: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/trainer-types/($trainer_type)")
+  let full_url = (build-url $base ({trainer_type: $trainer_type} | format pattern "/trainer-types/{trainer_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -694,7 +694,7 @@ export def "types get" [
 ]: nothing -> table<id: string, image: string, localId: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/types/($type)")
+  let full_url = (build-url $base ({type: $type} | format pattern "/types/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -733,7 +733,7 @@ export def "variants get" [
 ]: nothing -> table<id: string, image: string, localId: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/variants/($variant)")
+  let full_url = (build-url $base ({variant: $variant} | format pattern "/variants/{variant}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

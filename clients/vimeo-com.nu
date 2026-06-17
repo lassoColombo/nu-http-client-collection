@@ -163,7 +163,7 @@ export def "api-information endpoints" [
 #
 # GET /categories
 # operationId: get_categories
-export def "categories categories" [
+export def "categories get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "categories category" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/categories/($category)")
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}"))
   let accept_val = "application/vnd.vimeo.category+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -232,7 +232,7 @@ export def "categories-channels channels" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channels" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}/channels") $qp)
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -261,7 +261,7 @@ export def "categories-groups groups" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/groups" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}/groups") $qp)
   let accept_val = "application/vnd.vimeo.group+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -292,7 +292,7 @@ export def "categories-videos videos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/videos" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -316,7 +316,7 @@ export def "categories-videos video" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/categories/($category)/videos/($video_id)")
+  let full_url = (build-url $base ({category: $category, video_id: $video_id} | format pattern "/categories/{category}/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -326,7 +326,7 @@ export def "categories-videos video" [
 #
 # GET /channels
 # operationId: get_channels
-export def "channels channels" [
+export def "channels get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,7 +393,7 @@ export def "channels channel-by-channel_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -416,7 +416,7 @@ export def "channels channel-by-channel_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}"))
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -441,7 +441,7 @@ export def "channels channel-by-channel_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -465,7 +465,7 @@ export def "channels-categories categories-by-channel_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/categories")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/categories"))
   let accept_val = "application/vnd.vimeo.category+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -490,8 +490,8 @@ export def "channels-categories categories-by-channel_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/categories")
-  let body = {channels: $channels} | compact
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/categories"))
+  let body = {"channels": $channels} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -503,8 +503,8 @@ export def "channels-categories categories-by-channel_id-1" [
 # DELETE /channels/{channel_id}/categories/{category}
 # operationId: delete_channel_category
 export def "channels-categories category" [
-  category: string
   channel_id: float
+  category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,7 +516,7 @@ export def "channels-categories category" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/categories/($category)")
+  let full_url = (build-url $base ({channel_id: $channel_id, category: $category} | format pattern "/channels/{channel_id}/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -527,8 +527,8 @@ export def "channels-categories category" [
 # PUT /channels/{channel_id}/categories/{category}
 # operationId: categorize_channel
 export def "channels-categories channel" [
-  category: string
   channel_id: float
+  category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "channels-categories channel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/categories/($category)")
+  let full_url = (build-url $base ({channel_id: $channel_id, category: $category} | format pattern "/channels/{channel_id}/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -565,7 +565,7 @@ export def "channels-moderators moderators-by-channel_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/moderators")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/moderators"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -595,7 +595,7 @@ export def "channels-moderators moderators-by-channel_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/channels/($channel_id)/moderators" $qp)
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/moderators") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -620,8 +620,8 @@ export def "channels-moderators moderators-by-channel_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/moderators")
-  let body = {user_uri: $user_uri} | compact
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/moderators"))
+  let body = {"user_uri": $user_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -647,8 +647,8 @@ export def "channels-moderators moderators-by-channel_id-3" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/moderators")
-  let body = {user_uri: $user_uri} | compact
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/moderators"))
+  let body = {"user_uri": $user_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -673,7 +673,7 @@ export def "channels-moderators moderator-by-channel_id-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/moderators/($user_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id, user_id: $user_id} | format pattern "/channels/{channel_id}/moderators/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -697,7 +697,7 @@ export def "channels-moderators moderator-by-channel_id-user_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/moderators/($user_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id, user_id: $user_id} | format pattern "/channels/{channel_id}/moderators/{user_id}"))
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -721,7 +721,7 @@ export def "channels-moderators moderator-by-channel_id-user_id-2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/moderators/($user_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id, user_id: $user_id} | format pattern "/channels/{channel_id}/moderators/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -748,7 +748,7 @@ export def "channels-privacy-users users-by-channel_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/channels/($channel_id)/privacy/users" $qp)
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/privacy/users") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -773,7 +773,7 @@ export def "channels-privacy-users users-by-channel_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/privacy/users")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/privacy/users"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -798,7 +798,7 @@ export def "channels-privacy-users user-by-channel_id-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/privacy/users/($user_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id, user_id: $user_id} | format pattern "/channels/{channel_id}/privacy/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -822,7 +822,7 @@ export def "channels-privacy-users user-by-channel_id-user_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/privacy/users/($user_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id, user_id: $user_id} | format pattern "/channels/{channel_id}/privacy/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -832,7 +832,7 @@ export def "channels-privacy-users user-by-channel_id-user_id-1" [
 #
 # GET /channels/{channel_id}/tags
 # operationId: get_channel_tags
-export def "channels-tags tags" [
+export def "channels-tags tag-s" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -845,7 +845,7 @@ export def "channels-tags tags" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/tags")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/tags"))
   let accept_val = "application/vnd.vimeo.tag+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -870,7 +870,7 @@ export def "channels-tags channel-by-channel_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/tags")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/tags"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.tag+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -895,7 +895,7 @@ export def "channels-tags channel-by-channel_id-word" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/tags/($word)")
+  let full_url = (build-url $base ({channel_id: $channel_id, word: $word} | format pattern "/channels/{channel_id}/tags/{word}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -919,7 +919,7 @@ export def "channels-tags tag-by-channel_id-word" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/tags/($word)")
+  let full_url = (build-url $base ({channel_id: $channel_id, word: $word} | format pattern "/channels/{channel_id}/tags/{word}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -943,7 +943,7 @@ export def "channels-tags tag-by-channel_id-word-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/tags/($word)")
+  let full_url = (build-url $base ({channel_id: $channel_id, word: $word} | format pattern "/channels/{channel_id}/tags/{word}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -953,7 +953,7 @@ export def "channels-tags tag-by-channel_id-word-1" [
 #
 # GET /channels/{channel_id}/users
 # operationId: get_channel_subscribers
-export def "channels-users subscribers" [
+export def "channels-users subscribe-rs" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -973,7 +973,7 @@ export def "channels-users subscribers" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/channels/($channel_id)/users" $qp)
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/users") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -998,8 +998,8 @@ export def "channels-videos channel-by-channel_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/videos")
-  let body = {video_uri: $video_uri} | compact
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/videos"))
+  let body = {"video_uri": $video_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1032,7 +1032,7 @@ export def "channels-videos videos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/channels/($channel_id)/videos" $qp)
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1057,8 +1057,8 @@ export def "channels-videos channel-by-channel_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/videos")
-  let body = {video_uri: $video_uri} | compact
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/videos"))
+  let body = {"video_uri": $video_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1083,7 +1083,7 @@ export def "channels-videos channel-by-channel_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/videos/($video_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id, video_id: $video_id} | format pattern "/channels/{channel_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1107,7 +1107,7 @@ export def "channels-videos video" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/videos/($video_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id, video_id: $video_id} | format pattern "/channels/{channel_id}/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1131,7 +1131,7 @@ export def "channels-videos channel-by-channel_id-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/videos/($video_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id, video_id: $video_id} | format pattern "/channels/{channel_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1159,7 +1159,7 @@ export def "channels-videos-comments alt1-by-channel_id-video_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/channels/($channel_id)/videos/($video_id)/comments" $qp)
+  let full_url = (build-url $base ({channel_id: $channel_id, video_id: $video_id} | format pattern "/channels/{channel_id}/videos/{video_id}/comments") $qp)
   let accept_val = "application/vnd.vimeo.comment+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1185,7 +1185,7 @@ export def "channels-videos-comments alt1-by-channel_id-video_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/videos/($video_id)/comments")
+  let full_url = (build-url $base ({channel_id: $channel_id, video_id: $video_id} | format pattern "/channels/{channel_id}/videos/{video_id}/comments"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.comment+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1216,7 +1216,7 @@ export def "channels-videos-credits alt1-by-channel_id-video_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/channels/($channel_id)/videos/($video_id)/credits" $qp)
+  let full_url = (build-url $base ({channel_id: $channel_id, video_id: $video_id} | format pattern "/channels/{channel_id}/videos/{video_id}/credits") $qp)
   let accept_val = "application/vnd.vimeo.credit+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1242,7 +1242,7 @@ export def "channels-videos-credits alt1-by-channel_id-video_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/videos/($video_id)/credits")
+  let full_url = (build-url $base ({channel_id: $channel_id, video_id: $video_id} | format pattern "/channels/{channel_id}/videos/{video_id}/credits"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.credit+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1272,7 +1272,7 @@ export def "channels-videos-likes alt1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/channels/($channel_id)/videos/($video_id)/likes" $qp)
+  let full_url = (build-url $base ({channel_id: $channel_id, video_id: $video_id} | format pattern "/channels/{channel_id}/videos/{video_id}/likes") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1299,7 +1299,7 @@ export def "channels-videos-pictures alt1-by-channel_id-video_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/channels/($channel_id)/videos/($video_id)/pictures" $qp)
+  let full_url = (build-url $base ({channel_id: $channel_id, video_id: $video_id} | format pattern "/channels/{channel_id}/videos/{video_id}/pictures") $qp)
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1325,7 +1325,7 @@ export def "channels-videos-pictures alt1-by-channel_id-video_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/videos/($video_id)/pictures")
+  let full_url = (build-url $base ({channel_id: $channel_id, video_id: $video_id} | format pattern "/channels/{channel_id}/videos/{video_id}/pictures"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1353,7 +1353,7 @@ export def "channels-videos-privacy-users alt1-by-channel_id-video_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/channels/($channel_id)/videos/($video_id)/privacy/users" $qp)
+  let full_url = (build-url $base ({channel_id: $channel_id, video_id: $video_id} | format pattern "/channels/{channel_id}/videos/{video_id}/privacy/users") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1377,7 +1377,7 @@ export def "channels-videos-privacy-users alt1-by-channel_id-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/videos/($video_id)/privacy/users")
+  let full_url = (build-url $base ({channel_id: $channel_id, video_id: $video_id} | format pattern "/channels/{channel_id}/videos/{video_id}/privacy/users"))
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1401,7 +1401,7 @@ export def "channels-videos-texttracks alt1-by-channel_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/videos/($video_id)/texttracks")
+  let full_url = (build-url $base ({channel_id: $channel_id, video_id: $video_id} | format pattern "/channels/{channel_id}/videos/{video_id}/texttracks"))
   let accept_val = "application/vnd.vimeo.video.texttrack+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1427,7 +1427,7 @@ export def "channels-videos-texttracks alt1-by-channel_id-video_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/videos/($video_id)/texttracks")
+  let full_url = (build-url $base ({channel_id: $channel_id, video_id: $video_id} | format pattern "/channels/{channel_id}/videos/{video_id}/texttracks"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.video.texttrack+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1482,7 +1482,7 @@ export def "creativecommons licenses" [
 #
 # GET /groups
 # operationId: get_groups
-export def "groups groups" [
+export def "groups get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1549,7 +1549,7 @@ export def "groups group-by-group_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($group_id)")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1572,7 +1572,7 @@ export def "groups group-by-group_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($group_id)")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}"))
   let accept_val = "application/vnd.vimeo.group+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1602,7 +1602,7 @@ export def "groups-users members" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/groups/($group_id)/users" $qp)
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}/users") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1633,7 +1633,7 @@ export def "groups-videos videos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/groups/($group_id)/videos" $qp)
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1657,7 +1657,7 @@ export def "groups-videos group-by-group_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($group_id)/videos/($video_id)")
+  let full_url = (build-url $base ({group_id: $group_id, video_id: $video_id} | format pattern "/groups/{group_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1681,7 +1681,7 @@ export def "groups-videos video" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($group_id)/videos/($video_id)")
+  let full_url = (build-url $base ({group_id: $group_id, video_id: $video_id} | format pattern "/groups/{group_id}/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1705,7 +1705,7 @@ export def "groups-videos group-by-group_id-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($group_id)/videos/($video_id)")
+  let full_url = (build-url $base ({group_id: $group_id, video_id: $video_id} | format pattern "/groups/{group_id}/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1715,7 +1715,7 @@ export def "groups-videos group-by-group_id-video_id-1" [
 #
 # GET /languages
 # operationId: get_languages
-export def "languages languages" [
+export def "languages get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1852,7 +1852,7 @@ export def "me-albums alt1-by-album_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/albums/($album_id)")
+  let full_url = (build-url $base ({album_id: $album_id} | format pattern "/me/albums/{album_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1875,7 +1875,7 @@ export def "me-albums alt1-by-album_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/albums/($album_id)")
+  let full_url = (build-url $base ({album_id: $album_id} | format pattern "/me/albums/{album_id}"))
   let accept_val = "application/vnd.vimeo.album+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1900,7 +1900,7 @@ export def "me-albums alt1-by-album_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/albums/($album_id)")
+  let full_url = (build-url $base ({album_id: $album_id} | format pattern "/me/albums/{album_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.album+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1935,7 +1935,7 @@ export def "me-albums-videos alt1-by-album_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "weak_search" $weak_search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/me/albums/($album_id)/videos" $qp)
+  let full_url = (build-url $base ({album_id: $album_id} | format pattern "/me/albums/{album_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1960,8 +1960,8 @@ export def "me-albums-videos alt1-by-album_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/albums/($album_id)/videos")
-  let body = {videos: $videos} | compact
+  let full_url = (build-url $base ({album_id: $album_id} | format pattern "/me/albums/{album_id}/videos"))
+  let body = {"videos": $videos} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1986,7 +1986,7 @@ export def "me-albums-videos alt1-by-album_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/albums/($album_id)/videos/($video_id)")
+  let full_url = (build-url $base ({album_id: $album_id, video_id: $video_id} | format pattern "/me/albums/{album_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2012,7 +2012,7 @@ export def "me-albums-videos alt1-by-album_id-video_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "password" $password "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/me/albums/($album_id)/videos/($video_id)" $qp)
+  let full_url = (build-url $base ({album_id: $album_id, video_id: $video_id} | format pattern "/me/albums/{album_id}/videos/{video_id}") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2036,7 +2036,7 @@ export def "me-albums-videos alt1-by-album_id-video_id-2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/albums/($album_id)/videos/($video_id)")
+  let full_url = (build-url $base ({album_id: $album_id, video_id: $video_id} | format pattern "/me/albums/{album_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2062,8 +2062,8 @@ export def "me-albums-videos-set-album-thumbnail alt1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/albums/($album_id)/videos/($video_id)/set_album_thumbnail")
-  let body = {time_code: $time_code} | compact
+  let full_url = (build-url $base ({album_id: $album_id, video_id: $video_id} | format pattern "/me/albums/{album_id}/videos/{video_id}/set_album_thumbnail"))
+  let body = {"time_code": $time_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2144,7 +2144,7 @@ export def "me-categories alt1-by-category" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/categories/($category)")
+  let full_url = (build-url $base ({category: $category} | format pattern "/me/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2167,7 +2167,7 @@ export def "me-categories alt1-by-category-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/categories/($category)")
+  let full_url = (build-url $base ({category: $category} | format pattern "/me/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2190,7 +2190,7 @@ export def "me-categories alt1-by-category-2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/categories/($category)")
+  let full_url = (build-url $base ({category: $category} | format pattern "/me/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2242,7 +2242,7 @@ export def "me-channels alt1-by-channel_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/channels/($channel_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/me/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2265,7 +2265,7 @@ export def "me-channels alt1-by-channel_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/channels/($channel_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/me/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2288,7 +2288,7 @@ export def "me-channels alt1-by-channel_id-2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/channels/($channel_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/me/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2355,7 +2355,7 @@ export def "me-customlogos alt1-by-logo_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/customlogos/($logo_id)")
+  let full_url = (build-url $base ({logo_id: $logo_id} | format pattern "/me/customlogos/{logo_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2464,7 +2464,7 @@ export def "me-following alt1-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/following")
-  let body = {users: $users} | compact
+  let body = {"users": $users} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2488,7 +2488,7 @@ export def "me-following alt1-by-follow_user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/following/($follow_user_id)")
+  let full_url = (build-url $base ({follow_user_id: $follow_user_id} | format pattern "/me/following/{follow_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2511,7 +2511,7 @@ export def "me-following alt1-by-follow_user_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/following/($follow_user_id)")
+  let full_url = (build-url $base ({follow_user_id: $follow_user_id} | format pattern "/me/following/{follow_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2534,7 +2534,7 @@ export def "me-following alt1-by-follow_user_id-2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/following/($follow_user_id)")
+  let full_url = (build-url $base ({follow_user_id: $follow_user_id} | format pattern "/me/following/{follow_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2586,7 +2586,7 @@ export def "me-groups alt1-by-group_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/groups/($group_id)")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/me/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2609,7 +2609,7 @@ export def "me-groups alt1-by-group_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/groups/($group_id)")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/me/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2632,7 +2632,7 @@ export def "me-groups alt1-by-group_id-2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/groups/($group_id)")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/me/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2684,7 +2684,7 @@ export def "me-likes alt1-by-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/likes/($video_id)")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/me/likes/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2707,7 +2707,7 @@ export def "me-likes alt1-by-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/likes/($video_id)")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/me/likes/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2730,7 +2730,7 @@ export def "me-likes alt1-by-video_id-2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/likes/($video_id)")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/me/likes/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2797,7 +2797,7 @@ export def "me-ondemand-pages alt1-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/ondemand/pages")
-  let body = {accepted_currencies: $accepted_currencies, buy: $buy, content_rating: $content_rating, description: $description, domain_link: $domain_link, episodes: $episodes, link: $link, name: $name, rent: $rent, subscription: $subscription, type: $type} | compact
+  let body = {"accepted_currencies": $accepted_currencies, "buy": $buy, "content_rating": $content_rating, "description": $description, "domain_link": $domain_link, "episodes": $episodes, "link": $link, "name": $name, "rent": $rent, "subscription": $subscription, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2849,7 +2849,7 @@ export def "me-ondemand-purchases alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/ondemand/purchases/($ondemand_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/me/ondemand/purchases/{ondemand_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2919,7 +2919,7 @@ export def "me-pictures alt1-by-portraitset_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/pictures/($portraitset_id)")
+  let full_url = (build-url $base ({portraitset_id: $portraitset_id} | format pattern "/me/pictures/{portraitset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2942,7 +2942,7 @@ export def "me-pictures alt1-by-portraitset_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/pictures/($portraitset_id)")
+  let full_url = (build-url $base ({portraitset_id: $portraitset_id} | format pattern "/me/pictures/{portraitset_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2967,7 +2967,7 @@ export def "me-pictures alt1-by-portraitset_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/pictures/($portraitset_id)")
+  let full_url = (build-url $base ({portraitset_id: $portraitset_id} | format pattern "/me/pictures/{portraitset_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3019,7 +3019,7 @@ export def "me-portfolios alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/portfolios/($portfolio_id)")
+  let full_url = (build-url $base ({portfolio_id: $portfolio_id} | format pattern "/me/portfolios/{portfolio_id}"))
   let accept_val = "application/vnd.vimeo.portfolio+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3049,7 +3049,7 @@ export def "me-portfolios-videos alt1-by-portfolio_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/me/portfolios/($portfolio_id)/videos" $qp)
+  let full_url = (build-url $base ({portfolio_id: $portfolio_id} | format pattern "/me/portfolios/{portfolio_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3073,7 +3073,7 @@ export def "me-portfolios-videos alt1-by-portfolio_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/portfolios/($portfolio_id)/videos/($video_id)")
+  let full_url = (build-url $base ({portfolio_id: $portfolio_id, video_id: $video_id} | format pattern "/me/portfolios/{portfolio_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3097,7 +3097,7 @@ export def "me-portfolios-videos alt1-by-portfolio_id-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/portfolios/($portfolio_id)/videos/($video_id)")
+  let full_url = (build-url $base ({portfolio_id: $portfolio_id, video_id: $video_id} | format pattern "/me/portfolios/{portfolio_id}/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3121,7 +3121,7 @@ export def "me-portfolios-videos alt1-by-portfolio_id-video_id-2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/portfolios/($portfolio_id)/videos/($video_id)")
+  let full_url = (build-url $base ({portfolio_id: $portfolio_id, video_id: $video_id} | format pattern "/me/portfolios/{portfolio_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3169,7 +3169,7 @@ export def "me-presets alt1-by-preset_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/presets/($preset_id)")
+  let full_url = (build-url $base ({preset_id: $preset_id} | format pattern "/me/presets/{preset_id}"))
   let accept_val = "application/vnd.vimeo.preset+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3194,7 +3194,7 @@ export def "me-presets alt1-by-preset_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/presets/($preset_id)")
+  let full_url = (build-url $base ({preset_id: $preset_id} | format pattern "/me/presets/{preset_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.preset+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3221,7 +3221,7 @@ export def "me-presets-videos alt1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/me/presets/($preset_id)/videos" $qp)
+  let full_url = (build-url $base ({preset_id: $preset_id} | format pattern "/me/presets/{preset_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3273,7 +3273,7 @@ export def "me-projects alt1-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/projects")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3299,7 +3299,7 @@ export def "me-projects alt1-by-project_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "should_delete_clips" $should_delete_clips "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/me/projects/($project_id)" $qp)
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/me/projects/{project_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3322,7 +3322,7 @@ export def "me-projects alt1-by-project_id-1" [
 ]: nothing -> record<created_time: string, metadata: record<connections: record<videos: record>>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/projects/($project_id)")
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/me/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3347,8 +3347,8 @@ export def "me-projects alt1-by-project_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/projects/($project_id)")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/me/projects/{project_id}"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3375,7 +3375,7 @@ export def "me-projects-videos alt1-by-project_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "should_delete_clips" $should_delete_clips "scalar") (serialize-qp "uris" $uris "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/me/projects/($project_id)/videos" $qp)
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/me/projects/{project_id}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3403,7 +3403,7 @@ export def "me-projects-videos alt1-by-project_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/me/projects/($project_id)/videos" $qp)
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/me/projects/{project_id}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3428,7 +3428,7 @@ export def "me-projects-videos alt1-by-project_id-2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "uris" $uris "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/me/projects/($project_id)/videos" $qp)
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/me/projects/{project_id}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3452,7 +3452,7 @@ export def "me-projects-videos alt1-by-project_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/projects/($project_id)/videos/($video_id)")
+  let full_url = (build-url $base ({project_id: $project_id, video_id: $video_id} | format pattern "/me/projects/{project_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3476,7 +3476,7 @@ export def "me-projects-videos alt1-by-project_id-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/projects/($project_id)/videos/($video_id)")
+  let full_url = (build-url $base ({project_id: $project_id, video_id: $video_id} | format pattern "/me/projects/{project_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3556,7 +3556,7 @@ export def "me-videos alt1-by-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/videos/($video_id)")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/me/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3626,7 +3626,7 @@ export def "me-watched-videos history-by-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/watched/videos/($video_id)")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/me/watched/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3679,7 +3679,7 @@ export def "me-watchlater alt1-by-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/watchlater/($video_id)")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/me/watchlater/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3702,7 +3702,7 @@ export def "me-watchlater alt1-by-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/watchlater/($video_id)")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/me/watchlater/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3725,7 +3725,7 @@ export def "me-watchlater alt1-by-video_id-2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/watchlater/($video_id)")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/me/watchlater/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3867,7 +3867,7 @@ export def "ondemand-genres genre" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/genres/($genre_id)")
+  let full_url = (build-url $base ({genre_id: $genre_id} | format pattern "/ondemand/genres/{genre_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.genre+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3897,7 +3897,7 @@ export def "ondemand-genres-pages vods" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ondemand/genres/($genre_id)/pages" $qp)
+  let full_url = (build-url $base ({genre_id: $genre_id} | format pattern "/ondemand/genres/{genre_id}/pages") $qp)
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3921,7 +3921,7 @@ export def "ondemand-genres-pages vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/genres/($genre_id)/pages/($ondemand_id)")
+  let full_url = (build-url $base ({genre_id: $genre_id, ondemand_id: $ondemand_id} | format pattern "/ondemand/genres/{genre_id}/pages/{ondemand_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3944,7 +3944,7 @@ export def "ondemand-pages draft" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/ondemand/pages/{ondemand_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3967,7 +3967,7 @@ export def "ondemand-pages vod-by-ondemand_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/ondemand/pages/{ondemand_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3992,7 +3992,7 @@ export def "ondemand-pages vod-by-ondemand_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/ondemand/pages/{ondemand_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4019,7 +4019,7 @@ export def "ondemand-pages-backgrounds backgrounds" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/backgrounds" $qp)
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/ondemand/pages/{ondemand_id}/backgrounds") $qp)
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4042,7 +4042,7 @@ export def "ondemand-pages-backgrounds background-by-ondemand_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/backgrounds")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/ondemand/pages/{ondemand_id}/backgrounds"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4052,9 +4052,9 @@ export def "ondemand-pages-backgrounds background-by-ondemand_id" [
 #
 # DELETE /ondemand/pages/{ondemand_id}/backgrounds/{background_id}
 # operationId: delete_vod_background
-export def "ondemand-pages-backgrounds background-by-background_id-ondemand_id" [
-  background_id: float
+export def "ondemand-pages-backgrounds background-by-ondemand_id-background_id" [
   ondemand_id: float
+  background_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4066,7 +4066,7 @@ export def "ondemand-pages-backgrounds background-by-background_id-ondemand_id" 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/backgrounds/($background_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, background_id: $background_id} | format pattern "/ondemand/pages/{ondemand_id}/backgrounds/{background_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4076,9 +4076,9 @@ export def "ondemand-pages-backgrounds background-by-background_id-ondemand_id" 
 #
 # GET /ondemand/pages/{ondemand_id}/backgrounds/{background_id}
 # operationId: get_vod_background
-export def "ondemand-pages-backgrounds background-by-background_id-ondemand_id-1" [
-  background_id: float
+export def "ondemand-pages-backgrounds background-by-ondemand_id-background_id-1" [
   ondemand_id: float
+  background_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4090,7 +4090,7 @@ export def "ondemand-pages-backgrounds background-by-background_id-ondemand_id-1
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/backgrounds/($background_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, background_id: $background_id} | format pattern "/ondemand/pages/{ondemand_id}/backgrounds/{background_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4100,9 +4100,9 @@ export def "ondemand-pages-backgrounds background-by-background_id-ondemand_id-1
 #
 # PATCH /ondemand/pages/{ondemand_id}/backgrounds/{background_id}
 # operationId: edit_vod_background
-export def "ondemand-pages-backgrounds background-by-background_id-ondemand_id-2" [
-  background_id: float
+export def "ondemand-pages-backgrounds background-by-ondemand_id-background_id-2" [
   ondemand_id: float
+  background_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4116,7 +4116,7 @@ export def "ondemand-pages-backgrounds background-by-background_id-ondemand_id-2
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/backgrounds/($background_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, background_id: $background_id} | format pattern "/ondemand/pages/{ondemand_id}/backgrounds/{background_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4140,7 +4140,7 @@ export def "ondemand-pages-genres list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/genres")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/ondemand/pages/{ondemand_id}/genres"))
   let accept_val = "application/vnd.vimeo.ondemand.genre+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4150,9 +4150,9 @@ export def "ondemand-pages-genres list" [
 #
 # DELETE /ondemand/pages/{ondemand_id}/genres/{genre_id}
 # operationId: delete_vod_genre
-export def "ondemand-pages-genres genre-by-genre_id-ondemand_id" [
-  genre_id: string
+export def "ondemand-pages-genres genre-by-ondemand_id-genre_id" [
   ondemand_id: float
+  genre_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4164,7 +4164,7 @@ export def "ondemand-pages-genres genre-by-genre_id-ondemand_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/genres/($genre_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, genre_id: $genre_id} | format pattern "/ondemand/pages/{ondemand_id}/genres/{genre_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4175,8 +4175,8 @@ export def "ondemand-pages-genres genre-by-genre_id-ondemand_id" [
 # GET /ondemand/pages/{ondemand_id}/genres/{genre_id}
 # operationId: get_vod_genre_by_ondemand_id
 export def "ondemand-pages-genres id" [
-  genre_id: string
   ondemand_id: float
+  genre_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4188,7 +4188,7 @@ export def "ondemand-pages-genres id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/genres/($genre_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, genre_id: $genre_id} | format pattern "/ondemand/pages/{ondemand_id}/genres/{genre_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.genre+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4198,9 +4198,9 @@ export def "ondemand-pages-genres id" [
 #
 # PUT /ondemand/pages/{ondemand_id}/genres/{genre_id}
 # operationId: add_vod_genre
-export def "ondemand-pages-genres genre-by-genre_id-ondemand_id-1" [
-  genre_id: string
+export def "ondemand-pages-genres genre-by-ondemand_id-genre_id-1" [
   ondemand_id: float
+  genre_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4212,7 +4212,7 @@ export def "ondemand-pages-genres genre-by-genre_id-ondemand_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/genres/($genre_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, genre_id: $genre_id} | format pattern "/ondemand/pages/{ondemand_id}/genres/{genre_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.genre+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4241,7 +4241,7 @@ export def "ondemand-pages-likes likes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/likes" $qp)
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/ondemand/pages/{ondemand_id}/likes") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4251,7 +4251,7 @@ export def "ondemand-pages-likes likes" [
 #
 # GET /ondemand/pages/{ondemand_id}/pictures
 # operationId: get_vod_posters
-export def "ondemand-pages-pictures posters" [
+export def "ondemand-pages-pictures create-ers" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4267,7 +4267,7 @@ export def "ondemand-pages-pictures posters" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/pictures" $qp)
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/ondemand/pages/{ondemand_id}/pictures") $qp)
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4277,7 +4277,7 @@ export def "ondemand-pages-pictures posters" [
 #
 # POST /ondemand/pages/{ondemand_id}/pictures
 # operationId: add_vod_poster
-export def "ondemand-pages-pictures poster-by-ondemand_id" [
+export def "ondemand-pages-pictures create-er-by-ondemand_id" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4290,7 +4290,7 @@ export def "ondemand-pages-pictures poster-by-ondemand_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/pictures")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/ondemand/pages/{ondemand_id}/pictures"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4300,7 +4300,7 @@ export def "ondemand-pages-pictures poster-by-ondemand_id" [
 #
 # GET /ondemand/pages/{ondemand_id}/pictures/{poster_id}
 # operationId: get_vod_poster
-export def "ondemand-pages-pictures poster-by-ondemand_id-poster_id" [
+export def "ondemand-pages-pictures create-er-by-ondemand_id-poster_id" [
   ondemand_id: float
   poster_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -4314,7 +4314,7 @@ export def "ondemand-pages-pictures poster-by-ondemand_id-poster_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/pictures/($poster_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, poster_id: $poster_id} | format pattern "/ondemand/pages/{ondemand_id}/pictures/{poster_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4324,7 +4324,7 @@ export def "ondemand-pages-pictures poster-by-ondemand_id-poster_id" [
 #
 # PATCH /ondemand/pages/{ondemand_id}/pictures/{poster_id}
 # operationId: edit_vod_poster
-export def "ondemand-pages-pictures poster-by-ondemand_id-poster_id-1" [
+export def "ondemand-pages-pictures create-er-by-ondemand_id-poster_id-1" [
   ondemand_id: float
   poster_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -4340,7 +4340,7 @@ export def "ondemand-pages-pictures poster-by-ondemand_id-poster_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/pictures/($poster_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, poster_id: $poster_id} | format pattern "/ondemand/pages/{ondemand_id}/pictures/{poster_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4368,7 +4368,7 @@ export def "ondemand-pages-promotions promotions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/promotions" $qp)
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/ondemand/pages/{ondemand_id}/promotions") $qp)
   let accept_val = "application/vnd.vimeo.ondemand.promotion+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4393,7 +4393,7 @@ export def "ondemand-pages-promotions promotion-by-ondemand_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/promotions")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/ondemand/pages/{ondemand_id}/promotions"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.ondemand.promotion+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4418,7 +4418,7 @@ export def "ondemand-pages-promotions promotion-by-ondemand_id-promotion_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/promotions/($promotion_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, promotion_id: $promotion_id} | format pattern "/ondemand/pages/{ondemand_id}/promotions/{promotion_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4442,7 +4442,7 @@ export def "ondemand-pages-promotions promotion-by-ondemand_id-promotion_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/promotions/($promotion_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, promotion_id: $promotion_id} | format pattern "/ondemand/pages/{ondemand_id}/promotions/{promotion_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.promotion+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4469,7 +4469,7 @@ export def "ondemand-pages-promotions-codes codes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/promotions/($promotion_id)/codes" $qp)
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, promotion_id: $promotion_id} | format pattern "/ondemand/pages/{ondemand_id}/promotions/{promotion_id}/codes") $qp)
   let accept_val = "application/vnd.vimeo.ondemand.promocode+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4494,7 +4494,7 @@ export def "ondemand-pages-regions regions-by-ondemand_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/regions")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/ondemand/pages/{ondemand_id}/regions"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.ondemand.region+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4518,7 +4518,7 @@ export def "ondemand-pages-regions regions-by-ondemand_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/regions")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/ondemand/pages/{ondemand_id}/regions"))
   let accept_val = "application/vnd.vimeo.ondemand.region+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4543,7 +4543,7 @@ export def "ondemand-pages-regions regions-by-ondemand_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/regions")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/ondemand/pages/{ondemand_id}/regions"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.ondemand.region+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4554,9 +4554,9 @@ export def "ondemand-pages-regions regions-by-ondemand_id-2" [
 #
 # DELETE /ondemand/pages/{ondemand_id}/regions/{country}
 # operationId: delete_vod_region
-export def "ondemand-pages-regions region-by-country-ondemand_id" [
-  country: string
+export def "ondemand-pages-regions region-by-ondemand_id-country" [
   ondemand_id: float
+  country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4568,7 +4568,7 @@ export def "ondemand-pages-regions region-by-country-ondemand_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/regions/($country)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, country: $country} | format pattern "/ondemand/pages/{ondemand_id}/regions/{country}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4578,9 +4578,9 @@ export def "ondemand-pages-regions region-by-country-ondemand_id" [
 #
 # GET /ondemand/pages/{ondemand_id}/regions/{country}
 # operationId: get_vod_region
-export def "ondemand-pages-regions region-by-country-ondemand_id-1" [
-  country: string
+export def "ondemand-pages-regions region-by-ondemand_id-country-1" [
   ondemand_id: float
+  country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4592,7 +4592,7 @@ export def "ondemand-pages-regions region-by-country-ondemand_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/regions/($country)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, country: $country} | format pattern "/ondemand/pages/{ondemand_id}/regions/{country}"))
   let accept_val = "application/vnd.vimeo.ondemand.region+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4602,9 +4602,9 @@ export def "ondemand-pages-regions region-by-country-ondemand_id-1" [
 #
 # PUT /ondemand/pages/{ondemand_id}/regions/{country}
 # operationId: add_vod_region
-export def "ondemand-pages-regions region-by-country-ondemand_id-2" [
-  country: string
+export def "ondemand-pages-regions region-by-ondemand_id-country-2" [
   ondemand_id: float
+  country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4616,7 +4616,7 @@ export def "ondemand-pages-regions region-by-country-ondemand_id-2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/regions/($country)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, country: $country} | format pattern "/ondemand/pages/{ondemand_id}/regions/{country}"))
   let accept_val = "application/vnd.vimeo.ondemand.region+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4645,7 +4645,7 @@ export def "ondemand-pages-seasons seasons" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/seasons" $qp)
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/ondemand/pages/{ondemand_id}/seasons") $qp)
   let accept_val = "application/vnd.vimeo.ondemand.season+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4669,7 +4669,7 @@ export def "ondemand-pages-seasons season" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/seasons/($season_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, season_id: $season_id} | format pattern "/ondemand/pages/{ondemand_id}/seasons/{season_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.season+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4698,7 +4698,7 @@ export def "ondemand-pages-seasons-videos videos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/seasons/($season_id)/videos" $qp)
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, season_id: $season_id} | format pattern "/ondemand/pages/{ondemand_id}/seasons/{season_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4727,7 +4727,7 @@ export def "ondemand-pages-videos videos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/videos" $qp)
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id} | format pattern "/ondemand/pages/{ondemand_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.ondemand.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4751,7 +4751,7 @@ export def "ondemand-pages-videos vod-by-ondemand_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/videos/($video_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, video_id: $video_id} | format pattern "/ondemand/pages/{ondemand_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4775,7 +4775,7 @@ export def "ondemand-pages-videos video" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/videos/($video_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, video_id: $video_id} | format pattern "/ondemand/pages/{ondemand_id}/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4801,7 +4801,7 @@ export def "ondemand-pages-videos vod-by-ondemand_id-video_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/pages/($ondemand_id)/videos/($video_id)")
+  let full_url = (build-url $base ({ondemand_id: $ondemand_id, video_id: $video_id} | format pattern "/ondemand/pages/{ondemand_id}/videos/{video_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.ondemand.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4847,7 +4847,7 @@ export def "ondemand-regions region" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ondemand/regions/($country)")
+  let full_url = (build-url $base ({country: $country} | format pattern "/ondemand/regions/{country}"))
   let accept_val = "application/vnd.vimeo.ondemand.region+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4870,7 +4870,7 @@ export def "tags tag" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($word)")
+  let full_url = (build-url $base ({word: $word} | format pattern "/tags/{word}"))
   let accept_val = "application/vnd.vimeo.tag+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4898,7 +4898,7 @@ export def "tags-videos tag" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($word)/videos" $qp)
+  let full_url = (build-url $base ({word: $word} | format pattern "/tags/{word}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4930,7 +4930,7 @@ export def "tokens token" [
 #
 # GET /users
 # operationId: search_users
-export def "users users" [
+export def "users get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4971,7 +4971,7 @@ export def "users user-by-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4996,7 +4996,7 @@ export def "users user-by-user_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5026,7 +5026,7 @@ export def "users-albums albums" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/albums" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/albums") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5051,7 +5051,7 @@ export def "users-albums album-by-user_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/albums")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/albums"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.album+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5062,9 +5062,9 @@ export def "users-albums album-by-user_id" [
 #
 # DELETE /users/{user_id}/albums/{album_id}
 # operationId: delete_album
-export def "users-albums album-by-album_id-user_id" [
-  album_id: float
+export def "users-albums album-by-user_id-album_id" [
   user_id: float
+  album_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5076,7 +5076,7 @@ export def "users-albums album-by-album_id-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)")
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id} | format pattern "/users/{user_id}/albums/{album_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5086,9 +5086,9 @@ export def "users-albums album-by-album_id-user_id" [
 #
 # GET /users/{user_id}/albums/{album_id}
 # operationId: get_album
-export def "users-albums album-by-album_id-user_id-1" [
-  album_id: float
+export def "users-albums album-by-user_id-album_id-1" [
   user_id: float
+  album_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5100,7 +5100,7 @@ export def "users-albums album-by-album_id-user_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)")
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id} | format pattern "/users/{user_id}/albums/{album_id}"))
   let accept_val = "application/vnd.vimeo.album+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5110,9 +5110,9 @@ export def "users-albums album-by-album_id-user_id-1" [
 #
 # PATCH /users/{user_id}/albums/{album_id}
 # operationId: edit_album
-export def "users-albums album-by-album_id-user_id-2" [
-  album_id: float
+export def "users-albums album-by-user_id-album_id-2" [
   user_id: float
+  album_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5126,7 +5126,7 @@ export def "users-albums album-by-album_id-user_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)")
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id} | format pattern "/users/{user_id}/albums/{album_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.album+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5138,8 +5138,8 @@ export def "users-albums album-by-album_id-user_id-2" [
 # GET /users/{user_id}/albums/{album_id}/custom_thumbnails
 # operationId: get_album_custom_thumbs
 export def "users-albums-custom-thumbnails thumbs" [
-  album_id: float
   user_id: float
+  album_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5154,7 +5154,7 @@ export def "users-albums-custom-thumbnails thumbs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/custom_thumbnails" $qp)
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id} | format pattern "/users/{user_id}/albums/{album_id}/custom_thumbnails") $qp)
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5164,9 +5164,9 @@ export def "users-albums-custom-thumbnails thumbs" [
 #
 # POST /users/{user_id}/albums/{album_id}/custom_thumbnails
 # operationId: create_album_custom_thumb
-export def "users-albums-custom-thumbnails thumb-by-album_id-user_id" [
-  album_id: float
+export def "users-albums-custom-thumbnails thumb-by-user_id-album_id" [
   user_id: float
+  album_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5178,7 +5178,7 @@ export def "users-albums-custom-thumbnails thumb-by-album_id-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/custom_thumbnails")
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id} | format pattern "/users/{user_id}/albums/{album_id}/custom_thumbnails"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5188,10 +5188,10 @@ export def "users-albums-custom-thumbnails thumb-by-album_id-user_id" [
 #
 # DELETE /users/{user_id}/albums/{album_id}/custom_thumbnails/{thumbnail_id}
 # operationId: delete_album_custom_thumbnail
-export def "users-albums-custom-thumbnails thumbnail-by-album_id-thumbnail_id-user_id" [
+export def "users-albums-custom-thumbnails thumbnail-by-user_id-album_id-thumbnail_id" [
+  user_id: float
   album_id: float
   thumbnail_id: float
-  user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5203,7 +5203,7 @@ export def "users-albums-custom-thumbnails thumbnail-by-album_id-thumbnail_id-us
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/custom_thumbnails/($thumbnail_id)")
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id, thumbnail_id: $thumbnail_id} | format pattern "/users/{user_id}/albums/{album_id}/custom_thumbnails/{thumbnail_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5213,10 +5213,10 @@ export def "users-albums-custom-thumbnails thumbnail-by-album_id-thumbnail_id-us
 #
 # GET /users/{user_id}/albums/{album_id}/custom_thumbnails/{thumbnail_id}
 # operationId: get_album_custom_thumbnail
-export def "users-albums-custom-thumbnails thumbnail-by-album_id-thumbnail_id-user_id-1" [
+export def "users-albums-custom-thumbnails thumbnail-by-user_id-album_id-thumbnail_id-1" [
+  user_id: float
   album_id: float
   thumbnail_id: float
-  user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5228,7 +5228,7 @@ export def "users-albums-custom-thumbnails thumbnail-by-album_id-thumbnail_id-us
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/custom_thumbnails/($thumbnail_id)")
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id, thumbnail_id: $thumbnail_id} | format pattern "/users/{user_id}/albums/{album_id}/custom_thumbnails/{thumbnail_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5238,10 +5238,10 @@ export def "users-albums-custom-thumbnails thumbnail-by-album_id-thumbnail_id-us
 #
 # PATCH /users/{user_id}/albums/{album_id}/custom_thumbnails/{thumbnail_id}
 # operationId: replace_album_custom_thumb
-export def "users-albums-custom-thumbnails thumb-by-album_id-thumbnail_id-user_id" [
+export def "users-albums-custom-thumbnails thumb-by-user_id-album_id-thumbnail_id" [
+  user_id: float
   album_id: float
   thumbnail_id: float
-  user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5255,7 +5255,7 @@ export def "users-albums-custom-thumbnails thumb-by-album_id-thumbnail_id-user_i
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/custom_thumbnails/($thumbnail_id)")
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id, thumbnail_id: $thumbnail_id} | format pattern "/users/{user_id}/albums/{album_id}/custom_thumbnails/{thumbnail_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5267,8 +5267,8 @@ export def "users-albums-custom-thumbnails thumb-by-album_id-thumbnail_id-user_i
 # GET /users/{user_id}/albums/{album_id}/logos
 # operationId: get_album_logos
 export def "users-albums-logos logos" [
-  album_id: float
   user_id: float
+  album_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5283,7 +5283,7 @@ export def "users-albums-logos logos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/logos" $qp)
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id} | format pattern "/users/{user_id}/albums/{album_id}/logos") $qp)
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5293,9 +5293,9 @@ export def "users-albums-logos logos" [
 #
 # POST /users/{user_id}/albums/{album_id}/logos
 # operationId: create_album_logo
-export def "users-albums-logos logo-by-album_id-user_id" [
-  album_id: float
+export def "users-albums-logos logo-by-user_id-album_id" [
   user_id: float
+  album_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5307,7 +5307,7 @@ export def "users-albums-logos logo-by-album_id-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/logos")
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id} | format pattern "/users/{user_id}/albums/{album_id}/logos"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5317,10 +5317,10 @@ export def "users-albums-logos logo-by-album_id-user_id" [
 #
 # DELETE /users/{user_id}/albums/{album_id}/logos/{logo_id}
 # operationId: delete_album_logo
-export def "users-albums-logos logo-by-album_id-logo_id-user_id" [
+export def "users-albums-logos logo-by-user_id-album_id-logo_id" [
+  user_id: float
   album_id: float
   logo_id: float
-  user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5332,7 +5332,7 @@ export def "users-albums-logos logo-by-album_id-logo_id-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/logos/($logo_id)")
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id, logo_id: $logo_id} | format pattern "/users/{user_id}/albums/{album_id}/logos/{logo_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5342,10 +5342,10 @@ export def "users-albums-logos logo-by-album_id-logo_id-user_id" [
 #
 # GET /users/{user_id}/albums/{album_id}/logos/{logo_id}
 # operationId: get_album_logo
-export def "users-albums-logos logo-by-album_id-logo_id-user_id-1" [
+export def "users-albums-logos logo-by-user_id-album_id-logo_id-1" [
+  user_id: float
   album_id: float
   logo_id: float
-  user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5357,7 +5357,7 @@ export def "users-albums-logos logo-by-album_id-logo_id-user_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/logos/($logo_id)")
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id, logo_id: $logo_id} | format pattern "/users/{user_id}/albums/{album_id}/logos/{logo_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5367,10 +5367,10 @@ export def "users-albums-logos logo-by-album_id-logo_id-user_id-1" [
 #
 # PATCH /users/{user_id}/albums/{album_id}/logos/{logo_id}
 # operationId: replace_album_logo
-export def "users-albums-logos logo-by-album_id-logo_id-user_id-2" [
+export def "users-albums-logos logo-by-user_id-album_id-logo_id-2" [
+  user_id: float
   album_id: float
   logo_id: float
-  user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5384,7 +5384,7 @@ export def "users-albums-logos logo-by-album_id-logo_id-user_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/logos/($logo_id)")
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id, logo_id: $logo_id} | format pattern "/users/{user_id}/albums/{album_id}/logos/{logo_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5396,8 +5396,8 @@ export def "users-albums-logos logo-by-album_id-logo_id-user_id-2" [
 # GET /users/{user_id}/albums/{album_id}/videos
 # operationId: get_album_videos
 export def "users-albums-videos videos" [
-  album_id: float
   user_id: float
+  album_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5420,7 +5420,7 @@ export def "users-albums-videos videos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "weak_search" $weak_search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/videos" $qp)
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id} | format pattern "/users/{user_id}/albums/{album_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5430,9 +5430,9 @@ export def "users-albums-videos videos" [
 #
 # PUT /users/{user_id}/albums/{album_id}/videos
 # operationId: replace_videos_in_album
-export def "users-albums-videos album-by-album_id-user_id" [
-  album_id: float
+export def "users-albums-videos album-by-user_id-album_id" [
   user_id: float
+  album_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5446,8 +5446,8 @@ export def "users-albums-videos album-by-album_id-user_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/videos")
-  let body = {videos: $videos} | compact
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id} | format pattern "/users/{user_id}/albums/{album_id}/videos"))
+  let body = {"videos": $videos} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5458,9 +5458,9 @@ export def "users-albums-videos album-by-album_id-user_id" [
 #
 # DELETE /users/{user_id}/albums/{album_id}/videos/{video_id}
 # operationId: remove_video_from_album
-export def "users-albums-videos album-by-album_id-user_id-video_id" [
-  album_id: float
+export def "users-albums-videos album-by-user_id-album_id-video_id" [
   user_id: float
+  album_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5473,7 +5473,7 @@ export def "users-albums-videos album-by-album_id-user_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/videos/($video_id)")
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id, video_id: $video_id} | format pattern "/users/{user_id}/albums/{album_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5484,8 +5484,8 @@ export def "users-albums-videos album-by-album_id-user_id-video_id" [
 # GET /users/{user_id}/albums/{album_id}/videos/{video_id}
 # operationId: get_album_video
 export def "users-albums-videos video" [
-  album_id: float
   user_id: float
+  album_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5500,7 +5500,7 @@ export def "users-albums-videos video" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "password" $password "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/videos/($video_id)" $qp)
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id, video_id: $video_id} | format pattern "/users/{user_id}/albums/{album_id}/videos/{video_id}") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5510,9 +5510,9 @@ export def "users-albums-videos video" [
 #
 # PUT /users/{user_id}/albums/{album_id}/videos/{video_id}
 # operationId: add_video_to_album
-export def "users-albums-videos album-by-album_id-user_id-video_id-1" [
-  album_id: float
+export def "users-albums-videos album-by-user_id-album_id-video_id-1" [
   user_id: float
+  album_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5525,7 +5525,7 @@ export def "users-albums-videos album-by-album_id-user_id-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/videos/($video_id)")
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id, video_id: $video_id} | format pattern "/users/{user_id}/albums/{album_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5536,8 +5536,8 @@ export def "users-albums-videos album-by-album_id-user_id-video_id-1" [
 # POST /users/{user_id}/albums/{album_id}/videos/{video_id}/set_album_thumbnail
 # operationId: set_video_as_album_thumbnail
 export def "users-albums-videos-set-album-thumbnail thumbnail" [
-  album_id: float
   user_id: float
+  album_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5552,8 +5552,8 @@ export def "users-albums-videos-set-album-thumbnail thumbnail" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/albums/($album_id)/videos/($video_id)/set_album_thumbnail")
-  let body = {time_code: $time_code} | compact
+  let full_url = (build-url $base ({user_id: $user_id, album_id: $album_id, video_id: $video_id} | format pattern "/users/{user_id}/albums/{album_id}/videos/{video_id}/set_album_thumbnail"))
+  let body = {"time_code": $time_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5585,7 +5585,7 @@ export def "users-appearances appearances" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/appearances" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/appearances") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5613,7 +5613,7 @@ export def "users-categories subscriptions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/categories" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/categories") $qp)
   let accept_val = "application/vnd.vimeo.category+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5623,9 +5623,9 @@ export def "users-categories subscriptions" [
 #
 # DELETE /users/{user_id}/categories/{category}
 # operationId: unsubscribe_from_category
-export def "users-categories category-by-category-user_id" [
-  category: string
+export def "users-categories category-by-user_id-category" [
   user_id: float
+  category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5637,7 +5637,7 @@ export def "users-categories category-by-category-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/categories/($category)")
+  let full_url = (build-url $base ({user_id: $user_id, category: $category} | format pattern "/users/{user_id}/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5647,9 +5647,9 @@ export def "users-categories category-by-category-user_id" [
 #
 # GET /users/{user_id}/categories/{category}
 # operationId: check_if_user_subscribed_to_category
-export def "users-categories category-by-category-user_id-1" [
-  category: string
+export def "users-categories category-by-user_id-category-1" [
   user_id: float
+  category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5661,7 +5661,7 @@ export def "users-categories category-by-category-user_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/categories/($category)")
+  let full_url = (build-url $base ({user_id: $user_id, category: $category} | format pattern "/users/{user_id}/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5671,9 +5671,9 @@ export def "users-categories category-by-category-user_id-1" [
 #
 # PUT /users/{user_id}/categories/{category}
 # operationId: subscribe_to_category
-export def "users-categories category-by-category-user_id-2" [
-  category: float
+export def "users-categories category-by-user_id-category-2" [
   user_id: float
+  category: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5685,7 +5685,7 @@ export def "users-categories category-by-category-user_id-2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/categories/($category)")
+  let full_url = (build-url $base ({user_id: $user_id, category: $category} | format pattern "/users/{user_id}/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5715,7 +5715,7 @@ export def "users-channels subscriptions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/channels" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/channels") $qp)
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5725,9 +5725,9 @@ export def "users-channels subscriptions" [
 #
 # DELETE /users/{user_id}/channels/{channel_id}
 # operationId: unsubscribe_from_channel
-export def "users-channels channel-by-channel_id-user_id" [
-  channel_id: float
+export def "users-channels channel-by-user_id-channel_id" [
   user_id: float
+  channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5739,7 +5739,7 @@ export def "users-channels channel-by-channel_id-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/channels/($channel_id)")
+  let full_url = (build-url $base ({user_id: $user_id, channel_id: $channel_id} | format pattern "/users/{user_id}/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5749,9 +5749,9 @@ export def "users-channels channel-by-channel_id-user_id" [
 #
 # GET /users/{user_id}/channels/{channel_id}
 # operationId: check_if_user_subscribed_to_channel
-export def "users-channels channel-by-channel_id-user_id-1" [
-  channel_id: float
+export def "users-channels channel-by-user_id-channel_id-1" [
   user_id: float
+  channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5763,7 +5763,7 @@ export def "users-channels channel-by-channel_id-user_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/channels/($channel_id)")
+  let full_url = (build-url $base ({user_id: $user_id, channel_id: $channel_id} | format pattern "/users/{user_id}/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5773,9 +5773,9 @@ export def "users-channels channel-by-channel_id-user_id-1" [
 #
 # PUT /users/{user_id}/channels/{channel_id}
 # operationId: subscribe_to_channel
-export def "users-channels channel-by-channel_id-user_id-2" [
-  channel_id: float
+export def "users-channels channel-by-user_id-channel_id-2" [
   user_id: float
+  channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5787,7 +5787,7 @@ export def "users-channels channel-by-channel_id-user_id-2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/channels/($channel_id)")
+  let full_url = (build-url $base ({user_id: $user_id, channel_id: $channel_id} | format pattern "/users/{user_id}/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5810,7 +5810,7 @@ export def "users-customlogos logos" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/customlogos")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/customlogos"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5833,7 +5833,7 @@ export def "users-customlogos logo-by-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/customlogos")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/customlogos"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5843,9 +5843,9 @@ export def "users-customlogos logo-by-user_id" [
 #
 # GET /users/{user_id}/customlogos/{logo_id}
 # operationId: get_custom_logo
-export def "users-customlogos logo-by-logo_id-user_id" [
-  logo_id: float
+export def "users-customlogos logo-by-user_id-logo_id" [
   user_id: float
+  logo_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5857,7 +5857,7 @@ export def "users-customlogos logo-by-logo_id-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/customlogos/($logo_id)")
+  let full_url = (build-url $base ({user_id: $user_id, logo_id: $logo_id} | format pattern "/users/{user_id}/customlogos/{logo_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5885,7 +5885,7 @@ export def "users-feed feed" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/feed" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/feed") $qp)
   let accept_val = "application/vnd.vimeo.activity+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5914,7 +5914,7 @@ export def "users-followers followers" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/followers" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/followers") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5944,7 +5944,7 @@ export def "users-following list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/following" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/following") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5969,8 +5969,8 @@ export def "users-following users" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/following")
-  let body = {users: $users} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/following"))
+  let body = {"users": $users} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5981,9 +5981,9 @@ export def "users-following users" [
 #
 # DELETE /users/{user_id}/following/{follow_user_id}
 # operationId: unfollow_user
-export def "users-following user-by-follow_user_id-user_id" [
-  follow_user_id: float
+export def "users-following user-by-user_id-follow_user_id" [
   user_id: float
+  follow_user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5995,7 +5995,7 @@ export def "users-following user-by-follow_user_id-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/following/($follow_user_id)")
+  let full_url = (build-url $base ({user_id: $user_id, follow_user_id: $follow_user_id} | format pattern "/users/{user_id}/following/{follow_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6006,8 +6006,8 @@ export def "users-following user-by-follow_user_id-user_id" [
 # GET /users/{user_id}/following/{follow_user_id}
 # operationId: check_if_user_is_following
 export def "users-following following" [
-  follow_user_id: float
   user_id: float
+  follow_user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6019,7 +6019,7 @@ export def "users-following following" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/following/($follow_user_id)")
+  let full_url = (build-url $base ({user_id: $user_id, follow_user_id: $follow_user_id} | format pattern "/users/{user_id}/following/{follow_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6029,9 +6029,9 @@ export def "users-following following" [
 #
 # PUT /users/{user_id}/following/{follow_user_id}
 # operationId: follow_user
-export def "users-following user-by-follow_user_id-user_id-1" [
-  follow_user_id: float
+export def "users-following user-by-user_id-follow_user_id-1" [
   user_id: float
+  follow_user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6043,7 +6043,7 @@ export def "users-following user-by-follow_user_id-user_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/following/($follow_user_id)")
+  let full_url = (build-url $base ({user_id: $user_id, follow_user_id: $follow_user_id} | format pattern "/users/{user_id}/following/{follow_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6073,7 +6073,7 @@ export def "users-groups groups" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/groups" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/groups") $qp)
   let accept_val = "application/vnd.vimeo.group+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6083,9 +6083,9 @@ export def "users-groups groups" [
 #
 # DELETE /users/{user_id}/groups/{group_id}
 # operationId: leave_group
-export def "users-groups group-by-group_id-user_id" [
-  group_id: float
+export def "users-groups group-by-user_id-group_id" [
   user_id: float
+  group_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6097,7 +6097,7 @@ export def "users-groups group-by-group_id-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/groups/($group_id)")
+  let full_url = (build-url $base ({user_id: $user_id, group_id: $group_id} | format pattern "/users/{user_id}/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6107,9 +6107,9 @@ export def "users-groups group-by-group_id-user_id" [
 #
 # GET /users/{user_id}/groups/{group_id}
 # operationId: check_if_user_joined_group
-export def "users-groups group-by-group_id-user_id-1" [
-  group_id: float
+export def "users-groups group-by-user_id-group_id-1" [
   user_id: float
+  group_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6121,7 +6121,7 @@ export def "users-groups group-by-group_id-user_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/groups/($group_id)")
+  let full_url = (build-url $base ({user_id: $user_id, group_id: $group_id} | format pattern "/users/{user_id}/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6131,9 +6131,9 @@ export def "users-groups group-by-group_id-user_id-1" [
 #
 # PUT /users/{user_id}/groups/{group_id}
 # operationId: join_group
-export def "users-groups group-by-group_id-user_id-2" [
-  group_id: float
+export def "users-groups group-by-user_id-group_id-2" [
   user_id: float
+  group_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6145,7 +6145,7 @@ export def "users-groups group-by-group_id-user_id-2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/groups/($group_id)")
+  let full_url = (build-url $base ({user_id: $user_id, group_id: $group_id} | format pattern "/users/{user_id}/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6175,7 +6175,7 @@ export def "users-likes likes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/likes" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/likes") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6199,7 +6199,7 @@ export def "users-likes video-by-user_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/likes/($video_id)")
+  let full_url = (build-url $base ({user_id: $user_id, video_id: $video_id} | format pattern "/users/{user_id}/likes/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6223,7 +6223,7 @@ export def "users-likes video-by-user_id-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/likes/($video_id)")
+  let full_url = (build-url $base ({user_id: $user_id, video_id: $video_id} | format pattern "/users/{user_id}/likes/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6247,7 +6247,7 @@ export def "users-likes video-by-user_id-video_id-2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/likes/($video_id)")
+  let full_url = (build-url $base ({user_id: $user_id, video_id: $video_id} | format pattern "/users/{user_id}/likes/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6276,7 +6276,7 @@ export def "users-ondemand-pages vods" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/ondemand/pages" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/ondemand/pages") $qp)
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6315,8 +6315,8 @@ export def "users-ondemand-pages vod" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/ondemand/pages")
-  let body = {accepted_currencies: $accepted_currencies, buy: $buy, content_rating: $content_rating, description: $description, domain_link: $domain_link, episodes: $episodes, link: $link, name: $name, rent: $rent, subscription: $subscription, type: $type} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/ondemand/pages"))
+  let body = {"accepted_currencies": $accepted_currencies, "buy": $buy, "content_rating": $content_rating, "description": $description, "domain_link": $domain_link, "episodes": $episodes, "link": $link, "name": $name, "rent": $rent, "subscription": $subscription, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6340,7 +6340,7 @@ export def "users-ondemand-purchases purchased" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/ondemand/purchases")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/ondemand/purchases"))
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6366,7 +6366,7 @@ export def "users-pictures pictures" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/pictures" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/pictures") $qp)
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6389,7 +6389,7 @@ export def "users-pictures picture-by-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/pictures")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/pictures"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6399,9 +6399,9 @@ export def "users-pictures picture-by-user_id" [
 #
 # DELETE /users/{user_id}/pictures/{portraitset_id}
 # operationId: delete_picture
-export def "users-pictures picture-by-portraitset_id-user_id" [
-  portraitset_id: float
+export def "users-pictures picture-by-user_id-portraitset_id" [
   user_id: float
+  portraitset_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6413,7 +6413,7 @@ export def "users-pictures picture-by-portraitset_id-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/pictures/($portraitset_id)")
+  let full_url = (build-url $base ({user_id: $user_id, portraitset_id: $portraitset_id} | format pattern "/users/{user_id}/pictures/{portraitset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6423,9 +6423,9 @@ export def "users-pictures picture-by-portraitset_id-user_id" [
 #
 # GET /users/{user_id}/pictures/{portraitset_id}
 # operationId: get_picture
-export def "users-pictures picture-by-portraitset_id-user_id-1" [
-  portraitset_id: float
+export def "users-pictures picture-by-user_id-portraitset_id-1" [
   user_id: float
+  portraitset_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6437,7 +6437,7 @@ export def "users-pictures picture-by-portraitset_id-user_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/pictures/($portraitset_id)")
+  let full_url = (build-url $base ({user_id: $user_id, portraitset_id: $portraitset_id} | format pattern "/users/{user_id}/pictures/{portraitset_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6447,9 +6447,9 @@ export def "users-pictures picture-by-portraitset_id-user_id-1" [
 #
 # PATCH /users/{user_id}/pictures/{portraitset_id}
 # operationId: edit_picture
-export def "users-pictures picture-by-portraitset_id-user_id-2" [
-  portraitset_id: float
+export def "users-pictures picture-by-user_id-portraitset_id-2" [
   user_id: float
+  portraitset_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6463,7 +6463,7 @@ export def "users-pictures picture-by-portraitset_id-user_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/pictures/($portraitset_id)")
+  let full_url = (build-url $base ({user_id: $user_id, portraitset_id: $portraitset_id} | format pattern "/users/{user_id}/pictures/{portraitset_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6493,7 +6493,7 @@ export def "users-portfolios portfolios" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/portfolios" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/portfolios") $qp)
   let accept_val = "application/vnd.vimeo.portfolio+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6504,8 +6504,8 @@ export def "users-portfolios portfolios" [
 # GET /users/{user_id}/portfolios/{portfolio_id}
 # operationId: get_portfolio
 export def "users-portfolios portfolio" [
-  portfolio_id: float
   user_id: float
+  portfolio_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6517,7 +6517,7 @@ export def "users-portfolios portfolio" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/portfolios/($portfolio_id)")
+  let full_url = (build-url $base ({user_id: $user_id, portfolio_id: $portfolio_id} | format pattern "/users/{user_id}/portfolios/{portfolio_id}"))
   let accept_val = "application/vnd.vimeo.portfolio+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6528,8 +6528,8 @@ export def "users-portfolios portfolio" [
 # GET /users/{user_id}/portfolios/{portfolio_id}/videos
 # operationId: get_portfolio_videos
 export def "users-portfolios-videos videos" [
-  portfolio_id: float
   user_id: float
+  portfolio_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6548,7 +6548,7 @@ export def "users-portfolios-videos videos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/portfolios/($portfolio_id)/videos" $qp)
+  let full_url = (build-url $base ({user_id: $user_id, portfolio_id: $portfolio_id} | format pattern "/users/{user_id}/portfolios/{portfolio_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6558,9 +6558,9 @@ export def "users-portfolios-videos videos" [
 #
 # DELETE /users/{user_id}/portfolios/{portfolio_id}/videos/{video_id}
 # operationId: delete_video_from_portfolio
-export def "users-portfolios-videos portfolio-by-portfolio_id-user_id-video_id" [
-  portfolio_id: float
+export def "users-portfolios-videos portfolio-by-user_id-portfolio_id-video_id" [
   user_id: float
+  portfolio_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6573,7 +6573,7 @@ export def "users-portfolios-videos portfolio-by-portfolio_id-user_id-video_id" 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/portfolios/($portfolio_id)/videos/($video_id)")
+  let full_url = (build-url $base ({user_id: $user_id, portfolio_id: $portfolio_id, video_id: $video_id} | format pattern "/users/{user_id}/portfolios/{portfolio_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6584,8 +6584,8 @@ export def "users-portfolios-videos portfolio-by-portfolio_id-user_id-video_id" 
 # GET /users/{user_id}/portfolios/{portfolio_id}/videos/{video_id}
 # operationId: get_portfolio_video
 export def "users-portfolios-videos video" [
-  portfolio_id: float
   user_id: float
+  portfolio_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6598,7 +6598,7 @@ export def "users-portfolios-videos video" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/portfolios/($portfolio_id)/videos/($video_id)")
+  let full_url = (build-url $base ({user_id: $user_id, portfolio_id: $portfolio_id, video_id: $video_id} | format pattern "/users/{user_id}/portfolios/{portfolio_id}/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6608,9 +6608,9 @@ export def "users-portfolios-videos video" [
 #
 # PUT /users/{user_id}/portfolios/{portfolio_id}/videos/{video_id}
 # operationId: add_video_to_portfolio
-export def "users-portfolios-videos portfolio-by-portfolio_id-user_id-video_id-1" [
-  portfolio_id: float
+export def "users-portfolios-videos portfolio-by-user_id-portfolio_id-video_id-1" [
   user_id: float
+  portfolio_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6623,7 +6623,7 @@ export def "users-portfolios-videos portfolio-by-portfolio_id-user_id-video_id-1
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/portfolios/($portfolio_id)/videos/($video_id)")
+  let full_url = (build-url $base ({user_id: $user_id, portfolio_id: $portfolio_id, video_id: $video_id} | format pattern "/users/{user_id}/portfolios/{portfolio_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6649,7 +6649,7 @@ export def "users-presets presets" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/presets" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/presets") $qp)
   let accept_val = "application/vnd.vimeo.preset+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6659,9 +6659,9 @@ export def "users-presets presets" [
 #
 # GET /users/{user_id}/presets/{preset_id}
 # operationId: get_embed_preset
-export def "users-presets preset-by-preset_id-user_id" [
-  preset_id: float
+export def "users-presets preset-by-user_id-preset_id" [
   user_id: float
+  preset_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6673,7 +6673,7 @@ export def "users-presets preset-by-preset_id-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/presets/($preset_id)")
+  let full_url = (build-url $base ({user_id: $user_id, preset_id: $preset_id} | format pattern "/users/{user_id}/presets/{preset_id}"))
   let accept_val = "application/vnd.vimeo.preset+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6683,9 +6683,9 @@ export def "users-presets preset-by-preset_id-user_id" [
 #
 # PATCH /users/{user_id}/presets/{preset_id}
 # operationId: edit_embed_preset
-export def "users-presets preset-by-preset_id-user_id-1" [
-  preset_id: float
+export def "users-presets preset-by-user_id-preset_id-1" [
   user_id: float
+  preset_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6699,7 +6699,7 @@ export def "users-presets preset-by-preset_id-user_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/presets/($preset_id)")
+  let full_url = (build-url $base ({user_id: $user_id, preset_id: $preset_id} | format pattern "/users/{user_id}/presets/{preset_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.preset+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6711,8 +6711,8 @@ export def "users-presets preset-by-preset_id-user_id-1" [
 # GET /users/{user_id}/presets/{preset_id}/videos
 # operationId: get_embed_preset_videos
 export def "users-presets-videos videos" [
-  preset_id: float
   user_id: float
+  preset_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6727,7 +6727,7 @@ export def "users-presets-videos videos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/presets/($preset_id)/videos" $qp)
+  let full_url = (build-url $base ({user_id: $user_id, preset_id: $preset_id} | format pattern "/users/{user_id}/presets/{preset_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6755,7 +6755,7 @@ export def "users-projects projects" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/projects" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6780,8 +6780,8 @@ export def "users-projects project-by-user_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/projects")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/projects"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6792,9 +6792,9 @@ export def "users-projects project-by-user_id" [
 #
 # DELETE /users/{user_id}/projects/{project_id}
 # operationId: delete_project
-export def "users-projects project-by-project_id-user_id" [
-  project_id: float
+export def "users-projects project-by-user_id-project_id" [
   user_id: float
+  project_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6808,7 +6808,7 @@ export def "users-projects project-by-project_id-user_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "should_delete_clips" $should_delete_clips "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/projects/($project_id)" $qp)
+  let full_url = (build-url $base ({user_id: $user_id, project_id: $project_id} | format pattern "/users/{user_id}/projects/{project_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6818,9 +6818,9 @@ export def "users-projects project-by-project_id-user_id" [
 #
 # GET /users/{user_id}/projects/{project_id}
 # operationId: get_project
-export def "users-projects project-by-project_id-user_id-1" [
-  project_id: float
+export def "users-projects project-by-user_id-project_id-1" [
   user_id: float
+  project_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6832,7 +6832,7 @@ export def "users-projects project-by-project_id-user_id-1" [
 ]: nothing -> record<created_time: string, metadata: record<connections: record<videos: record>>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/projects/($project_id)")
+  let full_url = (build-url $base ({user_id: $user_id, project_id: $project_id} | format pattern "/users/{user_id}/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6842,9 +6842,9 @@ export def "users-projects project-by-project_id-user_id-1" [
 #
 # PATCH /users/{user_id}/projects/{project_id}
 # operationId: edit_project
-export def "users-projects project-by-project_id-user_id-2" [
-  project_id: float
+export def "users-projects project-by-user_id-project_id-2" [
   user_id: float
+  project_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6858,8 +6858,8 @@ export def "users-projects project-by-project_id-user_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/projects/($project_id)")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({user_id: $user_id, project_id: $project_id} | format pattern "/users/{user_id}/projects/{project_id}"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6870,9 +6870,9 @@ export def "users-projects project-by-project_id-user_id-2" [
 #
 # DELETE /users/{user_id}/projects/{project_id}/videos
 # operationId: remove_videos_from_project
-export def "users-projects-videos project-by-project_id-user_id" [
-  project_id: float
+export def "users-projects-videos project-by-user_id-project_id" [
   user_id: float
+  project_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6887,7 +6887,7 @@ export def "users-projects-videos project-by-project_id-user_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "should_delete_clips" $should_delete_clips "scalar") (serialize-qp "uris" $uris "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/projects/($project_id)/videos" $qp)
+  let full_url = (build-url $base ({user_id: $user_id, project_id: $project_id} | format pattern "/users/{user_id}/projects/{project_id}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6898,8 +6898,8 @@ export def "users-projects-videos project-by-project_id-user_id" [
 # GET /users/{user_id}/projects/{project_id}/videos
 # operationId: get_project_videos
 export def "users-projects-videos videos" [
-  project_id: float
   user_id: float
+  project_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6916,7 +6916,7 @@ export def "users-projects-videos videos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/projects/($project_id)/videos" $qp)
+  let full_url = (build-url $base ({user_id: $user_id, project_id: $project_id} | format pattern "/users/{user_id}/projects/{project_id}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6926,9 +6926,9 @@ export def "users-projects-videos videos" [
 #
 # PUT /users/{user_id}/projects/{project_id}/videos
 # operationId: add_videos_to_project
-export def "users-projects-videos project-by-project_id-user_id-1" [
-  project_id: float
+export def "users-projects-videos project-by-user_id-project_id-1" [
   user_id: float
+  project_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6942,7 +6942,7 @@ export def "users-projects-videos project-by-project_id-user_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "uris" $uris "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/projects/($project_id)/videos" $qp)
+  let full_url = (build-url $base ({user_id: $user_id, project_id: $project_id} | format pattern "/users/{user_id}/projects/{project_id}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6952,9 +6952,9 @@ export def "users-projects-videos project-by-project_id-user_id-1" [
 #
 # DELETE /users/{user_id}/projects/{project_id}/videos/{video_id}
 # operationId: remove_video_from_project
-export def "users-projects-videos project-by-project_id-user_id-video_id" [
-  project_id: float
+export def "users-projects-videos project-by-user_id-project_id-video_id" [
   user_id: float
+  project_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6967,7 +6967,7 @@ export def "users-projects-videos project-by-project_id-user_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/projects/($project_id)/videos/($video_id)")
+  let full_url = (build-url $base ({user_id: $user_id, project_id: $project_id, video_id: $video_id} | format pattern "/users/{user_id}/projects/{project_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6977,9 +6977,9 @@ export def "users-projects-videos project-by-project_id-user_id-video_id" [
 #
 # PUT /users/{user_id}/projects/{project_id}/videos/{video_id}
 # operationId: add_video_to_project
-export def "users-projects-videos project-by-project_id-user_id-video_id-1" [
-  project_id: float
+export def "users-projects-videos project-by-user_id-project_id-video_id-1" [
   user_id: float
+  project_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6992,7 +6992,7 @@ export def "users-projects-videos project-by-project_id-user_id-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/projects/($project_id)/videos/($video_id)")
+  let full_url = (build-url $base ({user_id: $user_id, project_id: $project_id, video_id: $video_id} | format pattern "/users/{user_id}/projects/{project_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7003,8 +7003,8 @@ export def "users-projects-videos project-by-project_id-user_id-video_id-1" [
 # DELETE /users/{user_id}/uploads/{upload}
 # operationId: complete_streaming_upload
 export def "users-uploads upload" [
-  upload: float
   user_id: float
+  upload: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7019,7 +7019,7 @@ export def "users-uploads upload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "signature" $signature "scalar") (serialize-qp "video_file_id" $video_file_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/uploads/($upload)" $qp)
+  let full_url = (build-url $base ({user_id: $user_id, upload: $upload} | format pattern "/users/{user_id}/uploads/{upload}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7030,8 +7030,8 @@ export def "users-uploads upload" [
 # GET /users/{user_id}/uploads/{upload}
 # operationId: get_upload_attempt
 export def "users-uploads attempt" [
-  upload: float
   user_id: float
+  upload: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7043,7 +7043,7 @@ export def "users-uploads attempt" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/uploads/($upload)")
+  let full_url = (build-url $base ({user_id: $user_id, upload: $upload} | format pattern "/users/{user_id}/uploads/{upload}"))
   let accept_val = "application/vnd.vimeo.uploadattempt+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7076,7 +7076,7 @@ export def "users-videos videos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "filter_playable" $filter_playable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/videos" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7101,7 +7101,7 @@ export def "users-videos video-by-user_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/videos")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/videos"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7126,7 +7126,7 @@ export def "users-videos video-by-user_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/videos/($video_id)")
+  let full_url = (build-url $base ({user_id: $user_id, video_id: $video_id} | format pattern "/users/{user_id}/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7157,7 +7157,7 @@ export def "users-watchlater list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/watchlater" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/watchlater") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7181,7 +7181,7 @@ export def "users-watchlater later-by-user_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/watchlater/($video_id)")
+  let full_url = (build-url $base ({user_id: $user_id, video_id: $video_id} | format pattern "/users/{user_id}/watchlater/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7205,7 +7205,7 @@ export def "users-watchlater queue" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/watchlater/($video_id)")
+  let full_url = (build-url $base ({user_id: $user_id, video_id: $video_id} | format pattern "/users/{user_id}/watchlater/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7229,7 +7229,7 @@ export def "users-watchlater later-by-user_id-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/watchlater/($video_id)")
+  let full_url = (build-url $base ({user_id: $user_id, video_id: $video_id} | format pattern "/users/{user_id}/watchlater/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7239,7 +7239,7 @@ export def "users-watchlater later-by-user_id-video_id-1" [
 #
 # GET /videos
 # operationId: search_videos
-export def "videos videos" [
+export def "videos get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7283,7 +7283,7 @@ export def "videos video-by-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7306,7 +7306,7 @@ export def "videos video-by-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7331,7 +7331,7 @@ export def "videos video-by-video_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7355,7 +7355,7 @@ export def "videos-available-channels channels" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/available_channels")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/available_channels"))
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7378,7 +7378,7 @@ export def "videos-categories categories" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/categories")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/categories"))
   let accept_val = "application/vnd.vimeo.category+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7403,7 +7403,7 @@ export def "videos-categories category" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/categories")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/categories"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.category+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7431,7 +7431,7 @@ export def "videos-comments comments" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/videos/($video_id)/comments" $qp)
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/comments") $qp)
   let accept_val = "application/vnd.vimeo.comment+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7456,7 +7456,7 @@ export def "videos-comments comment-by-video_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/comments")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/comments"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.comment+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7467,9 +7467,9 @@ export def "videos-comments comment-by-video_id" [
 #
 # DELETE /videos/{video_id}/comments/{comment_id}
 # operationId: delete_comment
-export def "videos-comments comment-by-comment_id-video_id" [
-  comment_id: float
+export def "videos-comments comment-by-video_id-comment_id" [
   video_id: float
+  comment_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7481,7 +7481,7 @@ export def "videos-comments comment-by-comment_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/comments/($comment_id)")
+  let full_url = (build-url $base ({video_id: $video_id, comment_id: $comment_id} | format pattern "/videos/{video_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7491,9 +7491,9 @@ export def "videos-comments comment-by-comment_id-video_id" [
 #
 # GET /videos/{video_id}/comments/{comment_id}
 # operationId: get_comment
-export def "videos-comments comment-by-comment_id-video_id-1" [
-  comment_id: float
+export def "videos-comments comment-by-video_id-comment_id-1" [
   video_id: float
+  comment_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7505,7 +7505,7 @@ export def "videos-comments comment-by-comment_id-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/comments/($comment_id)")
+  let full_url = (build-url $base ({video_id: $video_id, comment_id: $comment_id} | format pattern "/videos/{video_id}/comments/{comment_id}"))
   let accept_val = "application/vnd.vimeo.comment+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7515,9 +7515,9 @@ export def "videos-comments comment-by-comment_id-video_id-1" [
 #
 # PATCH /videos/{video_id}/comments/{comment_id}
 # operationId: edit_comment
-export def "videos-comments comment-by-comment_id-video_id-2" [
-  comment_id: float
+export def "videos-comments comment-by-video_id-comment_id-2" [
   video_id: float
+  comment_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7531,7 +7531,7 @@ export def "videos-comments comment-by-comment_id-video_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/comments/($comment_id)")
+  let full_url = (build-url $base ({video_id: $video_id, comment_id: $comment_id} | format pattern "/videos/{video_id}/comments/{comment_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.comment+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7543,8 +7543,8 @@ export def "videos-comments comment-by-comment_id-video_id-2" [
 # GET /videos/{video_id}/comments/{comment_id}/replies
 # operationId: get_comment_replies
 export def "videos-comments-replies replies" [
-  comment_id: float
   video_id: float
+  comment_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7559,7 +7559,7 @@ export def "videos-comments-replies replies" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/videos/($video_id)/comments/($comment_id)/replies" $qp)
+  let full_url = (build-url $base ({video_id: $video_id, comment_id: $comment_id} | format pattern "/videos/{video_id}/comments/{comment_id}/replies") $qp)
   let accept_val = "application/vnd.vimeo.comment+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7570,8 +7570,8 @@ export def "videos-comments-replies replies" [
 # POST /videos/{video_id}/comments/{comment_id}/replies
 # operationId: create_comment_reply
 export def "videos-comments-replies reply" [
-  comment_id: float
   video_id: float
+  comment_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7585,7 +7585,7 @@ export def "videos-comments-replies reply" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/comments/($comment_id)/replies")
+  let full_url = (build-url $base ({video_id: $video_id, comment_id: $comment_id} | format pattern "/videos/{video_id}/comments/{comment_id}/replies"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.comment+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7615,7 +7615,7 @@ export def "videos-credits credits" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/videos/($video_id)/credits" $qp)
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/credits") $qp)
   let accept_val = "application/vnd.vimeo.credit+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7640,7 +7640,7 @@ export def "videos-credits credit-by-video_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/credits")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/credits"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.credit+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7651,9 +7651,9 @@ export def "videos-credits credit-by-video_id" [
 #
 # DELETE /videos/{video_id}/credits/{credit_id}
 # operationId: delete_video_credit
-export def "videos-credits credit-by-credit_id-video_id" [
-  credit_id: float
+export def "videos-credits credit-by-video_id-credit_id" [
   video_id: float
+  credit_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7665,7 +7665,7 @@ export def "videos-credits credit-by-credit_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/credits/($credit_id)")
+  let full_url = (build-url $base ({video_id: $video_id, credit_id: $credit_id} | format pattern "/videos/{video_id}/credits/{credit_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7675,9 +7675,9 @@ export def "videos-credits credit-by-credit_id-video_id" [
 #
 # GET /videos/{video_id}/credits/{credit_id}
 # operationId: get_video_credit
-export def "videos-credits credit-by-credit_id-video_id-1" [
-  credit_id: float
+export def "videos-credits credit-by-video_id-credit_id-1" [
   video_id: float
+  credit_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7689,7 +7689,7 @@ export def "videos-credits credit-by-credit_id-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/credits/($credit_id)")
+  let full_url = (build-url $base ({video_id: $video_id, credit_id: $credit_id} | format pattern "/videos/{video_id}/credits/{credit_id}"))
   let accept_val = "application/vnd.vimeo.credit+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7699,9 +7699,9 @@ export def "videos-credits credit-by-credit_id-video_id-1" [
 #
 # PATCH /videos/{video_id}/credits/{credit_id}
 # operationId: edit_video_credit
-export def "videos-credits credit-by-credit_id-video_id-2" [
-  credit_id: float
+export def "videos-credits credit-by-video_id-credit_id-2" [
   video_id: float
+  credit_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7715,7 +7715,7 @@ export def "videos-credits credit-by-credit_id-video_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/credits/($credit_id)")
+  let full_url = (build-url $base ({video_id: $video_id, credit_id: $credit_id} | format pattern "/videos/{video_id}/credits/{credit_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.credit+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7744,7 +7744,7 @@ export def "videos-likes likes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/videos/($video_id)/likes" $qp)
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/likes") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7770,7 +7770,7 @@ export def "videos-pictures thumbnails" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/videos/($video_id)/pictures" $qp)
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/pictures") $qp)
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7795,7 +7795,7 @@ export def "videos-pictures thumbnail-by-video_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/pictures")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/pictures"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7806,9 +7806,9 @@ export def "videos-pictures thumbnail-by-video_id" [
 #
 # DELETE /videos/{video_id}/pictures/{picture_id}
 # operationId: delete_video_thumbnail
-export def "videos-pictures thumbnail-by-picture_id-video_id" [
-  picture_id: float
+export def "videos-pictures thumbnail-by-video_id-picture_id" [
   video_id: float
+  picture_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7820,7 +7820,7 @@ export def "videos-pictures thumbnail-by-picture_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/pictures/($picture_id)")
+  let full_url = (build-url $base ({video_id: $video_id, picture_id: $picture_id} | format pattern "/videos/{video_id}/pictures/{picture_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7830,9 +7830,9 @@ export def "videos-pictures thumbnail-by-picture_id-video_id" [
 #
 # GET /videos/{video_id}/pictures/{picture_id}
 # operationId: get_video_thumbnail
-export def "videos-pictures thumbnail-by-picture_id-video_id-1" [
-  picture_id: float
+export def "videos-pictures thumbnail-by-video_id-picture_id-1" [
   video_id: float
+  picture_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7844,7 +7844,7 @@ export def "videos-pictures thumbnail-by-picture_id-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/pictures/($picture_id)")
+  let full_url = (build-url $base ({video_id: $video_id, picture_id: $picture_id} | format pattern "/videos/{video_id}/pictures/{picture_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7854,9 +7854,9 @@ export def "videos-pictures thumbnail-by-picture_id-video_id-1" [
 #
 # PATCH /videos/{video_id}/pictures/{picture_id}
 # operationId: edit_video_thumbnail
-export def "videos-pictures thumbnail-by-picture_id-video_id-2" [
-  picture_id: float
+export def "videos-pictures thumbnail-by-video_id-picture_id-2" [
   video_id: float
+  picture_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7870,7 +7870,7 @@ export def "videos-pictures thumbnail-by-picture_id-video_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/pictures/($picture_id)")
+  let full_url = (build-url $base ({video_id: $video_id, picture_id: $picture_id} | format pattern "/videos/{video_id}/pictures/{picture_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7881,9 +7881,9 @@ export def "videos-pictures thumbnail-by-picture_id-video_id-2" [
 #
 # DELETE /videos/{video_id}/presets/{preset_id}
 # operationId: delete_video_embed_preset
-export def "videos-presets preset-by-preset_id-video_id" [
-  preset_id: float
+export def "videos-presets preset-by-video_id-preset_id" [
   video_id: float
+  preset_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7895,7 +7895,7 @@ export def "videos-presets preset-by-preset_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/presets/($preset_id)")
+  let full_url = (build-url $base ({video_id: $video_id, preset_id: $preset_id} | format pattern "/videos/{video_id}/presets/{preset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7905,9 +7905,9 @@ export def "videos-presets preset-by-preset_id-video_id" [
 #
 # GET /videos/{video_id}/presets/{preset_id}
 # operationId: get_video_embed_preset
-export def "videos-presets preset-by-preset_id-video_id-1" [
-  preset_id: float
+export def "videos-presets preset-by-video_id-preset_id-1" [
   video_id: float
+  preset_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7919,7 +7919,7 @@ export def "videos-presets preset-by-preset_id-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/presets/($preset_id)")
+  let full_url = (build-url $base ({video_id: $video_id, preset_id: $preset_id} | format pattern "/videos/{video_id}/presets/{preset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7929,9 +7929,9 @@ export def "videos-presets preset-by-preset_id-video_id-1" [
 #
 # PUT /videos/{video_id}/presets/{preset_id}
 # operationId: add_video_embed_preset
-export def "videos-presets preset-by-preset_id-video_id-2" [
-  preset_id: float
+export def "videos-presets preset-by-video_id-preset_id-2" [
   video_id: float
+  preset_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7943,7 +7943,7 @@ export def "videos-presets preset-by-preset_id-video_id-2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/presets/($preset_id)")
+  let full_url = (build-url $base ({video_id: $video_id, preset_id: $preset_id} | format pattern "/videos/{video_id}/presets/{preset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7969,7 +7969,7 @@ export def "videos-privacy-domains domains" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/videos/($video_id)/privacy/domains" $qp)
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/privacy/domains") $qp)
   let accept_val = "application/vnd.vimeo.domain+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7979,9 +7979,9 @@ export def "videos-privacy-domains domains" [
 #
 # DELETE /videos/{video_id}/privacy/domains/{domain}
 # operationId: delete_video_privacy_domain
-export def "videos-privacy-domains domain-by-domain-video_id" [
-  domain: string
+export def "videos-privacy-domains domain-by-video_id-domain" [
   video_id: float
+  domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7993,7 +7993,7 @@ export def "videos-privacy-domains domain-by-domain-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/privacy/domains/($domain)")
+  let full_url = (build-url $base ({video_id: $video_id, domain: $domain} | format pattern "/videos/{video_id}/privacy/domains/{domain}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8003,9 +8003,9 @@ export def "videos-privacy-domains domain-by-domain-video_id" [
 #
 # PUT /videos/{video_id}/privacy/domains/{domain}
 # operationId: add_video_privacy_domain
-export def "videos-privacy-domains domain-by-domain-video_id-1" [
-  domain: string
+export def "videos-privacy-domains domain-by-video_id-domain-1" [
   video_id: float
+  domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8017,7 +8017,7 @@ export def "videos-privacy-domains domain-by-domain-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/privacy/domains/($domain)")
+  let full_url = (build-url $base ({video_id: $video_id, domain: $domain} | format pattern "/videos/{video_id}/privacy/domains/{domain}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8043,7 +8043,7 @@ export def "videos-privacy-users users-by-video_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/videos/($video_id)/privacy/users" $qp)
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/privacy/users") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8066,7 +8066,7 @@ export def "videos-privacy-users users-by-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/privacy/users")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/privacy/users"))
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8076,9 +8076,9 @@ export def "videos-privacy-users users-by-video_id-1" [
 #
 # DELETE /videos/{video_id}/privacy/users/{user_id}
 # operationId: delete_video_privacy_user
-export def "videos-privacy-users user-by-user_id-video_id" [
-  user_id: float
+export def "videos-privacy-users user-by-video_id-user_id" [
   video_id: float
+  user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8090,7 +8090,7 @@ export def "videos-privacy-users user-by-user_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/privacy/users/($user_id)")
+  let full_url = (build-url $base ({video_id: $video_id, user_id: $user_id} | format pattern "/videos/{video_id}/privacy/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8100,9 +8100,9 @@ export def "videos-privacy-users user-by-user_id-video_id" [
 #
 # PUT /videos/{video_id}/privacy/users/{user_id}
 # operationId: add_video_privacy_user
-export def "videos-privacy-users user-by-user_id-video_id-1" [
-  user_id: float
+export def "videos-privacy-users user-by-video_id-user_id-1" [
   video_id: float
+  user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8114,7 +8114,7 @@ export def "videos-privacy-users user-by-user_id-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/privacy/users/($user_id)")
+  let full_url = (build-url $base ({video_id: $video_id, user_id: $user_id} | format pattern "/videos/{video_id}/privacy/users/{user_id}"))
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8124,7 +8124,7 @@ export def "videos-privacy-users user-by-user_id-video_id-1" [
 #
 # GET /videos/{video_id}/tags
 # operationId: get_video_tags
-export def "videos-tags tags-by-video_id" [
+export def "videos-tags tag-s-by-video_id" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8137,7 +8137,7 @@ export def "videos-tags tags-by-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/tags")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/tags"))
   let accept_val = "application/vnd.vimeo.tag+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8147,7 +8147,7 @@ export def "videos-tags tags-by-video_id" [
 #
 # PUT /videos/{video_id}/tags
 # operationId: add_video_tags
-export def "videos-tags tags-by-video_id-1" [
+export def "videos-tags tag-s-by-video_id-1" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8162,7 +8162,7 @@ export def "videos-tags tags-by-video_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/tags")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/tags"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.tag+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8187,7 +8187,7 @@ export def "videos-tags tag-by-video_id-word" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/tags/($word)")
+  let full_url = (build-url $base ({video_id: $video_id, word: $word} | format pattern "/videos/{video_id}/tags/{word}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8211,7 +8211,7 @@ export def "videos-tags tag-by-video_id-word-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/tags/($word)")
+  let full_url = (build-url $base ({video_id: $video_id, word: $word} | format pattern "/videos/{video_id}/tags/{word}"))
   let accept_val = "application/vnd.vimeo.tag+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8235,7 +8235,7 @@ export def "videos-tags tag-by-video_id-word-2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/tags/($word)")
+  let full_url = (build-url $base ({video_id: $video_id, word: $word} | format pattern "/videos/{video_id}/tags/{word}"))
   let accept_val = "application/vnd.vimeo.tag+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8258,7 +8258,7 @@ export def "videos-texttracks tracks" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/texttracks")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/texttracks"))
   let accept_val = "application/vnd.vimeo.video.texttrack+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8283,7 +8283,7 @@ export def "videos-texttracks track-by-video_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/texttracks")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/texttracks"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.video.texttrack+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8294,9 +8294,9 @@ export def "videos-texttracks track-by-video_id" [
 #
 # DELETE /videos/{video_id}/texttracks/{texttrack_id}
 # operationId: delete_text_track
-export def "videos-texttracks track-by-texttrack_id-video_id" [
-  texttrack_id: float
+export def "videos-texttracks track-by-video_id-texttrack_id" [
   video_id: float
+  texttrack_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8308,7 +8308,7 @@ export def "videos-texttracks track-by-texttrack_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/texttracks/($texttrack_id)")
+  let full_url = (build-url $base ({video_id: $video_id, texttrack_id: $texttrack_id} | format pattern "/videos/{video_id}/texttracks/{texttrack_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8318,9 +8318,9 @@ export def "videos-texttracks track-by-texttrack_id-video_id" [
 #
 # GET /videos/{video_id}/texttracks/{texttrack_id}
 # operationId: get_text_track
-export def "videos-texttracks track-by-texttrack_id-video_id-1" [
-  texttrack_id: float
+export def "videos-texttracks track-by-video_id-texttrack_id-1" [
   video_id: float
+  texttrack_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8332,7 +8332,7 @@ export def "videos-texttracks track-by-texttrack_id-video_id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/texttracks/($texttrack_id)")
+  let full_url = (build-url $base ({video_id: $video_id, texttrack_id: $texttrack_id} | format pattern "/videos/{video_id}/texttracks/{texttrack_id}"))
   let accept_val = "application/vnd.vimeo.video.texttrack+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8342,9 +8342,9 @@ export def "videos-texttracks track-by-texttrack_id-video_id-1" [
 #
 # PATCH /videos/{video_id}/texttracks/{texttrack_id}
 # operationId: edit_text_track
-export def "videos-texttracks track-by-texttrack_id-video_id-2" [
-  texttrack_id: float
+export def "videos-texttracks track-by-video_id-texttrack_id-2" [
   video_id: float
+  texttrack_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8358,7 +8358,7 @@ export def "videos-texttracks track-by-texttrack_id-video_id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/texttracks/($texttrack_id)")
+  let full_url = (build-url $base ({video_id: $video_id, texttrack_id: $texttrack_id} | format pattern "/videos/{video_id}/texttracks/{texttrack_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.video.texttrack+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8382,7 +8382,7 @@ export def "videos-timelinethumbnails logo-by-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/timelinethumbnails")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/timelinethumbnails"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8392,9 +8392,9 @@ export def "videos-timelinethumbnails logo-by-video_id" [
 #
 # GET /videos/{video_id}/timelinethumbnails/{thumbnail_id}
 # operationId: get_video_custom_logo
-export def "videos-timelinethumbnails logo-by-thumbnail_id-video_id" [
-  thumbnail_id: float
+export def "videos-timelinethumbnails logo-by-video_id-thumbnail_id" [
   video_id: float
+  thumbnail_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8406,7 +8406,7 @@ export def "videos-timelinethumbnails logo-by-thumbnail_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/timelinethumbnails/($thumbnail_id)")
+  let full_url = (build-url $base ({video_id: $video_id, thumbnail_id: $thumbnail_id} | format pattern "/videos/{video_id}/timelinethumbnails/{thumbnail_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8431,7 +8431,7 @@ export def "videos-versions version" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($video_id)/versions")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/versions"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.vimeo.video.version+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8459,7 +8459,7 @@ export def "videos-videos videos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/videos/($video_id)/videos" $qp)
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

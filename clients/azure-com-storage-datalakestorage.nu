@@ -77,7 +77,7 @@ def mode-completer [] { ["legacy" "posix"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: Filesystem_List
-export def "account-operations List" [
+export def "account-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -113,7 +113,7 @@ export def "account-operations List" [
   --resource: string@resource-completer # The value must be "account" for all account operations.
   --prefix: string # Filters results to filesystems within the specified prefix.
   --continuation: string # The number of filesystems returned with each invocation is limited. If the number of filesystems to be returned exceeds this limit, a continuation token is returned in the response header x-ms-continuation. When a continuation token is  returned in the response, it must be specified in a subsequent invocation of the list operation to continue listing the filesystems.
-  --maxResults: int # An optional value that specifies the maximum number of items to return. If omitted or greater than 5,000, the response will include up to 5,000 items. (format: int32)
+  --max-results: int # An optional value that specifies the maximum number of items to return. If omitted or greater than 5,000, the response will include up to 5,000 items. (format: int32)
   --timeout: int # An optional operation timeout value in seconds. The period begins when the request is received by the service. If the timeout value elapses before the operation completes, the operation fails. (format: int32)
   --x-ms-client-request-id: string # A UUID recorded in the analytics logs for troubleshooting and correlation.
   --x-ms-date: string # Specifies the Coordinated Universal Time (UTC) for the request.  This is required when using shared key authorization.
@@ -121,7 +121,7 @@ export def "account-operations List" [
 ]: nothing -> record<filesystems: table<eTag: string, lastModified: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "continuation" $continuation "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "continuation" $continuation "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp)
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -134,7 +134,7 @@ export def "account-operations List" [
 #
 # DELETE /{filesystem}
 # operationId: Filesystem_Delete
-export def "filesystem-operations Delete" [
+export def "filesystem-operations delete" [
   filesystem: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -149,14 +149,14 @@ export def "filesystem-operations Delete" [
   --x-ms-client-request-id: string # A UUID recorded in the analytics logs for troubleshooting and correlation.
   --x-ms-date: string # Specifies the Coordinated Universal Time (UTC) for the request.  This is required when using shared key authorization.
   --x-ms-version: string # Specifies the version of the REST protocol used for processing the request. This is required when using shared key authorization.
-  --If-Modified-Since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
-  --If-Unmodified-Since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
+  --if-modified-since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
+  --if-unmodified-since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($filesystem)" $qp)
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "If-Modified-Since": $If_Modified_Since, "If-Unmodified-Since": $If_Unmodified_Since} | compact
+  let full_url = (build-url $base ({filesystem: $filesystem} | format pattern "/{filesystem}") $qp)
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -167,7 +167,7 @@ export def "filesystem-operations Delete" [
 #
 # GET /{filesystem}
 # operationId: Path_List
-export def "filesystem-operations List" [
+export def "filesystem-operations list" [
   filesystem: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,7 +182,7 @@ export def "filesystem-operations List" [
   --directory: string # Filters results to paths within the specified directory. An error occurs if the directory does not exist.
   --recursive: oneof<nothing, bool> # If "true", all paths are listed; otherwise, only paths at the root of the filesystem are listed.  If "directory" is specified, the list will only include paths that share the same root.
   --continuation: string # The number of paths returned with each invocation is limited. If the number of paths to be returned exceeds this limit, a continuation token is returned in the response header x-ms-continuation. When a continuation token is  returned in the response, it must be specified in a subsequent invocation of the list operation to continue listing the paths.
-  --maxResults: int # An optional value that specifies the maximum number of items to return. If omitted or greater than 5,000, the response will include up to 5,000 items. (format: int32)
+  --max-results: int # An optional value that specifies the maximum number of items to return. If omitted or greater than 5,000, the response will include up to 5,000 items. (format: int32)
   --upn: oneof<nothing, bool> # Optional. Valid only when Hierarchical Namespace is enabled for the account. If "true", the user identity values returned in the owner and group fields of each list entry will be transformed from Azure Active Directory Object IDs to User Principal Names.  If "false", the values will be returned as Azure Active Directory Object IDs. The default value is false. Note that group and application Object IDs are not translated because they do not have unique friendly names.
   --x-ms-client-request-id: string # A UUID recorded in the analytics logs for troubleshooting and correlation.
   --x-ms-date: string # Specifies the Coordinated Universal Time (UTC) for the request.  This is required when using shared key authorization.
@@ -190,8 +190,8 @@ export def "filesystem-operations List" [
 ]: nothing -> record<paths: table<contentLength: int, eTag: string, group: string, isDirectory: bool, lastModified: string, name: string, owner: string, permissions: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "directory" $directory "scalar") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "continuation" $continuation "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "upn" $upn "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($filesystem)" $qp)
+  let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "directory" $directory "scalar") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "continuation" $continuation "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "upn" $upn "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({filesystem: $filesystem} | format pattern "/{filesystem}") $qp)
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -203,7 +203,7 @@ export def "filesystem-operations List" [
 #
 # HEAD /{filesystem}
 # operationId: Filesystem_GetProperties
-export def "filesystem-operations GetProperties" [
+export def "filesystem-operations get-properties" [
   filesystem: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "filesystem-operations GetProperties" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($filesystem)" $qp)
+  let full_url = (build-url $base ({filesystem: $filesystem} | format pattern "/{filesystem}") $qp)
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -234,7 +234,7 @@ export def "filesystem-operations GetProperties" [
 #
 # PATCH /{filesystem}
 # operationId: Filesystem_SetProperties
-export def "filesystem-operations SetProperties" [
+export def "filesystem-operations patch" [
   filesystem: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,14 +250,14 @@ export def "filesystem-operations SetProperties" [
   --x-ms-date: string # Specifies the Coordinated Universal Time (UTC) for the request.  This is required when using shared key authorization.
   --x-ms-version: string # Specifies the version of the REST protocol used for processing the request. This is required when using shared key authorization.
   --x-ms-properties: string # Optional. User-defined properties to be stored with the filesystem, in the format of a comma-separated list of name and value pairs "n1=v1, n2=v2, ...", where each value is a base64 encoded string. Note that the string may only contain ASCII characters in the ISO-8859-1 character set.  If the filesystem exists, any properties not included in the list will be removed.  All properties are removed if the header is omitted.  To merge new and existing properties, first get all existing properties and the current E-Tag, then make a conditional request with the E-Tag and include values for all properties.
-  --If-Modified-Since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
-  --If-Unmodified-Since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
+  --if-modified-since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
+  --if-unmodified-since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($filesystem)" $qp)
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-properties": $x_ms_properties, "If-Modified-Since": $If_Modified_Since, "If-Unmodified-Since": $If_Unmodified_Since} | compact
+  let full_url = (build-url $base ({filesystem: $filesystem} | format pattern "/{filesystem}") $qp)
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-properties": $x_ms_properties, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -268,7 +268,7 @@ export def "filesystem-operations SetProperties" [
 #
 # PUT /{filesystem}
 # operationId: Filesystem_Create
-export def "filesystem-operations Create" [
+export def "filesystem-operations create" [
   filesystem: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,7 +288,7 @@ export def "filesystem-operations Create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($filesystem)" $qp)
+  let full_url = (build-url $base ({filesystem: $filesystem} | format pattern "/{filesystem}") $qp)
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-properties": $x_ms_properties} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -300,7 +300,7 @@ export def "filesystem-operations Create" [
 #
 # DELETE /{filesystem}/{path}
 # operationId: Path_Delete
-export def "file-and-directory-operations Delete" [
+export def "file-and-directory-operations delete" [
   filesystem: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -318,16 +318,16 @@ export def "file-and-directory-operations Delete" [
   --x-ms-date: string # Specifies the Coordinated Universal Time (UTC) for the request.  This is required when using shared key authorization.
   --x-ms-version: string # Specifies the version of the REST protocol used for processing the request. This is required when using shared key authorization.
   --x-ms-lease-id: string # The lease ID must be specified if there is an active lease.
-  --If-Match: string # Optional.  An ETag value. Specify this header to perform the operation only if the resource's ETag matches the value specified. The ETag must be specified in quotes.
-  --If-None-Match: string # Optional.  An ETag value or the special wildcard ("*") value. Specify this header to perform the operation only if the resource's ETag does not match the value specified. The ETag must be specified in quotes.
-  --If-Modified-Since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
-  --If-Unmodified-Since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
+  --if-match: string # Optional.  An ETag value. Specify this header to perform the operation only if the resource's ETag matches the value specified. The ETag must be specified in quotes.
+  --if-none-match: string # Optional.  An ETag value or the special wildcard ("*") value. Specify this header to perform the operation only if the resource's ETag does not match the value specified. The ETag must be specified in quotes.
+  --if-modified-since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
+  --if-unmodified-since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "continuation" $continuation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($filesystem)/($path)" $qp)
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-lease-id": $x_ms_lease_id, "If-Match": $If_Match, "If-None-Match": $If_None_Match, "If-Modified-Since": $If_Modified_Since, "If-Unmodified-Since": $If_Unmodified_Since} | compact
+  let full_url = (build-url $base ({filesystem: $filesystem, path: $path} | format pattern "/{filesystem}/{path}") $qp)
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-lease-id": $x_ms_lease_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -338,7 +338,7 @@ export def "file-and-directory-operations Delete" [
 #
 # GET /{filesystem}/{path}
 # operationId: Path_Read
-export def "file-and-directory-operations Read" [
+export def "file-and-directory-operations get" [
   filesystem: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -354,19 +354,19 @@ export def "file-and-directory-operations Read" [
   --x-ms-client-request-id: string # A UUID recorded in the analytics logs for troubleshooting and correlation.
   --x-ms-date: string # Specifies the Coordinated Universal Time (UTC) for the request.  This is required when using shared key authorization.
   --x-ms-version: string # Specifies the version of the REST protocol used for processing the request. This is required when using shared key authorization.
-  --Range: string # The HTTP Range request header specifies one or more byte ranges of the resource to be retrieved.
+  --range: string # The HTTP Range request header specifies one or more byte ranges of the resource to be retrieved.
   --x-ms-lease-id: string # Optional. If this header is specified, the operation will be performed only if both of the following conditions are met: i) the path's lease is currently active and ii) the lease ID specified in the request matches that of the path.
   --x-ms-range-get-content-md5: oneof<nothing, bool> # Optional. When this header is set to "true" and specified together with the Range header, the service returns the MD5 hash for the range, as long as the range is less than or equal to 4MB in size. If this header is specified without the Range header, the service returns status code 400 (Bad Request). If this header is set to true when the range exceeds 4 MB in size, the service returns status code 400 (Bad Request).
-  --If-Match: string # Optional.  An ETag value. Specify this header to perform the operation only if the resource's ETag matches the value specified. The ETag must be specified in quotes.
-  --If-None-Match: string # Optional.  An ETag value or the special wildcard ("*") value. Specify this header to perform the operation only if the resource's ETag does not match the value specified. The ETag must be specified in quotes.
-  --If-Modified-Since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
-  --If-Unmodified-Since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
+  --if-match: string # Optional.  An ETag value. Specify this header to perform the operation only if the resource's ETag matches the value specified. The ETag must be specified in quotes.
+  --if-none-match: string # Optional.  An ETag value or the special wildcard ("*") value. Specify this header to perform the operation only if the resource's ETag does not match the value specified. The ETag must be specified in quotes.
+  --if-modified-since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
+  --if-unmodified-since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($filesystem)/($path)" $qp)
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "Range": $Range, "x-ms-lease-id": $x_ms_lease_id, "x-ms-range-get-content-md5": $x_ms_range_get_content_md5, "If-Match": $If_Match, "If-None-Match": $If_None_Match, "If-Modified-Since": $If_Modified_Since, "If-Unmodified-Since": $If_Unmodified_Since} | compact
+  let full_url = (build-url $base ({filesystem: $filesystem, path: $path} | format pattern "/{filesystem}/{path}") $qp)
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "Range": $range, "x-ms-lease-id": $x_ms_lease_id, "x-ms-range-get-content-md5": $x_ms_range_get_content_md5, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -377,7 +377,7 @@ export def "file-and-directory-operations Read" [
 #
 # HEAD /{filesystem}/{path}
 # operationId: Path_GetProperties
-export def "file-and-directory-operations GetProperties" [
+export def "file-and-directory-operations get-properties" [
   filesystem: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -391,21 +391,21 @@ export def "file-and-directory-operations GetProperties" [
   --timeout: int # An optional operation timeout value in seconds. The period begins when the request is received by the service. If the timeout value elapses before the operation completes, the operation fails. (format: int32)
   --action: string@action-completer # Optional. If the value is "getStatus" only the system defined properties for the path are returned. If the value is "getAccessControl" the access control list is returned in the response headers (Hierarchical Namespace must be enabled for the account), otherwise the properties are returned.
   --upn: oneof<nothing, bool> # Optional. Valid only when Hierarchical Namespace is enabled for the account. If "true", the user identity values returned in the x-ms-owner, x-ms-group, and x-ms-acl response headers will be transformed from Azure Active Directory Object IDs to User Principal Names.  If "false", the values will be returned as Azure Active Directory Object IDs. The default value is false. Note that group and application Object IDs are not translated because they do not have unique friendly names.
-  --fsAction: string # Required only for check access action. Valid only when Hierarchical Namespace is enabled for the account. File system operation read/write/execute in string form, matching regex pattern '[rwx-]{3}'
+  --fs-action: string # Required only for check access action. Valid only when Hierarchical Namespace is enabled for the account. File system operation read/write/execute in string form, matching regex pattern '[rwx-]{3}'
   --x-ms-client-request-id: string # A UUID recorded in the analytics logs for troubleshooting and correlation.
   --x-ms-date: string # Specifies the Coordinated Universal Time (UTC) for the request.  This is required when using shared key authorization.
   --x-ms-version: string # Specifies the version of the REST protocol used for processing the request. This is required when using shared key authorization.
   --x-ms-lease-id: string # Optional. If this header is specified, the operation will be performed only if both of the following conditions are met: i) the path's lease is currently active and ii) the lease ID specified in the request matches that of the path.
-  --If-Match: string # Optional.  An ETag value. Specify this header to perform the operation only if the resource's ETag matches the value specified. The ETag must be specified in quotes.
-  --If-None-Match: string # Optional.  An ETag value or the special wildcard ("*") value. Specify this header to perform the operation only if the resource's ETag does not match the value specified. The ETag must be specified in quotes.
-  --If-Modified-Since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
-  --If-Unmodified-Since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
+  --if-match: string # Optional.  An ETag value. Specify this header to perform the operation only if the resource's ETag matches the value specified. The ETag must be specified in quotes.
+  --if-none-match: string # Optional.  An ETag value or the special wildcard ("*") value. Specify this header to perform the operation only if the resource's ETag does not match the value specified. The ETag must be specified in quotes.
+  --if-modified-since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
+  --if-unmodified-since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "upn" $upn "scalar") (serialize-qp "fsAction" $fsAction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($filesystem)/($path)" $qp)
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-lease-id": $x_ms_lease_id, "If-Match": $If_Match, "If-None-Match": $If_None_Match, "If-Modified-Since": $If_Modified_Since, "If-Unmodified-Since": $If_Unmodified_Since} | compact
+  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "upn" $upn "scalar") (serialize-qp "fsAction" $fs_action "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({filesystem: $filesystem, path: $path} | format pattern "/{filesystem}/{path}") $qp)
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-lease-id": $x_ms_lease_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -416,7 +416,7 @@ export def "file-and-directory-operations GetProperties" [
 #
 # PATCH /{filesystem}/{path}
 # operationId: Path_Update
-export def "file-and-directory-operations Update" [
+export def "file-and-directory-operations update" [
   filesystem: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -430,13 +430,13 @@ export def "file-and-directory-operations Update" [
   --timeout: int # An optional operation timeout value in seconds. The period begins when the request is received by the service. If the timeout value elapses before the operation completes, the operation fails. (format: int32)
   --action: string@action-completer-1 # The action must be "append" to upload data to be appended to a file, "flush" to flush previously uploaded data to a file, "setProperties" to set the properties of a file or directory, or "setAccessControl" to set the owner, group, permissions, or access control list for a file or directory.  Note that Hierarchical Namespace must be enabled for the account in order to use access control.  Also note that the Access Control List (ACL) includes permissions for the owner, owning group, and others, so the x-ms-permissions and x-ms-acl request headers are mutually exclusive.
   --position: int # This parameter allows the caller to upload data in parallel and control the order in which it is appended to the file.  It is required when uploading data to be appended to the file and when flushing previously uploaded data to the file.  The value must be the position where the data is to be appended.  Uploaded data is not immediately flushed, or written, to the file.  To flush, the previously uploaded data must be contiguous, the position parameter must be specified and equal to the length of the file after all data has been written, and there must not be a request entity body included with the request. (format: int64)
-  --retainUncommittedData: oneof<nothing, bool> # Valid only for flush operations.  If "true", uncommitted data is retained after the flush operation completes; otherwise, the uncommitted data is deleted after the flush operation.  The default is false.  Data at offsets less than the specified position are written to the file when flush succeeds, but this optional parameter allows data after the flush position to be retained for a future flush operation.
+  --retain-uncommitted-data: oneof<nothing, bool> # Valid only for flush operations.  If "true", uncommitted data is retained after the flush operation completes; otherwise, the uncommitted data is deleted after the flush operation.  The default is false.  Data at offsets less than the specified position are written to the file when flush succeeds, but this optional parameter allows data after the flush position to be retained for a future flush operation.
   --close: oneof<nothing, bool> # Azure Storage Events allow applications to receive notifications when files change. When Azure Storage Events are enabled, a file changed event is raised. This event has a property indicating whether this is the final change to distinguish the difference between an intermediate flush to a file stream and the final close of a file stream. The close query parameter is valid only when the action is "flush" and change notifications are enabled. If the value of close is "true" and the flush operation completes successfully, the service raises a file change notification with a property indicating that this is the final update (the file stream has been closed). If "false" a change notification is raised indicating the file has changed. The default is false. This query parameter is set to true by the Hadoop ABFS driver to indicate that the file stream has been closed."
   --x-ms-client-request-id: string # A UUID recorded in the analytics logs for troubleshooting and correlation.
   --x-ms-date: string # Specifies the Coordinated Universal Time (UTC) for the request.  This is required when using shared key authorization.
   --x-ms-version: string # Specifies the version of the REST protocol used for processing the request. This is required when using shared key authorization.
-  --Content-Length: int # Required for "Append Data" and "Flush Data".  Must be 0 for "Flush Data".  Must be the length of the request content in bytes for "Append Data".
-  --Content-MD5: string # Optional. An MD5 hash of the request content. This header is valid on "Append" and "Flush" operations. This hash is used to verify the integrity of the request content during transport. When this header is specified, the storage service compares the hash of the content that has arrived with this header value. If the two hashes do not match, the operation will fail with error code 400 (Bad Request). Note that this MD5 hash is not stored with the file. This header is associated with the request content, and not with the stored content of the file itself.
+  --content-length: int # Required for "Append Data" and "Flush Data".  Must be 0 for "Flush Data".  Must be the length of the request content in bytes for "Append Data".
+  --content-md5: string # Optional. An MD5 hash of the request content. This header is valid on "Append" and "Flush" operations. This hash is used to verify the integrity of the request content during transport. When this header is specified, the storage service compares the hash of the content that has arrived with this header value. If the two hashes do not match, the operation will fail with error code 400 (Bad Request). Note that this MD5 hash is not stored with the file. This header is associated with the request content, and not with the stored content of the file itself.
   --x-ms-lease-id: string # The lease ID must be specified if there is an active lease.
   --x-ms-cache-control: string # Optional and only valid for flush and set properties operations.  The service stores this value and includes it in the "Cache-Control" response header for "Read File" operations.
   --x-ms-content-type: string # Optional and only valid for flush and set properties operations.  The service stores this value and includes it in the "Content-Type" response header for "Read File" operations.
@@ -449,19 +449,19 @@ export def "file-and-directory-operations Update" [
   --x-ms-group: string # Optional and valid only for the setAccessControl operation. Sets the owning group of the file or directory.
   --x-ms-permissions: string # Optional and only valid if Hierarchical Namespace is enabled for the account. Sets POSIX access permissions for the file owner, the file owning group, and others. Each class may be granted read, write, or execute permission.  The sticky bit is also supported.  Both symbolic (rwxrw-rw-) and 4-digit octal notation (e.g. 0766) are supported. Invalid in conjunction with x-ms-acl.
   --x-ms-acl: string # Optional and valid only for the setAccessControl operation. Sets POSIX access control rights on files and directories. The value is a comma-separated list of access control entries that fully replaces the existing access control list (ACL).  Each access control entry (ACE) consists of a scope, a type, a user or group identifier, and permissions in the format "[scope:][type]:[id]:[permissions]". The scope must be "default" to indicate the ACE belongs to the default ACL for a directory; otherwise scope is implicit and the ACE belongs to the access ACL.  There are four ACE types: "user" grants rights to the owner or a named user, "group" grants rights to the owning group or a named group, "mask" restricts rights granted to named users and the members of groups, and "other" grants rights to all users not found in any of the other entries. The user or group identifier is omitted for entries of type "mask" and "other".  The user or group identifier is also omitted for the owner and owning group.  The permission field is a 3-character sequence where the first character is 'r' to grant read access, the second character is 'w' to grant write access, and the third character is 'x' to grant execute permission.  If access is not granted, the '-' character is used to denote that the permission is denied. For example, the following ACL grants read, write, and execute rights to the file owner and john.doe@contoso, the read right to the owning group, and nothing to everyone else: "user::rwx,user:john.doe@contoso:rwx,group::r--,other::---,mask=rwx". Invalid in conjunction with x-ms-permissions.
-  --If-Match: string # Optional for Flush Data and Set Properties, but invalid for Append Data.  An ETag value. Specify this header to perform the operation only if the resource's ETag matches the value specified. The ETag must be specified in quotes.
-  --If-None-Match: string # Optional for Flush Data and Set Properties, but invalid for Append Data.  An ETag value or the special wildcard ("*") value. Specify this header to perform the operation only if the resource's ETag does not match the value specified. The ETag must be specified in quotes.
-  --If-Modified-Since: string # Optional for Flush Data and Set Properties, but invalid for Append Data. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
-  --If-Unmodified-Since: string # Optional for Flush Data and Set Properties, but invalid for Append Data. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
+  --if-match: string # Optional for Flush Data and Set Properties, but invalid for Append Data.  An ETag value. Specify this header to perform the operation only if the resource's ETag matches the value specified. The ETag must be specified in quotes.
+  --if-none-match: string # Optional for Flush Data and Set Properties, but invalid for Append Data.  An ETag value or the special wildcard ("*") value. Specify this header to perform the operation only if the resource's ETag does not match the value specified. The ETag must be specified in quotes.
+  --if-modified-since: string # Optional for Flush Data and Set Properties, but invalid for Append Data. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
+  --if-unmodified-since: string # Optional for Flush Data and Set Properties, but invalid for Append Data. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "retainUncommittedData" $retainUncommittedData "scalar") (serialize-qp "close" $close "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($filesystem)/($path)" $qp)
+  let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "retainUncommittedData" $retain_uncommitted_data "scalar") (serialize-qp "close" $close "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({filesystem: $filesystem, path: $path} | format pattern "/{filesystem}/{path}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "Content-Length": $Content_Length, "Content-MD5": $Content_MD5, "x-ms-lease-id": $x_ms_lease_id, "x-ms-cache-control": $x_ms_cache_control, "x-ms-content-type": $x_ms_content_type, "x-ms-content-disposition": $x_ms_content_disposition, "x-ms-content-encoding": $x_ms_content_encoding, "x-ms-content-language": $x_ms_content_language, "x-ms-content-md5": $x_ms_content_md5, "x-ms-properties": $x_ms_properties, "x-ms-owner": $x_ms_owner, "x-ms-group": $x_ms_group, "x-ms-permissions": $x_ms_permissions, "x-ms-acl": $x_ms_acl, "If-Match": $If_Match, "If-None-Match": $If_None_Match, "If-Modified-Since": $If_Modified_Since, "If-Unmodified-Since": $If_Unmodified_Since} | compact
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "Content-Length": $content_length, "Content-MD5": $content_md5, "x-ms-lease-id": $x_ms_lease_id, "x-ms-cache-control": $x_ms_cache_control, "x-ms-content-type": $x_ms_content_type, "x-ms-content-disposition": $x_ms_content_disposition, "x-ms-content-encoding": $x_ms_content_encoding, "x-ms-content-language": $x_ms_content_language, "x-ms-content-md5": $x_ms_content_md5, "x-ms-properties": $x_ms_properties, "x-ms-owner": $x_ms_owner, "x-ms-group": $x_ms_group, "x-ms-permissions": $x_ms_permissions, "x-ms-acl": $x_ms_acl, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -472,7 +472,7 @@ export def "file-and-directory-operations Update" [
 #
 # POST /{filesystem}/{path}
 # operationId: Path_Lease
-export def "file-and-directory-operations Lease" [
+export def "file-and-directory-operations post" [
   filesystem: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -492,16 +492,16 @@ export def "file-and-directory-operations Lease" [
   --x-ms-lease-break-period: int # The lease break period duration is optional to break a lease, and  specifies the break period of the lease in seconds.  The lease break  duration must be between 0 and 60 seconds.
   --x-ms-lease-id: string # Required when "x-ms-lease-action" is "renew", "change" or "release". For the renew and release actions, this must match the current lease ID.
   --x-ms-proposed-lease-id: string # Required when "x-ms-lease-action" is "acquire" or "change".  A lease will be acquired with this lease ID if the operation is successful.
-  --If-Match: string # Optional.  An ETag value. Specify this header to perform the operation only if the resource's ETag matches the value specified. The ETag must be specified in quotes.
-  --If-None-Match: string # Optional.  An ETag value or the special wildcard ("*") value. Specify this header to perform the operation only if the resource's ETag does not match the value specified. The ETag must be specified in quotes.
-  --If-Modified-Since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
-  --If-Unmodified-Since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
+  --if-match: string # Optional.  An ETag value. Specify this header to perform the operation only if the resource's ETag matches the value specified. The ETag must be specified in quotes.
+  --if-none-match: string # Optional.  An ETag value or the special wildcard ("*") value. Specify this header to perform the operation only if the resource's ETag does not match the value specified. The ETag must be specified in quotes.
+  --if-modified-since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
+  --if-unmodified-since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($filesystem)/($path)" $qp)
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-lease-action": $x_ms_lease_action, "x-ms-lease-duration": $x_ms_lease_duration, "x-ms-lease-break-period": $x_ms_lease_break_period, "x-ms-lease-id": $x_ms_lease_id, "x-ms-proposed-lease-id": $x_ms_proposed_lease_id, "If-Match": $If_Match, "If-None-Match": $If_None_Match, "If-Modified-Since": $If_Modified_Since, "If-Unmodified-Since": $If_Unmodified_Since} | compact
+  let full_url = (build-url $base ({filesystem: $filesystem, path: $path} | format pattern "/{filesystem}/{path}") $qp)
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-lease-action": $x_ms_lease_action, "x-ms-lease-duration": $x_ms_lease_duration, "x-ms-lease-break-period": $x_ms_lease_break_period, "x-ms-lease-id": $x_ms_lease_id, "x-ms-proposed-lease-id": $x_ms_proposed_lease_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -512,7 +512,7 @@ export def "file-and-directory-operations Lease" [
 #
 # PUT /{filesystem}/{path}
 # operationId: Path_Create
-export def "file-and-directory-operations Create" [
+export def "file-and-directory-operations create" [
   filesystem: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -530,10 +530,10 @@ export def "file-and-directory-operations Create" [
   --x-ms-client-request-id: string # A UUID recorded in the analytics logs for troubleshooting and correlation.
   --x-ms-date: string # Specifies the Coordinated Universal Time (UTC) for the request.  This is required when using shared key authorization.
   --x-ms-version: string # Specifies the version of the REST protocol used for processing the request. This is required when using shared key authorization.
-  --Cache-Control: string # Optional.  The service stores this value and includes it in the "Cache-Control" response header for "Read File" operations for "Read File" operations.
-  --Content-Encoding: string # Optional.  Specifies which content encodings have been applied to the file. This value is returned to the client when the "Read File" operation is performed.
-  --Content-Language: string # Optional.  Specifies the natural language used by the intended audience for the file.
-  --Content-Disposition: string # Optional.  The service stores this value and includes it in the "Content-Disposition" response header for "Read File" operations.
+  --cache-control: string # Optional.  The service stores this value and includes it in the "Cache-Control" response header for "Read File" operations for "Read File" operations.
+  --content-encoding: string # Optional.  Specifies which content encodings have been applied to the file. This value is returned to the client when the "Read File" operation is performed.
+  --content-language: string # Optional.  Specifies the natural language used by the intended audience for the file.
+  --content-disposition: string # Optional.  The service stores this value and includes it in the "Content-Disposition" response header for "Read File" operations.
   --x-ms-cache-control: string # Optional.  The service stores this value and includes it in the "Cache-Control" response header for "Read File" operations.
   --x-ms-content-type: string # Optional.  The service stores this value and includes it in the "Content-Type" response header for "Read File" operations.
   --x-ms-content-encoding: string # Optional.  The service stores this value and includes it in the "Content-Encoding" response header for "Read File" operations.
@@ -545,10 +545,10 @@ export def "file-and-directory-operations Create" [
   --x-ms-properties: string # Optional.  User-defined properties to be stored with the file or directory, in the format of a comma-separated list of name and value pairs "n1=v1, n2=v2, ...", where each value is a base64 encoded string. Note that the string may only contain ASCII characters in the ISO-8859-1 character set.
   --x-ms-permissions: string # Optional and only valid if Hierarchical Namespace is enabled for the account. Sets POSIX access permissions for the file owner, the file owning group, and others. Each class may be granted read, write, or execute permission.  The sticky bit is also supported.  Both symbolic (rwxrw-rw-) and 4-digit octal notation (e.g. 0766) are supported.
   --x-ms-umask: string # Optional and only valid if Hierarchical Namespace is enabled for the account. When creating a file or directory and the parent folder does not have a default ACL, the umask restricts the permissions of the file or directory to be created.  The resulting permission is given by p & ^u, where p is the permission and u is the umask.  For example, if p is 0777 and u is 0057, then the resulting permission is 0720.  The default permission is 0777 for a directory and 0666 for a file.  The default umask is 0027.  The umask must be specified in 4-digit octal notation (e.g. 0766).
-  --If-Match: string # Optional.  An ETag value. Specify this header to perform the operation only if the resource's ETag matches the value specified. The ETag must be specified in quotes.
-  --If-None-Match: string # Optional.  An ETag value or the special wildcard ("*") value. Specify this header to perform the operation only if the resource's ETag does not match the value specified. The ETag must be specified in quotes.
-  --If-Modified-Since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
-  --If-Unmodified-Since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
+  --if-match: string # Optional.  An ETag value. Specify this header to perform the operation only if the resource's ETag matches the value specified. The ETag must be specified in quotes.
+  --if-none-match: string # Optional.  An ETag value or the special wildcard ("*") value. Specify this header to perform the operation only if the resource's ETag does not match the value specified. The ETag must be specified in quotes.
+  --if-modified-since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
+  --if-unmodified-since: string # Optional. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
   --x-ms-source-if-match: string # Optional.  An ETag value. Specify this header to perform the rename operation only if the source's ETag matches the value specified. The ETag must be specified in quotes.
   --x-ms-source-if-none-match: string # Optional.  An ETag value or the special wildcard ("*") value. Specify this header to perform the rename operation only if the source's ETag does not match the value specified. The ETag must be specified in quotes.
   --x-ms-source-if-modified-since: string # Optional. A date and time value. Specify this header to perform the rename operation only if the source has been modified since the specified date and time.
@@ -557,8 +557,8 @@ export def "file-and-directory-operations Create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "resource" $resource "scalar") (serialize-qp "continuation" $continuation "scalar") (serialize-qp "mode" $mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($filesystem)/($path)" $qp)
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "Cache-Control": $Cache_Control, "Content-Encoding": $Content_Encoding, "Content-Language": $Content_Language, "Content-Disposition": $Content_Disposition, "x-ms-cache-control": $x_ms_cache_control, "x-ms-content-type": $x_ms_content_type, "x-ms-content-encoding": $x_ms_content_encoding, "x-ms-content-language": $x_ms_content_language, "x-ms-content-disposition": $x_ms_content_disposition, "x-ms-rename-source": $x_ms_rename_source, "x-ms-lease-id": $x_ms_lease_id, "x-ms-source-lease-id": $x_ms_source_lease_id, "x-ms-properties": $x_ms_properties, "x-ms-permissions": $x_ms_permissions, "x-ms-umask": $x_ms_umask, "If-Match": $If_Match, "If-None-Match": $If_None_Match, "If-Modified-Since": $If_Modified_Since, "If-Unmodified-Since": $If_Unmodified_Since, "x-ms-source-if-match": $x_ms_source_if_match, "x-ms-source-if-none-match": $x_ms_source_if_none_match, "x-ms-source-if-modified-since": $x_ms_source_if_modified_since, "x-ms-source-if-unmodified-since": $x_ms_source_if_unmodified_since} | compact
+  let full_url = (build-url $base ({filesystem: $filesystem, path: $path} | format pattern "/{filesystem}/{path}") $qp)
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "Cache-Control": $cache_control, "Content-Encoding": $content_encoding, "Content-Language": $content_language, "Content-Disposition": $content_disposition, "x-ms-cache-control": $x_ms_cache_control, "x-ms-content-type": $x_ms_content_type, "x-ms-content-encoding": $x_ms_content_encoding, "x-ms-content-language": $x_ms_content_language, "x-ms-content-disposition": $x_ms_content_disposition, "x-ms-rename-source": $x_ms_rename_source, "x-ms-lease-id": $x_ms_lease_id, "x-ms-source-lease-id": $x_ms_source_lease_id, "x-ms-properties": $x_ms_properties, "x-ms-permissions": $x_ms_permissions, "x-ms-umask": $x_ms_umask, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since, "x-ms-source-if-match": $x_ms_source_if_match, "x-ms-source-if-none-match": $x_ms_source_if_none_match, "x-ms-source-if-modified-since": $x_ms_source_if_modified_since, "x-ms-source-if-unmodified-since": $x_ms_source_if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

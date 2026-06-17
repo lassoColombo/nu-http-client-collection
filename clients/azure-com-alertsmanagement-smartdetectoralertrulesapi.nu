@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoftalerts-management-smart-detector-alert-rules List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoftalerts-management-smart-detector-alert-rules list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.alertsManagement/smartDetectorAlertRules
 # operationId: SmartDetectorAlertRules_List
-export def "subscriptions-providers-microsoftalerts-management-smart-detector-alert-rules List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoftalerts-management-smart-detector-alert-rules list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,12 +104,12 @@ export def "subscriptions-providers-microsoftalerts-management-smart-detector-al
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --expandDetector: oneof<nothing, bool> # Indicates if Smart Detector should be expanded.
+  --expand-detector: oneof<nothing, bool> # Indicates if Smart Detector should be expanded.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "expandDetector" $expandDetector "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/microsoft.alertsManagement/smartDetectorAlertRules" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "expandDetector" $expand_detector "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.alertsManagement/smartDetectorAlertRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,9 +119,9 @@ export def "subscriptions-providers-microsoftalerts-management-smart-detector-al
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.alertsManagement/smartDetectorAlertRules
 # operationId: SmartDetectorAlertRules_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoftalerts-management-smart-detector-alert-rules ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoftalerts-management-smart-detector-alert-rules list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,12 +131,12 @@ export def "subscriptions-resource-groups-providers-microsoftalerts-management-s
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --expandDetector: oneof<nothing, bool> # Indicates if Smart Detector should be expanded.
+  --expand-detector: oneof<nothing, bool> # Indicates if Smart Detector should be expanded.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "expandDetector" $expandDetector "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.alertsManagement/smartDetectorAlertRules" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "expandDetector" $expand_detector "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.alertsManagement/smartDetectorAlertRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -146,10 +146,10 @@ export def "subscriptions-resource-groups-providers-microsoftalerts-management-s
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.alertsManagement/smartDetectorAlertRules/{alertRuleName}
 # operationId: SmartDetectorAlertRules_Delete
-export def "subscriptions-resource-groups-providers-microsoftalerts-management-smart-detector-alert-rules Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  alertRuleName: string
+export def "subscriptions-resource-groups-providers-microsoftalerts-management-smart-detector-alert-rules delete" [
+  subscription_id: string
+  resource_group_name: string
+  alert_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "subscriptions-resource-groups-providers-microsoftalerts-management-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.alertsManagement/smartDetectorAlertRules/($alertRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, alert_rule_name: $alert_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.alertsManagement/smartDetectorAlertRules/{alert_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,10 +173,10 @@ export def "subscriptions-resource-groups-providers-microsoftalerts-management-s
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.alertsManagement/smartDetectorAlertRules/{alertRuleName}
 # operationId: SmartDetectorAlertRules_Get
-export def "subscriptions-resource-groups-providers-microsoftalerts-management-smart-detector-alert-rules Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  alertRuleName: string
+export def "subscriptions-resource-groups-providers-microsoftalerts-management-smart-detector-alert-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  alert_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,12 +186,12 @@ export def "subscriptions-resource-groups-providers-microsoftalerts-management-s
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --expandDetector: oneof<nothing, bool> # Indicates if Smart Detector should be expanded.
+  --expand-detector: oneof<nothing, bool> # Indicates if Smart Detector should be expanded.
 ]: nothing -> record<properties: record<actionGroups: record<customEmailSubject: string, customWebhookPayload: string, groupIds: list>, description: string, detector: record<description: string, id: string, imagePaths: list, name: string, parameters: record, supportedResourceTypes: list>, frequency: string, scope: list<string>, severity: string, state: string, throttling: record<duration: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "expandDetector" $expandDetector "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.alertsManagement/smartDetectorAlertRules/($alertRuleName)" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "expandDetector" $expand_detector "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, alert_rule_name: $alert_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.alertsManagement/smartDetectorAlertRules/{alert_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,10 +202,10 @@ export def "subscriptions-resource-groups-providers-microsoftalerts-management-s
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.alertsManagement/smartDetectorAlertRules/{alertRuleName}
 # operationId: SmartDetectorAlertRules_Patch
 # --properties shape: {actionGroups?: any, description?: string, frequency?: string, severity?: "Sev0"|"Sev1"|"Sev2"|"Sev3"|"Sev4", state?: "Enabled"|"Disabled", throttling?: any}
-export def "subscriptions-resource-groups-providers-microsoftalerts-management-smart-detector-alert-rules Patch" [
-  subscriptionId: string
-  resourceGroupName: string
-  alertRuleName: string
+export def "subscriptions-resource-groups-providers-microsoftalerts-management-smart-detector-alert-rules update" [
+  subscription_id: string
+  resource_group_name: string
+  alert_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,8 +222,8 @@ export def "subscriptions-resource-groups-providers-microsoftalerts-management-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.alertsManagement/smartDetectorAlertRules/($alertRuleName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, alert_rule_name: $alert_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.alertsManagement/smartDetectorAlertRules/{alert_rule_name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -235,10 +235,10 @@ export def "subscriptions-resource-groups-providers-microsoftalerts-management-s
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.alertsManagement/smartDetectorAlertRules/{alertRuleName}
 # operationId: SmartDetectorAlertRules_CreateOrUpdate
 # --properties shape: {actionGroups: any, description?: string, detector: any, frequency: string, scope: list, severity: "Sev0"|"Sev1"|"Sev2"|"Sev3"|"Sev4", state: "Enabled"|"Disabled", throttling?: any}
-export def "subscriptions-resource-groups-providers-microsoftalerts-management-smart-detector-alert-rules CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  alertRuleName: string
+export def "subscriptions-resource-groups-providers-microsoftalerts-management-smart-detector-alert-rules create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  alert_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,8 +256,8 @@ export def "subscriptions-resource-groups-providers-microsoftalerts-management-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.alertsManagement/smartDetectorAlertRules/($alertRuleName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, alert_rule_name: $alert_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.alertsManagement/smartDetectorAlertRules/{alert_rule_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

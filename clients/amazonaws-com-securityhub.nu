@@ -66,16 +66,16 @@ def base-url-completer [] { ["http://securityhub.us-east-1.amazonaws.com" "http:
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def VerificationState-completer [] { ["BENIGN_POSITIVE" "FALSE_POSITIVE" "TRUE_POSITIVE" "UNKNOWN"] }
-def ControlFindingGenerator-completer [] { ["SECURITY_CONTROL" "STANDARD_CONTROL"] }
-def AutoEnableStandards-completer [] { ["DEFAULT" "NONE"] }
-def RecordState-completer [] { ["ACTIVE" "ARCHIVED"] }
-def ControlStatus-completer [] { ["DISABLED" "ENABLED"] }
+def verification-state-completer [] { ["BENIGN_POSITIVE" "FALSE_POSITIVE" "TRUE_POSITIVE" "UNKNOWN"] }
+def control-finding-generator-completer [] { ["SECURITY_CONTROL" "STANDARD_CONTROL"] }
+def auto-enable-standards-completer [] { ["DEFAULT" "NONE"] }
+def record-state-completer [] { ["ACTIVE" "ARCHIVED"] }
+def control-status-completer [] { ["DISABLED" "ENABLED"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "administrator AcceptAdministratorInvitation" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "administrator post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +99,7 @@ export def commands []: nothing -> table {
 #
 # POST /administrator
 # operationId: AcceptAdministratorInvitation
-export def "administrator AcceptAdministratorInvitation" [
+export def "administrator post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,23 +108,23 @@ export def "administrator AcceptAdministratorInvitation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AdministratorId: string # The account ID of the Security Hub administrator account that sent the invitation.
-  InvitationId: string # The identifier of the invitation sent from the Security Hub administrator account.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  administrator_id: string # The account ID of the Security Hub administrator account that sent the invitation.
+  invitation_id: string # The identifier of the invitation sent from the Security Hub administrator account.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administrator")
-  let body = {AdministratorId: $AdministratorId, InvitationId: $InvitationId} | compact
+  let body = {"AdministratorId": $administrator_id, "InvitationId": $invitation_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -135,7 +135,7 @@ export def "administrator AcceptAdministratorInvitation" [
 #
 # GET /administrator
 # operationId: GetAdministratorAccount
-export def "administrator GetAdministratorAccount" [
+export def "administrator get-administrator-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -144,18 +144,18 @@ export def "administrator GetAdministratorAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Administrator: record<AccountId: record, InvitationId: record, InvitedAt: record, MemberStatus: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administrator")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -168,7 +168,7 @@ export def "administrator GetAdministratorAccount" [
 # DEPRECATED
 # operationId: AcceptInvitation
 @deprecated
-export def "master AcceptInvitation" [
+export def "master post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,23 +177,23 @@ export def "master AcceptInvitation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  MasterId: string # The account ID of the Security Hub administrator account that sent the invitation.
-  InvitationId: string # The identifier of the invitation sent from the Security Hub administrator account.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  master_id: string # The account ID of the Security Hub administrator account that sent the invitation.
+  invitation_id: string # The identifier of the invitation sent from the Security Hub administrator account.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/master")
-  let body = {MasterId: $MasterId, InvitationId: $InvitationId} | compact
+  let body = {"MasterId": $master_id, "InvitationId": $invitation_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -206,7 +206,7 @@ export def "master AcceptInvitation" [
 # DEPRECATED
 # operationId: GetMasterAccount
 @deprecated
-export def "master GetMasterAccount" [
+export def "master get-master-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,18 +215,18 @@ export def "master GetMasterAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Master: record<AccountId: record, InvitationId: record, InvitedAt: record, MemberStatus: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/master")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -237,7 +237,7 @@ export def "master GetMasterAccount" [
 #
 # POST /standards/deregister
 # operationId: BatchDisableStandards
-export def "standards-deregister BatchDisableStandards" [
+export def "standards-deregister post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,22 +246,22 @@ export def "standards-deregister BatchDisableStandards" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  StandardsSubscriptionArns: list # The ARNs of the standards subscriptions to disable.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  standards_subscription_arns: list # The ARNs of the standards subscriptions to disable.
 ]: any -> record<StandardsSubscriptions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/standards/deregister")
-  let body = {StandardsSubscriptionArns: $StandardsSubscriptionArns} | compact
+  let body = {"StandardsSubscriptionArns": $standards_subscription_arns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -273,7 +273,7 @@ export def "standards-deregister BatchDisableStandards" [
 # POST /standards/register
 # operationId: BatchEnableStandards
 # --StandardsSubscriptionRequests item shape: {StandardsArn: any, StandardsInput?: any}
-export def "standards-register BatchEnableStandards" [
+export def "standards-register post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,22 +282,22 @@ export def "standards-register BatchEnableStandards" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  StandardsSubscriptionRequests: list # The list of standards checks to enable. — item shape: {StandardsArn: any, StandardsInput?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  standards_subscription_requests: list # The list of standards checks to enable. — item shape: {StandardsArn: any, StandardsInput?: any}
 ]: any -> record<StandardsSubscriptions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/standards/register")
-  let body = {StandardsSubscriptionRequests: $StandardsSubscriptionRequests} | compact
+  let body = {"StandardsSubscriptionRequests": $standards_subscription_requests} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -308,7 +308,7 @@ export def "standards-register BatchEnableStandards" [
 #
 # POST /securityControls/batchGet
 # operationId: BatchGetSecurityControls
-export def "security-controls-batch-get BatchGetSecurityControls" [
+export def "security-controls-batch-get post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,22 +317,22 @@ export def "security-controls-batch-get BatchGetSecurityControls" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  SecurityControlIds: list #  A list of security controls (identified with <code>SecurityControlId</code>, <code>SecurityControlArn</code>, or a mix of both parameters). The security control ID or Amazon Resource Name (ARN) is the same across standards. 
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  security_control_ids: list #  A list of security controls (identified with <code>SecurityControlId</code>, <code>SecurityControlArn</code>, or a mix of both parameters). The security control ID or Amazon Resource Name (ARN) is the same across standards. 
 ]: any -> record<SecurityControls: record, UnprocessedIds: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/securityControls/batchGet")
-  let body = {SecurityControlIds: $SecurityControlIds} | compact
+  let body = {"SecurityControlIds": $security_control_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -344,7 +344,7 @@ export def "security-controls-batch-get BatchGetSecurityControls" [
 # POST /associations/batchGet
 # operationId: BatchGetStandardsControlAssociations
 # --StandardsControlAssociationIds item shape: {SecurityControlId: any, StandardsArn: any}
-export def "associations-batch-get BatchGetStandardsControlAssociations" [
+export def "associations-batch-get post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,22 +353,22 @@ export def "associations-batch-get BatchGetStandardsControlAssociations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  StandardsControlAssociationIds: list #  An array with one or more objects that includes a security control (identified with <code>SecurityControlId</code>, <code>SecurityControlArn</code>, or a mix of both parameters) and the Amazon Resource Name (ARN) of a standard. This field is used to query the enablement status of a control in a specified standard. The security control ID or ARN is the same across standards.  — item shape: {SecurityControlId: any, StandardsArn: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  standards_control_association_ids: list #  An array with one or more objects that includes a security control (identified with <code>SecurityControlId</code>, <code>SecurityControlArn</code>, or a mix of both parameters) and the Amazon Resource Name (ARN) of a standard. This field is used to query the enablement status of a control in a specified standard. The security control ID or ARN is the same across standards.  — item shape: {SecurityControlId: any, StandardsArn: any}
 ]: any -> record<StandardsControlAssociationDetails: record, UnprocessedAssociations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/associations/batchGet")
-  let body = {StandardsControlAssociationIds: $StandardsControlAssociationIds} | compact
+  let body = {"StandardsControlAssociationIds": $standards_control_association_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -380,7 +380,7 @@ export def "associations-batch-get BatchGetStandardsControlAssociations" [
 # POST /findings/import
 # operationId: BatchImportFindings
 # --Findings item shape: {SchemaVersion: any, Id: any, ProductArn: any, ProductName?: any, CompanyName?: any, Region?: any, GeneratorId: any, AwsAccountId: any, Types?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt: any, UpdatedAt: any, Severity?: any, Confidence?: any, Criticality?: any, Title: any, Description: any, Remediation?: any, SourceUrl?: any, ProductFields?: any, UserDefinedFields?: any, Malware?: any, Network?: any, NetworkPath?: any, Process?: any, Threats?: any, ThreatIntelIndicators?: any, Resources: any, Compliance?: any, VerificationState?: any, WorkflowState?: any, Workflow?: any, RecordState?: any, RelatedFindings?: any, Note?: any, Vulnerabilities?: any, PatchSummary?: any, Action?: any, FindingProviderFields?: any, Sample?: any}
-export def "findings-import BatchImportFindings" [
+export def "findings-import post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,22 +389,22 @@ export def "findings-import BatchImportFindings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Findings: list # A list of findings to import. To successfully import a finding, it must follow the <a href="https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-findings-format.html">Amazon Web Services Security Finding Format</a>. Maximum of 100 findings per request. — item shape: {SchemaVersion: any, Id: any, ProductArn: any, ProductName?: any, CompanyName?: any, Region?: any, GeneratorId: any, AwsAccountId: any, Types?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt: any, UpdatedAt: any, Severity?: any, Confidence?: any, Criticality?: any, Title: any, Description: any, Remediation?: any, SourceUrl?: any, ProductFields?: any, UserDefinedFields?: any, Malware?: any, Network?: any, NetworkPath?: any, Process?: any, Threats?: any, ThreatIntelIndicators?: any, Resources: any, Compliance?: any, VerificationState?: any, WorkflowState?: any, Workflow?: any, RecordState?: any, RelatedFindings?: any, Note?: any, Vulnerabilities?: any, PatchSummary?: any, Action?: any, FindingProviderFields?: any, Sample?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  findings: list # A list of findings to import. To successfully import a finding, it must follow the <a href="https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-findings-format.html">Amazon Web Services Security Finding Format</a>. Maximum of 100 findings per request. — item shape: {SchemaVersion: any, Id: any, ProductArn: any, ProductName?: any, CompanyName?: any, Region?: any, GeneratorId: any, AwsAccountId: any, Types?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt: any, UpdatedAt: any, Severity?: any, Confidence?: any, Criticality?: any, Title: any, Description: any, Remediation?: any, SourceUrl?: any, ProductFields?: any, UserDefinedFields?: any, Malware?: any, Network?: any, NetworkPath?: any, Process?: any, Threats?: any, ThreatIntelIndicators?: any, Resources: any, Compliance?: any, VerificationState?: any, WorkflowState?: any, Workflow?: any, RecordState?: any, RelatedFindings?: any, Note?: any, Vulnerabilities?: any, PatchSummary?: any, Action?: any, FindingProviderFields?: any, Sample?: any}
 ]: any -> record<FailedCount: record, SuccessCount: record, FailedFindings: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/findings/import")
-  let body = {Findings: $Findings} | compact
+  let body = {"Findings": $findings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -420,7 +420,7 @@ export def "findings-import BatchImportFindings" [
 # --Severity shape: {Normalized?: any, Product?: any, Label?: any}
 # --Workflow shape: {Status?: any}
 # --RelatedFindings item shape: {ProductArn: any, Id: any}
-export def "findings-batchupdate BatchUpdateFindings" [
+export def "findings-batchupdate patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,31 +429,31 @@ export def "findings-batchupdate BatchUpdateFindings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  FindingIdentifiers: list # <p>The list of findings to update. <code>BatchUpdateFindings</code> can be used to update up to 100 findings at a time.</p> <p>For each finding, the list provides the finding identifier and the ARN of the finding provider.</p> — item shape: {Id: any, ProductArn: any}
-  --Note: record # The updated note. — shape: {Text?: any, UpdatedBy?: any}
-  --Severity: record # Updates to the severity information for a finding. — shape: {Normalized?: any, Product?: any, Label?: any}
-  --VerificationState: string@VerificationState-completer # <p>Indicates the veracity of a finding.</p> <p>The available values for <code>VerificationState</code> are as follows.</p> <ul> <li> <p> <code>UNKNOWN</code> – The default disposition of a security finding</p> </li> <li> <p> <code>TRUE_POSITIVE</code> – The security finding is confirmed</p> </li> <li> <p> <code>FALSE_POSITIVE</code> – The security finding was determined to be a false alarm</p> </li> <li> <p> <code>BENIGN_POSITIVE</code> – A special case of <code>TRUE_POSITIVE</code> where the finding doesn't pose any threat, is expected, or both</p> </li> </ul>
-  --Confidence: int # <p>The updated value for the finding confidence. Confidence is defined as the likelihood that a finding accurately identifies the behavior or issue that it was intended to identify.</p> <p>Confidence is scored on a 0-100 basis using a ratio scale, where 0 means zero percent confidence and 100 means 100 percent confidence.</p>
-  --Criticality: int # <p>The updated value for the level of importance assigned to the resources associated with the findings.</p> <p>A score of 0 means that the underlying resources have no criticality, and a score of 100 is reserved for the most critical resources. </p>
-  --Types: list # <p>One or more finding types in the format of namespace/category/classifier that classify a finding.</p> <p>Valid namespace values are as follows.</p> <ul> <li> <p>Software and Configuration Checks</p> </li> <li> <p>TTPs</p> </li> <li> <p>Effects</p> </li> <li> <p>Unusual Behaviors</p> </li> <li> <p>Sensitive Data Identifications </p> </li> </ul>
-  --UserDefinedFields: record # A list of name/value string pairs associated with the finding. These are custom, user-defined fields added to a finding.
-  --Workflow: record # Used to update information about the investigation into the finding. — shape: {Status?: any}
-  --RelatedFindings: list # A list of findings that are related to the updated findings. — item shape: {ProductArn: any, Id: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  finding_identifiers: list # <p>The list of findings to update. <code>BatchUpdateFindings</code> can be used to update up to 100 findings at a time.</p> <p>For each finding, the list provides the finding identifier and the ARN of the finding provider.</p> — item shape: {Id: any, ProductArn: any}
+  --note: record # The updated note. — shape: {Text?: any, UpdatedBy?: any}
+  --severity: record # Updates to the severity information for a finding. — shape: {Normalized?: any, Product?: any, Label?: any}
+  --verification-state: string@verification-state-completer # <p>Indicates the veracity of a finding.</p> <p>The available values for <code>VerificationState</code> are as follows.</p> <ul> <li> <p> <code>UNKNOWN</code> – The default disposition of a security finding</p> </li> <li> <p> <code>TRUE_POSITIVE</code> – The security finding is confirmed</p> </li> <li> <p> <code>FALSE_POSITIVE</code> – The security finding was determined to be a false alarm</p> </li> <li> <p> <code>BENIGN_POSITIVE</code> – A special case of <code>TRUE_POSITIVE</code> where the finding doesn't pose any threat, is expected, or both</p> </li> </ul>
+  --confidence: int # <p>The updated value for the finding confidence. Confidence is defined as the likelihood that a finding accurately identifies the behavior or issue that it was intended to identify.</p> <p>Confidence is scored on a 0-100 basis using a ratio scale, where 0 means zero percent confidence and 100 means 100 percent confidence.</p>
+  --criticality: int # <p>The updated value for the level of importance assigned to the resources associated with the findings.</p> <p>A score of 0 means that the underlying resources have no criticality, and a score of 100 is reserved for the most critical resources. </p>
+  --types: list # <p>One or more finding types in the format of namespace/category/classifier that classify a finding.</p> <p>Valid namespace values are as follows.</p> <ul> <li> <p>Software and Configuration Checks</p> </li> <li> <p>TTPs</p> </li> <li> <p>Effects</p> </li> <li> <p>Unusual Behaviors</p> </li> <li> <p>Sensitive Data Identifications </p> </li> </ul>
+  --user-defined-fields: record # A list of name/value string pairs associated with the finding. These are custom, user-defined fields added to a finding.
+  --workflow: record # Used to update information about the investigation into the finding. — shape: {Status?: any}
+  --related-findings: list # A list of findings that are related to the updated findings. — item shape: {ProductArn: any, Id: any}
 ]: any -> record<ProcessedFindings: record, UnprocessedFindings: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/findings/batchupdate")
-  let body = {FindingIdentifiers: $FindingIdentifiers, Note: $Note, Severity: $Severity, VerificationState: $VerificationState, Confidence: $Confidence, Criticality: $Criticality, Types: $Types, UserDefinedFields: $UserDefinedFields, Workflow: $Workflow, RelatedFindings: $RelatedFindings} | compact
+  let body = {"FindingIdentifiers": $finding_identifiers, "Note": $note, "Severity": $severity, "VerificationState": $verification_state, "Confidence": $confidence, "Criticality": $criticality, "Types": $types, "UserDefinedFields": $user_defined_fields, "Workflow": $workflow, "RelatedFindings": $related_findings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -465,7 +465,7 @@ export def "findings-batchupdate BatchUpdateFindings" [
 # PATCH /associations
 # operationId: BatchUpdateStandardsControlAssociations
 # --StandardsControlAssociationUpdates item shape: {StandardsArn: any, SecurityControlId: any, AssociationStatus: any, UpdatedReason?: any}
-export def "associations BatchUpdateStandardsControlAssociations" [
+export def "associations patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -474,22 +474,22 @@ export def "associations BatchUpdateStandardsControlAssociations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  StandardsControlAssociationUpdates: list #  Updates the enablement status of a security control in a specified standard.  — item shape: {StandardsArn: any, SecurityControlId: any, AssociationStatus: any, UpdatedReason?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  standards_control_association_updates: list #  Updates the enablement status of a security control in a specified standard.  — item shape: {StandardsArn: any, SecurityControlId: any, AssociationStatus: any, UpdatedReason?: any}
 ]: any -> record<UnprocessedAssociationUpdates: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/associations")
-  let body = {StandardsControlAssociationUpdates: $StandardsControlAssociationUpdates} | compact
+  let body = {"StandardsControlAssociationUpdates": $standards_control_association_updates} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -500,7 +500,7 @@ export def "associations BatchUpdateStandardsControlAssociations" [
 #
 # POST /actionTargets
 # operationId: CreateActionTarget
-export def "action-targets CreateActionTarget" [
+export def "action-targets create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,24 +509,24 @@ export def "action-targets CreateActionTarget" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Name: string # The name of the custom action target. Can contain up to 20 characters.
-  Description: string # The description for the custom action target.
-  Id: string # The ID for the custom action target. Can contain up to 20 alphanumeric characters.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  name: string # The name of the custom action target. Can contain up to 20 characters.
+  description: string # The description for the custom action target.
+  id: string # The ID for the custom action target. Can contain up to 20 alphanumeric characters.
 ]: any -> record<ActionTargetArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/actionTargets")
-  let body = {Name: $Name, Description: $Description, Id: $Id} | compact
+  let body = {"Name": $name, "Description": $description, "Id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -537,7 +537,7 @@ export def "action-targets CreateActionTarget" [
 #
 # POST /findingAggregator/create
 # operationId: CreateFindingAggregator
-export def "finding-aggregator-create CreateFindingAggregator" [
+export def "finding-aggregator-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,23 +546,23 @@ export def "finding-aggregator-create CreateFindingAggregator" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  RegionLinkingMode: string # <p>Indicates whether to aggregate findings from all of the available Regions in the current partition. Also determines whether to automatically aggregate findings from new Regions as Security Hub supports them and you opt into them.</p> <p>The selected option also determines how to use the Regions provided in the Regions list.</p> <p>The options are as follows:</p> <ul> <li> <p> <code>ALL_REGIONS</code> - Indicates to aggregate findings from all of the Regions where Security Hub is enabled. When you choose this option, Security Hub also automatically aggregates findings from new Regions as Security Hub supports them and you opt into them. </p> </li> <li> <p> <code>ALL_REGIONS_EXCEPT_SPECIFIED</code> - Indicates to aggregate findings from all of the Regions where Security Hub is enabled, except for the Regions listed in the <code>Regions</code> parameter. When you choose this option, Security Hub also automatically aggregates findings from new Regions as Security Hub supports them and you opt into them. </p> </li> <li> <p> <code>SPECIFIED_REGIONS</code> - Indicates to aggregate findings only from the Regions listed in the <code>Regions</code> parameter. Security Hub does not automatically aggregate findings from new Regions. </p> </li> </ul>
-  --Regions: list # <p>If <code>RegionLinkingMode</code> is <code>ALL_REGIONS_EXCEPT_SPECIFIED</code>, then this is a space-separated list of Regions that do not aggregate findings to the aggregation Region.</p> <p>If <code>RegionLinkingMode</code> is <code>SPECIFIED_REGIONS</code>, then this is a space-separated list of Regions that do aggregate findings to the aggregation Region. </p>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  region_linking_mode: string # <p>Indicates whether to aggregate findings from all of the available Regions in the current partition. Also determines whether to automatically aggregate findings from new Regions as Security Hub supports them and you opt into them.</p> <p>The selected option also determines how to use the Regions provided in the Regions list.</p> <p>The options are as follows:</p> <ul> <li> <p> <code>ALL_REGIONS</code> - Indicates to aggregate findings from all of the Regions where Security Hub is enabled. When you choose this option, Security Hub also automatically aggregates findings from new Regions as Security Hub supports them and you opt into them. </p> </li> <li> <p> <code>ALL_REGIONS_EXCEPT_SPECIFIED</code> - Indicates to aggregate findings from all of the Regions where Security Hub is enabled, except for the Regions listed in the <code>Regions</code> parameter. When you choose this option, Security Hub also automatically aggregates findings from new Regions as Security Hub supports them and you opt into them. </p> </li> <li> <p> <code>SPECIFIED_REGIONS</code> - Indicates to aggregate findings only from the Regions listed in the <code>Regions</code> parameter. Security Hub does not automatically aggregate findings from new Regions. </p> </li> </ul>
+  --regions: list # <p>If <code>RegionLinkingMode</code> is <code>ALL_REGIONS_EXCEPT_SPECIFIED</code>, then this is a space-separated list of Regions that do not aggregate findings to the aggregation Region.</p> <p>If <code>RegionLinkingMode</code> is <code>SPECIFIED_REGIONS</code>, then this is a space-separated list of Regions that do aggregate findings to the aggregation Region. </p>
 ]: any -> record<FindingAggregatorArn: record, FindingAggregationRegion: record, RegionLinkingMode: record, Regions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/findingAggregator/create")
-  let body = {RegionLinkingMode: $RegionLinkingMode, Regions: $Regions} | compact
+  let body = {"RegionLinkingMode": $region_linking_mode, "Regions": $regions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -574,7 +574,7 @@ export def "finding-aggregator-create CreateFindingAggregator" [
 # POST /insights
 # operationId: CreateInsight
 # --Filters shape: {ProductArn?: any, AwsAccountId?: any, Id?: any, GeneratorId?: any, Region?: any, Type?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt?: any, UpdatedAt?: any, SeverityProduct?: any, SeverityNormalized?: any, SeverityLabel?: any, Confidence?: any, Criticality?: any, Title?: any, Description?: any, RecommendationText?: any, SourceUrl?: any, ProductFields?: any, ProductName?: any, CompanyName?: any, UserDefinedFields?: any, MalwareName?: any, MalwareType?: any, MalwarePath?: any, MalwareState?: any, NetworkDirection?: any, NetworkProtocol?: any, NetworkSourceIpV4?: any, NetworkSourceIpV6?: any, NetworkSourcePort?: any, NetworkSourceDomain?: any, NetworkSourceMac?: any, NetworkDestinationIpV4?: any, NetworkDestinationIpV6?: any, NetworkDestinationPort?: any, NetworkDestinationDomain?: any, ProcessName?: any, ProcessPath?: any, ProcessPid?: any, ProcessParentPid?: any, ProcessLaunchedAt?: any, ProcessTerminatedAt?: any, ThreatIntelIndicatorType?: any, ThreatIntelIndicatorValue?: any, ThreatIntelIndicatorCategory?: any, ThreatIntelIndicatorLastObservedAt?: any, ThreatIntelIndicatorSource?: any, ThreatIntelIndicatorSourceUrl?: any, ResourceType?: any, ResourceId?: any, ResourcePartition?: any, ResourceRegion?: any, ResourceTags?: any, ResourceAwsEc2InstanceType?: any, ResourceAwsEc2InstanceImageId?: any, ResourceAwsEc2InstanceIpV4Addresses?: any, ResourceAwsEc2InstanceIpV6Addresses?: any, ResourceAwsEc2InstanceKeyName?: any, ResourceAwsEc2InstanceIamInstanceProfileArn?: any, ResourceAwsEc2InstanceVpcId?: any, ResourceAwsEc2InstanceSubnetId?: any, ResourceAwsEc2InstanceLaunchedAt?: any, ResourceAwsS3BucketOwnerId?: any, ResourceAwsS3BucketOwnerName?: any, ResourceAwsIamAccessKeyUserName?: any, ResourceAwsIamAccessKeyPrincipalName?: any, ResourceAwsIamAccessKeyStatus?: any, ResourceAwsIamAccessKeyCreatedAt?: any, ResourceAwsIamUserUserName?: any, ResourceContainerName?: any, ResourceContainerImageId?: any, ResourceContainerImageName?: any, ResourceContainerLaunchedAt?: any, ResourceDetailsOther?: any, ComplianceStatus?: any, VerificationState?: any, WorkflowState?: any, WorkflowStatus?: any, RecordState?: any, RelatedFindingsProductArn?: any, RelatedFindingsId?: any, NoteText?: any, NoteUpdatedAt?: any, NoteUpdatedBy?: any, Keyword?: any, FindingProviderFieldsConfidence?: any, FindingProviderFieldsCriticality?: any, FindingProviderFieldsRelatedFindingsId?: any, FindingProviderFieldsRelatedFindingsProductArn?: any, FindingProviderFieldsSeverityLabel?: any, FindingProviderFieldsSeverityOriginal?: any, FindingProviderFieldsTypes?: any, Sample?: any, ComplianceSecurityControlId?: any, ComplianceAssociatedStandardsId?: any}
-export def "insights CreateInsight" [
+export def "insights create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,24 +583,24 @@ export def "insights CreateInsight" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Name: string # The name of the custom insight to create.
-  Filters: record # <p>A collection of attributes that are applied to all active Security Hub-aggregated findings and that result in a subset of findings that are included in this insight.</p> <p>You can filter by up to 10 finding attributes. For each attribute, you can provide up to 20 filter values.</p> — shape: {ProductArn?: any, AwsAccountId?: any, Id?: any, GeneratorId?: any, Region?: any, Type?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt?: any, UpdatedAt?: any, SeverityProduct?: any, SeverityNormalized?: any, SeverityLabel?: any, Confidence?: any, Criticality?: any, Title?: any, Description?: any, RecommendationText?: any, SourceUrl?: any, ProductFields?: any, ProductName?: any, CompanyName?: any, UserDefinedFields?: any, MalwareName?: any, MalwareType?: any, MalwarePath?: any, MalwareState?: any, NetworkDirection?: any, NetworkProtocol?: any, NetworkSourceIpV4?: any, NetworkSourceIpV6?: any, NetworkSourcePort?: any, NetworkSourceDomain?: any, NetworkSourceMac?: any, NetworkDestinationIpV4?: any, NetworkDestinationIpV6?: any, NetworkDestinationPort?: any, NetworkDestinationDomain?: any, ProcessName?: any, ProcessPath?: any, ProcessPid?: any, ProcessParentPid?: any, ProcessLaunchedAt?: any, ProcessTerminatedAt?: any, ThreatIntelIndicatorType?: any, ThreatIntelIndicatorValue?: any, ThreatIntelIndicatorCategory?: any, ThreatIntelIndicatorLastObservedAt?: any, ThreatIntelIndicatorSource?: any, ThreatIntelIndicatorSourceUrl?: any, ResourceType?: any, ResourceId?: any, ResourcePartition?: any, ResourceRegion?: any, ResourceTags?: any, ResourceAwsEc2InstanceType?: any, ResourceAwsEc2InstanceImageId?: any, ResourceAwsEc2InstanceIpV4Addresses?: any, ResourceAwsEc2InstanceIpV6Addresses?: any, ResourceAwsEc2InstanceKeyName?: any, ResourceAwsEc2InstanceIamInstanceProfileArn?: any, ResourceAwsEc2InstanceVpcId?: any, ResourceAwsEc2InstanceSubnetId?: any, ResourceAwsEc2InstanceLaunchedAt?: any, ResourceAwsS3BucketOwnerId?: any, ResourceAwsS3BucketOwnerName?: any, ResourceAwsIamAccessKeyUserName?: any, ResourceAwsIamAccessKeyPrincipalName?: any, ResourceAwsIamAccessKeyStatus?: any, ResourceAwsIamAccessKeyCreatedAt?: any, ResourceAwsIamUserUserName?: any, ResourceContainerName?: any, ResourceContainerImageId?: any, ResourceContainerImageName?: any, ResourceContainerLaunchedAt?: any, ResourceDetailsOther?: any, ComplianceStatus?: any, VerificationState?: any, WorkflowState?: any, WorkflowStatus?: any, RecordState?: any, RelatedFindingsProductArn?: any, RelatedFindingsId?: any, NoteText?: any, NoteUpdatedAt?: any, NoteUpdatedBy?: any, Keyword?: any, FindingProviderFieldsConfidence?: any, FindingProviderFieldsCriticality?: any, FindingProviderFieldsRelatedFindingsId?: any, FindingProviderFieldsRelatedFindingsProductArn?: any, FindingProviderFieldsSeverityLabel?: any, FindingProviderFieldsSeverityOriginal?: any, FindingProviderFieldsTypes?: any, Sample?: any, ComplianceSecurityControlId?: any, ComplianceAssociatedStandardsId?: any}
-  GroupByAttribute: string # The attribute used to group the findings for the insight. The grouping attribute identifies the type of item that the insight applies to. For example, if an insight is grouped by resource identifier, then the insight produces a list of resource identifiers.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  name: string # The name of the custom insight to create.
+  filters: record # <p>A collection of attributes that are applied to all active Security Hub-aggregated findings and that result in a subset of findings that are included in this insight.</p> <p>You can filter by up to 10 finding attributes. For each attribute, you can provide up to 20 filter values.</p> — shape: {ProductArn?: any, AwsAccountId?: any, Id?: any, GeneratorId?: any, Region?: any, Type?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt?: any, UpdatedAt?: any, SeverityProduct?: any, SeverityNormalized?: any, SeverityLabel?: any, Confidence?: any, Criticality?: any, Title?: any, Description?: any, RecommendationText?: any, SourceUrl?: any, ProductFields?: any, ProductName?: any, CompanyName?: any, UserDefinedFields?: any, MalwareName?: any, MalwareType?: any, MalwarePath?: any, MalwareState?: any, NetworkDirection?: any, NetworkProtocol?: any, NetworkSourceIpV4?: any, NetworkSourceIpV6?: any, NetworkSourcePort?: any, NetworkSourceDomain?: any, NetworkSourceMac?: any, NetworkDestinationIpV4?: any, NetworkDestinationIpV6?: any, NetworkDestinationPort?: any, NetworkDestinationDomain?: any, ProcessName?: any, ProcessPath?: any, ProcessPid?: any, ProcessParentPid?: any, ProcessLaunchedAt?: any, ProcessTerminatedAt?: any, ThreatIntelIndicatorType?: any, ThreatIntelIndicatorValue?: any, ThreatIntelIndicatorCategory?: any, ThreatIntelIndicatorLastObservedAt?: any, ThreatIntelIndicatorSource?: any, ThreatIntelIndicatorSourceUrl?: any, ResourceType?: any, ResourceId?: any, ResourcePartition?: any, ResourceRegion?: any, ResourceTags?: any, ResourceAwsEc2InstanceType?: any, ResourceAwsEc2InstanceImageId?: any, ResourceAwsEc2InstanceIpV4Addresses?: any, ResourceAwsEc2InstanceIpV6Addresses?: any, ResourceAwsEc2InstanceKeyName?: any, ResourceAwsEc2InstanceIamInstanceProfileArn?: any, ResourceAwsEc2InstanceVpcId?: any, ResourceAwsEc2InstanceSubnetId?: any, ResourceAwsEc2InstanceLaunchedAt?: any, ResourceAwsS3BucketOwnerId?: any, ResourceAwsS3BucketOwnerName?: any, ResourceAwsIamAccessKeyUserName?: any, ResourceAwsIamAccessKeyPrincipalName?: any, ResourceAwsIamAccessKeyStatus?: any, ResourceAwsIamAccessKeyCreatedAt?: any, ResourceAwsIamUserUserName?: any, ResourceContainerName?: any, ResourceContainerImageId?: any, ResourceContainerImageName?: any, ResourceContainerLaunchedAt?: any, ResourceDetailsOther?: any, ComplianceStatus?: any, VerificationState?: any, WorkflowState?: any, WorkflowStatus?: any, RecordState?: any, RelatedFindingsProductArn?: any, RelatedFindingsId?: any, NoteText?: any, NoteUpdatedAt?: any, NoteUpdatedBy?: any, Keyword?: any, FindingProviderFieldsConfidence?: any, FindingProviderFieldsCriticality?: any, FindingProviderFieldsRelatedFindingsId?: any, FindingProviderFieldsRelatedFindingsProductArn?: any, FindingProviderFieldsSeverityLabel?: any, FindingProviderFieldsSeverityOriginal?: any, FindingProviderFieldsTypes?: any, Sample?: any, ComplianceSecurityControlId?: any, ComplianceAssociatedStandardsId?: any}
+  group_by_attribute: string # The attribute used to group the findings for the insight. The grouping attribute identifies the type of item that the insight applies to. For example, if an insight is grouped by resource identifier, then the insight produces a list of resource identifiers.
 ]: any -> record<InsightArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/insights")
-  let body = {Name: $Name, Filters: $Filters, GroupByAttribute: $GroupByAttribute} | compact
+  let body = {"Name": $name, "Filters": $filters, "GroupByAttribute": $group_by_attribute} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -612,7 +612,7 @@ export def "insights CreateInsight" [
 # POST /members
 # operationId: CreateMembers
 # --AccountDetails item shape: {AccountId: any, Email?: any}
-export def "members CreateMembers" [
+export def "members create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,22 +621,22 @@ export def "members CreateMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AccountDetails: list # The list of accounts to associate with the Security Hub administrator account. For each account, the list includes the account ID and optionally the email address. — item shape: {AccountId: any, Email?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  account_details: list # The list of accounts to associate with the Security Hub administrator account. For each account, the list includes the account ID and optionally the email address. — item shape: {AccountId: any, Email?: any}
 ]: any -> record<UnprocessedAccounts: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/members")
-  let body = {AccountDetails: $AccountDetails} | compact
+  let body = {"AccountDetails": $account_details} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -647,7 +647,7 @@ export def "members CreateMembers" [
 #
 # GET /members
 # operationId: ListMembers
-export def "members ListMembers" [
+export def "members list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,22 +656,22 @@ export def "members ListMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --OnlyAssociated: oneof<nothing, bool> # <p>Specifies which member accounts to include in the response based on their relationship status with the administrator account. The default value is <code>TRUE</code>.</p> <p>If <code>OnlyAssociated</code> is set to <code>TRUE</code>, the response includes member accounts whose relationship status with the administrator account is set to <code>ENABLED</code>.</p> <p>If <code>OnlyAssociated</code> is set to <code>FALSE</code>, the response includes all existing member accounts. </p>
-  --MaxResults: int # The maximum number of items to return in the response. 
-  --NextToken: string # <p>The token that is required for pagination. On your first call to the <code>ListMembers</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --only-associated: oneof<nothing, bool> # <p>Specifies which member accounts to include in the response based on their relationship status with the administrator account. The default value is <code>TRUE</code>.</p> <p>If <code>OnlyAssociated</code> is set to <code>TRUE</code>, the response includes member accounts whose relationship status with the administrator account is set to <code>ENABLED</code>.</p> <p>If <code>OnlyAssociated</code> is set to <code>FALSE</code>, the response includes all existing member accounts. </p>
+  --max-results: int # The maximum number of items to return in the response. 
+  --next-token: string # <p>The token that is required for pagination. On your first call to the <code>ListMembers</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Members: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "OnlyAssociated" $OnlyAssociated "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "OnlyAssociated" $only_associated "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/members" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -682,7 +682,7 @@ export def "members ListMembers" [
 #
 # POST /invitations/decline
 # operationId: DeclineInvitations
-export def "invitations-decline DeclineInvitations" [
+export def "invitations-decline post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -691,22 +691,22 @@ export def "invitations-decline DeclineInvitations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AccountIds: list # The list of prospective member account IDs for which to decline an invitation.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  account_ids: list # The list of prospective member account IDs for which to decline an invitation.
 ]: any -> record<UnprocessedAccounts: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invitations/decline")
-  let body = {AccountIds: $AccountIds} | compact
+  let body = {"AccountIds": $account_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -717,8 +717,8 @@ export def "invitations-decline DeclineInvitations" [
 #
 # DELETE /actionTargets/{ActionTargetArn}
 # operationId: DeleteActionTarget
-export def "action-targets DeleteActionTarget" [
-  ActionTargetArn: string
+export def "action-targets delete" [
+  action_target_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -727,18 +727,18 @@ export def "action-targets DeleteActionTarget" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ActionTargetArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/actionTargets/($ActionTargetArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({action_target_arn: $action_target_arn} | format pattern "/actionTargets/{action_target_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -749,8 +749,8 @@ export def "action-targets DeleteActionTarget" [
 #
 # PATCH /actionTargets/{ActionTargetArn}
 # operationId: UpdateActionTarget
-export def "action-targets UpdateActionTarget" [
-  ActionTargetArn: string
+export def "action-targets update" [
+  action_target_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,23 +759,23 @@ export def "action-targets UpdateActionTarget" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --Name: string # The updated name of the custom action target.
-  --Description: string # The updated description for the custom action target.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --name: string # The updated name of the custom action target.
+  --description: string # The updated description for the custom action target.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/actionTargets/($ActionTargetArn)")
-  let body = {Name: $Name, Description: $Description} | compact
+  let full_url = (build-url $base ({action_target_arn: $action_target_arn} | format pattern "/actionTargets/{action_target_arn}"))
+  let body = {"Name": $name, "Description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -786,8 +786,8 @@ export def "action-targets UpdateActionTarget" [
 #
 # DELETE /findingAggregator/delete/{FindingAggregatorArn}
 # operationId: DeleteFindingAggregator
-export def "finding-aggregator-delete DeleteFindingAggregator" [
-  FindingAggregatorArn: string
+export def "finding-aggregator-delete delete" [
+  finding_aggregator_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,18 +796,18 @@ export def "finding-aggregator-delete DeleteFindingAggregator" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/findingAggregator/delete/($FindingAggregatorArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({finding_aggregator_arn: $finding_aggregator_arn} | format pattern "/findingAggregator/delete/{finding_aggregator_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -818,8 +818,8 @@ export def "finding-aggregator-delete DeleteFindingAggregator" [
 #
 # DELETE /insights/{InsightArn}
 # operationId: DeleteInsight
-export def "insights DeleteInsight" [
-  InsightArn: string
+export def "insights delete" [
+  insight_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -828,18 +828,18 @@ export def "insights DeleteInsight" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<InsightArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/insights/($InsightArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({insight_arn: $insight_arn} | format pattern "/insights/{insight_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -851,8 +851,8 @@ export def "insights DeleteInsight" [
 # PATCH /insights/{InsightArn}
 # operationId: UpdateInsight
 # --Filters shape: {ProductArn?: any, AwsAccountId?: any, Id?: any, GeneratorId?: any, Region?: any, Type?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt?: any, UpdatedAt?: any, SeverityProduct?: any, SeverityNormalized?: any, SeverityLabel?: any, Confidence?: any, Criticality?: any, Title?: any, Description?: any, RecommendationText?: any, SourceUrl?: any, ProductFields?: any, ProductName?: any, CompanyName?: any, UserDefinedFields?: any, MalwareName?: any, MalwareType?: any, MalwarePath?: any, MalwareState?: any, NetworkDirection?: any, NetworkProtocol?: any, NetworkSourceIpV4?: any, NetworkSourceIpV6?: any, NetworkSourcePort?: any, NetworkSourceDomain?: any, NetworkSourceMac?: any, NetworkDestinationIpV4?: any, NetworkDestinationIpV6?: any, NetworkDestinationPort?: any, NetworkDestinationDomain?: any, ProcessName?: any, ProcessPath?: any, ProcessPid?: any, ProcessParentPid?: any, ProcessLaunchedAt?: any, ProcessTerminatedAt?: any, ThreatIntelIndicatorType?: any, ThreatIntelIndicatorValue?: any, ThreatIntelIndicatorCategory?: any, ThreatIntelIndicatorLastObservedAt?: any, ThreatIntelIndicatorSource?: any, ThreatIntelIndicatorSourceUrl?: any, ResourceType?: any, ResourceId?: any, ResourcePartition?: any, ResourceRegion?: any, ResourceTags?: any, ResourceAwsEc2InstanceType?: any, ResourceAwsEc2InstanceImageId?: any, ResourceAwsEc2InstanceIpV4Addresses?: any, ResourceAwsEc2InstanceIpV6Addresses?: any, ResourceAwsEc2InstanceKeyName?: any, ResourceAwsEc2InstanceIamInstanceProfileArn?: any, ResourceAwsEc2InstanceVpcId?: any, ResourceAwsEc2InstanceSubnetId?: any, ResourceAwsEc2InstanceLaunchedAt?: any, ResourceAwsS3BucketOwnerId?: any, ResourceAwsS3BucketOwnerName?: any, ResourceAwsIamAccessKeyUserName?: any, ResourceAwsIamAccessKeyPrincipalName?: any, ResourceAwsIamAccessKeyStatus?: any, ResourceAwsIamAccessKeyCreatedAt?: any, ResourceAwsIamUserUserName?: any, ResourceContainerName?: any, ResourceContainerImageId?: any, ResourceContainerImageName?: any, ResourceContainerLaunchedAt?: any, ResourceDetailsOther?: any, ComplianceStatus?: any, VerificationState?: any, WorkflowState?: any, WorkflowStatus?: any, RecordState?: any, RelatedFindingsProductArn?: any, RelatedFindingsId?: any, NoteText?: any, NoteUpdatedAt?: any, NoteUpdatedBy?: any, Keyword?: any, FindingProviderFieldsConfidence?: any, FindingProviderFieldsCriticality?: any, FindingProviderFieldsRelatedFindingsId?: any, FindingProviderFieldsRelatedFindingsProductArn?: any, FindingProviderFieldsSeverityLabel?: any, FindingProviderFieldsSeverityOriginal?: any, FindingProviderFieldsTypes?: any, Sample?: any, ComplianceSecurityControlId?: any, ComplianceAssociatedStandardsId?: any}
-export def "insights UpdateInsight" [
-  InsightArn: string
+export def "insights update" [
+  insight_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -861,24 +861,24 @@ export def "insights UpdateInsight" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --Name: string # The updated name for the insight.
-  --Filters: record # <p>A collection of attributes that are applied to all active Security Hub-aggregated findings and that result in a subset of findings that are included in this insight.</p> <p>You can filter by up to 10 finding attributes. For each attribute, you can provide up to 20 filter values.</p> — shape: {ProductArn?: any, AwsAccountId?: any, Id?: any, GeneratorId?: any, Region?: any, Type?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt?: any, UpdatedAt?: any, SeverityProduct?: any, SeverityNormalized?: any, SeverityLabel?: any, Confidence?: any, Criticality?: any, Title?: any, Description?: any, RecommendationText?: any, SourceUrl?: any, ProductFields?: any, ProductName?: any, CompanyName?: any, UserDefinedFields?: any, MalwareName?: any, MalwareType?: any, MalwarePath?: any, MalwareState?: any, NetworkDirection?: any, NetworkProtocol?: any, NetworkSourceIpV4?: any, NetworkSourceIpV6?: any, NetworkSourcePort?: any, NetworkSourceDomain?: any, NetworkSourceMac?: any, NetworkDestinationIpV4?: any, NetworkDestinationIpV6?: any, NetworkDestinationPort?: any, NetworkDestinationDomain?: any, ProcessName?: any, ProcessPath?: any, ProcessPid?: any, ProcessParentPid?: any, ProcessLaunchedAt?: any, ProcessTerminatedAt?: any, ThreatIntelIndicatorType?: any, ThreatIntelIndicatorValue?: any, ThreatIntelIndicatorCategory?: any, ThreatIntelIndicatorLastObservedAt?: any, ThreatIntelIndicatorSource?: any, ThreatIntelIndicatorSourceUrl?: any, ResourceType?: any, ResourceId?: any, ResourcePartition?: any, ResourceRegion?: any, ResourceTags?: any, ResourceAwsEc2InstanceType?: any, ResourceAwsEc2InstanceImageId?: any, ResourceAwsEc2InstanceIpV4Addresses?: any, ResourceAwsEc2InstanceIpV6Addresses?: any, ResourceAwsEc2InstanceKeyName?: any, ResourceAwsEc2InstanceIamInstanceProfileArn?: any, ResourceAwsEc2InstanceVpcId?: any, ResourceAwsEc2InstanceSubnetId?: any, ResourceAwsEc2InstanceLaunchedAt?: any, ResourceAwsS3BucketOwnerId?: any, ResourceAwsS3BucketOwnerName?: any, ResourceAwsIamAccessKeyUserName?: any, ResourceAwsIamAccessKeyPrincipalName?: any, ResourceAwsIamAccessKeyStatus?: any, ResourceAwsIamAccessKeyCreatedAt?: any, ResourceAwsIamUserUserName?: any, ResourceContainerName?: any, ResourceContainerImageId?: any, ResourceContainerImageName?: any, ResourceContainerLaunchedAt?: any, ResourceDetailsOther?: any, ComplianceStatus?: any, VerificationState?: any, WorkflowState?: any, WorkflowStatus?: any, RecordState?: any, RelatedFindingsProductArn?: any, RelatedFindingsId?: any, NoteText?: any, NoteUpdatedAt?: any, NoteUpdatedBy?: any, Keyword?: any, FindingProviderFieldsConfidence?: any, FindingProviderFieldsCriticality?: any, FindingProviderFieldsRelatedFindingsId?: any, FindingProviderFieldsRelatedFindingsProductArn?: any, FindingProviderFieldsSeverityLabel?: any, FindingProviderFieldsSeverityOriginal?: any, FindingProviderFieldsTypes?: any, Sample?: any, ComplianceSecurityControlId?: any, ComplianceAssociatedStandardsId?: any}
-  --GroupByAttribute: string # The updated <code>GroupBy</code> attribute that defines this insight.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --name: string # The updated name for the insight.
+  --filters: record # <p>A collection of attributes that are applied to all active Security Hub-aggregated findings and that result in a subset of findings that are included in this insight.</p> <p>You can filter by up to 10 finding attributes. For each attribute, you can provide up to 20 filter values.</p> — shape: {ProductArn?: any, AwsAccountId?: any, Id?: any, GeneratorId?: any, Region?: any, Type?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt?: any, UpdatedAt?: any, SeverityProduct?: any, SeverityNormalized?: any, SeverityLabel?: any, Confidence?: any, Criticality?: any, Title?: any, Description?: any, RecommendationText?: any, SourceUrl?: any, ProductFields?: any, ProductName?: any, CompanyName?: any, UserDefinedFields?: any, MalwareName?: any, MalwareType?: any, MalwarePath?: any, MalwareState?: any, NetworkDirection?: any, NetworkProtocol?: any, NetworkSourceIpV4?: any, NetworkSourceIpV6?: any, NetworkSourcePort?: any, NetworkSourceDomain?: any, NetworkSourceMac?: any, NetworkDestinationIpV4?: any, NetworkDestinationIpV6?: any, NetworkDestinationPort?: any, NetworkDestinationDomain?: any, ProcessName?: any, ProcessPath?: any, ProcessPid?: any, ProcessParentPid?: any, ProcessLaunchedAt?: any, ProcessTerminatedAt?: any, ThreatIntelIndicatorType?: any, ThreatIntelIndicatorValue?: any, ThreatIntelIndicatorCategory?: any, ThreatIntelIndicatorLastObservedAt?: any, ThreatIntelIndicatorSource?: any, ThreatIntelIndicatorSourceUrl?: any, ResourceType?: any, ResourceId?: any, ResourcePartition?: any, ResourceRegion?: any, ResourceTags?: any, ResourceAwsEc2InstanceType?: any, ResourceAwsEc2InstanceImageId?: any, ResourceAwsEc2InstanceIpV4Addresses?: any, ResourceAwsEc2InstanceIpV6Addresses?: any, ResourceAwsEc2InstanceKeyName?: any, ResourceAwsEc2InstanceIamInstanceProfileArn?: any, ResourceAwsEc2InstanceVpcId?: any, ResourceAwsEc2InstanceSubnetId?: any, ResourceAwsEc2InstanceLaunchedAt?: any, ResourceAwsS3BucketOwnerId?: any, ResourceAwsS3BucketOwnerName?: any, ResourceAwsIamAccessKeyUserName?: any, ResourceAwsIamAccessKeyPrincipalName?: any, ResourceAwsIamAccessKeyStatus?: any, ResourceAwsIamAccessKeyCreatedAt?: any, ResourceAwsIamUserUserName?: any, ResourceContainerName?: any, ResourceContainerImageId?: any, ResourceContainerImageName?: any, ResourceContainerLaunchedAt?: any, ResourceDetailsOther?: any, ComplianceStatus?: any, VerificationState?: any, WorkflowState?: any, WorkflowStatus?: any, RecordState?: any, RelatedFindingsProductArn?: any, RelatedFindingsId?: any, NoteText?: any, NoteUpdatedAt?: any, NoteUpdatedBy?: any, Keyword?: any, FindingProviderFieldsConfidence?: any, FindingProviderFieldsCriticality?: any, FindingProviderFieldsRelatedFindingsId?: any, FindingProviderFieldsRelatedFindingsProductArn?: any, FindingProviderFieldsSeverityLabel?: any, FindingProviderFieldsSeverityOriginal?: any, FindingProviderFieldsTypes?: any, Sample?: any, ComplianceSecurityControlId?: any, ComplianceAssociatedStandardsId?: any}
+  --group-by-attribute: string # The updated <code>GroupBy</code> attribute that defines this insight.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/insights/($InsightArn)")
-  let body = {Name: $Name, Filters: $Filters, GroupByAttribute: $GroupByAttribute} | compact
+  let full_url = (build-url $base ({insight_arn: $insight_arn} | format pattern "/insights/{insight_arn}"))
+  let body = {"Name": $name, "Filters": $filters, "GroupByAttribute": $group_by_attribute} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -889,7 +889,7 @@ export def "insights UpdateInsight" [
 #
 # POST /invitations/delete
 # operationId: DeleteInvitations
-export def "invitations-delete DeleteInvitations" [
+export def "invitations-delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -898,22 +898,22 @@ export def "invitations-delete DeleteInvitations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AccountIds: list # The list of member account IDs that received the invitations you want to delete.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  account_ids: list # The list of member account IDs that received the invitations you want to delete.
 ]: any -> record<UnprocessedAccounts: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invitations/delete")
-  let body = {AccountIds: $AccountIds} | compact
+  let body = {"AccountIds": $account_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -924,7 +924,7 @@ export def "invitations-delete DeleteInvitations" [
 #
 # POST /members/delete
 # operationId: DeleteMembers
-export def "members-delete DeleteMembers" [
+export def "members-delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,22 +933,22 @@ export def "members-delete DeleteMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AccountIds: list # The list of account IDs for the member accounts to delete.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  account_ids: list # The list of account IDs for the member accounts to delete.
 ]: any -> record<UnprocessedAccounts: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/members/delete")
-  let body = {AccountIds: $AccountIds} | compact
+  let body = {"AccountIds": $account_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -959,7 +959,7 @@ export def "members-delete DeleteMembers" [
 #
 # POST /actionTargets/get
 # operationId: DescribeActionTargets
-export def "action-targets-get DescribeActionTargets" [
+export def "action-targets-get post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -968,27 +968,27 @@ export def "action-targets-get DescribeActionTargets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --ActionTargetArns: list # A list of custom action target ARNs for the custom action targets to retrieve.
-  --NextToken: string # <p>The token that is required for pagination. On your first call to the <code>DescribeActionTargets</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
-  --MaxResults: int # The maximum number of results to return.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --action-target-arns: list # A list of custom action target ARNs for the custom action targets to retrieve.
+  --next-token: string # <p>The token that is required for pagination. On your first call to the <code>DescribeActionTargets</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
+  --max-results: int # The maximum number of results to return.
 ]: any -> record<ActionTargets: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/actionTargets/get" $qp)
-  let body = {ActionTargetArns: $ActionTargetArns, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ActionTargetArns": $action_target_arns, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -999,7 +999,7 @@ export def "action-targets-get DescribeActionTargets" [
 #
 # GET /accounts
 # operationId: DescribeHub
-export def "accounts DescribeHub" [
+export def "accounts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1008,20 +1008,20 @@ export def "accounts DescribeHub" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --HubArn: string # The ARN of the Hub resource to retrieve.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --hub-arn: string # The ARN of the Hub resource to retrieve.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<HubArn: record, SubscribedAt: record, AutoEnableControls: record, ControlFindingGenerator: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "HubArn" $HubArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "HubArn" $hub_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounts" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1032,7 +1032,7 @@ export def "accounts DescribeHub" [
 #
 # DELETE /accounts
 # operationId: DisableSecurityHub
-export def "accounts DisableSecurityHub" [
+export def "accounts disable-security-hub" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1041,18 +1041,18 @@ export def "accounts DisableSecurityHub" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1063,7 +1063,7 @@ export def "accounts DisableSecurityHub" [
 #
 # POST /accounts
 # operationId: EnableSecurityHub
-export def "accounts EnableSecurityHub" [
+export def "accounts enable-security-hub" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1072,24 +1072,24 @@ export def "accounts EnableSecurityHub" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --Tags: record # The tags to add to the hub resource when you enable Security Hub.
-  --EnableDefaultStandards: oneof<nothing, bool> # Whether to enable the security standards that Security Hub has designated as automatically enabled. If you do not provide a value for <code>EnableDefaultStandards</code>, it is set to <code>true</code>. To not enable the automatically enabled standards, set <code>EnableDefaultStandards</code> to <code>false</code>.
-  --ControlFindingGenerator: string@ControlFindingGenerator-completer # <p>This field, used when enabling Security Hub, specifies whether the calling account has consolidated control findings turned on. If the value for this field is set to <code>SECURITY_CONTROL</code>, Security Hub generates a single finding for a control check even when the check applies to multiple enabled standards.</p> <p>If the value for this field is set to <code>STANDARD_CONTROL</code>, Security Hub generates separate findings for a control check when the check applies to multiple enabled standards.</p> <p>The value for this field in a member account matches the value in the administrator account. For accounts that aren't part of an organization, the default value of this field is <code>SECURITY_CONTROL</code> if you enabled Security Hub on or after February 23, 2023.</p>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --tags: record # The tags to add to the hub resource when you enable Security Hub.
+  --enable-default-standards: oneof<nothing, bool> # Whether to enable the security standards that Security Hub has designated as automatically enabled. If you do not provide a value for <code>EnableDefaultStandards</code>, it is set to <code>true</code>. To not enable the automatically enabled standards, set <code>EnableDefaultStandards</code> to <code>false</code>.
+  --control-finding-generator: string@control-finding-generator-completer # <p>This field, used when enabling Security Hub, specifies whether the calling account has consolidated control findings turned on. If the value for this field is set to <code>SECURITY_CONTROL</code>, Security Hub generates a single finding for a control check even when the check applies to multiple enabled standards.</p> <p>If the value for this field is set to <code>STANDARD_CONTROL</code>, Security Hub generates separate findings for a control check when the check applies to multiple enabled standards.</p> <p>The value for this field in a member account matches the value in the administrator account. For accounts that aren't part of an organization, the default value of this field is <code>SECURITY_CONTROL</code> if you enabled Security Hub on or after February 23, 2023.</p>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts")
-  let body = {Tags: $Tags, EnableDefaultStandards: $EnableDefaultStandards, ControlFindingGenerator: $ControlFindingGenerator} | compact
+  let body = {"Tags": $tags, "EnableDefaultStandards": $enable_default_standards, "ControlFindingGenerator": $control_finding_generator} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1100,7 +1100,7 @@ export def "accounts EnableSecurityHub" [
 #
 # PATCH /accounts
 # operationId: UpdateSecurityHubConfiguration
-export def "accounts UpdateSecurityHubConfiguration" [
+export def "accounts update-security-hub-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1109,23 +1109,23 @@ export def "accounts UpdateSecurityHubConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --AutoEnableControls: oneof<nothing, bool> # <p>Whether to automatically enable new controls when they are added to standards that are enabled.</p> <p>By default, this is set to <code>true</code>, and new controls are enabled automatically. To not automatically enable new controls, set this to <code>false</code>. </p>
-  --ControlFindingGenerator: string@ControlFindingGenerator-completer # <p>Updates whether the calling account has consolidated control findings turned on. If the value for this field is set to <code>SECURITY_CONTROL</code>, Security Hub generates a single finding for a control check even when the check applies to multiple enabled standards.</p> <p>If the value for this field is set to <code>STANDARD_CONTROL</code>, Security Hub generates separate findings for a control check when the check applies to multiple enabled standards.</p> <p>For accounts that are part of an organization, this value can only be updated in the administrator account.</p>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --auto-enable-controls: oneof<nothing, bool> # <p>Whether to automatically enable new controls when they are added to standards that are enabled.</p> <p>By default, this is set to <code>true</code>, and new controls are enabled automatically. To not automatically enable new controls, set this to <code>false</code>. </p>
+  --control-finding-generator: string@control-finding-generator-completer # <p>Updates whether the calling account has consolidated control findings turned on. If the value for this field is set to <code>SECURITY_CONTROL</code>, Security Hub generates a single finding for a control check even when the check applies to multiple enabled standards.</p> <p>If the value for this field is set to <code>STANDARD_CONTROL</code>, Security Hub generates separate findings for a control check when the check applies to multiple enabled standards.</p> <p>For accounts that are part of an organization, this value can only be updated in the administrator account.</p>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts")
-  let body = {AutoEnableControls: $AutoEnableControls, ControlFindingGenerator: $ControlFindingGenerator} | compact
+  let body = {"AutoEnableControls": $auto_enable_controls, "ControlFindingGenerator": $control_finding_generator} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1136,7 +1136,7 @@ export def "accounts UpdateSecurityHubConfiguration" [
 #
 # GET /organization/configuration
 # operationId: DescribeOrganizationConfiguration
-export def "organization-configuration DescribeOrganizationConfiguration" [
+export def "organization-configuration get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1145,18 +1145,18 @@ export def "organization-configuration DescribeOrganizationConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<AutoEnable: record, MemberAccountLimitReached: record, AutoEnableStandards: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organization/configuration")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1167,7 +1167,7 @@ export def "organization-configuration DescribeOrganizationConfiguration" [
 #
 # POST /organization/configuration
 # operationId: UpdateOrganizationConfiguration
-export def "organization-configuration UpdateOrganizationConfiguration" [
+export def "organization-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1176,23 +1176,23 @@ export def "organization-configuration UpdateOrganizationConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --AutoEnable: oneof<nothing, bool> # <p>Whether to automatically enable Security Hub for new accounts in the organization.</p> <p>By default, this is <code>false</code>, and new accounts are not added automatically.</p> <p>To automatically enable Security Hub for new accounts, set this to <code>true</code>.</p>
-  --AutoEnableStandards: string@AutoEnableStandards-completer # <p>Whether to automatically enable Security Hub <a href="https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-standards-enable-disable.html">default standards</a> for new member accounts in the organization.</p> <p>By default, this parameter is equal to <code>DEFAULT</code>, and new member accounts are automatically enabled with default Security Hub standards.</p> <p>To opt out of enabling default standards for new member accounts, set this parameter equal to <code>NONE</code>.</p>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --auto-enable: oneof<nothing, bool> # <p>Whether to automatically enable Security Hub for new accounts in the organization.</p> <p>By default, this is <code>false</code>, and new accounts are not added automatically.</p> <p>To automatically enable Security Hub for new accounts, set this to <code>true</code>.</p>
+  --auto-enable-standards: string@auto-enable-standards-completer # <p>Whether to automatically enable Security Hub <a href="https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-standards-enable-disable.html">default standards</a> for new member accounts in the organization.</p> <p>By default, this parameter is equal to <code>DEFAULT</code>, and new member accounts are automatically enabled with default Security Hub standards.</p> <p>To opt out of enabling default standards for new member accounts, set this parameter equal to <code>NONE</code>.</p>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organization/configuration")
-  let body = {AutoEnable: $AutoEnable, AutoEnableStandards: $AutoEnableStandards} | compact
+  let body = {"AutoEnable": $auto_enable, "AutoEnableStandards": $auto_enable_standards} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1203,7 +1203,7 @@ export def "organization-configuration UpdateOrganizationConfiguration" [
 #
 # GET /products
 # operationId: DescribeProducts
-export def "products DescribeProducts" [
+export def "products get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1212,22 +1212,22 @@ export def "products DescribeProducts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # <p>The token that is required for pagination. On your first call to the <code>DescribeProducts</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
-  --MaxResults: int # The maximum number of results to return.
-  --ProductArn: string # The ARN of the integration to return.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --next-token: string # <p>The token that is required for pagination. On your first call to the <code>DescribeProducts</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
+  --max-results: int # The maximum number of results to return.
+  --product-arn: string # The ARN of the integration to return.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Products: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "ProductArn" $ProductArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "ProductArn" $product_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1238,7 +1238,7 @@ export def "products DescribeProducts" [
 #
 # GET /standards
 # operationId: DescribeStandards
-export def "standards DescribeStandards" [
+export def "standards get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1247,21 +1247,21 @@ export def "standards DescribeStandards" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # <p>The token that is required for pagination. On your first call to the <code>DescribeStandards</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
-  --MaxResults: int # The maximum number of standards to return.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --next-token: string # <p>The token that is required for pagination. On your first call to the <code>DescribeStandards</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
+  --max-results: int # The maximum number of standards to return.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Standards: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/standards" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1272,8 +1272,8 @@ export def "standards DescribeStandards" [
 #
 # GET /standards/controls/{StandardsSubscriptionArn}
 # operationId: DescribeStandardsControls
-export def "standards-controls DescribeStandardsControls" [
-  StandardsSubscriptionArn: string
+export def "standards-controls get" [
+  standards_subscription_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1282,21 +1282,21 @@ export def "standards-controls DescribeStandardsControls" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # <p>The token that is required for pagination. On your first call to the <code>DescribeStandardsControls</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
-  --MaxResults: int # The maximum number of security standard controls to return.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --next-token: string # <p>The token that is required for pagination. On your first call to the <code>DescribeStandardsControls</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
+  --max-results: int # The maximum number of security standard controls to return.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Controls: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/standards/controls/($StandardsSubscriptionArn)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({standards_subscription_arn: $standards_subscription_arn} | format pattern "/standards/controls/{standards_subscription_arn}") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1307,8 +1307,8 @@ export def "standards-controls DescribeStandardsControls" [
 #
 # DELETE /productSubscriptions/{ProductSubscriptionArn}
 # operationId: DisableImportFindingsForProduct
-export def "product-subscriptions DisableImportFindingsForProduct" [
-  ProductSubscriptionArn: string
+export def "product-subscriptions disable-import-findings-for" [
+  product_subscription_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1317,18 +1317,18 @@ export def "product-subscriptions DisableImportFindingsForProduct" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/productSubscriptions/($ProductSubscriptionArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({product_subscription_arn: $product_subscription_arn} | format pattern "/productSubscriptions/{product_subscription_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1339,7 +1339,7 @@ export def "product-subscriptions DisableImportFindingsForProduct" [
 #
 # POST /organization/admin/disable
 # operationId: DisableOrganizationAdminAccount
-export def "organization-admin-disable DisableOrganizationAdminAccount" [
+export def "organization-admin-disable disable-organization-admin-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1348,22 +1348,22 @@ export def "organization-admin-disable DisableOrganizationAdminAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AdminAccountId: string # The Amazon Web Services account identifier of the Security Hub administrator account.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  admin_account_id: string # The Amazon Web Services account identifier of the Security Hub administrator account.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organization/admin/disable")
-  let body = {AdminAccountId: $AdminAccountId} | compact
+  let body = {"AdminAccountId": $admin_account_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1374,7 +1374,7 @@ export def "organization-admin-disable DisableOrganizationAdminAccount" [
 #
 # POST /administrator/disassociate
 # operationId: DisassociateFromAdministratorAccount
-export def "administrator-disassociate DisassociateFromAdministratorAccount" [
+export def "administrator-disassociate post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1383,18 +1383,18 @@ export def "administrator-disassociate DisassociateFromAdministratorAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administrator/disassociate")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1407,7 +1407,7 @@ export def "administrator-disassociate DisassociateFromAdministratorAccount" [
 # DEPRECATED
 # operationId: DisassociateFromMasterAccount
 @deprecated
-export def "master-disassociate DisassociateFromMasterAccount" [
+export def "master-disassociate post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1416,18 +1416,18 @@ export def "master-disassociate DisassociateFromMasterAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/master/disassociate")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1438,7 +1438,7 @@ export def "master-disassociate DisassociateFromMasterAccount" [
 #
 # POST /members/disassociate
 # operationId: DisassociateMembers
-export def "members-disassociate DisassociateMembers" [
+export def "members-disassociate post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1447,22 +1447,22 @@ export def "members-disassociate DisassociateMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AccountIds: list # The account IDs of the member accounts to disassociate from the administrator account.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  account_ids: list # The account IDs of the member accounts to disassociate from the administrator account.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/members/disassociate")
-  let body = {AccountIds: $AccountIds} | compact
+  let body = {"AccountIds": $account_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1473,7 +1473,7 @@ export def "members-disassociate DisassociateMembers" [
 #
 # POST /productSubscriptions
 # operationId: EnableImportFindingsForProduct
-export def "product-subscriptions EnableImportFindingsForProduct" [
+export def "product-subscriptions enable-import-findings-for" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1482,22 +1482,22 @@ export def "product-subscriptions EnableImportFindingsForProduct" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ProductArn: string # The ARN of the product to enable the integration for.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  product_arn: string # The ARN of the product to enable the integration for.
 ]: any -> record<ProductSubscriptionArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/productSubscriptions")
-  let body = {ProductArn: $ProductArn} | compact
+  let body = {"ProductArn": $product_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1508,7 +1508,7 @@ export def "product-subscriptions EnableImportFindingsForProduct" [
 #
 # GET /productSubscriptions
 # operationId: ListEnabledProductsForImport
-export def "product-subscriptions ListEnabledProductsForImport" [
+export def "product-subscriptions list-enabled-products-for-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1517,21 +1517,21 @@ export def "product-subscriptions ListEnabledProductsForImport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # <p>The token that is required for pagination. On your first call to the <code>ListEnabledProductsForImport</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
-  --MaxResults: int # The maximum number of items to return in the response.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --next-token: string # <p>The token that is required for pagination. On your first call to the <code>ListEnabledProductsForImport</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
+  --max-results: int # The maximum number of items to return in the response.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ProductSubscriptions: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/productSubscriptions" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1542,7 +1542,7 @@ export def "product-subscriptions ListEnabledProductsForImport" [
 #
 # POST /organization/admin/enable
 # operationId: EnableOrganizationAdminAccount
-export def "organization-admin-enable EnableOrganizationAdminAccount" [
+export def "organization-admin-enable enable-organization-admin-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1551,22 +1551,22 @@ export def "organization-admin-enable EnableOrganizationAdminAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AdminAccountId: string # The Amazon Web Services account identifier of the account to designate as the Security Hub administrator account.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  admin_account_id: string # The Amazon Web Services account identifier of the account to designate as the Security Hub administrator account.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organization/admin/enable")
-  let body = {AdminAccountId: $AdminAccountId} | compact
+  let body = {"AdminAccountId": $admin_account_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1577,7 +1577,7 @@ export def "organization-admin-enable EnableOrganizationAdminAccount" [
 #
 # POST /standards/get
 # operationId: GetEnabledStandards
-export def "standards-get GetEnabledStandards" [
+export def "standards-get get-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1586,27 +1586,27 @@ export def "standards-get GetEnabledStandards" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --StandardsSubscriptionArns: list # The list of the standards subscription ARNs for the standards to retrieve.
-  --NextToken: string # <p>The token that is required for pagination. On your first call to the <code>GetEnabledStandards</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
-  --MaxResults: int # The maximum number of results to return in the response.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --standards-subscription-arns: list # The list of the standards subscription ARNs for the standards to retrieve.
+  --next-token: string # <p>The token that is required for pagination. On your first call to the <code>GetEnabledStandards</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
+  --max-results: int # The maximum number of results to return in the response.
 ]: any -> record<StandardsSubscriptions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/standards/get" $qp)
-  let body = {StandardsSubscriptionArns: $StandardsSubscriptionArns, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"StandardsSubscriptionArns": $standards_subscription_arns, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1617,8 +1617,8 @@ export def "standards-get GetEnabledStandards" [
 #
 # GET /findingAggregator/get/{FindingAggregatorArn}
 # operationId: GetFindingAggregator
-export def "finding-aggregator-get GetFindingAggregator" [
-  FindingAggregatorArn: string
+export def "finding-aggregator-get get" [
+  finding_aggregator_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1627,18 +1627,18 @@ export def "finding-aggregator-get GetFindingAggregator" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<FindingAggregatorArn: record, FindingAggregationRegion: record, RegionLinkingMode: record, Regions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/findingAggregator/get/($FindingAggregatorArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({finding_aggregator_arn: $finding_aggregator_arn} | format pattern "/findingAggregator/get/{finding_aggregator_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1651,7 +1651,7 @@ export def "finding-aggregator-get GetFindingAggregator" [
 # operationId: GetFindings
 # --Filters shape: {ProductArn?: any, AwsAccountId?: any, Id?: any, GeneratorId?: any, Region?: any, Type?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt?: any, UpdatedAt?: any, SeverityProduct?: any, SeverityNormalized?: any, SeverityLabel?: any, Confidence?: any, Criticality?: any, Title?: any, Description?: any, RecommendationText?: any, SourceUrl?: any, ProductFields?: any, ProductName?: any, CompanyName?: any, UserDefinedFields?: any, MalwareName?: any, MalwareType?: any, MalwarePath?: any, MalwareState?: any, NetworkDirection?: any, NetworkProtocol?: any, NetworkSourceIpV4?: any, NetworkSourceIpV6?: any, NetworkSourcePort?: any, NetworkSourceDomain?: any, NetworkSourceMac?: any, NetworkDestinationIpV4?: any, NetworkDestinationIpV6?: any, NetworkDestinationPort?: any, NetworkDestinationDomain?: any, ProcessName?: any, ProcessPath?: any, ProcessPid?: any, ProcessParentPid?: any, ProcessLaunchedAt?: any, ProcessTerminatedAt?: any, ThreatIntelIndicatorType?: any, ThreatIntelIndicatorValue?: any, ThreatIntelIndicatorCategory?: any, ThreatIntelIndicatorLastObservedAt?: any, ThreatIntelIndicatorSource?: any, ThreatIntelIndicatorSourceUrl?: any, ResourceType?: any, ResourceId?: any, ResourcePartition?: any, ResourceRegion?: any, ResourceTags?: any, ResourceAwsEc2InstanceType?: any, ResourceAwsEc2InstanceImageId?: any, ResourceAwsEc2InstanceIpV4Addresses?: any, ResourceAwsEc2InstanceIpV6Addresses?: any, ResourceAwsEc2InstanceKeyName?: any, ResourceAwsEc2InstanceIamInstanceProfileArn?: any, ResourceAwsEc2InstanceVpcId?: any, ResourceAwsEc2InstanceSubnetId?: any, ResourceAwsEc2InstanceLaunchedAt?: any, ResourceAwsS3BucketOwnerId?: any, ResourceAwsS3BucketOwnerName?: any, ResourceAwsIamAccessKeyUserName?: any, ResourceAwsIamAccessKeyPrincipalName?: any, ResourceAwsIamAccessKeyStatus?: any, ResourceAwsIamAccessKeyCreatedAt?: any, ResourceAwsIamUserUserName?: any, ResourceContainerName?: any, ResourceContainerImageId?: any, ResourceContainerImageName?: any, ResourceContainerLaunchedAt?: any, ResourceDetailsOther?: any, ComplianceStatus?: any, VerificationState?: any, WorkflowState?: any, WorkflowStatus?: any, RecordState?: any, RelatedFindingsProductArn?: any, RelatedFindingsId?: any, NoteText?: any, NoteUpdatedAt?: any, NoteUpdatedBy?: any, Keyword?: any, FindingProviderFieldsConfidence?: any, FindingProviderFieldsCriticality?: any, FindingProviderFieldsRelatedFindingsId?: any, FindingProviderFieldsRelatedFindingsProductArn?: any, FindingProviderFieldsSeverityLabel?: any, FindingProviderFieldsSeverityOriginal?: any, FindingProviderFieldsTypes?: any, Sample?: any, ComplianceSecurityControlId?: any, ComplianceAssociatedStandardsId?: any}
 # --SortCriteria item shape: {Field?: any, SortOrder?: any}
-export def "findings GetFindings" [
+export def "findings get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1660,28 +1660,28 @@ export def "findings GetFindings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --Filters: record # <p>A collection of attributes that are applied to all active Security Hub-aggregated findings and that result in a subset of findings that are included in this insight.</p> <p>You can filter by up to 10 finding attributes. For each attribute, you can provide up to 20 filter values.</p> — shape: {ProductArn?: any, AwsAccountId?: any, Id?: any, GeneratorId?: any, Region?: any, Type?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt?: any, UpdatedAt?: any, SeverityProduct?: any, SeverityNormalized?: any, SeverityLabel?: any, Confidence?: any, Criticality?: any, Title?: any, Description?: any, RecommendationText?: any, SourceUrl?: any, ProductFields?: any, ProductName?: any, CompanyName?: any, UserDefinedFields?: any, MalwareName?: any, MalwareType?: any, MalwarePath?: any, MalwareState?: any, NetworkDirection?: any, NetworkProtocol?: any, NetworkSourceIpV4?: any, NetworkSourceIpV6?: any, NetworkSourcePort?: any, NetworkSourceDomain?: any, NetworkSourceMac?: any, NetworkDestinationIpV4?: any, NetworkDestinationIpV6?: any, NetworkDestinationPort?: any, NetworkDestinationDomain?: any, ProcessName?: any, ProcessPath?: any, ProcessPid?: any, ProcessParentPid?: any, ProcessLaunchedAt?: any, ProcessTerminatedAt?: any, ThreatIntelIndicatorType?: any, ThreatIntelIndicatorValue?: any, ThreatIntelIndicatorCategory?: any, ThreatIntelIndicatorLastObservedAt?: any, ThreatIntelIndicatorSource?: any, ThreatIntelIndicatorSourceUrl?: any, ResourceType?: any, ResourceId?: any, ResourcePartition?: any, ResourceRegion?: any, ResourceTags?: any, ResourceAwsEc2InstanceType?: any, ResourceAwsEc2InstanceImageId?: any, ResourceAwsEc2InstanceIpV4Addresses?: any, ResourceAwsEc2InstanceIpV6Addresses?: any, ResourceAwsEc2InstanceKeyName?: any, ResourceAwsEc2InstanceIamInstanceProfileArn?: any, ResourceAwsEc2InstanceVpcId?: any, ResourceAwsEc2InstanceSubnetId?: any, ResourceAwsEc2InstanceLaunchedAt?: any, ResourceAwsS3BucketOwnerId?: any, ResourceAwsS3BucketOwnerName?: any, ResourceAwsIamAccessKeyUserName?: any, ResourceAwsIamAccessKeyPrincipalName?: any, ResourceAwsIamAccessKeyStatus?: any, ResourceAwsIamAccessKeyCreatedAt?: any, ResourceAwsIamUserUserName?: any, ResourceContainerName?: any, ResourceContainerImageId?: any, ResourceContainerImageName?: any, ResourceContainerLaunchedAt?: any, ResourceDetailsOther?: any, ComplianceStatus?: any, VerificationState?: any, WorkflowState?: any, WorkflowStatus?: any, RecordState?: any, RelatedFindingsProductArn?: any, RelatedFindingsId?: any, NoteText?: any, NoteUpdatedAt?: any, NoteUpdatedBy?: any, Keyword?: any, FindingProviderFieldsConfidence?: any, FindingProviderFieldsCriticality?: any, FindingProviderFieldsRelatedFindingsId?: any, FindingProviderFieldsRelatedFindingsProductArn?: any, FindingProviderFieldsSeverityLabel?: any, FindingProviderFieldsSeverityOriginal?: any, FindingProviderFieldsTypes?: any, Sample?: any, ComplianceSecurityControlId?: any, ComplianceAssociatedStandardsId?: any}
-  --SortCriteria: list # The finding attributes used to sort the list of returned findings. — item shape: {Field?: any, SortOrder?: any}
-  --NextToken: string # <p>The token that is required for pagination. On your first call to the <code>GetFindings</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
-  --MaxResults: int # The maximum number of findings to return.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --filters: record # <p>A collection of attributes that are applied to all active Security Hub-aggregated findings and that result in a subset of findings that are included in this insight.</p> <p>You can filter by up to 10 finding attributes. For each attribute, you can provide up to 20 filter values.</p> — shape: {ProductArn?: any, AwsAccountId?: any, Id?: any, GeneratorId?: any, Region?: any, Type?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt?: any, UpdatedAt?: any, SeverityProduct?: any, SeverityNormalized?: any, SeverityLabel?: any, Confidence?: any, Criticality?: any, Title?: any, Description?: any, RecommendationText?: any, SourceUrl?: any, ProductFields?: any, ProductName?: any, CompanyName?: any, UserDefinedFields?: any, MalwareName?: any, MalwareType?: any, MalwarePath?: any, MalwareState?: any, NetworkDirection?: any, NetworkProtocol?: any, NetworkSourceIpV4?: any, NetworkSourceIpV6?: any, NetworkSourcePort?: any, NetworkSourceDomain?: any, NetworkSourceMac?: any, NetworkDestinationIpV4?: any, NetworkDestinationIpV6?: any, NetworkDestinationPort?: any, NetworkDestinationDomain?: any, ProcessName?: any, ProcessPath?: any, ProcessPid?: any, ProcessParentPid?: any, ProcessLaunchedAt?: any, ProcessTerminatedAt?: any, ThreatIntelIndicatorType?: any, ThreatIntelIndicatorValue?: any, ThreatIntelIndicatorCategory?: any, ThreatIntelIndicatorLastObservedAt?: any, ThreatIntelIndicatorSource?: any, ThreatIntelIndicatorSourceUrl?: any, ResourceType?: any, ResourceId?: any, ResourcePartition?: any, ResourceRegion?: any, ResourceTags?: any, ResourceAwsEc2InstanceType?: any, ResourceAwsEc2InstanceImageId?: any, ResourceAwsEc2InstanceIpV4Addresses?: any, ResourceAwsEc2InstanceIpV6Addresses?: any, ResourceAwsEc2InstanceKeyName?: any, ResourceAwsEc2InstanceIamInstanceProfileArn?: any, ResourceAwsEc2InstanceVpcId?: any, ResourceAwsEc2InstanceSubnetId?: any, ResourceAwsEc2InstanceLaunchedAt?: any, ResourceAwsS3BucketOwnerId?: any, ResourceAwsS3BucketOwnerName?: any, ResourceAwsIamAccessKeyUserName?: any, ResourceAwsIamAccessKeyPrincipalName?: any, ResourceAwsIamAccessKeyStatus?: any, ResourceAwsIamAccessKeyCreatedAt?: any, ResourceAwsIamUserUserName?: any, ResourceContainerName?: any, ResourceContainerImageId?: any, ResourceContainerImageName?: any, ResourceContainerLaunchedAt?: any, ResourceDetailsOther?: any, ComplianceStatus?: any, VerificationState?: any, WorkflowState?: any, WorkflowStatus?: any, RecordState?: any, RelatedFindingsProductArn?: any, RelatedFindingsId?: any, NoteText?: any, NoteUpdatedAt?: any, NoteUpdatedBy?: any, Keyword?: any, FindingProviderFieldsConfidence?: any, FindingProviderFieldsCriticality?: any, FindingProviderFieldsRelatedFindingsId?: any, FindingProviderFieldsRelatedFindingsProductArn?: any, FindingProviderFieldsSeverityLabel?: any, FindingProviderFieldsSeverityOriginal?: any, FindingProviderFieldsTypes?: any, Sample?: any, ComplianceSecurityControlId?: any, ComplianceAssociatedStandardsId?: any}
+  --sort-criteria: list # The finding attributes used to sort the list of returned findings. — item shape: {Field?: any, SortOrder?: any}
+  --next-token: string # <p>The token that is required for pagination. On your first call to the <code>GetFindings</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
+  --max-results: int # The maximum number of findings to return.
 ]: any -> record<Findings: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/findings" $qp)
-  let body = {Filters: $Filters, SortCriteria: $SortCriteria, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Filters": $filters, "SortCriteria": $sort_criteria, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1694,7 +1694,7 @@ export def "findings GetFindings" [
 # operationId: UpdateFindings
 # --Filters shape: {ProductArn?: any, AwsAccountId?: any, Id?: any, GeneratorId?: any, Region?: any, Type?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt?: any, UpdatedAt?: any, SeverityProduct?: any, SeverityNormalized?: any, SeverityLabel?: any, Confidence?: any, Criticality?: any, Title?: any, Description?: any, RecommendationText?: any, SourceUrl?: any, ProductFields?: any, ProductName?: any, CompanyName?: any, UserDefinedFields?: any, MalwareName?: any, MalwareType?: any, MalwarePath?: any, MalwareState?: any, NetworkDirection?: any, NetworkProtocol?: any, NetworkSourceIpV4?: any, NetworkSourceIpV6?: any, NetworkSourcePort?: any, NetworkSourceDomain?: any, NetworkSourceMac?: any, NetworkDestinationIpV4?: any, NetworkDestinationIpV6?: any, NetworkDestinationPort?: any, NetworkDestinationDomain?: any, ProcessName?: any, ProcessPath?: any, ProcessPid?: any, ProcessParentPid?: any, ProcessLaunchedAt?: any, ProcessTerminatedAt?: any, ThreatIntelIndicatorType?: any, ThreatIntelIndicatorValue?: any, ThreatIntelIndicatorCategory?: any, ThreatIntelIndicatorLastObservedAt?: any, ThreatIntelIndicatorSource?: any, ThreatIntelIndicatorSourceUrl?: any, ResourceType?: any, ResourceId?: any, ResourcePartition?: any, ResourceRegion?: any, ResourceTags?: any, ResourceAwsEc2InstanceType?: any, ResourceAwsEc2InstanceImageId?: any, ResourceAwsEc2InstanceIpV4Addresses?: any, ResourceAwsEc2InstanceIpV6Addresses?: any, ResourceAwsEc2InstanceKeyName?: any, ResourceAwsEc2InstanceIamInstanceProfileArn?: any, ResourceAwsEc2InstanceVpcId?: any, ResourceAwsEc2InstanceSubnetId?: any, ResourceAwsEc2InstanceLaunchedAt?: any, ResourceAwsS3BucketOwnerId?: any, ResourceAwsS3BucketOwnerName?: any, ResourceAwsIamAccessKeyUserName?: any, ResourceAwsIamAccessKeyPrincipalName?: any, ResourceAwsIamAccessKeyStatus?: any, ResourceAwsIamAccessKeyCreatedAt?: any, ResourceAwsIamUserUserName?: any, ResourceContainerName?: any, ResourceContainerImageId?: any, ResourceContainerImageName?: any, ResourceContainerLaunchedAt?: any, ResourceDetailsOther?: any, ComplianceStatus?: any, VerificationState?: any, WorkflowState?: any, WorkflowStatus?: any, RecordState?: any, RelatedFindingsProductArn?: any, RelatedFindingsId?: any, NoteText?: any, NoteUpdatedAt?: any, NoteUpdatedBy?: any, Keyword?: any, FindingProviderFieldsConfidence?: any, FindingProviderFieldsCriticality?: any, FindingProviderFieldsRelatedFindingsId?: any, FindingProviderFieldsRelatedFindingsProductArn?: any, FindingProviderFieldsSeverityLabel?: any, FindingProviderFieldsSeverityOriginal?: any, FindingProviderFieldsTypes?: any, Sample?: any, ComplianceSecurityControlId?: any, ComplianceAssociatedStandardsId?: any}
 # --Note shape: {Text?: any, UpdatedBy?: any}
-export def "findings UpdateFindings" [
+export def "findings update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1703,24 +1703,24 @@ export def "findings UpdateFindings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Filters: record # <p>A collection of attributes that are applied to all active Security Hub-aggregated findings and that result in a subset of findings that are included in this insight.</p> <p>You can filter by up to 10 finding attributes. For each attribute, you can provide up to 20 filter values.</p> — shape: {ProductArn?: any, AwsAccountId?: any, Id?: any, GeneratorId?: any, Region?: any, Type?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt?: any, UpdatedAt?: any, SeverityProduct?: any, SeverityNormalized?: any, SeverityLabel?: any, Confidence?: any, Criticality?: any, Title?: any, Description?: any, RecommendationText?: any, SourceUrl?: any, ProductFields?: any, ProductName?: any, CompanyName?: any, UserDefinedFields?: any, MalwareName?: any, MalwareType?: any, MalwarePath?: any, MalwareState?: any, NetworkDirection?: any, NetworkProtocol?: any, NetworkSourceIpV4?: any, NetworkSourceIpV6?: any, NetworkSourcePort?: any, NetworkSourceDomain?: any, NetworkSourceMac?: any, NetworkDestinationIpV4?: any, NetworkDestinationIpV6?: any, NetworkDestinationPort?: any, NetworkDestinationDomain?: any, ProcessName?: any, ProcessPath?: any, ProcessPid?: any, ProcessParentPid?: any, ProcessLaunchedAt?: any, ProcessTerminatedAt?: any, ThreatIntelIndicatorType?: any, ThreatIntelIndicatorValue?: any, ThreatIntelIndicatorCategory?: any, ThreatIntelIndicatorLastObservedAt?: any, ThreatIntelIndicatorSource?: any, ThreatIntelIndicatorSourceUrl?: any, ResourceType?: any, ResourceId?: any, ResourcePartition?: any, ResourceRegion?: any, ResourceTags?: any, ResourceAwsEc2InstanceType?: any, ResourceAwsEc2InstanceImageId?: any, ResourceAwsEc2InstanceIpV4Addresses?: any, ResourceAwsEc2InstanceIpV6Addresses?: any, ResourceAwsEc2InstanceKeyName?: any, ResourceAwsEc2InstanceIamInstanceProfileArn?: any, ResourceAwsEc2InstanceVpcId?: any, ResourceAwsEc2InstanceSubnetId?: any, ResourceAwsEc2InstanceLaunchedAt?: any, ResourceAwsS3BucketOwnerId?: any, ResourceAwsS3BucketOwnerName?: any, ResourceAwsIamAccessKeyUserName?: any, ResourceAwsIamAccessKeyPrincipalName?: any, ResourceAwsIamAccessKeyStatus?: any, ResourceAwsIamAccessKeyCreatedAt?: any, ResourceAwsIamUserUserName?: any, ResourceContainerName?: any, ResourceContainerImageId?: any, ResourceContainerImageName?: any, ResourceContainerLaunchedAt?: any, ResourceDetailsOther?: any, ComplianceStatus?: any, VerificationState?: any, WorkflowState?: any, WorkflowStatus?: any, RecordState?: any, RelatedFindingsProductArn?: any, RelatedFindingsId?: any, NoteText?: any, NoteUpdatedAt?: any, NoteUpdatedBy?: any, Keyword?: any, FindingProviderFieldsConfidence?: any, FindingProviderFieldsCriticality?: any, FindingProviderFieldsRelatedFindingsId?: any, FindingProviderFieldsRelatedFindingsProductArn?: any, FindingProviderFieldsSeverityLabel?: any, FindingProviderFieldsSeverityOriginal?: any, FindingProviderFieldsTypes?: any, Sample?: any, ComplianceSecurityControlId?: any, ComplianceAssociatedStandardsId?: any}
-  --Note: record # The updated note. — shape: {Text?: any, UpdatedBy?: any}
-  --RecordState: string@RecordState-completer # The updated record state for the finding.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  filters: record # <p>A collection of attributes that are applied to all active Security Hub-aggregated findings and that result in a subset of findings that are included in this insight.</p> <p>You can filter by up to 10 finding attributes. For each attribute, you can provide up to 20 filter values.</p> — shape: {ProductArn?: any, AwsAccountId?: any, Id?: any, GeneratorId?: any, Region?: any, Type?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt?: any, UpdatedAt?: any, SeverityProduct?: any, SeverityNormalized?: any, SeverityLabel?: any, Confidence?: any, Criticality?: any, Title?: any, Description?: any, RecommendationText?: any, SourceUrl?: any, ProductFields?: any, ProductName?: any, CompanyName?: any, UserDefinedFields?: any, MalwareName?: any, MalwareType?: any, MalwarePath?: any, MalwareState?: any, NetworkDirection?: any, NetworkProtocol?: any, NetworkSourceIpV4?: any, NetworkSourceIpV6?: any, NetworkSourcePort?: any, NetworkSourceDomain?: any, NetworkSourceMac?: any, NetworkDestinationIpV4?: any, NetworkDestinationIpV6?: any, NetworkDestinationPort?: any, NetworkDestinationDomain?: any, ProcessName?: any, ProcessPath?: any, ProcessPid?: any, ProcessParentPid?: any, ProcessLaunchedAt?: any, ProcessTerminatedAt?: any, ThreatIntelIndicatorType?: any, ThreatIntelIndicatorValue?: any, ThreatIntelIndicatorCategory?: any, ThreatIntelIndicatorLastObservedAt?: any, ThreatIntelIndicatorSource?: any, ThreatIntelIndicatorSourceUrl?: any, ResourceType?: any, ResourceId?: any, ResourcePartition?: any, ResourceRegion?: any, ResourceTags?: any, ResourceAwsEc2InstanceType?: any, ResourceAwsEc2InstanceImageId?: any, ResourceAwsEc2InstanceIpV4Addresses?: any, ResourceAwsEc2InstanceIpV6Addresses?: any, ResourceAwsEc2InstanceKeyName?: any, ResourceAwsEc2InstanceIamInstanceProfileArn?: any, ResourceAwsEc2InstanceVpcId?: any, ResourceAwsEc2InstanceSubnetId?: any, ResourceAwsEc2InstanceLaunchedAt?: any, ResourceAwsS3BucketOwnerId?: any, ResourceAwsS3BucketOwnerName?: any, ResourceAwsIamAccessKeyUserName?: any, ResourceAwsIamAccessKeyPrincipalName?: any, ResourceAwsIamAccessKeyStatus?: any, ResourceAwsIamAccessKeyCreatedAt?: any, ResourceAwsIamUserUserName?: any, ResourceContainerName?: any, ResourceContainerImageId?: any, ResourceContainerImageName?: any, ResourceContainerLaunchedAt?: any, ResourceDetailsOther?: any, ComplianceStatus?: any, VerificationState?: any, WorkflowState?: any, WorkflowStatus?: any, RecordState?: any, RelatedFindingsProductArn?: any, RelatedFindingsId?: any, NoteText?: any, NoteUpdatedAt?: any, NoteUpdatedBy?: any, Keyword?: any, FindingProviderFieldsConfidence?: any, FindingProviderFieldsCriticality?: any, FindingProviderFieldsRelatedFindingsId?: any, FindingProviderFieldsRelatedFindingsProductArn?: any, FindingProviderFieldsSeverityLabel?: any, FindingProviderFieldsSeverityOriginal?: any, FindingProviderFieldsTypes?: any, Sample?: any, ComplianceSecurityControlId?: any, ComplianceAssociatedStandardsId?: any}
+  --note: record # The updated note. — shape: {Text?: any, UpdatedBy?: any}
+  --record-state: string@record-state-completer # The updated record state for the finding.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/findings")
-  let body = {Filters: $Filters, Note: $Note, RecordState: $RecordState} | compact
+  let body = {"Filters": $filters, "Note": $note, "RecordState": $record_state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1731,8 +1731,8 @@ export def "findings UpdateFindings" [
 #
 # GET /insights/results/{InsightArn}
 # operationId: GetInsightResults
-export def "insights-results GetInsightResults" [
-  InsightArn: string
+export def "insights-results get" [
+  insight_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1741,18 +1741,18 @@ export def "insights-results GetInsightResults" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<InsightResults: record<InsightArn: record, GroupByAttribute: record, ResultValues: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/insights/results/($InsightArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({insight_arn: $insight_arn} | format pattern "/insights/results/{insight_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1763,7 +1763,7 @@ export def "insights-results GetInsightResults" [
 #
 # POST /insights/get
 # operationId: GetInsights
-export def "insights-get GetInsights" [
+export def "insights-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1772,27 +1772,27 @@ export def "insights-get GetInsights" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --InsightArns: list # The ARNs of the insights to describe. If you do not provide any insight ARNs, then <code>GetInsights</code> returns all of your custom insights. It does not return any managed insights.
-  --NextToken: string # <p>The token that is required for pagination. On your first call to the <code>GetInsights</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
-  --MaxResults: int # The maximum number of items to return in the response.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --insight-arns: list # The ARNs of the insights to describe. If you do not provide any insight ARNs, then <code>GetInsights</code> returns all of your custom insights. It does not return any managed insights.
+  --next-token: string # <p>The token that is required for pagination. On your first call to the <code>GetInsights</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
+  --max-results: int # The maximum number of items to return in the response.
 ]: any -> record<Insights: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/insights/get" $qp)
-  let body = {InsightArns: $InsightArns, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"InsightArns": $insight_arns, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1803,7 +1803,7 @@ export def "insights-get GetInsights" [
 #
 # GET /invitations/count
 # operationId: GetInvitationsCount
-export def "invitations-count GetInvitationsCount" [
+export def "invitations-count get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1812,18 +1812,18 @@ export def "invitations-count GetInvitationsCount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<InvitationsCount: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invitations/count")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1834,7 +1834,7 @@ export def "invitations-count GetInvitationsCount" [
 #
 # POST /members/get
 # operationId: GetMembers
-export def "members-get GetMembers" [
+export def "members-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1843,22 +1843,22 @@ export def "members-get GetMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AccountIds: list # The list of account IDs for the Security Hub member accounts to return the details for. 
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  account_ids: list # The list of account IDs for the Security Hub member accounts to return the details for. 
 ]: any -> record<Members: record, UnprocessedAccounts: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/members/get")
-  let body = {AccountIds: $AccountIds} | compact
+  let body = {"AccountIds": $account_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1869,7 +1869,7 @@ export def "members-get GetMembers" [
 #
 # POST /members/invite
 # operationId: InviteMembers
-export def "members-invite InviteMembers" [
+export def "members-invite post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1878,22 +1878,22 @@ export def "members-invite InviteMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AccountIds: list # The list of account IDs of the Amazon Web Services accounts to invite to Security Hub as members. 
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  account_ids: list # The list of account IDs of the Amazon Web Services accounts to invite to Security Hub as members. 
 ]: any -> record<UnprocessedAccounts: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/members/invite")
-  let body = {AccountIds: $AccountIds} | compact
+  let body = {"AccountIds": $account_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1904,7 +1904,7 @@ export def "members-invite InviteMembers" [
 #
 # GET /findingAggregator/list
 # operationId: ListFindingAggregators
-export def "finding-aggregator-list ListFindingAggregators" [
+export def "finding-aggregator-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1913,21 +1913,21 @@ export def "finding-aggregator-list ListFindingAggregators" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # The token returned with the previous set of results. Identifies the next set of results to return.
-  --MaxResults: int # The maximum number of results to return. This operation currently only returns a single result.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --next-token: string # The token returned with the previous set of results. Identifies the next set of results to return.
+  --max-results: int # The maximum number of results to return. This operation currently only returns a single result.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<FindingAggregators: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/findingAggregator/list" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1938,7 +1938,7 @@ export def "finding-aggregator-list ListFindingAggregators" [
 #
 # GET /invitations
 # operationId: ListInvitations
-export def "invitations ListInvitations" [
+export def "invitations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1947,21 +1947,21 @@ export def "invitations ListInvitations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: int # The maximum number of items to return in the response. 
-  --NextToken: string # <p>The token that is required for pagination. On your first call to the <code>ListInvitations</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: int # The maximum number of items to return in the response. 
+  --next-token: string # <p>The token that is required for pagination. On your first call to the <code>ListInvitations</code> operation, set the value of this parameter to <code>NULL</code>.</p> <p>For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response.</p>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Invitations: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/invitations" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1972,7 +1972,7 @@ export def "invitations ListInvitations" [
 #
 # GET /organization/admin
 # operationId: ListOrganizationAdminAccounts
-export def "organization-admin ListOrganizationAdminAccounts" [
+export def "organization-admin list-organization-admin-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1981,21 +1981,21 @@ export def "organization-admin ListOrganizationAdminAccounts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: int # The maximum number of items to return in the response.
-  --NextToken: string # The token that is required for pagination. On your first call to the <code>ListOrganizationAdminAccounts</code> operation, set the value of this parameter to <code>NULL</code>. For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response. 
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: int # The maximum number of items to return in the response.
+  --next-token: string # The token that is required for pagination. On your first call to the <code>ListOrganizationAdminAccounts</code> operation, set the value of this parameter to <code>NULL</code>. For subsequent calls to the operation, to continue listing data, set the value of this parameter to the value returned from the previous response. 
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<AdminAccounts: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/organization/admin" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2006,7 +2006,7 @@ export def "organization-admin ListOrganizationAdminAccounts" [
 #
 # GET /securityControls/definitions
 # operationId: ListSecurityControlDefinitions
-export def "security-controls-definitions ListSecurityControlDefinitions" [
+export def "security-controls-definitions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2015,22 +2015,22 @@ export def "security-controls-definitions ListSecurityControlDefinitions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --StandardsArn: string #  The Amazon Resource Name (ARN) of the standard that you want to view controls for. 
-  --NextToken: string #  Optional pagination parameter. 
-  --MaxResults: int #  An optional parameter that limits the total results of the API response to the specified number. If this parameter isn't provided in the request, the results include the first 25 security controls that apply to the specified standard. The results also include a <code>NextToken</code> parameter that you can use in a subsequent API call to get the next 25 controls. This repeats until all controls for the standard are returned. 
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --standards-arn: string #  The Amazon Resource Name (ARN) of the standard that you want to view controls for. 
+  --next-token: string #  Optional pagination parameter. 
+  --max-results: int #  An optional parameter that limits the total results of the API response to the specified number. If this parameter isn't provided in the request, the results include the first 25 security controls that apply to the specified standard. The results also include a <code>NextToken</code> parameter that you can use in a subsequent API call to get the next 25 controls. This repeats until all controls for the standard are returned. 
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<SecurityControlDefinitions: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "StandardsArn" $StandardsArn "scalar") (serialize-qp "NextToken" $NextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "StandardsArn" $standards_arn "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/securityControls/definitions" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2041,7 +2041,7 @@ export def "security-controls-definitions ListSecurityControlDefinitions" [
 #
 # GET /associations#SecurityControlId
 # operationId: ListStandardsControlAssociations
-export def "associations-security-control-id ListStandardsControlAssociations" [
+export def "associations-security-control-id list-standards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2050,22 +2050,22 @@ export def "associations-security-control-id ListStandardsControlAssociations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --SecurityControlId: string #  The identifier of the control (identified with <code>SecurityControlId</code>, <code>SecurityControlArn</code>, or a mix of both parameters) that you want to determine the enablement status of in each enabled standard. 
-  --NextToken: string #  Optional pagination parameter. 
-  --MaxResults: int #  An optional parameter that limits the total results of the API response to the specified number. If this parameter isn't provided in the request, the results include the first 25 standard and control associations. The results also include a <code>NextToken</code> parameter that you can use in a subsequent API call to get the next 25 associations. This repeats until all associations for the specified control are returned. The number of results is limited by the number of supported Security Hub standards that you've enabled in the calling account. 
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --security-control-id: string #  The identifier of the control (identified with <code>SecurityControlId</code>, <code>SecurityControlArn</code>, or a mix of both parameters) that you want to determine the enablement status of in each enabled standard. 
+  --next-token: string #  Optional pagination parameter. 
+  --max-results: int #  An optional parameter that limits the total results of the API response to the specified number. If this parameter isn't provided in the request, the results include the first 25 standard and control associations. The results also include a <code>NextToken</code> parameter that you can use in a subsequent API call to get the next 25 associations. This repeats until all associations for the specified control are returned. The number of results is limited by the number of supported Security Hub standards that you've enabled in the calling account. 
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<StandardsControlAssociationSummaries: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "SecurityControlId" $SecurityControlId "scalar") (serialize-qp "NextToken" $NextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "SecurityControlId" $security_control_id "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/associations#SecurityControlId" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2076,8 +2076,8 @@ export def "associations-security-control-id ListStandardsControlAssociations" [
 #
 # GET /tags/{ResourceArn}
 # operationId: ListTagsForResource
-export def "tags ListTagsForResource" [
-  ResourceArn: string
+export def "tags list-tags-for-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2086,18 +2086,18 @@ export def "tags ListTagsForResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($ResourceArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2108,8 +2108,8 @@ export def "tags ListTagsForResource" [
 #
 # POST /tags/{ResourceArn}
 # operationId: TagResource
-export def "tags TagResource" [
-  ResourceArn: string
+export def "tags tag-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2118,22 +2118,22 @@ export def "tags TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Tags: record # The tags to add to the resource. You can add up to 50 tags at a time. The tag keys can be no longer than 128 characters. The tag values can be no longer than 256 characters.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  tags: record # The tags to add to the resource. You can add up to 50 tags at a time. The tag keys can be no longer than 128 characters. The tag values can be no longer than 256 characters.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($ResourceArn)")
-  let body = {Tags: $Tags} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
+  let body = {"Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2144,8 +2144,8 @@ export def "tags TagResource" [
 #
 # DELETE /tags/{ResourceArn}#tagKeys
 # operationId: UntagResource
-export def "tags UntagResource" [
-  ResourceArn: string
+export def "tags untag-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2154,20 +2154,20 @@ export def "tags UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tagKeys: list # The tag keys associated with the tags to remove from the resource. You can remove up to 50 tags at a time.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --tag-keys: list # The tag keys associated with the tags to remove from the resource. You can remove up to 50 tags at a time.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tagKeys" $tagKeys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($ResourceArn)#tagKeys" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}#tagKeys") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2178,7 +2178,7 @@ export def "tags UntagResource" [
 #
 # PATCH /findingAggregator/update
 # operationId: UpdateFindingAggregator
-export def "finding-aggregator-update UpdateFindingAggregator" [
+export def "finding-aggregator-update update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2187,24 +2187,24 @@ export def "finding-aggregator-update UpdateFindingAggregator" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  FindingAggregatorArn: string # The ARN of the finding aggregator. To obtain the ARN, use <code>ListFindingAggregators</code>.
-  RegionLinkingMode: string # <p>Indicates whether to aggregate findings from all of the available Regions in the current partition. Also determines whether to automatically aggregate findings from new Regions as Security Hub supports them and you opt into them.</p> <p>The selected option also determines how to use the Regions provided in the Regions list.</p> <p>The options are as follows:</p> <ul> <li> <p> <code>ALL_REGIONS</code> - Indicates to aggregate findings from all of the Regions where Security Hub is enabled. When you choose this option, Security Hub also automatically aggregates findings from new Regions as Security Hub supports them and you opt into them. </p> </li> <li> <p> <code>ALL_REGIONS_EXCEPT_SPECIFIED</code> - Indicates to aggregate findings from all of the Regions where Security Hub is enabled, except for the Regions listed in the <code>Regions</code> parameter. When you choose this option, Security Hub also automatically aggregates findings from new Regions as Security Hub supports them and you opt into them. </p> </li> <li> <p> <code>SPECIFIED_REGIONS</code> - Indicates to aggregate findings only from the Regions listed in the <code>Regions</code> parameter. Security Hub does not automatically aggregate findings from new Regions. </p> </li> </ul>
-  --Regions: list # <p>If <code>RegionLinkingMode</code> is <code>ALL_REGIONS_EXCEPT_SPECIFIED</code>, then this is a space-separated list of Regions that do not aggregate findings to the aggregation Region.</p> <p>If <code>RegionLinkingMode</code> is <code>SPECIFIED_REGIONS</code>, then this is a space-separated list of Regions that do aggregate findings to the aggregation Region.</p>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  finding_aggregator_arn: string # The ARN of the finding aggregator. To obtain the ARN, use <code>ListFindingAggregators</code>.
+  region_linking_mode: string # <p>Indicates whether to aggregate findings from all of the available Regions in the current partition. Also determines whether to automatically aggregate findings from new Regions as Security Hub supports them and you opt into them.</p> <p>The selected option also determines how to use the Regions provided in the Regions list.</p> <p>The options are as follows:</p> <ul> <li> <p> <code>ALL_REGIONS</code> - Indicates to aggregate findings from all of the Regions where Security Hub is enabled. When you choose this option, Security Hub also automatically aggregates findings from new Regions as Security Hub supports them and you opt into them. </p> </li> <li> <p> <code>ALL_REGIONS_EXCEPT_SPECIFIED</code> - Indicates to aggregate findings from all of the Regions where Security Hub is enabled, except for the Regions listed in the <code>Regions</code> parameter. When you choose this option, Security Hub also automatically aggregates findings from new Regions as Security Hub supports them and you opt into them. </p> </li> <li> <p> <code>SPECIFIED_REGIONS</code> - Indicates to aggregate findings only from the Regions listed in the <code>Regions</code> parameter. Security Hub does not automatically aggregate findings from new Regions. </p> </li> </ul>
+  --regions: list # <p>If <code>RegionLinkingMode</code> is <code>ALL_REGIONS_EXCEPT_SPECIFIED</code>, then this is a space-separated list of Regions that do not aggregate findings to the aggregation Region.</p> <p>If <code>RegionLinkingMode</code> is <code>SPECIFIED_REGIONS</code>, then this is a space-separated list of Regions that do aggregate findings to the aggregation Region.</p>
 ]: any -> record<FindingAggregatorArn: record, FindingAggregationRegion: record, RegionLinkingMode: record, Regions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/findingAggregator/update")
-  let body = {FindingAggregatorArn: $FindingAggregatorArn, RegionLinkingMode: $RegionLinkingMode, Regions: $Regions} | compact
+  let body = {"FindingAggregatorArn": $finding_aggregator_arn, "RegionLinkingMode": $region_linking_mode, "Regions": $regions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2215,8 +2215,8 @@ export def "finding-aggregator-update UpdateFindingAggregator" [
 #
 # PATCH /standards/control/{StandardsControlArn}
 # operationId: UpdateStandardsControl
-export def "standards-control UpdateStandardsControl" [
-  StandardsControlArn: string
+export def "standards-control update" [
+  standards_control_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2225,23 +2225,23 @@ export def "standards-control UpdateStandardsControl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --ControlStatus: string@ControlStatus-completer # The updated status of the security standard control.
-  --DisabledReason: string # A description of the reason why you are disabling a security standard control. If you are disabling a control, then this is required.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --control-status: string@control-status-completer # The updated status of the security standard control.
+  --disabled-reason: string # A description of the reason why you are disabling a security standard control. If you are disabling a control, then this is required.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/standards/control/($StandardsControlArn)")
-  let body = {ControlStatus: $ControlStatus, DisabledReason: $DisabledReason} | compact
+  let full_url = (build-url $base ({standards_control_arn: $standards_control_arn} | format pattern "/standards/control/{standards_control_arn}"))
+  let body = {"ControlStatus": $control_status, "DisabledReason": $disabled_reason} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

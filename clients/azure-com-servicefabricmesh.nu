@@ -71,7 +71,7 @@ def api-version-completer [] { ["2018-09-01-preview"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-service-fabric-mesh-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-service-fabric-mesh-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ServiceFabricMesh/operations
 # operationId: Operations_List
-export def "providers-microsoft-service-fabric-mesh-operations List" [
+export def "providers-microsoft-service-fabric-mesh-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,8 +119,8 @@ export def "providers-microsoft-service-fabric-mesh-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabricMesh/applications
 # operationId: Application_ListBySubscription
-export def "subscriptions-providers-microsoft-service-fabric-mesh-applications ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-service-fabric-mesh-applications list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-applications L
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ServiceFabricMesh/applications" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ServiceFabricMesh/applications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,8 +144,8 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-applications L
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabricMesh/gateways
 # operationId: Gateway_ListBySubscription
-export def "subscriptions-providers-microsoft-service-fabric-mesh-gateways ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-service-fabric-mesh-gateways list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-gateways ListB
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ServiceFabricMesh/gateways" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ServiceFabricMesh/gateways") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,8 +169,8 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-gateways ListB
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabricMesh/networks
 # operationId: Network_ListBySubscription
-export def "subscriptions-providers-microsoft-service-fabric-mesh-networks ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-service-fabric-mesh-networks list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-networks ListB
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ServiceFabricMesh/networks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ServiceFabricMesh/networks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -194,8 +194,8 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-networks ListB
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabricMesh/secrets
 # operationId: Secret_ListBySubscription
-export def "subscriptions-providers-microsoft-service-fabric-mesh-secrets ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-service-fabric-mesh-secrets list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-secrets ListBy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ServiceFabricMesh/secrets" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ServiceFabricMesh/secrets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -219,8 +219,8 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-secrets ListBy
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabricMesh/volumes
 # operationId: Volume_ListBySubscription
-export def "subscriptions-providers-microsoft-service-fabric-mesh-volumes ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-service-fabric-mesh-volumes list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,7 +234,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-volumes ListBy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ServiceFabricMesh/volumes" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ServiceFabricMesh/volumes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,9 +244,9 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-volumes ListBy
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications
 # operationId: Application_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/applications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -270,10 +270,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}
 # operationId: Application_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  applicationResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications delete" [
+  subscription_id: string
+  resource_group_name: string
+  application_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,7 +287,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications/($applicationResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, application_resource_name: $application_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/applications/{application_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -297,10 +297,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}
 # operationId: Application_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  applicationResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications get" [
+  subscription_id: string
+  resource_group_name: string
+  application_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,7 +314,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications/($applicationResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, application_resource_name: $application_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/applications/{application_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -324,10 +324,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}
 # operationId: Application_Create
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  applicationResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications create" [
+  subscription_id: string
+  resource_group_name: string
+  application_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,7 +341,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications/($applicationResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, application_resource_name: $application_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/applications/{application_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -351,10 +351,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}/services
 # operationId: Service_List
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications-services List" [
-  subscriptionId: string
-  resourceGroupName: string
-  applicationResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications-services list" [
+  subscription_id: string
+  resource_group_name: string
+  application_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,7 +368,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications/($applicationResourceName)/services" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, application_resource_name: $application_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/applications/{application_resource_name}/services") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -378,11 +378,11 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}/services/{serviceResourceName}
 # operationId: Service_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications-services Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  applicationResourceName: string
-  serviceResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications-services get" [
+  subscription_id: string
+  resource_group_name: string
+  application_resource_name: string
+  service_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,7 +396,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications/($applicationResourceName)/services/($serviceResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, application_resource_name: $application_resource_name, service_resource_name: $service_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/applications/{application_resource_name}/services/{service_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -406,11 +406,11 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}/services/{serviceResourceName}/replicas
 # operationId: ServiceReplica_List
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications-services-replicas List" [
-  subscriptionId: string
-  resourceGroupName: string
-  applicationResourceName: string
-  serviceResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications-services-replicas list" [
+  subscription_id: string
+  resource_group_name: string
+  application_resource_name: string
+  service_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications/($applicationResourceName)/services/($serviceResourceName)/replicas" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, application_resource_name: $application_resource_name, service_resource_name: $service_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/applications/{application_resource_name}/services/{service_resource_name}/replicas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -434,12 +434,12 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}/services/{serviceResourceName}/replicas/{replicaName}
 # operationId: ServiceReplica_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications-services-replicas Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  applicationResourceName: string
-  serviceResourceName: string
-  replicaName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications-services-replicas get" [
+  subscription_id: string
+  resource_group_name: string
+  application_resource_name: string
+  service_resource_name: string
+  replica_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,7 +453,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications/($applicationResourceName)/services/($serviceResourceName)/replicas/($replicaName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, application_resource_name: $application_resource_name, service_resource_name: $service_resource_name, replica_name: $replica_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/applications/{application_resource_name}/services/{service_resource_name}/replicas/{replica_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -463,13 +463,13 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}/services/{serviceResourceName}/replicas/{replicaName}/codePackages/{codePackageName}/logs
 # operationId: CodePackage_GetContainerLogs
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications-services-replicas-code-packages-logs GetContainerLogs" [
-  subscriptionId: string
-  resourceGroupName: string
-  applicationResourceName: string
-  serviceResourceName: string
-  replicaName: string
-  codePackageName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications-services-replicas-code-packages-logs get-container" [
+  subscription_id: string
+  resource_group_name: string
+  application_resource_name: string
+  service_resource_name: string
+  replica_name: string
+  code_package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "tail" $tail "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications/($applicationResourceName)/services/($serviceResourceName)/replicas/($replicaName)/codePackages/($codePackageName)/logs" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, application_resource_name: $application_resource_name, service_resource_name: $service_resource_name, replica_name: $replica_name, code_package_name: $code_package_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/applications/{application_resource_name}/services/{service_resource_name}/replicas/{replica_name}/codePackages/{code_package_name}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -494,9 +494,9 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/gateways
 # operationId: Gateway_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-gateways ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-gateways list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,7 +510,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/gateways" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/gateways") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -520,10 +520,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/gateways/{gatewayResourceName}
 # operationId: Gateway_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-gateways Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-gateways delete" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,7 +537,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/gateways/($gatewayResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_resource_name: $gateway_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/gateways/{gateway_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -547,10 +547,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/gateways/{gatewayResourceName}
 # operationId: Gateway_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-gateways Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-gateways get" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,7 +564,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/gateways/($gatewayResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_resource_name: $gateway_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/gateways/{gateway_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -574,10 +574,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/gateways/{gatewayResourceName}
 # operationId: Gateway_Create
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-gateways Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-gateways create" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -591,7 +591,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/gateways/($gatewayResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_resource_name: $gateway_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/gateways/{gateway_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -601,9 +601,9 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/networks
 # operationId: Network_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-networks ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-networks list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,7 +617,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/networks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/networks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -627,10 +627,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/networks/{networkResourceName}
 # operationId: Network_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-networks Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  networkResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-networks delete" [
+  subscription_id: string
+  resource_group_name: string
+  network_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,7 +644,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/networks/($networkResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_resource_name: $network_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/networks/{network_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -654,10 +654,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/networks/{networkResourceName}
 # operationId: Network_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-networks Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  networkResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-networks get" [
+  subscription_id: string
+  resource_group_name: string
+  network_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -671,7 +671,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/networks/($networkResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_resource_name: $network_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/networks/{network_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -681,10 +681,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/networks/{networkResourceName}
 # operationId: Network_Create
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-networks Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  networkResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-networks create" [
+  subscription_id: string
+  resource_group_name: string
+  network_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -698,7 +698,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/networks/($networkResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_resource_name: $network_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/networks/{network_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -708,9 +708,9 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets
 # operationId: Secret_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -724,7 +724,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/secrets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -734,10 +734,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}
 # operationId: Secret_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  secretResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets delete" [
+  subscription_id: string
+  resource_group_name: string
+  secret_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -751,7 +751,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets/($secretResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, secret_resource_name: $secret_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/secrets/{secret_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -761,10 +761,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}
 # operationId: Secret_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  secretResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets get" [
+  subscription_id: string
+  resource_group_name: string
+  secret_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,7 +778,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets/($secretResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, secret_resource_name: $secret_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/secrets/{secret_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -788,10 +788,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}
 # operationId: Secret_Create
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  secretResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets create" [
+  subscription_id: string
+  resource_group_name: string
+  secret_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -805,7 +805,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets/($secretResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, secret_resource_name: $secret_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/secrets/{secret_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -815,10 +815,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}/values
 # operationId: SecretValue_List
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets-values List" [
-  subscriptionId: string
-  resourceGroupName: string
-  secretResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets-values list" [
+  subscription_id: string
+  resource_group_name: string
+  secret_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -832,7 +832,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets/($secretResourceName)/values" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, secret_resource_name: $secret_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/secrets/{secret_resource_name}/values") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -842,11 +842,11 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}/values/{secretValueResourceName}
 # operationId: SecretValue_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets-values Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  secretResourceName: string
-  secretValueResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets-values delete" [
+  subscription_id: string
+  resource_group_name: string
+  secret_resource_name: string
+  secret_value_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -860,7 +860,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets/($secretResourceName)/values/($secretValueResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, secret_resource_name: $secret_resource_name, secret_value_resource_name: $secret_value_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/secrets/{secret_resource_name}/values/{secret_value_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -870,11 +870,11 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}/values/{secretValueResourceName}
 # operationId: SecretValue_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets-values Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  secretResourceName: string
-  secretValueResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets-values get" [
+  subscription_id: string
+  resource_group_name: string
+  secret_resource_name: string
+  secret_value_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -888,7 +888,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets/($secretResourceName)/values/($secretValueResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, secret_resource_name: $secret_resource_name, secret_value_resource_name: $secret_value_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/secrets/{secret_resource_name}/values/{secret_value_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -898,11 +898,11 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}/values/{secretValueResourceName}
 # operationId: SecretValue_Create
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets-values Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  secretResourceName: string
-  secretValueResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets-values create" [
+  subscription_id: string
+  resource_group_name: string
+  secret_resource_name: string
+  secret_value_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -916,7 +916,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets/($secretResourceName)/values/($secretValueResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, secret_resource_name: $secret_resource_name, secret_value_resource_name: $secret_value_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/secrets/{secret_resource_name}/values/{secret_value_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -926,11 +926,11 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}/values/{secretValueResourceName}/list_value
 # operationId: SecretValue_ListValue
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets-values-list-value ListValue" [
-  subscriptionId: string
-  resourceGroupName: string
-  secretResourceName: string
-  secretValueResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets-values-list-value list" [
+  subscription_id: string
+  resource_group_name: string
+  secret_resource_name: string
+  secret_value_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -944,7 +944,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets/($secretResourceName)/values/($secretValueResourceName)/list_value" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, secret_resource_name: $secret_resource_name, secret_value_resource_name: $secret_value_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/secrets/{secret_resource_name}/values/{secret_value_resource_name}/list_value") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -954,9 +954,9 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/volumes
 # operationId: Volume_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-volumes ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-volumes list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,7 +970,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/volumes" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/volumes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -980,10 +980,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/volumes/{volumeResourceName}
 # operationId: Volume_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-volumes Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  volumeResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-volumes delete" [
+  subscription_id: string
+  resource_group_name: string
+  volume_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -997,7 +997,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/volumes/($volumeResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, volume_resource_name: $volume_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/volumes/{volume_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1007,10 +1007,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/volumes/{volumeResourceName}
 # operationId: Volume_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-volumes Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  volumeResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-volumes get" [
+  subscription_id: string
+  resource_group_name: string
+  volume_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1024,7 +1024,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/volumes/($volumeResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, volume_resource_name: $volume_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/volumes/{volume_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1034,10 +1034,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/volumes/{volumeResourceName}
 # operationId: Volume_Create
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-volumes Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  volumeResourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-volumes create" [
+  subscription_id: string
+  resource_group_name: string
+  volume_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1051,7 +1051,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/volumes/($volumeResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, volume_resource_name: $volume_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabricMesh/volumes/{volume_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

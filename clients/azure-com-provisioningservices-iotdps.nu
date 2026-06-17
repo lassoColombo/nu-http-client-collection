@@ -66,12 +66,12 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def certificatepurpose-completer [] { ["clientAuthentication" "serverAuthentication"] }
+def certificate-purpose-completer [] { ["clientAuthentication" "serverAuthentication"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-devices-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-devices-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Devices/operations
 # operationId: Operations_List
-export def "providers-microsoft-devices-operations List" [
+export def "providers-microsoft-devices-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,8 +119,8 @@ export def "providers-microsoft-devices-operations List" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Devices/checkProvisioningServiceNameAvailability
 # operationId: IotDpsResource_CheckProvisioningServiceNameAvailability
-export def "subscriptions-providers-microsoft-devices-check-provisioning-service-name-availability CheckProvisioningServiceNameAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-devices-check-provisioning-service-name-availability check" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,8 +136,8 @@ export def "subscriptions-providers-microsoft-devices-check-provisioning-service
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Devices/checkProvisioningServiceNameAvailability" $qp)
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Devices/checkProvisioningServiceNameAvailability") $qp)
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -148,8 +148,8 @@ export def "subscriptions-providers-microsoft-devices-check-provisioning-service
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Devices/provisioningServices
 # operationId: IotDpsResource_ListBySubscription
-export def "subscriptions-providers-microsoft-devices-provisioning-services ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-devices-provisioning-services list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "subscriptions-providers-microsoft-devices-provisioning-services List
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Devices/provisioningServices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Devices/provisioningServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,9 +173,9 @@ export def "subscriptions-providers-microsoft-devices-provisioning-services List
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices
 # operationId: IotDpsResource_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -199,10 +199,10 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}
 # operationId: IotDpsResource_Delete
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services Delete" [
-  provisioningServiceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services delete" [
+  subscription_id: string
+  resource_group_name: string
+  provisioning_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provisioning_service_name: $provisioning_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,10 +226,10 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}
 # operationId: IotDpsResource_Get
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services Get" [
-  provisioningServiceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services get" [
+  subscription_id: string
+  resource_group_name: string
+  provisioning_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provisioning_service_name: $provisioning_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,10 +253,10 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}
 # operationId: IotDpsResource_Update
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  provisioningServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services update" [
+  subscription_id: string
+  resource_group_name: string
+  provisioning_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,8 +272,8 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provisioning_service_name: $provisioning_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -286,10 +286,10 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 # operationId: IotDpsResource_CreateOrUpdate
 # --properties shape: {allocationPolicy?: "Hashed"|"GeoLatency"|"Static", authorizationPolicies?: list, iotHubs?: list, provisioningState?: string, state?: "Activating"|"Active"|"Deleting"|"Deleted"|"ActivationFailed"|"DeletionFailed"|"Transitioning"|"Suspending"|"Suspended"|"Resuming"|"FailingOver"|"FailoverFailed"}
 # --sku shape: {capacity?: int, name?: "S1"}
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  provisioningServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  provisioning_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,8 +309,8 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)" $qp)
-  let body = {etag: $etag, properties: $properties, sku: $sku, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provisioning_service_name: $provisioning_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}") $qp)
+  let body = {"etag": $etag, "properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -321,10 +321,10 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/certificates
 # operationId: DpsCertificates_List
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates List" [
-  subscriptionId: string
-  resourceGroupName: string
-  provisioningServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates list" [
+  subscription_id: string
+  resource_group_name: string
+  provisioning_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)/certificates" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provisioning_service_name: $provisioning_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/certificates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -348,11 +348,11 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/certificates/{certificateName}
 # operationId: DpsCertificate_Delete
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  provisioningServiceName: string
-  certificateName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates delete" [
+  subscription_id: string
+  resource_group_name: string
+  provisioning_service_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,22 +361,22 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificatename: string # This is optional, and it is the Common Name of the certificate.
-  --certificaterawBytes: string # Raw data within the certificate. (format: byte)
-  --certificateisVerified: oneof<nothing, bool> # Indicates if certificate has been verified by owner of the private key.
-  --certificatepurpose: string@certificatepurpose-completer # A description that mentions the purpose of the certificate.
-  --certificatecreated: string # Time the certificate is created. (format: date-time)
-  --certificatelastUpdated: string # Time the certificate is last updated. (format: date-time)
-  --certificatehasPrivateKey: oneof<nothing, bool> # Indicates if the certificate contains a private key.
-  --certificatenonce: string # Random number generated to indicate Proof of Possession.
+  --certificate-name: string # This is optional, and it is the Common Name of the certificate.
+  --certificate-raw-bytes: string # Raw data within the certificate. (format: byte)
+  --certificate-is-verified: oneof<nothing, bool> # Indicates if certificate has been verified by owner of the private key.
+  --certificate-purpose: string@certificate-purpose-completer # A description that mentions the purpose of the certificate.
+  --certificate-created: string # Time the certificate is created. (format: date-time)
+  --certificate-last-updated: string # Time the certificate is last updated. (format: date-time)
+  --certificate-has-private-key: oneof<nothing, bool> # Indicates if the certificate contains a private key.
+  --certificate-nonce: string # Random number generated to indicate Proof of Possession.
   --api-version: string # The version of the API.
-  --If-Match: string # ETag of the certificate
+  --if-match: string # ETag of the certificate
 ]: nothing -> record<Code: string, Details: string, HttpStatusCode: string, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "certificate.name" $certificatename "scalar") (serialize-qp "certificate.rawBytes" $certificaterawBytes "scalar") (serialize-qp "certificate.isVerified" $certificateisVerified "scalar") (serialize-qp "certificate.purpose" $certificatepurpose "scalar") (serialize-qp "certificate.created" $certificatecreated "scalar") (serialize-qp "certificate.lastUpdated" $certificatelastUpdated "scalar") (serialize-qp "certificate.hasPrivateKey" $certificatehasPrivateKey "scalar") (serialize-qp "certificate.nonce" $certificatenonce "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)/certificates/($certificateName)" $qp)
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let qp = [(serialize-qp "certificate.name" $certificate_name "scalar") (serialize-qp "certificate.rawBytes" $certificate_raw_bytes "scalar") (serialize-qp "certificate.isVerified" $certificate_is_verified "scalar") (serialize-qp "certificate.purpose" $certificate_purpose "scalar") (serialize-qp "certificate.created" $certificate_created "scalar") (serialize-qp "certificate.lastUpdated" $certificate_last_updated "scalar") (serialize-qp "certificate.hasPrivateKey" $certificate_has_private_key "scalar") (serialize-qp "certificate.nonce" $certificate_nonce "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provisioning_service_name: $provisioning_service_name, certificate_name: $certificate_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/certificates/{certificate_name}") $qp)
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -387,11 +387,11 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/certificates/{certificateName}
 # operationId: DpsCertificate_Get
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates Get" [
-  certificateName: string
-  subscriptionId: string
-  resourceGroupName: string
-  provisioningServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates get" [
+  subscription_id: string
+  resource_group_name: string
+  provisioning_service_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,13 +401,13 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
-  --If-Match: string # ETag of the certificate.
+  --if-match: string # ETag of the certificate.
 ]: nothing -> record<etag: string, id: string, name: string, properties: record<created: string, expiry: string, isVerified: bool, subject: string, thumbprint: string, updated: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)/certificates/($certificateName)" $qp)
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provisioning_service_name: $provisioning_service_name, certificate_name: $certificate_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/certificates/{certificate_name}") $qp)
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -418,11 +418,11 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/certificates/{certificateName}
 # operationId: DpsCertificate_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  provisioningServiceName: string
-  certificateName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  provisioning_service_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,17 +432,17 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API.
-  --If-Match: string # ETag of the certificate. This is required to update an existing certificate, and ignored while creating a brand new certificate.
+  --if-match: string # ETag of the certificate. This is required to update an existing certificate, and ignored while creating a brand new certificate.
   --certificate: string # Base-64 representation of the X509 leaf certificate .cer file or just .pem file content.
 ]: any -> record<etag: string, id: string, name: string, properties: record<created: string, expiry: string, isVerified: bool, subject: string, thumbprint: string, updated: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)/certificates/($certificateName)" $qp)
-  let body = {certificate: $certificate} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provisioning_service_name: $provisioning_service_name, certificate_name: $certificate_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/certificates/{certificate_name}") $qp)
+  let body = {"certificate": $certificate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -453,11 +453,11 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/certificates/{certificateName}/generateVerificationCode
 # operationId: DpsCertificate_GenerateVerificationCode
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates-generate-verification-code GenerateVerificationCode" [
-  certificateName: string
-  subscriptionId: string
-  resourceGroupName: string
-  provisioningServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates-generate-verification-code post" [
+  subscription_id: string
+  resource_group_name: string
+  provisioning_service_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,22 +466,22 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificatename: string # Common Name for the certificate.
-  --certificaterawBytes: string # Raw data of certificate. (format: byte)
-  --certificateisVerified: oneof<nothing, bool> # Indicates if the certificate has been verified by owner of the private key.
-  --certificatepurpose: string@certificatepurpose-completer # Description mentioning the purpose of the certificate.
-  --certificatecreated: string # Certificate creation time. (format: date-time)
-  --certificatelastUpdated: string # Certificate last updated time. (format: date-time)
-  --certificatehasPrivateKey: oneof<nothing, bool> # Indicates if the certificate contains private key.
-  --certificatenonce: string # Random number generated to indicate Proof of Possession.
+  --certificate-name: string # Common Name for the certificate.
+  --certificate-raw-bytes: string # Raw data of certificate. (format: byte)
+  --certificate-is-verified: oneof<nothing, bool> # Indicates if the certificate has been verified by owner of the private key.
+  --certificate-purpose: string@certificate-purpose-completer # Description mentioning the purpose of the certificate.
+  --certificate-created: string # Certificate creation time. (format: date-time)
+  --certificate-last-updated: string # Certificate last updated time. (format: date-time)
+  --certificate-has-private-key: oneof<nothing, bool> # Indicates if the certificate contains private key.
+  --certificate-nonce: string # Random number generated to indicate Proof of Possession.
   --api-version: string # The version of the API.
-  --If-Match: string # ETag of the certificate. This is required to update an existing certificate, and ignored while creating a brand new certificate.
+  --if-match: string # ETag of the certificate. This is required to update an existing certificate, and ignored while creating a brand new certificate.
 ]: nothing -> record<etag: string, id: string, name: string, properties: record<created: string, expiry: string, isVerified: bool, subject: string, thumbprint: string, updated: string, verificationCode: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "certificate.name" $certificatename "scalar") (serialize-qp "certificate.rawBytes" $certificaterawBytes "scalar") (serialize-qp "certificate.isVerified" $certificateisVerified "scalar") (serialize-qp "certificate.purpose" $certificatepurpose "scalar") (serialize-qp "certificate.created" $certificatecreated "scalar") (serialize-qp "certificate.lastUpdated" $certificatelastUpdated "scalar") (serialize-qp "certificate.hasPrivateKey" $certificatehasPrivateKey "scalar") (serialize-qp "certificate.nonce" $certificatenonce "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)/certificates/($certificateName)/generateVerificationCode" $qp)
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let qp = [(serialize-qp "certificate.name" $certificate_name "scalar") (serialize-qp "certificate.rawBytes" $certificate_raw_bytes "scalar") (serialize-qp "certificate.isVerified" $certificate_is_verified "scalar") (serialize-qp "certificate.purpose" $certificate_purpose "scalar") (serialize-qp "certificate.created" $certificate_created "scalar") (serialize-qp "certificate.lastUpdated" $certificate_last_updated "scalar") (serialize-qp "certificate.hasPrivateKey" $certificate_has_private_key "scalar") (serialize-qp "certificate.nonce" $certificate_nonce "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provisioning_service_name: $provisioning_service_name, certificate_name: $certificate_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/certificates/{certificate_name}/generateVerificationCode") $qp)
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -492,11 +492,11 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/certificates/{certificateName}/verify
 # operationId: DpsCertificate_VerifyCertificate
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates-verify VerifyCertificate" [
-  certificateName: string
-  subscriptionId: string
-  resourceGroupName: string
-  provisioningServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates-verify verify" [
+  subscription_id: string
+  resource_group_name: string
+  provisioning_service_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,26 +505,26 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificatename: string # Common Name for the certificate.
-  --certificaterawBytes: string # Raw data of certificate. (format: byte)
-  --certificateisVerified: oneof<nothing, bool> # Indicates if the certificate has been verified by owner of the private key.
-  --certificatepurpose: string@certificatepurpose-completer # Describe the purpose of the certificate.
-  --certificatecreated: string # Certificate creation time. (format: date-time)
-  --certificatelastUpdated: string # Certificate last updated time. (format: date-time)
-  --certificatehasPrivateKey: oneof<nothing, bool> # Indicates if the certificate contains private key.
-  --certificatenonce: string # Random number generated to indicate Proof of Possession.
+  --certificate-name: string # Common Name for the certificate.
+  --certificate-raw-bytes: string # Raw data of certificate. (format: byte)
+  --certificate-is-verified: oneof<nothing, bool> # Indicates if the certificate has been verified by owner of the private key.
+  --certificate-purpose: string@certificate-purpose-completer # Describe the purpose of the certificate.
+  --certificate-created: string # Certificate creation time. (format: date-time)
+  --certificate-last-updated: string # Certificate last updated time. (format: date-time)
+  --certificate-has-private-key: oneof<nothing, bool> # Indicates if the certificate contains private key.
+  --certificate-nonce: string # Random number generated to indicate Proof of Possession.
   --api-version: string # The version of the API.
-  --If-Match: string # ETag of the certificate.
+  --if-match: string # ETag of the certificate.
   --certificate: string # base-64 representation of X509 certificate .cer file or just .pem file content.
 ]: any -> record<etag: string, id: string, name: string, properties: record<created: string, expiry: string, isVerified: bool, subject: string, thumbprint: string, updated: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "certificate.name" $certificatename "scalar") (serialize-qp "certificate.rawBytes" $certificaterawBytes "scalar") (serialize-qp "certificate.isVerified" $certificateisVerified "scalar") (serialize-qp "certificate.purpose" $certificatepurpose "scalar") (serialize-qp "certificate.created" $certificatecreated "scalar") (serialize-qp "certificate.lastUpdated" $certificatelastUpdated "scalar") (serialize-qp "certificate.hasPrivateKey" $certificatehasPrivateKey "scalar") (serialize-qp "certificate.nonce" $certificatenonce "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)/certificates/($certificateName)/verify" $qp)
-  let body = {certificate: $certificate} | compact
+  let qp = [(serialize-qp "certificate.name" $certificate_name "scalar") (serialize-qp "certificate.rawBytes" $certificate_raw_bytes "scalar") (serialize-qp "certificate.isVerified" $certificate_is_verified "scalar") (serialize-qp "certificate.purpose" $certificate_purpose "scalar") (serialize-qp "certificate.created" $certificate_created "scalar") (serialize-qp "certificate.lastUpdated" $certificate_last_updated "scalar") (serialize-qp "certificate.hasPrivateKey" $certificate_has_private_key "scalar") (serialize-qp "certificate.nonce" $certificate_nonce "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provisioning_service_name: $provisioning_service_name, certificate_name: $certificate_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/certificates/{certificate_name}/verify") $qp)
+  let body = {"certificate": $certificate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -535,11 +535,11 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/keys/{keyName}/listkeys
 # operationId: IotDpsResource_ListKeysForKeyName
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-keys-listkeys ListKeysForKeyName" [
-  provisioningServiceName: string
-  keyName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-keys-listkeys list-keys-for-key-name" [
+  subscription_id: string
+  resource_group_name: string
+  provisioning_service_name: string
+  key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,7 +553,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)/keys/($keyName)/listkeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provisioning_service_name: $provisioning_service_name, key_name: $key_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/keys/{key_name}/listkeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -563,10 +563,10 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/listkeys
 # operationId: IotDpsResource_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-listkeys ListKeys" [
-  provisioningServiceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-listkeys list-keys" [
+  subscription_id: string
+  resource_group_name: string
+  provisioning_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,7 +580,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)/listkeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provisioning_service_name: $provisioning_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/listkeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -590,11 +590,11 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/operationresults/{operationId}
 # operationId: IotDpsResource_GetOperationResult
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-operationresults GetOperationResult" [
-  operationId: string
-  subscriptionId: string
-  resourceGroupName: string
-  provisioningServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-operationresults get" [
+  subscription_id: string
+  resource_group_name: string
+  provisioning_service_name: string
+  operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,7 +609,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "asyncinfo" $asyncinfo "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)/operationresults/($operationId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provisioning_service_name: $provisioning_service_name, operation_id: $operation_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/operationresults/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -619,10 +619,10 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/skus
 # operationId: IotDpsResource_listValidSkus
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-skus listValidSkus" [
-  provisioningServiceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-skus list-valid" [
+  subscription_id: string
+  resource_group_name: string
+  provisioning_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,7 +636,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Devices/provisioningServices/($provisioningServiceName)/skus" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provisioning_service_name: $provisioning_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/skus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

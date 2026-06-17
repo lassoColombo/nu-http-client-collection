@@ -66,26 +66,26 @@ def base-url-completer [] { ["http://cloudhsmv2.us-east-1.amazonaws.com" "http:/
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["BaldrApiService.CopyBackupToRegion"] }
-def X-Amz-Target-completer-1 [] { ["BaldrApiService.CreateCluster"] }
-def X-Amz-Target-completer-2 [] { ["BaldrApiService.CreateHsm"] }
-def X-Amz-Target-completer-3 [] { ["BaldrApiService.DeleteBackup"] }
-def X-Amz-Target-completer-4 [] { ["BaldrApiService.DeleteCluster"] }
-def X-Amz-Target-completer-5 [] { ["BaldrApiService.DeleteHsm"] }
-def X-Amz-Target-completer-6 [] { ["BaldrApiService.DescribeBackups"] }
-def X-Amz-Target-completer-7 [] { ["BaldrApiService.DescribeClusters"] }
-def X-Amz-Target-completer-8 [] { ["BaldrApiService.InitializeCluster"] }
-def X-Amz-Target-completer-9 [] { ["BaldrApiService.ListTags"] }
-def X-Amz-Target-completer-10 [] { ["BaldrApiService.ModifyBackupAttributes"] }
-def X-Amz-Target-completer-11 [] { ["BaldrApiService.ModifyCluster"] }
-def X-Amz-Target-completer-12 [] { ["BaldrApiService.RestoreBackup"] }
-def X-Amz-Target-completer-13 [] { ["BaldrApiService.TagResource"] }
-def X-Amz-Target-completer-14 [] { ["BaldrApiService.UntagResource"] }
+def x-amz-target-completer [] { ["BaldrApiService.CopyBackupToRegion"] }
+def x-amz-target-completer-1 [] { ["BaldrApiService.CreateCluster"] }
+def x-amz-target-completer-2 [] { ["BaldrApiService.CreateHsm"] }
+def x-amz-target-completer-3 [] { ["BaldrApiService.DeleteBackup"] }
+def x-amz-target-completer-4 [] { ["BaldrApiService.DeleteCluster"] }
+def x-amz-target-completer-5 [] { ["BaldrApiService.DeleteHsm"] }
+def x-amz-target-completer-6 [] { ["BaldrApiService.DescribeBackups"] }
+def x-amz-target-completer-7 [] { ["BaldrApiService.DescribeClusters"] }
+def x-amz-target-completer-8 [] { ["BaldrApiService.InitializeCluster"] }
+def x-amz-target-completer-9 [] { ["BaldrApiService.ListTags"] }
+def x-amz-target-completer-10 [] { ["BaldrApiService.ModifyBackupAttributes"] }
+def x-amz-target-completer-11 [] { ["BaldrApiService.ModifyCluster"] }
+def x-amz-target-completer-12 [] { ["BaldrApiService.RestoreBackup"] }
+def x-amz-target-completer-13 [] { ["BaldrApiService.TagResource"] }
+def x-amz-target-completer-14 [] { ["BaldrApiService.UntagResource"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-baldr-api-service-copy-backup-to-region CopyBackupToRegion" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-baldr-api-service-copy-backup-to-region copy" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -109,7 +109,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=BaldrApiService.CopyBackupToRegion
 # operationId: CopyBackupToRegion
-export def "x-amz-target-baldr-api-service-copy-backup-to-region CopyBackupToRegion" [
+export def "x-amz-target-baldr-api-service-copy-backup-to-region copy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -118,25 +118,25 @@ export def "x-amz-target-baldr-api-service-copy-backup-to-region CopyBackupToReg
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  DestinationRegion: any
-  BackupId: any
-  --TagList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  destination_region: any
+  backup_id: any
+  --tag-list: any
 ]: any -> record<DestinationBackup: record<CreateTimestamp: record, SourceRegion: record, SourceBackup: record, SourceCluster: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=BaldrApiService.CopyBackupToRegion")
-  let body = {DestinationRegion: $DestinationRegion, BackupId: $BackupId, TagList: $TagList} | compact
+  let body = {"DestinationRegion": $destination_region, "BackupId": $backup_id, "TagList": $tag_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -147,7 +147,7 @@ export def "x-amz-target-baldr-api-service-copy-backup-to-region CopyBackupToReg
 #
 # POST /#X-Amz-Target=BaldrApiService.CreateCluster
 # operationId: CreateCluster
-export def "x-amz-target-baldr-api-service-create-cluster CreateCluster" [
+export def "x-amz-target-baldr-api-service-create-cluster create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,27 +156,27 @@ export def "x-amz-target-baldr-api-service-create-cluster CreateCluster" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  --BackupRetentionPolicy: any
-  HsmType: any
-  --SourceBackupId: any
-  SubnetIds: any
-  --TagList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  --backup-retention-policy: any
+  hsm_type: any
+  --source-backup-id: any
+  subnet_ids: any
+  --tag-list: any
 ]: any -> record<Cluster: record<BackupPolicy: record, BackupRetentionPolicy: record<Type: record, Value: record>, ClusterId: record, CreateTimestamp: record, Hsms: record, HsmType: record, PreCoPassword: record, SecurityGroup: record, SourceBackupId: record, State: record, StateMessage: record, SubnetMapping: record, VpcId: record, Certificates: record<ClusterCsr: record, HsmCertificate: record, AwsHardwareCertificate: record, ManufacturerHardwareCertificate: record, ClusterCertificate: record>, TagList: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=BaldrApiService.CreateCluster")
-  let body = {BackupRetentionPolicy: $BackupRetentionPolicy, HsmType: $HsmType, SourceBackupId: $SourceBackupId, SubnetIds: $SubnetIds, TagList: $TagList} | compact
+  let body = {"BackupRetentionPolicy": $backup_retention_policy, "HsmType": $hsm_type, "SourceBackupId": $source_backup_id, "SubnetIds": $subnet_ids, "TagList": $tag_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -187,7 +187,7 @@ export def "x-amz-target-baldr-api-service-create-cluster CreateCluster" [
 #
 # POST /#X-Amz-Target=BaldrApiService.CreateHsm
 # operationId: CreateHsm
-export def "x-amz-target-baldr-api-service-create-hsm CreateHsm" [
+export def "x-amz-target-baldr-api-service-create-hsm create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,25 +196,25 @@ export def "x-amz-target-baldr-api-service-create-hsm CreateHsm" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  ClusterId: any
-  AvailabilityZone: any
-  --IpAddress: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  cluster_id: any
+  availability_zone: any
+  --ip-address: any
 ]: any -> record<Hsm: record<AvailabilityZone: record, ClusterId: record, SubnetId: record, EniId: record, EniIp: record, HsmId: record, State: record, StateMessage: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=BaldrApiService.CreateHsm")
-  let body = {ClusterId: $ClusterId, AvailabilityZone: $AvailabilityZone, IpAddress: $IpAddress} | compact
+  let body = {"ClusterId": $cluster_id, "AvailabilityZone": $availability_zone, "IpAddress": $ip_address} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -225,7 +225,7 @@ export def "x-amz-target-baldr-api-service-create-hsm CreateHsm" [
 #
 # POST /#X-Amz-Target=BaldrApiService.DeleteBackup
 # operationId: DeleteBackup
-export def "x-amz-target-baldr-api-service-delete-backup DeleteBackup" [
+export def "x-amz-target-baldr-api-service-delete-backup delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,23 +234,23 @@ export def "x-amz-target-baldr-api-service-delete-backup DeleteBackup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  BackupId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  backup_id: any
 ]: any -> record<Backup: record<BackupId: record, BackupState: record, ClusterId: record, CreateTimestamp: record, CopyTimestamp: record, NeverExpires: record, SourceRegion: record, SourceBackup: record, SourceCluster: record, DeleteTimestamp: record, TagList: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=BaldrApiService.DeleteBackup")
-  let body = {BackupId: $BackupId} | compact
+  let body = {"BackupId": $backup_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -261,7 +261,7 @@ export def "x-amz-target-baldr-api-service-delete-backup DeleteBackup" [
 #
 # POST /#X-Amz-Target=BaldrApiService.DeleteCluster
 # operationId: DeleteCluster
-export def "x-amz-target-baldr-api-service-delete-cluster DeleteCluster" [
+export def "x-amz-target-baldr-api-service-delete-cluster delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,23 +270,23 @@ export def "x-amz-target-baldr-api-service-delete-cluster DeleteCluster" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  ClusterId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  cluster_id: any
 ]: any -> record<Cluster: record<BackupPolicy: record, BackupRetentionPolicy: record<Type: record, Value: record>, ClusterId: record, CreateTimestamp: record, Hsms: record, HsmType: record, PreCoPassword: record, SecurityGroup: record, SourceBackupId: record, State: record, StateMessage: record, SubnetMapping: record, VpcId: record, Certificates: record<ClusterCsr: record, HsmCertificate: record, AwsHardwareCertificate: record, ManufacturerHardwareCertificate: record, ClusterCertificate: record>, TagList: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=BaldrApiService.DeleteCluster")
-  let body = {ClusterId: $ClusterId} | compact
+  let body = {"ClusterId": $cluster_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -297,7 +297,7 @@ export def "x-amz-target-baldr-api-service-delete-cluster DeleteCluster" [
 #
 # POST /#X-Amz-Target=BaldrApiService.DeleteHsm
 # operationId: DeleteHsm
-export def "x-amz-target-baldr-api-service-delete-hsm DeleteHsm" [
+export def "x-amz-target-baldr-api-service-delete-hsm delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,26 +306,26 @@ export def "x-amz-target-baldr-api-service-delete-hsm DeleteHsm" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  ClusterId: any
-  --HsmId: any
-  --EniId: any
-  --EniIp: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  cluster_id: any
+  --hsm-id: any
+  --eni-id: any
+  --eni-ip: any
 ]: any -> record<HsmId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=BaldrApiService.DeleteHsm")
-  let body = {ClusterId: $ClusterId, HsmId: $HsmId, EniId: $EniId, EniIp: $EniIp} | compact
+  let body = {"ClusterId": $cluster_id, "HsmId": $hsm_id, "EniId": $eni_id, "EniIp": $eni_ip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -336,7 +336,7 @@ export def "x-amz-target-baldr-api-service-delete-hsm DeleteHsm" [
 #
 # POST /#X-Amz-Target=BaldrApiService.DescribeBackups
 # operationId: DescribeBackups
-export def "x-amz-target-baldr-api-service-describe-backups DescribeBackups" [
+export def "x-amz-target-baldr-api-service-describe-backups post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,29 +345,29 @@ export def "x-amz-target-baldr-api-service-describe-backups DescribeBackups" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  --NextToken: any
-  --MaxResults: any
-  --Filters: any
-  --SortAscending: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  --next-token: any
+  --max-results: any
+  --filters: any
+  --sort-ascending: any
 ]: any -> record<Backups: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=BaldrApiService.DescribeBackups" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Filters: $Filters, SortAscending: $SortAscending} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Filters": $filters, "SortAscending": $sort_ascending} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -378,7 +378,7 @@ export def "x-amz-target-baldr-api-service-describe-backups DescribeBackups" [
 #
 # POST /#X-Amz-Target=BaldrApiService.DescribeClusters
 # operationId: DescribeClusters
-export def "x-amz-target-baldr-api-service-describe-clusters DescribeClusters" [
+export def "x-amz-target-baldr-api-service-describe-clusters post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -387,28 +387,28 @@ export def "x-amz-target-baldr-api-service-describe-clusters DescribeClusters" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  --Filters: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  --filters: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<Clusters: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=BaldrApiService.DescribeClusters" $qp)
-  let body = {Filters: $Filters, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Filters": $filters, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -419,7 +419,7 @@ export def "x-amz-target-baldr-api-service-describe-clusters DescribeClusters" [
 #
 # POST /#X-Amz-Target=BaldrApiService.InitializeCluster
 # operationId: InitializeCluster
-export def "x-amz-target-baldr-api-service-initialize-cluster InitializeCluster" [
+export def "x-amz-target-baldr-api-service-initialize-cluster post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,25 +428,25 @@ export def "x-amz-target-baldr-api-service-initialize-cluster InitializeCluster"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  ClusterId: any
-  SignedCert: any
-  TrustAnchor: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  cluster_id: any
+  signed_cert: any
+  trust_anchor: any
 ]: any -> record<State: record, StateMessage: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=BaldrApiService.InitializeCluster")
-  let body = {ClusterId: $ClusterId, SignedCert: $SignedCert, TrustAnchor: $TrustAnchor} | compact
+  let body = {"ClusterId": $cluster_id, "SignedCert": $signed_cert, "TrustAnchor": $trust_anchor} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -457,7 +457,7 @@ export def "x-amz-target-baldr-api-service-initialize-cluster InitializeCluster"
 #
 # POST /#X-Amz-Target=BaldrApiService.ListTags
 # operationId: ListTags
-export def "x-amz-target-baldr-api-service-list-tags ListTags" [
+export def "x-amz-target-baldr-api-service-list-tags list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,28 +466,28 @@ export def "x-amz-target-baldr-api-service-list-tags ListTags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  ResourceId: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  resource_id: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<TagList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=BaldrApiService.ListTags" $qp)
-  let body = {ResourceId: $ResourceId, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ResourceId": $resource_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -498,7 +498,7 @@ export def "x-amz-target-baldr-api-service-list-tags ListTags" [
 #
 # POST /#X-Amz-Target=BaldrApiService.ModifyBackupAttributes
 # operationId: ModifyBackupAttributes
-export def "x-amz-target-baldr-api-service-modify-backup-attributes ModifyBackupAttributes" [
+export def "x-amz-target-baldr-api-service-modify-backup-attributes post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,24 +507,24 @@ export def "x-amz-target-baldr-api-service-modify-backup-attributes ModifyBackup
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  BackupId: any
-  NeverExpires: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  backup_id: any
+  never_expires: any
 ]: any -> record<Backup: record<BackupId: record, BackupState: record, ClusterId: record, CreateTimestamp: record, CopyTimestamp: record, NeverExpires: record, SourceRegion: record, SourceBackup: record, SourceCluster: record, DeleteTimestamp: record, TagList: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=BaldrApiService.ModifyBackupAttributes")
-  let body = {BackupId: $BackupId, NeverExpires: $NeverExpires} | compact
+  let body = {"BackupId": $backup_id, "NeverExpires": $never_expires} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -535,7 +535,7 @@ export def "x-amz-target-baldr-api-service-modify-backup-attributes ModifyBackup
 #
 # POST /#X-Amz-Target=BaldrApiService.ModifyCluster
 # operationId: ModifyCluster
-export def "x-amz-target-baldr-api-service-modify-cluster ModifyCluster" [
+export def "x-amz-target-baldr-api-service-modify-cluster post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -544,24 +544,24 @@ export def "x-amz-target-baldr-api-service-modify-cluster ModifyCluster" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  BackupRetentionPolicy: any
-  ClusterId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  backup_retention_policy: any
+  cluster_id: any
 ]: any -> record<Cluster: record<BackupPolicy: record, BackupRetentionPolicy: record<Type: record, Value: record>, ClusterId: record, CreateTimestamp: record, Hsms: record, HsmType: record, PreCoPassword: record, SecurityGroup: record, SourceBackupId: record, State: record, StateMessage: record, SubnetMapping: record, VpcId: record, Certificates: record<ClusterCsr: record, HsmCertificate: record, AwsHardwareCertificate: record, ManufacturerHardwareCertificate: record, ClusterCertificate: record>, TagList: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=BaldrApiService.ModifyCluster")
-  let body = {BackupRetentionPolicy: $BackupRetentionPolicy, ClusterId: $ClusterId} | compact
+  let body = {"BackupRetentionPolicy": $backup_retention_policy, "ClusterId": $cluster_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -572,7 +572,7 @@ export def "x-amz-target-baldr-api-service-modify-cluster ModifyCluster" [
 #
 # POST /#X-Amz-Target=BaldrApiService.RestoreBackup
 # operationId: RestoreBackup
-export def "x-amz-target-baldr-api-service-restore-backup RestoreBackup" [
+export def "x-amz-target-baldr-api-service-restore-backup post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,23 +581,23 @@ export def "x-amz-target-baldr-api-service-restore-backup RestoreBackup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  BackupId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  backup_id: any
 ]: any -> record<Backup: record<BackupId: record, BackupState: record, ClusterId: record, CreateTimestamp: record, CopyTimestamp: record, NeverExpires: record, SourceRegion: record, SourceBackup: record, SourceCluster: record, DeleteTimestamp: record, TagList: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=BaldrApiService.RestoreBackup")
-  let body = {BackupId: $BackupId} | compact
+  let body = {"BackupId": $backup_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -608,7 +608,7 @@ export def "x-amz-target-baldr-api-service-restore-backup RestoreBackup" [
 #
 # POST /#X-Amz-Target=BaldrApiService.TagResource
 # operationId: TagResource
-export def "x-amz-target-baldr-api-service-tag-resource TagResource" [
+export def "x-amz-target-baldr-api-service-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,24 +617,24 @@ export def "x-amz-target-baldr-api-service-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  ResourceId: any
-  TagList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  resource_id: any
+  tag_list: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=BaldrApiService.TagResource")
-  let body = {ResourceId: $ResourceId, TagList: $TagList} | compact
+  let body = {"ResourceId": $resource_id, "TagList": $tag_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -645,7 +645,7 @@ export def "x-amz-target-baldr-api-service-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=BaldrApiService.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-baldr-api-service-untag-resource UntagResource" [
+export def "x-amz-target-baldr-api-service-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -654,24 +654,24 @@ export def "x-amz-target-baldr-api-service-untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  ResourceId: any
-  TagKeyList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  resource_id: any
+  tag_key_list: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=BaldrApiService.UntagResource")
-  let body = {ResourceId: $ResourceId, TagKeyList: $TagKeyList} | compact
+  let body = {"ResourceId": $resource_id, "TagKeyList": $tag_key_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

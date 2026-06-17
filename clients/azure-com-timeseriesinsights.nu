@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "availability GetAvailability" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "availability get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /availability
 # operationId: Query_GetAvailability
-export def "availability GetAvailability" [
+export def "availability get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,13 +103,13 @@ export def "availability GetAvailability" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Currently supported version is "2018-11-01-preview". (default: 2018-11-01-preview)
-  --storeType: string # For the environments with warm store enabled, the query can be executed either on the 'WarmStore' or 'ColdStore'. This parameter in the query defines which store the query should be executed on. If not defined, the query will be executed on the cold store.
+  --store-type: string # For the environments with warm store enabled, the query can be executed either on the 'WarmStore' or 'ColdStore'. This parameter in the query defines which store the query should be executed on. If not defined, the query will be executed on the cold store.
   --x-ms-client-request-id: string # Optional client request ID. Service records this value. Allows the service to trace operation across services, and allows the customer to contact support regarding a particular request.
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
 ]: nothing -> record<availability: record<distribution: any, intervalSize: string, range: record<from: string, to: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "storeType" $storeType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "storeType" $store_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/availability" $qp)
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -123,7 +123,7 @@ export def "availability GetAvailability" [
 # POST /eventSchema
 # operationId: Query_GetEventSchema
 # --searchSpan shape: {from: string, to: string}
-export def "event-schema GetEventSchema" [
+export def "event-schema get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,17 +133,17 @@ export def "event-schema GetEventSchema" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Currently supported version is "2018-11-01-preview". (default: 2018-11-01-preview)
-  --storeType: string # For the environments with warm store enabled, the query can be executed either on the 'WarmStore' or 'ColdStore'. This parameter in the query defines which store the query should be executed on. If not defined, the query will be executed on the cold store.
+  --store-type: string # For the environments with warm store enabled, the query can be executed either on the 'WarmStore' or 'ColdStore'. This parameter in the query defines which store the query should be executed on. If not defined, the query will be executed on the cold store.
   --x-ms-client-request-id: string # Optional client request ID. Service records this value. Allows the service to trace operation across services, and allows the customer to contact support regarding a particular request.
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
-  searchSpan: record # The range of time. Cannot be null or negative. — shape: {from: string, to: string}
+  search_span: record # The range of time. Cannot be null or negative. — shape: {from: string, to: string}
 ]: any -> record<properties: table<name: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "storeType" $storeType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "storeType" $store_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/eventSchema" $qp)
-  let body = {searchSpan: $searchSpan} | compact
+  let body = {"searchSpan": $search_span} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -156,7 +156,7 @@ export def "event-schema GetEventSchema" [
 #
 # GET /timeseries/hierarchies
 # operationId: TimeSeriesHierarchies_Get
-export def "timeseries-hierarchies Get" [
+export def "timeseries-hierarchies get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "timeseries-hierarchies Get" [
 # --delete shape: {hierarchyIds?: list, names?: list}
 # --get shape: {hierarchyIds?: list, names?: list}
 # --put item shape: {id?: string, name: string, source: record}
-export def "timeseries-hierarchies-batch ExecuteBatch" [
+export def "timeseries-hierarchies-batch exec-ute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "timeseries-hierarchies-batch ExecuteBatch" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/hierarchies/$batch" $qp)
-  let body = {delete: $delete, get: $body_get, put: $put} | compact
+  let body = {"delete": $delete, "get": $body_get, "put": $put} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -222,7 +222,7 @@ export def "timeseries-hierarchies-batch ExecuteBatch" [
 #
 # GET /timeseries/instances
 # operationId: TimeSeriesInstances_Get
-export def "timeseries-instances Get" [
+export def "timeseries-instances get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "timeseries-instances Get" [
 # --get shape: {names?: list, timeSeriesIds?: list}
 # --put item shape: {description?: string, hierarchyIds?: list, instanceFields?: record, name?: string, timeSeriesId: list, typeId: string}
 # --update item shape: {description?: string, hierarchyIds?: list, instanceFields?: record, name?: string, timeSeriesId: list, typeId: string}
-export def "timeseries-instances-batch ExecuteBatch" [
+export def "timeseries-instances-batch exec-ute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,7 +277,7 @@ export def "timeseries-instances-batch ExecuteBatch" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/instances/$batch" $qp)
-  let body = {delete: $delete, get: $body_get, put: $put, update: $update} | compact
+  let body = {"delete": $delete, "get": $body_get, "put": $put, "update": $update} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -292,7 +292,7 @@ export def "timeseries-instances-batch ExecuteBatch" [
 # operationId: TimeSeriesInstances_Search
 # --hierarchies shape: {expand?: record, pageSize?: int, sort?: record}
 # --instances shape: {highlights?: bool, pageSize?: int, recursive?: bool, sort?: record}
-export def "timeseries-instances-search Search" [
+export def "timeseries-instances-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,14 +308,14 @@ export def "timeseries-instances-search Search" [
   --hierarchies: record # Parameter of how to return time series instance hierarchies by search instances call. — shape: {expand?: record, pageSize?: int, sort?: record}
   --instances: record # Parameters of how to return time series instances by search instances call. — shape: {highlights?: bool, pageSize?: int, recursive?: bool, sort?: record}
   --path: list # Filter on hierarchy path of time series instances. Path is represented as array of string path segments. First element should be hierarchy name. Example: ["Location", "California"]. Optional, case sensitive, never empty and can be null.
-  searchString: string # Query search string that will be matched to the attributes of time series instances. Example: "floor 100". Case-insensitive, must be present, but can be empty string.
+  search_string: string # Query search string that will be matched to the attributes of time series instances. Example: "floor 100". Case-insensitive, must be present, but can be empty string.
 ]: any -> record<hierarchyNodes: record<continuationToken: string, hitCount: int, hits: list<record>>, instances: record<continuationToken: string, hitCount: int, hits: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/instances/search" $qp)
-  let body = {hierarchies: $hierarchies, instances: $instances, path: $path, searchString: $searchString} | compact
+  let body = {"hierarchies": $hierarchies, "instances": $instances, "path": $path, "searchString": $search_string} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-ms-continuation": $x_ms_continuation, "x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -328,7 +328,7 @@ export def "timeseries-instances-search Search" [
 #
 # POST /timeseries/instances/suggest
 # operationId: TimeSeriesInstances_Suggest
-export def "timeseries-instances-suggest Suggest" [
+export def "timeseries-instances-suggest post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,7 +340,7 @@ export def "timeseries-instances-suggest Suggest" [
   --api-version: string # Version of the API to be used with the client request. Currently supported version is "2018-11-01-preview". (default: 2018-11-01-preview)
   --x-ms-client-request-id: string # Optional client request ID. Service records this value. Allows the service to trace operation across services, and allows the customer to contact support regarding a particular request.
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
-  searchString: string # Search string for which suggestions are required. Empty is allowed, but not null.
+  search_string: string # Search string for which suggestions are required. Empty is allowed, but not null.
   --take: int # Maximum number of suggestions expected in the result. Defaults to 10 when not set. (format: int32)
 ]: any -> record<suggestions: table<highlightedSearchString: string, searchString: string>> {
   let input = $in
@@ -348,7 +348,7 @@ export def "timeseries-instances-suggest Suggest" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/instances/suggest" $qp)
-  let body = {searchString: $searchString, take: $take} | compact
+  let body = {"searchString": $search_string, "take": $take} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -361,7 +361,7 @@ export def "timeseries-instances-suggest Suggest" [
 #
 # GET /timeseries/modelSettings
 # operationId: ModelSettings_Get
-export def "timeseries-model-settings Get" [
+export def "timeseries-model-settings get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,7 +389,7 @@ export def "timeseries-model-settings Get" [
 #
 # PATCH /timeseries/modelSettings
 # operationId: ModelSettings_Update
-export def "timeseries-model-settings Update" [
+export def "timeseries-model-settings update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "timeseries-model-settings Update" [
   --api-version: string # Version of the API to be used with the client request. Currently supported version is "2018-11-01-preview". (default: 2018-11-01-preview)
   --x-ms-client-request-id: string # Optional client request ID. Service records this value. Allows the service to trace operation across services, and allows the customer to contact support regarding a particular request.
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
-  --defaultTypeId: string # Default type id of the model that new instances will automatically belong to. (format: uuid)
+  --default-type-id: string # Default type id of the model that new instances will automatically belong to. (format: uuid)
   --name: string # Model display name which is shown in the UX and mutable by the user. Initial value is "DefaultModel".
 ]: any -> record<modelSettings: record<defaultTypeId: string, name: string, timeSeriesIdProperties: list<record>>> {
   let input = $in
@@ -409,7 +409,7 @@ export def "timeseries-model-settings Update" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/modelSettings" $qp)
-  let body = {defaultTypeId: $defaultTypeId, name: $name} | compact
+  let body = {"defaultTypeId": $default_type_id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -425,7 +425,7 @@ export def "timeseries-model-settings Update" [
 # --aggregateSeries shape: {filter?: record, inlineVariables?: record, interval: string, projectedVariables?: list, searchSpan: record, timeSeriesId: list}
 # --getEvents shape: {filter?: record, projectedProperties?: list, searchSpan: record, take?: int, timeSeriesId: list}
 # --getSeries shape: {filter?: record, inlineVariables?: record, projectedVariables?: list, searchSpan: record, take?: int, timeSeriesId: list}
-export def "timeseries-query Execute" [
+export def "timeseries-query exec-ute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -435,20 +435,20 @@ export def "timeseries-query Execute" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Currently supported version is "2018-11-01-preview". (default: 2018-11-01-preview)
-  --storeType: string # For the environments with warm store enabled, the query can be executed either on the 'WarmStore' or 'ColdStore'. This parameter in the query defines which store the query should be executed on. If not defined, the query will be executed on the cold store.
+  --store-type: string # For the environments with warm store enabled, the query can be executed either on the 'WarmStore' or 'ColdStore'. This parameter in the query defines which store the query should be executed on. If not defined, the query will be executed on the cold store.
   --x-ms-continuation: string # Continuation token from previous page of results to retrieve the next page of the results in calls that support pagination. To get the first page results, specify null continuation token as parameter value. Returned continuation token is null if all results have been returned, and there is no next page of results.
   --x-ms-client-request-id: string # Optional client request ID. Service records this value. Allows the service to trace operation across services, and allows the customer to contact support regarding a particular request.
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
-  --aggregateSeries: record # Aggregate Series query. Allows to calculate an aggregated time series from events for a given Time Series ID and search span. — shape: {filter?: record, inlineVariables?: record, interval: string, projectedVariables?: list, searchSpan: record, timeSeriesId: list}
-  --getEvents: record # Get Events query. Allows to retrieve raw events for a given Time Series ID and search span. — shape: {filter?: record, projectedProperties?: list, searchSpan: record, take?: int, timeSeriesId: list}
-  --getSeries: record # Get Series query. Allows to retrieve time series of calculated variable values from events for a given Time Series ID and search span. — shape: {filter?: record, inlineVariables?: record, projectedVariables?: list, searchSpan: record, take?: int, timeSeriesId: list}
+  --aggregate-series: record # Aggregate Series query. Allows to calculate an aggregated time series from events for a given Time Series ID and search span. — shape: {filter?: record, inlineVariables?: record, interval: string, projectedVariables?: list, searchSpan: record, timeSeriesId: list}
+  --get-events: record # Get Events query. Allows to retrieve raw events for a given Time Series ID and search span. — shape: {filter?: record, projectedProperties?: list, searchSpan: record, take?: int, timeSeriesId: list}
+  --get-series: record # Get Series query. Allows to retrieve time series of calculated variable values from events for a given Time Series ID and search span. — shape: {filter?: record, inlineVariables?: record, projectedVariables?: list, searchSpan: record, take?: int, timeSeriesId: list}
 ]: any -> record<continuationToken: string, progress: float, properties: table<name: string, type: string, values: list>, timestamps: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "storeType" $storeType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "storeType" $store_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/query" $qp)
-  let body = {aggregateSeries: $aggregateSeries, getEvents: $getEvents, getSeries: $getSeries} | compact
+  let body = {"aggregateSeries": $aggregate_series, "getEvents": $get_events, "getSeries": $get_series} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-ms-continuation": $x_ms_continuation, "x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -461,7 +461,7 @@ export def "timeseries-query Execute" [
 #
 # GET /timeseries/types
 # operationId: TimeSeriesTypes_Get
-export def "timeseries-types Get" [
+export def "timeseries-types get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "timeseries-types Get" [
 # --delete shape: {names?: list, typeIds?: list}
 # --get shape: {names?: list, typeIds?: list}
 # --put item shape: {description?: string, id?: string, name: string, variables: any}
-export def "timeseries-types-batch ExecuteBatch" [
+export def "timeseries-types-batch exec-ute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,7 +514,7 @@ export def "timeseries-types-batch ExecuteBatch" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/types/$batch" $qp)
-  let body = {delete: $delete, get: $body_get, put: $put} | compact
+  let body = {"delete": $delete, "get": $body_get, "put": $put} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

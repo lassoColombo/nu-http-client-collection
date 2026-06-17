@@ -111,21 +111,21 @@ export def "openhouses list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer # Request listings by a specific property type. This defaults to Residential, and you can only specify one type in a single query.
-  --listingId: string # Request openhouses for a specific `listingId`.
+  --listing-id: string # Request openhouses for a specific `listingId`.
   --cities: list # Filter the openhouses returned by a list of valid cities.  The `cities` query parameter is case-insensitive.  The list of `cities` provided by your RETS vendor can be seen by sending an `OPTIONS` request to the `/properties` endpoint:  `curl -XOPTIONS -u simplyrets:simplyrets https://api.simplyrets.com/openhouses`
   --brokers: list # Filter the listings returned by brokerage with a Broker ID. You can specific multiple broker parameters. Note, the Broker ID is provided by your MLS.
   --agent: string # Filter the listings returned by an agent ID.  Note, the Agent ID is provided by your MLS.
   --minprice: int # Filter listings by a minimum price.
   --startdate: string # Scheduled date and time of the open house showing (format: date-time)
   --offset: int # Increase the offset parameter by the limit to go to the next "page" of listings. Also take a look at the Link HTTP Header for pre-built pagination.  *NOTE:* Use the `lastId` parameter for pagination.
-  --lastId: int # Used as a cursor for pagination.
+  --last-id: int # Used as a cursor for pagination.
   --limit: int # Set the number of listings to return in the response. This defaults to 20 listings, and can be a maximum of 500. To paginate through to the next page of listings, take a look at the `offset` parameter, or the Link in the HTTP Header.
   --qp-sort: string@sort-completer # Sort the response by a specific field. Values starting with a minus (-) denote descending order, while the others are ascending.
   --include: list # Include a extra fields which are not in the default response body - 'association' includes additional HOA data - 'agreement' information on the listing agreement - 'garageSpaces' additional garage data - 'maintenanceExpense' data on maintenance expenses - 'parking' additional parking data - 'pool' includes an additional pool description - 'taxAnnualAmount' include the annual tax amount - 'taxYear' include the tax year data - 'rooms' include parameter will include    any additional rooms as a list.  Note that your MLS must provide these fields in their RETS data for them to be available in the API response.  In the future, fields which require an 'include' may become available by default.
 ]: nothing -> table<description: string, endTime: string, inputId: any, listing: record<address: record, agent: record, association: record, coAgent: record, disclaimer: string, geo: record, leaseTerm: string, leaseType: string, listDate: string, listPrice: float, listingId: string, mls: record, mlsId: int, modified: string, office: record, photos: list, privateRemarks: string, property: record, remarks: string, sales: record, school: record, showingInstructions: string, tax: record, virtualTourUrl: string>, openHouseId: string, openHouseKey: string, refreshments: string, startTime: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "listingId" $listingId "scalar") (serialize-qp "cities" $cities "multi") (serialize-qp "brokers" $brokers "multi") (serialize-qp "agent" $agent "scalar") (serialize-qp "minprice" $minprice "scalar") (serialize-qp "startdate" $startdate "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "lastId" $lastId "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "include" $include "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "listingId" $listing_id "scalar") (serialize-qp "cities" $cities "multi") (serialize-qp "brokers" $brokers "multi") (serialize-qp "agent" $agent "scalar") (serialize-qp "minprice" $minprice "scalar") (serialize-qp "startdate" $startdate "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "lastId" $last_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "include" $include "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/openhouses" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -136,7 +136,7 @@ export def "openhouses list" [
 #
 # GET /openhouses/{openHouseKey}
 export def "openhouses get" [
-  openHouseKey: int
+  open_house_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,7 +151,7 @@ export def "openhouses get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/openhouses/($openHouseKey)" $qp)
+  let full_url = (build-url $base ({open_house_key: $open_house_key} | format pattern "/openhouses/{open_house_key}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,9 +188,9 @@ export def "properties list" [
   --minyear: int # Filter listings by a setting a minimum year built.
   --limit: int # Set the number of listings to return in the response. This defaults to 20 listings, and can be a maximum of 500. To paginate through to the next page of listings, take a look at the `offset` parameter, or the Link in the HTTP Header.
   --offset: int # Increase the offset parameter by the limit to go to the next "page" of listings. Also take a look at the Link HTTP Header for pre-built pagination.  *NOTE:* Use the `lastId` field to paginate response  *NOTE:* If you're offset is too high, you will receive an `HTTP 400 offset too high` error message.
-  --lastId: int # Used as a cursor for pagination. When using `lastId`, the `sort` parameter will not work.
+  --last-id: int # Used as a cursor for pagination. When using `lastId`, the `sort` parameter will not work.
   --vendor: string # Used to specify the vendor (MLS) to search from. This parameter is required on multi-MLS apps, and you can only query one vendor at a time. To get your vendor id's make an OPTIONS request to https://api.simplyrets.com.  `curl -XOPTIONS https://api.simplyrets.com/properties`
-  --postalCodes: list # Filter the listings returned by postal codes / zip code. You can specify multiple.
+  --postal-codes: list # Filter the listings returned by postal codes / zip code. You can specify multiple.
   --features: list # Filter the listings by specific interior features.  You can filter by multiple. For example, to filter trial listings by multiple features you can use, Return listings that are within a set of latitude longitude coordinates. For example,  ``` Wet Bar High Ceiling ```  e.g. `https://simplyrets.com/services?features=Wet%20Bar&features=High%20Ceiling`  The list of `features` provided by your RETS vendor can be seen by sending an `OPTIONS` request to the `/properties` endpoint:  `curl -XOPTIONS -u simplyrets:simplyrets https://api.simplyrets.com/properties`
   --water: string # Query water/waterfront listings only. Specify `true` to filter waterfront listings.  If you specify `water=true`, all listings with any `waterfront` value will be queried.  If you specify `water=false`, listings which are **NOT** waterfront listings will be queried.  If you specify `water=LAKE+NAME` or another valid value contained in your feed, that value will be searched
   --neighborhoods: list # Filter the listings returned by specific neighborhoods and subdivisions. You can specify multiple `neighborhoods` by using the query parameter multiple times.  The `neighborhoods` query parameter is case-insensitive.  The list of `neighborhoods` provided by your RETS vendor can be seen by sending an `OPTIONS` request to the `/properties` endpoint:  `curl -XOPTIONS -u simplyrets:simplyrets https://api.simplyrets.com/properties`
@@ -203,7 +203,7 @@ export def "properties list" [
 ]: nothing -> table<address: record<city: string, country: string, crossStreet: string, full: string, postalCode: string, state: string, streetName: string, streetNumber: int, streetNumberText: string>, agent: record<contact: record, firstName: string, id: string, lastName: string>, association: record<amenities: string, fee: int, name: string>, coAgent: record<contact: record, firstName: string, id: string, lastName: string>, disclaimer: string, geo: record<county: string, directions: string, lat: float, lng: float, marketArea: string>, leaseTerm: string, leaseType: string, listDate: string, listPrice: float, listingId: string, mls: record<area: string, areaMinor: string, daysOnMarket: int, originatingSystemName: string, status: string, statusText: string>, mlsId: int, modified: string, office: record<brokerid: string, contact: record, name: string, servingName: string>, photos: list<string>, privateRemarks: string, property: record<accessibility: string, additionalRooms: string, area: int, areaSource: string, bathsFull: int, bathsHalf: int, bathsThreeQuarter: int, bedrooms: int, construction: string, cooling: string, exteriorFeatures: string, fireplaces: int, flooring: string, foundation: string, garageSpaces: float, heating: string, interiorFeatures: string, laundryFeatures: string, lotDescription: string, lotSize: string, lotSizeAcres: float, lotSizeArea: float, lotSizeAreaUnits: string, maintenanceExpense: float, occupantName: string, occupantType: string, ownerName: string, parking: record, poolFeatures: string, roof: string, stories: float, style: string, subType: string, subTypeRaw: string, subdivision: string, type: string, view: string, water: string, yearBuilt: int>, remarks: string, sales: record<agent: string, closeDate: string, closePrice: int, contractDate: string, office: string>, school: record<district: string, elementarySchool: string, highSchool: string, middleSchool: string>, showingInstructions: string, tax: record<id: string, taxAnnualAmount: string, taxYear: int>, virtualTourUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "status" $status "multi") (serialize-qp "type" $type "multi") (serialize-qp "subtype" $subtype "multi") (serialize-qp "agent" $agent "scalar") (serialize-qp "brokers" $brokers "multi") (serialize-qp "minprice" $minprice "scalar") (serialize-qp "maxprice" $maxprice "scalar") (serialize-qp "minarea" $minarea "scalar") (serialize-qp "maxarea" $maxarea "scalar") (serialize-qp "minbaths" $minbaths "scalar") (serialize-qp "maxbaths" $maxbaths "scalar") (serialize-qp "minbeds" $minbeds "scalar") (serialize-qp "maxbeds" $maxbeds "scalar") (serialize-qp "maxdom" $maxdom "scalar") (serialize-qp "minyear" $minyear "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "lastId" $lastId "scalar") (serialize-qp "vendor" $vendor "scalar") (serialize-qp "postalCodes" $postalCodes "multi") (serialize-qp "features" $features "multi") (serialize-qp "water" $water "scalar") (serialize-qp "neighborhoods" $neighborhoods "multi") (serialize-qp "cities" $cities "multi") (serialize-qp "counties" $counties "multi") (serialize-qp "points" $points "multi") (serialize-qp "include" $include "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "status" $status "multi") (serialize-qp "type" $type "multi") (serialize-qp "subtype" $subtype "multi") (serialize-qp "agent" $agent "scalar") (serialize-qp "brokers" $brokers "multi") (serialize-qp "minprice" $minprice "scalar") (serialize-qp "maxprice" $maxprice "scalar") (serialize-qp "minarea" $minarea "scalar") (serialize-qp "maxarea" $maxarea "scalar") (serialize-qp "minbaths" $minbaths "scalar") (serialize-qp "maxbaths" $maxbaths "scalar") (serialize-qp "minbeds" $minbeds "scalar") (serialize-qp "maxbeds" $maxbeds "scalar") (serialize-qp "maxdom" $maxdom "scalar") (serialize-qp "minyear" $minyear "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "lastId" $last_id "scalar") (serialize-qp "vendor" $vendor "scalar") (serialize-qp "postalCodes" $postal_codes "multi") (serialize-qp "features" $features "multi") (serialize-qp "water" $water "scalar") (serialize-qp "neighborhoods" $neighborhoods "multi") (serialize-qp "cities" $cities "multi") (serialize-qp "counties" $counties "multi") (serialize-qp "points" $points "multi") (serialize-qp "include" $include "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/properties" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -214,7 +214,7 @@ export def "properties list" [
 #
 # GET /properties/{mlsId}
 export def "properties get" [
-  mlsId: int
+  mls_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "properties get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/properties/($mlsId)" $qp)
+  let full_url = (build-url $base ({mls_id: $mls_id} | format pattern "/properties/{mls_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

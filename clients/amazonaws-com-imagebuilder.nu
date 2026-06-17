@@ -67,8 +67,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def platform-completer [] { ["Linux" "Windows"] }
-def containerType-completer [] { ["DOCKER"] }
-def platformOverride-completer [] { ["Linux" "Windows"] }
+def container-type-completer [] { ["DOCKER"] }
+def platform-override-completer [] { ["Linux" "Windows"] }
 def status-completer [] { ["DISABLED" "ENABLED"] }
 def type-completer [] { ["BUILD" "TEST"] }
 def format-completer [] { ["SHELL"] }
@@ -77,7 +77,7 @@ def owner-completer [] { ["Amazon" "Self" "Shared" "ThirdParty"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-image-creation CancelImageCreation" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-image-creation cancel" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # PUT /CancelImageCreation
 # operationId: CancelImageCreation
-export def "cancel-image-creation CancelImageCreation" [
+export def "cancel-image-creation cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,23 +110,23 @@ export def "cancel-image-creation CancelImageCreation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  imageBuildVersionArn: string # The Amazon Resource Name (ARN) of the image that you want to cancel creation for.
-  clientToken: string # Unique, case-sensitive identifier you provide to ensure idempotency of the request. For more information, see <a href="https://docs.aws.amazon.com/AWSEC2/latest/APIReference/Run_Instance_Idempotency.html">Ensuring idempotency</a> in the <i>Amazon EC2 API Reference</i>.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  image_build_version_arn: string # The Amazon Resource Name (ARN) of the image that you want to cancel creation for.
+  client_token: string # Unique, case-sensitive identifier you provide to ensure idempotency of the request. For more information, see <a href="https://docs.aws.amazon.com/AWSEC2/latest/APIReference/Run_Instance_Idempotency.html">Ensuring idempotency</a> in the <i>Amazon EC2 API Reference</i>.
 ]: any -> record<requestId: record, clientToken: record, imageBuildVersionArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CancelImageCreation")
-  let body = {imageBuildVersionArn: $imageBuildVersionArn, clientToken: $clientToken} | compact
+  let body = {"imageBuildVersionArn": $image_build_version_arn, "clientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -137,7 +137,7 @@ export def "cancel-image-creation CancelImageCreation" [
 #
 # PUT /CreateComponent
 # operationId: CreateComponent
-export def "create-component CreateComponent" [
+export def "create-component create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,32 +146,32 @@ export def "create-component CreateComponent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   name: string # The name of the component.
-  semanticVersion: string # <p>The semantic version of the component. This version follows the semantic version syntax.</p> <note> <p>The semantic version has four nodes: &lt;major&gt;.&lt;minor&gt;.&lt;patch&gt;/&lt;build&gt;. You can assign values for the first three, and can filter on all of them.</p> <p> <b>Assignment:</b> For the first three nodes you can assign any positive integer value, including zero, with an upper limit of 2^30-1, or 1073741823 for each node. Image Builder automatically assigns the build number to the fourth node.</p> <p> <b>Patterns:</b> You can use any numeric pattern that adheres to the assignment requirements for the nodes that you can assign. For example, you might choose a software version pattern, such as 1.0.0, or a date, such as 2021.01.01.</p> </note>
+  semantic_version: string # <p>The semantic version of the component. This version follows the semantic version syntax.</p> <note> <p>The semantic version has four nodes: &lt;major&gt;.&lt;minor&gt;.&lt;patch&gt;/&lt;build&gt;. You can assign values for the first three, and can filter on all of them.</p> <p> <b>Assignment:</b> For the first three nodes you can assign any positive integer value, including zero, with an upper limit of 2^30-1, or 1073741823 for each node. Image Builder automatically assigns the build number to the fourth node.</p> <p> <b>Patterns:</b> You can use any numeric pattern that adheres to the assignment requirements for the nodes that you can assign. For example, you might choose a software version pattern, such as 1.0.0, or a date, such as 2021.01.01.</p> </note>
   --description: string # Describes the contents of the component.
-  --changeDescription: string # The change description of the component. Describes what change has been made in this version, or what makes this version different from other versions of this component.
+  --change-description: string # The change description of the component. Describes what change has been made in this version, or what makes this version different from other versions of this component.
   platform: string@platform-completer # The operating system platform of the component.
-  --supportedOsVersions: list # The operating system (OS) version supported by the component. If the OS information is available, a prefix match is performed against the base image OS version during image recipe creation.
+  --supported-os-versions: list # The operating system (OS) version supported by the component. If the OS information is available, a prefix match is performed against the base image OS version during image recipe creation.
   --data: string # Component <code>data</code> contains inline YAML document content for the component. Alternatively, you can specify the <code>uri</code> of a YAML document file stored in Amazon S3. However, you cannot specify both properties.
   --uri: string # <p>The <code>uri</code> of a YAML component document file. This must be an S3 URL (<code>s3://bucket/key</code>), and the requester must have permission to access the S3 bucket it points to. If you use Amazon S3, you can specify component content up to your service quota.</p> <p>Alternatively, you can specify the YAML document inline, using the component <code>data</code> property. You cannot specify both properties.</p>
-  --kmsKeyId: string # The ID of the KMS key that is used to encrypt this component.
+  --kms-key-id: string # The ID of the KMS key that is used to encrypt this component.
   --tags: record # The tags that apply to the component.
-  clientToken: string # The idempotency token of the component.
+  client_token: string # The idempotency token of the component.
 ]: any -> record<requestId: record, clientToken: record, componentBuildVersionArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CreateComponent")
-  let body = {name: $name, semanticVersion: $semanticVersion, description: $description, changeDescription: $changeDescription, platform: $platform, supportedOsVersions: $supportedOsVersions, data: $data, uri: $uri, kmsKeyId: $kmsKeyId, tags: $tags, clientToken: $clientToken} | compact
+  let body = {"name": $name, "semanticVersion": $semantic_version, "description": $description, "changeDescription": $change_description, "platform": $platform, "supportedOsVersions": $supported_os_versions, "data": $data, "uri": $uri, "kmsKeyId": $kms_key_id, "tags": $tags, "clientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -185,7 +185,7 @@ export def "create-component CreateComponent" [
 # --components item shape: {componentArn: any, parameters?: any}
 # --instanceConfiguration shape: {image?: any, blockDeviceMappings?: any}
 # --targetRepository shape: {service?: any, repositoryName?: any}
-export def "create-container-recipe CreateContainerRecipe" [
+export def "create-container-recipe create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,37 +194,37 @@ export def "create-container-recipe CreateContainerRecipe" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  containerType: string@containerType-completer # The type of container to create.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  container_type: string@container-type-completer # The type of container to create.
   name: string # The name of the container recipe.
   --description: string # The description of the container recipe.
-  semanticVersion: string # <p>The semantic version of the container recipe. This version follows the semantic version syntax.</p> <note> <p>The semantic version has four nodes: &lt;major&gt;.&lt;minor&gt;.&lt;patch&gt;/&lt;build&gt;. You can assign values for the first three, and can filter on all of them.</p> <p> <b>Assignment:</b> For the first three nodes you can assign any positive integer value, including zero, with an upper limit of 2^30-1, or 1073741823 for each node. Image Builder automatically assigns the build number to the fourth node.</p> <p> <b>Patterns:</b> You can use any numeric pattern that adheres to the assignment requirements for the nodes that you can assign. For example, you might choose a software version pattern, such as 1.0.0, or a date, such as 2021.01.01.</p> </note>
+  semantic_version: string # <p>The semantic version of the container recipe. This version follows the semantic version syntax.</p> <note> <p>The semantic version has four nodes: &lt;major&gt;.&lt;minor&gt;.&lt;patch&gt;/&lt;build&gt;. You can assign values for the first three, and can filter on all of them.</p> <p> <b>Assignment:</b> For the first three nodes you can assign any positive integer value, including zero, with an upper limit of 2^30-1, or 1073741823 for each node. Image Builder automatically assigns the build number to the fourth node.</p> <p> <b>Patterns:</b> You can use any numeric pattern that adheres to the assignment requirements for the nodes that you can assign. For example, you might choose a software version pattern, such as 1.0.0, or a date, such as 2021.01.01.</p> </note>
   components: list # Components for build and test that are included in the container recipe. Recipes require a minimum of one build component, and can have a maximum of 20 build and test components in any combination. — item shape: {componentArn: any, parameters?: any}
-  --instanceConfiguration: record # Defines a custom base AMI and block device mapping configurations of an instance used for building and testing container images. — shape: {image?: any, blockDeviceMappings?: any}
-  --dockerfileTemplateData: string # The Dockerfile template used to build your image as an inline data blob.
-  --dockerfileTemplateUri: string # The Amazon S3 URI for the Dockerfile that will be used to build your container image.
-  --platformOverride: string@platformOverride-completer # Specifies the operating system platform when you use a custom base image.
-  --imageOsVersionOverride: string # Specifies the operating system version for the base image.
-  parentImage: string # The base image for the container recipe.
+  --instance-configuration: record # Defines a custom base AMI and block device mapping configurations of an instance used for building and testing container images. — shape: {image?: any, blockDeviceMappings?: any}
+  --dockerfile-template-data: string # The Dockerfile template used to build your image as an inline data blob.
+  --dockerfile-template-uri: string # The Amazon S3 URI for the Dockerfile that will be used to build your container image.
+  --platform-override: string@platform-override-completer # Specifies the operating system platform when you use a custom base image.
+  --image-os-version-override: string # Specifies the operating system version for the base image.
+  parent_image: string # The base image for the container recipe.
   --tags: record # Tags that are attached to the container recipe.
-  --workingDirectory: string # The working directory for use during build and test workflows.
-  targetRepository: record # The container repository where the output container image is stored. — shape: {service?: any, repositoryName?: any}
-  --kmsKeyId: string # Identifies which KMS key is used to encrypt the container image.
-  clientToken: string # The client token used to make this request idempotent.
+  --working-directory: string # The working directory for use during build and test workflows.
+  target_repository: record # The container repository where the output container image is stored. — shape: {service?: any, repositoryName?: any}
+  --kms-key-id: string # Identifies which KMS key is used to encrypt the container image.
+  client_token: string # The client token used to make this request idempotent.
 ]: any -> record<requestId: record, clientToken: record, containerRecipeArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CreateContainerRecipe")
-  let body = {containerType: $containerType, name: $name, description: $description, semanticVersion: $semanticVersion, components: $components, instanceConfiguration: $instanceConfiguration, dockerfileTemplateData: $dockerfileTemplateData, dockerfileTemplateUri: $dockerfileTemplateUri, platformOverride: $platformOverride, imageOsVersionOverride: $imageOsVersionOverride, parentImage: $parentImage, tags: $tags, workingDirectory: $workingDirectory, targetRepository: $targetRepository, kmsKeyId: $kmsKeyId, clientToken: $clientToken} | compact
+  let body = {"containerType": $container_type, "name": $name, "description": $description, "semanticVersion": $semantic_version, "components": $components, "instanceConfiguration": $instance_configuration, "dockerfileTemplateData": $dockerfile_template_data, "dockerfileTemplateUri": $dockerfile_template_uri, "platformOverride": $platform_override, "imageOsVersionOverride": $image_os_version_override, "parentImage": $parent_image, "tags": $tags, "workingDirectory": $working_directory, "targetRepository": $target_repository, "kmsKeyId": $kms_key_id, "clientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -236,7 +236,7 @@ export def "create-container-recipe CreateContainerRecipe" [
 # PUT /CreateDistributionConfiguration
 # operationId: CreateDistributionConfiguration
 # --distributions item shape: {region: any, amiDistributionConfiguration?: any, containerDistributionConfiguration?: any, licenseConfigurationArns?: any, launchTemplateConfigurations?: any, s3ExportConfiguration?: any, fastLaunchConfigurations?: any}
-export def "create-distribution-configuration CreateDistributionConfiguration" [
+export def "create-distribution-configuration create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,26 +245,26 @@ export def "create-distribution-configuration CreateDistributionConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   name: string # The name of the distribution configuration.
   --description: string # The description of the distribution configuration.
   distributions: list # The distributions of the distribution configuration. — item shape: {region: any, amiDistributionConfiguration?: any, containerDistributionConfiguration?: any, licenseConfigurationArns?: any, launchTemplateConfigurations?: any, s3ExportConfiguration?: any, fastLaunchConfigurations?: any}
   --tags: record # The tags of the distribution configuration.
-  clientToken: string # The idempotency token of the distribution configuration.
+  client_token: string # The idempotency token of the distribution configuration.
 ]: any -> record<requestId: record, clientToken: record, distributionConfigurationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CreateDistributionConfiguration")
-  let body = {name: $name, description: $description, distributions: $distributions, tags: $tags, clientToken: $clientToken} | compact
+  let body = {"name": $name, "description": $description, "distributions": $distributions, "tags": $tags, "clientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -277,7 +277,7 @@ export def "create-distribution-configuration CreateDistributionConfiguration" [
 # operationId: CreateImage
 # --imageTestsConfiguration shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
 # --imageScanningConfiguration shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
-export def "create-image CreateImage" [
+export def "create-image create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,30 +286,30 @@ export def "create-image CreateImage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --imageRecipeArn: string # The Amazon Resource Name (ARN) of the image recipe that defines how images are configured, tested, and assessed.
-  --containerRecipeArn: string # The Amazon Resource Name (ARN) of the container recipe that defines how images are configured and tested.
-  --distributionConfigurationArn: string # The Amazon Resource Name (ARN) of the distribution configuration that defines and configures the outputs of your pipeline.
-  infrastructureConfigurationArn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that defines the environment in which your image will be built and tested.
-  --imageTestsConfiguration: record # Configure image tests for your pipeline build. Tests run after building the image, to verify that the AMI or container image is valid before distributing it. — shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
-  --enhancedImageMetadataEnabled: oneof<nothing, bool> # Collects additional information about the image being created, including the operating system (OS) version and package list. This information is used to enhance the overall experience of using EC2 Image Builder. Enabled by default.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --image-recipe-arn: string # The Amazon Resource Name (ARN) of the image recipe that defines how images are configured, tested, and assessed.
+  --container-recipe-arn: string # The Amazon Resource Name (ARN) of the container recipe that defines how images are configured and tested.
+  --distribution-configuration-arn: string # The Amazon Resource Name (ARN) of the distribution configuration that defines and configures the outputs of your pipeline.
+  infrastructure_configuration_arn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that defines the environment in which your image will be built and tested.
+  --image-tests-configuration: record # Configure image tests for your pipeline build. Tests run after building the image, to verify that the AMI or container image is valid before distributing it. — shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
+  --enhanced-image-metadata-enabled: oneof<nothing, bool> # Collects additional information about the image being created, including the operating system (OS) version and package list. This information is used to enhance the overall experience of using EC2 Image Builder. Enabled by default.
   --tags: record # The tags of the image.
-  clientToken: string # The idempotency token used to make this request idempotent.
-  --imageScanningConfiguration: record # Contains settings for Image Builder image resource and container image scans. — shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
+  client_token: string # The idempotency token used to make this request idempotent.
+  --image-scanning-configuration: record # Contains settings for Image Builder image resource and container image scans. — shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
 ]: any -> record<requestId: record, clientToken: record, imageBuildVersionArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CreateImage")
-  let body = {imageRecipeArn: $imageRecipeArn, containerRecipeArn: $containerRecipeArn, distributionConfigurationArn: $distributionConfigurationArn, infrastructureConfigurationArn: $infrastructureConfigurationArn, imageTestsConfiguration: $imageTestsConfiguration, enhancedImageMetadataEnabled: $enhancedImageMetadataEnabled, tags: $tags, clientToken: $clientToken, imageScanningConfiguration: $imageScanningConfiguration} | compact
+  let body = {"imageRecipeArn": $image_recipe_arn, "containerRecipeArn": $container_recipe_arn, "distributionConfigurationArn": $distribution_configuration_arn, "infrastructureConfigurationArn": $infrastructure_configuration_arn, "imageTestsConfiguration": $image_tests_configuration, "enhancedImageMetadataEnabled": $enhanced_image_metadata_enabled, "tags": $tags, "clientToken": $client_token, "imageScanningConfiguration": $image_scanning_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -323,7 +323,7 @@ export def "create-image CreateImage" [
 # --imageTestsConfiguration shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
 # --schedule shape: {scheduleExpression?: any, timezone?: any, pipelineExecutionStartCondition?: any}
 # --imageScanningConfiguration shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
-export def "create-image-pipeline CreateImagePipeline" [
+export def "create-image-pipeline create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,34 +332,34 @@ export def "create-image-pipeline CreateImagePipeline" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   name: string # The name of the image pipeline.
   --description: string # The description of the image pipeline.
-  --imageRecipeArn: string # The Amazon Resource Name (ARN) of the image recipe that will be used to configure images created by this image pipeline.
-  --containerRecipeArn: string # The Amazon Resource Name (ARN) of the container recipe that is used to configure images created by this container pipeline.
-  infrastructureConfigurationArn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that will be used to build images created by this image pipeline.
-  --distributionConfigurationArn: string # The Amazon Resource Name (ARN) of the distribution configuration that will be used to configure and distribute images created by this image pipeline.
-  --imageTestsConfiguration: record # Configure image tests for your pipeline build. Tests run after building the image, to verify that the AMI or container image is valid before distributing it. — shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
-  --enhancedImageMetadataEnabled: oneof<nothing, bool> # Collects additional information about the image being created, including the operating system (OS) version and package list. This information is used to enhance the overall experience of using EC2 Image Builder. Enabled by default.
+  --image-recipe-arn: string # The Amazon Resource Name (ARN) of the image recipe that will be used to configure images created by this image pipeline.
+  --container-recipe-arn: string # The Amazon Resource Name (ARN) of the container recipe that is used to configure images created by this container pipeline.
+  infrastructure_configuration_arn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that will be used to build images created by this image pipeline.
+  --distribution-configuration-arn: string # The Amazon Resource Name (ARN) of the distribution configuration that will be used to configure and distribute images created by this image pipeline.
+  --image-tests-configuration: record # Configure image tests for your pipeline build. Tests run after building the image, to verify that the AMI or container image is valid before distributing it. — shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
+  --enhanced-image-metadata-enabled: oneof<nothing, bool> # Collects additional information about the image being created, including the operating system (OS) version and package list. This information is used to enhance the overall experience of using EC2 Image Builder. Enabled by default.
   --schedule: record # A schedule configures how often and when a pipeline will automatically create a new image. — shape: {scheduleExpression?: any, timezone?: any, pipelineExecutionStartCondition?: any}
   --status: string@status-completer # The status of the image pipeline.
   --tags: record # The tags of the image pipeline.
-  clientToken: string # The idempotency token used to make this request idempotent.
-  --imageScanningConfiguration: record # Contains settings for Image Builder image resource and container image scans. — shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
+  client_token: string # The idempotency token used to make this request idempotent.
+  --image-scanning-configuration: record # Contains settings for Image Builder image resource and container image scans. — shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
 ]: any -> record<requestId: record, clientToken: record, imagePipelineArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CreateImagePipeline")
-  let body = {name: $name, description: $description, imageRecipeArn: $imageRecipeArn, containerRecipeArn: $containerRecipeArn, infrastructureConfigurationArn: $infrastructureConfigurationArn, distributionConfigurationArn: $distributionConfigurationArn, imageTestsConfiguration: $imageTestsConfiguration, enhancedImageMetadataEnabled: $enhancedImageMetadataEnabled, schedule: $schedule, status: $status, tags: $tags, clientToken: $clientToken, imageScanningConfiguration: $imageScanningConfiguration} | compact
+  let body = {"name": $name, "description": $description, "imageRecipeArn": $image_recipe_arn, "containerRecipeArn": $container_recipe_arn, "infrastructureConfigurationArn": $infrastructure_configuration_arn, "distributionConfigurationArn": $distribution_configuration_arn, "imageTestsConfiguration": $image_tests_configuration, "enhancedImageMetadataEnabled": $enhanced_image_metadata_enabled, "schedule": $schedule, "status": $status, "tags": $tags, "clientToken": $client_token, "imageScanningConfiguration": $image_scanning_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -373,7 +373,7 @@ export def "create-image-pipeline CreateImagePipeline" [
 # --components item shape: {componentArn: any, parameters?: any}
 # --blockDeviceMappings item shape: {deviceName?: any, ebs?: any, virtualName?: any, noDevice?: any}
 # --additionalInstanceConfiguration shape: {systemsManagerAgent?: any, userDataOverride?: any}
-export def "create-image-recipe CreateImageRecipe" [
+export def "create-image-recipe create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,31 +382,31 @@ export def "create-image-recipe CreateImageRecipe" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   name: string # The name of the image recipe.
   --description: string # The description of the image recipe.
-  semanticVersion: string # <p>The semantic version of the image recipe. This version follows the semantic version syntax.</p> <note> <p>The semantic version has four nodes: &lt;major&gt;.&lt;minor&gt;.&lt;patch&gt;/&lt;build&gt;. You can assign values for the first three, and can filter on all of them.</p> <p> <b>Assignment:</b> For the first three nodes you can assign any positive integer value, including zero, with an upper limit of 2^30-1, or 1073741823 for each node. Image Builder automatically assigns the build number to the fourth node.</p> <p> <b>Patterns:</b> You can use any numeric pattern that adheres to the assignment requirements for the nodes that you can assign. For example, you might choose a software version pattern, such as 1.0.0, or a date, such as 2021.01.01.</p> </note>
+  semantic_version: string # <p>The semantic version of the image recipe. This version follows the semantic version syntax.</p> <note> <p>The semantic version has four nodes: &lt;major&gt;.&lt;minor&gt;.&lt;patch&gt;/&lt;build&gt;. You can assign values for the first three, and can filter on all of them.</p> <p> <b>Assignment:</b> For the first three nodes you can assign any positive integer value, including zero, with an upper limit of 2^30-1, or 1073741823 for each node. Image Builder automatically assigns the build number to the fourth node.</p> <p> <b>Patterns:</b> You can use any numeric pattern that adheres to the assignment requirements for the nodes that you can assign. For example, you might choose a software version pattern, such as 1.0.0, or a date, such as 2021.01.01.</p> </note>
   components: list # The components included in the image recipe. — item shape: {componentArn: any, parameters?: any}
-  parentImage: string # The base image of the image recipe. The value of the string can be the ARN of the base image or an AMI ID. The format for the ARN follows this example: <code>arn:aws:imagebuilder:us-west-2:aws:image/windows-server-2016-english-full-base-x86/x.x.x</code>. You can provide the specific version that you want to use, or you can use a wildcard in all of the fields. If you enter an AMI ID for the string value, you must have access to the AMI, and the AMI must be in the same Region in which you are using Image Builder.
-  --blockDeviceMappings: list # The block device mappings of the image recipe. — item shape: {deviceName?: any, ebs?: any, virtualName?: any, noDevice?: any}
+  parent_image: string # The base image of the image recipe. The value of the string can be the ARN of the base image or an AMI ID. The format for the ARN follows this example: <code>arn:aws:imagebuilder:us-west-2:aws:image/windows-server-2016-english-full-base-x86/x.x.x</code>. You can provide the specific version that you want to use, or you can use a wildcard in all of the fields. If you enter an AMI ID for the string value, you must have access to the AMI, and the AMI must be in the same Region in which you are using Image Builder.
+  --block-device-mappings: list # The block device mappings of the image recipe. — item shape: {deviceName?: any, ebs?: any, virtualName?: any, noDevice?: any}
   --tags: record # The tags of the image recipe.
-  --workingDirectory: string # The working directory used during build and test workflows.
-  --additionalInstanceConfiguration: record # <p>In addition to your infrastructure configuration, these settings provide an extra layer of control over your build instances. You can also specify commands to run on launch for all of your build instances.</p> <p>Image Builder does not automatically install the Systems Manager agent on Windows instances. If your base image includes the Systems Manager agent, then the AMI that you create will also include the agent. For Linux instances, if the base image does not already include the Systems Manager agent, Image Builder installs it. For Linux instances where Image Builder installs the Systems Manager agent, you can choose whether to keep it for the AMI that you create.</p> — shape: {systemsManagerAgent?: any, userDataOverride?: any}
-  clientToken: string # The idempotency token used to make this request idempotent.
+  --working-directory: string # The working directory used during build and test workflows.
+  --additional-instance-configuration: record # <p>In addition to your infrastructure configuration, these settings provide an extra layer of control over your build instances. You can also specify commands to run on launch for all of your build instances.</p> <p>Image Builder does not automatically install the Systems Manager agent on Windows instances. If your base image includes the Systems Manager agent, then the AMI that you create will also include the agent. For Linux instances, if the base image does not already include the Systems Manager agent, Image Builder installs it. For Linux instances where Image Builder installs the Systems Manager agent, you can choose whether to keep it for the AMI that you create.</p> — shape: {systemsManagerAgent?: any, userDataOverride?: any}
+  client_token: string # The idempotency token used to make this request idempotent.
 ]: any -> record<requestId: record, clientToken: record, imageRecipeArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CreateImageRecipe")
-  let body = {name: $name, description: $description, semanticVersion: $semanticVersion, components: $components, parentImage: $parentImage, blockDeviceMappings: $blockDeviceMappings, tags: $tags, workingDirectory: $workingDirectory, additionalInstanceConfiguration: $additionalInstanceConfiguration, clientToken: $clientToken} | compact
+  let body = {"name": $name, "description": $description, "semanticVersion": $semantic_version, "components": $components, "parentImage": $parent_image, "blockDeviceMappings": $block_device_mappings, "tags": $tags, "workingDirectory": $working_directory, "additionalInstanceConfiguration": $additional_instance_configuration, "clientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -419,7 +419,7 @@ export def "create-image-recipe CreateImageRecipe" [
 # operationId: CreateInfrastructureConfiguration
 # --logging shape: {s3Logs?: any}
 # --instanceMetadataOptions shape: {httpTokens?: any, httpPutResponseHopLimit?: any}
-export def "create-infrastructure-configuration CreateInfrastructureConfiguration" [
+export def "create-infrastructure-configuration create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,35 +428,35 @@ export def "create-infrastructure-configuration CreateInfrastructureConfiguratio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   name: string # The name of the infrastructure configuration.
   --description: string # The description of the infrastructure configuration.
-  --instanceTypes: list # The instance types of the infrastructure configuration. You can specify one or more instance types to use for this build. The service will pick one of these instance types based on availability.
-  instanceProfileName: string # The instance profile to associate with the instance used to customize your Amazon EC2 AMI.
-  --securityGroupIds: list # The security group IDs to associate with the instance used to customize your Amazon EC2 AMI.
-  --subnetId: string # The subnet ID in which to place the instance used to customize your Amazon EC2 AMI.
+  --instance-types: list # The instance types of the infrastructure configuration. You can specify one or more instance types to use for this build. The service will pick one of these instance types based on availability.
+  instance_profile_name: string # The instance profile to associate with the instance used to customize your Amazon EC2 AMI.
+  --security-group-ids: list # The security group IDs to associate with the instance used to customize your Amazon EC2 AMI.
+  --subnet-id: string # The subnet ID in which to place the instance used to customize your Amazon EC2 AMI.
   --logging: record # Logging configuration defines where Image Builder uploads your logs. — shape: {s3Logs?: any}
-  --keyPair: string # The key pair of the infrastructure configuration. You can use this to log on to and debug the instance used to create your image.
-  --terminateInstanceOnFailure: oneof<nothing, bool> # The terminate instance on failure setting of the infrastructure configuration. Set to false if you want Image Builder to retain the instance used to configure your AMI if the build or test phase of your workflow fails.
-  --snsTopicArn: string # <p>The Amazon Resource Name (ARN) for the SNS topic to which we send image build event notifications.</p> <note> <p>EC2 Image Builder is unable to send notifications to SNS topics that are encrypted using keys from other accounts. The key that is used to encrypt the SNS topic must reside in the account that the Image Builder service runs under.</p> </note>
-  --resourceTags: record # The tags attached to the resource created by Image Builder.
-  --instanceMetadataOptions: record # The instance metadata options that apply to the HTTP requests that pipeline builds use to launch EC2 build and test instances. For more information about instance metadata options, see <a href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-options.html">Configure the instance metadata options</a> in the <i> <i>Amazon EC2 User Guide</i> </i> for Linux instances, or <a href="https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/configuring-instance-metadata-options.html">Configure the instance metadata options</a> in the <i> <i>Amazon EC2 Windows Guide</i> </i> for Windows instances. — shape: {httpTokens?: any, httpPutResponseHopLimit?: any}
+  --key-pair: string # The key pair of the infrastructure configuration. You can use this to log on to and debug the instance used to create your image.
+  --terminate-instance-on-failure: oneof<nothing, bool> # The terminate instance on failure setting of the infrastructure configuration. Set to false if you want Image Builder to retain the instance used to configure your AMI if the build or test phase of your workflow fails.
+  --sns-topic-arn: string # <p>The Amazon Resource Name (ARN) for the SNS topic to which we send image build event notifications.</p> <note> <p>EC2 Image Builder is unable to send notifications to SNS topics that are encrypted using keys from other accounts. The key that is used to encrypt the SNS topic must reside in the account that the Image Builder service runs under.</p> </note>
+  --resource-tags: record # The tags attached to the resource created by Image Builder.
+  --instance-metadata-options: record # The instance metadata options that apply to the HTTP requests that pipeline builds use to launch EC2 build and test instances. For more information about instance metadata options, see <a href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-options.html">Configure the instance metadata options</a> in the <i> <i>Amazon EC2 User Guide</i> </i> for Linux instances, or <a href="https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/configuring-instance-metadata-options.html">Configure the instance metadata options</a> in the <i> <i>Amazon EC2 Windows Guide</i> </i> for Windows instances. — shape: {httpTokens?: any, httpPutResponseHopLimit?: any}
   --tags: record # The tags of the infrastructure configuration.
-  clientToken: string # The idempotency token used to make this request idempotent.
+  client_token: string # The idempotency token used to make this request idempotent.
 ]: any -> record<requestId: record, clientToken: record, infrastructureConfigurationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CreateInfrastructureConfiguration")
-  let body = {name: $name, description: $description, instanceTypes: $instanceTypes, instanceProfileName: $instanceProfileName, securityGroupIds: $securityGroupIds, subnetId: $subnetId, logging: $logging, keyPair: $keyPair, terminateInstanceOnFailure: $terminateInstanceOnFailure, snsTopicArn: $snsTopicArn, resourceTags: $resourceTags, instanceMetadataOptions: $instanceMetadataOptions, tags: $tags, clientToken: $clientToken} | compact
+  let body = {"name": $name, "description": $description, "instanceTypes": $instance_types, "instanceProfileName": $instance_profile_name, "securityGroupIds": $security_group_ids, "subnetId": $subnet_id, "logging": $logging, "keyPair": $key_pair, "terminateInstanceOnFailure": $terminate_instance_on_failure, "snsTopicArn": $sns_topic_arn, "resourceTags": $resource_tags, "instanceMetadataOptions": $instance_metadata_options, "tags": $tags, "clientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -467,7 +467,7 @@ export def "create-infrastructure-configuration CreateInfrastructureConfiguratio
 #
 # DELETE /DeleteComponent#componentBuildVersionArn
 # operationId: DeleteComponent
-export def "delete-componentcomponent-build-version-arn DeleteComponent" [
+export def "delete-componentcomponent-build-version-arn delete-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,20 +476,20 @@ export def "delete-componentcomponent-build-version-arn DeleteComponent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --componentBuildVersionArn: string # The Amazon Resource Name (ARN) of the component build version to delete.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --component-build-version-arn: string # The Amazon Resource Name (ARN) of the component build version to delete.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, componentBuildVersionArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "componentBuildVersionArn" $componentBuildVersionArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "componentBuildVersionArn" $component_build_version_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DeleteComponent#componentBuildVersionArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -500,7 +500,7 @@ export def "delete-componentcomponent-build-version-arn DeleteComponent" [
 #
 # DELETE /DeleteContainerRecipe#containerRecipeArn
 # operationId: DeleteContainerRecipe
-export def "delete-container-recipecontainer-recipe-arn DeleteContainerRecipe" [
+export def "delete-container-recipecontainer-recipe-arn delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,20 +509,20 @@ export def "delete-container-recipecontainer-recipe-arn DeleteContainerRecipe" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --containerRecipeArn: string # The Amazon Resource Name (ARN) of the container recipe to delete.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --container-recipe-arn: string # The Amazon Resource Name (ARN) of the container recipe to delete.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, containerRecipeArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "containerRecipeArn" $containerRecipeArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "containerRecipeArn" $container_recipe_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DeleteContainerRecipe#containerRecipeArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -533,7 +533,7 @@ export def "delete-container-recipecontainer-recipe-arn DeleteContainerRecipe" [
 #
 # DELETE /DeleteDistributionConfiguration#distributionConfigurationArn
 # operationId: DeleteDistributionConfiguration
-export def "delete-distribution-configurationdistribution-configuration-arn DeleteDistributionConfiguration" [
+export def "delete-distribution-configurationdistribution-configuration-arn delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -542,20 +542,20 @@ export def "delete-distribution-configurationdistribution-configuration-arn Dele
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --distributionConfigurationArn: string # The Amazon Resource Name (ARN) of the distribution configuration to delete.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --distribution-configuration-arn: string # The Amazon Resource Name (ARN) of the distribution configuration to delete.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, distributionConfigurationArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "distributionConfigurationArn" $distributionConfigurationArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "distributionConfigurationArn" $distribution_configuration_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DeleteDistributionConfiguration#distributionConfigurationArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -566,7 +566,7 @@ export def "delete-distribution-configurationdistribution-configuration-arn Dele
 #
 # DELETE /DeleteImage#imageBuildVersionArn
 # operationId: DeleteImage
-export def "delete-imageimage-build-version-arn DeleteImage" [
+export def "delete-imageimage-build-version-arn delete-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -575,20 +575,20 @@ export def "delete-imageimage-build-version-arn DeleteImage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --imageBuildVersionArn: string # The Amazon Resource Name (ARN) of the Image Builder image resource to delete.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --image-build-version-arn: string # The Amazon Resource Name (ARN) of the Image Builder image resource to delete.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, imageBuildVersionArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "imageBuildVersionArn" $imageBuildVersionArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "imageBuildVersionArn" $image_build_version_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DeleteImage#imageBuildVersionArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -599,7 +599,7 @@ export def "delete-imageimage-build-version-arn DeleteImage" [
 #
 # DELETE /DeleteImagePipeline#imagePipelineArn
 # operationId: DeleteImagePipeline
-export def "delete-image-pipelineimage-pipeline-arn DeleteImagePipeline" [
+export def "delete-image-pipelineimage-pipeline-arn delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,20 +608,20 @@ export def "delete-image-pipelineimage-pipeline-arn DeleteImagePipeline" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --imagePipelineArn: string # The Amazon Resource Name (ARN) of the image pipeline to delete.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --image-pipeline-arn: string # The Amazon Resource Name (ARN) of the image pipeline to delete.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, imagePipelineArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "imagePipelineArn" $imagePipelineArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "imagePipelineArn" $image_pipeline_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DeleteImagePipeline#imagePipelineArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -632,7 +632,7 @@ export def "delete-image-pipelineimage-pipeline-arn DeleteImagePipeline" [
 #
 # DELETE /DeleteImageRecipe#imageRecipeArn
 # operationId: DeleteImageRecipe
-export def "delete-image-recipeimage-recipe-arn DeleteImageRecipe" [
+export def "delete-image-recipeimage-recipe-arn delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,20 +641,20 @@ export def "delete-image-recipeimage-recipe-arn DeleteImageRecipe" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --imageRecipeArn: string # The Amazon Resource Name (ARN) of the image recipe to delete.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --image-recipe-arn: string # The Amazon Resource Name (ARN) of the image recipe to delete.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, imageRecipeArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "imageRecipeArn" $imageRecipeArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "imageRecipeArn" $image_recipe_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DeleteImageRecipe#imageRecipeArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -665,7 +665,7 @@ export def "delete-image-recipeimage-recipe-arn DeleteImageRecipe" [
 #
 # DELETE /DeleteInfrastructureConfiguration#infrastructureConfigurationArn
 # operationId: DeleteInfrastructureConfiguration
-export def "delete-infrastructure-configurationinfrastructure-configuration-arn DeleteInfrastructureConfiguration" [
+export def "delete-infrastructure-configurationinfrastructure-configuration-arn delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,20 +674,20 @@ export def "delete-infrastructure-configurationinfrastructure-configuration-arn 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --infrastructureConfigurationArn: string # The Amazon Resource Name (ARN) of the infrastructure configuration to delete.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --infrastructure-configuration-arn: string # The Amazon Resource Name (ARN) of the infrastructure configuration to delete.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, infrastructureConfigurationArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "infrastructureConfigurationArn" $infrastructureConfigurationArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "infrastructureConfigurationArn" $infrastructure_configuration_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DeleteInfrastructureConfiguration#infrastructureConfigurationArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -698,7 +698,7 @@ export def "delete-infrastructure-configurationinfrastructure-configuration-arn 
 #
 # GET /GetComponent#componentBuildVersionArn
 # operationId: GetComponent
-export def "get-componentcomponent-build-version-arn GetComponent" [
+export def "get-componentcomponent-build-version-arn get-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -707,20 +707,20 @@ export def "get-componentcomponent-build-version-arn GetComponent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --componentBuildVersionArn: string # The Amazon Resource Name (ARN) of the component that you want to get. Regex requires the suffix <code>/\d+$</code>.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --component-build-version-arn: string # The Amazon Resource Name (ARN) of the component that you want to get. Regex requires the suffix <code>/\d+$</code>.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, component: record<arn: record, name: record, version: record, description: record, changeDescription: record, type: record, platform: record, supportedOsVersions: record, state: record<status: record, reason: record>, parameters: record, owner: record, data: record, kmsKeyId: record, encrypted: record, dateCreated: record, tags: record, publisher: record, obfuscate: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "componentBuildVersionArn" $componentBuildVersionArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "componentBuildVersionArn" $component_build_version_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetComponent#componentBuildVersionArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -731,7 +731,7 @@ export def "get-componentcomponent-build-version-arn GetComponent" [
 #
 # GET /GetComponentPolicy#componentArn
 # operationId: GetComponentPolicy
-export def "get-component-policycomponent-arn GetComponentPolicy" [
+export def "get-component-policycomponent-arn get-component-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -740,20 +740,20 @@ export def "get-component-policycomponent-arn GetComponentPolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --componentArn: string # The Amazon Resource Name (ARN) of the component whose policy you want to retrieve.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --component-arn: string # The Amazon Resource Name (ARN) of the component whose policy you want to retrieve.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, policy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "componentArn" $componentArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "componentArn" $component_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetComponentPolicy#componentArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -764,7 +764,7 @@ export def "get-component-policycomponent-arn GetComponentPolicy" [
 #
 # GET /GetContainerRecipe#containerRecipeArn
 # operationId: GetContainerRecipe
-export def "get-container-recipecontainer-recipe-arn GetContainerRecipe" [
+export def "get-container-recipecontainer-recipe-arn get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -773,20 +773,20 @@ export def "get-container-recipecontainer-recipe-arn GetContainerRecipe" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --containerRecipeArn: string # The Amazon Resource Name (ARN) of the container recipe to retrieve.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --container-recipe-arn: string # The Amazon Resource Name (ARN) of the container recipe to retrieve.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, containerRecipe: record<arn: record, containerType: record, name: record, description: record, platform: record, owner: record, version: record, components: record, instanceConfiguration: record<image: record, blockDeviceMappings: record>, dockerfileTemplateData: record, kmsKeyId: record, encrypted: record, parentImage: record, dateCreated: record, tags: record, workingDirectory: record, targetRepository: record<service: record, repositoryName: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "containerRecipeArn" $containerRecipeArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "containerRecipeArn" $container_recipe_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetContainerRecipe#containerRecipeArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -797,7 +797,7 @@ export def "get-container-recipecontainer-recipe-arn GetContainerRecipe" [
 #
 # GET /GetContainerRecipePolicy#containerRecipeArn
 # operationId: GetContainerRecipePolicy
-export def "get-container-recipe-policycontainer-recipe-arn GetContainerRecipePolicy" [
+export def "get-container-recipe-policycontainer-recipe-arn get-container-recipe-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -806,20 +806,20 @@ export def "get-container-recipe-policycontainer-recipe-arn GetContainerRecipePo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --containerRecipeArn: string # The Amazon Resource Name (ARN) of the container recipe for the policy being requested.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --container-recipe-arn: string # The Amazon Resource Name (ARN) of the container recipe for the policy being requested.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, policy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "containerRecipeArn" $containerRecipeArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "containerRecipeArn" $container_recipe_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetContainerRecipePolicy#containerRecipeArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -830,7 +830,7 @@ export def "get-container-recipe-policycontainer-recipe-arn GetContainerRecipePo
 #
 # GET /GetDistributionConfiguration#distributionConfigurationArn
 # operationId: GetDistributionConfiguration
-export def "get-distribution-configurationdistribution-configuration-arn GetDistributionConfiguration" [
+export def "get-distribution-configurationdistribution-configuration-arn get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -839,20 +839,20 @@ export def "get-distribution-configurationdistribution-configuration-arn GetDist
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --distributionConfigurationArn: string # The Amazon Resource Name (ARN) of the distribution configuration that you want to retrieve.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --distribution-configuration-arn: string # The Amazon Resource Name (ARN) of the distribution configuration that you want to retrieve.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, distributionConfiguration: record<arn: record, name: record, description: record, distributions: record, timeoutMinutes: record, dateCreated: record, dateUpdated: record, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "distributionConfigurationArn" $distributionConfigurationArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "distributionConfigurationArn" $distribution_configuration_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetDistributionConfiguration#distributionConfigurationArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -863,7 +863,7 @@ export def "get-distribution-configurationdistribution-configuration-arn GetDist
 #
 # GET /GetImage#imageBuildVersionArn
 # operationId: GetImage
-export def "get-imageimage-build-version-arn GetImage" [
+export def "get-imageimage-build-version-arn get-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,20 +872,20 @@ export def "get-imageimage-build-version-arn GetImage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --imageBuildVersionArn: string # The Amazon Resource Name (ARN) of the image that you want to get.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --image-build-version-arn: string # The Amazon Resource Name (ARN) of the image that you want to get.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, image: record<arn: record, type: record, name: record, version: record, platform: record, enhancedImageMetadataEnabled: record, osVersion: record, state: record<status: record, reason: record>, imageRecipe: record<arn: record, type: record, name: record, description: record, platform: record, owner: record, version: record, components: record, parentImage: record, blockDeviceMappings: record, dateCreated: record, tags: record, workingDirectory: record, additionalInstanceConfiguration: record>, containerRecipe: record<arn: record, containerType: record, name: record, description: record, platform: record, owner: record, version: record, components: record, instanceConfiguration: record, dockerfileTemplateData: record, kmsKeyId: record, encrypted: record, parentImage: record, dateCreated: record, tags: record, workingDirectory: record, targetRepository: record>, sourcePipelineName: record, sourcePipelineArn: record, infrastructureConfiguration: record<arn: record, name: record, description: record, instanceTypes: record, instanceProfileName: record, securityGroupIds: record, subnetId: record, logging: record, keyPair: record, terminateInstanceOnFailure: record, snsTopicArn: record, dateCreated: record, dateUpdated: record, resourceTags: record, instanceMetadataOptions: record, tags: record>, distributionConfiguration: record<arn: record, name: record, description: record, distributions: record, timeoutMinutes: record, dateCreated: record, dateUpdated: record, tags: record>, imageTestsConfiguration: record<imageTestsEnabled: record, timeoutMinutes: record>, dateCreated: record, outputResources: record<amis: record, containers: record>, tags: record, buildType: record, imageSource: record, scanState: record<status: record, reason: record>, imageScanningConfiguration: record<imageScanningEnabled: record, ecrConfiguration: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "imageBuildVersionArn" $imageBuildVersionArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "imageBuildVersionArn" $image_build_version_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetImage#imageBuildVersionArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -896,7 +896,7 @@ export def "get-imageimage-build-version-arn GetImage" [
 #
 # GET /GetImagePipeline#imagePipelineArn
 # operationId: GetImagePipeline
-export def "get-image-pipelineimage-pipeline-arn GetImagePipeline" [
+export def "get-image-pipelineimage-pipeline-arn get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,20 +905,20 @@ export def "get-image-pipelineimage-pipeline-arn GetImagePipeline" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --imagePipelineArn: string # The Amazon Resource Name (ARN) of the image pipeline that you want to retrieve.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --image-pipeline-arn: string # The Amazon Resource Name (ARN) of the image pipeline that you want to retrieve.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, imagePipeline: record<arn: record, name: record, description: record, platform: record, enhancedImageMetadataEnabled: record, imageRecipeArn: record, containerRecipeArn: record, infrastructureConfigurationArn: record, distributionConfigurationArn: record, imageTestsConfiguration: record<imageTestsEnabled: record, timeoutMinutes: record>, schedule: record<scheduleExpression: record, timezone: record, pipelineExecutionStartCondition: record>, status: record, dateCreated: record, dateUpdated: record, dateLastRun: record, dateNextRun: record, tags: record, imageScanningConfiguration: record<imageScanningEnabled: record, ecrConfiguration: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "imagePipelineArn" $imagePipelineArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "imagePipelineArn" $image_pipeline_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetImagePipeline#imagePipelineArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -929,7 +929,7 @@ export def "get-image-pipelineimage-pipeline-arn GetImagePipeline" [
 #
 # GET /GetImagePolicy#imageArn
 # operationId: GetImagePolicy
-export def "get-image-policyimage-arn GetImagePolicy" [
+export def "get-image-policyimage-arn get-image-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -938,20 +938,20 @@ export def "get-image-policyimage-arn GetImagePolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --imageArn: string # The Amazon Resource Name (ARN) of the image whose policy you want to retrieve.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --image-arn: string # The Amazon Resource Name (ARN) of the image whose policy you want to retrieve.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, policy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "imageArn" $imageArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "imageArn" $image_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetImagePolicy#imageArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -962,7 +962,7 @@ export def "get-image-policyimage-arn GetImagePolicy" [
 #
 # GET /GetImageRecipe#imageRecipeArn
 # operationId: GetImageRecipe
-export def "get-image-recipeimage-recipe-arn GetImageRecipe" [
+export def "get-image-recipeimage-recipe-arn get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -971,20 +971,20 @@ export def "get-image-recipeimage-recipe-arn GetImageRecipe" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --imageRecipeArn: string # The Amazon Resource Name (ARN) of the image recipe that you want to retrieve.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --image-recipe-arn: string # The Amazon Resource Name (ARN) of the image recipe that you want to retrieve.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, imageRecipe: record<arn: record, type: record, name: record, description: record, platform: record, owner: record, version: record, components: record, parentImage: record, blockDeviceMappings: record, dateCreated: record, tags: record, workingDirectory: record, additionalInstanceConfiguration: record<systemsManagerAgent: record, userDataOverride: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "imageRecipeArn" $imageRecipeArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "imageRecipeArn" $image_recipe_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetImageRecipe#imageRecipeArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -995,7 +995,7 @@ export def "get-image-recipeimage-recipe-arn GetImageRecipe" [
 #
 # GET /GetImageRecipePolicy#imageRecipeArn
 # operationId: GetImageRecipePolicy
-export def "get-image-recipe-policyimage-recipe-arn GetImageRecipePolicy" [
+export def "get-image-recipe-policyimage-recipe-arn get-image-recipe-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1004,20 +1004,20 @@ export def "get-image-recipe-policyimage-recipe-arn GetImageRecipePolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --imageRecipeArn: string # The Amazon Resource Name (ARN) of the image recipe whose policy you want to retrieve.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --image-recipe-arn: string # The Amazon Resource Name (ARN) of the image recipe whose policy you want to retrieve.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, policy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "imageRecipeArn" $imageRecipeArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "imageRecipeArn" $image_recipe_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetImageRecipePolicy#imageRecipeArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1028,7 +1028,7 @@ export def "get-image-recipe-policyimage-recipe-arn GetImageRecipePolicy" [
 #
 # GET /GetInfrastructureConfiguration#infrastructureConfigurationArn
 # operationId: GetInfrastructureConfiguration
-export def "get-infrastructure-configurationinfrastructure-configuration-arn GetInfrastructureConfiguration" [
+export def "get-infrastructure-configurationinfrastructure-configuration-arn get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,20 +1037,20 @@ export def "get-infrastructure-configurationinfrastructure-configuration-arn Get
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --infrastructureConfigurationArn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that you want to retrieve.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --infrastructure-configuration-arn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that you want to retrieve.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, infrastructureConfiguration: record<arn: record, name: record, description: record, instanceTypes: record, instanceProfileName: record, securityGroupIds: record, subnetId: record, logging: record<s3Logs: record>, keyPair: record, terminateInstanceOnFailure: record, snsTopicArn: record, dateCreated: record, dateUpdated: record, resourceTags: record, instanceMetadataOptions: record<httpTokens: record, httpPutResponseHopLimit: record>, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "infrastructureConfigurationArn" $infrastructureConfigurationArn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "infrastructureConfigurationArn" $infrastructure_configuration_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetInfrastructureConfiguration#infrastructureConfigurationArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1061,7 +1061,7 @@ export def "get-infrastructure-configurationinfrastructure-configuration-arn Get
 #
 # GET /GetWorkflowExecution#workflowExecutionId
 # operationId: GetWorkflowExecution
-export def "get-workflow-executionworkflow-execution-id GetWorkflowExecution" [
+export def "get-workflow-executionworkflow-execution-id get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1070,20 +1070,20 @@ export def "get-workflow-executionworkflow-execution-id GetWorkflowExecution" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflowExecutionId: string # Use the unique identifier for a runtime instance of the workflow to get runtime details.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --workflow-execution-id: string # Use the unique identifier for a runtime instance of the workflow to get runtime details.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, workflowBuildVersionArn: record, workflowExecutionId: record, imageBuildVersionArn: record, type: record, status: record, message: record, totalStepCount: record, totalStepsSucceeded: record, totalStepsFailed: record, totalStepsSkipped: record, startTime: record, endTime: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workflowExecutionId" $workflowExecutionId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "workflowExecutionId" $workflow_execution_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetWorkflowExecution#workflowExecutionId" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1094,7 +1094,7 @@ export def "get-workflow-executionworkflow-execution-id GetWorkflowExecution" [
 #
 # GET /GetWorkflowStepExecution#stepExecutionId
 # operationId: GetWorkflowStepExecution
-export def "get-workflow-step-executionstep-execution-id GetWorkflowStepExecution" [
+export def "get-workflow-step-executionstep-execution-id get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1103,20 +1103,20 @@ export def "get-workflow-step-executionstep-execution-id GetWorkflowStepExecutio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stepExecutionId: string # Use the unique identifier for a specific runtime instance of the workflow step to get runtime details for that step.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --step-execution-id: string # Use the unique identifier for a specific runtime instance of the workflow step to get runtime details for that step.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<requestId: record, stepExecutionId: record, workflowBuildVersionArn: record, workflowExecutionId: record, imageBuildVersionArn: record, name: record, description: record, action: record, status: record, rollbackStatus: record, message: record, inputs: record, outputs: record, startTime: record, endTime: record, onFailure: record, timeoutSeconds: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "stepExecutionId" $stepExecutionId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "stepExecutionId" $step_execution_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetWorkflowStepExecution#stepExecutionId" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1127,7 +1127,7 @@ export def "get-workflow-step-executionstep-execution-id GetWorkflowStepExecutio
 #
 # PUT /ImportComponent
 # operationId: ImportComponent
-export def "import-component ImportComponent" [
+export def "import-component import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1136,33 +1136,33 @@ export def "import-component ImportComponent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   name: string # The name of the component.
-  semanticVersion: string # <p>The semantic version of the component. This version follows the semantic version syntax.</p> <note> <p>The semantic version has four nodes: &lt;major&gt;.&lt;minor&gt;.&lt;patch&gt;/&lt;build&gt;. You can assign values for the first three, and can filter on all of them.</p> <p> <b>Filtering:</b> With semantic versioning, you have the flexibility to use wildcards (x) to specify the most recent versions or nodes when selecting the base image or components for your recipe. When you use a wildcard in any node, all nodes to the right of the first wildcard must also be wildcards.</p> </note>
+  semantic_version: string # <p>The semantic version of the component. This version follows the semantic version syntax.</p> <note> <p>The semantic version has four nodes: &lt;major&gt;.&lt;minor&gt;.&lt;patch&gt;/&lt;build&gt;. You can assign values for the first three, and can filter on all of them.</p> <p> <b>Filtering:</b> With semantic versioning, you have the flexibility to use wildcards (x) to specify the most recent versions or nodes when selecting the base image or components for your recipe. When you use a wildcard in any node, all nodes to the right of the first wildcard must also be wildcards.</p> </note>
   --description: string # The description of the component. Describes the contents of the component.
-  --changeDescription: string # The change description of the component. This description indicates the change that has been made in this version, or what makes this version different from other versions of this component.
+  --change-description: string # The change description of the component. This description indicates the change that has been made in this version, or what makes this version different from other versions of this component.
   type: string@type-completer # The type of the component denotes whether the component is used to build the image, or only to test it.
   format: string@format-completer # The format of the resource that you want to import as a component.
   platform: string@platform-completer # The platform of the component.
   --data: string # The data of the component. Used to specify the data inline. Either <code>data</code> or <code>uri</code> can be used to specify the data within the component.
   --uri: string # The uri of the component. Must be an Amazon S3 URL and the requester must have permission to access the Amazon S3 bucket. If you use Amazon S3, you can specify component content up to your service quota. Either <code>data</code> or <code>uri</code> can be used to specify the data within the component.
-  --kmsKeyId: string # The ID of the KMS key that should be used to encrypt this component.
+  --kms-key-id: string # The ID of the KMS key that should be used to encrypt this component.
   --tags: record # The tags of the component.
-  clientToken: string # The idempotency token of the component.
+  client_token: string # The idempotency token of the component.
 ]: any -> record<requestId: record, clientToken: record, componentBuildVersionArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ImportComponent")
-  let body = {name: $name, semanticVersion: $semanticVersion, description: $description, changeDescription: $changeDescription, type: $type, format: $format, platform: $platform, data: $data, uri: $uri, kmsKeyId: $kmsKeyId, tags: $tags, clientToken: $clientToken} | compact
+  let body = {"name": $name, "semanticVersion": $semantic_version, "description": $description, "changeDescription": $change_description, "type": $type, "format": $format, "platform": $platform, "data": $data, "uri": $uri, "kmsKeyId": $kms_key_id, "tags": $tags, "clientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1173,7 +1173,7 @@ export def "import-component ImportComponent" [
 #
 # PUT /ImportVmImage
 # operationId: ImportVmImage
-export def "import-vm-image ImportVmImage" [
+export def "import-vm-image import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1182,29 +1182,29 @@ export def "import-vm-image ImportVmImage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   name: string # The name of the base image that is created by the import process.
-  semanticVersion: string # <p>The semantic version to attach to the base image that was created during the import process. This version follows the semantic version syntax.</p> <note> <p>The semantic version has four nodes: &lt;major&gt;.&lt;minor&gt;.&lt;patch&gt;/&lt;build&gt;. You can assign values for the first three, and can filter on all of them.</p> <p> <b>Assignment:</b> For the first three nodes you can assign any positive integer value, including zero, with an upper limit of 2^30-1, or 1073741823 for each node. Image Builder automatically assigns the build number to the fourth node.</p> <p> <b>Patterns:</b> You can use any numeric pattern that adheres to the assignment requirements for the nodes that you can assign. For example, you might choose a software version pattern, such as 1.0.0, or a date, such as 2021.01.01.</p> </note>
+  semantic_version: string # <p>The semantic version to attach to the base image that was created during the import process. This version follows the semantic version syntax.</p> <note> <p>The semantic version has four nodes: &lt;major&gt;.&lt;minor&gt;.&lt;patch&gt;/&lt;build&gt;. You can assign values for the first three, and can filter on all of them.</p> <p> <b>Assignment:</b> For the first three nodes you can assign any positive integer value, including zero, with an upper limit of 2^30-1, or 1073741823 for each node. Image Builder automatically assigns the build number to the fourth node.</p> <p> <b>Patterns:</b> You can use any numeric pattern that adheres to the assignment requirements for the nodes that you can assign. For example, you might choose a software version pattern, such as 1.0.0, or a date, such as 2021.01.01.</p> </note>
   --description: string # The description for the base image that is created by the import process.
   platform: string@platform-completer # The operating system platform for the imported VM.
-  --osVersion: string # The operating system version for the imported VM.
-  vmImportTaskId: string # The <code>importTaskId</code> (API) or <code>ImportTaskId</code> (CLI) from the Amazon EC2 VM import process. Image Builder retrieves information from the import process to pull in the AMI that is created from the VM source as the base image for your recipe.
+  --os-version: string # The operating system version for the imported VM.
+  vm_import_task_id: string # The <code>importTaskId</code> (API) or <code>ImportTaskId</code> (CLI) from the Amazon EC2 VM import process. Image Builder retrieves information from the import process to pull in the AMI that is created from the VM source as the base image for your recipe.
   --tags: record # Tags that are attached to the import resources.
-  clientToken: string # Unique, case-sensitive identifier you provide to ensure idempotency of the request. For more information, see <a href="https://docs.aws.amazon.com/AWSEC2/latest/APIReference/Run_Instance_Idempotency.html">Ensuring idempotency</a> in the <i>Amazon EC2 API Reference</i>.
+  client_token: string # Unique, case-sensitive identifier you provide to ensure idempotency of the request. For more information, see <a href="https://docs.aws.amazon.com/AWSEC2/latest/APIReference/Run_Instance_Idempotency.html">Ensuring idempotency</a> in the <i>Amazon EC2 API Reference</i>.
 ]: any -> record<requestId: record, imageArn: record, clientToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ImportVmImage")
-  let body = {name: $name, semanticVersion: $semanticVersion, description: $description, platform: $platform, osVersion: $osVersion, vmImportTaskId: $vmImportTaskId, tags: $tags, clientToken: $clientToken} | compact
+  let body = {"name": $name, "semanticVersion": $semantic_version, "description": $description, "platform": $platform, "osVersion": $os_version, "vmImportTaskId": $vm_import_task_id, "tags": $tags, "clientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1215,7 +1215,7 @@ export def "import-vm-image ImportVmImage" [
 #
 # POST /ListComponentBuildVersions
 # operationId: ListComponentBuildVersions
-export def "list-component-build-versions ListComponentBuildVersions" [
+export def "list-component-build-versions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1224,27 +1224,27 @@ export def "list-component-build-versions ListComponentBuildVersions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  componentVersionArn: string # The component version Amazon Resource Name (ARN) whose versions you want to list.
-  --maxResults: int # The maximum items to return in a request.
-  --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  component_version_arn: string # The component version Amazon Resource Name (ARN) whose versions you want to list.
+  --max-results: int # The maximum items to return in a request.
+  --next-token: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
 ]: any -> record<requestId: record, componentSummaryList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListComponentBuildVersions" $qp)
-  let body = {componentVersionArn: $componentVersionArn, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"componentVersionArn": $component_version_arn, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1256,7 +1256,7 @@ export def "list-component-build-versions ListComponentBuildVersions" [
 # POST /ListComponents
 # operationId: ListComponents
 # --filters item shape: {name?: any, values?: any}
-export def "list-components ListComponents" [
+export def "list-components list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1265,29 +1265,29 @@ export def "list-components ListComponents" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --owner: string@owner-completer # Filters results based on the type of owner for the component. By default, this request returns a list of components that your account owns. To see results for other types of owners, you can specify components that Amazon manages, third party components, or components that other accounts have shared with you.
   --filters: list # <p>Use the following filters to streamline results:</p> <ul> <li> <p> <code>description</code> </p> </li> <li> <p> <code>name</code> </p> </li> <li> <p> <code>platform</code> </p> </li> <li> <p> <code>supportedOsVersion</code> </p> </li> <li> <p> <code>type</code> </p> </li> <li> <p> <code>version</code> </p> </li> </ul> — item shape: {name?: any, values?: any}
-  --byName: oneof<nothing, bool> # Returns the list of components for the specified name.
-  --maxResults: int # The maximum items to return in a request.
-  --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
+  --by-name: oneof<nothing, bool> # Returns the list of components for the specified name.
+  --max-results: int # The maximum items to return in a request.
+  --next-token: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
 ]: any -> record<requestId: record, componentVersionList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListComponents" $qp)
-  let body = {owner: $owner, filters: $filters, byName: $byName, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"owner": $owner, "filters": $filters, "byName": $by_name, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1299,7 +1299,7 @@ export def "list-components ListComponents" [
 # POST /ListContainerRecipes
 # operationId: ListContainerRecipes
 # --filters item shape: {name?: any, values?: any}
-export def "list-container-recipes ListContainerRecipes" [
+export def "list-container-recipes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1308,28 +1308,28 @@ export def "list-container-recipes ListContainerRecipes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --owner: string@owner-completer # Returns container recipes belonging to the specified owner, that have been shared with you. You can omit this field to return container recipes belonging to your account.
   --filters: list # <p>Use the following filters to streamline results:</p> <ul> <li> <p> <code>containerType</code> </p> </li> <li> <p> <code>name</code> </p> </li> <li> <p> <code>parentImage</code> </p> </li> <li> <p> <code>platform</code> </p> </li> </ul> — item shape: {name?: any, values?: any}
-  --maxResults: int # The maximum items to return in a request.
-  --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
+  --max-results: int # The maximum items to return in a request.
+  --next-token: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
 ]: any -> record<requestId: record, containerRecipeSummaryList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListContainerRecipes" $qp)
-  let body = {owner: $owner, filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"owner": $owner, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1341,7 +1341,7 @@ export def "list-container-recipes ListContainerRecipes" [
 # POST /ListDistributionConfigurations
 # operationId: ListDistributionConfigurations
 # --filters item shape: {name?: any, values?: any}
-export def "list-distribution-configurations ListDistributionConfigurations" [
+export def "list-distribution-configurations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1350,27 +1350,27 @@ export def "list-distribution-configurations ListDistributionConfigurations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --filters: list # You can filter on <code>name</code> to streamline results. — item shape: {name?: any, values?: any}
-  --maxResults: int # The maximum items to return in a request.
-  --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
+  --max-results: int # The maximum items to return in a request.
+  --next-token: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
 ]: any -> record<requestId: record, distributionConfigurationSummaryList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListDistributionConfigurations" $qp)
-  let body = {filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1382,7 +1382,7 @@ export def "list-distribution-configurations ListDistributionConfigurations" [
 # POST /ListImageBuildVersions
 # operationId: ListImageBuildVersions
 # --filters item shape: {name?: any, values?: any}
-export def "list-image-build-versions ListImageBuildVersions" [
+export def "list-image-build-versions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1391,28 +1391,28 @@ export def "list-image-build-versions ListImageBuildVersions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  imageVersionArn: string # The Amazon Resource Name (ARN) of the image whose build versions you want to retrieve.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  image_version_arn: string # The Amazon Resource Name (ARN) of the image whose build versions you want to retrieve.
   --filters: list # <p>Use the following filters to streamline results:</p> <ul> <li> <p> <code>name</code> </p> </li> <li> <p> <code>osVersion</code> </p> </li> <li> <p> <code>platform</code> </p> </li> <li> <p> <code>type</code> </p> </li> <li> <p> <code>version</code> </p> </li> </ul> — item shape: {name?: any, values?: any}
-  --maxResults: int # The maximum items to return in a request.
-  --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
+  --max-results: int # The maximum items to return in a request.
+  --next-token: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
 ]: any -> record<requestId: record, imageSummaryList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListImageBuildVersions" $qp)
-  let body = {imageVersionArn: $imageVersionArn, filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"imageVersionArn": $image_version_arn, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1423,7 +1423,7 @@ export def "list-image-build-versions ListImageBuildVersions" [
 #
 # POST /ListImagePackages
 # operationId: ListImagePackages
-export def "list-image-packages ListImagePackages" [
+export def "list-image-packages list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1432,27 +1432,27 @@ export def "list-image-packages ListImagePackages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  imageBuildVersionArn: string # Filter results for the ListImagePackages request by the Image Build Version ARN
-  --maxResults: int # The maximum items to return in a request.
-  --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  image_build_version_arn: string # Filter results for the ListImagePackages request by the Image Build Version ARN
+  --max-results: int # The maximum items to return in a request.
+  --next-token: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
 ]: any -> record<requestId: record, imagePackageList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListImagePackages" $qp)
-  let body = {imageBuildVersionArn: $imageBuildVersionArn, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"imageBuildVersionArn": $image_build_version_arn, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1464,7 +1464,7 @@ export def "list-image-packages ListImagePackages" [
 # POST /ListImagePipelineImages
 # operationId: ListImagePipelineImages
 # --filters item shape: {name?: any, values?: any}
-export def "list-image-pipeline-images ListImagePipelineImages" [
+export def "list-image-pipeline-images list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1473,28 +1473,28 @@ export def "list-image-pipeline-images ListImagePipelineImages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  imagePipelineArn: string # The Amazon Resource Name (ARN) of the image pipeline whose images you want to view.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  image_pipeline_arn: string # The Amazon Resource Name (ARN) of the image pipeline whose images you want to view.
   --filters: list # <p>Use the following filters to streamline results:</p> <ul> <li> <p> <code>name</code> </p> </li> <li> <p> <code>version</code> </p> </li> </ul> — item shape: {name?: any, values?: any}
-  --maxResults: int # The maximum items to return in a request.
-  --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
+  --max-results: int # The maximum items to return in a request.
+  --next-token: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
 ]: any -> record<requestId: record, imageSummaryList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListImagePipelineImages" $qp)
-  let body = {imagePipelineArn: $imagePipelineArn, filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"imagePipelineArn": $image_pipeline_arn, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1506,7 +1506,7 @@ export def "list-image-pipeline-images ListImagePipelineImages" [
 # POST /ListImagePipelines
 # operationId: ListImagePipelines
 # --filters item shape: {name?: any, values?: any}
-export def "list-image-pipelines ListImagePipelines" [
+export def "list-image-pipelines list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1515,27 +1515,27 @@ export def "list-image-pipelines ListImagePipelines" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --filters: list # <p>Use the following filters to streamline results:</p> <ul> <li> <p> <code>description</code> </p> </li> <li> <p> <code>distributionConfigurationArn</code> </p> </li> <li> <p> <code>imageRecipeArn</code> </p> </li> <li> <p> <code>infrastructureConfigurationArn</code> </p> </li> <li> <p> <code>name</code> </p> </li> <li> <p> <code>status</code> </p> </li> </ul> — item shape: {name?: any, values?: any}
-  --maxResults: int # The maximum items to return in a request.
-  --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
+  --max-results: int # The maximum items to return in a request.
+  --next-token: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
 ]: any -> record<requestId: record, imagePipelineList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListImagePipelines" $qp)
-  let body = {filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1547,7 +1547,7 @@ export def "list-image-pipelines ListImagePipelines" [
 # POST /ListImageRecipes
 # operationId: ListImageRecipes
 # --filters item shape: {name?: any, values?: any}
-export def "list-image-recipes ListImageRecipes" [
+export def "list-image-recipes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1556,28 +1556,28 @@ export def "list-image-recipes ListImageRecipes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --owner: string@owner-completer # The owner defines which image recipes you want to list. By default, this request will only show image recipes owned by your account. You can use this field to specify if you want to view image recipes owned by yourself, by Amazon, or those image recipes that have been shared with you by other customers.
   --filters: list # <p>Use the following filters to streamline results:</p> <ul> <li> <p> <code>name</code> </p> </li> <li> <p> <code>parentImage</code> </p> </li> <li> <p> <code>platform</code> </p> </li> </ul> — item shape: {name?: any, values?: any}
-  --maxResults: int # The maximum items to return in a request.
-  --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
+  --max-results: int # The maximum items to return in a request.
+  --next-token: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
 ]: any -> record<requestId: record, imageRecipeSummaryList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListImageRecipes" $qp)
-  let body = {owner: $owner, filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"owner": $owner, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1589,7 +1589,7 @@ export def "list-image-recipes ListImageRecipes" [
 # POST /ListImageScanFindingAggregations
 # operationId: ListImageScanFindingAggregations
 # --filter shape: {name?: any, values?: any}
-export def "list-image-scan-finding-aggregations ListImageScanFindingAggregations" [
+export def "list-image-scan-finding-aggregations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1598,25 +1598,25 @@ export def "list-image-scan-finding-aggregations ListImageScanFindingAggregation
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --filter: record # A filter name and value pair that is used to return a more specific list of results from a list operation. Filters can be used to match a set of resources by specific criteria, such as tags, attributes, or IDs. — shape: {name?: any, values?: any}
-  --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
+  --next-token: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
 ]: any -> record<requestId: record, aggregationType: record, responses: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListImageScanFindingAggregations" $qp)
-  let body = {filter: $filter, nextToken: $nextToken} | compact
+  let body = {"filter": $filter, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1628,7 +1628,7 @@ export def "list-image-scan-finding-aggregations ListImageScanFindingAggregation
 # POST /ListImageScanFindings
 # operationId: ListImageScanFindings
 # --filters item shape: {name?: any, values?: any}
-export def "list-image-scan-findings ListImageScanFindings" [
+export def "list-image-scan-findings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1637,27 +1637,27 @@ export def "list-image-scan-findings ListImageScanFindings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --filters: list # <p>An array of name value pairs that you can use to filter your results. You can use the following filters to streamline results:</p> <ul> <li> <p> <code>imageBuildVersionArn</code> </p> </li> <li> <p> <code>imagePipelineArn</code> </p> </li> <li> <p> <code>vulnerabilityId</code> </p> </li> <li> <p> <code>severity</code> </p> </li> </ul> <p>If you don't request a filter, then all findings in your account are listed.</p> — item shape: {name?: any, values?: any}
-  --maxResults: int # The maximum items to return in a request.
-  --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
+  --max-results: int # The maximum items to return in a request.
+  --next-token: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
 ]: any -> record<requestId: record, findings: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListImageScanFindings" $qp)
-  let body = {filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1669,7 +1669,7 @@ export def "list-image-scan-findings ListImageScanFindings" [
 # POST /ListImages
 # operationId: ListImages
 # --filters item shape: {name?: any, values?: any}
-export def "list-images ListImages" [
+export def "list-images list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1678,30 +1678,30 @@ export def "list-images ListImages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --owner: string@owner-completer # The owner defines which images you want to list. By default, this request will only show images owned by your account. You can use this field to specify if you want to view images owned by yourself, by Amazon, or those images that have been shared with you by other customers.
   --filters: list # <p>Use the following filters to streamline results:</p> <ul> <li> <p> <code>name</code> </p> </li> <li> <p> <code>osVersion</code> </p> </li> <li> <p> <code>platform</code> </p> </li> <li> <p> <code>type</code> </p> </li> <li> <p> <code>version</code> </p> </li> </ul> — item shape: {name?: any, values?: any}
-  --byName: oneof<nothing, bool> # Requests a list of images with a specific recipe name.
-  --maxResults: int # The maximum items to return in a request.
-  --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
-  --includeDeprecated: oneof<nothing, bool> # Includes deprecated images in the response list.
+  --by-name: oneof<nothing, bool> # Requests a list of images with a specific recipe name.
+  --max-results: int # The maximum items to return in a request.
+  --next-token: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
+  --include-deprecated: oneof<nothing, bool> # Includes deprecated images in the response list.
 ]: any -> record<requestId: record, imageVersionList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListImages" $qp)
-  let body = {owner: $owner, filters: $filters, byName: $byName, maxResults: $maxResults, nextToken: $nextToken, includeDeprecated: $includeDeprecated} | compact
+  let body = {"owner": $owner, "filters": $filters, "byName": $by_name, "maxResults": $max_results, "nextToken": $next_token, "includeDeprecated": $include_deprecated} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1713,7 +1713,7 @@ export def "list-images ListImages" [
 # POST /ListInfrastructureConfigurations
 # operationId: ListInfrastructureConfigurations
 # --filters item shape: {name?: any, values?: any}
-export def "list-infrastructure-configurations ListInfrastructureConfigurations" [
+export def "list-infrastructure-configurations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1722,27 +1722,27 @@ export def "list-infrastructure-configurations ListInfrastructureConfigurations"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --filters: list # You can filter on <code>name</code> to streamline results. — item shape: {name?: any, values?: any}
-  --maxResults: int # The maximum items to return in a request.
-  --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
+  --max-results: int # The maximum items to return in a request.
+  --next-token: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
 ]: any -> record<requestId: record, infrastructureConfigurationSummaryList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListInfrastructureConfigurations" $qp)
-  let body = {filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1753,8 +1753,8 @@ export def "list-infrastructure-configurations ListInfrastructureConfigurations"
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags ListTagsForResource" [
-  resourceArn: string
+export def "tags list-tags-for-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1763,18 +1763,18 @@ export def "tags ListTagsForResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($resourceArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1785,8 +1785,8 @@ export def "tags ListTagsForResource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags TagResource" [
-  resourceArn: string
+export def "tags tag-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1795,22 +1795,22 @@ export def "tags TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   tags: record # The tags to apply to the resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($resourceArn)")
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1821,7 +1821,7 @@ export def "tags TagResource" [
 #
 # POST /ListWorkflowExecutions
 # operationId: ListWorkflowExecutions
-export def "list-workflow-executions ListWorkflowExecutions" [
+export def "list-workflow-executions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1830,27 +1830,27 @@ export def "list-workflow-executions ListWorkflowExecutions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --maxResults: int # The maximum items to return in a request.
-  --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
-  imageBuildVersionArn: string # List all workflow runtime instances for the specified image build version resource ARN.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --max-results: int # The maximum items to return in a request.
+  --next-token: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
+  image_build_version_arn: string # List all workflow runtime instances for the specified image build version resource ARN.
 ]: any -> record<requestId: record, workflowExecutions: record, imageBuildVersionArn: record, message: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListWorkflowExecutions" $qp)
-  let body = {maxResults: $maxResults, nextToken: $nextToken, imageBuildVersionArn: $imageBuildVersionArn} | compact
+  let body = {"maxResults": $max_results, "nextToken": $next_token, "imageBuildVersionArn": $image_build_version_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1861,7 +1861,7 @@ export def "list-workflow-executions ListWorkflowExecutions" [
 #
 # POST /ListWorkflowStepExecutions
 # operationId: ListWorkflowStepExecutions
-export def "list-workflow-step-executions ListWorkflowStepExecutions" [
+export def "list-workflow-step-executions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1870,27 +1870,27 @@ export def "list-workflow-step-executions ListWorkflowStepExecutions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --maxResults: int # The maximum items to return in a request.
-  --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
-  workflowExecutionId: string # The unique identifier that Image Builder assigned to keep track of runtime details when it ran the workflow.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --max-results: int # The maximum items to return in a request.
+  --next-token: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
+  workflow_execution_id: string # The unique identifier that Image Builder assigned to keep track of runtime details when it ran the workflow.
 ]: any -> record<requestId: record, steps: record, workflowBuildVersionArn: record, workflowExecutionId: record, imageBuildVersionArn: record, message: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListWorkflowStepExecutions" $qp)
-  let body = {maxResults: $maxResults, nextToken: $nextToken, workflowExecutionId: $workflowExecutionId} | compact
+  let body = {"maxResults": $max_results, "nextToken": $next_token, "workflowExecutionId": $workflow_execution_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1901,7 +1901,7 @@ export def "list-workflow-step-executions ListWorkflowStepExecutions" [
 #
 # PUT /PutComponentPolicy
 # operationId: PutComponentPolicy
-export def "put-component-policy PutComponentPolicy" [
+export def "put-component-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1910,23 +1910,23 @@ export def "put-component-policy PutComponentPolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  componentArn: string # The Amazon Resource Name (ARN) of the component that this policy should be applied to.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  component_arn: string # The Amazon Resource Name (ARN) of the component that this policy should be applied to.
   policy: string # The policy to apply.
 ]: any -> record<requestId: record, componentArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/PutComponentPolicy")
-  let body = {componentArn: $componentArn, policy: $policy} | compact
+  let body = {"componentArn": $component_arn, "policy": $policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1937,7 +1937,7 @@ export def "put-component-policy PutComponentPolicy" [
 #
 # PUT /PutContainerRecipePolicy
 # operationId: PutContainerRecipePolicy
-export def "put-container-recipe-policy PutContainerRecipePolicy" [
+export def "put-container-recipe-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1946,23 +1946,23 @@ export def "put-container-recipe-policy PutContainerRecipePolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  containerRecipeArn: string # The Amazon Resource Name (ARN) of the container recipe that this policy should be applied to.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  container_recipe_arn: string # The Amazon Resource Name (ARN) of the container recipe that this policy should be applied to.
   policy: string # The policy to apply to the container recipe.
 ]: any -> record<requestId: record, containerRecipeArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/PutContainerRecipePolicy")
-  let body = {containerRecipeArn: $containerRecipeArn, policy: $policy} | compact
+  let body = {"containerRecipeArn": $container_recipe_arn, "policy": $policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1973,7 +1973,7 @@ export def "put-container-recipe-policy PutContainerRecipePolicy" [
 #
 # PUT /PutImagePolicy
 # operationId: PutImagePolicy
-export def "put-image-policy PutImagePolicy" [
+export def "put-image-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1982,23 +1982,23 @@ export def "put-image-policy PutImagePolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  imageArn: string # The Amazon Resource Name (ARN) of the image that this policy should be applied to.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  image_arn: string # The Amazon Resource Name (ARN) of the image that this policy should be applied to.
   policy: string # The policy to apply.
 ]: any -> record<requestId: record, imageArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/PutImagePolicy")
-  let body = {imageArn: $imageArn, policy: $policy} | compact
+  let body = {"imageArn": $image_arn, "policy": $policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2009,7 +2009,7 @@ export def "put-image-policy PutImagePolicy" [
 #
 # PUT /PutImageRecipePolicy
 # operationId: PutImageRecipePolicy
-export def "put-image-recipe-policy PutImageRecipePolicy" [
+export def "put-image-recipe-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2018,23 +2018,23 @@ export def "put-image-recipe-policy PutImageRecipePolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  imageRecipeArn: string # The Amazon Resource Name (ARN) of the image recipe that this policy should be applied to.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  image_recipe_arn: string # The Amazon Resource Name (ARN) of the image recipe that this policy should be applied to.
   policy: string # The policy to apply.
 ]: any -> record<requestId: record, imageRecipeArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/PutImageRecipePolicy")
-  let body = {imageRecipeArn: $imageRecipeArn, policy: $policy} | compact
+  let body = {"imageRecipeArn": $image_recipe_arn, "policy": $policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2045,7 +2045,7 @@ export def "put-image-recipe-policy PutImageRecipePolicy" [
 #
 # PUT /StartImagePipelineExecution
 # operationId: StartImagePipelineExecution
-export def "start-image-pipeline-execution StartImagePipelineExecution" [
+export def "start-image-pipeline-execution start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2054,23 +2054,23 @@ export def "start-image-pipeline-execution StartImagePipelineExecution" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  imagePipelineArn: string # The Amazon Resource Name (ARN) of the image pipeline that you want to manually invoke.
-  clientToken: string # The idempotency token used to make this request idempotent.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  image_pipeline_arn: string # The Amazon Resource Name (ARN) of the image pipeline that you want to manually invoke.
+  client_token: string # The idempotency token used to make this request idempotent.
 ]: any -> record<requestId: record, clientToken: record, imageBuildVersionArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/StartImagePipelineExecution")
-  let body = {imagePipelineArn: $imagePipelineArn, clientToken: $clientToken} | compact
+  let body = {"imagePipelineArn": $image_pipeline_arn, "clientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2081,8 +2081,8 @@ export def "start-image-pipeline-execution StartImagePipelineExecution" [
 #
 # DELETE /tags/{resourceArn}#tagKeys
 # operationId: UntagResource
-export def "tags UntagResource" [
-  resourceArn: string
+export def "tags untag-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2091,20 +2091,20 @@ export def "tags UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tagKeys: list # The tag keys to remove from the resource.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --tag-keys: list # The tag keys to remove from the resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tagKeys" $tagKeys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($resourceArn)#tagKeys" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}#tagKeys") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2116,7 +2116,7 @@ export def "tags UntagResource" [
 # PUT /UpdateDistributionConfiguration
 # operationId: UpdateDistributionConfiguration
 # --distributions item shape: {region: any, amiDistributionConfiguration?: any, containerDistributionConfiguration?: any, licenseConfigurationArns?: any, launchTemplateConfigurations?: any, s3ExportConfiguration?: any, fastLaunchConfigurations?: any}
-export def "update-distribution-configuration UpdateDistributionConfiguration" [
+export def "update-distribution-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2125,25 +2125,25 @@ export def "update-distribution-configuration UpdateDistributionConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  distributionConfigurationArn: string # The Amazon Resource Name (ARN) of the distribution configuration that you want to update.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  distribution_configuration_arn: string # The Amazon Resource Name (ARN) of the distribution configuration that you want to update.
   --description: string # The description of the distribution configuration.
   distributions: list # The distributions of the distribution configuration. — item shape: {region: any, amiDistributionConfiguration?: any, containerDistributionConfiguration?: any, licenseConfigurationArns?: any, launchTemplateConfigurations?: any, s3ExportConfiguration?: any, fastLaunchConfigurations?: any}
-  clientToken: string # The idempotency token of the distribution configuration.
+  client_token: string # The idempotency token of the distribution configuration.
 ]: any -> record<requestId: record, clientToken: record, distributionConfigurationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/UpdateDistributionConfiguration")
-  let body = {distributionConfigurationArn: $distributionConfigurationArn, description: $description, distributions: $distributions, clientToken: $clientToken} | compact
+  let body = {"distributionConfigurationArn": $distribution_configuration_arn, "description": $description, "distributions": $distributions, "clientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2157,7 +2157,7 @@ export def "update-distribution-configuration UpdateDistributionConfiguration" [
 # --imageTestsConfiguration shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
 # --schedule shape: {scheduleExpression?: any, timezone?: any, pipelineExecutionStartCondition?: any}
 # --imageScanningConfiguration shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
-export def "update-image-pipeline UpdateImagePipeline" [
+export def "update-image-pipeline update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2166,33 +2166,33 @@ export def "update-image-pipeline UpdateImagePipeline" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  imagePipelineArn: string # The Amazon Resource Name (ARN) of the image pipeline that you want to update.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  image_pipeline_arn: string # The Amazon Resource Name (ARN) of the image pipeline that you want to update.
   --description: string # The description of the image pipeline.
-  --imageRecipeArn: string # The Amazon Resource Name (ARN) of the image recipe that will be used to configure images updated by this image pipeline.
-  --containerRecipeArn: string # The Amazon Resource Name (ARN) of the container pipeline to update.
-  infrastructureConfigurationArn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that Image Builder uses to build images that this image pipeline has updated.
-  --distributionConfigurationArn: string # The Amazon Resource Name (ARN) of the distribution configuration that Image Builder uses to configure and distribute images that this image pipeline has updated.
-  --imageTestsConfiguration: record # Configure image tests for your pipeline build. Tests run after building the image, to verify that the AMI or container image is valid before distributing it. — shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
-  --enhancedImageMetadataEnabled: oneof<nothing, bool> # Collects additional information about the image being created, including the operating system (OS) version and package list. This information is used to enhance the overall experience of using EC2 Image Builder. Enabled by default.
+  --image-recipe-arn: string # The Amazon Resource Name (ARN) of the image recipe that will be used to configure images updated by this image pipeline.
+  --container-recipe-arn: string # The Amazon Resource Name (ARN) of the container pipeline to update.
+  infrastructure_configuration_arn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that Image Builder uses to build images that this image pipeline has updated.
+  --distribution-configuration-arn: string # The Amazon Resource Name (ARN) of the distribution configuration that Image Builder uses to configure and distribute images that this image pipeline has updated.
+  --image-tests-configuration: record # Configure image tests for your pipeline build. Tests run after building the image, to verify that the AMI or container image is valid before distributing it. — shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
+  --enhanced-image-metadata-enabled: oneof<nothing, bool> # Collects additional information about the image being created, including the operating system (OS) version and package list. This information is used to enhance the overall experience of using EC2 Image Builder. Enabled by default.
   --schedule: record # A schedule configures how often and when a pipeline will automatically create a new image. — shape: {scheduleExpression?: any, timezone?: any, pipelineExecutionStartCondition?: any}
   --status: string@status-completer # The status of the image pipeline.
-  clientToken: string # The idempotency token used to make this request idempotent.
-  --imageScanningConfiguration: record # Contains settings for Image Builder image resource and container image scans. — shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
+  client_token: string # The idempotency token used to make this request idempotent.
+  --image-scanning-configuration: record # Contains settings for Image Builder image resource and container image scans. — shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
 ]: any -> record<requestId: record, clientToken: record, imagePipelineArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/UpdateImagePipeline")
-  let body = {imagePipelineArn: $imagePipelineArn, description: $description, imageRecipeArn: $imageRecipeArn, containerRecipeArn: $containerRecipeArn, infrastructureConfigurationArn: $infrastructureConfigurationArn, distributionConfigurationArn: $distributionConfigurationArn, imageTestsConfiguration: $imageTestsConfiguration, enhancedImageMetadataEnabled: $enhancedImageMetadataEnabled, schedule: $schedule, status: $status, clientToken: $clientToken, imageScanningConfiguration: $imageScanningConfiguration} | compact
+  let body = {"imagePipelineArn": $image_pipeline_arn, "description": $description, "imageRecipeArn": $image_recipe_arn, "containerRecipeArn": $container_recipe_arn, "infrastructureConfigurationArn": $infrastructure_configuration_arn, "distributionConfigurationArn": $distribution_configuration_arn, "imageTestsConfiguration": $image_tests_configuration, "enhancedImageMetadataEnabled": $enhanced_image_metadata_enabled, "schedule": $schedule, "status": $status, "clientToken": $client_token, "imageScanningConfiguration": $image_scanning_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2205,7 +2205,7 @@ export def "update-image-pipeline UpdateImagePipeline" [
 # operationId: UpdateInfrastructureConfiguration
 # --logging shape: {s3Logs?: any}
 # --instanceMetadataOptions shape: {httpTokens?: any, httpPutResponseHopLimit?: any}
-export def "update-infrastructure-configuration UpdateInfrastructureConfiguration" [
+export def "update-infrastructure-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2214,34 +2214,34 @@ export def "update-infrastructure-configuration UpdateInfrastructureConfiguratio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  infrastructureConfigurationArn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that you want to update.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  infrastructure_configuration_arn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that you want to update.
   --description: string # The description of the infrastructure configuration.
-  --instanceTypes: list # The instance types of the infrastructure configuration. You can specify one or more instance types to use for this build. The service will pick one of these instance types based on availability.
-  instanceProfileName: string # The instance profile to associate with the instance used to customize your Amazon EC2 AMI.
-  --securityGroupIds: list # The security group IDs to associate with the instance used to customize your Amazon EC2 AMI.
-  --subnetId: string # The subnet ID to place the instance used to customize your Amazon EC2 AMI in.
+  --instance-types: list # The instance types of the infrastructure configuration. You can specify one or more instance types to use for this build. The service will pick one of these instance types based on availability.
+  instance_profile_name: string # The instance profile to associate with the instance used to customize your Amazon EC2 AMI.
+  --security-group-ids: list # The security group IDs to associate with the instance used to customize your Amazon EC2 AMI.
+  --subnet-id: string # The subnet ID to place the instance used to customize your Amazon EC2 AMI in.
   --logging: record # Logging configuration defines where Image Builder uploads your logs. — shape: {s3Logs?: any}
-  --keyPair: string # The key pair of the infrastructure configuration. You can use this to log on to and debug the instance used to create your image.
-  --terminateInstanceOnFailure: oneof<nothing, bool> # The terminate instance on failure setting of the infrastructure configuration. Set to false if you want Image Builder to retain the instance used to configure your AMI if the build or test phase of your workflow fails.
-  --snsTopicArn: string # <p>The Amazon Resource Name (ARN) for the SNS topic to which we send image build event notifications.</p> <note> <p>EC2 Image Builder is unable to send notifications to SNS topics that are encrypted using keys from other accounts. The key that is used to encrypt the SNS topic must reside in the account that the Image Builder service runs under.</p> </note>
-  clientToken: string # The idempotency token used to make this request idempotent.
-  --resourceTags: record # The tags attached to the resource created by Image Builder.
-  --instanceMetadataOptions: record # The instance metadata options that apply to the HTTP requests that pipeline builds use to launch EC2 build and test instances. For more information about instance metadata options, see <a href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-options.html">Configure the instance metadata options</a> in the <i> <i>Amazon EC2 User Guide</i> </i> for Linux instances, or <a href="https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/configuring-instance-metadata-options.html">Configure the instance metadata options</a> in the <i> <i>Amazon EC2 Windows Guide</i> </i> for Windows instances. — shape: {httpTokens?: any, httpPutResponseHopLimit?: any}
+  --key-pair: string # The key pair of the infrastructure configuration. You can use this to log on to and debug the instance used to create your image.
+  --terminate-instance-on-failure: oneof<nothing, bool> # The terminate instance on failure setting of the infrastructure configuration. Set to false if you want Image Builder to retain the instance used to configure your AMI if the build or test phase of your workflow fails.
+  --sns-topic-arn: string # <p>The Amazon Resource Name (ARN) for the SNS topic to which we send image build event notifications.</p> <note> <p>EC2 Image Builder is unable to send notifications to SNS topics that are encrypted using keys from other accounts. The key that is used to encrypt the SNS topic must reside in the account that the Image Builder service runs under.</p> </note>
+  client_token: string # The idempotency token used to make this request idempotent.
+  --resource-tags: record # The tags attached to the resource created by Image Builder.
+  --instance-metadata-options: record # The instance metadata options that apply to the HTTP requests that pipeline builds use to launch EC2 build and test instances. For more information about instance metadata options, see <a href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-options.html">Configure the instance metadata options</a> in the <i> <i>Amazon EC2 User Guide</i> </i> for Linux instances, or <a href="https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/configuring-instance-metadata-options.html">Configure the instance metadata options</a> in the <i> <i>Amazon EC2 Windows Guide</i> </i> for Windows instances. — shape: {httpTokens?: any, httpPutResponseHopLimit?: any}
 ]: any -> record<requestId: record, clientToken: record, infrastructureConfigurationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/UpdateInfrastructureConfiguration")
-  let body = {infrastructureConfigurationArn: $infrastructureConfigurationArn, description: $description, instanceTypes: $instanceTypes, instanceProfileName: $instanceProfileName, securityGroupIds: $securityGroupIds, subnetId: $subnetId, logging: $logging, keyPair: $keyPair, terminateInstanceOnFailure: $terminateInstanceOnFailure, snsTopicArn: $snsTopicArn, clientToken: $clientToken, resourceTags: $resourceTags, instanceMetadataOptions: $instanceMetadataOptions} | compact
+  let body = {"infrastructureConfigurationArn": $infrastructure_configuration_arn, "description": $description, "instanceTypes": $instance_types, "instanceProfileName": $instance_profile_name, "securityGroupIds": $security_group_ids, "subnetId": $subnet_id, "logging": $logging, "keyPair": $key_pair, "terminateInstanceOnFailure": $terminate_instance_on_failure, "snsTopicArn": $sns_topic_arn, "clientToken": $client_token, "resourceTags": $resource_tags, "instanceMetadataOptions": $instance_metadata_options} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

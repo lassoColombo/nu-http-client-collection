@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-virtual-networks ListAll" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-virtual-networks list-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/virtualNetworks
 # operationId: VirtualNetworks_ListAll
-export def "subscriptions-providers-microsoft-network-virtual-networks ListAll" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-network-virtual-networks list-all" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "subscriptions-providers-microsoft-network-virtual-networks ListAll" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/virtualNetworks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/virtualNetworks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,9 +118,9 @@ export def "subscriptions-providers-microsoft-network-virtual-networks ListAll" 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks
 # operationId: VirtualNetworks_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks List" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,10 +144,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}
 # operationId: VirtualNetworks_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks Delete" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks delete" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,10 +171,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}
 # operationId: VirtualNetworks_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks Get" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks get" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -199,10 +199,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}
 # operationId: VirtualNetworks_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks UpdateTags" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks update-tags" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,8 +218,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -231,10 +231,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}
 # operationId: VirtualNetworks_CreateOrUpdate
 # --properties shape: {addressSpace?: any, bgpCommunities?: any, ddosProtectionPlan?: any, dhcpOptions?: any, enableDdosProtection?: bool, enableVmProtection?: bool, resourceGuid?: string, subnets?: list, virtualNetworkPeerings?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks CreateOrUpdate" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,8 +254,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)" $qp)
-  let body = {etag: $etag, properties: $properties, id: $id, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}") $qp)
+  let body = {"etag": $etag, "properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -266,10 +266,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/CheckIPAddressAvailability
 # operationId: VirtualNetworks_CheckIPAddressAvailability
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-check-ip-address-availability CheckIPAddressAvailability" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-check-ip-address-availability check" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,13 +278,13 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ipAddress: string # The private IP address to be verified.
+  --ip-address: string # The private IP address to be verified.
   --api-version: string # Client API version.
 ]: nothing -> record<available: bool, availableIPAddresses: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ipAddress" $ipAddress "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)/CheckIPAddressAvailability" $qp)
+  let qp = [(serialize-qp "ipAddress" $ip_address "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/CheckIPAddressAvailability") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -294,10 +294,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets
 # operationId: Subnets_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets List" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets list" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)/subnets" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/subnets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -321,11 +321,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}
 # operationId: Subnets_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets Delete" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  subnetName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets delete" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
+  subnet_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)/subnets/($subnetName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name, subnet_name: $subnet_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/subnets/{subnet_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -349,11 +349,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}
 # operationId: Subnets_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets Get" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  subnetName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets get" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
+  subnet_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,7 +368,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)/subnets/($subnetName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name, subnet_name: $subnet_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/subnets/{subnet_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -379,11 +379,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}
 # operationId: Subnets_CreateOrUpdate
 # --properties shape: {addressPrefix?: string, addressPrefixes?: list, delegations?: list, natGateway?: any, networkSecurityGroup?: any, privateEndpointNetworkPolicies?: string, privateLinkServiceNetworkPolicies?: string, resourceNavigationLinks?: list, routeTable?: any, serviceAssociationLinks?: list, serviceEndpointPolicies?: list, serviceEndpoints?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets CreateOrUpdate" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  subnetName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
+  subnet_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,8 +402,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)/subnets/($subnetName)" $qp)
-  let body = {etag: $etag, name: $name, properties: $properties, id: $id} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name, subnet_name: $subnet_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/subnets/{subnet_name}") $qp)
+  let body = {"etag": $etag, "name": $name, "properties": $properties, "id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -415,11 +415,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}/PrepareNetworkPolicies
 # operationId: Subnets_PrepareNetworkPolicies
 # --networkIntentPolicyConfigurations item shape: {networkIntentPolicyName?: string, sourceNetworkIntentPolicy?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets-prepare-network-policies PrepareNetworkPolicies" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  subnetName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets-prepare-network-policies post" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
+  subnet_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,15 +429,15 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  --networkIntentPolicyConfigurations: list # A list of NetworkIntentPolicyConfiguration. — item shape: {networkIntentPolicyName?: string, sourceNetworkIntentPolicy?: any}
-  --serviceName: string # The name of the service for which subnet is being prepared for.
+  --network-intent-policy-configurations: list # A list of NetworkIntentPolicyConfiguration. — item shape: {networkIntentPolicyName?: string, sourceNetworkIntentPolicy?: any}
+  --service-name: string # The name of the service for which subnet is being prepared for.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)/subnets/($subnetName)/PrepareNetworkPolicies" $qp)
-  let body = {networkIntentPolicyConfigurations: $networkIntentPolicyConfigurations, serviceName: $serviceName} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name, subnet_name: $subnet_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/subnets/{subnet_name}/PrepareNetworkPolicies") $qp)
+  let body = {"networkIntentPolicyConfigurations": $network_intent_policy_configurations, "serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -448,11 +448,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}/ResourceNavigationLinks
 # operationId: ResourceNavigationLinks_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets-resource-navigation-links List" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  subnetName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets-resource-navigation-links list" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
+  subnet_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,7 +466,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)/subnets/($subnetName)/ResourceNavigationLinks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name, subnet_name: $subnet_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/subnets/{subnet_name}/ResourceNavigationLinks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -476,11 +476,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}/ServiceAssociationLinks
 # operationId: ServiceAssociationLinks_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets-service-association-links List" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  subnetName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets-service-association-links list" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
+  subnet_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -494,7 +494,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)/subnets/($subnetName)/ServiceAssociationLinks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name, subnet_name: $subnet_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/subnets/{subnet_name}/ServiceAssociationLinks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -504,11 +504,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}/UnprepareNetworkPolicies
 # operationId: Subnets_UnprepareNetworkPolicies
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets-unprepare-network-policies UnprepareNetworkPolicies" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  subnetName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets-unprepare-network-policies post" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
+  subnet_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -518,14 +518,14 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  --serviceName: string # The name of the service for which subnet is being unprepared for.
+  --service-name: string # The name of the service for which subnet is being unprepared for.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)/subnets/($subnetName)/UnprepareNetworkPolicies" $qp)
-  let body = {serviceName: $serviceName} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name, subnet_name: $subnet_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/subnets/{subnet_name}/UnprepareNetworkPolicies") $qp)
+  let body = {"serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -536,10 +536,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/usages
 # operationId: VirtualNetworks_ListUsage
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-usages ListUsage" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-usages list" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,7 +553,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)/usages" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/usages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -563,10 +563,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/virtualNetworkPeerings
 # operationId: VirtualNetworkPeerings_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-virtual-network-peerings List" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-virtual-network-peerings list" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,7 +580,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)/virtualNetworkPeerings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/virtualNetworkPeerings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -590,11 +590,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/virtualNetworkPeerings/{virtualNetworkPeeringName}
 # operationId: VirtualNetworkPeerings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-virtual-network-peerings Delete" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  virtualNetworkPeeringName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-virtual-network-peerings delete" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
+  virtual_network_peering_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,7 +608,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)/virtualNetworkPeerings/($virtualNetworkPeeringName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name, virtual_network_peering_name: $virtual_network_peering_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/virtualNetworkPeerings/{virtual_network_peering_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -618,11 +618,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/virtualNetworkPeerings/{virtualNetworkPeeringName}
 # operationId: VirtualNetworkPeerings_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-virtual-network-peerings Get" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  virtualNetworkPeeringName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-virtual-network-peerings get" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
+  virtual_network_peering_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,7 +636,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)/virtualNetworkPeerings/($virtualNetworkPeeringName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name, virtual_network_peering_name: $virtual_network_peering_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/virtualNetworkPeerings/{virtual_network_peering_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -647,11 +647,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/virtualNetworkPeerings/{virtualNetworkPeeringName}
 # operationId: VirtualNetworkPeerings_CreateOrUpdate
 # --properties shape: {allowForwardedTraffic?: bool, allowGatewayTransit?: bool, allowVirtualNetworkAccess?: bool, peeringState?: "Initiated"|"Connected"|"Disconnected", remoteAddressSpace?: any, remoteVirtualNetwork?: any, useRemoteGateways?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-virtual-network-peerings CreateOrUpdate" [
-  resourceGroupName: string
-  virtualNetworkName: string
-  virtualNetworkPeeringName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-virtual-network-peerings create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_network_name: string
+  virtual_network_peering_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -670,8 +670,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualNetworks/($virtualNetworkName)/virtualNetworkPeerings/($virtualNetworkPeeringName)" $qp)
-  let body = {etag: $etag, name: $name, properties: $properties, id: $id} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_network_name: $virtual_network_name, virtual_network_peering_name: $virtual_network_peering_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/virtualNetworkPeerings/{virtual_network_peering_name}") $qp)
+  let body = {"etag": $etag, "name": $name, "properties": $properties, "id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

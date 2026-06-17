@@ -71,7 +71,7 @@ def name-completer [] { ["password1" "password2"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-container-registry-registries-generate-credentials GenerateCredentials" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-container-registry-registries-generate-credentials post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,10 +95,10 @@ export def commands []: nothing -> table {
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/generateCredentials
 # operationId: Registries_GenerateCredentials
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-generate-credentials GenerateCredentials" [
-  subscriptionId: string
-  resourceGroupName: string
-  registryName: string
+export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-generate-credentials post" [
+  subscription_id: string
+  resource_group_name: string
+  registry_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,14 +110,14 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
   --api-version: string # The client API version.
   --expiry: string # The expiry date of the generated credentials after which the credentials become invalid. (format: date-time)
   --name: string@name-completer # Specifies name of the password which should be regenerated if any -- password1 or password2.
-  --tokenId: string # The resource ID of the token for which credentials have to be generated.
+  --token-id: string # The resource ID of the token for which credentials have to be generated.
 ]: any -> record<passwords: table<creationTime: string, expiry: string, name: string, value: string>, username: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerRegistry/registries/($registryName)/generateCredentials" $qp)
-  let body = {expiry: $expiry, name: $name, tokenId: $tokenId} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, registry_name: $registry_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/generateCredentials") $qp)
+  let body = {"expiry": $expiry, "name": $name, "tokenId": $token_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -128,10 +128,10 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/scopeMaps
 # operationId: ScopeMaps_List
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-scope-maps List" [
-  subscriptionId: string
-  resourceGroupName: string
-  registryName: string
+export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-scope-maps list" [
+  subscription_id: string
+  resource_group_name: string
+  registry_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,7 +145,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerRegistry/registries/($registryName)/scopeMaps" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, registry_name: $registry_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/scopeMaps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -155,11 +155,11 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/scopeMaps/{scopeMapName}
 # operationId: ScopeMaps_Delete
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-scope-maps Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  registryName: string
-  scopeMapName: string
+export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-scope-maps delete" [
+  subscription_id: string
+  resource_group_name: string
+  registry_name: string
+  scope_map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerRegistry/registries/($registryName)/scopeMaps/($scopeMapName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, registry_name: $registry_name, scope_map_name: $scope_map_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/scopeMaps/{scope_map_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,11 +183,11 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/scopeMaps/{scopeMapName}
 # operationId: ScopeMaps_Get
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-scope-maps Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  registryName: string
-  scopeMapName: string
+export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-scope-maps get" [
+  subscription_id: string
+  resource_group_name: string
+  registry_name: string
+  scope_map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerRegistry/registries/($registryName)/scopeMaps/($scopeMapName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, registry_name: $registry_name, scope_map_name: $scope_map_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/scopeMaps/{scope_map_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,11 +212,11 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/scopeMaps/{scopeMapName}
 # operationId: ScopeMaps_Update
 # --properties shape: {actions?: list, description?: string}
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-scope-maps Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  registryName: string
-  scopeMapName: string
+export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-scope-maps update" [
+  subscription_id: string
+  resource_group_name: string
+  registry_name: string
+  scope_map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,8 +232,8 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerRegistry/registries/($registryName)/scopeMaps/($scopeMapName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, registry_name: $registry_name, scope_map_name: $scope_map_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/scopeMaps/{scope_map_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -245,11 +245,11 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/scopeMaps/{scopeMapName}
 # operationId: ScopeMaps_Create
 # --properties shape: {actions: list, description?: string}
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-scope-maps Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  registryName: string
-  scopeMapName: string
+export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-scope-maps create" [
+  subscription_id: string
+  resource_group_name: string
+  registry_name: string
+  scope_map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,8 +265,8 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerRegistry/registries/($registryName)/scopeMaps/($scopeMapName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, registry_name: $registry_name, scope_map_name: $scope_map_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/scopeMaps/{scope_map_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -277,10 +277,10 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/tokens
 # operationId: Tokens_List
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tokens List" [
-  subscriptionId: string
-  resourceGroupName: string
-  registryName: string
+export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tokens list" [
+  subscription_id: string
+  resource_group_name: string
+  registry_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerRegistry/registries/($registryName)/tokens" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, registry_name: $registry_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/tokens") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -304,11 +304,11 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/tokens/{tokenName}
 # operationId: Tokens_Delete
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tokens Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  registryName: string
-  tokenName: string
+export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tokens delete" [
+  subscription_id: string
+  resource_group_name: string
+  registry_name: string
+  token_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,7 +322,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerRegistry/registries/($registryName)/tokens/($tokenName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, registry_name: $registry_name, token_name: $token_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/tokens/{token_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -332,11 +332,11 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/tokens/{tokenName}
 # operationId: Tokens_Get
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tokens Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  registryName: string
-  tokenName: string
+export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tokens get" [
+  subscription_id: string
+  resource_group_name: string
+  registry_name: string
+  token_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,7 +350,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerRegistry/registries/($registryName)/tokens/($tokenName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, registry_name: $registry_name, token_name: $token_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/tokens/{token_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -361,11 +361,11 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/tokens/{tokenName}
 # operationId: Tokens_Update
 # --properties shape: {credentials?: record, scopeMapId?: string, status?: "enabled"|"disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tokens Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  registryName: string
-  tokenName: string
+export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tokens update" [
+  subscription_id: string
+  resource_group_name: string
+  registry_name: string
+  token_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,8 +381,8 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerRegistry/registries/($registryName)/tokens/($tokenName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, registry_name: $registry_name, token_name: $token_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/tokens/{token_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -394,11 +394,11 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/tokens/{tokenName}
 # operationId: Tokens_Create
 # --properties shape: {credentials?: record, objectId?: string, scopeMapId?: string, status?: "enabled"|"disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tokens Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  registryName: string
-  tokenName: string
+export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tokens create" [
+  subscription_id: string
+  resource_group_name: string
+  registry_name: string
+  token_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,8 +414,8 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ContainerRegistry/registries/($registryName)/tokens/($tokenName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, registry_name: $registry_name, token_name: $token_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/tokens/{token_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -128,13 +128,13 @@ export def "broadcasts list" [
   --service-id: string # Filter by Service ID. E.g. bbc_radio_fourfm
   --date: string # Filter by date. E.g. 2016-06-17
   --qp-sort: string@sort-completer # Sort by provided query. E.g. 'start_at' sorts in ascending order, and '-start_at' sorts in descending order
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<duration: int, end: string, is_audio_described: bool, is_blanked: bool, is_critical: bool, is_live: bool, is_repeat: bool, is_webcast: bool, pid: string, programme: record, service_id: string, start: string, type: string, version_pid: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "service_id" $service_id "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/broadcasts" $qp)
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -160,13 +160,13 @@ export def "broadcasts-latest get" [
   --next: string # Filter what will be on air next in minutes. E.g. '240' returns programmes broadcasted in the next four hurs
   --previous: string # Filter what was on air previously in minutes. E.g. '240' returns programmes broadcasted in the previous four hurs
   --qp-sort: string@sort-completer # Sort by provided query. E.g. 'start_at' sorts in ascending order, and '-start_at' sorts in descending order
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<duration: int, end: string, is_audio_described: bool, is_blanked: bool, is_critical: bool, is_live: bool, is_repeat: bool, is_webcast: bool, pid: string, programme: record, service_id: string, start: string, type: string, version_pid: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "service_id" $service_id "scalar") (serialize-qp "on_air" $on_air "scalar") (serialize-qp "next" $next "scalar") (serialize-qp "previous" $previous "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/broadcasts/latest" $qp)
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -187,12 +187,12 @@ export def "broadcasts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<duration: int, end: string, is_audio_described: bool, is_blanked: bool, is_critical: bool, is_live: bool, is_repeat: bool, is_webcast: bool, pid: string, programme: record, service_id: string, start: string, type: string, version_pid: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/broadcasts/($pid)")
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({pid: $pid} | format pattern "/broadcasts/{pid}"))
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,13 +212,13 @@ export def "categories list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string@kind-completer # Filter by provided query. E.g. 'promoted' returns promoted categories
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<category_type: string, child_categories: list, depth: int, id: string, pip_id: string, title: string, type: string, url_key: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "kind" $kind "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories" $qp)
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -238,12 +238,12 @@ export def "categories get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<category_type: string, child_categories: list, depth: int, id: string, pip_id: string, title: string, type: string, url_key: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/categories/($id)")
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/categories/{id}"))
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -266,13 +266,13 @@ export def "collections-members get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<pid: string, type: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/collections/($pid)/members" $qp)
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({pid: $pid} | format pattern "/collections/{pid}/members") $qp)
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -292,12 +292,12 @@ export def "experience-homepage get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, data: table<description: string, title: string, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/experience/homepage")
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -322,13 +322,13 @@ export def "music-popular-artists list" [
   --decomposed: oneof<nothing, bool> # In addition to the overall score, return a list of scores broken down by day N.B Must be used in conjunction with since and/or until and since is >= 31 days
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<gid: string, id: string, imagePid: string, name: string, score: int, sortName: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "decomposed" $decomposed "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/music/popular/artists" $qp)
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -352,13 +352,13 @@ export def "music-popular-artists get" [
   --since: string # ISO 8601 Date yyyy-mm-dd.  Returns items between given time period and now
   --until: string # ISO 8601 Date yyyy-mm-dd.  Returns items between given 'since' and 'until' date params
   --decomposed: oneof<nothing, bool> # In addition to the overall score, return a list of scores broken down by day N.B Must be used in conjunction with since and/or until and since is >= 31 days
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<gid: string, id: string, imagePid: string, name: string, score: int, sortName: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "decomposed" $decomposed "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/music/popular/artists/($id)" $qp)
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/music/popular/artists/{id}") $qp)
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -383,13 +383,13 @@ export def "music-popular-playlists list" [
   --decomposed: oneof<nothing, bool> # In addition to the overall score, return a list of scores broken down by day N.B Must be used in conjunction with since and/or until and since is >= 31 days
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<categories: list, commentsEnabled: bool, description: string, externalPartners: list, genre: string, id: string, imagePid: string, imageUrl: string, kind: string, mood: string, oneOff: bool, playlistPlaybackType: string, score: int, serviceId: string, title: string, updatedAt: string, visibility: string, wideImagePid: string, wideImageUrl: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "decomposed" $decomposed "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/music/popular/playlists" $qp)
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -413,13 +413,13 @@ export def "music-popular-playlists get" [
   --since: string # ISO 8601 Date yyyy-mm-dd.  Returns items between given time period and now
   --until: string # ISO 8601 Date yyyy-mm-dd.  Returns items between given 'since' and 'until' date params
   --decomposed: oneof<nothing, bool> # In addition to the overall score, return a list of scores broken down by day N.B Must be used in conjunction with since and/or until and since is >= 31 days
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<categories: list, commentsEnabled: bool, description: string, externalPartners: list, genre: string, id: string, imagePid: string, imageUrl: string, kind: string, mood: string, oneOff: bool, playlistPlaybackType: string, score: int, serviceId: string, title: string, updatedAt: string, visibility: string, wideImagePid: string, wideImageUrl: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "decomposed" $decomposed "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/music/popular/playlists/($id)" $qp)
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/music/popular/playlists/{id}") $qp)
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -447,13 +447,13 @@ export def "music-popular-tracks list" [
   --decomposed: oneof<nothing, bool> # In addition to the overall score, return a list of scores broken down by day N.B Must be used in conjunction with since and/or until and since is >= 31 days
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<album: string, artistGid: string, artistName: string, artists: list, baseTitle: string, classical: bool, id: string, mergedIds: list, preferredMultiplayRecordAudio: record, preferredRecordAudio: record, radioEdit: bool, recordAudio: list, recordImageHref: string, recordImagePid: string, score: int, title: string, type: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "network" $network "scalar") (serialize-qp "programme" $programme "scalar") (serialize-qp "artist" $artist "scalar") (serialize-qp "decomposed" $decomposed "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/music/popular/tracks" $qp)
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -480,13 +480,13 @@ export def "music-popular-tracks get" [
   --programme: string # Items with given Programme Pid
   --artist: string # MusicBrainz artist ID
   --decomposed: oneof<nothing, bool> # In addition to the overall score, return a list of scores broken down by day N.B Must be used in conjunction with since and/or until and since is >= 31 days
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<album: string, artistGid: string, artistName: string, artists: list, baseTitle: string, classical: bool, id: string, mergedIds: list, preferredMultiplayRecordAudio: record, preferredRecordAudio: record, radioEdit: bool, recordAudio: list, recordImageHref: string, recordImagePid: string, score: int, title: string, type: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "network" $network "scalar") (serialize-qp "programme" $programme "scalar") (serialize-qp "artist" $artist "scalar") (serialize-qp "decomposed" $decomposed "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/music/popular/tracks/($id)" $qp)
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/music/popular/tracks/{id}") $qp)
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -505,8 +505,8 @@ export def "my-categories-follows delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-api-key: string # API_KEY
   category_id: string
   platform: string@platform-completer
 ]: any -> any {
@@ -514,9 +514,9 @@ export def "my-categories-follows delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/categories/follows")
-  let body = {category_id: $category_id, platform: $platform} | compact
+  let body = {"category_id": $category_id, "platform": $platform} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -537,14 +537,14 @@ export def "my-categories-follows get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/categories/follows" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -563,8 +563,8 @@ export def "my-categories-follows post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-api-key: string # API_KEY
   category_id: string
   platform: string@platform-completer
 ]: any -> any {
@@ -572,9 +572,9 @@ export def "my-categories-follows post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/categories/follows")
-  let body = {category_id: $category_id, platform: $platform} | compact
+  let body = {"category_id": $category_id, "platform": $platform} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -596,15 +596,15 @@ export def "my-music-export get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<created_at: string, id: string, job_id: string, status: string, vendor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/music/export" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -626,15 +626,15 @@ export def "my-music-exports-jobs get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --over16: oneof<nothing, bool> # Boolean age check
   --vendor: string@vendor-completer # Specify Vendor Jobs
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<created_at: string, id: string, job_id: string, status: string, vendor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "over16" $over16 "scalar") (serialize-qp "vendor" $vendor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/music/exports/jobs" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -645,7 +645,7 @@ export def "my-music-exports-jobs get" [
 #
 # POST /my/music/exports/jobs
 # operationId: postMusicExportJob
-export def "my-music-exports-jobs post" [
+export def "my-music-exports-jobs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,9 +656,9 @@ export def "my-music-exports-jobs post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --over16: oneof<nothing, bool> # Boolean age check
   --vendor: string@vendor-completer # Specify Vendor Jobs
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   --body: record
 ]: any -> record<method: string, replied_at: string, schema: string> {
   let input = $in
@@ -667,7 +667,7 @@ export def "my-music-exports-jobs post" [
   let qp = [(serialize-qp "over16" $over16 "scalar") (serialize-qp "vendor" $vendor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/music/exports/jobs" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -692,15 +692,15 @@ export def "my-music-exports-tracks get" [
   --limit: int # Paginated results limit
   --vendor: string@vendor-completer # Specify Vendor Tracks
   --status: string@status-completer # Specify Track status
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<created_at: string, id: string, job_id: string, status: string, vendor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "over16" $over16 "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "vendor" $vendor "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/music/exports/tracks" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -711,7 +711,7 @@ export def "my-music-exports-tracks get" [
 #
 # GET /my/music/favourites
 # operationId: getPersonalisedMusicFavourites
-export def "my-music-favourites get" [
+export def "my-music-favourites get-personalised" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -724,15 +724,15 @@ export def "my-music-favourites get" [
   --limit: int # Paginated results limit
   --action: string@action-completer # Filters activities based on the type of action
   --music-data: oneof<nothing, bool> # Omits music data from the response, defaults to true
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "music-data" $music_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/music/favourites" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -743,7 +743,7 @@ export def "my-music-favourites get" [
 #
 # POST /my/music/favourites
 # operationId: postPersonalisedMusicFavouritesBatch
-export def "my-music-favourites post" [
+export def "my-music-favourites create-personalised-music-favourites-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -752,9 +752,9 @@ export def "my-music-favourites post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   --body: record
 ]: any -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
   let input = $in
@@ -762,7 +762,7 @@ export def "my-music-favourites post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/music/favourites")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -773,7 +773,7 @@ export def "my-music-favourites post" [
 #
 # PUT /my/music/favourites
 # operationId: putPersonalisedMusicFavouritesBatch
-export def "my-music-favourites put" [
+export def "my-music-favourites update-personalised-music-favourites-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -782,9 +782,9 @@ export def "my-music-favourites put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   --body: record
 ]: any -> record<method: string, replied_at: string, schema: string> {
   let input = $in
@@ -792,7 +792,7 @@ export def "my-music-favourites put" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/music/favourites")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -803,7 +803,7 @@ export def "my-music-favourites put" [
 #
 # GET /my/music/favourites/{type}
 # operationId: getPersonalisedMusicFavouritesByType
-export def "my-music-favourites get-by-type" [
+export def "my-music-favourites get-personalised-by-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -816,15 +816,15 @@ export def "my-music-favourites get-by-type" [
   --action: string@action-completer # Filters activities based on the type of action
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/my/music/favourites/($type)" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({type: $type} | format pattern "/my/music/favourites/{type}") $qp)
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -835,7 +835,7 @@ export def "my-music-favourites get-by-type" [
 #
 # DELETE /my/music/favourites/{type}/{id}
 # operationId: deletePersonalisedMusicFavouritesByTypeById
-export def "my-music-favourites delete" [
+export def "my-music-favourites delete-personalised" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -846,14 +846,14 @@ export def "my-music-favourites delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<method: string, replied_at: string, schema: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/music/favourites/($type)/($id)")
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({type: $type, id: $id} | format pattern "/my/music/favourites/{type}/{id}"))
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -864,7 +864,7 @@ export def "my-music-favourites delete" [
 #
 # GET /my/music/favourites/{type}/{id}
 # operationId: getPersonalisedMusicFavouritesByTypeById
-export def "my-music-favourites get-by-type-id" [
+export def "my-music-favourites get-personalised-by-type-id" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -875,14 +875,14 @@ export def "my-music-favourites get-by-type-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/music/favourites/($type)/($id)")
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({type: $type, id: $id} | format pattern "/my/music/favourites/{type}/{id}"))
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -894,7 +894,7 @@ export def "my-music-favourites get-by-type-id" [
 # POST /my/music/favourites/{type}/{id}
 # operationId: postPersonalisedMusicFavouritesByTypeById
 # --meta_data shape: {key: string}
-export def "my-music-favourites post-by-type-id" [
+export def "my-music-favourites create-personalised" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -905,9 +905,9 @@ export def "my-music-favourites post-by-type-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   action: string
   --added-at: string
   --context: string
@@ -916,10 +916,10 @@ export def "my-music-favourites post-by-type-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/music/favourites/($type)/($id)")
-  let body = {action: $action, added_at: $added_at, context: $context, meta_data: $meta_data} | compact
+  let full_url = (build-url $base ({type: $type, id: $id} | format pattern "/my/music/favourites/{type}/{id}"))
+  let body = {"action": $action, "added_at": $added_at, "context": $context, "meta_data": $meta_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -931,7 +931,7 @@ export def "my-music-favourites post-by-type-id" [
 # PUT /my/music/favourites/{type}/{id}
 # operationId: putPersonalisedMusicFavouritesByTypeById
 # --meta_data shape: {key: string}
-export def "my-music-favourites put-by-type-id" [
+export def "my-music-favourites update-personalised" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -942,9 +942,9 @@ export def "my-music-favourites put-by-type-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   action: string
   --added-at: string
   --context: string
@@ -953,10 +953,10 @@ export def "my-music-favourites put-by-type-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/music/favourites/($type)/($id)")
-  let body = {action: $action, added_at: $added_at, context: $context, meta_data: $meta_data} | compact
+  let full_url = (build-url $base ({type: $type, id: $id} | format pattern "/my/music/favourites/{type}/{id}"))
+  let body = {"action": $action, "added_at": $added_at, "context": $context, "meta_data": $meta_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -967,7 +967,7 @@ export def "my-music-favourites put-by-type-id" [
 #
 # GET /my/music/follows
 # operationId: getPersonalisedMusicFollows
-export def "my-music-follows get" [
+export def "my-music-follows get-personalised" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -982,15 +982,15 @@ export def "my-music-follows get" [
   --music-within-uk: oneof<nothing, bool> # Specify location to be passed to Music API
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "music-data" $music_data "scalar") (serialize-qp "music_context" $music_context "scalar") (serialize-qp "music_within_uk" $music_within_uk "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/music/follows" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1001,7 +1001,7 @@ export def "my-music-follows get" [
 #
 # POST /my/music/follows
 # operationId: postPersonalisedMusicFollowsBatch
-export def "my-music-follows post" [
+export def "my-music-follows create-personalised-music-follows-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1014,9 +1014,9 @@ export def "my-music-follows post" [
   --music-data: oneof<nothing, bool> # Omits music data from the response, defaults to true
   --music-context: string@music-context-completer # Specify context to be passed to Music API
   --music-within-uk: oneof<nothing, bool> # Specify location to be passed to Music API
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   --body: record
 ]: any -> record<method: string, replied_at: string, schema: string> {
   let input = $in
@@ -1025,7 +1025,7 @@ export def "my-music-follows post" [
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "music-data" $music_data "scalar") (serialize-qp "music_context" $music_context "scalar") (serialize-qp "music_within_uk" $music_within_uk "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/music/follows" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1036,7 +1036,7 @@ export def "my-music-follows post" [
 #
 # PUT /my/music/follows
 # operationId: putPersonalisedMusicFollowsBatch
-export def "my-music-follows put" [
+export def "my-music-follows update-personalised-music-follows-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1049,9 +1049,9 @@ export def "my-music-follows put" [
   --music-data: oneof<nothing, bool> # Omits music data from the response, defaults to true
   --music-context: string@music-context-completer # Specify context to be passed to Music API
   --music-within-uk: oneof<nothing, bool> # Specify location to be passed to Music API
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   --body: record
 ]: any -> record<method: string, replied_at: string, schema: string> {
   let input = $in
@@ -1060,7 +1060,7 @@ export def "my-music-follows put" [
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "music-data" $music_data "scalar") (serialize-qp "music_context" $music_context "scalar") (serialize-qp "music_within_uk" $music_within_uk "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/music/follows" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1071,7 +1071,7 @@ export def "my-music-follows put" [
 #
 # GET /my/music/follows/{type}
 # operationId: getPersonalisedMusicFollowsByType
-export def "my-music-follows get-by-type" [
+export def "my-music-follows get-personalised-by-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1087,15 +1087,15 @@ export def "my-music-follows get-by-type" [
   --music-within-uk: oneof<nothing, bool> # Specify location to be passed to Music API
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "music-data" $music_data "scalar") (serialize-qp "music_context" $music_context "scalar") (serialize-qp "music_within_uk" $music_within_uk "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/my/music/follows/($type)" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({type: $type} | format pattern "/my/music/follows/{type}") $qp)
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1106,7 +1106,7 @@ export def "my-music-follows get-by-type" [
 #
 # DELETE /my/music/follows/{type}/{id}
 # operationId: deletePersonalisedMusicFollowsByTypeById
-export def "my-music-follows delete" [
+export def "my-music-follows delete-personalised" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1120,15 +1120,15 @@ export def "my-music-follows delete" [
   --music-data: oneof<nothing, bool> # Omits music data from the response, defaults to true
   --music-context: string@music-context-completer # Specify context to be passed to Music API
   --music-within-uk: oneof<nothing, bool> # Specify location to be passed to Music API
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<method: string, replied_at: string, schema: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "music-data" $music_data "scalar") (serialize-qp "music_context" $music_context "scalar") (serialize-qp "music_within_uk" $music_within_uk "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/my/music/follows/($type)/($id)" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({type: $type, id: $id} | format pattern "/my/music/follows/{type}/{id}") $qp)
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1139,7 +1139,7 @@ export def "my-music-follows delete" [
 #
 # GET /my/music/follows/{type}/{id}
 # operationId: getPersonalisedMusicFollowsByTypeById
-export def "my-music-follows get-by-type-id" [
+export def "my-music-follows get-personalised-by-type-id" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1153,15 +1153,15 @@ export def "my-music-follows get-by-type-id" [
   --music-data: oneof<nothing, bool> # Omits music data from the response, defaults to true
   --music-context: string@music-context-completer # Specify context to be passed to Music API
   --music-within-uk: oneof<nothing, bool> # Specify location to be passed to Music API
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "music-data" $music_data "scalar") (serialize-qp "music_context" $music_context "scalar") (serialize-qp "music_within_uk" $music_within_uk "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/my/music/follows/($type)/($id)" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({type: $type, id: $id} | format pattern "/my/music/follows/{type}/{id}") $qp)
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1173,7 +1173,7 @@ export def "my-music-follows get-by-type-id" [
 # POST /my/music/follows/{type}/{id}
 # operationId: postPersonalisedMusicFollowsByTypeById
 # --meta_data shape: {key: string}
-export def "my-music-follows post-by-type-id" [
+export def "my-music-follows create-personalised" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1187,9 +1187,9 @@ export def "my-music-follows post-by-type-id" [
   --music-data: oneof<nothing, bool> # Omits music data from the response, defaults to true
   --music-context: string@music-context-completer # Specify context to be passed to Music API
   --music-within-uk: oneof<nothing, bool> # Specify location to be passed to Music API
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   action: string
   --added-at: string
   --context: string
@@ -1199,10 +1199,10 @@ export def "my-music-follows post-by-type-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "music-data" $music_data "scalar") (serialize-qp "music_context" $music_context "scalar") (serialize-qp "music_within_uk" $music_within_uk "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/my/music/follows/($type)/($id)" $qp)
-  let body = {action: $action, added_at: $added_at, context: $context, meta_data: $meta_data} | compact
+  let full_url = (build-url $base ({type: $type, id: $id} | format pattern "/my/music/follows/{type}/{id}") $qp)
+  let body = {"action": $action, "added_at": $added_at, "context": $context, "meta_data": $meta_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1214,7 +1214,7 @@ export def "my-music-follows post-by-type-id" [
 # PUT /my/music/follows/{type}/{id}
 # operationId: putPersonalisedMusicFollowsByTypeById
 # --meta_data shape: {key: string}
-export def "my-music-follows put-by-type-id" [
+export def "my-music-follows update-personalised" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1228,9 +1228,9 @@ export def "my-music-follows put-by-type-id" [
   --music-data: oneof<nothing, bool> # Omits music data from the response, defaults to true
   --music-context: string@music-context-completer # Specify context to be passed to Music API
   --music-within-uk: oneof<nothing, bool> # Specify location to be passed to Music API
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   action: string
   --added-at: string
   --context: string
@@ -1240,10 +1240,10 @@ export def "my-music-follows put-by-type-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "music-data" $music_data "scalar") (serialize-qp "music_context" $music_context "scalar") (serialize-qp "music_within_uk" $music_within_uk "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/my/music/follows/($type)/($id)" $qp)
-  let body = {action: $action, added_at: $added_at, context: $context, meta_data: $meta_data} | compact
+  let full_url = (build-url $base ({type: $type, id: $id} | format pattern "/my/music/follows/{type}/{id}") $qp)
+  let body = {"action": $action, "added_at": $added_at, "context": $context, "meta_data": $meta_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1263,14 +1263,14 @@ export def "my-music-preferences-export delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<method: string, replied_at: string, schema: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/music/preferences/export")
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1290,14 +1290,14 @@ export def "my-music-preferences-export list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<method: string, replied_at: string, results: table<access_expires_at: string, access_token: string, add_plus_export: bool, authorization_code: string, last_export: string, legacy_state: string, partner_id: string, refresh_token: string, terms: bool, vendor: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/music/preferences/export")
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1308,7 +1308,7 @@ export def "my-music-preferences-export list" [
 #
 # POST /my/music/preferences/export
 # operationId: postMusicPreferencesExport
-export def "my-music-preferences-export post" [
+export def "my-music-preferences-export create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1317,9 +1317,9 @@ export def "my-music-preferences-export post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   access_expires_at: string
   access_token: string
   --add-plus-export: oneof<nothing, bool>
@@ -1335,9 +1335,9 @@ export def "my-music-preferences-export post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/music/preferences/export")
-  let body = {access_expires_at: $access_expires_at, access_token: $access_token, add_plus_export: $add_plus_export, authorization_code: $authorization_code, last_export: $last_export, legacy_state: $legacy_state, partner_id: $partner_id, refresh_token: $refresh_token, terms: $terms, vendor: $vendor} | compact
+  let body = {"access_expires_at": $access_expires_at, "access_token": $access_token, "add_plus_export": $add_plus_export, "authorization_code": $authorization_code, "last_export": $last_export, "legacy_state": $legacy_state, "partner_id": $partner_id, "refresh_token": $refresh_token, "terms": $terms, "vendor": $vendor} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1358,14 +1358,14 @@ export def "my-music-preferences-export delete-by-vendor" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<errors: table<message: string, replied_at: int, status: int>, schema: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/music/preferences/export/($vendor)")
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({vendor: $vendor} | format pattern "/my/music/preferences/export/{vendor}"))
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1386,14 +1386,14 @@ export def "my-music-preferences-export get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<method: string, replied_at: string, results: table<access_expires_at: string, access_token: string, add_plus_export: bool, authorization_code: string, last_export: string, legacy_state: string, partner_id: string, refresh_token: string, terms: bool, vendor: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/music/preferences/export/($vendor)")
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({vendor: $vendor} | format pattern "/my/music/preferences/export/{vendor}"))
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1404,7 +1404,7 @@ export def "my-music-preferences-export get" [
 #
 # POST /my/music/preferences/export/{vendor}
 # operationId: postMusicPreferencesExportVendor
-export def "my-music-preferences-export post-by-vendor" [
+export def "my-music-preferences-export create-by-vendor" [
   vendor: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1414,9 +1414,9 @@ export def "my-music-preferences-export post-by-vendor" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   access_expires_at: string
   access_token: string
   --add-plus-export: oneof<nothing, bool>
@@ -1431,10 +1431,10 @@ export def "my-music-preferences-export post-by-vendor" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/music/preferences/export/($vendor)")
-  let body = {access_expires_at: $access_expires_at, access_token: $access_token, add_plus_export: $add_plus_export, authorization_code: $authorization_code, last_export: $last_export, legacy_state: $legacy_state, partner_id: $partner_id, refresh_token: $refresh_token, terms: $terms, vendor: $body_vendor} | compact
+  let full_url = (build-url $base ({vendor: $vendor} | format pattern "/my/music/preferences/export/{vendor}"))
+  let body = {"access_expires_at": $access_expires_at, "access_token": $access_token, "add_plus_export": $add_plus_export, "authorization_code": $authorization_code, "last_export": $last_export, "legacy_state": $legacy_state, "partner_id": $partner_id, "refresh_token": $refresh_token, "terms": $terms, "vendor": $body_vendor} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1445,7 +1445,7 @@ export def "my-music-preferences-export post-by-vendor" [
 #
 # PUT /my/music/preferences/export/{vendor}
 # operationId: putMusicPreferencesExportVendor
-export def "my-music-preferences-export put" [
+export def "my-music-preferences-export update" [
   vendor: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1455,9 +1455,9 @@ export def "my-music-preferences-export put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   access_expires_at: string
   access_token: string
   --add-plus-export: oneof<nothing, bool>
@@ -1472,10 +1472,10 @@ export def "my-music-preferences-export put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/music/preferences/export/($vendor)")
-  let body = {access_expires_at: $access_expires_at, access_token: $access_token, add_plus_export: $add_plus_export, authorization_code: $authorization_code, last_export: $last_export, legacy_state: $legacy_state, partner_id: $partner_id, refresh_token: $refresh_token, terms: $terms, vendor: $body_vendor} | compact
+  let full_url = (build-url $base ({vendor: $vendor} | format pattern "/my/music/preferences/export/{vendor}"))
+  let body = {"access_expires_at": $access_expires_at, "access_token": $access_token, "add_plus_export": $add_plus_export, "authorization_code": $authorization_code, "last_export": $last_export, "legacy_state": $legacy_state, "partner_id": $partner_id, "refresh_token": $refresh_token, "terms": $terms, "vendor": $body_vendor} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1496,8 +1496,8 @@ export def "my-networks-follows delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-api-key: string # API_KEY
   platform: string@platform-completer
   service_id: string
 ]: any -> any {
@@ -1506,9 +1506,9 @@ export def "my-networks-follows delete" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/networks/follows" $qp)
-  let body = {platform: $platform, service_id: $service_id} | compact
+  let body = {"platform": $platform, "service_id": $service_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1529,14 +1529,14 @@ export def "my-networks-follows get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<created: string, type: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/networks/follows" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1557,8 +1557,8 @@ export def "my-networks-follows post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-api-key: string # API_KEY
   platform: string@platform-completer
   service_id: string
 ]: any -> any {
@@ -1567,9 +1567,9 @@ export def "my-networks-follows post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/networks/follows" $qp)
-  let body = {platform: $platform, service_id: $service_id} | compact
+  let body = {"platform": $platform, "service_id": $service_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1588,8 +1588,8 @@ export def "my-plays post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-api-key: string # API_KEY
   action: string@action-completer-2
   elapsed_time: int
   pid: string
@@ -1600,9 +1600,9 @@ export def "my-plays post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/plays")
-  let body = {action: $action, elapsed_time: $elapsed_time, pid: $pid, resource_type: $resource_type, version_pid: $version_pid} | compact
+  let body = {"action": $action, "elapsed_time": $elapsed_time, "pid": $pid, "resource_type": $resource_type, "version_pid": $version_pid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1624,14 +1624,14 @@ export def "my-playspace-containers-suggested suggestContainer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --previous-pid: string # Clip or Episode PID of the previous or first content item in the Playspace stream.
   --previous-container: string # Container ID of the previous container in the Playspace stream.
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-api-key: string # API_KEY
 ]: nothing -> record<id: string, members: table<description: string, image_url: string, pid: string, title: string, type: string, version_pid: string>, title: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "previous_pid" $previous_pid "scalar") (serialize-qp "previous_container" $previous_container "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/playspace/containers/suggested" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1652,13 +1652,13 @@ export def "my-playspace-containers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-api-key: string # API_KEY
 ]: nothing -> record<id: string, members: table<description: string, image_url: string, pid: string, title: string, type: string, version_pid: string>, title: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/playspace/containers/($id)")
-  let extra_headers = {"Authorization": $Authorization, "X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/playspace/containers/{id}"))
+  let extra_headers = {"Authorization": $authorization, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1681,14 +1681,14 @@ export def "my-programmes-recommendations get" [
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
   --rights: string@rights-completer # Only return available results for the web/mobile.
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<pid: string, type: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "rights" $rights "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/programmes/recommendations" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1699,7 +1699,7 @@ export def "my-programmes-recommendations get" [
 #
 # GET /my/radio/favourites
 # operationId: getPersonalisedRadioFavourites
-export def "my-radio-favourites get" [
+export def "my-radio-favourites get-personalised" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1712,15 +1712,15 @@ export def "my-radio-favourites get" [
   --limit: int # Paginated results limit
   --qp-sort: string@sort-completer-1 # Sort order for Personalised Radio results
   --show-all-activity: oneof<nothing, bool> # Include items which have been 'soft' unfavourited in response. I.e items with UAS type of 'unfavourited'
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "show_all_activity" $show_all_activity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/radio/favourites" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1731,7 +1731,7 @@ export def "my-radio-favourites get" [
 #
 # POST /my/radio/favourites
 # operationId: postPersonalisedRadioBatch
-export def "my-radio-favourites post" [
+export def "my-radio-favourites create-personalised-radio-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1740,9 +1740,9 @@ export def "my-radio-favourites post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   --body: record
 ]: any -> record<_schema: string, method: string, replied_at: string> {
   let input = $in
@@ -1750,7 +1750,7 @@ export def "my-radio-favourites post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/radio/favourites")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1761,7 +1761,7 @@ export def "my-radio-favourites post" [
 #
 # PUT /my/radio/favourites
 # operationId: putPersonalisedRadioBatch
-export def "my-radio-favourites put" [
+export def "my-radio-favourites update-personalised-radio-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1770,9 +1770,9 @@ export def "my-radio-favourites put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   --body: record
 ]: any -> record<_schema: string, method: string, replied_at: string> {
   let input = $in
@@ -1780,7 +1780,7 @@ export def "my-radio-favourites put" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/radio/favourites")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1791,7 +1791,7 @@ export def "my-radio-favourites put" [
 #
 # GET /my/radio/favourites/{type}
 # operationId: getPersonalisedRadioFavouritesByType
-export def "my-radio-favourites get-by-type" [
+export def "my-radio-favourites get-personalised-by-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1805,15 +1805,15 @@ export def "my-radio-favourites get-by-type" [
   --show-all-activity: oneof<nothing, bool> # Include items which have been 'soft' unfavourited in response. I.e items with UAS type of 'unfavourited'
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "show_all_activity" $show_all_activity "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/my/radio/favourites/($type)" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({type: $type} | format pattern "/my/radio/favourites/{type}") $qp)
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1824,7 +1824,7 @@ export def "my-radio-favourites get-by-type" [
 #
 # DELETE /my/radio/favourites/{type}/{pid}
 # operationId: deletePersonalisedRadioByActivityTypeById
-export def "my-radio-favourites delete" [
+export def "my-radio-favourites delete-personalised" [
   type: string
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1835,14 +1835,14 @@ export def "my-radio-favourites delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, method: string, replied_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/radio/favourites/($type)/($pid)")
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({type: $type, pid: $pid} | format pattern "/my/radio/favourites/{type}/{pid}"))
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1853,7 +1853,7 @@ export def "my-radio-favourites delete" [
 #
 # GET /my/radio/favourites/{type}/{pid}
 # operationId: getPersonalisedRadioByActivityTypeById
-export def "my-radio-favourites get-by-type-pid" [
+export def "my-radio-favourites get-personalised-by-type-pid" [
   type: string
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1865,15 +1865,15 @@ export def "my-radio-favourites get-by-type-pid" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --show-all-activity: oneof<nothing, bool> # Include items which have been 'soft' unfavourited in response. I.e items with UAS type of 'unfavourited'
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "show_all_activity" $show_all_activity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/my/radio/favourites/($type)/($pid)" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({type: $type, pid: $pid} | format pattern "/my/radio/favourites/{type}/{pid}") $qp)
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1885,7 +1885,7 @@ export def "my-radio-favourites get-by-type-pid" [
 # POST /my/radio/favourites/{type}/{pid}
 # operationId: postPersonalisedRadioByActivityTypeById
 # --metadata shape: {key: string}
-export def "my-radio-favourites post-by-type-pid" [
+export def "my-radio-favourites create-personalised" [
   type: string
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1896,9 +1896,9 @@ export def "my-radio-favourites post-by-type-pid" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   action: string
   --added-at: string
   --context: string
@@ -1907,10 +1907,10 @@ export def "my-radio-favourites post-by-type-pid" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/radio/favourites/($type)/($pid)")
-  let body = {action: $action, added_at: $added_at, context: $context, metadata: $metadata} | compact
+  let full_url = (build-url $base ({type: $type, pid: $pid} | format pattern "/my/radio/favourites/{type}/{pid}"))
+  let body = {"action": $action, "added_at": $added_at, "context": $context, "metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1922,7 +1922,7 @@ export def "my-radio-favourites post-by-type-pid" [
 # PUT /my/radio/favourites/{type}/{pid}
 # operationId: putPersonalisedRadioByActivityTypeById
 # --metadata shape: {key: string}
-export def "my-radio-favourites put-by-type-pid" [
+export def "my-radio-favourites update-personalised" [
   type: string
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1933,9 +1933,9 @@ export def "my-radio-favourites put-by-type-pid" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   action: string
   --added-at: string
   --context: string
@@ -1944,10 +1944,10 @@ export def "my-radio-favourites put-by-type-pid" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/radio/favourites/($type)/($pid)")
-  let body = {action: $action, added_at: $added_at, context: $context, metadata: $metadata} | compact
+  let full_url = (build-url $base ({type: $type, pid: $pid} | format pattern "/my/radio/favourites/{type}/{pid}"))
+  let body = {"action": $action, "added_at": $added_at, "context": $context, "metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1958,7 +1958,7 @@ export def "my-radio-favourites put-by-type-pid" [
 #
 # GET /my/radio/follows
 # operationId: getPersonalisedRadioFollows
-export def "my-radio-follows get" [
+export def "my-radio-follows get-personalised" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1971,15 +1971,15 @@ export def "my-radio-follows get" [
   --limit: int # Paginated results limit
   --qp-sort: string@sort-completer-1 # Sort order for Personalised Radio results
   --show-all-activity: oneof<nothing, bool> # Include items which have been 'soft' unfollowed in response. I.e items with UAS type of 'unfollowed'
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "show_all_activity" $show_all_activity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/radio/follows" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1990,7 +1990,7 @@ export def "my-radio-follows get" [
 #
 # POST /my/radio/follows
 # operationId: postPersonalisedRadioFollowsBatch
-export def "my-radio-follows post" [
+export def "my-radio-follows create-personalised-radio-follows-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1999,9 +1999,9 @@ export def "my-radio-follows post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   --body: record
 ]: any -> record<_schema: string, method: string, replied_at: string> {
   let input = $in
@@ -2009,7 +2009,7 @@ export def "my-radio-follows post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/radio/follows")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2020,7 +2020,7 @@ export def "my-radio-follows post" [
 #
 # PUT /my/radio/follows
 # operationId: putPersonalisedRadioFollowsBatch
-export def "my-radio-follows put" [
+export def "my-radio-follows update-personalised-radio-follows-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2029,9 +2029,9 @@ export def "my-radio-follows put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   --body: record
 ]: any -> record<_schema: string, method: string, replied_at: string> {
   let input = $in
@@ -2039,7 +2039,7 @@ export def "my-radio-follows put" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/radio/follows")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2050,7 +2050,7 @@ export def "my-radio-follows put" [
 #
 # GET /my/radio/follows/{type}
 # operationId: getPersonalisedRadioFollowsByType
-export def "my-radio-follows get-by-type" [
+export def "my-radio-follows get-personalised-by-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2064,15 +2064,15 @@ export def "my-radio-follows get-by-type" [
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
   --show-all-activity: oneof<nothing, bool> # Include items which have been 'soft' unfollowed in response. I.e items with UAS type of 'unfollowed'
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "show_all_activity" $show_all_activity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/my/radio/follows/($type)" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({type: $type} | format pattern "/my/radio/follows/{type}") $qp)
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2083,7 +2083,7 @@ export def "my-radio-follows get-by-type" [
 #
 # DELETE /my/radio/follows/{type}/{pid}
 # operationId: deletePersonalisedRadioFollowsByTypeById
-export def "my-radio-follows delete" [
+export def "my-radio-follows delete-personalised" [
   type: string
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2094,14 +2094,14 @@ export def "my-radio-follows delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, method: string, replied_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/radio/follows/($type)/($pid)")
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({type: $type, pid: $pid} | format pattern "/my/radio/follows/{type}/{pid}"))
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2112,7 +2112,7 @@ export def "my-radio-follows delete" [
 #
 # GET /my/radio/follows/{type}/{pid}
 # operationId: getPersonalisedRadioFollowsByTypeById
-export def "my-radio-follows get-by-type-pid" [
+export def "my-radio-follows get-personalised-by-type-pid" [
   type: string
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2123,14 +2123,14 @@ export def "my-radio-follows get-by-type-pid" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/radio/follows/($type)/($pid)")
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({type: $type, pid: $pid} | format pattern "/my/radio/follows/{type}/{pid}"))
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2142,7 +2142,7 @@ export def "my-radio-follows get-by-type-pid" [
 # POST /my/radio/follows/{type}/{pid}
 # operationId: postPersonalisedRadioFollowsByTypeById
 # --metadata shape: {key: string}
-export def "my-radio-follows post-by-type-pid" [
+export def "my-radio-follows create-personalised" [
   type: string
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2153,9 +2153,9 @@ export def "my-radio-follows post-by-type-pid" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   action: string
   --added-at: string
   --context: string
@@ -2164,10 +2164,10 @@ export def "my-radio-follows post-by-type-pid" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/radio/follows/($type)/($pid)")
-  let body = {action: $action, added_at: $added_at, context: $context, metadata: $metadata} | compact
+  let full_url = (build-url $base ({type: $type, pid: $pid} | format pattern "/my/radio/follows/{type}/{pid}"))
+  let body = {"action": $action, "added_at": $added_at, "context": $context, "metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2179,7 +2179,7 @@ export def "my-radio-follows post-by-type-pid" [
 # PUT /my/radio/follows/{type}/{pid}
 # operationId: putPersonalisedRadioFollowsByTypeById
 # --metadata shape: {key: string}
-export def "my-radio-follows put-by-type-pid" [
+export def "my-radio-follows update-personalised" [
   type: string
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2190,9 +2190,9 @@ export def "my-radio-follows put-by-type-pid" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
   action: string
   --added-at: string
   --context: string
@@ -2201,10 +2201,10 @@ export def "my-radio-follows put-by-type-pid" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/radio/follows/($type)/($pid)")
-  let body = {action: $action, added_at: $added_at, context: $context, metadata: $metadata} | compact
+  let full_url = (build-url $base ({type: $type, pid: $pid} | format pattern "/my/radio/follows/{type}/{pid}"))
+  let body = {"action": $action, "added_at": $added_at, "context": $context, "metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2215,7 +2215,7 @@ export def "my-radio-follows put-by-type-pid" [
 #
 # GET /my/radio/plays
 # operationId: getPersonalisedRadioPlays
-export def "my-radio-plays get" [
+export def "my-radio-plays get-personalised" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2228,15 +2228,15 @@ export def "my-radio-plays get" [
   --limit: int # Paginated results limit
   --qp-sort: string@sort-completer-1 # Sort order for Personalised Radio results
   --show-all-activity: oneof<nothing, bool> # Include expired/unavailable items
-  --Authorization: string # Bearer OAUTH_TOKEN
-  --X-Authentication-Provider: string # Authentication type
-  --X-API-Key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN
+  --x-authentication-provider: string # Authentication type
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "show_all_activity" $show_all_activity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/radio/plays" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-Authentication-Provider": $X_Authentication_Provider, "X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2264,13 +2264,13 @@ export def "podcasts list" [
   --category: string # Category ID
   --q: string # Search query String
   --coverage: string@coverage-completer # Local, National or Regional Coverage
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<category_summaries: list, days_available: int, entity_type: string, first_published_date: string, frequency: string, images: list, latest_available_episodes: list, network_summary: record, pid: string, rss_url: string, synopses: record, territory: string, titles: record, total_available_episodes: int, type: string, updated_at: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "network" $network "scalar") (serialize-qp "network_url_key" $network_url_key "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "coverage" $coverage "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/podcasts" $qp)
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2290,12 +2290,12 @@ export def "podcasts-featured get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: float, offset: float, results: table<featured_podcasts: list, title: string, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/podcasts/featured")
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2318,13 +2318,13 @@ export def "podcasts get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<category_summaries: list, days_available: int, entity_type: string, first_published_date: string, frequency: string, images: list, latest_available_episodes: list, network_summary: record, pid: string, rss_url: string, synopses: record, territory: string, titles: record, total_available_episodes: int, type: string, updated_at: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/podcasts/($pid)" $qp)
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({pid: $pid} | format pattern "/podcasts/{pid}") $qp)
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2347,13 +2347,13 @@ export def "podcasts-episodes get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: float, offset: float, results: table<asset_url: string, available_versions: list, images: list, media_type: string, network_summary: record, pid: string, release_date: string, short_synopsis: string, titles: record, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/podcasts/($pid)/episodes" $qp)
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({pid: $pid} | format pattern "/podcasts/{pid}/episodes") $qp)
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2364,7 +2364,7 @@ export def "podcasts-episodes get" [
 #
 # GET /radio/networks.json
 # operationId: getRadioNetworks
-export def "radio-networksjson get" [
+export def "radio-networksjson get-radio-networks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2375,13 +2375,13 @@ export def "radio-networksjson get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --preset: oneof<nothing, bool> # Returns all networks needed for iPlayer Radio responsive web navigation
   --international: oneof<nothing, bool> # Returns all networks available internationally
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<active: bool, contacts: list, date_ranges: list, group: string, id: string, international: bool, key: string, preset: bool, promoted_category_summaries: list, services: list, short_title: string, sort: int, title: string, type: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "preset" $preset "scalar") (serialize-qp "international" $international "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/radio/networks.json" $qp)
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2392,7 +2392,7 @@ export def "radio-networksjson get" [
 #
 # GET /radio/popular
 # operationId: getPopularEpisodesClips
-export def "radio-popular get" [
+export def "radio-popular get-popular-episodes-clips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2412,13 +2412,13 @@ export def "radio-popular get" [
   --container: string # Filter by container. Accepts any pid e.g. brand,series,episode
   --media-set: list@media-set-completer # Filter by media set name. Accepts comma separated combinations of the following: pc,mobile-download,android-download-high,apple-ios-download-high,mobile-cellular-main,mobile-phone-main,iptv-all
   --q: string # Search query String
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<data: record, id: string, score: int, type: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "distinct" $distinct "scalar") (serialize-qp "network" $network "scalar") (serialize-qp "network_url_key" $network_url_key "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "media_type" $media_type "scalar") (serialize-qp "container" $container "scalar") (serialize-qp "media_set" $media_set "csv") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/radio/popular" $qp)
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2445,13 +2445,13 @@ export def "radio-programmes list" [
   --qp-sort: string@sort-completer-2 # Sort by provided query. E.g. 'title' sorts in ascending order, and -title sorts in descending order
   --container: string # Filter by container. Accepts any brand or series pid
   --type: string@type-completer-1 # Filter by programme type. Accepts comma separated values
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<pid: string, type: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "kind" $kind "scalar") (serialize-qp "network" $network "scalar") (serialize-qp "network_url_key" $network_url_key "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "container" $container "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/radio/programmes" $qp)
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2472,12 +2472,12 @@ export def "radio-programmes get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-API-Key: string # API_KEY
+  --x-api-key: string # API_KEY
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<pid: string, type: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/radio/programmes/($pid)")
-  let extra_headers = {"X-API-Key": $X_API_Key} | compact
+  let full_url = (build-url $base ({pid: $pid} | format pattern "/radio/programmes/{pid}"))
+  let extra_headers = {"X-API-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

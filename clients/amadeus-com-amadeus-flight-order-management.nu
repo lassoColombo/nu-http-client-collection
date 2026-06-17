@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "booking-flight-orders cancelFlightOrder" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "booking-flight-orders cancel" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,8 +92,8 @@ export def commands []: nothing -> table {
 #
 # DELETE /booking/flight-orders/{flight-orderId}
 # operationId: cancelFlightOrder
-export def "booking-flight-orders cancelFlightOrder" [
-  flight_orderId: string
+export def "booking-flight-orders cancel" [
+  flight_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,7 +105,7 @@ export def "booking-flight-orders cancelFlightOrder" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/booking/flight-orders/($flight_orderId)")
+  let full_url = (build-url $base ({flight_order_id: $flight_order_id} | format pattern "/booking/flight-orders/{flight_order_id}"))
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -116,7 +116,7 @@ export def "booking-flight-orders cancelFlightOrder" [
 # GET /booking/flight-orders/{flight-orderId}
 # operationId: getFlightOrder
 export def "booking-flight-orders get" [
-  flight_orderId: string
+  flight_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,7 +128,7 @@ export def "booking-flight-orders get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/booking/flight-orders/($flight_orderId)")
+  let full_url = (build-url $base ({flight_order_id: $flight_order_id} | format pattern "/booking/flight-orders/{flight_order_id}"))
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

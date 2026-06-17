@@ -150,7 +150,7 @@ export def "file-storage-drive-groups driveGroupsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/file-storage/drive-groups" $qp)
-  let body = {description: $description, display_name: $display_name, name: $name} | compact
+  let body = {"description": $description, "display_name": $display_name, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -181,7 +181,7 @@ export def "file-storage-drive-groups driveGroupsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/drive-groups/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/drive-groups/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -212,7 +212,7 @@ export def "file-storage-drive-groups driveGroupsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/drive-groups/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/drive-groups/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -246,8 +246,8 @@ export def "file-storage-drive-groups driveGroupsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/drive-groups/($id)" $qp)
-  let body = {description: $description, display_name: $display_name, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/drive-groups/{id}") $qp)
+  let body = {"description": $description, "display_name": $display_name, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -314,7 +314,7 @@ export def "file-storage-drives drivesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/file-storage/drives" $qp)
-  let body = {description: $description, name: $name} | compact
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -345,7 +345,7 @@ export def "file-storage-drives drivesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/drives/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/drives/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -376,7 +376,7 @@ export def "file-storage-drives drivesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/drives/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/drives/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -409,8 +409,8 @@ export def "file-storage-drives drivesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/drives/($id)" $qp)
-  let body = {description: $description, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/drives/{id}") $qp)
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -513,7 +513,7 @@ export def "file-storage-files-search filesSearch" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pass_through" $pass_through "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/file-storage/files/search" $qp)
-  let body = {drive_id: $drive_id, query: $query} | compact
+  let body = {"drive_id": $drive_id, "query": $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -544,7 +544,7 @@ export def "file-storage-files filesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/files/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/files/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -575,7 +575,7 @@ export def "file-storage-files filesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/files/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/files/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -609,8 +609,8 @@ export def "file-storage-files filesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/files/($id)" $qp)
-  let body = {description: $description, name: $name, parent_folder_id: $parent_folder_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/files/{id}") $qp)
+  let body = {"description": $description, "name": $name, "parent_folder_id": $parent_folder_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -641,7 +641,7 @@ export def "file-storage-files-download filesDownload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/files/($id)/download" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/files/{id}/download") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -677,7 +677,7 @@ export def "file-storage-folders foldersAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/file-storage/folders" $qp)
-  let body = {description: $description, drive_id: $drive_id, name: $name, parent_folder_id: $parent_folder_id} | compact
+  let body = {"description": $description, "drive_id": $drive_id, "name": $name, "parent_folder_id": $parent_folder_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -708,7 +708,7 @@ export def "file-storage-folders foldersDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/folders/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/folders/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -739,7 +739,7 @@ export def "file-storage-folders foldersOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/folders/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/folders/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -773,8 +773,8 @@ export def "file-storage-folders foldersUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/folders/($id)" $qp)
-  let body = {description: $description, name: $name, parent_folder_id: $parent_folder_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/folders/{id}") $qp)
+  let body = {"description": $description, "name": $name, "parent_folder_id": $parent_folder_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -809,8 +809,8 @@ export def "file-storage-folders-copy foldersCopy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/folders/($id)/copy" $qp)
-  let body = {name: $name, parent_folder_id: $parent_folder_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/folders/{id}/copy") $qp)
+  let body = {"name": $name, "parent_folder_id": $parent_folder_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -879,7 +879,7 @@ export def "file-storage-shared-links sharedLinksAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/file-storage/shared-links" $qp)
-  let body = {download_url: $download_url, password: $password, scope: $scope, target_id: $target_id} | compact
+  let body = {"download_url": $download_url, "password": $password, "scope": $scope, "target_id": $target_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -910,7 +910,7 @@ export def "file-storage-shared-links sharedLinksDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/shared-links/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/shared-links/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -941,7 +941,7 @@ export def "file-storage-shared-links sharedLinksOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/shared-links/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/shared-links/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -977,8 +977,8 @@ export def "file-storage-shared-links sharedLinksUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/shared-links/($id)" $qp)
-  let body = {download_url: $download_url, password: $password, scope: $scope, target_id: $target_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/shared-links/{id}") $qp)
+  let body = {"download_url": $download_url, "password": $password, "scope": $scope, "target_id": $target_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -991,7 +991,7 @@ export def "file-storage-shared-links sharedLinksUpdate" [
 #
 # POST /file-storage/upload-sessions
 # operationId: uploadSessionsAdd
-export def "file-storage-upload-sessions uploadSessionsAdd" [
+export def "file-storage-upload-sessions upload-sessions-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1014,7 +1014,7 @@ export def "file-storage-upload-sessions uploadSessionsAdd" [
   let base = ($base_url | default "https://upload.apideck.com")
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/file-storage/upload-sessions" $qp)
-  let body = {drive_id: $drive_id, name: $name, parent_folder_id: $parent_folder_id, size: $size} | compact
+  let body = {"drive_id": $drive_id, "name": $name, "parent_folder_id": $parent_folder_id, "size": $size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1027,7 +1027,7 @@ export def "file-storage-upload-sessions uploadSessionsAdd" [
 #
 # DELETE /file-storage/upload-sessions/{id}
 # operationId: uploadSessionsDelete
-export def "file-storage-upload-sessions uploadSessionsDelete" [
+export def "file-storage-upload-sessions upload-sessions-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1045,7 +1045,7 @@ export def "file-storage-upload-sessions uploadSessionsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/upload-sessions/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/upload-sessions/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1057,7 +1057,7 @@ export def "file-storage-upload-sessions uploadSessionsDelete" [
 #
 # GET /file-storage/upload-sessions/{id}
 # operationId: uploadSessionsOne
-export def "file-storage-upload-sessions uploadSessionsOne" [
+export def "file-storage-upload-sessions upload-sessions-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1076,7 +1076,7 @@ export def "file-storage-upload-sessions uploadSessionsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.apideck.com")
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/upload-sessions/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/upload-sessions/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1088,7 +1088,7 @@ export def "file-storage-upload-sessions uploadSessionsOne" [
 #
 # PUT /file-storage/upload-sessions/{id}
 # operationId: uploadSessionsUpload
-export def "file-storage-upload-sessions uploadSessionsUpload" [
+export def "file-storage-upload-sessions upload" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1110,7 +1110,7 @@ export def "file-storage-upload-sessions uploadSessionsUpload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.apideck.com")
   let qp = [(serialize-qp "part_number" $part_number "scalar") (serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/upload-sessions/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/upload-sessions/{id}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id, "digest": $digest} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1123,7 +1123,7 @@ export def "file-storage-upload-sessions uploadSessionsUpload" [
 #
 # POST /file-storage/upload-sessions/{id}/finish
 # operationId: uploadSessionsFinish
-export def "file-storage-upload-sessions-finish uploadSessionsFinish" [
+export def "file-storage-upload-sessions-finish upload" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1144,7 +1144,7 @@ export def "file-storage-upload-sessions-finish uploadSessionsFinish" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.apideck.com")
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/file-storage/upload-sessions/($id)/finish" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/file-storage/upload-sessions/{id}/finish") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id, "digest": $digest} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

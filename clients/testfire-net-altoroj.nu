@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /account
 # operationId: getAccount
-export def "account list" [
+export def "account get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,12 +101,12 @@ export def "account list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Authorization token (provided upon successful login)
+  --authorization: string # Authorization token (provided upon successful login)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -117,8 +117,8 @@ export def "account list" [
 #
 # GET /account/{accountNo}
 # operationId: getAccountBalance
-export def "account get" [
-  accountNo: string
+export def "account get-account-balance" [
+  account_no: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,12 +127,12 @@ export def "account get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Authorization token (provided upon successful login)
+  --authorization: string # Authorization token (provided upon successful login)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/($accountNo)")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({account_no: $account_no} | format pattern "/account/{account_no}"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -144,7 +144,7 @@ export def "account get" [
 # GET /account/{accountNo}/transactions
 # operationId: showLastTenTransactions
 export def "account-transactions showLastTenTransactions" [
-  accountNo: string
+  account_no: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,12 +153,12 @@ export def "account-transactions showLastTenTransactions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Authorization token (provided upon successful login)
+  --authorization: string # Authorization token (provided upon successful login)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/($accountNo)/transactions")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({account_no: $account_no} | format pattern "/account/{account_no}/transactions"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -169,8 +169,8 @@ export def "account-transactions showLastTenTransactions" [
 #
 # POST /account/{accountNo}/transactions
 # operationId: getTransactions
-export def "account-transactions post" [
-  accountNo: string
+export def "account-transactions get" [
+  account_no: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,17 +179,17 @@ export def "account-transactions post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Authorization token (provided upon successful login)
-  endDate: string # format: date, e.g. 2012-03-17
-  startDate: string # format: date, e.g. 2012-03-12
+  --authorization: string # Authorization token (provided upon successful login)
+  end_date: string # format: date, e.g. 2012-03-17
+  start_date: string # format: date, e.g. 2012-03-12
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/($accountNo)/transactions")
-  let body = {endDate: $endDate, startDate: $startDate} | compact
+  let full_url = (build-url $base ({account_no: $account_no} | format pattern "/account/{account_no}/transactions"))
+  let body = {"endDate": $end_date, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,7 +200,7 @@ export def "account-transactions post" [
 #
 # POST /admin/addUser
 # operationId: addUser
-export def "admin-add-user addUser" [
+export def "admin-add-user create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "admin-add-user addUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Authorization token (provided upon successful login)
+  --authorization: string # Authorization token (provided upon successful login)
   firstname: string # e.g. Bilbo
   lastname: string # e.g. Baggins
   password1: string # format: password, e.g. S3l3ctS0methingStr0ng5AsP@ssword
@@ -220,9 +220,9 @@ export def "admin-add-user addUser" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/addUser")
-  let body = {firstname: $firstname, lastname: $lastname, password1: $password1, password2: $password2, username: $username} | compact
+  let body = {"firstname": $firstname, "lastname": $lastname, "password1": $password1, "password2": $password2, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -242,7 +242,7 @@ export def "admin-change-password changePassword" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Authorization token (provided upon successful login)
+  --authorization: string # Authorization token (provided upon successful login)
   --password1: string # format: password, e.g. Th1s!sz3nu3Passv0rd
   password2: string # format: password, e.g. Th1s!sz3nu3Passv0rd
   username: string # e.g. jdoe
@@ -251,9 +251,9 @@ export def "admin-change-password changePassword" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/changePassword")
-  let body = {password1: $password1, password2: $password2, username: $username} | compact
+  let body = {"password1": $password1, "password2": $password2, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -264,7 +264,7 @@ export def "admin-change-password changePassword" [
 #
 # POST /feedback/submit
 # operationId: sendFeedback
-export def "feedback-submit sendFeedback" [
+export def "feedback-submit send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "feedback-submit sendFeedback" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/feedback/submit")
-  let body = {email: $email, message: $message, name: $name, subject: $subject} | compact
+  let body = {"email": $email, "message": $message, "name": $name, "subject": $subject} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -294,7 +294,7 @@ export def "feedback-submit sendFeedback" [
 # GET /feedback/{feedbackId}
 # operationId: getFeedback
 export def "feedback get" [
-  feedbackId: string
+  feedback_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,12 +303,12 @@ export def "feedback get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Authorization token (provided upon successful login)
+  --authorization: string # Authorization token (provided upon successful login)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/feedback/($feedbackId)")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({feedback_id: $feedback_id} | format pattern "/feedback/{feedback_id}"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -319,7 +319,7 @@ export def "feedback get" [
 #
 # GET /login
 # operationId: checkLogin
-export def "login checkLogin" [
+export def "login check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,12 +328,12 @@ export def "login checkLogin" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Authorization token (provided upon successful login)
+  --authorization: string # Authorization token (provided upon successful login)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/login")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -344,7 +344,7 @@ export def "login checkLogin" [
 #
 # POST /login
 # operationId: login
-export def "login login" [
+export def "login post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,7 +360,7 @@ export def "login login" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/login")
-  let body = {password: $password, username: $username} | compact
+  let body = {"password": $password, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -402,18 +402,18 @@ export def "transfer trasnfer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Authorization token (provided upon successful login)
-  fromAccount: string # e.g. 800003
-  toAccount: string # e.g. 800002
-  transferAmount: string # e.g. 200
+  --authorization: string # Authorization token (provided upon successful login)
+  from_account: string # e.g. 800003
+  to_account: string # e.g. 800002
+  transfer_amount: string # e.g. 200
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer")
-  let body = {fromAccount: $fromAccount, toAccount: $toAccount, transferAmount: $transferAmount} | compact
+  let body = {"fromAccount": $from_account, "toAccount": $to_account, "transferAmount": $transfer_amount} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

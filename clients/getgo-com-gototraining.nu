@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-organizers get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-organizers get-all-organisers" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,8 +94,8 @@ export def commands []: nothing -> table {
 # DEPRECATED
 # operationId: getAllOrganisers
 @deprecated
-export def "accounts-organizers get" [
-  accountKey: int
+export def "accounts-organizers get-all-organisers" [
+  account_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,12 +104,12 @@ export def "accounts-organizers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
 ]: nothing -> table<email: string, givenName: string, organizerKey: string, surname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($accountKey)/organizers")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({account_key: $account_key} | format pattern "/accounts/{account_key}/organizers"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,8 +120,8 @@ export def "accounts-organizers get" [
 #
 # GET /organizers/{organizerKey}/trainings
 # operationId: getAllTrainings
-export def "organizers-trainings list" [
-  organizerKey: int
+export def "organizers-trainings get-all" [
+  organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,12 +130,12 @@ export def "organizers-trainings list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
 ]: nothing -> table<description: string, name: string, organizers: list<record>, registrationSettings: record<disableConfirmationEmail: bool, disableWebRegistration: bool>, timeZone: string, times: list<record>, trainingId: string, trainingKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizers/($organizerKey)/trainings")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key} | format pattern "/organizers/{organizer_key}/trainings"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -149,7 +149,7 @@ export def "organizers-trainings list" [
 # --registrationSettings shape: {disableConfirmationEmail: bool, disableWebRegistration: bool}
 # --times item shape: {endDate: string, startDate: string}
 export def "organizers-trainings scheduleTraining" [
-  organizerKey: int
+  organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,21 +158,21 @@ export def "organizers-trainings scheduleTraining" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
   --description: string # Description of the training
   name: string # Name of the training
   --organizers: list # List of keys of the co-organizers for this training
-  --registrationSettings: any # Training settings, namely availability of web registration and confirmation emails to the training registrants — shape: {disableConfirmationEmail: bool, disableWebRegistration: bool}
-  timeZone: string # Time zone of the training. (Must be a valid time zone ID, see https://goto-developer.logmein.com/time-zones)
+  --registration-settings: any # Training settings, namely availability of web registration and confirmation emails to the training registrants — shape: {disableConfirmationEmail: bool, disableWebRegistration: bool}
+  time_zone: string # Time zone of the training. (Must be a valid time zone ID, see https://goto-developer.logmein.com/time-zones)
   times: list # Array with startDate and endDate for the training sessions — item shape: {endDate: string, startDate: string}
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizers/($organizerKey)/trainings")
-  let body = {description: $description, name: $name, organizers: $organizers, registrationSettings: $registrationSettings, timeZone: $timeZone, times: $times} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key} | format pattern "/organizers/{organizer_key}/trainings"))
+  let body = {"description": $description, "name": $name, "organizers": $organizers, "registrationSettings": $registration_settings, "timeZone": $time_zone, "times": $times} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -183,9 +183,9 @@ export def "organizers-trainings scheduleTraining" [
 #
 # DELETE /organizers/{organizerKey}/trainings/{trainingKey}
 # operationId: cancelTraining
-export def "organizers-trainings cancelTraining" [
-  organizerKey: int
-  trainingKey: int
+export def "organizers-trainings cancel" [
+  organizer_key: int
+  training_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,12 +194,12 @@ export def "organizers-trainings cancelTraining" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizers/($organizerKey)/trainings/($trainingKey)")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key, training_key: $training_key} | format pattern "/organizers/{organizer_key}/trainings/{training_key}"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -211,8 +211,8 @@ export def "organizers-trainings cancelTraining" [
 # GET /organizers/{organizerKey}/trainings/{trainingKey}
 # operationId: getTraining
 export def "organizers-trainings get" [
-  organizerKey: int
-  trainingKey: int
+  organizer_key: int
+  training_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,12 +221,12 @@ export def "organizers-trainings get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
 ]: nothing -> record<description: string, name: string, organizers: table<email: string, givenName: string, organizerKey: string, surname: string>, registrationSettings: record<disableConfirmationEmail: bool, disableWebRegistration: bool>, timeZone: string, times: table<endDate: string, startDate: string>, trainingId: string, trainingKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizers/($organizerKey)/trainings/($trainingKey)")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key, training_key: $training_key} | format pattern "/organizers/{organizer_key}/trainings/{training_key}"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -238,8 +238,8 @@ export def "organizers-trainings get" [
 # GET /organizers/{organizerKey}/trainings/{trainingKey}/manageUrl
 # operationId: getManageTrainingURL
 export def "organizers-trainings-manage-url get" [
-  organizerKey: int
-  trainingKey: int
+  organizer_key: int
+  training_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,12 +248,12 @@ export def "organizers-trainings-manage-url get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizers/($organizerKey)/trainings/($trainingKey)/manageUrl")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key, training_key: $training_key} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/manageUrl"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -264,9 +264,9 @@ export def "organizers-trainings-manage-url get" [
 #
 # PUT /organizers/{organizerKey}/trainings/{trainingKey}/nameDescription
 # operationId: updateTrainingNameDescription
-export def "organizers-trainings-name-description updateTrainingNameDescription" [
-  organizerKey: int
-  trainingKey: int
+export def "organizers-trainings-name-description update" [
+  organizer_key: int
+  training_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,17 +275,17 @@ export def "organizers-trainings-name-description updateTrainingNameDescription"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
   --description: string # The training's description
   name: string # The training's name
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizers/($organizerKey)/trainings/($trainingKey)/nameDescription")
-  let body = {description: $description, name: $name} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key, training_key: $training_key} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/nameDescription"))
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -296,9 +296,9 @@ export def "organizers-trainings-name-description updateTrainingNameDescription"
 #
 # GET /organizers/{organizerKey}/trainings/{trainingKey}/organizers
 # operationId: getOrganisersForTraining
-export def "organizers-trainings-organizers get" [
-  organizerKey: int
-  trainingKey: int
+export def "organizers-trainings-organizers get-organisers-for" [
+  organizer_key: int
+  training_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,12 +307,12 @@ export def "organizers-trainings-organizers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
 ]: nothing -> table<email: string, givenName: string, organizerKey: string, surname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizers/($organizerKey)/trainings/($trainingKey)/organizers")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key, training_key: $training_key} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/organizers"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -323,9 +323,9 @@ export def "organizers-trainings-organizers get" [
 #
 # PUT /organizers/{organizerKey}/trainings/{trainingKey}/organizers
 # operationId: updateOrganisersForTraining
-export def "organizers-trainings-organizers updateOrganisersForTraining" [
-  organizerKey: int
-  trainingKey: int
+export def "organizers-trainings-organizers update-organisers-for" [
+  organizer_key: int
+  training_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,17 +334,17 @@ export def "organizers-trainings-organizers updateOrganisersForTraining" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
-  --notifyOrganizers: oneof<nothing, bool> # Specifies whether an email should be sent notifying of the change to the training's organizers.
+  --authorization: string # Access token
+  --notify-organizers: oneof<nothing, bool> # Specifies whether an email should be sent notifying of the change to the training's organizers.
   organizers: list # List of keys of the organizers for the training.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizers/($organizerKey)/trainings/($trainingKey)/organizers")
-  let body = {notifyOrganizers: $notifyOrganizers, organizers: $organizers} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key, training_key: $training_key} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/organizers"))
+  let body = {"notifyOrganizers": $notify_organizers, "organizers": $organizers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -356,8 +356,8 @@ export def "organizers-trainings-organizers updateOrganisersForTraining" [
 # GET /organizers/{organizerKey}/trainings/{trainingKey}/registrants
 # operationId: getRegistrants
 export def "organizers-trainings-registrants list" [
-  organizerKey: int
-  trainingKey: int
+  organizer_key: int
+  training_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,12 +366,12 @@ export def "organizers-trainings-registrants list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
 ]: nothing -> table<confirmationUrl: string, email: string, givenName: string, joinUrl: string, registrantKey: string, registrationDate: string, status: string, surname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizers/($organizerKey)/trainings/($trainingKey)/registrants")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key, training_key: $training_key} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/registrants"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -382,9 +382,9 @@ export def "organizers-trainings-registrants list" [
 #
 # POST /organizers/{organizerKey}/trainings/{trainingKey}/registrants
 # operationId: registerForTraining
-export def "organizers-trainings-registrants registerForTraining" [
-  organizerKey: int
-  trainingKey: int
+export def "organizers-trainings-registrants create-for" [
+  organizer_key: int
+  training_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,18 +393,18 @@ export def "organizers-trainings-registrants registerForTraining" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
   email: string # The registrant's email address
-  givenName: string # The registrant's first name
+  given_name: string # The registrant's first name
   surname: string # The registrant's surname
 ]: any -> record<confirmationUrl: string, joinUrl: string, registrantKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizers/($organizerKey)/trainings/($trainingKey)/registrants")
-  let body = {email: $email, givenName: $givenName, surname: $surname} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key, training_key: $training_key} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/registrants"))
+  let body = {"email": $email, "givenName": $given_name, "surname": $surname} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -415,10 +415,10 @@ export def "organizers-trainings-registrants registerForTraining" [
 #
 # DELETE /organizers/{organizerKey}/trainings/{trainingKey}/registrants/{registrantKey}
 # operationId: cancelRegistration
-export def "organizers-trainings-registrants cancelRegistration" [
-  organizerKey: int
-  trainingKey: int
-  registrantKey: int
+export def "organizers-trainings-registrants cancel-registration" [
+  organizer_key: int
+  training_key: int
+  registrant_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,12 +427,12 @@ export def "organizers-trainings-registrants cancelRegistration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizers/($organizerKey)/trainings/($trainingKey)/registrants/($registrantKey)")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key, training_key: $training_key, registrant_key: $registrant_key} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/registrants/{registrant_key}"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -444,9 +444,9 @@ export def "organizers-trainings-registrants cancelRegistration" [
 # GET /organizers/{organizerKey}/trainings/{trainingKey}/registrants/{registrantKey}
 # operationId: getRegistrant
 export def "organizers-trainings-registrants get" [
-  organizerKey: int
-  trainingKey: int
-  registrantKey: int
+  organizer_key: int
+  training_key: int
+  registrant_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,12 +455,12 @@ export def "organizers-trainings-registrants get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
 ]: nothing -> record<confirmationUrl: string, email: string, givenName: string, joinUrl: string, registrantKey: string, registrationDate: string, status: string, surname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizers/($organizerKey)/trainings/($trainingKey)/registrants/($registrantKey)")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key, training_key: $training_key, registrant_key: $registrant_key} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/registrants/{registrant_key}"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -471,9 +471,9 @@ export def "organizers-trainings-registrants get" [
 #
 # PUT /organizers/{organizerKey}/trainings/{trainingKey}/registrationSettings
 # operationId: updateRegistrationSettingsForTraining
-export def "organizers-trainings-registration-settings updateRegistrationSettingsForTraining" [
-  organizerKey: int
-  trainingKey: int
+export def "organizers-trainings-registration-settings update-registration-settings-for" [
+  organizer_key: int
+  training_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,17 +482,17 @@ export def "organizers-trainings-registration-settings updateRegistrationSetting
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
-  --disableConfirmationEmail: oneof<nothing, bool> # Indicates whether confirmation emails to the training registrants are disabled
-  --disableWebRegistration: oneof<nothing, bool> # Indicates whether the web registration for the training is disabled
+  --authorization: string # Access token
+  --disable-confirmation-email: oneof<nothing, bool> # Indicates whether confirmation emails to the training registrants are disabled
+  --disable-web-registration: oneof<nothing, bool> # Indicates whether the web registration for the training is disabled
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizers/($organizerKey)/trainings/($trainingKey)/registrationSettings")
-  let body = {disableConfirmationEmail: $disableConfirmationEmail, disableWebRegistration: $disableWebRegistration} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key, training_key: $training_key} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/registrationSettings"))
+  let body = {"disableConfirmationEmail": $disable_confirmation_email, "disableWebRegistration": $disable_web_registration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -504,8 +504,8 @@ export def "organizers-trainings-registration-settings updateRegistrationSetting
 # GET /organizers/{organizerKey}/trainings/{trainingKey}/startUrl
 # operationId: getStartUrl
 export def "organizers-trainings-start-url get" [
-  organizerKey: int
-  trainingKey: int
+  organizer_key: int
+  training_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,12 +514,12 @@ export def "organizers-trainings-start-url get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizers/($organizerKey)/trainings/($trainingKey)/startUrl")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key, training_key: $training_key} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/startUrl"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -531,9 +531,9 @@ export def "organizers-trainings-start-url get" [
 # PUT /organizers/{organizerKey}/trainings/{trainingKey}/times
 # operationId: updateTrainingTimes
 # --times item shape: {endDate: string, startDate: string}
-export def "organizers-trainings-times updateTrainingTimes" [
-  organizerKey: int
-  trainingKey: int
+export def "organizers-trainings-times update" [
+  organizer_key: int
+  training_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -542,19 +542,19 @@ export def "organizers-trainings-times updateTrainingTimes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
-  --notifyRegistrants: oneof<nothing, bool> # Notify registrants via email of change to training. Default is true
-  --notifyTrainers: oneof<nothing, bool> # Notify trainers via email of change to training. Default is true
-  timeZone: string # Time zone of the training. Must be a valid time zone ID, see https://goto-developer.logmein.com/time-zones
+  --authorization: string # Access token
+  --notify-registrants: oneof<nothing, bool> # Notify registrants via email of change to training. Default is true
+  --notify-trainers: oneof<nothing, bool> # Notify trainers via email of change to training. Default is true
+  time_zone: string # Time zone of the training. Must be a valid time zone ID, see https://goto-developer.logmein.com/time-zones
   times: list # Start and end times for the training sessions — item shape: {endDate: string, startDate: string}
 ]: any -> record<notifiedRegistrants: int, notifiedTrainers: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizers/($organizerKey)/trainings/($trainingKey)/times")
-  let body = {notifyRegistrants: $notifyRegistrants, notifyTrainers: $notifyTrainers, timeZone: $timeZone, times: $times} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key, training_key: $training_key} | format pattern "/organizers/{organizer_key}/trainings/{training_key}/times"))
+  let body = {"notifyRegistrants": $notify_registrants, "notifyTrainers": $notify_trainers, "timeZone": $time_zone, "times": $times} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -565,8 +565,8 @@ export def "organizers-trainings-times updateTrainingTimes" [
 #
 # POST /reports/organizers/{organizerKey}/sessions
 # operationId: getSessionDetailsForDateRange
-export def "reports-organizers-sessions post" [
-  organizerKey: int
+export def "reports-organizers-sessions get-session-details-for-date-range" [
+  organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -575,17 +575,17 @@ export def "reports-organizers-sessions post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
-  endDate: string # The ending time of an interval (format: date-time)
-  startDate: string # The starting time of an interval (format: date-time)
+  --authorization: string # Access token
+  end_date: string # The ending time of an interval (format: date-time)
+  start_date: string # The starting time of an interval (format: date-time)
 ]: any -> table<attendanceCount: int, duration: int, organizers: list<record>, sessionEndTime: string, sessionKey: string, sessionStartTime: string, trainingName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reports/organizers/($organizerKey)/sessions")
-  let body = {endDate: $endDate, startDate: $startDate} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key} | format pattern "/reports/organizers/{organizer_key}/sessions"))
+  let body = {"endDate": $end_date, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -596,9 +596,9 @@ export def "reports-organizers-sessions post" [
 #
 # GET /reports/organizers/{organizerKey}/sessions/{sessionKey}/attendees
 # operationId: getAttendanceDetails
-export def "reports-organizers-sessions-attendees get" [
-  organizerKey: int
-  sessionKey: int
+export def "reports-organizers-sessions-attendees get-attendance-details" [
+  organizer_key: int
+  session_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,12 +607,12 @@ export def "reports-organizers-sessions-attendees get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
 ]: nothing -> table<email: string, givenName: string, inSessionTimes: list<record>, surname: string, timeInSession: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reports/organizers/($organizerKey)/sessions/($sessionKey)/attendees")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key, session_key: $session_key} | format pattern "/reports/organizers/{organizer_key}/sessions/{session_key}/attendees"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -623,9 +623,9 @@ export def "reports-organizers-sessions-attendees get" [
 #
 # GET /reports/organizers/{organizerKey}/trainings/{trainingKey}
 # operationId: getSessionDetailsForTraining
-export def "reports-organizers-trainings get" [
-  organizerKey: int
-  trainingKey: int
+export def "reports-organizers-trainings get-session-details-for" [
+  organizer_key: int
+  training_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -634,12 +634,12 @@ export def "reports-organizers-trainings get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
 ]: nothing -> table<attendanceCount: int, duration: int, organizers: list<record>, sessionEndTime: string, sessionKey: string, sessionStartTime: string, trainingName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reports/organizers/($organizerKey)/trainings/($trainingKey)")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({organizer_key: $organizer_key, training_key: $training_key} | format pattern "/reports/organizers/{organizer_key}/trainings/{training_key}"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -650,8 +650,8 @@ export def "reports-organizers-trainings get" [
 #
 # GET /trainings/{trainingKey}/recordings
 # operationId: getRecordingsForTraining
-export def "trainings-recordings list" [
-  trainingKey: int
+export def "trainings-recordings get-recordings-for" [
+  training_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,12 +660,12 @@ export def "trainings-recordings list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
 ]: nothing -> record<recordingList: table<description: string, downloadUrl: string, endDate: string, name: string, recordingId: int, registrationUrl: string, startDate: string>, trainingKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/trainings/($trainingKey)/recordings")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({training_key: $training_key} | format pattern "/trainings/{training_key}/recordings"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -676,9 +676,9 @@ export def "trainings-recordings list" [
 #
 # GET /trainings/{trainingKey}/recordings/{recordingId}
 # operationId: getRecordingDownloadById
-export def "trainings-recordings get" [
-  trainingKey: int
-  recordingId: int
+export def "trainings-recordings get-recording-download" [
+  training_key: int
+  recording_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -687,12 +687,12 @@ export def "trainings-recordings get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/trainings/($trainingKey)/recordings/($recordingId)")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({training_key: $training_key, recording_id: $recording_id} | format pattern "/trainings/{training_key}/recordings/{recording_id}"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -703,8 +703,8 @@ export def "trainings-recordings get" [
 #
 # GET /trainings/{trainingKey}/start
 # operationId: startTraining
-export def "trainings-start startTraining" [
-  trainingKey: int
+export def "trainings-start start" [
+  training_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,12 +713,12 @@ export def "trainings-start startTraining" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token
+  --authorization: string # Access token
 ]: nothing -> record<hostURL: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/trainings/($trainingKey)/start")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({training_key: $training_key} | format pattern "/trainings/{training_key}/start"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -105,7 +105,7 @@ export def "generate-upload post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --User-Agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
   --model: string@model-completer # DEPRECATED, default: steve
   --name: string
   --variant: string@variant-completer # Skin variant - automatically determined based on the image if not specified
@@ -116,9 +116,9 @@ export def "generate-upload post" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/generate/upload")
-  let body = {model: $model, name: $name, variant: $variant, visibility: $visibility, file: $file} | compact
+  let body = {"model": $model, "name": $name, "variant": $variant, "visibility": $visibility, "file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"User-Agent": $User_Agent} | compact
+  let extra_headers = {"User-Agent": $user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -136,7 +136,7 @@ export def "generate-url post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --User-Agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
   --model: string@model-completer # DEPRECATED, default: steve
   --name: string
   --variant: string@variant-completer # Skin variant - automatically determined based on the image if not specified
@@ -147,9 +147,9 @@ export def "generate-url post" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/generate/url")
-  let body = {model: $model, name: $name, variant: $variant, visibility: $visibility, url: $body_url} | compact
+  let body = {"model": $model, "name": $name, "variant": $variant, "visibility": $visibility, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"User-Agent": $User_Agent} | compact
+  let extra_headers = {"User-Agent": $user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -167,7 +167,7 @@ export def "generate-user post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --User-Agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
   --model: string@model-completer # DEPRECATED, default: steve
   --name: string
   --variant: string@variant-completer # Skin variant - automatically determined based on the image if not specified
@@ -178,9 +178,9 @@ export def "generate-user post" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/generate/user")
-  let body = {model: $model, name: $name, variant: $variant, visibility: $visibility, uuid: $uuid} | compact
+  let body = {"model": $model, "name": $name, "variant": $variant, "visibility": $visibility, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"User-Agent": $User_Agent} | compact
+  let extra_headers = {"User-Agent": $user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -197,12 +197,12 @@ export def "get-delay get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --User-Agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/get/delay")
-  let extra_headers = {"User-Agent": $User_Agent} | compact
+  let extra_headers = {"User-Agent": $user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -222,12 +222,12 @@ export def "get-id get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --User-Agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
 ]: nothing -> record<account: int, accountId: int, data: record<texture: record<signature: string, url: string, value: string>, uuid: string>, duration: float, id: int, idStr: string, model: string, name: string, private: bool, server: string, timestamp: float, uuid: string, variant: string, views: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/get/id/($id)")
-  let extra_headers = {"User-Agent": $User_Agent} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/get/id/{id}"))
+  let extra_headers = {"User-Agent": $user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -245,12 +245,12 @@ export def "get-list get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --User-Agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
 ]: nothing -> record<filter: string, page: record<amount: int, index: int, total: int>, skins: table<id: int, name: string, time: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/get/list/($page)")
-  let extra_headers = {"User-Agent": $User_Agent} | compact
+  let full_url = (build-url $base ({page: $page} | format pattern "/get/list/{page}"))
+  let extra_headers = {"User-Agent": $user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -268,12 +268,12 @@ export def "get-uuid get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --User-Agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
 ]: nothing -> record<account: int, accountId: int, data: record<texture: record<signature: string, url: string, value: string>, uuid: string>, duration: float, id: int, idStr: string, model: string, name: string, private: bool, server: string, timestamp: float, uuid: string, variant: string, views: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/get/uuid/($uuid)")
-  let extra_headers = {"User-Agent": $User_Agent} | compact
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/get/uuid/{uuid}"))
+  let extra_headers = {"User-Agent": $user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -291,12 +291,12 @@ export def "validate-name get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --User-Agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
 ]: nothing -> record<name: string, uuid: string, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/validate/name/($name)")
-  let extra_headers = {"User-Agent": $User_Agent} | compact
+  let full_url = (build-url $base ({name: $name} | format pattern "/validate/name/{name}"))
+  let extra_headers = {"User-Agent": $user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -314,12 +314,12 @@ export def "validate-uuid get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --User-Agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
 ]: nothing -> record<name: string, uuid: string, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/validate/uuid/($uuid)")
-  let extra_headers = {"User-Agent": $User_Agent} | compact
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/validate/uuid/{uuid}"))
+  let extra_headers = {"User-Agent": $user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

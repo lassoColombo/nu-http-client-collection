@@ -66,13 +66,13 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def source-completer [] { [" frontgate" " tmr" " universe" "ticketmaster"] }
-def includeTest-completer [] { [" no" " only" "yes"] }
-def includeLicensedContent-completer [] { [" no" "yes"] }
-def includeSpellcheck-completer [] { [" no" "yes"] }
-def includeTBA-completer [] { [" no" " only" "yes"] }
-def includeTBD-completer [] { [" no" " only" "yes"] }
+def include-test-completer [] { [" no" " only" "yes"] }
+def include-licensed-content-completer [] { [" no" "yes"] }
+def include-spellcheck-completer [] { [" no" "yes"] }
+def include-tba-completer [] { [" no" " only" "yes"] }
+def include-tbd-completer [] { [" no" " only" "yes"] }
 def unit-completer [] { ["km" "miles"] }
-def includeFuzzy-completer [] { [" no" "yes"] }
+def include-fuzzy-completer [] { [" no" "yes"] }
 def accept-completer [] { ["application/hal+json; charset=utf-8" "application/json; charset=utf-8"] }
 
 # List all available API commands with their parameters
@@ -112,21 +112,21 @@ export def "discovery-attractions find" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string # Sorting order of the search result. Allowable Values : 'name,asc', 'name,desc', 'relevance,asc', 'relevance,desc' (default: relevance,desc, e.g. )
-  --classificationName: list # Filter attractions by classification name: name of any segment, genre, sub-genre, type, sub-type (default: , e.g. )
-  --classificationId: list # Filter attractions by classification id: id of any segment, genre, sub-genre, type, sub-type (default: , e.g. )
+  --classification-name: list # Filter attractions by classification name: name of any segment, genre, sub-genre, type, sub-type (default: , e.g. )
+  --classification-id: list # Filter attractions by classification id: id of any segment, genre, sub-genre, type, sub-type (default: , e.g. )
   --keyword: string # Keyword to search on (default: , e.g. )
   --id: string # Filter entities by its id (default: , e.g. )
   --qp-source: string@source-completer # Filter entities by its source name (default: , e.g. )
-  --includeTest: string@includeTest-completer # True if you want to have entities flag as test in the response. Only, if you only wanted test entities (default: no, e.g. )
+  --include-test: string@include-test-completer # True if you want to have entities flag as test in the response. Only, if you only wanted test entities (default: no, e.g. )
   --page: string # Page number (default: 0, e.g. )
   --size: string # Page size of the response (default: 20, e.g. )
   --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
-  --includeLicensedContent: string@includeLicensedContent-completer # Yes if you want to display licensed content (default: no, e.g. )
-  --includeSpellcheck: string@includeSpellcheck-completer # yes, to include spell check suggestions in the response. (default: no, e.g. )
+  --include-licensed-content: string@include-licensed-content-completer # Yes if you want to display licensed content (default: no, e.g. )
+  --include-spellcheck: string@include-spellcheck-completer # yes, to include spell check suggestions in the response. (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "classificationName" $classificationName "multi") (serialize-qp "classificationId" $classificationId "multi") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "includeTest" $includeTest "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $includeLicensedContent "scalar") (serialize-qp "includeSpellcheck" $includeSpellcheck "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "classificationName" $classification_name "multi") (serialize-qp "classificationId" $classification_id "multi") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "includeTest" $include_test "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar") (serialize-qp "includeSpellcheck" $include_spellcheck "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/discovery/v2/attractions" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -148,12 +148,12 @@ export def "discovery-attractions get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
-  --includeLicensedContent: string@includeLicensedContent-completer # True if you want to display licensed content (default: no, e.g. )
+  --include-licensed-content: string@include-licensed-content-completer # True if you want to display licensed content (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $includeLicensedContent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/discovery/v2/attractions/($id)" $qp)
+  let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/discovery/v2/attractions/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -175,16 +175,16 @@ export def "discovery-classifications list" [
   --keyword: string # Keyword to search on (default: , e.g. )
   --id: string # Filter entities by its id (default: , e.g. )
   --qp-source: string@source-completer # Filter entities by its source name (default: , e.g. )
-  --includeTest: string@includeTest-completer # True if you want to have entities flag as test in the response. Only, if you only wanted test entities (default: no, e.g. )
+  --include-test: string@include-test-completer # True if you want to have entities flag as test in the response. Only, if you only wanted test entities (default: no, e.g. )
   --page: string # Page number (default: 0, e.g. )
   --size: string # Page size of the response (default: 20, e.g. )
   --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
-  --includeLicensedContent: string@includeLicensedContent-completer # Yes if you want to display licensed content (default: no, e.g. )
-  --includeSpellcheck: string@includeSpellcheck-completer # yes, to include spell check suggestions in the response. (default: no, e.g. )
+  --include-licensed-content: string@include-licensed-content-completer # Yes if you want to display licensed content (default: no, e.g. )
+  --include-spellcheck: string@include-spellcheck-completer # yes, to include spell check suggestions in the response. (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "includeTest" $includeTest "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $includeLicensedContent "scalar") (serialize-qp "includeSpellcheck" $includeSpellcheck "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "includeTest" $include_test "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar") (serialize-qp "includeSpellcheck" $include_spellcheck "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/discovery/v2/classifications" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -206,12 +206,12 @@ export def "discovery-classifications-genres get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
-  --includeLicensedContent: string@includeLicensedContent-completer # True if you want to display licensed content (default: no, e.g. )
+  --include-licensed-content: string@include-licensed-content-completer # True if you want to display licensed content (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $includeLicensedContent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/discovery/v2/classifications/genres/($id)" $qp)
+  let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/discovery/v2/classifications/genres/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -232,12 +232,12 @@ export def "discovery-classifications-segments get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
-  --includeLicensedContent: string@includeLicensedContent-completer # True if you want to display licensed content (default: no, e.g. )
+  --include-licensed-content: string@include-licensed-content-completer # True if you want to display licensed content (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $includeLicensedContent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/discovery/v2/classifications/segments/($id)" $qp)
+  let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/discovery/v2/classifications/segments/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,12 +258,12 @@ export def "discovery-classifications-subgenres get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
-  --includeLicensedContent: string@includeLicensedContent-completer # True if you want to display licensed content (default: no, e.g. )
+  --include-licensed-content: string@include-licensed-content-completer # True if you want to display licensed content (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $includeLicensedContent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/discovery/v2/classifications/subgenres/($id)" $qp)
+  let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/discovery/v2/classifications/subgenres/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -283,12 +283,12 @@ export def "discovery-classifications get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
-  --includeLicensedContent: string@includeLicensedContent-completer # True if you want to display licensed content (default: no, e.g. )
+  --include-licensed-content: string@include-licensed-content-completer # True if you want to display licensed content (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $includeLicensedContent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/discovery/v2/classifications/($id)" $qp)
+  let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/discovery/v2/classifications/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -307,45 +307,45 @@ export def "discovery-events list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string # Sorting order of the search result. Allowable values : 'name,asc', 'name,desc', 'date,asc', 'date,desc', 'relevance,asc', 'relevance,desc', 'distance,asc', 'name,date,asc', 'name,date,desc', 'date,name,asc', 'date,name,desc','onsaleStartDate,asc', 'id,asc' (default: relevance,desc, e.g. )
-  --startDateTime: string # Filter events with a start date after this date (default: , e.g. )
-  --endDateTime: string # Filter events with a start date before this date (default: , e.g. )
-  --onsaleStartDateTime: string # Filter events with onsale start date after this date (default: , e.g. )
-  --onsaleOnStartDate: string # Filter events with onsale start date on this date (default: , e.g. )
-  --onsaleOnAfterStartDate: string # Filter events with onsale range within this date (default: , e.g. )
-  --onsaleEndDateTime: string # Filter events with onsale end date before this date (default: , e.g. )
+  --start-date-time: string # Filter events with a start date after this date (default: , e.g. )
+  --end-date-time: string # Filter events with a start date before this date (default: , e.g. )
+  --onsale-start-date-time: string # Filter events with onsale start date after this date (default: , e.g. )
+  --onsale-on-start-date: string # Filter events with onsale start date on this date (default: , e.g. )
+  --onsale-on-after-start-date: string # Filter events with onsale range within this date (default: , e.g. )
+  --onsale-end-date-time: string # Filter events with onsale end date before this date (default: , e.g. )
   --city: string # Filter events by city (default: , e.g. )
-  --countryCode: string # Filter events by country code (default: , e.g. )
-  --stateCode: string # Filter events by state code (default: , e.g. )
-  --postalCode: string # Filter events by postal code / zipcode (default: , e.g. )
-  --venueId: string # Filter events by venue id (default: , e.g. )
-  --attractionId: string # Filter events by attraction id (default: , e.g. )
-  --segmentId: string # Filter events by segment id (default: , e.g. )
-  --segmentName: string # Filter events by segment name (default: , e.g. )
-  --classificationName: list # Filter events by classification name: name of any segment, genre, sub-genre, type, sub-type (default: , e.g. )
-  --classificationId: list # Filter events by classification id: id of any segment, genre, sub-genre, type, sub-type (default: , e.g. )
-  --marketId: string # Filter events by market id (default: , e.g. )
-  --promoterId: string # Filter events by promoter id (default: , e.g. )
-  --dmaId: string # Filter events by dma id (default: , e.g. )
-  --includeTBA: string@includeTBA-completer # True, to include events with date to be announce (TBA) (default: no if date parameter sent, yes otherwise, e.g. )
-  --includeTBD: string@includeTBD-completer # True, to include event with a date to be defined (TBD) (default: no if date parameter sent, yes otherwise, e.g. )
-  --clientVisibility: string # Filter events by clientName (default: , e.g. )
+  --country-code: string # Filter events by country code (default: , e.g. )
+  --state-code: string # Filter events by state code (default: , e.g. )
+  --postal-code: string # Filter events by postal code / zipcode (default: , e.g. )
+  --venue-id: string # Filter events by venue id (default: , e.g. )
+  --attraction-id: string # Filter events by attraction id (default: , e.g. )
+  --segment-id: string # Filter events by segment id (default: , e.g. )
+  --segment-name: string # Filter events by segment name (default: , e.g. )
+  --classification-name: list # Filter events by classification name: name of any segment, genre, sub-genre, type, sub-type (default: , e.g. )
+  --classification-id: list # Filter events by classification id: id of any segment, genre, sub-genre, type, sub-type (default: , e.g. )
+  --market-id: string # Filter events by market id (default: , e.g. )
+  --promoter-id: string # Filter events by promoter id (default: , e.g. )
+  --dma-id: string # Filter events by dma id (default: , e.g. )
+  --include-tba: string@include-tba-completer # True, to include events with date to be announce (TBA) (default: no if date parameter sent, yes otherwise, e.g. )
+  --include-tbd: string@include-tbd-completer # True, to include event with a date to be defined (TBD) (default: no if date parameter sent, yes otherwise, e.g. )
+  --client-visibility: string # Filter events by clientName (default: , e.g. )
   --latlong: string # Filter events by latitude and longitude, this filter is deprecated and maybe removed in a future release, please use geoPoint instead (default: , e.g. 33.80003000,-117.88304300)
   --radius: string # Radius of the area in which we want to search for events. (default: 50, e.g. )
   --unit: string@unit-completer # Unit of the radius (default: miles, e.g. )
-  --geoPoint: string # filter events by geoHash (default: , e.g. dr5rh)
+  --geo-point: string # filter events by geoHash (default: , e.g. dr5rh)
   --keyword: string # Keyword to search on (default: , e.g. )
   --id: string # Filter entities by its id (default: , e.g. )
   --qp-source: string@source-completer # Filter entities by its source name (default: , e.g. )
-  --includeTest: string@includeTest-completer # True if you want to have entities flag as test in the response. Only, if you only wanted test entities (default: no, e.g. )
+  --include-test: string@include-test-completer # True if you want to have entities flag as test in the response. Only, if you only wanted test entities (default: no, e.g. )
   --page: string # Page number (default: 0, e.g. )
   --size: string # Page size of the response (default: 20, e.g. )
   --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
-  --includeLicensedContent: string@includeLicensedContent-completer # Yes if you want to display licensed content (default: no, e.g. )
-  --includeSpellcheck: string@includeSpellcheck-completer # yes, to include spell check suggestions in the response. (default: no, e.g. )
+  --include-licensed-content: string@include-licensed-content-completer # Yes if you want to display licensed content (default: no, e.g. )
+  --include-spellcheck: string@include-spellcheck-completer # yes, to include spell check suggestions in the response. (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "startDateTime" $startDateTime "scalar") (serialize-qp "endDateTime" $endDateTime "scalar") (serialize-qp "onsaleStartDateTime" $onsaleStartDateTime "scalar") (serialize-qp "onsaleOnStartDate" $onsaleOnStartDate "scalar") (serialize-qp "onsaleOnAfterStartDate" $onsaleOnAfterStartDate "scalar") (serialize-qp "onsaleEndDateTime" $onsaleEndDateTime "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "countryCode" $countryCode "scalar") (serialize-qp "stateCode" $stateCode "scalar") (serialize-qp "postalCode" $postalCode "scalar") (serialize-qp "venueId" $venueId "scalar") (serialize-qp "attractionId" $attractionId "scalar") (serialize-qp "segmentId" $segmentId "scalar") (serialize-qp "segmentName" $segmentName "scalar") (serialize-qp "classificationName" $classificationName "multi") (serialize-qp "classificationId" $classificationId "multi") (serialize-qp "marketId" $marketId "scalar") (serialize-qp "promoterId" $promoterId "scalar") (serialize-qp "dmaId" $dmaId "scalar") (serialize-qp "includeTBA" $includeTBA "scalar") (serialize-qp "includeTBD" $includeTBD "scalar") (serialize-qp "clientVisibility" $clientVisibility "scalar") (serialize-qp "latlong" $latlong "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "unit" $unit "scalar") (serialize-qp "geoPoint" $geoPoint "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "includeTest" $includeTest "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $includeLicensedContent "scalar") (serialize-qp "includeSpellcheck" $includeSpellcheck "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "onsaleStartDateTime" $onsale_start_date_time "scalar") (serialize-qp "onsaleOnStartDate" $onsale_on_start_date "scalar") (serialize-qp "onsaleOnAfterStartDate" $onsale_on_after_start_date "scalar") (serialize-qp "onsaleEndDateTime" $onsale_end_date_time "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "stateCode" $state_code "scalar") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "venueId" $venue_id "scalar") (serialize-qp "attractionId" $attraction_id "scalar") (serialize-qp "segmentId" $segment_id "scalar") (serialize-qp "segmentName" $segment_name "scalar") (serialize-qp "classificationName" $classification_name "multi") (serialize-qp "classificationId" $classification_id "multi") (serialize-qp "marketId" $market_id "scalar") (serialize-qp "promoterId" $promoter_id "scalar") (serialize-qp "dmaId" $dma_id "scalar") (serialize-qp "includeTBA" $include_tba "scalar") (serialize-qp "includeTBD" $include_tbd "scalar") (serialize-qp "clientVisibility" $client_visibility "scalar") (serialize-qp "latlong" $latlong "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "unit" $unit "scalar") (serialize-qp "geoPoint" $geo_point "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "includeTest" $include_test "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar") (serialize-qp "includeSpellcheck" $include_spellcheck "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/discovery/v2/events" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -366,12 +366,12 @@ export def "discovery-events get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
-  --includeLicensedContent: string@includeLicensedContent-completer # True if you want to display licensed content (default: no, e.g. )
+  --include-licensed-content: string@include-licensed-content-completer # True if you want to display licensed content (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $includeLicensedContent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/discovery/v2/events/($id)" $qp)
+  let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/discovery/v2/events/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -392,12 +392,12 @@ export def "discovery-events-images get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
-  --includeLicensedContent: string@includeLicensedContent-completer # True if you want to display licensed content (default: no, e.g. )
+  --include-licensed-content: string@include-licensed-content-completer # True if you want to display licensed content (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $includeLicensedContent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/discovery/v2/events/($id)/images" $qp)
+  let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/discovery/v2/events/{id}/images") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -422,20 +422,20 @@ export def "discovery-suggest get" [
   --radius: string # Radius of the area in which we want to search for events. (default: 100, e.g. )
   --unit: string@unit-completer # Unit of the radius (default: miles, e.g. )
   --size: string # Size of every entity returned in the response (default: 5, e.g. )
-  --includeFuzzy: string@includeFuzzy-completer # yes, to include fuzzy matches in the search. This has performance impact. (default: no, e.g. )
-  --clientVisibility: string # Filter events to clientName (default: , e.g. )
-  --countryCode: string # Filter suggestions by country code (default: , e.g. )
-  --includeTBA: string@includeTBA-completer # True, to include events with date to be announce (TBA) (default: no if date parameter sent, yes otherwise, e.g. )
-  --includeTBD: string@includeTBD-completer # True, to include event with a date to be defined (TBD) (default: no if date parameter sent, yes otherwise, e.g. )
-  --segmentId: string # Filter suggestions by segment id (default: , e.g. )
-  --geoPoint: string # filter events by geoHash (default: , e.g. dr5rh)
+  --include-fuzzy: string@include-fuzzy-completer # yes, to include fuzzy matches in the search. This has performance impact. (default: no, e.g. )
+  --client-visibility: string # Filter events to clientName (default: , e.g. )
+  --country-code: string # Filter suggestions by country code (default: , e.g. )
+  --include-tba: string@include-tba-completer # True, to include events with date to be announce (TBA) (default: no if date parameter sent, yes otherwise, e.g. )
+  --include-tbd: string@include-tbd-completer # True, to include event with a date to be defined (TBD) (default: no if date parameter sent, yes otherwise, e.g. )
+  --segment-id: string # Filter suggestions by segment id (default: , e.g. )
+  --geo-point: string # filter events by geoHash (default: , e.g. dr5rh)
   --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
-  --includeLicensedContent: string@includeLicensedContent-completer # Yes if you want to display licensed content (default: no, e.g. )
-  --includeSpellcheck: string@includeSpellcheck-completer # yes, to include spell check suggestions in the response. (default: no, e.g. )
+  --include-licensed-content: string@include-licensed-content-completer # Yes if you want to display licensed content (default: no, e.g. )
+  --include-spellcheck: string@include-spellcheck-completer # yes, to include spell check suggestions in the response. (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "keyword" $keyword "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "latlong" $latlong "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "unit" $unit "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "includeFuzzy" $includeFuzzy "scalar") (serialize-qp "clientVisibility" $clientVisibility "scalar") (serialize-qp "countryCode" $countryCode "scalar") (serialize-qp "includeTBA" $includeTBA "scalar") (serialize-qp "includeTBD" $includeTBD "scalar") (serialize-qp "segmentId" $segmentId "scalar") (serialize-qp "geoPoint" $geoPoint "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $includeLicensedContent "scalar") (serialize-qp "includeSpellcheck" $includeSpellcheck "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "keyword" $keyword "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "latlong" $latlong "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "unit" $unit "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "includeFuzzy" $include_fuzzy "scalar") (serialize-qp "clientVisibility" $client_visibility "scalar") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "includeTBA" $include_tba "scalar") (serialize-qp "includeTBD" $include_tbd "scalar") (serialize-qp "segmentId" $segment_id "scalar") (serialize-qp "geoPoint" $geo_point "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar") (serialize-qp "includeSpellcheck" $include_spellcheck "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/discovery/v2/suggest" $qp)
   let accept_val = ($accept | default "application/hal+json; charset=utf-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -455,25 +455,25 @@ export def "discovery-venues list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string # Sorting order of the search result. Allowable Values: 'name,asc', 'name,desc', 'relevance,asc', 'relevance,desc', 'distance,asc', 'distance,desc' (default: relevance,desc, e.g. )
-  --stateCode: string # Filter venues by state / province code (default: , e.g. )
-  --countryCode: string # Filter venues by country code (default: , e.g. )
+  --state-code: string # Filter venues by state / province code (default: , e.g. )
+  --country-code: string # Filter venues by country code (default: , e.g. )
   --latlong: string # Filter events by latitude and longitude, this filter is deprecated and maybe removed in a future release, please use geoPoint instead (default: , e.g. 33.80003000,-117.88304300)
   --radius: string # Radius of the area in which we want to search for events. (default: 50, e.g. )
   --unit: string@unit-completer # Unit of the radius (default: miles, e.g. )
-  --geoPoint: string # filter events by geoHash (default: , e.g. dr5rh)
+  --geo-point: string # filter events by geoHash (default: , e.g. dr5rh)
   --keyword: string # Keyword to search on (default: , e.g. )
   --id: string # Filter entities by its id (default: , e.g. )
   --qp-source: string@source-completer # Filter entities by its source name (default: , e.g. )
-  --includeTest: string@includeTest-completer # True if you want to have entities flag as test in the response. Only, if you only wanted test entities (default: no, e.g. )
+  --include-test: string@include-test-completer # True if you want to have entities flag as test in the response. Only, if you only wanted test entities (default: no, e.g. )
   --page: string # Page number (default: 0, e.g. )
   --size: string # Page size of the response (default: 20, e.g. )
   --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
-  --includeLicensedContent: string@includeLicensedContent-completer # Yes if you want to display licensed content (default: no, e.g. )
-  --includeSpellcheck: string@includeSpellcheck-completer # yes, to include spell check suggestions in the response. (default: no, e.g. )
+  --include-licensed-content: string@include-licensed-content-completer # Yes if you want to display licensed content (default: no, e.g. )
+  --include-spellcheck: string@include-spellcheck-completer # yes, to include spell check suggestions in the response. (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "stateCode" $stateCode "scalar") (serialize-qp "countryCode" $countryCode "scalar") (serialize-qp "latlong" $latlong "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "unit" $unit "scalar") (serialize-qp "geoPoint" $geoPoint "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "includeTest" $includeTest "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $includeLicensedContent "scalar") (serialize-qp "includeSpellcheck" $includeSpellcheck "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "stateCode" $state_code "scalar") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "latlong" $latlong "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "unit" $unit "scalar") (serialize-qp "geoPoint" $geo_point "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "includeTest" $include_test "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar") (serialize-qp "includeSpellcheck" $include_spellcheck "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/discovery/v2/venues" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -494,12 +494,12 @@ export def "discovery-venues get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # The locale in ISO code format. Multiple comma-separated values can be provided. When omitting the country part of the code (e.g. only 'en' or 'fr') then the first matching locale is used. When using a '*' it matches all locales. '*' can only be used at the end (e.g. 'en-us,en,*')  (default: en, e.g. en-us,en,fr)
-  --includeLicensedContent: string@includeLicensedContent-completer # True if you want to display licensed content (default: no, e.g. )
+  --include-licensed-content: string@include-licensed-content-completer # True if you want to display licensed content (default: no, e.g. )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $includeLicensedContent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/discovery/v2/venues/($id)" $qp)
+  let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/discovery/v2/venues/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

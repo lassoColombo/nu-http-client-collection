@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 # GET /GetPrediction/{StationCodes}
 # operationId: 547636a6f918230da8553640
 export def "get-prediction 547636a6f918230da8553640" [
-  StationCodes: string
+  station_codes: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,7 +107,7 @@ export def "get-prediction 547636a6f918230da8553640" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GetPrediction/($StationCodes)")
+  let full_url = (build-url $base ({station_codes: $station_codes} | format pattern "/GetPrediction/{station_codes}"))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,7 +118,7 @@ export def "get-prediction 547636a6f918230da8553640" [
 # GET /json/GetPrediction/{StationCodes}
 # operationId: 547636a6f918230da855363f
 export def "json-get-prediction 547636a6f918230da855363f" [
-  StationCodes: string
+  station_codes: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,7 +130,7 @@ export def "json-get-prediction 547636a6f918230da855363f" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/json/GetPrediction/($StationCodes)")
+  let full_url = (build-url $base ({station_codes: $station_codes} | format pattern "/json/GetPrediction/{station_codes}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

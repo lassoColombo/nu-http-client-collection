@@ -72,7 +72,7 @@ def format-completer [] { ["jpeg" "jpg" "png"] }
 def zoom-completer [] { ["0" "1" "10" "11" "12" "13" "14" "15" "16" "17" "18" "19" "2" "20" "21" "22" "3" "4" "5" "6" "7" "8" "9"] }
 def view-completer [] { ["IN" "Unified"] }
 def view-completer-1 [] { ["IL" "IN" "Unified"] }
-def tileSize-completer [] { ["256" "512"] }
+def tile-size-completer [] { ["256" "512"] }
 def request-completer [] { ["GetMap"] }
 def srs-completer [] { ["EPSG:3857" "EPSG:4326"] }
 def format-completer-1 [] { ["image/jpeg" "image/png"] }
@@ -109,7 +109,7 @@ export def commands []: nothing -> table {
 #
 # GET /map/{versionNumber}/copyrights.{format}
 export def "map-copyrights-format get" [
-  versionNumber: int
+  version_number: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -124,7 +124,7 @@ export def "map-copyrights-format get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/map/($versionNumber)/copyrights.($format)" $qp)
+  let full_url = (build-url $base ({version_number: $version_number, format: $format} | format pattern "/map/{version_number}/copyrights.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -134,7 +134,7 @@ export def "map-copyrights-format get" [
 #
 # GET /map/{versionNumber}/copyrights/caption.{format}
 export def "map-copyrights-caption-format get" [
-  versionNumber: int
+  version_number: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -149,7 +149,7 @@ export def "map-copyrights-caption-format get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/map/($versionNumber)/copyrights/caption.($format)" $qp)
+  let full_url = (build-url $base ({version_number: $version_number, format: $format} | format pattern "/map/{version_number}/copyrights/caption.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -159,12 +159,12 @@ export def "map-copyrights-caption-format get" [
 #
 # GET /map/{versionNumber}/copyrights/{minLon}/{minLat}/{maxLon}/{maxLat}.{format}
 export def "map-copyrights get" [
-  versionNumber: int
+  version_number: int
+  min_lon: float
+  min_lat: float
+  max_lon: float
+  max_lat: float
   format: string
-  minLon: float
-  minLat: float
-  maxLon: float
-  maxLat: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "map-copyrights get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/map/($versionNumber)/copyrights/($minLon)/($minLat)/($maxLon)/($maxLat).($format)" $qp)
+  let full_url = (build-url $base ({version_number: $version_number, min_lon: $min_lon, min_lat: $min_lat, max_lon: $max_lon, max_lat: $max_lat, format: $format} | format pattern "/map/{version_number}/copyrights/{min_lon}/{min_lat}/{max_lon}/{max_lat}.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,11 +188,11 @@ export def "map-copyrights get" [
 #
 # GET /map/{versionNumber}/copyrights/{zoom}/{X}/{Y}.{format}
 export def "map-copyrights list" [
-  versionNumber: int
-  format: string
+  version_number: int
   zoom: int
-  X: int
-  Y: int
+  x: int
+  y: int
+  format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "map-copyrights list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/map/($versionNumber)/copyrights/($zoom)/($X)/($Y).($format)" $qp)
+  let full_url = (build-url $base ({version_number: $version_number, zoom: $zoom, x: $x, y: $y, format: $format} | format pattern "/map/{version_number}/copyrights/{zoom}/{x}/{y}.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -216,7 +216,7 @@ export def "map-copyrights list" [
 #
 # GET /map/{versionNumber}/staticimage
 export def "map-staticimage get" [
-  versionNumber: int
+  version_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "map-staticimage get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "layer" $layer "scalar") (serialize-qp "style" $style "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "zoom" $zoom "scalar") (serialize-qp "center" $center "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "bbox" $bbox "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/map/($versionNumber)/staticimage" $qp)
+  let full_url = (build-url $base ({version_number: $version_number} | format pattern "/map/{version_number}/staticimage") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -248,12 +248,12 @@ export def "map-staticimage get" [
 #
 # GET /map/{versionNumber}/tile/{layer}/{style}/{zoom}/{X}/{Y}.pbf
 export def "map-tile list" [
-  versionNumber: int
+  version_number: int
   layer: string
   style: string
   zoom: int
-  X: int
-  Y: int
+  x: int
+  y: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "map-tile list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "view" $view "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/map/($versionNumber)/tile/($layer)/($style)/($zoom)/($X)/($Y).pbf" $qp)
+  let full_url = (build-url $base ({version_number: $version_number, layer: $layer, style: $style, zoom: $zoom, x: $x, y: $y} | format pattern "/map/{version_number}/tile/{layer}/{style}/{zoom}/{x}/{y}.pbf") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -278,12 +278,12 @@ export def "map-tile list" [
 #
 # GET /map/{versionNumber}/tile/{layer}/{style}/{zoom}/{X}/{Y}.{format}
 export def "map-tile get" [
-  versionNumber: int
+  version_number: int
   layer: string
   style: string
   zoom: int
-  X: int
-  Y: int
+  x: int
+  y: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,13 +293,13 @@ export def "map-tile get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tileSize: int@tileSize-completer # Tile dimensions in pixels. <em>512</em> is only available for the <em>main</em> style and <em>basic</em> or <em>labels</em> layers. (default: 256)
+  --tile-size: int@tile-size-completer # Tile dimensions in pixels. <em>512</em> is only available for the <em>main</em> style and <em>basic</em> or <em>labels</em> layers. (default: 256)
   --view: string@view-completer # Geopolitical view. Determines rendering of disputed areas. See the <a href="/maps-sdk-web/functional-examples#geopolitical-views">documentation</a> for an explanation of how this works in live services. (e.g. Unified)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tileSize" $tileSize "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/map/($versionNumber)/tile/($layer)/($style)/($zoom)/($X)/($Y).($format)" $qp)
+  let qp = [(serialize-qp "tileSize" $tile_size "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({version_number: $version_number, layer: $layer, style: $style, zoom: $zoom, x: $x, y: $y, format: $format} | format pattern "/map/{version_number}/tile/{layer}/{style}/{zoom}/{x}/{y}.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -309,8 +309,8 @@ export def "map-tile get" [
 #
 # GET /map/{versionNumber}/wms/
 # operationId: GetMap
-export def "map-wms GetMap" [
-  versionNumber: int
+export def "map-wms get" [
+  version_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "map-wms GetMap" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "request" $request "scalar") (serialize-qp "srs" $srs "scalar") (serialize-qp "bbox" $bbox "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "layers" $layers "scalar") (serialize-qp "styles" $styles "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/map/($versionNumber)/wms/" $qp)
+  let full_url = (build-url $base ({version_number: $version_number} | format pattern "/map/{version_number}/wms/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -343,8 +343,8 @@ export def "map-wms GetMap" [
 #
 # GET /map/{versionNumber}/wms//
 # operationId: GetCapabilities
-export def "map-wms GetCapabilities" [
-  versionNumber: int
+export def "map-wms get-capabilities" [
+  version_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,7 +360,7 @@ export def "map-wms GetCapabilities" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "service" $service "scalar") (serialize-qp "request" $request "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/map/($versionNumber)/wms//" $qp)
+  let full_url = (build-url $base ({version_number: $version_number} | format pattern "/map/{version_number}/wms//") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -370,9 +370,9 @@ export def "map-wms GetCapabilities" [
 #
 # GET /map/{versionNumber}/wmts/{key}/{wmtsVersion}/WMTSCapabilities.xml
 export def "map-wmts-wmts-capabilitiesxml get" [
-  versionNumber: int
+  version_number: int
   key: string
-  wmtsVersion: string
+  wmts_version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,7 +384,7 @@ export def "map-wmts-wmts-capabilitiesxml get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/map/($versionNumber)/wmts/($key)/($wmtsVersion)/WMTSCapabilities.xml")
+  let full_url = (build-url $base ({version_number: $version_number, key: $key, wmts_version: $wmts_version} | format pattern "/map/{version_number}/wmts/{key}/{wmts_version}/WMTSCapabilities.xml"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

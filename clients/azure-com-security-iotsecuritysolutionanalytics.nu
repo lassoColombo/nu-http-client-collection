@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}/analyticsModels
 # operationId: IotSecuritySolutionAnalytics_List
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models List" [
-  subscriptionId: string
-  resourceGroupName: string
-  solutionName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models list" [
+  subscription_id: string
+  resource_group_name: string
+  solution_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/iotSecuritySolutions/($solutionName)/analyticsModels" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, solution_name: $solution_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/iotSecuritySolutions/{solution_name}/analyticsModels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,10 +120,10 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}/analyticsModels/default
 # operationId: IotSecuritySolutionAnalytics_Get
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  solutionName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default get" [
+  subscription_id: string
+  resource_group_name: string
+  solution_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,7 +137,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/iotSecuritySolutions/($solutionName)/analyticsModels/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, solution_name: $solution_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/iotSecuritySolutions/{solution_name}/analyticsModels/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,10 +147,10 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}/analyticsModels/default/aggregatedAlerts
 # operationId: IotSecuritySolutionsAnalyticsAggregatedAlert_List
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default-aggregated-alerts List" [
-  subscriptionId: string
-  resourceGroupName: string
-  solutionName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default-aggregated-alerts list" [
+  subscription_id: string
+  resource_group_name: string
+  solution_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/iotSecuritySolutions/($solutionName)/analyticsModels/default/aggregatedAlerts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, solution_name: $solution_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/iotSecuritySolutions/{solution_name}/analyticsModels/default/aggregatedAlerts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -175,11 +175,11 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}/analyticsModels/default/aggregatedAlerts/{aggregatedAlertName}
 # operationId: IotSecuritySolutionsAnalyticsAggregatedAlert_Get
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default-aggregated-alerts Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  solutionName: string
-  aggregatedAlertName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default-aggregated-alerts get" [
+  subscription_id: string
+  resource_group_name: string
+  solution_name: string
+  aggregated_alert_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/iotSecuritySolutions/($solutionName)/analyticsModels/default/aggregatedAlerts/($aggregatedAlertName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, solution_name: $solution_name, aggregated_alert_name: $aggregated_alert_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/iotSecuritySolutions/{solution_name}/analyticsModels/default/aggregatedAlerts/{aggregated_alert_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -203,11 +203,11 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}/analyticsModels/default/aggregatedAlerts/{aggregatedAlertName}/dismiss
 # operationId: IotSecuritySolutionsAnalyticsAggregatedAlert_Dismiss
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default-aggregated-alerts-dismiss Dismiss" [
-  subscriptionId: string
-  resourceGroupName: string
-  solutionName: string
-  aggregatedAlertName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default-aggregated-alerts-dismiss post" [
+  subscription_id: string
+  resource_group_name: string
+  solution_name: string
+  aggregated_alert_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/iotSecuritySolutions/($solutionName)/analyticsModels/default/aggregatedAlerts/($aggregatedAlertName)/dismiss" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, solution_name: $solution_name, aggregated_alert_name: $aggregated_alert_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/iotSecuritySolutions/{solution_name}/analyticsModels/default/aggregatedAlerts/{aggregated_alert_name}/dismiss") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -231,10 +231,10 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}/analyticsModels/default/aggregatedRecommendations
 # operationId: IotSecuritySolutionsAnalyticsRecommendation_List
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default-aggregated-recommendations List" [
-  subscriptionId: string
-  resourceGroupName: string
-  solutionName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default-aggregated-recommendations list" [
+  subscription_id: string
+  resource_group_name: string
+  solution_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,7 +249,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/iotSecuritySolutions/($solutionName)/analyticsModels/default/aggregatedRecommendations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, solution_name: $solution_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/iotSecuritySolutions/{solution_name}/analyticsModels/default/aggregatedRecommendations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,11 +259,11 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}/analyticsModels/default/aggregatedRecommendations/{aggregatedRecommendationName}
 # operationId: IotSecuritySolutionsAnalyticsRecommendation_Get
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default-aggregated-recommendations Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  solutionName: string
-  aggregatedRecommendationName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default-aggregated-recommendations get" [
+  subscription_id: string
+  resource_group_name: string
+  solution_name: string
+  aggregated_recommendation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,7 +277,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/iotSecuritySolutions/($solutionName)/analyticsModels/default/aggregatedRecommendations/($aggregatedRecommendationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, solution_name: $solution_name, aggregated_recommendation_name: $aggregated_recommendation_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/iotSecuritySolutions/{solution_name}/analyticsModels/default/aggregatedRecommendations/{aggregated_recommendation_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

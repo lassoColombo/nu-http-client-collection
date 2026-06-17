@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "balance-transfers retrieveBalanceTransfers" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "balance-transfers retrieve" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /{api_key}/balance-transfers
 # operationId: retrieveBalanceTransfers
-export def "balance-transfers retrieveBalanceTransfers" [
+export def "balance-transfers retrieve" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -110,7 +110,7 @@ export def "balance-transfers retrieveBalanceTransfers" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "subaccount" $subaccount "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($api_key)/balance-transfers" $qp)
+  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/{api_key}/balance-transfers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -138,8 +138,8 @@ export def "balance-transfers transferBalance" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($api_key)/balance-transfers")
-  let body = {amount: $amount, from: $body_from, reference: $reference, to: $body_to} | compact
+  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/{api_key}/balance-transfers"))
+  let body = {"amount": $amount, "from": $body_from, "reference": $reference, "to": $body_to} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -150,7 +150,7 @@ export def "balance-transfers transferBalance" [
 #
 # GET /{api_key}/credit-transfers
 # operationId: retrieveCreditTransfers
-export def "credit-transfers retrieveCreditTransfers" [
+export def "credit-transfers retrieve" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -167,7 +167,7 @@ export def "credit-transfers retrieveCreditTransfers" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "subaccount" $subaccount "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($api_key)/credit-transfers" $qp)
+  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/{api_key}/credit-transfers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,8 +195,8 @@ export def "credit-transfers transferCredit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($api_key)/credit-transfers")
-  let body = {amount: $amount, from: $body_from, reference: $reference, to: $body_to} | compact
+  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/{api_key}/credit-transfers"))
+  let body = {"amount": $amount, "from": $body_from, "reference": $reference, "to": $body_to} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -207,7 +207,7 @@ export def "credit-transfers transferCredit" [
 #
 # GET /{api_key}/subaccounts
 # operationId: retrieveSubaccountsList
-export def "subaccounts retrieveSubaccountsList" [
+export def "subaccounts retrieve-subaccounts-list" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +220,7 @@ export def "subaccounts retrieveSubaccountsList" [
 ]: nothing -> record<_embedded: record<primary_account: record<api_key: string, balance: float, created_at: string, credit_limit: float, name: string, primary_account_api_key: string, suspended: bool, use_primary_account_balance: bool>, subaccounts: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($api_key)/subaccounts")
+  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/{api_key}/subaccounts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,7 +230,7 @@ export def "subaccounts retrieveSubaccountsList" [
 #
 # POST /{api_key}/subaccounts
 # operationId: createSubAccount
-export def "subaccounts createSubAccount" [
+export def "subaccounts create" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -247,8 +247,8 @@ export def "subaccounts createSubAccount" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($api_key)/subaccounts")
-  let body = {name: $name, secret: $secret, use_primary_account_balance: $use_primary_account_balance} | compact
+  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/{api_key}/subaccounts"))
+  let body = {"name": $name, "secret": $secret, "use_primary_account_balance": $use_primary_account_balance} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -259,7 +259,7 @@ export def "subaccounts createSubAccount" [
 #
 # GET /{api_key}/subaccounts/{subaccount_key}
 # operationId: retrieveSubaccount
-export def "subaccounts retrieveSubaccount" [
+export def "subaccounts retrieve" [
   api_key: string
   subaccount_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -273,7 +273,7 @@ export def "subaccounts retrieveSubaccount" [
 ]: nothing -> record<api_key: string, balance: float, created_at: string, credit_limit: float, name: string, primary_account_api_key: string, suspended: bool, use_primary_account_balance: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($api_key)/subaccounts/($subaccount_key)")
+  let full_url = (build-url $base ({api_key: $api_key, subaccount_key: $subaccount_key} | format pattern "/{api_key}/subaccounts/{subaccount_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -301,8 +301,8 @@ export def "subaccounts modifySubaccount" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($api_key)/subaccounts/($subaccount_key)")
-  let body = {name: $name, suspended: $suspended, use_primary_account_balance: $use_primary_account_balance} | compact
+  let full_url = (build-url $base ({api_key: $api_key, subaccount_key: $subaccount_key} | format pattern "/{api_key}/subaccounts/{subaccount_key}"))
+  let body = {"name": $name, "suspended": $suspended, "use_primary_account_balance": $use_primary_account_balance} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -331,8 +331,8 @@ export def "transfer-number transferNumber" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($api_key)/transfer-number")
-  let body = {country: $country, from: $body_from, number: $number, to: $body_to} | compact
+  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/{api_key}/transfer-number"))
+  let body = {"country": $country, "from": $body_from, "number": $number, "to": $body_to} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

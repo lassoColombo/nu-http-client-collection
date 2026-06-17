@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms
 # operationId: Transforms_List
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms List" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,7 +112,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$orderby" $orderby "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaServices/($accountName)/transforms" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaServices/{account_name}/transforms") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,11 +122,11 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}
 # operationId: Transforms_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  transformName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  transform_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +140,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaServices/($accountName)/transforms/($transformName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, transform_name: $transform_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaServices/{account_name}/transforms/{transform_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,11 +150,11 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}
 # operationId: Transforms_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  transformName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  transform_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaServices/($accountName)/transforms/($transformName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, transform_name: $transform_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaServices/{account_name}/transforms/{transform_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,11 +179,11 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}
 # operationId: Transforms_Update
 # --properties shape: {description?: string, outputs: list}
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  transformName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  transform_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,8 +199,8 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaServices/($accountName)/transforms/($transformName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, transform_name: $transform_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaServices/{account_name}/transforms/{transform_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,11 +212,11 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}
 # operationId: Transforms_CreateOrUpdate
 # --properties shape: {description?: string, outputs: list}
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  transformName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  transform_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,8 +232,8 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaServices/($accountName)/transforms/($transformName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, transform_name: $transform_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaServices/{account_name}/transforms/{transform_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -244,11 +244,11 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}/jobs
 # operationId: Jobs_List
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs List" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  transformName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  transform_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$orderby" $orderby "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaServices/($accountName)/transforms/($transformName)/jobs" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, transform_name: $transform_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaServices/{account_name}/transforms/{transform_name}/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -274,12 +274,12 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}/jobs/{jobName}
 # operationId: Jobs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  transformName: string
-  jobName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  transform_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaServices/($accountName)/transforms/($transformName)/jobs/($jobName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, transform_name: $transform_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaServices/{account_name}/transforms/{transform_name}/jobs/{job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -303,12 +303,12 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}/jobs/{jobName}
 # operationId: Jobs_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  transformName: string
-  jobName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  transform_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,7 +322,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaServices/($accountName)/transforms/($transformName)/jobs/($jobName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, transform_name: $transform_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaServices/{account_name}/transforms/{transform_name}/jobs/{job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -333,12 +333,12 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}/jobs/{jobName}
 # operationId: Jobs_Update
 # --properties shape: {correlationData?: record, description?: string, input: record, outputs: list, priority?: "Low"|"Normal"|"High"}
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  transformName: string
-  jobName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  transform_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,8 +354,8 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaServices/($accountName)/transforms/($transformName)/jobs/($jobName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, transform_name: $transform_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaServices/{account_name}/transforms/{transform_name}/jobs/{job_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -367,12 +367,12 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}/jobs/{jobName}
 # operationId: Jobs_Create
 # --properties shape: {correlationData?: record, description?: string, input: record, outputs: list, priority?: "Low"|"Normal"|"High"}
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  transformName: string
-  jobName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  transform_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,8 +388,8 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaServices/($accountName)/transforms/($transformName)/jobs/($jobName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, transform_name: $transform_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaServices/{account_name}/transforms/{transform_name}/jobs/{job_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -400,12 +400,12 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}/jobs/{jobName}/cancelJob
 # operationId: Jobs_CancelJob
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs-cancel-job CancelJob" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  transformName: string
-  jobName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs-cancel-job cancel" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  transform_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,7 +419,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaServices/($accountName)/transforms/($transformName)/jobs/($jobName)/cancelJob" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, transform_name: $transform_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaServices/{account_name}/transforms/{transform_name}/jobs/{job_name}/cancelJob") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

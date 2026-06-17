@@ -116,7 +116,7 @@ export def "alerts-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/alerts?lat=($lat)&lon=($lon)" $qp)
+  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/alerts?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -140,7 +140,7 @@ export def "bulk-files get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bulk/files/($file)" $qp)
+  let full_url = (build-url $base ({file: $file} | format pattern "/bulk/files/{file}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -167,7 +167,7 @@ export def "current-airquality-city-city-country-country get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/current/airquality?city=($city)&country=($country)" $qp)
+  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/current/airquality?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -192,7 +192,7 @@ export def "current-airquality-city-id-city-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/current/airquality?city_id=($city_id)" $qp)
+  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/current/airquality?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -218,7 +218,7 @@ export def "current-airquality-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/current/airquality?lat=($lat)&lon=($lon)" $qp)
+  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/current/airquality?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,7 +244,7 @@ export def "current-airquality-postal-code-postal-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/current/airquality?postal_code=($postal_code)" $qp)
+  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/current/airquality?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -272,7 +272,7 @@ export def "current-cities-cities get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/current?cities=($cities)" $qp)
+  let full_url = (build-url $base ({cities: $cities} | format pattern "/current?cities={cities}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -303,7 +303,7 @@ export def "current-city-city-country-country get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/current?city=($city)&country=($country)" $qp)
+  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/current?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -332,7 +332,7 @@ export def "current-city-id-city-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/current?city_id=($city_id)" $qp)
+  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/current?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -362,7 +362,7 @@ export def "current-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/current?lat=($lat)&lon=($lon)" $qp)
+  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/current?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -389,7 +389,7 @@ export def "current-points-points get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/current?points=($points)" $qp)
+  let full_url = (build-url $base ({points: $points} | format pattern "/current?points={points}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -419,7 +419,7 @@ export def "current-postal-code-postal-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/current?postal_code=($postal_code)" $qp)
+  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/current?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -447,7 +447,7 @@ export def "current-station-station get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/current?station=($station)" $qp)
+  let full_url = (build-url $base ({station: $station} | format pattern "/current?station={station}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -474,7 +474,7 @@ export def "current-stations-stations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/current?stations=($stations)" $qp)
+  let full_url = (build-url $base ({stations: $stations} | format pattern "/current?stations={stations}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -502,7 +502,7 @@ export def "forecast-airquality-city-city-country-country get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/forecast/airquality?city=($city)&country=($country)" $qp)
+  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/forecast/airquality?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -528,7 +528,7 @@ export def "forecast-airquality-city-id-city-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/forecast/airquality?city_id=($city_id)" $qp)
+  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/forecast/airquality?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -555,7 +555,7 @@ export def "forecast-airquality-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "hours" $hours "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/forecast/airquality?lat=($lat)&lon=($lon)" $qp)
+  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/forecast/airquality?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -582,7 +582,7 @@ export def "forecast-airquality-postal-code-postal-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/forecast/airquality?postal_code=($postal_code)" $qp)
+  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/forecast/airquality?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -612,7 +612,7 @@ export def "forecast-daily-city-city-country-country get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "days" $days "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/forecast/daily?city=($city)&country=($country)" $qp)
+  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/forecast/daily?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -640,7 +640,7 @@ export def "forecast-daily-city-id-city-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "days" $days "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/forecast/daily?city_id=($city_id)" $qp)
+  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/forecast/daily?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -669,7 +669,7 @@ export def "forecast-daily-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "days" $days "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/forecast/daily?lat=($lat)&lon=($lon)" $qp)
+  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/forecast/daily?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -698,7 +698,7 @@ export def "forecast-daily-postal-code-postal-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "days" $days "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/forecast/daily?postal_code=($postal_code)" $qp)
+  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/forecast/daily?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -727,7 +727,7 @@ export def "forecast-energy-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "threshold" $threshold "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "tp" $tp "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/forecast/energy?lat=($lat)&lon=($lon)" $qp)
+  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/forecast/energy?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -757,7 +757,7 @@ export def "forecast-hourly-city-city-country-country get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/forecast/hourly?city=($city)&country=($country)" $qp)
+  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/forecast/hourly?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -785,7 +785,7 @@ export def "forecast-hourly-city-id-city-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/forecast/hourly?city_id=($city_id)" $qp)
+  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/forecast/hourly?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -814,7 +814,7 @@ export def "forecast-hourly-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "hours" $hours "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/forecast/hourly?lat=($lat)&lon=($lon)" $qp)
+  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/forecast/hourly?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -843,7 +843,7 @@ export def "forecast-hourly-postal-code-postal-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/forecast/hourly?postal_code=($postal_code)" $qp)
+  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/forecast/hourly?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -870,7 +870,7 @@ export def "history-airquality-city-city-country-country get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/airquality?city=($city)&country=($country)" $qp)
+  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/history/airquality?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -895,7 +895,7 @@ export def "history-airquality-city-id-city-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/airquality?city_id=($city_id)" $qp)
+  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/history/airquality?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -921,7 +921,7 @@ export def "history-airquality-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/airquality?lat=($lat)&lon=($lon)" $qp)
+  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/history/airquality?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -947,7 +947,7 @@ export def "history-airquality-postal-code-postal-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/airquality?postal_code=($postal_code)" $qp)
+  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/history/airquality?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -978,7 +978,7 @@ export def "history-daily-city-city-country-country get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/daily?city=($city)&country=($country)" $qp)
+  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/history/daily?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1007,7 +1007,7 @@ export def "history-daily-city-id-city-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/daily?city_id=($city_id)" $qp)
+  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/history/daily?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1037,7 +1037,7 @@ export def "history-daily-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/daily?lat=($lat)&lon=($lon)" $qp)
+  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/history/daily?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1067,7 +1067,7 @@ export def "history-daily-postal-code-postal-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/daily?postal_code=($postal_code)" $qp)
+  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/history/daily?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1096,7 +1096,7 @@ export def "history-daily-station-station get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/daily?station=($station)" $qp)
+  let full_url = (build-url $base ({station: $station} | format pattern "/history/daily?station={station}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1127,7 +1127,7 @@ export def "history-energy-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "tp" $tp "scalar") (serialize-qp "threshold" $threshold "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/energy?lat=($lat)&lon=($lon)" $qp)
+  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/history/energy?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1159,7 +1159,7 @@ export def "history-hourly-city-city-country-country get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/hourly?city=($city)&country=($country)" $qp)
+  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/history/hourly?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1189,7 +1189,7 @@ export def "history-hourly-city-id-city-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/hourly?city_id=($city_id)" $qp)
+  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/history/hourly?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1220,7 +1220,7 @@ export def "history-hourly-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/hourly?lat=($lat)&lon=($lon)" $qp)
+  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/history/hourly?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1251,7 +1251,7 @@ export def "history-hourly-postal-code-postal-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/hourly?postal_code=($postal_code)" $qp)
+  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/history/hourly?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1281,7 +1281,7 @@ export def "history-hourly-station-station get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/hourly?station=($station)" $qp)
+  let full_url = (build-url $base ({station: $station} | format pattern "/history/hourly?station={station}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1313,7 +1313,7 @@ export def "history-subhourly-city-city-country-country get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/subhourly?city=($city)&country=($country)" $qp)
+  let full_url = (build-url $base ({city: $city, country: $country} | format pattern "/history/subhourly?city={city}&country={country}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1343,7 +1343,7 @@ export def "history-subhourly-city-id-city-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/subhourly?city_id=($city_id)" $qp)
+  let full_url = (build-url $base ({city_id: $city_id} | format pattern "/history/subhourly?city_id={city_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1374,7 +1374,7 @@ export def "history-subhourly-lat-lat-lon-lon get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/subhourly?lat=($lat)&lon=($lon)" $qp)
+  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/history/subhourly?lat={lat}&lon={lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1405,7 +1405,7 @@ export def "history-subhourly-postal-code-postal-code get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/subhourly?postal_code=($postal_code)" $qp)
+  let full_url = (build-url $base ({postal_code: $postal_code} | format pattern "/history/subhourly?postal_code={postal_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1435,7 +1435,7 @@ export def "history-subhourly-station-station get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/history/subhourly?station=($station)" $qp)
+  let full_url = (build-url $base ({station: $station} | format pattern "/history/subhourly?station={station}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -67,28 +67,27 @@ def auth-scheme-completer [] { ["basic"] }
 
 # Completers for enum parameters
 def status-completer [] { ["active" "inactive"] }
-def schemaType-completer [] { ["explicit" "implicit"] }
-def sortBy-completer [] { ["CreatedAt" "ID" "UpdatedAt"] }
+def schema-type-completer [] { ["explicit" "implicit"] }
+def sort-by-completer [] { ["CreatedAt" "ID" "UpdatedAt"] }
 def include-completer [] { ["properties"] }
 def type-completer [] { ["flux"] }
-def Accept-Encoding-completer [] { ["gzip" "identity"] }
-def Content-Type-completer [] { ["application/json" "application/vnd.flux"] }
+def accept-encoding-completer [] { ["gzip" "identity"] }
+def content-type-completer [] { ["application/json" "application/vnd.flux"] }
 def accept-completer [] { ["application/json" "application/vnd.influx.arrow" "text/csv"] }
-def Content-Type-completer-1 [] { ["application/json"] }
+def content-type-completer-1 [] { ["application/json"] }
 def type-completer-1 [] { ["prometheus"] }
 def type-completer-2 [] { ["self" "v1" "v2"] }
-def Accept-completer [] { ["application/json" "application/octet-stream" "application/toml"] }
 def accept-completer-1 [] { ["application/json" "application/octet-stream" "application/toml"] }
 def accept-completer-2 [] { ["application/json" "application/x-yaml"] }
 def precision-completer [] { ["ms" "ns" "s" "us"] }
-def Content-Encoding-completer [] { ["gzip" "identity"] }
-def Content-Type-completer-2 [] { ["application/vnd.influx.arrow" "text/plain" "text/plain; charset=utf-8"] }
-def Accept-completer-1 [] { ["application/json"] }
+def content-encoding-completer [] { ["gzip" "identity"] }
+def content-type-completer-2 [] { ["application/vnd.influx.arrow" "text/plain" "text/plain; charset=utf-8"] }
+def accept-completer-3 [] { ["application/json"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "routes GetRoutes" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "routes get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -112,7 +111,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GetRoutes
-export def "routes GetRoutes" [
+export def "routes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -121,12 +120,12 @@ export def "routes GetRoutes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<authorizations: string, buckets: string, dashboards: string, external: record<statusFeed: string>, flags: string, me: string, orgs: string, query: record<analyze: string, ast: string, self: string, suggestions: string>, setup: string, signin: string, signout: string, sources: string, system: record<debug: string, health: string, metrics: string>, tasks: string, telegrafs: string, users: string, variables: string, write: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -137,7 +136,7 @@ export def "routes GetRoutes" [
 #
 # GET /authorizations
 # operationId: GetAuthorizations
-export def "authorizations GetAuthorizations" [
+export def "authorizations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,17 +145,17 @@ export def "authorizations GetAuthorizations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userID: string # Only show authorizations that belong to a user ID.
+  --user-id: string # Only show authorizations that belong to a user ID.
   --user: string # Only show authorizations that belong to a user name.
-  --orgID: string # Only show authorizations that belong to an organization ID.
+  --org-id: string # Only show authorizations that belong to an organization ID.
   --org: string # Only show authorizations that belong to a organization name.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<authorizations: table<description: string, status: string, createdAt: string, id: string, links: record, org: string, orgID: string, permissions: list, token: string, updatedAt: string, user: string, userID: string>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userID" $userID "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "orgID" $orgID "scalar") (serialize-qp "org" $org "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "userID" $user_id "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "org" $org "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authorizations" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -168,7 +167,7 @@ export def "authorizations GetAuthorizations" [
 # POST /authorizations
 # operationId: PostAuthorizations
 # --permissions item shape: {action: "read"|"write", resource: record}
-export def "authorizations PostAuthorizations" [
+export def "authorizations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,20 +176,20 @@ export def "authorizations PostAuthorizations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --description: string # A description of the token.
   --status: string@status-completer # If inactive the token is inactive and requests using the token will be rejected. (default: active)
-  orgID: string # ID of org that authorization is scoped to.
+  org_id: string # ID of org that authorization is scoped to.
   permissions: list # List of permissions for an auth.  An auth must have at least one Permission. — item shape: {action: "read"|"write", resource: record}
-  --userID: string # ID of user that authorization is scoped to.
+  --user-id: string # ID of user that authorization is scoped to.
 ]: any -> record<description: string, status: string, createdAt: string, id: string, links: record<self: string, user: string>, org: string, orgID: string, permissions: table<action: string, resource: record>, token: string, updatedAt: string, user: string, userID: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authorizations")
-  let body = {description: $description, status: $status, orgID: $orgID, permissions: $permissions, userID: $userID} | compact
+  let body = {"description": $description, "status": $status, "orgID": $org_id, "permissions": $permissions, "userID": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -201,8 +200,8 @@ export def "authorizations PostAuthorizations" [
 #
 # DELETE /authorizations/{authID}
 # operationId: DeleteAuthorizationsID
-export def "authorizations DeleteAuthorizationsID" [
-  authID: string
+export def "authorizations delete" [
+  auth_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,12 +210,12 @@ export def "authorizations DeleteAuthorizationsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authorizations/($authID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({auth_id: $auth_id} | format pattern "/authorizations/{auth_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -227,8 +226,8 @@ export def "authorizations DeleteAuthorizationsID" [
 #
 # GET /authorizations/{authID}
 # operationId: GetAuthorizationsID
-export def "authorizations GetAuthorizationsID" [
-  authID: string
+export def "authorizations get" [
+  auth_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,12 +236,12 @@ export def "authorizations GetAuthorizationsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<description: string, status: string, createdAt: string, id: string, links: record<self: string, user: string>, org: string, orgID: string, permissions: table<action: string, resource: record>, token: string, updatedAt: string, user: string, userID: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authorizations/($authID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({auth_id: $auth_id} | format pattern "/authorizations/{auth_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,8 +252,8 @@ export def "authorizations GetAuthorizationsID" [
 #
 # PATCH /authorizations/{authID}
 # operationId: PatchAuthorizationsID
-export def "authorizations PatchAuthorizationsID" [
-  authID: string
+export def "authorizations update" [
+  auth_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,17 +262,17 @@ export def "authorizations PatchAuthorizationsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --description: string # A description of the token.
   --status: string@status-completer # If inactive the token is inactive and requests using the token will be rejected. (default: active)
 ]: any -> record<description: string, status: string, createdAt: string, id: string, links: record<self: string, user: string>, org: string, orgID: string, permissions: table<action: string, resource: record>, token: string, updatedAt: string, user: string, userID: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authorizations/($authID)")
-  let body = {description: $description, status: $status} | compact
+  let full_url = (build-url $base ({auth_id: $auth_id} | format pattern "/authorizations/{auth_id}"))
+  let body = {"description": $description, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -284,7 +283,7 @@ export def "authorizations PatchAuthorizationsID" [
 #
 # GET /buckets
 # operationId: GetBuckets
-export def "buckets GetBuckets" [
+export def "buckets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -297,16 +296,16 @@ export def "buckets GetBuckets" [
   --limit: int # default: 20
   --after: string # The last resource ID from which to seek from (but not including). This is to be used instead of `offset`.
   --org: string # The name of the organization.
-  --orgID: string # The organization ID.
+  --org-id: string # The organization ID.
   --name: string # Only returns buckets with a specific name.
   --id: string # Only returns buckets with a specific ID.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<buckets: table<createdAt: string, description: string, id: string, labels: list, links: record, name: string, orgID: string, retentionRules: list, rp: string, schemaType: string, type: string, updatedAt: string>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "org" $org "scalar") (serialize-qp "orgID" $orgID "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/buckets" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -318,7 +317,7 @@ export def "buckets GetBuckets" [
 # POST /buckets
 # operationId: PostBuckets
 # --retentionRules item shape: {everySeconds: int, shardGroupDurationSeconds?: int, type: "expire"}
-export def "buckets PostBuckets" [
+export def "buckets create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,21 +326,21 @@ export def "buckets PostBuckets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --description: string
   name: string
-  orgID: string
-  retentionRules: list # Rules to expire or retain data.  No rules means data never expires. — item shape: {everySeconds: int, shardGroupDurationSeconds?: int, type: "expire"}
+  org_id: string
+  retention_rules: list # Rules to expire or retain data.  No rules means data never expires. — item shape: {everySeconds: int, shardGroupDurationSeconds?: int, type: "expire"}
   --rp: string
-  --schemaType: string@schemaType-completer
+  --schema-type: string@schema-type-completer
 ]: any -> record<createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, org: string, owners: string, self: string, write: string>, name: string, orgID: string, retentionRules: table<everySeconds: int, shardGroupDurationSeconds: int, type: string>, rp: string, schemaType: string, type: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/buckets")
-  let body = {description: $description, name: $name, orgID: $orgID, retentionRules: $retentionRules, rp: $rp, schemaType: $schemaType} | compact
+  let body = {"description": $description, "name": $name, "orgID": $org_id, "retentionRules": $retention_rules, "rp": $rp, "schemaType": $schema_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -352,8 +351,8 @@ export def "buckets PostBuckets" [
 #
 # DELETE /buckets/{bucketID}
 # operationId: DeleteBucketsID
-export def "buckets DeleteBucketsID" [
-  bucketID: string
+export def "buckets delete" [
+  bucket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,12 +361,12 @@ export def "buckets DeleteBucketsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -378,8 +377,8 @@ export def "buckets DeleteBucketsID" [
 #
 # GET /buckets/{bucketID}
 # operationId: GetBucketsID
-export def "buckets GetBucketsID" [
-  bucketID: string
+export def "buckets get" [
+  bucket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,12 +387,12 @@ export def "buckets GetBucketsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, org: string, owners: string, self: string, write: string>, name: string, orgID: string, retentionRules: table<everySeconds: int, shardGroupDurationSeconds: int, type: string>, rp: string, schemaType: string, type: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -405,8 +404,8 @@ export def "buckets GetBucketsID" [
 # PATCH /buckets/{bucketID}
 # operationId: PatchBucketsID
 # --retentionRules item shape: {everySeconds?: int, shardGroupDurationSeconds?: int, type: "expire"}
-export def "buckets PatchBucketsID" [
-  bucketID: string
+export def "buckets update" [
+  bucket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,18 +414,18 @@ export def "buckets PatchBucketsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --description: string
   --name: string
-  --retentionRules: list # Updates to rules to expire or retain data. No rules means no updates. — item shape: {everySeconds?: int, shardGroupDurationSeconds?: int, type: "expire"}
+  --retention-rules: list # Updates to rules to expire or retain data. No rules means no updates. — item shape: {everySeconds?: int, shardGroupDurationSeconds?: int, type: "expire"}
 ]: any -> record<createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, members: string, org: string, owners: string, self: string, write: string>, name: string, orgID: string, retentionRules: table<everySeconds: int, shardGroupDurationSeconds: int, type: string>, rp: string, schemaType: string, type: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketID)")
-  let body = {description: $description, name: $name, retentionRules: $retentionRules} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}"))
+  let body = {"description": $description, "name": $name, "retentionRules": $retention_rules} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -437,8 +436,8 @@ export def "buckets PatchBucketsID" [
 #
 # GET /buckets/{bucketID}/labels
 # operationId: GetBucketsIDLabels
-export def "buckets-labels GetBucketsIDLabels" [
-  bucketID: string
+export def "buckets-labels get" [
+  bucket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,12 +446,12 @@ export def "buckets-labels GetBucketsIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketID)/labels")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}/labels"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -463,8 +462,8 @@ export def "buckets-labels GetBucketsIDLabels" [
 #
 # POST /buckets/{bucketID}/labels
 # operationId: PostBucketsIDLabels
-export def "buckets-labels PostBucketsIDLabels" [
-  bucketID: string
+export def "buckets-labels create" [
+  bucket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -473,16 +472,16 @@ export def "buckets-labels PostBucketsIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --labelID: string
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --label-id: string
 ]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketID)/labels")
-  let body = {labelID: $labelID} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}/labels"))
+  let body = {"labelID": $label_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -493,9 +492,9 @@ export def "buckets-labels PostBucketsIDLabels" [
 #
 # DELETE /buckets/{bucketID}/labels/{labelID}
 # operationId: DeleteBucketsIDLabelsID
-export def "buckets-labels DeleteBucketsIDLabelsID" [
-  bucketID: string
-  labelID: string
+export def "buckets-labels delete" [
+  bucket_id: string
+  label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,12 +503,12 @@ export def "buckets-labels DeleteBucketsIDLabelsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketID)/labels/($labelID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id, label_id: $label_id} | format pattern "/buckets/{bucket_id}/labels/{label_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -520,8 +519,8 @@ export def "buckets-labels DeleteBucketsIDLabelsID" [
 #
 # GET /buckets/{bucketID}/members
 # operationId: GetBucketsIDMembers
-export def "buckets-members GetBucketsIDMembers" [
-  bucketID: string
+export def "buckets-members get" [
+  bucket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,12 +529,12 @@ export def "buckets-members GetBucketsIDMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketID)/members")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}/members"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -546,8 +545,8 @@ export def "buckets-members GetBucketsIDMembers" [
 #
 # POST /buckets/{bucketID}/members
 # operationId: PostBucketsIDMembers
-export def "buckets-members PostBucketsIDMembers" [
-  bucketID: string
+export def "buckets-members create" [
+  bucket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -556,17 +555,17 @@ export def "buckets-members PostBucketsIDMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
 ]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketID)/members")
-  let body = {id: $id, name: $name} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}/members"))
+  let body = {"id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -577,9 +576,9 @@ export def "buckets-members PostBucketsIDMembers" [
 #
 # DELETE /buckets/{bucketID}/members/{userID}
 # operationId: DeleteBucketsIDMembersID
-export def "buckets-members DeleteBucketsIDMembersID" [
-  userID: string
-  bucketID: string
+export def "buckets-members delete" [
+  bucket_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,12 +587,12 @@ export def "buckets-members DeleteBucketsIDMembersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketID)/members/($userID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id, user_id: $user_id} | format pattern "/buckets/{bucket_id}/members/{user_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -604,8 +603,8 @@ export def "buckets-members DeleteBucketsIDMembersID" [
 #
 # GET /buckets/{bucketID}/owners
 # operationId: GetBucketsIDOwners
-export def "buckets-owners GetBucketsIDOwners" [
-  bucketID: string
+export def "buckets-owners get" [
+  bucket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -614,12 +613,12 @@ export def "buckets-owners GetBucketsIDOwners" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketID)/owners")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}/owners"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -630,8 +629,8 @@ export def "buckets-owners GetBucketsIDOwners" [
 #
 # POST /buckets/{bucketID}/owners
 # operationId: PostBucketsIDOwners
-export def "buckets-owners PostBucketsIDOwners" [
-  bucketID: string
+export def "buckets-owners create" [
+  bucket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,17 +639,17 @@ export def "buckets-owners PostBucketsIDOwners" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
 ]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketID)/owners")
-  let body = {id: $id, name: $name} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}/owners"))
+  let body = {"id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -661,9 +660,9 @@ export def "buckets-owners PostBucketsIDOwners" [
 #
 # DELETE /buckets/{bucketID}/owners/{userID}
 # operationId: DeleteBucketsIDOwnersID
-export def "buckets-owners DeleteBucketsIDOwnersID" [
-  userID: string
-  bucketID: string
+export def "buckets-owners delete" [
+  bucket_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -672,12 +671,12 @@ export def "buckets-owners DeleteBucketsIDOwnersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucketID)/owners/($userID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id, user_id: $user_id} | format pattern "/buckets/{bucket_id}/owners/{user_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -688,7 +687,7 @@ export def "buckets-owners DeleteBucketsIDOwnersID" [
 #
 # GET /checks
 # operationId: GetChecks
-export def "checks GetChecks" [
+export def "checks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -699,14 +698,14 @@ export def "checks GetChecks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int
   --limit: int # default: 20
-  --orgID: string # Only show checks that belong to a specific organization ID.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --org-id: string # Only show checks that belong to a specific organization ID.
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<checks: list<record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orgID" $orgID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/checks" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -717,7 +716,7 @@ export def "checks GetChecks" [
 #
 # POST /checks
 # operationId: CreateCheck
-export def "checks CreateCheck" [
+export def "checks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,8 +741,8 @@ export def "checks CreateCheck" [
 #
 # DELETE /checks/{checkID}
 # operationId: DeleteChecksID
-export def "checks DeleteChecksID" [
-  checkID: string
+export def "checks delete" [
+  check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -752,12 +751,12 @@ export def "checks DeleteChecksID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/checks/($checkID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/checks/{check_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -768,8 +767,8 @@ export def "checks DeleteChecksID" [
 #
 # GET /checks/{checkID}
 # operationId: GetChecksID
-export def "checks GetChecksID" [
-  checkID: string
+export def "checks get" [
+  check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,12 +777,12 @@ export def "checks GetChecksID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/checks/($checkID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/checks/{check_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -794,8 +793,8 @@ export def "checks GetChecksID" [
 #
 # PATCH /checks/{checkID}
 # operationId: PatchChecksID
-export def "checks PatchChecksID" [
-  checkID: string
+export def "checks update-by-checkID" [
+  check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -804,7 +803,7 @@ export def "checks PatchChecksID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --description: string
   --name: string
   --status: string@status-completer
@@ -812,10 +811,10 @@ export def "checks PatchChecksID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/checks/($checkID)")
-  let body = {description: $description, name: $name, status: $status} | compact
+  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/checks/{check_id}"))
+  let body = {"description": $description, "name": $name, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -826,8 +825,8 @@ export def "checks PatchChecksID" [
 #
 # PUT /checks/{checkID}
 # operationId: PutChecksID
-export def "checks PutChecksID" [
-  checkID: string
+export def "checks update-by-checkID-1" [
+  check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -836,15 +835,15 @@ export def "checks PutChecksID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/checks/($checkID)")
+  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/checks/{check_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -855,8 +854,8 @@ export def "checks PutChecksID" [
 #
 # GET /checks/{checkID}/labels
 # operationId: GetChecksIDLabels
-export def "checks-labels GetChecksIDLabels" [
-  checkID: string
+export def "checks-labels get" [
+  check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -865,12 +864,12 @@ export def "checks-labels GetChecksIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/checks/($checkID)/labels")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/checks/{check_id}/labels"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -881,8 +880,8 @@ export def "checks-labels GetChecksIDLabels" [
 #
 # POST /checks/{checkID}/labels
 # operationId: PostChecksIDLabels
-export def "checks-labels PostChecksIDLabels" [
-  checkID: string
+export def "checks-labels create" [
+  check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -891,16 +890,16 @@ export def "checks-labels PostChecksIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --labelID: string
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --label-id: string
 ]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/checks/($checkID)/labels")
-  let body = {labelID: $labelID} | compact
+  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/checks/{check_id}/labels"))
+  let body = {"labelID": $label_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -911,9 +910,9 @@ export def "checks-labels PostChecksIDLabels" [
 #
 # DELETE /checks/{checkID}/labels/{labelID}
 # operationId: DeleteChecksIDLabelsID
-export def "checks-labels DeleteChecksIDLabelsID" [
-  checkID: string
-  labelID: string
+export def "checks-labels delete" [
+  check_id: string
+  label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -922,12 +921,12 @@ export def "checks-labels DeleteChecksIDLabelsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/checks/($checkID)/labels/($labelID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({check_id: $check_id, label_id: $label_id} | format pattern "/checks/{check_id}/labels/{label_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -938,8 +937,8 @@ export def "checks-labels DeleteChecksIDLabelsID" [
 #
 # GET /checks/{checkID}/query
 # operationId: GetChecksIDQuery
-export def "checks-query GetChecksIDQuery" [
-  checkID: string
+export def "checks-query get" [
+  check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -948,12 +947,12 @@ export def "checks-query GetChecksIDQuery" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<flux: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/checks/($checkID)/query")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/checks/{check_id}/query"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -964,7 +963,7 @@ export def "checks-query GetChecksIDQuery" [
 #
 # GET /dashboards
 # operationId: GetDashboards
-export def "dashboards GetDashboards" [
+export def "dashboards list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -977,17 +976,17 @@ export def "dashboards GetDashboards" [
   --limit: int # default: 20
   --descending: oneof<nothing, bool> # default: false
   --owner: string # A user identifier. Returns only dashboards where this user has the `owner` role.
-  --sortBy: string@sortBy-completer # The column to sort by.
+  --sort-by: string@sort-by-completer # The column to sort by.
   --id: list # A list of dashboard identifiers. Returns only the listed dashboards. If both `id` and `owner` are specified, only `id` is used.
-  --orgID: string # The identifier of the organization.
+  --org-id: string # The identifier of the organization.
   --org: string # The name of the organization.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<dashboards: list<record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "id" $id "multi") (serialize-qp "orgID" $orgID "scalar") (serialize-qp "org" $org "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "id" $id "multi") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "org" $org "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dashboards" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -998,7 +997,7 @@ export def "dashboards GetDashboards" [
 #
 # POST /dashboards
 # operationId: PostDashboards
-export def "dashboards PostDashboards" [
+export def "dashboards create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1007,18 +1006,18 @@ export def "dashboards PostDashboards" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --description: string # The user-facing description of the dashboard.
   name: string # The user-facing name of the dashboard.
-  orgID: string # The ID of the organization that owns the dashboard.
+  org_id: string # The ID of the organization that owns the dashboard.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dashboards")
-  let body = {description: $description, name: $name, orgID: $orgID} | compact
+  let body = {"description": $description, "name": $name, "orgID": $org_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1029,8 +1028,8 @@ export def "dashboards PostDashboards" [
 #
 # DELETE /dashboards/{dashboardID}
 # operationId: DeleteDashboardsID
-export def "dashboards DeleteDashboardsID" [
-  dashboardID: string
+export def "dashboards delete" [
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1039,12 +1038,12 @@ export def "dashboards DeleteDashboardsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1055,8 +1054,8 @@ export def "dashboards DeleteDashboardsID" [
 #
 # GET /dashboards/{dashboardID}
 # operationId: GetDashboardsID
-export def "dashboards GetDashboardsID" [
-  dashboardID: string
+export def "dashboards get" [
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1066,13 +1065,13 @@ export def "dashboards GetDashboardsID" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer # Includes the cell view properties in the response if set to `properties`
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dashboards/($dashboardID)" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}") $qp)
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1084,8 +1083,8 @@ export def "dashboards GetDashboardsID" [
 # PATCH /dashboards/{dashboardID}
 # operationId: PatchDashboardsID
 # --cells shape: {h?: int, id?: string, links?: record, viewID?: string, w?: int, x?: int, y?: int, name?: string, properties?: any}
-export def "dashboards PatchDashboardsID" [
-  dashboardID: string
+export def "dashboards update" [
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1094,7 +1093,7 @@ export def "dashboards PatchDashboardsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --cells: record # shape: {h?: int, id?: string, links?: record, viewID?: string, w?: int, x?: int, y?: int, name?: string, properties?: any}
   --description: string # optional, when provided will replace the description
   --name: string # optional, when provided will replace the name
@@ -1102,10 +1101,10 @@ export def "dashboards PatchDashboardsID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)")
-  let body = {cells: $cells, description: $description, name: $name} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}"))
+  let body = {"cells": $cells, "description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1116,8 +1115,8 @@ export def "dashboards PatchDashboardsID" [
 #
 # POST /dashboards/{dashboardID}/cells
 # operationId: PostDashboardsIDCells
-export def "dashboards-cells PostDashboardsIDCells" [
-  dashboardID: string
+export def "dashboards-cells create" [
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1126,10 +1125,10 @@ export def "dashboards-cells PostDashboardsIDCells" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --h: int # format: int32
   --name: string
-  --usingView: string # Makes a copy of the provided view.
+  --using-view: string # Makes a copy of the provided view.
   --w: int # format: int32
   --x: int # format: int32
   --y: int # format: int32
@@ -1137,10 +1136,10 @@ export def "dashboards-cells PostDashboardsIDCells" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)/cells")
-  let body = {h: $h, name: $name, usingView: $usingView, w: $w, x: $x, y: $y} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}/cells"))
+  let body = {"h": $h, "name": $name, "usingView": $using_view, "w": $w, "x": $x, "y": $y} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1151,8 +1150,8 @@ export def "dashboards-cells PostDashboardsIDCells" [
 #
 # PUT /dashboards/{dashboardID}/cells
 # operationId: PutDashboardsIDCells
-export def "dashboards-cells PutDashboardsIDCells" [
-  dashboardID: string
+export def "dashboards-cells update-by-dashboardID" [
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1161,15 +1160,15 @@ export def "dashboards-cells PutDashboardsIDCells" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)/cells")
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}/cells"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1180,9 +1179,9 @@ export def "dashboards-cells PutDashboardsIDCells" [
 #
 # DELETE /dashboards/{dashboardID}/cells/{cellID}
 # operationId: DeleteDashboardsIDCellsID
-export def "dashboards-cells DeleteDashboardsIDCellsID" [
-  dashboardID: string
-  cellID: string
+export def "dashboards-cells delete" [
+  dashboard_id: string
+  cell_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1191,12 +1190,12 @@ export def "dashboards-cells DeleteDashboardsIDCellsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)/cells/($cellID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, cell_id: $cell_id} | format pattern "/dashboards/{dashboard_id}/cells/{cell_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1207,9 +1206,9 @@ export def "dashboards-cells DeleteDashboardsIDCellsID" [
 #
 # PATCH /dashboards/{dashboardID}/cells/{cellID}
 # operationId: PatchDashboardsIDCellsID
-export def "dashboards-cells PatchDashboardsIDCellsID" [
-  dashboardID: string
-  cellID: string
+export def "dashboards-cells update-by-dashboardID-cellID" [
+  dashboard_id: string
+  cell_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1218,7 +1217,7 @@ export def "dashboards-cells PatchDashboardsIDCellsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --h: int # format: int32
   --w: int # format: int32
   --x: int # format: int32
@@ -1227,10 +1226,10 @@ export def "dashboards-cells PatchDashboardsIDCellsID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)/cells/($cellID)")
-  let body = {h: $h, w: $w, x: $x, y: $y} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, cell_id: $cell_id} | format pattern "/dashboards/{dashboard_id}/cells/{cell_id}"))
+  let body = {"h": $h, "w": $w, "x": $x, "y": $y} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1241,9 +1240,9 @@ export def "dashboards-cells PatchDashboardsIDCellsID" [
 #
 # GET /dashboards/{dashboardID}/cells/{cellID}/view
 # operationId: GetDashboardsIDCellsIDView
-export def "dashboards-cells-view GetDashboardsIDCellsIDView" [
-  dashboardID: string
-  cellID: string
+export def "dashboards-cells-view get" [
+  dashboard_id: string
+  cell_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1252,12 +1251,12 @@ export def "dashboards-cells-view GetDashboardsIDCellsIDView" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<id: string, links: record<self: string>, name: string, properties: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)/cells/($cellID)/view")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, cell_id: $cell_id} | format pattern "/dashboards/{dashboard_id}/cells/{cell_id}/view"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1269,9 +1268,9 @@ export def "dashboards-cells-view GetDashboardsIDCellsIDView" [
 # PATCH /dashboards/{dashboardID}/cells/{cellID}/view
 # operationId: PatchDashboardsIDCellsIDView
 # --links shape: {self?: string}
-export def "dashboards-cells-view PatchDashboardsIDCellsIDView" [
-  dashboardID: string
-  cellID: string
+export def "dashboards-cells-view update" [
+  dashboard_id: string
+  cell_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1280,17 +1279,17 @@ export def "dashboards-cells-view PatchDashboardsIDCellsIDView" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   name: string
   properties: any
 ]: any -> record<id: string, links: record<self: string>, name: string, properties: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)/cells/($cellID)/view")
-  let body = {name: $name, properties: $properties} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, cell_id: $cell_id} | format pattern "/dashboards/{dashboard_id}/cells/{cell_id}/view"))
+  let body = {"name": $name, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1301,8 +1300,8 @@ export def "dashboards-cells-view PatchDashboardsIDCellsIDView" [
 #
 # GET /dashboards/{dashboardID}/labels
 # operationId: GetDashboardsIDLabels
-export def "dashboards-labels GetDashboardsIDLabels" [
-  dashboardID: string
+export def "dashboards-labels get" [
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1311,12 +1310,12 @@ export def "dashboards-labels GetDashboardsIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)/labels")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}/labels"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1327,8 +1326,8 @@ export def "dashboards-labels GetDashboardsIDLabels" [
 #
 # POST /dashboards/{dashboardID}/labels
 # operationId: PostDashboardsIDLabels
-export def "dashboards-labels PostDashboardsIDLabels" [
-  dashboardID: string
+export def "dashboards-labels create" [
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1337,16 +1336,16 @@ export def "dashboards-labels PostDashboardsIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --labelID: string
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --label-id: string
 ]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)/labels")
-  let body = {labelID: $labelID} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}/labels"))
+  let body = {"labelID": $label_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1357,9 +1356,9 @@ export def "dashboards-labels PostDashboardsIDLabels" [
 #
 # DELETE /dashboards/{dashboardID}/labels/{labelID}
 # operationId: DeleteDashboardsIDLabelsID
-export def "dashboards-labels DeleteDashboardsIDLabelsID" [
-  dashboardID: string
-  labelID: string
+export def "dashboards-labels delete" [
+  dashboard_id: string
+  label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1368,12 +1367,12 @@ export def "dashboards-labels DeleteDashboardsIDLabelsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)/labels/($labelID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, label_id: $label_id} | format pattern "/dashboards/{dashboard_id}/labels/{label_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1384,8 +1383,8 @@ export def "dashboards-labels DeleteDashboardsIDLabelsID" [
 #
 # GET /dashboards/{dashboardID}/members
 # operationId: GetDashboardsIDMembers
-export def "dashboards-members GetDashboardsIDMembers" [
-  dashboardID: string
+export def "dashboards-members get" [
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1394,12 +1393,12 @@ export def "dashboards-members GetDashboardsIDMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)/members")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}/members"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1410,8 +1409,8 @@ export def "dashboards-members GetDashboardsIDMembers" [
 #
 # POST /dashboards/{dashboardID}/members
 # operationId: PostDashboardsIDMembers
-export def "dashboards-members PostDashboardsIDMembers" [
-  dashboardID: string
+export def "dashboards-members create" [
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1420,17 +1419,17 @@ export def "dashboards-members PostDashboardsIDMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
 ]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)/members")
-  let body = {id: $id, name: $name} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}/members"))
+  let body = {"id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1441,9 +1440,9 @@ export def "dashboards-members PostDashboardsIDMembers" [
 #
 # DELETE /dashboards/{dashboardID}/members/{userID}
 # operationId: DeleteDashboardsIDMembersID
-export def "dashboards-members DeleteDashboardsIDMembersID" [
-  userID: string
-  dashboardID: string
+export def "dashboards-members delete" [
+  dashboard_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1452,12 +1451,12 @@ export def "dashboards-members DeleteDashboardsIDMembersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)/members/($userID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, user_id: $user_id} | format pattern "/dashboards/{dashboard_id}/members/{user_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1468,8 +1467,8 @@ export def "dashboards-members DeleteDashboardsIDMembersID" [
 #
 # GET /dashboards/{dashboardID}/owners
 # operationId: GetDashboardsIDOwners
-export def "dashboards-owners GetDashboardsIDOwners" [
-  dashboardID: string
+export def "dashboards-owners get" [
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1478,12 +1477,12 @@ export def "dashboards-owners GetDashboardsIDOwners" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)/owners")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}/owners"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1494,8 +1493,8 @@ export def "dashboards-owners GetDashboardsIDOwners" [
 #
 # POST /dashboards/{dashboardID}/owners
 # operationId: PostDashboardsIDOwners
-export def "dashboards-owners PostDashboardsIDOwners" [
-  dashboardID: string
+export def "dashboards-owners create" [
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1504,17 +1503,17 @@ export def "dashboards-owners PostDashboardsIDOwners" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
 ]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)/owners")
-  let body = {id: $id, name: $name} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/dashboards/{dashboard_id}/owners"))
+  let body = {"id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1525,9 +1524,9 @@ export def "dashboards-owners PostDashboardsIDOwners" [
 #
 # DELETE /dashboards/{dashboardID}/owners/{userID}
 # operationId: DeleteDashboardsIDOwnersID
-export def "dashboards-owners DeleteDashboardsIDOwnersID" [
-  userID: string
-  dashboardID: string
+export def "dashboards-owners delete" [
+  dashboard_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1536,12 +1535,12 @@ export def "dashboards-owners DeleteDashboardsIDOwnersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboards/($dashboardID)/owners/($userID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, user_id: $user_id} | format pattern "/dashboards/{dashboard_id}/owners/{user_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1552,7 +1551,7 @@ export def "dashboards-owners DeleteDashboardsIDOwnersID" [
 #
 # GET /dbrps
 # operationId: GetDBRPs
-export def "dbrps GetDBRPs" [
+export def "dbrps list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1561,19 +1560,19 @@ export def "dbrps GetDBRPs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --orgID: string # Specifies the organization ID to filter on
+  --org-id: string # Specifies the organization ID to filter on
   --id: string # Specifies the mapping ID to filter on
-  --bucketID: string # Specifies the bucket ID to filter on
+  --bucket-id: string # Specifies the bucket ID to filter on
   --default: oneof<nothing, bool> # Specifies filtering on default
   --db: string # Specifies the database to filter on
   --rp: string # Specifies the retention policy to filter on
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<content: table<bucketID: string, database: string, default: bool, id: string, links: record, org: string, orgID: string, retention_policy: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "orgID" $orgID "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "bucketID" $bucketID "scalar") (serialize-qp "default" $default "scalar") (serialize-qp "db" $db "scalar") (serialize-qp "rp" $rp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "orgID" $org_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "bucketID" $bucket_id "scalar") (serialize-qp "default" $default "scalar") (serialize-qp "db" $db "scalar") (serialize-qp "rp" $rp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dbrps" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1584,7 +1583,7 @@ export def "dbrps GetDBRPs" [
 #
 # POST /dbrps
 # operationId: PostDBRP
-export def "dbrps PostDBRP" [
+export def "dbrps create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1593,22 +1592,22 @@ export def "dbrps PostDBRP" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --bucketID: string # the bucket ID used as target for the translation.
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --bucket-id: string # the bucket ID used as target for the translation.
   --database: string # InfluxDB v1 database
   --default: oneof<nothing, bool> # Specify if this mapping represents the default retention policy for the database specificed.
   --links: record
   --org: string # the organization that owns this mapping.
-  --orgID: string # the organization ID that owns this mapping.
+  --org-id: string # the organization ID that owns this mapping.
   --retention-policy: string # InfluxDB v1 retention policy
 ]: any -> record<bucketID: string, database: string, default: bool, id: string, links: record<next: string, prev: string, self: string>, org: string, orgID: string, retention_policy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dbrps")
-  let body = {bucketID: $bucketID, database: $database, default: $default, links: $links, org: $org, orgID: $orgID, retention_policy: $retention_policy} | compact
+  let body = {"bucketID": $bucket_id, "database": $database, "default": $default, "links": $links, "org": $org, "orgID": $org_id, "retention_policy": $retention_policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1619,8 +1618,8 @@ export def "dbrps PostDBRP" [
 #
 # DELETE /dbrps/{dbrpID}
 # operationId: DeleteDBRPID
-export def "dbrps DeleteDBRPID" [
-  dbrpID: string
+export def "dbrps delete" [
+  dbrp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1629,14 +1628,14 @@ export def "dbrps DeleteDBRPID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --orgID: string # Specifies the organization ID of the mapping
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --org-id: string # Specifies the organization ID of the mapping
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "orgID" $orgID "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dbrps/($dbrpID)" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({dbrp_id: $dbrp_id} | format pattern "/dbrps/{dbrp_id}") $qp)
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1647,8 +1646,8 @@ export def "dbrps DeleteDBRPID" [
 #
 # GET /dbrps/{dbrpID}
 # operationId: GetDBRPsID
-export def "dbrps GetDBRPsID" [
-  dbrpID: string
+export def "dbrps get" [
+  dbrp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1657,14 +1656,14 @@ export def "dbrps GetDBRPsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --orgID: string # Specifies the organization ID of the mapping
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --org-id: string # Specifies the organization ID of the mapping
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<bucketID: string, database: string, default: bool, id: string, links: record<next: string, prev: string, self: string>, org: string, orgID: string, retention_policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "orgID" $orgID "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dbrps/($dbrpID)" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({dbrp_id: $dbrp_id} | format pattern "/dbrps/{dbrp_id}") $qp)
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1675,8 +1674,8 @@ export def "dbrps GetDBRPsID" [
 #
 # PATCH /dbrps/{dbrpID}
 # operationId: PatchDBRPID
-export def "dbrps PatchDBRPID" [
-  dbrpID: string
+export def "dbrps update" [
+  dbrp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1685,8 +1684,8 @@ export def "dbrps PatchDBRPID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --orgID: string # Specifies the organization ID of the mapping
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --org-id: string # Specifies the organization ID of the mapping
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --database: string # InfluxDB v1 database
   --default: oneof<nothing, bool>
   --links: record
@@ -1695,11 +1694,11 @@ export def "dbrps PatchDBRPID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "orgID" $orgID "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dbrps/($dbrpID)" $qp)
-  let body = {database: $database, default: $default, links: $links, retention_policy: $retention_policy} | compact
+  let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({dbrp_id: $dbrp_id} | format pattern "/dbrps/{dbrp_id}") $qp)
+  let body = {"database": $database, "default": $default, "links": $links, "retention_policy": $retention_policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1710,7 +1709,7 @@ export def "dbrps PatchDBRPID" [
 #
 # POST /delete
 # operationId: PostDelete
-export def "delete PostDelete" [
+export def "delete create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1721,9 +1720,9 @@ export def "delete PostDelete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --org: string # Specifies the organization to delete data from.
   --bucket: string # Specifies the bucket to delete data from.
-  --orgID: string # Specifies the organization ID of the resource.
-  --bucketID: string # Specifies the bucket ID to delete data from.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --org-id: string # Specifies the organization ID of the resource.
+  --bucket-id: string # Specifies the bucket ID to delete data from.
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --predicate: string # InfluxQL-like delete statement (e.g. tag1="value1" and (tag2="value2" and tag3!="value3"))
   start: string # RFC3339Nano (format: date-time)
   stop: string # RFC3339Nano (format: date-time)
@@ -1731,11 +1730,11 @@ export def "delete PostDelete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "bucket" $bucket "scalar") (serialize-qp "orgID" $orgID "scalar") (serialize-qp "bucketID" $bucketID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "bucket" $bucket "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "bucketID" $bucket_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/delete" $qp)
-  let body = {predicate: $predicate, start: $start, stop: $stop} | compact
+  let body = {"predicate": $predicate, "start": $start, "stop": $stop} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1746,7 +1745,7 @@ export def "delete PostDelete" [
 #
 # GET /documents/templates
 # operationId: GetDocumentsTemplates
-export def "documents-templates GetDocumentsTemplates" [
+export def "documents-templates list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1756,14 +1755,14 @@ export def "documents-templates GetDocumentsTemplates" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --org: string # Specifies the name of the organization of the template.
-  --orgID: string # Specifies the organization ID of the template.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --org-id: string # Specifies the organization ID of the template.
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<documents: table<id: string, labels: list, links: record, meta: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "orgID" $orgID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/documents/templates" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1775,7 +1774,7 @@ export def "documents-templates GetDocumentsTemplates" [
 # POST /documents/templates
 # operationId: PostDocumentsTemplates
 # --meta shape: {description?: string, name: string, templateID?: string, type?: string, version: string}
-export def "documents-templates PostDocumentsTemplates" [
+export def "documents-templates create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1784,20 +1783,20 @@ export def "documents-templates PostDocumentsTemplates" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   content: record
   --labels: list # An array of label IDs to be added as labels to the document.
   meta: record # shape: {description?: string, name: string, templateID?: string, type?: string, version: string}
   --org: string # The organization Name. Specify either `orgID` or `org`.
-  --orgID: string # The organization Name. Specify either `orgID` or `org`.
+  --org-id: string # The organization Name. Specify either `orgID` or `org`.
 ]: any -> record<content: record, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<self: string>, meta: record<createdAt: string, description: string, name: string, templateID: string, type: string, updatedAt: string, version: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/documents/templates")
-  let body = {content: $content, labels: $labels, meta: $meta, org: $org, orgID: $orgID} | compact
+  let body = {"content": $content, "labels": $labels, "meta": $meta, "org": $org, "orgID": $org_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1808,8 +1807,8 @@ export def "documents-templates PostDocumentsTemplates" [
 #
 # DELETE /documents/templates/{templateID}
 # operationId: DeleteDocumentsTemplatesID
-export def "documents-templates DeleteDocumentsTemplatesID" [
-  templateID: string
+export def "documents-templates delete" [
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1818,12 +1817,12 @@ export def "documents-templates DeleteDocumentsTemplatesID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/templates/($templateID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/documents/templates/{template_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1834,8 +1833,8 @@ export def "documents-templates DeleteDocumentsTemplatesID" [
 #
 # GET /documents/templates/{templateID}
 # operationId: GetDocumentsTemplatesID
-export def "documents-templates GetDocumentsTemplatesID" [
-  templateID: string
+export def "documents-templates get" [
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1844,12 +1843,12 @@ export def "documents-templates GetDocumentsTemplatesID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<content: record, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<self: string>, meta: record<createdAt: string, description: string, name: string, templateID: string, type: string, updatedAt: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/templates/($templateID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/documents/templates/{template_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1861,8 +1860,8 @@ export def "documents-templates GetDocumentsTemplatesID" [
 # PUT /documents/templates/{templateID}
 # operationId: PutDocumentsTemplatesID
 # --meta shape: {description?: string, name: string, templateID?: string, type?: string, version: string}
-export def "documents-templates PutDocumentsTemplatesID" [
-  templateID: string
+export def "documents-templates update" [
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1871,17 +1870,17 @@ export def "documents-templates PutDocumentsTemplatesID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --content: record
   --meta: record # shape: {description?: string, name: string, templateID?: string, type?: string, version: string}
 ]: any -> record<content: record, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<self: string>, meta: record<createdAt: string, description: string, name: string, templateID: string, type: string, updatedAt: string, version: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/templates/($templateID)")
-  let body = {content: $content, meta: $meta} | compact
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/documents/templates/{template_id}"))
+  let body = {"content": $content, "meta": $meta} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1892,8 +1891,8 @@ export def "documents-templates PutDocumentsTemplatesID" [
 #
 # GET /documents/templates/{templateID}/labels
 # operationId: GetDocumentsTemplatesIDLabels
-export def "documents-templates-labels GetDocumentsTemplatesIDLabels" [
-  templateID: string
+export def "documents-templates-labels get" [
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1902,12 +1901,12 @@ export def "documents-templates-labels GetDocumentsTemplatesIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/templates/($templateID)/labels")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/documents/templates/{template_id}/labels"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1918,8 +1917,8 @@ export def "documents-templates-labels GetDocumentsTemplatesIDLabels" [
 #
 # POST /documents/templates/{templateID}/labels
 # operationId: PostDocumentsTemplatesIDLabels
-export def "documents-templates-labels PostDocumentsTemplatesIDLabels" [
-  templateID: string
+export def "documents-templates-labels create" [
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1928,16 +1927,16 @@ export def "documents-templates-labels PostDocumentsTemplatesIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --labelID: string
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --label-id: string
 ]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/templates/($templateID)/labels")
-  let body = {labelID: $labelID} | compact
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/documents/templates/{template_id}/labels"))
+  let body = {"labelID": $label_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1948,9 +1947,9 @@ export def "documents-templates-labels PostDocumentsTemplatesIDLabels" [
 #
 # DELETE /documents/templates/{templateID}/labels/{labelID}
 # operationId: DeleteDocumentsTemplatesIDLabelsID
-export def "documents-templates-labels DeleteDocumentsTemplatesIDLabelsID" [
-  templateID: string
-  labelID: string
+export def "documents-templates-labels delete" [
+  template_id: string
+  label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1959,12 +1958,12 @@ export def "documents-templates-labels DeleteDocumentsTemplatesIDLabelsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/templates/($templateID)/labels/($labelID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({template_id: $template_id, label_id: $label_id} | format pattern "/documents/templates/{template_id}/labels/{label_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1975,7 +1974,7 @@ export def "documents-templates-labels DeleteDocumentsTemplatesIDLabelsID" [
 #
 # GET /flags
 # operationId: GetFlags
-export def "flags GetFlags" [
+export def "flags get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1984,12 +1983,12 @@ export def "flags GetFlags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/flags")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2000,7 +1999,7 @@ export def "flags GetFlags" [
 #
 # GET /health
 # operationId: GetHealth
-export def "health GetHealth" [
+export def "health get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2009,12 +2008,12 @@ export def "health GetHealth" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<checks: list<any>, commit: string, message: string, name: string, status: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2025,7 +2024,7 @@ export def "health GetHealth" [
 #
 # GET /labels
 # operationId: GetLabels
-export def "labels GetLabels" [
+export def "labels list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2034,14 +2033,14 @@ export def "labels GetLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --orgID: string # The organization ID.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --org-id: string # The organization ID.
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "orgID" $orgID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/labels" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2052,7 +2051,7 @@ export def "labels GetLabels" [
 #
 # POST /labels
 # operationId: PostLabels
-export def "labels PostLabels" [
+export def "labels create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2062,14 +2061,14 @@ export def "labels PostLabels" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string
-  orgID: string
+  org_id: string
   --properties: record # Key/Value pairs associated with this label. Keys can be removed by sending an update with an empty value. (e.g. {color: ffb3b3, description: this is a description})
 ]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/labels")
-  let body = {name: $name, orgID: $orgID, properties: $properties} | compact
+  let body = {"name": $name, "orgID": $org_id, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2080,8 +2079,8 @@ export def "labels PostLabels" [
 #
 # DELETE /labels/{labelID}
 # operationId: DeleteLabelsID
-export def "labels DeleteLabelsID" [
-  labelID: string
+export def "labels delete" [
+  label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2090,12 +2089,12 @@ export def "labels DeleteLabelsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/labels/($labelID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({label_id: $label_id} | format pattern "/labels/{label_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2106,8 +2105,8 @@ export def "labels DeleteLabelsID" [
 #
 # GET /labels/{labelID}
 # operationId: GetLabelsID
-export def "labels GetLabelsID" [
-  labelID: string
+export def "labels get" [
+  label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2116,12 +2115,12 @@ export def "labels GetLabelsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/labels/($labelID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({label_id: $label_id} | format pattern "/labels/{label_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2132,8 +2131,8 @@ export def "labels GetLabelsID" [
 #
 # PATCH /labels/{labelID}
 # operationId: PatchLabelsID
-export def "labels PatchLabelsID" [
-  labelID: string
+export def "labels update" [
+  label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2142,17 +2141,17 @@ export def "labels PatchLabelsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --name: string
   --properties: record # Key/Value pairs associated with this label. Keys can be removed by sending an update with an empty value. (e.g. {color: ffb3b3, description: this is a description})
 ]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/labels/($labelID)")
-  let body = {name: $name, properties: $properties} | compact
+  let full_url = (build-url $base ({label_id: $label_id} | format pattern "/labels/{label_id}"))
+  let body = {"name": $name, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2163,7 +2162,7 @@ export def "labels PatchLabelsID" [
 #
 # GET /me
 # operationId: GetMe
-export def "me GetMe" [
+export def "me get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2172,12 +2171,12 @@ export def "me GetMe" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2188,7 +2187,7 @@ export def "me GetMe" [
 #
 # PUT /me/password
 # operationId: PutMePassword
-export def "me-password PutMePassword" [
+export def "me-password update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2197,16 +2196,16 @@ export def "me-password PutMePassword" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   password: string
 ]: any -> record<code: string, err: string, message: string, op: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/password")
-  let body = {password: $password} | compact
+  let body = {"password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2217,7 +2216,7 @@ export def "me-password PutMePassword" [
 #
 # GET /notificationEndpoints
 # operationId: GetNotificationEndpoints
-export def "notification-endpoints GetNotificationEndpoints" [
+export def "notification-endpoints list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2228,14 +2227,14 @@ export def "notification-endpoints GetNotificationEndpoints" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int
   --limit: int # default: 20
-  --orgID: string # Only show notification endpoints that belong to specific organization ID.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --org-id: string # Only show notification endpoints that belong to specific organization ID.
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<next: string, prev: string, self: string>, notificationEndpoints: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orgID" $orgID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notificationEndpoints" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2246,7 +2245,7 @@ export def "notification-endpoints GetNotificationEndpoints" [
 #
 # POST /notificationEndpoints
 # operationId: CreateNotificationEndpoint
-export def "notification-endpoints CreateNotificationEndpoint" [
+export def "notification-endpoints create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2271,8 +2270,8 @@ export def "notification-endpoints CreateNotificationEndpoint" [
 #
 # DELETE /notificationEndpoints/{endpointID}
 # operationId: DeleteNotificationEndpointsID
-export def "notification-endpoints DeleteNotificationEndpointsID" [
-  endpointID: string
+export def "notification-endpoints delete" [
+  endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2281,12 +2280,12 @@ export def "notification-endpoints DeleteNotificationEndpointsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notificationEndpoints/($endpointID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({endpoint_id: $endpoint_id} | format pattern "/notificationEndpoints/{endpoint_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2297,8 +2296,8 @@ export def "notification-endpoints DeleteNotificationEndpointsID" [
 #
 # GET /notificationEndpoints/{endpointID}
 # operationId: GetNotificationEndpointsID
-export def "notification-endpoints GetNotificationEndpointsID" [
-  endpointID: string
+export def "notification-endpoints get" [
+  endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2307,12 +2306,12 @@ export def "notification-endpoints GetNotificationEndpointsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notificationEndpoints/($endpointID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({endpoint_id: $endpoint_id} | format pattern "/notificationEndpoints/{endpoint_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2323,8 +2322,8 @@ export def "notification-endpoints GetNotificationEndpointsID" [
 #
 # PATCH /notificationEndpoints/{endpointID}
 # operationId: PatchNotificationEndpointsID
-export def "notification-endpoints PatchNotificationEndpointsID" [
-  endpointID: string
+export def "notification-endpoints update-by-endpointID" [
+  endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2333,7 +2332,7 @@ export def "notification-endpoints PatchNotificationEndpointsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --description: string
   --name: string
   --status: string@status-completer
@@ -2341,10 +2340,10 @@ export def "notification-endpoints PatchNotificationEndpointsID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notificationEndpoints/($endpointID)")
-  let body = {description: $description, name: $name, status: $status} | compact
+  let full_url = (build-url $base ({endpoint_id: $endpoint_id} | format pattern "/notificationEndpoints/{endpoint_id}"))
+  let body = {"description": $description, "name": $name, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2355,8 +2354,8 @@ export def "notification-endpoints PatchNotificationEndpointsID" [
 #
 # PUT /notificationEndpoints/{endpointID}
 # operationId: PutNotificationEndpointsID
-export def "notification-endpoints PutNotificationEndpointsID" [
-  endpointID: string
+export def "notification-endpoints update-by-endpointID-1" [
+  endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2365,15 +2364,15 @@ export def "notification-endpoints PutNotificationEndpointsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notificationEndpoints/($endpointID)")
+  let full_url = (build-url $base ({endpoint_id: $endpoint_id} | format pattern "/notificationEndpoints/{endpoint_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2384,8 +2383,8 @@ export def "notification-endpoints PutNotificationEndpointsID" [
 #
 # GET /notificationEndpoints/{endpointID}/labels
 # operationId: GetNotificationEndpointsIDLabels
-export def "notification-endpoints-labels GetNotificationEndpointsIDLabels" [
-  endpointID: string
+export def "notification-endpoints-labels get" [
+  endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2394,12 +2393,12 @@ export def "notification-endpoints-labels GetNotificationEndpointsIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notificationEndpoints/($endpointID)/labels")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({endpoint_id: $endpoint_id} | format pattern "/notificationEndpoints/{endpoint_id}/labels"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2410,8 +2409,8 @@ export def "notification-endpoints-labels GetNotificationEndpointsIDLabels" [
 #
 # POST /notificationEndpoints/{endpointID}/labels
 # operationId: PostNotificationEndpointIDLabels
-export def "notification-endpoints-labels PostNotificationEndpointIDLabels" [
-  endpointID: string
+export def "notification-endpoints-labels create" [
+  endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2420,16 +2419,16 @@ export def "notification-endpoints-labels PostNotificationEndpointIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --labelID: string
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --label-id: string
 ]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notificationEndpoints/($endpointID)/labels")
-  let body = {labelID: $labelID} | compact
+  let full_url = (build-url $base ({endpoint_id: $endpoint_id} | format pattern "/notificationEndpoints/{endpoint_id}/labels"))
+  let body = {"labelID": $label_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2440,9 +2439,9 @@ export def "notification-endpoints-labels PostNotificationEndpointIDLabels" [
 #
 # DELETE /notificationEndpoints/{endpointID}/labels/{labelID}
 # operationId: DeleteNotificationEndpointsIDLabelsID
-export def "notification-endpoints-labels DeleteNotificationEndpointsIDLabelsID" [
-  endpointID: string
-  labelID: string
+export def "notification-endpoints-labels delete" [
+  endpoint_id: string
+  label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2451,12 +2450,12 @@ export def "notification-endpoints-labels DeleteNotificationEndpointsIDLabelsID"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notificationEndpoints/($endpointID)/labels/($labelID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({endpoint_id: $endpoint_id, label_id: $label_id} | format pattern "/notificationEndpoints/{endpoint_id}/labels/{label_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2467,7 +2466,7 @@ export def "notification-endpoints-labels DeleteNotificationEndpointsIDLabelsID"
 #
 # GET /notificationRules
 # operationId: GetNotificationRules
-export def "notification-rules GetNotificationRules" [
+export def "notification-rules list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2478,16 +2477,16 @@ export def "notification-rules GetNotificationRules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int
   --limit: int # default: 20
-  --orgID: string # Only show notification rules that belong to a specific organization ID.
-  --checkID: string # Only show notifications that belong to the specific check ID.
+  --org-id: string # Only show notification rules that belong to a specific organization ID.
+  --check-id: string # Only show notifications that belong to the specific check ID.
   --tag: string # Only return notification rules that "would match" statuses which contain the tag key value pairs provided. (e.g. env:prod)
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<next: string, prev: string, self: string>, notificationRules: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orgID" $orgID "scalar") (serialize-qp "checkID" $checkID "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "checkID" $check_id "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notificationRules" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2498,7 +2497,7 @@ export def "notification-rules GetNotificationRules" [
 #
 # POST /notificationRules
 # operationId: CreateNotificationRule
-export def "notification-rules CreateNotificationRule" [
+export def "notification-rules create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2523,8 +2522,8 @@ export def "notification-rules CreateNotificationRule" [
 #
 # DELETE /notificationRules/{ruleID}
 # operationId: DeleteNotificationRulesID
-export def "notification-rules DeleteNotificationRulesID" [
-  ruleID: string
+export def "notification-rules delete" [
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2533,12 +2532,12 @@ export def "notification-rules DeleteNotificationRulesID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notificationRules/($ruleID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/notificationRules/{rule_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2549,8 +2548,8 @@ export def "notification-rules DeleteNotificationRulesID" [
 #
 # GET /notificationRules/{ruleID}
 # operationId: GetNotificationRulesID
-export def "notification-rules GetNotificationRulesID" [
-  ruleID: string
+export def "notification-rules get" [
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2559,12 +2558,12 @@ export def "notification-rules GetNotificationRulesID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notificationRules/($ruleID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/notificationRules/{rule_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2575,8 +2574,8 @@ export def "notification-rules GetNotificationRulesID" [
 #
 # PATCH /notificationRules/{ruleID}
 # operationId: PatchNotificationRulesID
-export def "notification-rules PatchNotificationRulesID" [
-  ruleID: string
+export def "notification-rules update-by-ruleID" [
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2585,7 +2584,7 @@ export def "notification-rules PatchNotificationRulesID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --description: string
   --name: string
   --status: string@status-completer
@@ -2593,10 +2592,10 @@ export def "notification-rules PatchNotificationRulesID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notificationRules/($ruleID)")
-  let body = {description: $description, name: $name, status: $status} | compact
+  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/notificationRules/{rule_id}"))
+  let body = {"description": $description, "name": $name, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2607,8 +2606,8 @@ export def "notification-rules PatchNotificationRulesID" [
 #
 # PUT /notificationRules/{ruleID}
 # operationId: PutNotificationRulesID
-export def "notification-rules PutNotificationRulesID" [
-  ruleID: string
+export def "notification-rules update-by-ruleID-1" [
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2617,15 +2616,15 @@ export def "notification-rules PutNotificationRulesID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notificationRules/($ruleID)")
+  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/notificationRules/{rule_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2636,8 +2635,8 @@ export def "notification-rules PutNotificationRulesID" [
 #
 # GET /notificationRules/{ruleID}/labels
 # operationId: GetNotificationRulesIDLabels
-export def "notification-rules-labels GetNotificationRulesIDLabels" [
-  ruleID: string
+export def "notification-rules-labels get" [
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2646,12 +2645,12 @@ export def "notification-rules-labels GetNotificationRulesIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notificationRules/($ruleID)/labels")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/notificationRules/{rule_id}/labels"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2662,8 +2661,8 @@ export def "notification-rules-labels GetNotificationRulesIDLabels" [
 #
 # POST /notificationRules/{ruleID}/labels
 # operationId: PostNotificationRuleIDLabels
-export def "notification-rules-labels PostNotificationRuleIDLabels" [
-  ruleID: string
+export def "notification-rules-labels create" [
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2672,16 +2671,16 @@ export def "notification-rules-labels PostNotificationRuleIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --labelID: string
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --label-id: string
 ]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notificationRules/($ruleID)/labels")
-  let body = {labelID: $labelID} | compact
+  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/notificationRules/{rule_id}/labels"))
+  let body = {"labelID": $label_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2692,9 +2691,9 @@ export def "notification-rules-labels PostNotificationRuleIDLabels" [
 #
 # DELETE /notificationRules/{ruleID}/labels/{labelID}
 # operationId: DeleteNotificationRulesIDLabelsID
-export def "notification-rules-labels DeleteNotificationRulesIDLabelsID" [
-  ruleID: string
-  labelID: string
+export def "notification-rules-labels delete" [
+  rule_id: string
+  label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2703,12 +2702,12 @@ export def "notification-rules-labels DeleteNotificationRulesIDLabelsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notificationRules/($ruleID)/labels/($labelID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({rule_id: $rule_id, label_id: $label_id} | format pattern "/notificationRules/{rule_id}/labels/{label_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2719,8 +2718,8 @@ export def "notification-rules-labels DeleteNotificationRulesIDLabelsID" [
 #
 # GET /notificationRules/{ruleID}/query
 # operationId: GetNotificationRulesIDQuery
-export def "notification-rules-query GetNotificationRulesIDQuery" [
-  ruleID: string
+export def "notification-rules-query get" [
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2729,12 +2728,12 @@ export def "notification-rules-query GetNotificationRulesIDQuery" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<flux: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notificationRules/($ruleID)/query")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/notificationRules/{rule_id}/query"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2745,7 +2744,7 @@ export def "notification-rules-query GetNotificationRulesIDQuery" [
 #
 # GET /orgs
 # operationId: GetOrgs
-export def "orgs GetOrgs" [
+export def "orgs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2758,15 +2757,15 @@ export def "orgs GetOrgs" [
   --limit: int # default: 20
   --descending: oneof<nothing, bool> # default: false
   --org: string # Filter organizations to a specific organization name.
-  --orgID: string # Filter organizations to a specific organization ID.
-  --userID: string # Filter organizations to a specific user ID.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --org-id: string # Filter organizations to a specific organization ID.
+  --user-id: string # Filter organizations to a specific user ID.
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<next: string, prev: string, self: string>, orgs: table<createdAt: string, description: string, id: string, links: record, name: string, status: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "org" $org "scalar") (serialize-qp "orgID" $orgID "scalar") (serialize-qp "userID" $userID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "userID" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orgs" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2777,7 +2776,7 @@ export def "orgs GetOrgs" [
 #
 # POST /orgs
 # operationId: PostOrgs
-export def "orgs PostOrgs" [
+export def "orgs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2786,7 +2785,7 @@ export def "orgs PostOrgs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --description: string
   name: string
 ]: any -> record<createdAt: string, description: string, id: string, links: record<buckets: string, dashboards: string, labels: string, members: string, owners: string, secrets: string, self: string, tasks: string>, name: string, status: string, updatedAt: string> {
@@ -2794,9 +2793,9 @@ export def "orgs PostOrgs" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orgs")
-  let body = {description: $description, name: $name} | compact
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2807,8 +2806,8 @@ export def "orgs PostOrgs" [
 #
 # DELETE /orgs/{orgID}
 # operationId: DeleteOrgsID
-export def "orgs DeleteOrgsID" [
-  orgID: string
+export def "orgs delete" [
+  org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2817,12 +2816,12 @@ export def "orgs DeleteOrgsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($orgID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2833,8 +2832,8 @@ export def "orgs DeleteOrgsID" [
 #
 # GET /orgs/{orgID}
 # operationId: GetOrgsID
-export def "orgs GetOrgsID" [
-  orgID: string
+export def "orgs get" [
+  org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2843,12 +2842,12 @@ export def "orgs GetOrgsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<createdAt: string, description: string, id: string, links: record<buckets: string, dashboards: string, labels: string, members: string, owners: string, secrets: string, self: string, tasks: string>, name: string, status: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($orgID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2859,8 +2858,8 @@ export def "orgs GetOrgsID" [
 #
 # PATCH /orgs/{orgID}
 # operationId: PatchOrgsID
-export def "orgs PatchOrgsID" [
-  orgID: string
+export def "orgs update" [
+  org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2869,17 +2868,17 @@ export def "orgs PatchOrgsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --description: string # New description to set on the organization
   --name: string # New name to set on the organization
 ]: any -> record<createdAt: string, description: string, id: string, links: record<buckets: string, dashboards: string, labels: string, members: string, owners: string, secrets: string, self: string, tasks: string>, name: string, status: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($orgID)")
-  let body = {description: $description, name: $name} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}"))
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2890,8 +2889,8 @@ export def "orgs PatchOrgsID" [
 #
 # GET /orgs/{orgID}/members
 # operationId: GetOrgsIDMembers
-export def "orgs-members GetOrgsIDMembers" [
-  orgID: string
+export def "orgs-members get" [
+  org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2900,12 +2899,12 @@ export def "orgs-members GetOrgsIDMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($orgID)/members")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}/members"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2916,8 +2915,8 @@ export def "orgs-members GetOrgsIDMembers" [
 #
 # POST /orgs/{orgID}/members
 # operationId: PostOrgsIDMembers
-export def "orgs-members PostOrgsIDMembers" [
-  orgID: string
+export def "orgs-members create" [
+  org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2926,17 +2925,17 @@ export def "orgs-members PostOrgsIDMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
 ]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($orgID)/members")
-  let body = {id: $id, name: $name} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}/members"))
+  let body = {"id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2947,9 +2946,9 @@ export def "orgs-members PostOrgsIDMembers" [
 #
 # DELETE /orgs/{orgID}/members/{userID}
 # operationId: DeleteOrgsIDMembersID
-export def "orgs-members DeleteOrgsIDMembersID" [
-  userID: string
-  orgID: string
+export def "orgs-members delete" [
+  org_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2958,12 +2957,12 @@ export def "orgs-members DeleteOrgsIDMembersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($orgID)/members/($userID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({org_id: $org_id, user_id: $user_id} | format pattern "/orgs/{org_id}/members/{user_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2974,8 +2973,8 @@ export def "orgs-members DeleteOrgsIDMembersID" [
 #
 # GET /orgs/{orgID}/owners
 # operationId: GetOrgsIDOwners
-export def "orgs-owners GetOrgsIDOwners" [
-  orgID: string
+export def "orgs-owners get" [
+  org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2984,12 +2983,12 @@ export def "orgs-owners GetOrgsIDOwners" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($orgID)/owners")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}/owners"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3000,8 +2999,8 @@ export def "orgs-owners GetOrgsIDOwners" [
 #
 # POST /orgs/{orgID}/owners
 # operationId: PostOrgsIDOwners
-export def "orgs-owners PostOrgsIDOwners" [
-  orgID: string
+export def "orgs-owners create" [
+  org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3010,17 +3009,17 @@ export def "orgs-owners PostOrgsIDOwners" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
 ]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($orgID)/owners")
-  let body = {id: $id, name: $name} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}/owners"))
+  let body = {"id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3031,9 +3030,9 @@ export def "orgs-owners PostOrgsIDOwners" [
 #
 # DELETE /orgs/{orgID}/owners/{userID}
 # operationId: DeleteOrgsIDOwnersID
-export def "orgs-owners DeleteOrgsIDOwnersID" [
-  userID: string
-  orgID: string
+export def "orgs-owners delete" [
+  org_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3042,12 +3041,12 @@ export def "orgs-owners DeleteOrgsIDOwnersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($orgID)/owners/($userID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({org_id: $org_id, user_id: $user_id} | format pattern "/orgs/{org_id}/owners/{user_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3058,8 +3057,8 @@ export def "orgs-owners DeleteOrgsIDOwnersID" [
 #
 # GET /orgs/{orgID}/secrets
 # operationId: GetOrgsIDSecrets
-export def "orgs-secrets GetOrgsIDSecrets" [
-  orgID: string
+export def "orgs-secrets get" [
+  org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3068,12 +3067,12 @@ export def "orgs-secrets GetOrgsIDSecrets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<secrets: list<string>, links: record<org: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($orgID)/secrets")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}/secrets"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3084,8 +3083,8 @@ export def "orgs-secrets GetOrgsIDSecrets" [
 #
 # PATCH /orgs/{orgID}/secrets
 # operationId: PatchOrgsIDSecrets
-export def "orgs-secrets PatchOrgsIDSecrets" [
-  orgID: string
+export def "orgs-secrets update" [
+  org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3094,15 +3093,15 @@ export def "orgs-secrets PatchOrgsIDSecrets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --body: record
 ]: any -> record<code: string, err: string, message: string, op: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($orgID)/secrets")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}/secrets"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3113,8 +3112,8 @@ export def "orgs-secrets PatchOrgsIDSecrets" [
 #
 # POST /orgs/{orgID}/secrets/delete
 # operationId: PostOrgsIDSecrets
-export def "orgs-secrets-delete PostOrgsIDSecrets" [
-  orgID: string
+export def "orgs-secrets-delete create" [
+  org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3123,16 +3122,16 @@ export def "orgs-secrets-delete PostOrgsIDSecrets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --secrets: list
 ]: any -> record<code: string, err: string, message: string, op: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($orgID)/secrets/delete")
-  let body = {secrets: $secrets} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/orgs/{org_id}/secrets/delete"))
+  let body = {"secrets": $secrets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3145,7 +3144,7 @@ export def "orgs-secrets-delete PostOrgsIDSecrets" [
 # operationId: PostQuery
 # --dialect shape: {annotations?: list, commentPrefix?: string, dateTimeFormat?: "RFC3339"|"RFC3339Nano", delimiter?: string, header?: bool}
 # --extern shape: {body?: list, imports?: list, name?: string, package?: record, type?: string}
-export def "query PostQuery" [
+export def "query create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3156,10 +3155,10 @@ export def "query PostQuery" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --org: string # Specifies the name of the organization executing the query. Takes either the ID or Name interchangeably. If both `orgID` and `org` are specified, `org` takes precedence.
-  --orgID: string # Specifies the ID of the organization executing the query. If both `orgID` and `org` are specified, `org` takes precedence.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --Accept-Encoding: string@Accept-Encoding-completer # The Accept-Encoding request HTTP header advertises which content encoding, usually a compression algorithm, the client is able to understand.
-  --Content-Type: string@Content-Type-completer
+  --org-id: string # Specifies the ID of the organization executing the query. If both `orgID` and `org` are specified, `org` takes precedence.
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --accept-encoding: string@accept-encoding-completer # The Accept-Encoding request HTTP header advertises which content encoding, usually a compression algorithm, the client is able to understand.
+  --content-type: string@content-type-completer
   --dialect: record # Dialect are options to change the default CSV output format; https://www.w3.org/TR/2015/REC-tabular-metadata-20151217/#dialect-descriptions — shape: {annotations?: list, commentPrefix?: string, dateTimeFormat?: "RFC3339"|"RFC3339Nano", delimiter?: string, header?: bool}
   --extern: record # Represents a source from a single file — shape: {body?: list, imports?: list, name?: string, package?: record, type?: string}
   --now: string # Specifies the time that should be reported as "now" in the query. Default is the server's now time. (format: date-time)
@@ -3171,11 +3170,11 @@ export def "query PostQuery" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "orgID" $orgID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/query" $qp)
-  let body = {dialect: $dialect, extern: $extern, now: $now, params: $params, query: $query, type: $type, bucket: $bucket} | compact
+  let body = {"dialect": $dialect, "extern": $extern, "now": $now, "params": $params, "query": $query, "type": $type, "bucket": $bucket} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span, "Accept-Encoding": $Accept_Encoding, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Accept-Encoding": $accept_encoding, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/vnd.influx.arrow")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3188,7 +3187,7 @@ export def "query PostQuery" [
 # operationId: PostQueryAnalyze
 # --dialect shape: {annotations?: list, commentPrefix?: string, dateTimeFormat?: "RFC3339"|"RFC3339Nano", delimiter?: string, header?: bool}
 # --extern shape: {body?: list, imports?: list, name?: string, package?: record, type?: string}
-export def "query-analyze PostQueryAnalyze" [
+export def "query-analyze create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3197,8 +3196,8 @@ export def "query-analyze PostQueryAnalyze" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --Content-Type: string@Content-Type-completer-1
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --content-type: string@content-type-completer-1
   --dialect: record # Dialect are options to change the default CSV output format; https://www.w3.org/TR/2015/REC-tabular-metadata-20151217/#dialect-descriptions — shape: {annotations?: list, commentPrefix?: string, dateTimeFormat?: "RFC3339"|"RFC3339Nano", delimiter?: string, header?: bool}
   --extern: record # Represents a source from a single file — shape: {body?: list, imports?: list, name?: string, package?: record, type?: string}
   --now: string # Specifies the time that should be reported as "now" in the query. Default is the server's now time. (format: date-time)
@@ -3210,9 +3209,9 @@ export def "query-analyze PostQueryAnalyze" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/query/analyze")
-  let body = {dialect: $dialect, extern: $extern, now: $now, params: $params, query: $query, type: $type} | compact
+  let body = {"dialect": $dialect, "extern": $extern, "now": $now, "params": $params, "query": $query, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3223,7 +3222,7 @@ export def "query-analyze PostQueryAnalyze" [
 #
 # POST /query/ast
 # operationId: PostQueryAst
-export def "query-ast PostQueryAst" [
+export def "query-ast create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3232,17 +3231,17 @@ export def "query-ast PostQueryAst" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --Content-Type: string@Content-Type-completer-1
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --content-type: string@content-type-completer-1
   query: string # Flux query script to be analyzed
 ]: any -> record<ast: record<files: list<record>, package: string, path: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/query/ast")
-  let body = {query: $query} | compact
+  let body = {"query": $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3253,7 +3252,7 @@ export def "query-ast PostQueryAst" [
 #
 # GET /query/suggestions
 # operationId: GetQuerySuggestions
-export def "query-suggestions GetQuerySuggestions" [
+export def "query-suggestions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3262,12 +3261,12 @@ export def "query-suggestions GetQuerySuggestions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<funcs: table<name: string, params: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/query/suggestions")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3278,7 +3277,7 @@ export def "query-suggestions GetQuerySuggestions" [
 #
 # GET /query/suggestions/{name}
 # operationId: GetQuerySuggestionsName
-export def "query-suggestions GetQuerySuggestionsName" [
+export def "query-suggestions get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3288,12 +3287,12 @@ export def "query-suggestions GetQuerySuggestionsName" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<name: string, params: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/query/suggestions/($name)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({name: $name} | format pattern "/query/suggestions/{name}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3304,7 +3303,7 @@ export def "query-suggestions GetQuerySuggestionsName" [
 #
 # GET /ready
 # operationId: GetReady
-export def "ready GetReady" [
+export def "ready get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3313,12 +3312,12 @@ export def "ready GetReady" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<started: string, status: string, up: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ready")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3329,7 +3328,7 @@ export def "ready GetReady" [
 #
 # GET /scrapers
 # operationId: GetScrapers
-export def "scrapers GetScrapers" [
+export def "scrapers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3340,15 +3339,15 @@ export def "scrapers GetScrapers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Specifies the name of the scraper target.
   --id: list # List of scraper target IDs to return. If both `id` and `owner` are specified, only `id` is used.
-  --orgID: string # Specifies the organization ID of the scraper target.
+  --org-id: string # Specifies the organization ID of the scraper target.
   --org: string # Specifies the organization name of the scraper target.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<configurations: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "id" $id "multi") (serialize-qp "orgID" $orgID "scalar") (serialize-qp "org" $org "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "id" $id "multi") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "org" $org "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/scrapers" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3359,7 +3358,7 @@ export def "scrapers GetScrapers" [
 #
 # POST /scrapers
 # operationId: PostScrapers
-export def "scrapers PostScrapers" [
+export def "scrapers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3368,11 +3367,11 @@ export def "scrapers PostScrapers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --allowInsecure: oneof<nothing, bool> # Skip TLS verification on endpoint. (default: false)
-  --bucketID: string # The ID of the bucket to write to.
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --allow-insecure: oneof<nothing, bool> # Skip TLS verification on endpoint. (default: false)
+  --bucket-id: string # The ID of the bucket to write to.
   --name: string # The name of the scraper target.
-  --orgID: string # The organization ID.
+  --org-id: string # The organization ID.
   --type: string@type-completer-1 # The type of the metrics to be parsed.
   --body-url: string # The URL of the metrics endpoint. (e.g. http://localhost:9090/metrics)
 ]: any -> record {
@@ -3380,9 +3379,9 @@ export def "scrapers PostScrapers" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/scrapers")
-  let body = {allowInsecure: $allowInsecure, bucketID: $bucketID, name: $name, orgID: $orgID, type: $type, url: $body_url} | compact
+  let body = {"allowInsecure": $allow_insecure, "bucketID": $bucket_id, "name": $name, "orgID": $org_id, "type": $type, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3393,8 +3392,8 @@ export def "scrapers PostScrapers" [
 #
 # DELETE /scrapers/{scraperTargetID}
 # operationId: DeleteScrapersID
-export def "scrapers DeleteScrapersID" [
-  scraperTargetID: string
+export def "scrapers delete" [
+  scraper_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3403,12 +3402,12 @@ export def "scrapers DeleteScrapersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scrapers/($scraperTargetID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3419,8 +3418,8 @@ export def "scrapers DeleteScrapersID" [
 #
 # GET /scrapers/{scraperTargetID}
 # operationId: GetScrapersID
-export def "scrapers GetScrapersID" [
-  scraperTargetID: string
+export def "scrapers get" [
+  scraper_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3429,12 +3428,12 @@ export def "scrapers GetScrapersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scrapers/($scraperTargetID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3445,8 +3444,8 @@ export def "scrapers GetScrapersID" [
 #
 # PATCH /scrapers/{scraperTargetID}
 # operationId: PatchScrapersID
-export def "scrapers PatchScrapersID" [
-  scraperTargetID: string
+export def "scrapers update" [
+  scraper_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3455,21 +3454,21 @@ export def "scrapers PatchScrapersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --allowInsecure: oneof<nothing, bool> # Skip TLS verification on endpoint. (default: false)
-  --bucketID: string # The ID of the bucket to write to.
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --allow-insecure: oneof<nothing, bool> # Skip TLS verification on endpoint. (default: false)
+  --bucket-id: string # The ID of the bucket to write to.
   --name: string # The name of the scraper target.
-  --orgID: string # The organization ID.
+  --org-id: string # The organization ID.
   --type: string@type-completer-1 # The type of the metrics to be parsed.
   --body-url: string # The URL of the metrics endpoint. (e.g. http://localhost:9090/metrics)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scrapers/($scraperTargetID)")
-  let body = {allowInsecure: $allowInsecure, bucketID: $bucketID, name: $name, orgID: $orgID, type: $type, url: $body_url} | compact
+  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}"))
+  let body = {"allowInsecure": $allow_insecure, "bucketID": $bucket_id, "name": $name, "orgID": $org_id, "type": $type, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3480,8 +3479,8 @@ export def "scrapers PatchScrapersID" [
 #
 # GET /scrapers/{scraperTargetID}/labels
 # operationId: GetScrapersIDLabels
-export def "scrapers-labels GetScrapersIDLabels" [
-  scraperTargetID: string
+export def "scrapers-labels get" [
+  scraper_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3490,12 +3489,12 @@ export def "scrapers-labels GetScrapersIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scrapers/($scraperTargetID)/labels")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}/labels"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3506,8 +3505,8 @@ export def "scrapers-labels GetScrapersIDLabels" [
 #
 # POST /scrapers/{scraperTargetID}/labels
 # operationId: PostScrapersIDLabels
-export def "scrapers-labels PostScrapersIDLabels" [
-  scraperTargetID: string
+export def "scrapers-labels create" [
+  scraper_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3516,16 +3515,16 @@ export def "scrapers-labels PostScrapersIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --labelID: string
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --label-id: string
 ]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scrapers/($scraperTargetID)/labels")
-  let body = {labelID: $labelID} | compact
+  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}/labels"))
+  let body = {"labelID": $label_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3536,9 +3535,9 @@ export def "scrapers-labels PostScrapersIDLabels" [
 #
 # DELETE /scrapers/{scraperTargetID}/labels/{labelID}
 # operationId: DeleteScrapersIDLabelsID
-export def "scrapers-labels DeleteScrapersIDLabelsID" [
-  scraperTargetID: string
-  labelID: string
+export def "scrapers-labels delete" [
+  scraper_target_id: string
+  label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3547,12 +3546,12 @@ export def "scrapers-labels DeleteScrapersIDLabelsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scrapers/($scraperTargetID)/labels/($labelID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id, label_id: $label_id} | format pattern "/scrapers/{scraper_target_id}/labels/{label_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3563,8 +3562,8 @@ export def "scrapers-labels DeleteScrapersIDLabelsID" [
 #
 # GET /scrapers/{scraperTargetID}/members
 # operationId: GetScrapersIDMembers
-export def "scrapers-members GetScrapersIDMembers" [
-  scraperTargetID: string
+export def "scrapers-members get" [
+  scraper_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3573,12 +3572,12 @@ export def "scrapers-members GetScrapersIDMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scrapers/($scraperTargetID)/members")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}/members"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3589,8 +3588,8 @@ export def "scrapers-members GetScrapersIDMembers" [
 #
 # POST /scrapers/{scraperTargetID}/members
 # operationId: PostScrapersIDMembers
-export def "scrapers-members PostScrapersIDMembers" [
-  scraperTargetID: string
+export def "scrapers-members create" [
+  scraper_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3599,17 +3598,17 @@ export def "scrapers-members PostScrapersIDMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
 ]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scrapers/($scraperTargetID)/members")
-  let body = {id: $id, name: $name} | compact
+  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}/members"))
+  let body = {"id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3620,9 +3619,9 @@ export def "scrapers-members PostScrapersIDMembers" [
 #
 # DELETE /scrapers/{scraperTargetID}/members/{userID}
 # operationId: DeleteScrapersIDMembersID
-export def "scrapers-members DeleteScrapersIDMembersID" [
-  userID: string
-  scraperTargetID: string
+export def "scrapers-members delete" [
+  scraper_target_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3631,12 +3630,12 @@ export def "scrapers-members DeleteScrapersIDMembersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scrapers/($scraperTargetID)/members/($userID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id, user_id: $user_id} | format pattern "/scrapers/{scraper_target_id}/members/{user_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3647,8 +3646,8 @@ export def "scrapers-members DeleteScrapersIDMembersID" [
 #
 # GET /scrapers/{scraperTargetID}/owners
 # operationId: GetScrapersIDOwners
-export def "scrapers-owners GetScrapersIDOwners" [
-  scraperTargetID: string
+export def "scrapers-owners get" [
+  scraper_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3657,12 +3656,12 @@ export def "scrapers-owners GetScrapersIDOwners" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scrapers/($scraperTargetID)/owners")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}/owners"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3673,8 +3672,8 @@ export def "scrapers-owners GetScrapersIDOwners" [
 #
 # POST /scrapers/{scraperTargetID}/owners
 # operationId: PostScrapersIDOwners
-export def "scrapers-owners PostScrapersIDOwners" [
-  scraperTargetID: string
+export def "scrapers-owners create" [
+  scraper_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3683,17 +3682,17 @@ export def "scrapers-owners PostScrapersIDOwners" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
 ]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scrapers/($scraperTargetID)/owners")
-  let body = {id: $id, name: $name} | compact
+  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id} | format pattern "/scrapers/{scraper_target_id}/owners"))
+  let body = {"id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3704,9 +3703,9 @@ export def "scrapers-owners PostScrapersIDOwners" [
 #
 # DELETE /scrapers/{scraperTargetID}/owners/{userID}
 # operationId: DeleteScrapersIDOwnersID
-export def "scrapers-owners DeleteScrapersIDOwnersID" [
-  userID: string
-  scraperTargetID: string
+export def "scrapers-owners delete" [
+  scraper_target_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3715,12 +3714,12 @@ export def "scrapers-owners DeleteScrapersIDOwnersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/scrapers/($scraperTargetID)/owners/($userID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({scraper_target_id: $scraper_target_id, user_id: $user_id} | format pattern "/scrapers/{scraper_target_id}/owners/{user_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3731,7 +3730,7 @@ export def "scrapers-owners DeleteScrapersIDOwnersID" [
 #
 # GET /setup
 # operationId: GetSetup
-export def "setup GetSetup" [
+export def "setup get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3740,12 +3739,12 @@ export def "setup GetSetup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<allowed: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3756,8 +3755,8 @@ export def "setup GetSetup" [
 #
 # POST /setup
 # operationId: PostSetup
-@deprecated --flag retentionPeriodHrs
-export def "setup PostSetup" [
+@deprecated --flag retention-period-hrs
+export def "setup create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3766,12 +3765,12 @@ export def "setup PostSetup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   bucket: string
   org: string
   --password: string
-  --retentionPeriodHrs: int # Retention period *in nanoseconds* for the new bucket. This key's name has been misleading since OSS 2.0 GA, please transition to use `retentionPeriodSeconds`  (DEPRECATED)
-  --retentionPeriodSeconds: int # format: int64
+  --retention-period-hrs: int # Retention period *in nanoseconds* for the new bucket. This key's name has been misleading since OSS 2.0 GA, please transition to use `retentionPeriodSeconds`  (DEPRECATED)
+  --retention-period-seconds: int # format: int64
   --body-token: string # Authentication token to set on the initial user. If not specified, the server will generate a token.
   username: string
 ]: any -> record<auth: record<description: string, status: string, createdAt: string, id: string, links: record<self: string, user: string>, org: string, orgID: string, permissions: list<record>, token: string, updatedAt: string, user: string, userID: string>, bucket: record<createdAt: string, description: string, id: string, labels: list<record>, links: record<labels: string, members: string, org: string, owners: string, self: string, write: string>, name: string, orgID: string, retentionRules: list<record>, rp: string, schemaType: string, type: string, updatedAt: string>, org: record<createdAt: string, description: string, id: string, links: record<buckets: string, dashboards: string, labels: string, members: string, owners: string, secrets: string, self: string, tasks: string>, name: string, status: string, updatedAt: string>, user: record<id: string, links: record<self: string>, name: string, oauthID: string, status: string>> {
@@ -3779,9 +3778,9 @@ export def "setup PostSetup" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup")
-  let body = {bucket: $bucket, org: $org, password: $password, retentionPeriodHrs: $retentionPeriodHrs, retentionPeriodSeconds: $retentionPeriodSeconds, token: $body_token, username: $username} | compact
+  let body = {"bucket": $bucket, "org": $org, "password": $password, "retentionPeriodHrs": $retention_period_hrs, "retentionPeriodSeconds": $retention_period_seconds, "token": $body_token, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3792,7 +3791,7 @@ export def "setup PostSetup" [
 #
 # POST /signin
 # operationId: PostSignin
-export def "signin PostSignin" [
+export def "signin create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3801,12 +3800,12 @@ export def "signin PostSignin" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signin")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3817,7 +3816,7 @@ export def "signin PostSignin" [
 #
 # POST /signout
 # operationId: PostSignout
-export def "signout PostSignout" [
+export def "signout create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3826,12 +3825,12 @@ export def "signout PostSignout" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signout")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3842,7 +3841,7 @@ export def "signout PostSignout" [
 #
 # GET /sources
 # operationId: GetSources
-export def "sources GetSources" [
+export def "sources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3852,13 +3851,13 @@ export def "sources GetSources" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --org: string # The name of the organization.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<self: string>, sources: table<default: bool, defaultRP: string, id: string, insecureSkipVerify: bool, languages: list, links: record, metaUrl: string, name: string, orgID: string, password: string, sharedSecret: string, telegraf: string, token: string, type: string, url: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sources" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3870,7 +3869,7 @@ export def "sources GetSources" [
 # POST /sources
 # operationId: PostSources
 # --links shape: {buckets?: string, health?: string, query?: string, self?: string}
-export def "sources PostSources" [
+export def "sources create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3879,17 +3878,17 @@ export def "sources PostSources" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --default: oneof<nothing, bool>
-  --defaultRP: string
+  --default-rp: string
   --id: string
-  --insecureSkipVerify: oneof<nothing, bool>
+  --insecure-skip-verify: oneof<nothing, bool>
   --links: record # shape: {buckets?: string, health?: string, query?: string, self?: string}
-  --metaUrl: string # format: uri
+  --meta-url: string # format: uri
   --name: string
-  --orgID: string
+  --org-id: string
   --password: string
-  --sharedSecret: string
+  --shared-secret: string
   --telegraf: string
   --body-token: string
   --type: string@type-completer-2
@@ -3900,9 +3899,9 @@ export def "sources PostSources" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sources")
-  let body = {default: $default, defaultRP: $defaultRP, id: $id, insecureSkipVerify: $insecureSkipVerify, links: $links, metaUrl: $metaUrl, name: $name, orgID: $orgID, password: $password, sharedSecret: $sharedSecret, telegraf: $telegraf, token: $body_token, type: $type, url: $body_url, username: $username} | compact
+  let body = {"default": $default, "defaultRP": $default_rp, "id": $id, "insecureSkipVerify": $insecure_skip_verify, "links": $links, "metaUrl": $meta_url, "name": $name, "orgID": $org_id, "password": $password, "sharedSecret": $shared_secret, "telegraf": $telegraf, "token": $body_token, "type": $type, "url": $body_url, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3913,8 +3912,8 @@ export def "sources PostSources" [
 #
 # DELETE /sources/{sourceID}
 # operationId: DeleteSourcesID
-export def "sources DeleteSourcesID" [
-  sourceID: string
+export def "sources delete" [
+  source_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3923,12 +3922,12 @@ export def "sources DeleteSourcesID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sources/($sourceID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({source_id: $source_id} | format pattern "/sources/{source_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3939,8 +3938,8 @@ export def "sources DeleteSourcesID" [
 #
 # GET /sources/{sourceID}
 # operationId: GetSourcesID
-export def "sources GetSourcesID" [
-  sourceID: string
+export def "sources get" [
+  source_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3949,12 +3948,12 @@ export def "sources GetSourcesID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<default: bool, defaultRP: string, id: string, insecureSkipVerify: bool, languages: list<string>, links: record<buckets: string, health: string, query: string, self: string>, metaUrl: string, name: string, orgID: string, password: string, sharedSecret: string, telegraf: string, token: string, type: string, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sources/($sourceID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({source_id: $source_id} | format pattern "/sources/{source_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3966,8 +3965,8 @@ export def "sources GetSourcesID" [
 # PATCH /sources/{sourceID}
 # operationId: PatchSourcesID
 # --links shape: {buckets?: string, health?: string, query?: string, self?: string}
-export def "sources PatchSourcesID" [
-  sourceID: string
+export def "sources update" [
+  source_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3976,17 +3975,17 @@ export def "sources PatchSourcesID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --default: oneof<nothing, bool>
-  --defaultRP: string
+  --default-rp: string
   --id: string
-  --insecureSkipVerify: oneof<nothing, bool>
+  --insecure-skip-verify: oneof<nothing, bool>
   --links: record # shape: {buckets?: string, health?: string, query?: string, self?: string}
-  --metaUrl: string # format: uri
+  --meta-url: string # format: uri
   --name: string
-  --orgID: string
+  --org-id: string
   --password: string
-  --sharedSecret: string
+  --shared-secret: string
   --telegraf: string
   --body-token: string
   --type: string@type-completer-2
@@ -3996,10 +3995,10 @@ export def "sources PatchSourcesID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sources/($sourceID)")
-  let body = {default: $default, defaultRP: $defaultRP, id: $id, insecureSkipVerify: $insecureSkipVerify, links: $links, metaUrl: $metaUrl, name: $name, orgID: $orgID, password: $password, sharedSecret: $sharedSecret, telegraf: $telegraf, token: $body_token, type: $type, url: $body_url, username: $username} | compact
+  let full_url = (build-url $base ({source_id: $source_id} | format pattern "/sources/{source_id}"))
+  let body = {"default": $default, "defaultRP": $default_rp, "id": $id, "insecureSkipVerify": $insecure_skip_verify, "links": $links, "metaUrl": $meta_url, "name": $name, "orgID": $org_id, "password": $password, "sharedSecret": $shared_secret, "telegraf": $telegraf, "token": $body_token, "type": $type, "url": $body_url, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4010,8 +4009,8 @@ export def "sources PatchSourcesID" [
 #
 # GET /sources/{sourceID}/buckets
 # operationId: GetSourcesIDBuckets
-export def "sources-buckets GetSourcesIDBuckets" [
-  sourceID: string
+export def "sources-buckets get" [
+  source_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4021,13 +4020,13 @@ export def "sources-buckets GetSourcesIDBuckets" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --org: string # The name of the organization.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<buckets: table<createdAt: string, description: string, id: string, labels: list, links: record, name: string, orgID: string, retentionRules: list, rp: string, schemaType: string, type: string, updatedAt: string>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org" $org "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sources/($sourceID)/buckets" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({source_id: $source_id} | format pattern "/sources/{source_id}/buckets") $qp)
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4038,8 +4037,8 @@ export def "sources-buckets GetSourcesIDBuckets" [
 #
 # GET /sources/{sourceID}/health
 # operationId: GetSourcesIDHealth
-export def "sources-health GetSourcesIDHealth" [
-  sourceID: string
+export def "sources-health get" [
+  source_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4048,12 +4047,12 @@ export def "sources-health GetSourcesIDHealth" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<checks: list<any>, commit: string, message: string, name: string, status: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sources/($sourceID)/health")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({source_id: $source_id} | format pattern "/sources/{source_id}/health"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4064,7 +4063,7 @@ export def "sources-health GetSourcesIDHealth" [
 #
 # GET /stacks
 # operationId: ListStacks
-export def "stacks ListStacks" [
+export def "stacks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4073,13 +4072,13 @@ export def "stacks ListStacks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --orgID: string # The organization id of the stacks
+  --org-id: string # The organization id of the stacks
   --name: string # A collection of names to filter the list by.
-  --stackID: string # A collection of stackIDs to filter the list by.
+  --stack-id: string # A collection of stackIDs to filter the list by.
 ]: nothing -> record<stacks: table<createdAt: string, events: list, id: string, orgID: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "orgID" $orgID "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "stackID" $stackID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "orgID" $org_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "stackID" $stack_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stacks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4090,7 +4089,7 @@ export def "stacks ListStacks" [
 #
 # POST /stacks
 # operationId: CreateStack
-export def "stacks CreateStack" [
+export def "stacks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4101,14 +4100,14 @@ export def "stacks CreateStack" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
   --name: string
-  --orgID: string
+  --org-id: string
   --urls: list
 ]: any -> record<createdAt: string, events: table<description: string, eventType: string, name: string, resources: list, sources: list, updatedAt: string, urls: list>, id: string, orgID: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stacks")
-  let body = {description: $description, name: $name, orgID: $orgID, urls: $urls} | compact
+  let body = {"description": $description, "name": $name, "orgID": $org_id, "urls": $urls} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4119,7 +4118,7 @@ export def "stacks CreateStack" [
 #
 # DELETE /stacks/{stack_id}
 # operationId: DeleteStack
-export def "stacks DeleteStack" [
+export def "stacks delete" [
   stack_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4129,12 +4128,12 @@ export def "stacks DeleteStack" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --orgID: string # The identifier of the organization.
+  --org-id: string # The identifier of the organization.
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "orgID" $orgID "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/stacks/($stack_id)" $qp)
+  let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({stack_id: $stack_id} | format pattern "/stacks/{stack_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4144,7 +4143,7 @@ export def "stacks DeleteStack" [
 #
 # GET /stacks/{stack_id}
 # operationId: ReadStack
-export def "stacks ReadStack" [
+export def "stacks get" [
   stack_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4157,7 +4156,7 @@ export def "stacks ReadStack" [
 ]: nothing -> record<createdAt: string, events: table<description: string, eventType: string, name: string, resources: list, sources: list, updatedAt: string, urls: list>, id: string, orgID: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stacks/($stack_id)")
+  let full_url = (build-url $base ({stack_id: $stack_id} | format pattern "/stacks/{stack_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4168,7 +4167,7 @@ export def "stacks ReadStack" [
 # PATCH /stacks/{stack_id}
 # operationId: UpdateStack
 # --additionalResources item shape: {kind: string, resourceID: string, templateMetaName?: string}
-export def "stacks UpdateStack" [
+export def "stacks update" [
   stack_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4178,16 +4177,16 @@ export def "stacks UpdateStack" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --additionalResources: list # item shape: {kind: string, resourceID: string, templateMetaName?: string}
+  --additional-resources: list # item shape: {kind: string, resourceID: string, templateMetaName?: string}
   --description: string # nullable
   --name: string # nullable
-  --templateURLs: list # nullable
+  --template-ur-ls: list # nullable
 ]: any -> record<createdAt: string, events: table<description: string, eventType: string, name: string, resources: list, sources: list, updatedAt: string, urls: list>, id: string, orgID: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stacks/($stack_id)")
-  let body = {additionalResources: $additionalResources, description: $description, name: $name, templateURLs: $templateURLs} | compact
+  let full_url = (build-url $base ({stack_id: $stack_id} | format pattern "/stacks/{stack_id}"))
+  let body = {"additionalResources": $additional_resources, "description": $description, "name": $name, "templateURLs": $template_ur_ls} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4198,7 +4197,7 @@ export def "stacks UpdateStack" [
 #
 # POST /stacks/{stack_id}/uninstall
 # operationId: UninstallStack
-export def "stacks-uninstall UninstallStack" [
+export def "stacks-uninstall post" [
   stack_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4211,7 +4210,7 @@ export def "stacks-uninstall UninstallStack" [
 ]: nothing -> record<createdAt: string, events: table<description: string, eventType: string, name: string, resources: list, sources: list, updatedAt: string, urls: list>, id: string, orgID: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stacks/($stack_id)/uninstall")
+  let full_url = (build-url $base ({stack_id: $stack_id} | format pattern "/stacks/{stack_id}/uninstall"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4221,7 +4220,7 @@ export def "stacks-uninstall UninstallStack" [
 #
 # GET /tasks
 # operationId: GetTasks
-export def "tasks GetTasks" [
+export def "tasks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4234,16 +4233,16 @@ export def "tasks GetTasks" [
   --after: string # Return tasks after a specified ID.
   --user: string # Filter tasks to a specific user ID.
   --org: string # Filter tasks to a specific organization name.
-  --orgID: string # Filter tasks to a specific organization ID.
+  --org-id: string # Filter tasks to a specific organization ID.
   --status: string@status-completer # Filter tasks by a status--"inactive" or "active".
   --limit: int # The number of tasks to return (default: 100)
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<next: string, prev: string, self: string>, tasks: table<authorizationID: string, createdAt: string, cron: string, description: string, every: string, flux: string, id: string, labels: list, lastRunError: string, lastRunStatus: string, latestCompleted: string, links: record, name: string, offset: string, org: string, orgID: string, status: string, type: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "org" $org "scalar") (serialize-qp "orgID" $orgID "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tasks" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4254,7 +4253,7 @@ export def "tasks GetTasks" [
 #
 # POST /tasks
 # operationId: PostTasks
-export def "tasks PostTasks" [
+export def "tasks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4263,20 +4262,20 @@ export def "tasks PostTasks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --description: string # An optional description of the task.
   flux: string # The Flux script to run for this task.
   --org: string # The name of the organization that owns this Task.
-  --orgID: string # The ID of the organization that owns this Task.
+  --org-id: string # The ID of the organization that owns this Task.
   --status: string@status-completer
 ]: any -> record<authorizationID: string, createdAt: string, cron: string, description: string, every: string, flux: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, lastRunError: string, lastRunStatus: string, latestCompleted: string, links: record<labels: string, logs: string, members: string, owners: string, runs: string, self: string>, name: string, offset: string, org: string, orgID: string, status: string, type: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tasks")
-  let body = {description: $description, flux: $flux, org: $org, orgID: $orgID, status: $status} | compact
+  let body = {"description": $description, "flux": $flux, "org": $org, "orgID": $org_id, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4287,8 +4286,8 @@ export def "tasks PostTasks" [
 #
 # DELETE /tasks/{taskID}
 # operationId: DeleteTasksID
-export def "tasks DeleteTasksID" [
-  taskID: string
+export def "tasks delete" [
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4297,12 +4296,12 @@ export def "tasks DeleteTasksID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4313,8 +4312,8 @@ export def "tasks DeleteTasksID" [
 #
 # GET /tasks/{taskID}
 # operationId: GetTasksID
-export def "tasks GetTasksID" [
-  taskID: string
+export def "tasks get" [
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4323,12 +4322,12 @@ export def "tasks GetTasksID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<authorizationID: string, createdAt: string, cron: string, description: string, every: string, flux: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, lastRunError: string, lastRunStatus: string, latestCompleted: string, links: record<labels: string, logs: string, members: string, owners: string, runs: string, self: string>, name: string, offset: string, org: string, orgID: string, status: string, type: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4339,8 +4338,8 @@ export def "tasks GetTasksID" [
 #
 # PATCH /tasks/{taskID}
 # operationId: PatchTasksID
-export def "tasks PatchTasksID" [
-  taskID: string
+export def "tasks update" [
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4349,7 +4348,7 @@ export def "tasks PatchTasksID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --cron: string # Override the 'cron' option in the flux script.
   --description: string # An optional description of the task.
   --every: string # Override the 'every' option in the flux script.
@@ -4361,10 +4360,10 @@ export def "tasks PatchTasksID" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)")
-  let body = {cron: $cron, description: $description, every: $every, flux: $flux, name: $name, offset: $offset, status: $status} | compact
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}"))
+  let body = {"cron": $cron, "description": $description, "every": $every, "flux": $flux, "name": $name, "offset": $offset, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4375,8 +4374,8 @@ export def "tasks PatchTasksID" [
 #
 # GET /tasks/{taskID}/labels
 # operationId: GetTasksIDLabels
-export def "tasks-labels GetTasksIDLabels" [
-  taskID: string
+export def "tasks-labels get" [
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4385,12 +4384,12 @@ export def "tasks-labels GetTasksIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)/labels")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/labels"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4401,8 +4400,8 @@ export def "tasks-labels GetTasksIDLabels" [
 #
 # POST /tasks/{taskID}/labels
 # operationId: PostTasksIDLabels
-export def "tasks-labels PostTasksIDLabels" [
-  taskID: string
+export def "tasks-labels create" [
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4411,16 +4410,16 @@ export def "tasks-labels PostTasksIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --labelID: string
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --label-id: string
 ]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)/labels")
-  let body = {labelID: $labelID} | compact
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/labels"))
+  let body = {"labelID": $label_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4431,9 +4430,9 @@ export def "tasks-labels PostTasksIDLabels" [
 #
 # DELETE /tasks/{taskID}/labels/{labelID}
 # operationId: DeleteTasksIDLabelsID
-export def "tasks-labels DeleteTasksIDLabelsID" [
-  taskID: string
-  labelID: string
+export def "tasks-labels delete" [
+  task_id: string
+  label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4442,12 +4441,12 @@ export def "tasks-labels DeleteTasksIDLabelsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)/labels/($labelID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({task_id: $task_id, label_id: $label_id} | format pattern "/tasks/{task_id}/labels/{label_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4458,8 +4457,8 @@ export def "tasks-labels DeleteTasksIDLabelsID" [
 #
 # GET /tasks/{taskID}/logs
 # operationId: GetTasksIDLogs
-export def "tasks-logs GetTasksIDLogs" [
-  taskID: string
+export def "tasks-logs get" [
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4468,12 +4467,12 @@ export def "tasks-logs GetTasksIDLogs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<events: table<message: string, runID: string, time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)/logs")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/logs"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4484,8 +4483,8 @@ export def "tasks-logs GetTasksIDLogs" [
 #
 # GET /tasks/{taskID}/members
 # operationId: GetTasksIDMembers
-export def "tasks-members GetTasksIDMembers" [
-  taskID: string
+export def "tasks-members get" [
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4494,12 +4493,12 @@ export def "tasks-members GetTasksIDMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)/members")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/members"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4510,8 +4509,8 @@ export def "tasks-members GetTasksIDMembers" [
 #
 # POST /tasks/{taskID}/members
 # operationId: PostTasksIDMembers
-export def "tasks-members PostTasksIDMembers" [
-  taskID: string
+export def "tasks-members create" [
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4520,17 +4519,17 @@ export def "tasks-members PostTasksIDMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
 ]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)/members")
-  let body = {id: $id, name: $name} | compact
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/members"))
+  let body = {"id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4541,9 +4540,9 @@ export def "tasks-members PostTasksIDMembers" [
 #
 # DELETE /tasks/{taskID}/members/{userID}
 # operationId: DeleteTasksIDMembersID
-export def "tasks-members DeleteTasksIDMembersID" [
-  userID: string
-  taskID: string
+export def "tasks-members delete" [
+  task_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4552,12 +4551,12 @@ export def "tasks-members DeleteTasksIDMembersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)/members/($userID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({task_id: $task_id, user_id: $user_id} | format pattern "/tasks/{task_id}/members/{user_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4568,8 +4567,8 @@ export def "tasks-members DeleteTasksIDMembersID" [
 #
 # GET /tasks/{taskID}/owners
 # operationId: GetTasksIDOwners
-export def "tasks-owners GetTasksIDOwners" [
-  taskID: string
+export def "tasks-owners get" [
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4578,12 +4577,12 @@ export def "tasks-owners GetTasksIDOwners" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)/owners")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/owners"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4594,8 +4593,8 @@ export def "tasks-owners GetTasksIDOwners" [
 #
 # POST /tasks/{taskID}/owners
 # operationId: PostTasksIDOwners
-export def "tasks-owners PostTasksIDOwners" [
-  taskID: string
+export def "tasks-owners create" [
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4604,17 +4603,17 @@ export def "tasks-owners PostTasksIDOwners" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
 ]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)/owners")
-  let body = {id: $id, name: $name} | compact
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/owners"))
+  let body = {"id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4625,9 +4624,9 @@ export def "tasks-owners PostTasksIDOwners" [
 #
 # DELETE /tasks/{taskID}/owners/{userID}
 # operationId: DeleteTasksIDOwnersID
-export def "tasks-owners DeleteTasksIDOwnersID" [
-  userID: string
-  taskID: string
+export def "tasks-owners delete" [
+  task_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4636,12 +4635,12 @@ export def "tasks-owners DeleteTasksIDOwnersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)/owners/($userID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({task_id: $task_id, user_id: $user_id} | format pattern "/tasks/{task_id}/owners/{user_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4652,8 +4651,8 @@ export def "tasks-owners DeleteTasksIDOwnersID" [
 #
 # GET /tasks/{taskID}/runs
 # operationId: GetTasksIDRuns
-export def "tasks-runs GetTasksIDRuns" [
-  taskID: string
+export def "tasks-runs list" [
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4664,15 +4663,15 @@ export def "tasks-runs GetTasksIDRuns" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # Returns runs after a specific ID.
   --limit: int # The number of runs to return (default: 100)
-  --afterTime: string # Filter runs to those scheduled after this time, RFC3339 (format: date-time)
-  --beforeTime: string # Filter runs to those scheduled before this time, RFC3339 (format: date-time)
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --after-time: string # Filter runs to those scheduled after this time, RFC3339 (format: date-time)
+  --before-time: string # Filter runs to those scheduled before this time, RFC3339 (format: date-time)
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<next: string, prev: string, self: string>, runs: table<finishedAt: string, id: string, links: record, log: list, requestedAt: string, scheduledFor: string, startedAt: string, status: string, taskID: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "afterTime" $afterTime "scalar") (serialize-qp "beforeTime" $beforeTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($taskID)/runs" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "afterTime" $after_time "scalar") (serialize-qp "beforeTime" $before_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/runs") $qp)
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4683,8 +4682,8 @@ export def "tasks-runs GetTasksIDRuns" [
 #
 # POST /tasks/{taskID}/runs
 # operationId: PostTasksIDRuns
-export def "tasks-runs PostTasksIDRuns" [
-  taskID: string
+export def "tasks-runs create" [
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4693,16 +4692,16 @@ export def "tasks-runs PostTasksIDRuns" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --scheduledFor: string # Time used for run's "now" option, RFC3339.  Default is the server's now time. (nullable, format: date-time)
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --scheduled-for: string # Time used for run's "now" option, RFC3339.  Default is the server's now time. (nullable, format: date-time)
 ]: any -> record<finishedAt: string, id: string, links: record<retry: string, self: string, task: string>, log: table<message: string, runID: string, time: string>, requestedAt: string, scheduledFor: string, startedAt: string, status: string, taskID: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)/runs")
-  let body = {scheduledFor: $scheduledFor} | compact
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/tasks/{task_id}/runs"))
+  let body = {"scheduledFor": $scheduled_for} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4713,9 +4712,9 @@ export def "tasks-runs PostTasksIDRuns" [
 #
 # DELETE /tasks/{taskID}/runs/{runID}
 # operationId: DeleteTasksIDRunsID
-export def "tasks-runs DeleteTasksIDRunsID" [
-  taskID: string
-  runID: string
+export def "tasks-runs delete" [
+  task_id: string
+  run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4724,12 +4723,12 @@ export def "tasks-runs DeleteTasksIDRunsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)/runs/($runID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({task_id: $task_id, run_id: $run_id} | format pattern "/tasks/{task_id}/runs/{run_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4740,9 +4739,9 @@ export def "tasks-runs DeleteTasksIDRunsID" [
 #
 # GET /tasks/{taskID}/runs/{runID}
 # operationId: GetTasksIDRunsID
-export def "tasks-runs GetTasksIDRunsID" [
-  taskID: string
-  runID: string
+export def "tasks-runs get" [
+  task_id: string
+  run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4751,12 +4750,12 @@ export def "tasks-runs GetTasksIDRunsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<finishedAt: string, id: string, links: record<retry: string, self: string, task: string>, log: table<message: string, runID: string, time: string>, requestedAt: string, scheduledFor: string, startedAt: string, status: string, taskID: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)/runs/($runID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({task_id: $task_id, run_id: $run_id} | format pattern "/tasks/{task_id}/runs/{run_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4767,9 +4766,9 @@ export def "tasks-runs GetTasksIDRunsID" [
 #
 # GET /tasks/{taskID}/runs/{runID}/logs
 # operationId: GetTasksIDRunsIDLogs
-export def "tasks-runs-logs GetTasksIDRunsIDLogs" [
-  taskID: string
-  runID: string
+export def "tasks-runs-logs get" [
+  task_id: string
+  run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4778,12 +4777,12 @@ export def "tasks-runs-logs GetTasksIDRunsIDLogs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<events: table<message: string, runID: string, time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)/runs/($runID)/logs")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({task_id: $task_id, run_id: $run_id} | format pattern "/tasks/{task_id}/runs/{run_id}/logs"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4794,9 +4793,9 @@ export def "tasks-runs-logs GetTasksIDRunsIDLogs" [
 #
 # POST /tasks/{taskID}/runs/{runID}/retry
 # operationId: PostTasksIDRunsIDRetry
-export def "tasks-runs-retry PostTasksIDRunsIDRetry" [
-  taskID: string
-  runID: string
+export def "tasks-runs-retry create" [
+  task_id: string
+  run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4805,15 +4804,15 @@ export def "tasks-runs-retry PostTasksIDRunsIDRetry" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --body: record
 ]: any -> record<finishedAt: string, id: string, links: record<retry: string, self: string, task: string>, log: table<message: string, runID: string, time: string>, requestedAt: string, scheduledFor: string, startedAt: string, status: string, taskID: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tasks/($taskID)/runs/($runID)/retry")
+  let full_url = (build-url $base ({task_id: $task_id, run_id: $run_id} | format pattern "/tasks/{task_id}/runs/{run_id}/retry"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4824,7 +4823,7 @@ export def "tasks-runs-retry PostTasksIDRunsIDRetry" [
 #
 # GET /telegraf/plugins
 # operationId: GetTelegrafPlugins
-export def "telegraf-plugins GetTelegrafPlugins" [
+export def "telegraf-plugins get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4834,13 +4833,13 @@ export def "telegraf-plugins GetTelegrafPlugins" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # The type of plugin desired.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<os: string, plugins: table<config: string, description: string, name: string, type: string>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/telegraf/plugins" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4851,7 +4850,7 @@ export def "telegraf-plugins GetTelegrafPlugins" [
 #
 # GET /telegrafs
 # operationId: GetTelegrafs
-export def "telegrafs GetTelegrafs" [
+export def "telegrafs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4860,14 +4859,14 @@ export def "telegrafs GetTelegrafs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --orgID: string # The organization ID the Telegraf config belongs to.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --org-id: string # The organization ID the Telegraf config belongs to.
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<configurations: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "orgID" $orgID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/telegrafs" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4879,7 +4878,7 @@ export def "telegrafs GetTelegrafs" [
 # POST /telegrafs
 # operationId: PostTelegrafs
 # --metadata shape: {buckets?: list}
-export def "telegrafs PostTelegrafs" [
+export def "telegrafs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4888,20 +4887,20 @@ export def "telegrafs PostTelegrafs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --config: string
   --description: string
   --metadata: record # shape: {buckets?: list}
   --name: string
-  --orgID: string
+  --org-id: string
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/telegrafs")
-  let body = {config: $config, description: $description, metadata: $metadata, name: $name, orgID: $orgID} | compact
+  let body = {"config": $config, "description": $description, "metadata": $metadata, "name": $name, "orgID": $org_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4912,8 +4911,8 @@ export def "telegrafs PostTelegrafs" [
 #
 # DELETE /telegrafs/{telegrafID}
 # operationId: DeleteTelegrafsID
-export def "telegrafs DeleteTelegrafsID" [
-  telegrafID: string
+export def "telegrafs delete" [
+  telegraf_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4922,12 +4921,12 @@ export def "telegrafs DeleteTelegrafsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telegrafs/($telegrafID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4938,8 +4937,8 @@ export def "telegrafs DeleteTelegrafsID" [
 #
 # GET /telegrafs/{telegrafID}
 # operationId: GetTelegrafsID
-export def "telegrafs GetTelegrafsID" [
-  telegrafID: string
+export def "telegrafs get" [
+  telegraf_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4949,13 +4948,13 @@ export def "telegrafs GetTelegrafsID" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --Accept: string@Accept-completer
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --hdr-accept: string@accept-completer-1
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telegrafs/($telegrafID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4967,8 +4966,8 @@ export def "telegrafs GetTelegrafsID" [
 # PUT /telegrafs/{telegrafID}
 # operationId: PutTelegrafsID
 # --metadata shape: {buckets?: list}
-export def "telegrafs PutTelegrafsID" [
-  telegrafID: string
+export def "telegrafs update" [
+  telegraf_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4977,20 +4976,20 @@ export def "telegrafs PutTelegrafsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   --config: string
   --description: string
   --metadata: record # shape: {buckets?: list}
   --name: string
-  --orgID: string
+  --org-id: string
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telegrafs/($telegrafID)")
-  let body = {config: $config, description: $description, metadata: $metadata, name: $name, orgID: $orgID} | compact
+  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}"))
+  let body = {"config": $config, "description": $description, "metadata": $metadata, "name": $name, "orgID": $org_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5001,8 +5000,8 @@ export def "telegrafs PutTelegrafsID" [
 #
 # GET /telegrafs/{telegrafID}/labels
 # operationId: GetTelegrafsIDLabels
-export def "telegrafs-labels GetTelegrafsIDLabels" [
-  telegrafID: string
+export def "telegrafs-labels get" [
+  telegraf_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5011,12 +5010,12 @@ export def "telegrafs-labels GetTelegrafsIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telegrafs/($telegrafID)/labels")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}/labels"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5027,8 +5026,8 @@ export def "telegrafs-labels GetTelegrafsIDLabels" [
 #
 # POST /telegrafs/{telegrafID}/labels
 # operationId: PostTelegrafsIDLabels
-export def "telegrafs-labels PostTelegrafsIDLabels" [
-  telegrafID: string
+export def "telegrafs-labels create" [
+  telegraf_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5037,16 +5036,16 @@ export def "telegrafs-labels PostTelegrafsIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --labelID: string
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --label-id: string
 ]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telegrafs/($telegrafID)/labels")
-  let body = {labelID: $labelID} | compact
+  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}/labels"))
+  let body = {"labelID": $label_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5057,9 +5056,9 @@ export def "telegrafs-labels PostTelegrafsIDLabels" [
 #
 # DELETE /telegrafs/{telegrafID}/labels/{labelID}
 # operationId: DeleteTelegrafsIDLabelsID
-export def "telegrafs-labels DeleteTelegrafsIDLabelsID" [
-  telegrafID: string
-  labelID: string
+export def "telegrafs-labels delete" [
+  telegraf_id: string
+  label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5068,12 +5067,12 @@ export def "telegrafs-labels DeleteTelegrafsIDLabelsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telegrafs/($telegrafID)/labels/($labelID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({telegraf_id: $telegraf_id, label_id: $label_id} | format pattern "/telegrafs/{telegraf_id}/labels/{label_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5084,8 +5083,8 @@ export def "telegrafs-labels DeleteTelegrafsIDLabelsID" [
 #
 # GET /telegrafs/{telegrafID}/members
 # operationId: GetTelegrafsIDMembers
-export def "telegrafs-members GetTelegrafsIDMembers" [
-  telegrafID: string
+export def "telegrafs-members get" [
+  telegraf_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5094,12 +5093,12 @@ export def "telegrafs-members GetTelegrafsIDMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telegrafs/($telegrafID)/members")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}/members"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5110,8 +5109,8 @@ export def "telegrafs-members GetTelegrafsIDMembers" [
 #
 # POST /telegrafs/{telegrafID}/members
 # operationId: PostTelegrafsIDMembers
-export def "telegrafs-members PostTelegrafsIDMembers" [
-  telegrafID: string
+export def "telegrafs-members create" [
+  telegraf_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5120,17 +5119,17 @@ export def "telegrafs-members PostTelegrafsIDMembers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
 ]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telegrafs/($telegrafID)/members")
-  let body = {id: $id, name: $name} | compact
+  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}/members"))
+  let body = {"id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5141,9 +5140,9 @@ export def "telegrafs-members PostTelegrafsIDMembers" [
 #
 # DELETE /telegrafs/{telegrafID}/members/{userID}
 # operationId: DeleteTelegrafsIDMembersID
-export def "telegrafs-members DeleteTelegrafsIDMembersID" [
-  userID: string
-  telegrafID: string
+export def "telegrafs-members delete" [
+  telegraf_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5152,12 +5151,12 @@ export def "telegrafs-members DeleteTelegrafsIDMembersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telegrafs/($telegrafID)/members/($userID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({telegraf_id: $telegraf_id, user_id: $user_id} | format pattern "/telegrafs/{telegraf_id}/members/{user_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5168,8 +5167,8 @@ export def "telegrafs-members DeleteTelegrafsIDMembersID" [
 #
 # GET /telegrafs/{telegrafID}/owners
 # operationId: GetTelegrafsIDOwners
-export def "telegrafs-owners GetTelegrafsIDOwners" [
-  telegrafID: string
+export def "telegrafs-owners get" [
+  telegraf_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5178,12 +5177,12 @@ export def "telegrafs-owners GetTelegrafsIDOwners" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telegrafs/($telegrafID)/owners")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}/owners"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5194,8 +5193,8 @@ export def "telegrafs-owners GetTelegrafsIDOwners" [
 #
 # POST /telegrafs/{telegrafID}/owners
 # operationId: PostTelegrafsIDOwners
-export def "telegrafs-owners PostTelegrafsIDOwners" [
-  telegrafID: string
+export def "telegrafs-owners create" [
+  telegraf_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5204,17 +5203,17 @@ export def "telegrafs-owners PostTelegrafsIDOwners" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   id: string
   --name: string
 ]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string, role: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telegrafs/($telegrafID)/owners")
-  let body = {id: $id, name: $name} | compact
+  let full_url = (build-url $base ({telegraf_id: $telegraf_id} | format pattern "/telegrafs/{telegraf_id}/owners"))
+  let body = {"id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5225,9 +5224,9 @@ export def "telegrafs-owners PostTelegrafsIDOwners" [
 #
 # DELETE /telegrafs/{telegrafID}/owners/{userID}
 # operationId: DeleteTelegrafsIDOwnersID
-export def "telegrafs-owners DeleteTelegrafsIDOwnersID" [
-  userID: string
-  telegrafID: string
+export def "telegrafs-owners delete" [
+  telegraf_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5236,12 +5235,12 @@ export def "telegrafs-owners DeleteTelegrafsIDOwnersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telegrafs/($telegrafID)/owners/($userID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({telegraf_id: $telegraf_id, user_id: $user_id} | format pattern "/telegrafs/{telegraf_id}/owners/{user_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5255,7 +5254,7 @@ export def "telegrafs-owners DeleteTelegrafsIDOwnersID" [
 # --remotes item shape: {contentType?: string, url: string}
 # --template shape: {contentType?: string, contents?: list, sources?: list}
 # --templates item shape: {contentType?: string, contents?: list, sources?: list}
-export def "templates-apply ApplyTemplate" [
+export def "templates-apply post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5265,12 +5264,12 @@ export def "templates-apply ApplyTemplate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --actions: list
-  --dryRun: oneof<nothing, bool>
-  --envRefs: record
-  --orgID: string
+  --body-dry-run: oneof<nothing, bool>
+  --env-refs: record
+  --org-id: string
   --remotes: list # item shape: {contentType?: string, url: string}
   --secrets: record
-  --stackID: string
+  --stack-id: string
   --template: record # shape: {contentType?: string, contents?: list, sources?: list}
   --templates: list # item shape: {contentType?: string, contents?: list, sources?: list}
 ]: any -> record<diff: record<buckets: list<record>, checks: list<record>, dashboards: list<record>, labelMappings: list<record>, labels: list<record>, notificationEndpoints: list<record>, notificationRules: list<record>, tasks: list<record>, telegrafConfigs: list<record>, variables: list<record>>, errors: table<fields: list, indexes: list, kind: string, reason: string>, sources: list<string>, stackID: string, summary: record<buckets: list<record>, checks: list<record>, dashboards: list<record>, labelMappings: list<record>, labels: list<record>, missingEnvRefs: list<string>, missingSecrets: list<string>, notificationEndpoints: list<record>, notificationRules: list<record>, tasks: list<record>, telegrafConfigs: list<record>, variables: list<record>>> {
@@ -5278,7 +5277,7 @@ export def "templates-apply ApplyTemplate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/apply")
-  let body = {actions: $actions, dryRun: $dryRun, envRefs: $envRefs, orgID: $orgID, remotes: $remotes, secrets: $secrets, stackID: $stackID, template: $template, templates: $templates} | compact
+  let body = {"actions": $actions, "dryRun": $body_dry_run, "envRefs": $env_refs, "orgID": $org_id, "remotes": $remotes, "secrets": $secrets, "stackID": $stack_id, "template": $template, "templates": $templates} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5291,7 +5290,7 @@ export def "templates-apply ApplyTemplate" [
 # operationId: ExportTemplate
 # --orgIDs item shape: {orgID?: string, resourceFilters?: record}
 # --resources shape: {id: string, kind: "Bucket"|"Check"|"CheckDeadman"|"CheckThreshold"|"Dashboard"|"Label"|"NotificationEndpoint"|"NotificationEndpointHTTP"|"NotificationEndpointPagerDuty"|"NotificationEndpointSlack"|"NotificationRule"|"Task"|"Telegraf"|"Variable", name?: string}
-export def "templates-export ExportTemplate" [
+export def "templates-export export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5301,15 +5300,15 @@ export def "templates-export ExportTemplate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --orgIDs: list # item shape: {orgID?: string, resourceFilters?: record}
+  --org-i-ds: list # item shape: {orgID?: string, resourceFilters?: record}
   --resources: record # shape: {id: string, kind: "Bucket"|"Check"|"CheckDeadman"|"CheckThreshold"|"Dashboard"|"Label"|"NotificationEndpoint"|"NotificationEndpointHTTP"|"NotificationEndpointPagerDuty"|"NotificationEndpointSlack"|"NotificationRule"|"Task"|"Telegraf"|"Variable", name?: string}
-  --stackID: string
+  --stack-id: string
 ]: any -> table<apiVersion: string, kind: string, meta: record<name: string>, spec: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/export")
-  let body = {orgIDs: $orgIDs, resources: $resources, stackID: $stackID} | compact
+  let body = {"orgIDs": $org_i_ds, "resources": $resources, "stackID": $stack_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5320,7 +5319,7 @@ export def "templates-export ExportTemplate" [
 #
 # GET /users
 # operationId: GetUsers
-export def "users GetUsers" [
+export def "users list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5334,13 +5333,13 @@ export def "users GetUsers" [
   --after: string # The last resource ID from which to seek from (but not including). This is to be used instead of `offset`.
   --name: string
   --id: string
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, links: record, name: string, oauthID: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5351,7 +5350,7 @@ export def "users GetUsers" [
 #
 # POST /users
 # operationId: PostUsers
-export def "users PostUsers" [
+export def "users create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5360,18 +5359,18 @@ export def "users PostUsers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   name: string
-  --oauthID: string
+  --oauth-id: string
   --status: string@status-completer # If inactive the user is inactive. (default: active)
 ]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users")
-  let body = {name: $name, oauthID: $oauthID, status: $status} | compact
+  let body = {"name": $name, "oauthID": $oauth_id, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5382,8 +5381,8 @@ export def "users PostUsers" [
 #
 # DELETE /users/{userID}
 # operationId: DeleteUsersID
-export def "users DeleteUsersID" [
-  userID: string
+export def "users delete" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5392,12 +5391,12 @@ export def "users DeleteUsersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($userID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5408,8 +5407,8 @@ export def "users DeleteUsersID" [
 #
 # GET /users/{userID}
 # operationId: GetUsersID
-export def "users GetUsersID" [
-  userID: string
+export def "users get" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5418,12 +5417,12 @@ export def "users GetUsersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($userID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5434,8 +5433,8 @@ export def "users GetUsersID" [
 #
 # PATCH /users/{userID}
 # operationId: PatchUsersID
-export def "users PatchUsersID" [
-  userID: string
+export def "users update" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5444,18 +5443,18 @@ export def "users PatchUsersID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   name: string
-  --oauthID: string
+  --oauth-id: string
   --status: string@status-completer # If inactive the user is inactive. (default: active)
 ]: any -> record<id: string, links: record<self: string>, name: string, oauthID: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($userID)")
-  let body = {name: $name, oauthID: $oauthID, status: $status} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
+  let body = {"name": $name, "oauthID": $oauth_id, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5466,8 +5465,8 @@ export def "users PatchUsersID" [
 #
 # POST /users/{userID}/password
 # operationId: PostUsersIDPassword
-export def "users-password PostUsersIDPassword" [
-  userID: string
+export def "users-password create" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5476,16 +5475,16 @@ export def "users-password PostUsersIDPassword" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   password: string
 ]: any -> record<code: string, err: string, message: string, op: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($userID)/password")
-  let body = {password: $password} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/password"))
+  let body = {"password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5496,7 +5495,7 @@ export def "users-password PostUsersIDPassword" [
 #
 # GET /variables
 # operationId: GetVariables
-export def "variables GetVariables" [
+export def "variables list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5506,14 +5505,14 @@ export def "variables GetVariables" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --org: string # The name of the organization.
-  --orgID: string # The organization ID.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --org-id: string # The organization ID.
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<variables: table<arguments: record, createdAt: string, description: string, id: string, labels: list, links: record, name: string, orgID: string, selected: list, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "orgID" $orgID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/variables" $qp)
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5527,7 +5526,7 @@ export def "variables GetVariables" [
 # --arguments shape: {type?: "query", values?: record}
 # --labels item shape: {name?: string, properties?: record}
 # --links shape: {labels?: string, org?: string, self?: string}
-export def "variables PostVariables" [
+export def "variables create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5536,23 +5535,23 @@ export def "variables PostVariables" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   arguments: record # shape: {type?: "query", values?: record}
-  --createdAt: string # format: date-time
+  --created-at: string # format: date-time
   --description: string
   --labels: list # item shape: {name?: string, properties?: record}
   name: string
-  orgID: string
+  org_id: string
   --selected: list
-  --updatedAt: string # format: date-time
+  --updated-at: string # format: date-time
 ]: any -> record<arguments: record, createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, org: string, self: string>, name: string, orgID: string, selected: list<string>, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/variables")
-  let body = {arguments: $arguments, createdAt: $createdAt, description: $description, labels: $labels, name: $name, orgID: $orgID, selected: $selected, updatedAt: $updatedAt} | compact
+  let body = {"arguments": $arguments, "createdAt": $created_at, "description": $description, "labels": $labels, "name": $name, "orgID": $org_id, "selected": $selected, "updatedAt": $updated_at} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5563,8 +5562,8 @@ export def "variables PostVariables" [
 #
 # DELETE /variables/{variableID}
 # operationId: DeleteVariablesID
-export def "variables DeleteVariablesID" [
-  variableID: string
+export def "variables delete" [
+  variable_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5573,12 +5572,12 @@ export def "variables DeleteVariablesID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/variables/($variableID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({variable_id: $variable_id} | format pattern "/variables/{variable_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5589,8 +5588,8 @@ export def "variables DeleteVariablesID" [
 #
 # GET /variables/{variableID}
 # operationId: GetVariablesID
-export def "variables GetVariablesID" [
-  variableID: string
+export def "variables get" [
+  variable_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5599,12 +5598,12 @@ export def "variables GetVariablesID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<arguments: record, createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, org: string, self: string>, name: string, orgID: string, selected: list<string>, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/variables/($variableID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({variable_id: $variable_id} | format pattern "/variables/{variable_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5618,8 +5617,8 @@ export def "variables GetVariablesID" [
 # --arguments shape: {type?: "query", values?: record}
 # --labels item shape: {name?: string, properties?: record}
 # --links shape: {labels?: string, org?: string, self?: string}
-export def "variables PatchVariablesID" [
-  variableID: string
+export def "variables update-by-variableID" [
+  variable_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5628,23 +5627,23 @@ export def "variables PatchVariablesID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   arguments: record # shape: {type?: "query", values?: record}
-  --createdAt: string # format: date-time
+  --created-at: string # format: date-time
   --description: string
   --labels: list # item shape: {name?: string, properties?: record}
   name: string
-  orgID: string
+  org_id: string
   --selected: list
-  --updatedAt: string # format: date-time
+  --updated-at: string # format: date-time
 ]: any -> record<arguments: record, createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, org: string, self: string>, name: string, orgID: string, selected: list<string>, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/variables/($variableID)")
-  let body = {arguments: $arguments, createdAt: $createdAt, description: $description, labels: $labels, name: $name, orgID: $orgID, selected: $selected, updatedAt: $updatedAt} | compact
+  let full_url = (build-url $base ({variable_id: $variable_id} | format pattern "/variables/{variable_id}"))
+  let body = {"arguments": $arguments, "createdAt": $created_at, "description": $description, "labels": $labels, "name": $name, "orgID": $org_id, "selected": $selected, "updatedAt": $updated_at} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5658,8 +5657,8 @@ export def "variables PatchVariablesID" [
 # --arguments shape: {type?: "query", values?: record}
 # --labels item shape: {name?: string, properties?: record}
 # --links shape: {labels?: string, org?: string, self?: string}
-export def "variables PutVariablesID" [
-  variableID: string
+export def "variables update-by-variableID-1" [
+  variable_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5668,23 +5667,23 @@ export def "variables PutVariablesID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
   arguments: record # shape: {type?: "query", values?: record}
-  --createdAt: string # format: date-time
+  --created-at: string # format: date-time
   --description: string
   --labels: list # item shape: {name?: string, properties?: record}
   name: string
-  orgID: string
+  org_id: string
   --selected: list
-  --updatedAt: string # format: date-time
+  --updated-at: string # format: date-time
 ]: any -> record<arguments: record, createdAt: string, description: string, id: string, labels: table<id: string, name: string, orgID: string, properties: record>, links: record<labels: string, org: string, self: string>, name: string, orgID: string, selected: list<string>, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/variables/($variableID)")
-  let body = {arguments: $arguments, createdAt: $createdAt, description: $description, labels: $labels, name: $name, orgID: $orgID, selected: $selected, updatedAt: $updatedAt} | compact
+  let full_url = (build-url $base ({variable_id: $variable_id} | format pattern "/variables/{variable_id}"))
+  let body = {"arguments": $arguments, "createdAt": $created_at, "description": $description, "labels": $labels, "name": $name, "orgID": $org_id, "selected": $selected, "updatedAt": $updated_at} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5695,8 +5694,8 @@ export def "variables PutVariablesID" [
 #
 # GET /variables/{variableID}/labels
 # operationId: GetVariablesIDLabels
-export def "variables-labels GetVariablesIDLabels" [
-  variableID: string
+export def "variables-labels get" [
+  variable_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5705,12 +5704,12 @@ export def "variables-labels GetVariablesIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<labels: table<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/variables/($variableID)/labels")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({variable_id: $variable_id} | format pattern "/variables/{variable_id}/labels"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5721,8 +5720,8 @@ export def "variables-labels GetVariablesIDLabels" [
 #
 # POST /variables/{variableID}/labels
 # operationId: PostVariablesIDLabels
-export def "variables-labels PostVariablesIDLabels" [
-  variableID: string
+export def "variables-labels create" [
+  variable_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5731,16 +5730,16 @@ export def "variables-labels PostVariablesIDLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --labelID: string
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --label-id: string
 ]: any -> record<label: record<id: string, name: string, orgID: string, properties: record>, links: record<next: string, prev: string, self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/variables/($variableID)/labels")
-  let body = {labelID: $labelID} | compact
+  let full_url = (build-url $base ({variable_id: $variable_id} | format pattern "/variables/{variable_id}/labels"))
+  let body = {"labelID": $label_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5751,9 +5750,9 @@ export def "variables-labels PostVariablesIDLabels" [
 #
 # DELETE /variables/{variableID}/labels/{labelID}
 # operationId: DeleteVariablesIDLabelsID
-export def "variables-labels DeleteVariablesIDLabelsID" [
-  variableID: string
-  labelID: string
+export def "variables-labels delete" [
+  variable_id: string
+  label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5762,12 +5761,12 @@ export def "variables-labels DeleteVariablesIDLabelsID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
 ]: nothing -> record<code: string, err: string, message: string, op: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/variables/($variableID)/labels/($labelID)")
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span} | compact
+  let full_url = (build-url $base ({variable_id: $variable_id, label_id: $label_id} | format pattern "/variables/{variable_id}/labels/{label_id}"))
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5778,7 +5777,7 @@ export def "variables-labels DeleteVariablesIDLabelsID" [
 #
 # POST /write
 # operationId: PostWrite
-export def "write PostWrite" [
+export def "write create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5788,23 +5787,23 @@ export def "write PostWrite" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --org: string # Specifies the destination organization for writes. Takes either the ID or Name interchangeably. If both `orgID` and `org` are specified, `org` takes precedence.
-  --orgID: string # Specifies the ID of the destination organization for writes. If both `orgID` and `org` are specified, `org` takes precedence.
+  --org-id: string # Specifies the ID of the destination organization for writes. If both `orgID` and `org` are specified, `org` takes precedence.
   --bucket: string # The destination bucket for writes.
   --precision: string@precision-completer # The precision for the unix timestamps within the body line-protocol.
-  --Zap-Trace-Span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
-  --Content-Encoding: string@Content-Encoding-completer # When present, its value indicates to the database that compression is applied to the line-protocol body.
-  --Content-Type: string@Content-Type-completer-2 # Content-Type is used to indicate the format of the data sent to the server.
-  --Content-Length: int # Content-Length is an entity header is indicating the size of the entity-body, in bytes, sent to the database. If the length is greater than the database max body configuration option, a 413 response is sent.
-  --Accept: string@Accept-completer-1 # Specifies the return content format.
+  --zap-trace-span: string # OpenTracing span context (e.g. {baggage: {key: value}, span_id: 1, trace_id: 1})
+  --content-encoding: string@content-encoding-completer # When present, its value indicates to the database that compression is applied to the line-protocol body.
+  --content-type: string@content-type-completer-2 # Content-Type is used to indicate the format of the data sent to the server.
+  --content-length: int # Content-Length is an entity header is indicating the size of the entity-body, in bytes, sent to the database. If the length is greater than the database max body configuration option, a 413 response is sent.
+  --hdr-accept: string@accept-completer-3 # Specifies the return content format.
   --body: record
 ]: any -> record<code: string, err: string, message: string, op: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "orgID" $orgID "scalar") (serialize-qp "bucket" $bucket "scalar") (serialize-qp "precision" $precision "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "org" $org "scalar") (serialize-qp "orgID" $org_id "scalar") (serialize-qp "bucket" $bucket "scalar") (serialize-qp "precision" $precision "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/write" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Zap-Trace-Span": $Zap_Trace_Span, "Content-Encoding": $Content_Encoding, "Content-Type": $Content_Type, "Content-Length": $Content_Length, "Accept": $Accept} | compact
+  let extra_headers = {"Zap-Trace-Span": $zap_trace_span, "Content-Encoding": $content_encoding, "Content-Type": $content_type, "Content-Length": $content_length, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

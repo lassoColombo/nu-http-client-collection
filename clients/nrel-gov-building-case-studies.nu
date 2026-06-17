@@ -113,7 +113,7 @@ export def "project-output-format project" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "portal" $portal "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "province" $province "scalar") (serialize-qp "region" $region "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/project.($output_format)" $qp)
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/project.{output_format}") $qp)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -124,8 +124,8 @@ export def "project-output-format project" [
 # GET /project/{project_id}.{output_format}
 # operationId: document
 export def "project document" [
-  output_format: string
   project_id: int
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,7 +139,7 @@ export def "project document" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/project/($project_id).($output_format)" $qp)
+  let full_url = (build-url $base ({project_id: $project_id, output_format: $output_format} | format pattern "/project/{project_id}.{output_format}") $qp)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

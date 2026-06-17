@@ -65,9 +65,9 @@ def base-url-completer [] { ["https://developer.walmart.com/proxy/item-api-doc-a
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def WM-CONSUMERCHANNELTYPE-completer [] { ["SWAGGER_CHANNEL_TYPE"] }
-def feedType-completer [] { ["item"] }
-def feedType-completer-1 [] { ["CONTENT_PRODUCT" "SUPPLIER_FULL_ITEM" "item"] }
+def wm-consumer-channel-type-completer [] { ["SWAGGER_CHANNEL_TYPE"] }
+def feed-type-completer [] { ["item"] }
+def feed-type-completer-1 [] { ["CONTENT_PRODUCT" "SUPPLIER_FULL_ITEM" "item"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -105,22 +105,22 @@ export def "feeds v2getFeedItemStatus" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --feedId: string # The feed ID.
-  --includeDetails: string # Includes the status details for each item in the feed. Do not set this parameter to true as discrepancies may appear between the header and the item details (the item details may be incorrect). Instead, use the Get a feedItems status. (default: false)
+  --feed-id: string # The feed ID.
+  --include-details: string # Includes the status details for each item in the feed. Do not set this parameter to true as discrepancies may appear between the header and the item details (the item details may be incorrect). Instead, use the Get a feedItems status. (default: false)
   --offset: string # The object response to start with, where 0 is the first entity that can be requested. It can only be used when includeDetails is set to true. (default: 0)
   --limit: string # The number of items to be returned. Cannot be more than 50 items. Use it only when the includeDetails is set to true. (default: 50)
-  --WM-CONSUMERCHANNELTYPE: string@WM-CONSUMERCHANNELTYPE-completer # Channel Type
-  --WM-CONSUMERID: string # Your Consumer ID
-  --WM-SECTIMESTAMP: string # Epoch timestamp
-  --WM-SECAUTH-SIGNATURE: string # Authentication signature
-  --WM-SVCNAME: string # The Service name
-  --WM-QOSCORRELATION-ID: string # A Transaction ID
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
+  --wm-consumer-id: string # Your Consumer ID
+  --wm-sec-timestamp: string # Epoch timestamp
+  --wm-sec-auth-signature: string # Authentication signature
+  --wm-svc-name: string # The Service name
+  --wm-qos-correlation-id: string # A Transaction ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "feedId" $feedId "scalar") (serialize-qp "includeDetails" $includeDetails "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "feedId" $feed_id "scalar") (serialize-qp "includeDetails" $include_details "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/feeds" $qp)
-  let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_CONSUMER.ID": $WM_CONSUMERID, "WM_SEC.TIMESTAMP": $WM_SECTIMESTAMP, "WM_SEC.AUTH_SIGNATURE": $WM_SECAUTH_SIGNATURE, "WM_SVC.NAME": $WM_SVCNAME, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID} | compact
+  let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -140,23 +140,23 @@ export def "feeds v2doPostMultiPart" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --feedType: string@feedType-completer # Feed Type (default: item)
-  --WM-CONSUMERCHANNELTYPE: string@WM-CONSUMERCHANNELTYPE-completer # Channel Type
-  --WM-CONSUMERID: string # Your Consumer ID
-  --WM-SECTIMESTAMP: string # Epoch timestamp
-  --WM-SECAUTH-SIGNATURE: string # Authentication signature
-  --WM-SVCNAME: string # The Service name
-  --WM-QOSCORRELATION-ID: string # A Transaction ID
+  --feed-type: string@feed-type-completer # Feed Type (default: item)
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
+  --wm-consumer-id: string # Your Consumer ID
+  --wm-sec-timestamp: string # Epoch timestamp
+  --wm-sec-auth-signature: string # Authentication signature
+  --wm-svc-name: string # The Service name
+  --wm-qos-correlation-id: string # A Transaction ID
   file: path # Feed File to upload
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "feedType" $feedType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "feedType" $feed_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/feeds" $qp)
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_CONSUMER.ID": $WM_CONSUMERID, "WM_SEC.TIMESTAMP": $WM_SECTIMESTAMP, "WM_SEC.AUTH_SIGNATURE": $WM_SECAUTH_SIGNATURE, "WM_SVC.NAME": $WM_SVCNAME, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID} | compact
+  let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -169,7 +169,7 @@ export def "feeds v2doPostMultiPart" [
 # GET /v2/feeds/{feedId}
 # operationId: v2getAllItemsStatus
 export def "feeds v2getAllItemsStatus" [
-  feedId: string
+  feed_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,21 +178,21 @@ export def "feeds v2getAllItemsStatus" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --includeDetails: string # Includes details of each entity in the feed. Do not set this parameter to true. (default: false)
+  --include-details: string # Includes details of each entity in the feed. Do not set this parameter to true. (default: false)
   --offset: string # The object response to start with, where 0 is the first entity that can be requested. It can only be used when includeDetails is set to true. (default: 0)
   --limit: string # The number of entities to be returned. It cannot be more than 50 entities. Use it only when the includeDetails is set to true. (default: 50)
-  --WM-CONSUMERCHANNELTYPE: string@WM-CONSUMERCHANNELTYPE-completer # Channel Type
-  --WM-CONSUMERID: string # Your Consumer ID
-  --WM-SECTIMESTAMP: string # Epoch timestamp
-  --WM-SECAUTH-SIGNATURE: string # Authentication signature
-  --WM-SVCNAME: string # The Service name
-  --WM-QOSCORRELATION-ID: string # A Transaction ID
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
+  --wm-consumer-id: string # Your Consumer ID
+  --wm-sec-timestamp: string # Epoch timestamp
+  --wm-sec-auth-signature: string # Authentication signature
+  --wm-svc-name: string # The Service name
+  --wm-qos-correlation-id: string # A Transaction ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includeDetails" $includeDetails "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/feeds/($feedId)" $qp)
-  let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_CONSUMER.ID": $WM_CONSUMERID, "WM_SEC.TIMESTAMP": $WM_SECTIMESTAMP, "WM_SEC.AUTH_SIGNATURE": $WM_SECAUTH_SIGNATURE, "WM_SVC.NAME": $WM_SVCNAME, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID} | compact
+  let qp = [(serialize-qp "includeDetails" $include_details "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({feed_id: $feed_id} | format pattern "/v2/feeds/{feed_id}") $qp)
+  let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,22 +212,22 @@ export def "feeds v3getFeedItemStatus" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --feedId: string # The feed ID.
-  --includeDetails: string # Includes the status details for each item in the feed. Do not set this parameter to true as discrepancies may appear between the header and the item details (the item details may be incorrect). Instead, use the Get a feedItems status. (default: false)
+  --feed-id: string # The feed ID.
+  --include-details: string # Includes the status details for each item in the feed. Do not set this parameter to true as discrepancies may appear between the header and the item details (the item details may be incorrect). Instead, use the Get a feedItems status. (default: false)
   --offset: string # The object response to start with, where 0 is the first entity that can be requested. It can only be used when includeDetails is set to true. (default: 0)
   --limit: string # The number of items to be returned. Cannot be more than 50 items. Use it only when the includeDetails is set to true. (default: 50)
-  --WM-CONSUMERCHANNELTYPE: string@WM-CONSUMERCHANNELTYPE-completer # Channel Type
-  --WM-CONSUMERID: string # Your Consumer ID
-  --WM-SECTIMESTAMP: string # Epoch timestamp
-  --WM-SECAUTH-SIGNATURE: string # Authentication signature
-  --WM-SVCNAME: string # The Service name
-  --WM-QOSCORRELATION-ID: string # A Transaction ID
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
+  --wm-consumer-id: string # Your Consumer ID
+  --wm-sec-timestamp: string # Epoch timestamp
+  --wm-sec-auth-signature: string # Authentication signature
+  --wm-svc-name: string # The Service name
+  --wm-qos-correlation-id: string # A Transaction ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "feedId" $feedId "scalar") (serialize-qp "includeDetails" $includeDetails "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "feedId" $feed_id "scalar") (serialize-qp "includeDetails" $include_details "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/feeds" $qp)
-  let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_CONSUMER.ID": $WM_CONSUMERID, "WM_SEC.TIMESTAMP": $WM_SECTIMESTAMP, "WM_SEC.AUTH_SIGNATURE": $WM_SECAUTH_SIGNATURE, "WM_SVC.NAME": $WM_SVCNAME, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID} | compact
+  let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -247,23 +247,23 @@ export def "feeds v3doPostMultiPart" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --feedType: string@feedType-completer-1 # Feed Type (default: item)
-  --WM-CONSUMERCHANNELTYPE: string@WM-CONSUMERCHANNELTYPE-completer # Channel Type
-  --WM-CONSUMERID: string # Your Consumer ID
-  --WM-SECTIMESTAMP: string # Epoch timestamp
-  --WM-SECAUTH-SIGNATURE: string # Authentication signature
-  --WM-SVCNAME: string # The Service name
-  --WM-QOSCORRELATION-ID: string # A Transaction ID
+  --feed-type: string@feed-type-completer-1 # Feed Type (default: item)
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
+  --wm-consumer-id: string # Your Consumer ID
+  --wm-sec-timestamp: string # Epoch timestamp
+  --wm-sec-auth-signature: string # Authentication signature
+  --wm-svc-name: string # The Service name
+  --wm-qos-correlation-id: string # A Transaction ID
   file: path # Feed File to upload
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "feedType" $feedType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "feedType" $feed_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/feeds" $qp)
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_CONSUMER.ID": $WM_CONSUMERID, "WM_SEC.TIMESTAMP": $WM_SECTIMESTAMP, "WM_SEC.AUTH_SIGNATURE": $WM_SECAUTH_SIGNATURE, "WM_SVC.NAME": $WM_SVCNAME, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID} | compact
+  let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -276,7 +276,7 @@ export def "feeds v3doPostMultiPart" [
 # GET /v3/feeds/{feedId}
 # operationId: v3getAllItemsStatus
 export def "feeds v3getAllItemsStatus" [
-  feedId: string
+  feed_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,21 +285,21 @@ export def "feeds v3getAllItemsStatus" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --includeDetails: string # Includes details of each entity in the feed. Do not set this parameter to true. (default: false)
+  --include-details: string # Includes details of each entity in the feed. Do not set this parameter to true. (default: false)
   --offset: string # The object response to start with, where 0 is the first entity that can be requested. It can only be used when includeDetails is set to true. (default: 0)
   --limit: string # The number of entities to be returned. It cannot be more than 50 entities. Use it only when the includeDetails is set to true. (default: 50)
-  --WM-CONSUMERCHANNELTYPE: string@WM-CONSUMERCHANNELTYPE-completer # Channel Type
-  --WM-CONSUMERID: string # Your Consumer ID
-  --WM-SECTIMESTAMP: string # Epoch timestamp
-  --WM-SECAUTH-SIGNATURE: string # Authentication signature
-  --WM-SVCNAME: string # The Service name
-  --WM-QOSCORRELATION-ID: string # A Transaction ID
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
+  --wm-consumer-id: string # Your Consumer ID
+  --wm-sec-timestamp: string # Epoch timestamp
+  --wm-sec-auth-signature: string # Authentication signature
+  --wm-svc-name: string # The Service name
+  --wm-qos-correlation-id: string # A Transaction ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includeDetails" $includeDetails "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/feeds/($feedId)" $qp)
-  let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_CONSUMER.ID": $WM_CONSUMERID, "WM_SEC.TIMESTAMP": $WM_SECTIMESTAMP, "WM_SEC.AUTH_SIGNATURE": $WM_SECAUTH_SIGNATURE, "WM_SVC.NAME": $WM_SVCNAME, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID} | compact
+  let qp = [(serialize-qp "includeDetails" $include_details "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({feed_id: $feed_id} | format pattern "/v3/feeds/{feed_id}") $qp)
+  let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

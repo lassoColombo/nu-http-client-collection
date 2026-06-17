@@ -127,7 +127,7 @@ export def "article get" [
 ]: nothing -> record<author: string, claps: int, id: string, image_url: string, is_locked: bool, is_series: bool, lang: string, last_modified_at: string, publication_id: string, published_at: string, reading_time: float, responses_count: int, subtitle: string, tags: list<string>, title: string, topics: list<string>, url: string, voters: int, word_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/article/($article_id)")
+  let full_url = (build-url $base ({article_id: $article_id} | format pattern "/article/{article_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -149,7 +149,7 @@ export def "article-content get" [
 ]: nothing -> record<content: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/article/($article_id)/content")
+  let full_url = (build-url $base ({article_id: $article_id} | format pattern "/article/{article_id}/content"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,7 +171,7 @@ export def "article-fans get" [
 ]: nothing -> record<article_id: string, count: int, voters: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/article/($article_id)/fans")
+  let full_url = (build-url $base ({article_id: $article_id} | format pattern "/article/{article_id}/fans"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -193,7 +193,7 @@ export def "article-markdown get" [
 ]: nothing -> record<markdown: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/article/($article_id)/markdown")
+  let full_url = (build-url $base ({article_id: $article_id} | format pattern "/article/{article_id}/markdown"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -215,7 +215,7 @@ export def "article-related get" [
 ]: nothing -> record<id: string, related_articles: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/article/($article_id)/related")
+  let full_url = (build-url $base ({article_id: $article_id} | format pattern "/article/{article_id}/related"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -237,7 +237,7 @@ export def "article-responses get" [
 ]: nothing -> record<id: string, responses: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/article/($article_id)/responses")
+  let full_url = (build-url $base ({article_id: $article_id} | format pattern "/article/{article_id}/responses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,7 +259,7 @@ export def "latestposts get" [
 ]: nothing -> record<latestposts: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/latestposts/($topic_slug)")
+  let full_url = (build-url $base ({topic_slug: $topic_slug} | format pattern "/latestposts/{topic_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -281,7 +281,7 @@ export def "list get" [
 ]: nothing -> record<author: string, claps: int, count: int, created_at: string, description: string, id: string, last_item_inserted_at: string, name: string, responses_count: int, thumbnail: string, voters: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/list/($list_id)")
+  let full_url = (build-url $base ({list_id: $list_id} | format pattern "/list/{list_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -303,7 +303,7 @@ export def "list-articles get" [
 ]: nothing -> record<id: string, list_articles: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/list/($list_id)/articles")
+  let full_url = (build-url $base ({list_id: $list_id} | format pattern "/list/{list_id}/articles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -325,7 +325,7 @@ export def "list-responses get" [
 ]: nothing -> record<id: string, responses: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/list/($list_id)/responses")
+  let full_url = (build-url $base ({list_id: $list_id} | format pattern "/list/{list_id}/responses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -347,7 +347,7 @@ export def "publication-id-for get" [
 ]: nothing -> record<publication_id: string, publication_slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/publication/id_for/($publication_slug)")
+  let full_url = (build-url $base ({publication_slug: $publication_slug} | format pattern "/publication/id_for/{publication_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -369,7 +369,7 @@ export def "publication get" [
 ]: nothing -> record<creator: string, description: string, editors: list<string>, facebook_pagename: string, followers: int, id: string, instagram_username: string, name: string, slug: string, tagline: string, tags: list<string>, twitter_username: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/publication/($publication_id)")
+  let full_url = (build-url $base ({publication_id: $publication_id} | format pattern "/publication/{publication_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -393,7 +393,7 @@ export def "publication-articles get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/publication/($publication_id)/articles" $qp)
+  let full_url = (build-url $base ({publication_id: $publication_id} | format pattern "/publication/{publication_id}/articles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -415,7 +415,7 @@ export def "publication-newsletter get" [
 ]: nothing -> record<creator_id: string, description: string, id: string, image: string, name: string, slug: string, subscribers: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/publication/($publication_id)/newsletter")
+  let full_url = (build-url $base ({publication_id: $publication_id} | format pattern "/publication/{publication_id}/newsletter"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -437,7 +437,7 @@ export def "related-tags get" [
 ]: nothing -> record<given_tag: string, related_tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/related_tags/($tag)")
+  let full_url = (build-url $base ({tag: $tag} | format pattern "/related_tags/{tag}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -461,7 +461,7 @@ export def "search-articles-query-query get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/articles?query=($query)" $qp)
+  let full_url = (build-url $base ({query: $query} | format pattern "/search/articles?query={query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -485,7 +485,7 @@ export def "search-lists-query-query get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/lists?query=($query)" $qp)
+  let full_url = (build-url $base ({query: $query} | format pattern "/search/lists?query={query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -509,7 +509,7 @@ export def "search-publications-query-query get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/publications?query=($query)" $qp)
+  let full_url = (build-url $base ({query: $query} | format pattern "/search/publications?query={query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -533,7 +533,7 @@ export def "search-tags-query-query get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/tags?query=($query)" $qp)
+  let full_url = (build-url $base ({query: $query} | format pattern "/search/tags?query={query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -557,7 +557,7 @@ export def "search-users-query-query get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/users?query=($query)" $qp)
+  let full_url = (build-url $base ({query: $query} | format pattern "/search/users?query={query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -581,7 +581,7 @@ export def "top-writer get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/top_writer/($topic_slug)" $qp)
+  let full_url = (build-url $base ({topic_slug: $topic_slug} | format pattern "/top_writer/{topic_slug}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -607,7 +607,7 @@ export def "topfeeds get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/topfeeds/($tag)/($mode)" $qp)
+  let full_url = (build-url $base ({tag: $tag, mode: $mode} | format pattern "/topfeeds/{tag}/{mode}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -629,7 +629,7 @@ export def "user-id-for get" [
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/id_for/($username)")
+  let full_url = (build-url $base ({username: $username} | format pattern "/user/id_for/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -651,7 +651,7 @@ export def "user get" [
 ]: nothing -> record<allow_notes: bool, bio: string, followers_count: int, following_count: int, fullname: string, has_list: bool, id: string, image_url: string, is_book_author: bool, is_suspended: bool, is_writer_program_enrolled: bool, medium_member_at: string, top_writer_in: list<string>, twitter_username: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/($user_id)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/user/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -673,7 +673,7 @@ export def "user-articles get" [
 ]: nothing -> record<associated_articles: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/($user_id)/articles")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/user/{user_id}/articles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -697,7 +697,7 @@ export def "user-followers get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/user/($user_id)/followers" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/user/{user_id}/followers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -721,7 +721,7 @@ export def "user-following get" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/user/($user_id)/following" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/user/{user_id}/following") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -743,7 +743,7 @@ export def "user-interests get" [
 ]: nothing -> record<tags_followed: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/($user_id)/interests")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/user/{user_id}/interests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -765,7 +765,7 @@ export def "user-lists get" [
 ]: nothing -> record<lists: list<string>, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/($user_id)/lists")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/user/{user_id}/lists"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -787,7 +787,7 @@ export def "user-publications get" [
 ]: nothing -> record<publications: list<string>, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/($user_id)/publications")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/user/{user_id}/publications"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -809,7 +809,7 @@ export def "user-top-articles get" [
 ]: nothing -> record<associated_articles: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/($user_id)/top_articles")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/user/{user_id}/top_articles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

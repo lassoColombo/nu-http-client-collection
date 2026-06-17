@@ -71,7 +71,7 @@ def accept-completer [] { ["application/json" "application/vnd.collection.doc+js
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "following post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "following create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # POST /v2/following
 # operationId: postFollowing
-export def "following post" [
+export def "following create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,8 +105,8 @@ export def "following post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
-  --daysSinceLastListen: int # The number of days since a user last listened to a story from this aggregation. Absent if user never listened to the aggregation. (format: int32)
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --days-since-last-listen: int # The number of days since a user last listened to a story from this aggregation. Absent if user never listened to the aggregation. (format: int32)
   --following: oneof<nothing, bool> # Whether or not the user is following the aggregation. When changing affiliation status, the client is expected to toggle this value and then send the entire object back. (default: false)
   href: string # A link to more details about the program from the NPR Story API
   id: string # A unique identifier for the aggregation (program)
@@ -119,9 +119,9 @@ export def "following post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/following")
-  let body = {daysSinceLastListen: $daysSinceLastListen, following: $following, href: $href, id: $id, notif_following: $notif_following, notif_rated: $notif_rated, rating: $rating, title: $title} | compact
+  let body = {"daysSinceLastListen": $days_since_last_listen, "following": $following, "href": $href, "id": $id, "notif_following": $notif_following, "notif_rated": $notif_rated, "rating": $rating, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -132,7 +132,7 @@ export def "following post" [
 #
 # PUT /v2/stations
 # operationId: updateStations
-export def "stations updateStations" [
+export def "stations update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,7 +142,7 @@ export def "stations updateStations" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
   --body: record
 ]: any -> any {
   let input = $in
@@ -150,7 +150,7 @@ export def "stations updateStations" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/stations")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -171,12 +171,12 @@ export def "user delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -197,12 +197,12 @@ export def "user get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -224,13 +224,13 @@ export def "user-inherit inheritFromTempUser" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --temp-user: int # The temporary user's ID before the user registered or logged in
-  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "temp_user" $temp_user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/inherit" $qp)
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

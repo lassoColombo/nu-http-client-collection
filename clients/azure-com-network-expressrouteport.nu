@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-express-route-ports List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-express-route-ports list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/ExpressRoutePorts
 # operationId: ExpressRoutePorts_List
-export def "subscriptions-providers-microsoft-network-express-route-ports List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-network-express-route-ports list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "subscriptions-providers-microsoft-network-express-route-ports List" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/ExpressRoutePorts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/ExpressRoutePorts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,8 +118,8 @@ export def "subscriptions-providers-microsoft-network-express-route-ports List" 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/ExpressRoutePortsLocations
 # operationId: ExpressRoutePortsLocations_List
-export def "subscriptions-providers-microsoft-network-express-route-ports-locations List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-network-express-route-ports-locations list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,7 +133,7 @@ export def "subscriptions-providers-microsoft-network-express-route-ports-locati
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/ExpressRoutePortsLocations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/ExpressRoutePortsLocations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,9 +143,9 @@ export def "subscriptions-providers-microsoft-network-express-route-ports-locati
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/ExpressRoutePortsLocations/{locationName}
 # operationId: ExpressRoutePortsLocations_Get
-export def "subscriptions-providers-microsoft-network-express-route-ports-locations Get" [
-  subscriptionId: string
-  locationName: string
+export def "subscriptions-providers-microsoft-network-express-route-ports-locations get" [
+  subscription_id: string
+  location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "subscriptions-providers-microsoft-network-express-route-ports-locati
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/ExpressRoutePortsLocations/($locationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location_name: $location_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/ExpressRoutePortsLocations/{location_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,9 +169,9 @@ export def "subscriptions-providers-microsoft-network-express-route-ports-locati
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/ExpressRoutePorts
 # operationId: ExpressRoutePorts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/ExpressRoutePorts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/ExpressRoutePorts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,10 +195,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/ExpressRoutePorts/{expressRoutePortName}
 # operationId: ExpressRoutePorts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  expressRoutePortName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports delete" [
+  subscription_id: string
+  resource_group_name: string
+  express_route_port_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/ExpressRoutePorts/($expressRoutePortName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, express_route_port_name: $express_route_port_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/ExpressRoutePorts/{express_route_port_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -222,10 +222,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/ExpressRoutePorts/{expressRoutePortName}
 # operationId: ExpressRoutePorts_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  expressRoutePortName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports get" [
+  subscription_id: string
+  resource_group_name: string
+  express_route_port_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/ExpressRoutePorts/($expressRoutePortName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, express_route_port_name: $express_route_port_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/ExpressRoutePorts/{express_route_port_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -249,10 +249,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/ExpressRoutePorts/{expressRoutePortName}
 # operationId: ExpressRoutePorts_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports UpdateTags" [
-  subscriptionId: string
-  resourceGroupName: string
-  expressRoutePortName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports update-tags" [
+  subscription_id: string
+  resource_group_name: string
+  express_route_port_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,8 +268,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/ExpressRoutePorts/($expressRoutePortName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, express_route_port_name: $express_route_port_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/ExpressRoutePorts/{express_route_port_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -282,10 +282,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 # operationId: ExpressRoutePorts_CreateOrUpdate
 # --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
 # --properties shape: {bandwidthInGbps?: int, encapsulation?: "Dot1Q"|"QinQ", links?: list, peeringLocation?: string, resourceGuid?: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  expressRoutePortName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  express_route_port_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,8 +305,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/ExpressRoutePorts/($expressRoutePortName)" $qp)
-  let body = {identity: $identity, properties: $properties, id: $id, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, express_route_port_name: $express_route_port_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/ExpressRoutePorts/{express_route_port_name}") $qp)
+  let body = {"identity": $identity, "properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -317,10 +317,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/ExpressRoutePorts/{expressRoutePortName}/links
 # operationId: ExpressRouteLinks_List
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports-links List" [
-  subscriptionId: string
-  resourceGroupName: string
-  expressRoutePortName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports-links list" [
+  subscription_id: string
+  resource_group_name: string
+  express_route_port_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/ExpressRoutePorts/($expressRoutePortName)/links" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, express_route_port_name: $express_route_port_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/ExpressRoutePorts/{express_route_port_name}/links") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,11 +344,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/ExpressRoutePorts/{expressRoutePortName}/links/{linkName}
 # operationId: ExpressRouteLinks_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports-links Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  expressRoutePortName: string
-  linkName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports-links get" [
+  subscription_id: string
+  resource_group_name: string
+  express_route_port_name: string
+  link_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +362,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/ExpressRoutePorts/($expressRoutePortName)/links/($linkName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, express_route_port_name: $express_route_port_name, link_name: $link_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/ExpressRoutePorts/{express_route_port_name}/links/{link_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -71,7 +71,7 @@ def type-completer [] { ["Microsoft.DataLakeStore/accounts"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-lake-store-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-lake-store-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DataLakeStore/operations
 # operationId: Operations_List
-export def "providers-microsoft-data-lake-store-operations List" [
+export def "providers-microsoft-data-lake-store-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,8 +119,8 @@ export def "providers-microsoft-data-lake-store-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataLakeStore/accounts
 # operationId: Accounts_List
-export def "subscriptions-providers-microsoft-data-lake-store-accounts List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-data-lake-store-accounts list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +140,7 @@ export def "subscriptions-providers-microsoft-data-lake-store-accounts List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DataLakeStore/accounts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataLakeStore/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,8 +150,8 @@ export def "subscriptions-providers-microsoft-data-lake-store-accounts List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataLakeStore/locations/{location}/capability
 # operationId: Locations_GetCapability
-export def "subscriptions-providers-microsoft-data-lake-store-locations-capability GetCapability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-data-lake-store-locations-capability get" [
+  subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -166,7 +166,7 @@ export def "subscriptions-providers-microsoft-data-lake-store-locations-capabili
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DataLakeStore/locations/($location)/capability" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataLakeStore/locations/{location}/capability") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,8 +176,8 @@ export def "subscriptions-providers-microsoft-data-lake-store-locations-capabili
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DataLakeStore/locations/{location}/checkNameAvailability
 # operationId: Accounts_CheckNameAvailability
-export def "subscriptions-providers-microsoft-data-lake-store-locations-check-name-availability CheckNameAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-data-lake-store-locations-check-name-availability check" [
+  subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,8 +195,8 @@ export def "subscriptions-providers-microsoft-data-lake-store-locations-check-na
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DataLakeStore/locations/($location)/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataLakeStore/locations/{location}/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -207,8 +207,8 @@ export def "subscriptions-providers-microsoft-data-lake-store-locations-check-na
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataLakeStore/locations/{location}/usages
 # operationId: Locations_GetUsage
-export def "subscriptions-providers-microsoft-data-lake-store-locations-usages GetUsage" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-data-lake-store-locations-usages get" [
+  subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -223,7 +223,7 @@ export def "subscriptions-providers-microsoft-data-lake-store-locations-usages G
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DataLakeStore/locations/($location)/usages" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataLakeStore/locations/{location}/usages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -233,9 +233,9 @@ export def "subscriptions-providers-microsoft-data-lake-store-locations-usages G
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts
 # operationId: Accounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -265,10 +265,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}
 # operationId: Accounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -292,10 +292,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}
 # operationId: Accounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,7 +309,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -320,10 +320,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}
 # operationId: Accounts_Update
 # --properties shape: {defaultGroup?: string, encryptionConfig?: any, firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", newTier?: "Consumption"|"Commitment_1TB"|"Commitment_10TB"|"Commitment_100TB"|"Commitment_500TB"|"Commitment_1PB"|"Commitment_5PB", trustedIdProviderState?: "Enabled"|"Disabled", trustedIdProviders?: list, virtualNetworkRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,8 +340,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -354,10 +354,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 # operationId: Accounts_Create
 # --identity shape: {type: "SystemAssigned"}
 # --properties shape: {defaultGroup?: string, encryptionConfig?: any, encryptionState?: "Enabled"|"Disabled", firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", newTier?: "Consumption"|"Commitment_1TB"|"Commitment_10TB"|"Commitment_100TB"|"Commitment_500TB"|"Commitment_1PB"|"Commitment_5PB", trustedIdProviderState?: "Enabled"|"Disabled", trustedIdProviders?: list, virtualNetworkRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,8 +376,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)" $qp)
-  let body = {identity: $identity, location: $location, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}") $qp)
+  let body = {"identity": $identity, "location": $location, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -388,10 +388,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/enableKeyVault
 # operationId: Accounts_EnableKeyVault
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-enable-key-vault EnableKeyVault" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-enable-key-vault enable" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,7 +405,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)/enableKeyVault" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}/enableKeyVault") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -415,10 +415,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/firewallRules
 # operationId: FirewallRules_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-firewall-rules ListByAccount" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-firewall-rules list-by" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,7 +432,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)/firewallRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}/firewallRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -442,11 +442,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-firewall-rules Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  firewallRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-firewall-rules delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  firewall_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,7 +460,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)/firewallRules/($firewallRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, firewall_rule_name: $firewall_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}/firewallRules/{firewall_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -470,11 +470,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-firewall-rules Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  firewallRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-firewall-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  firewall_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -488,7 +488,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)/firewallRules/($firewallRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, firewall_rule_name: $firewall_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}/firewallRules/{firewall_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -499,11 +499,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_Update
 # --properties shape: {endIpAddress?: string, startIpAddress?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-firewall-rules Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  firewallRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-firewall-rules update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  firewall_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,8 +519,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)/firewallRules/($firewallRuleName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, firewall_rule_name: $firewall_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}/firewallRules/{firewall_rule_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -532,11 +532,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_CreateOrUpdate
 # --properties shape: {endIpAddress: string, startIpAddress: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-firewall-rules CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  firewallRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-firewall-rules create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  firewall_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,8 +552,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)/firewallRules/($firewallRuleName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, firewall_rule_name: $firewall_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}/firewallRules/{firewall_rule_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -564,10 +564,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/trustedIdProviders
 # operationId: TrustedIdProviders_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-trusted-id-providers ListByAccount" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-trusted-id-providers list-by" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,7 +581,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)/trustedIdProviders" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}/trustedIdProviders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -591,11 +591,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/trustedIdProviders/{trustedIdProviderName}
 # operationId: TrustedIdProviders_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-trusted-id-providers Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  trustedIdProviderName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-trusted-id-providers delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  trusted_id_provider_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,7 +609,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)/trustedIdProviders/($trustedIdProviderName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, trusted_id_provider_name: $trusted_id_provider_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}/trustedIdProviders/{trusted_id_provider_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -619,11 +619,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/trustedIdProviders/{trustedIdProviderName}
 # operationId: TrustedIdProviders_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-trusted-id-providers Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  trustedIdProviderName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-trusted-id-providers get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  trusted_id_provider_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,7 +637,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)/trustedIdProviders/($trustedIdProviderName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, trusted_id_provider_name: $trusted_id_provider_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}/trustedIdProviders/{trusted_id_provider_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -648,11 +648,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/trustedIdProviders/{trustedIdProviderName}
 # operationId: TrustedIdProviders_Update
 # --properties shape: {idProvider?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-trusted-id-providers Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  trustedIdProviderName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-trusted-id-providers update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  trusted_id_provider_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,8 +668,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)/trustedIdProviders/($trustedIdProviderName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, trusted_id_provider_name: $trusted_id_provider_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}/trustedIdProviders/{trusted_id_provider_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -681,11 +681,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/trustedIdProviders/{trustedIdProviderName}
 # operationId: TrustedIdProviders_CreateOrUpdate
 # --properties shape: {idProvider: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-trusted-id-providers CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  trustedIdProviderName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-trusted-id-providers create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  trusted_id_provider_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -701,8 +701,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)/trustedIdProviders/($trustedIdProviderName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, trusted_id_provider_name: $trusted_id_provider_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}/trustedIdProviders/{trusted_id_provider_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -713,10 +713,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/virtualNetworkRules
 # operationId: VirtualNetworkRules_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-virtual-network-rules ListByAccount" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-virtual-network-rules list-by" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -730,7 +730,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)/virtualNetworkRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}/virtualNetworkRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -740,11 +740,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/virtualNetworkRules/{virtualNetworkRuleName}
 # operationId: VirtualNetworkRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-virtual-network-rules Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  virtualNetworkRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-virtual-network-rules delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  virtual_network_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -758,7 +758,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)/virtualNetworkRules/($virtualNetworkRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, virtual_network_rule_name: $virtual_network_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}/virtualNetworkRules/{virtual_network_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -768,11 +768,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/virtualNetworkRules/{virtualNetworkRuleName}
 # operationId: VirtualNetworkRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-virtual-network-rules Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  virtualNetworkRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-virtual-network-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  virtual_network_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -786,7 +786,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)/virtualNetworkRules/($virtualNetworkRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, virtual_network_rule_name: $virtual_network_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}/virtualNetworkRules/{virtual_network_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -797,11 +797,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/virtualNetworkRules/{virtualNetworkRuleName}
 # operationId: VirtualNetworkRules_Update
 # --properties shape: {subnetId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-virtual-network-rules Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  virtualNetworkRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-virtual-network-rules update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  virtual_network_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -817,8 +817,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)/virtualNetworkRules/($virtualNetworkRuleName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, virtual_network_rule_name: $virtual_network_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}/virtualNetworkRules/{virtual_network_rule_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -830,11 +830,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/virtualNetworkRules/{virtualNetworkRuleName}
 # operationId: VirtualNetworkRules_CreateOrUpdate
 # --properties shape: {subnetId: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-virtual-network-rules CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  virtualNetworkRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-virtual-network-rules create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  virtual_network_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -850,8 +850,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataLakeStore/accounts/($accountName)/virtualNetworkRules/($virtualNetworkRuleName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, virtual_network_rule_name: $virtual_network_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeStore/accounts/{account_name}/virtualNetworkRules/{virtual_network_rule_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

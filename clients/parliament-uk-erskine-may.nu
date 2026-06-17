@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/Chapter/{chapterNumber}
 export def "chapter get" [
-  chapterNumber: int
+  chapter_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,7 +107,7 @@ export def "chapter get" [
 ]: nothing -> record<description: string, number: int, partNumber: int, sections: table<id: int, subSections: list, title: string, titleChain: string>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/Chapter/($chapterNumber)")
+  let full_url = (build-url $base ({chapter_number: $chapter_number} | format pattern "/api/Chapter/{chapter_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -126,13 +126,13 @@ export def "index-term-browse get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --startLetter: string # Index terms by start letter
+  --start-letter: string # Index terms by start letter
   --skip: int # The number of records to skip from the first, default is 0. (format: int32, default: 0)
   --take: int # The number of records to return, default is 20, maximum is 20. (format: int32, default: 20)
 ]: nothing -> record<searchResults: table<displayAs: string, id: int, seeValue: string>, searchTerm: string, searchTerms: list<string>, skip: int, suggestedSearch: string, take: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startLetter" $startLetter "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startLetter" $start_letter "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/IndexTerm/browse" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -143,7 +143,7 @@ export def "index-term-browse get" [
 #
 # GET /api/IndexTerm/{indexTermId}
 export def "index-term get" [
-  indexTermId: int
+  index_term_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "index-term get" [
 ]: nothing -> record<childTerms: list<any>, displayAs: string, id: int, parentTerm: any, references: table<chapterNumber: int, chapterTitle: string, paragraphReference: string, partNumber: int, searchResultText: string, sectionId: int, sectionTitle: string, sectionTitleChain: string>, seeLinks: table<indexTermId: int, seeType: string, seeValue: string>, term: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/IndexTerm/($indexTermId)")
+  let full_url = (build-url $base ({index_term_id: $index_term_id} | format pattern "/api/IndexTerm/{index_term_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,7 +188,7 @@ export def "part list" [
 #
 # GET /api/Part/{partNumber}
 export def "part get" [
-  partNumber: int
+  part_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "part get" [
 ]: nothing -> record<chapters: table<description: string, number: int, partNumber: int, sections: list, title: string>, description: string, number: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/Part/($partNumber)")
+  let full_url = (build-url $base ({part_number: $part_number} | format pattern "/api/Part/{part_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -211,7 +211,7 @@ export def "part get" [
 #
 # GET /api/Search/IndexTermSearchResults/{searchTerm}
 export def "search-index-term-search-results get" [
-  searchTerm: string
+  search_term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "search-index-term-search-results get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/Search/IndexTermSearchResults/($searchTerm)" $qp)
+  let full_url = (build-url $base ({search_term: $search_term} | format pattern "/api/Search/IndexTermSearchResults/{search_term}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,7 +250,7 @@ export def "search-paragraph get" [
 ]: nothing -> record<id: int, subSections: list<any>, title: string, titleChain: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/Search/Paragraph/($reference)")
+  let full_url = (build-url $base ({reference: $reference} | format pattern "/api/Search/Paragraph/{reference}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,7 +260,7 @@ export def "search-paragraph get" [
 #
 # GET /api/Search/ParagraphSearchResults/{searchTerm}
 export def "search-paragraph-search-results get" [
-  searchTerm: string
+  search_term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "search-paragraph-search-results get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/Search/ParagraphSearchResults/($searchTerm)" $qp)
+  let full_url = (build-url $base ({search_term: $search_term} | format pattern "/api/Search/ParagraphSearchResults/{search_term}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -286,7 +286,7 @@ export def "search-paragraph-search-results get" [
 #
 # GET /api/Search/SectionSearchResults/{searchTerm}
 export def "search-section-search-results get" [
-  searchTerm: string
+  search_term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "search-section-search-results get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/Search/SectionSearchResults/($searchTerm)" $qp)
+  let full_url = (build-url $base ({search_term: $search_term} | format pattern "/api/Search/SectionSearchResults/{search_term}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -312,7 +312,7 @@ export def "search-section-search-results get" [
 #
 # GET /api/Section/{sectionId}
 export def "section list" [
-  sectionId: int
+  section_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "section list" [
 ]: nothing -> record<chapterNumber: int, chapterTitle: string, contentHtml: string, footnotes: table<content: string, number: string>, id: int, isUpdated: bool, parentSectionId: int, parentSectionTitle: string, partNumber: int, partTitle: string, subSections: table<id: int, subSections: list, title: string, titleChain: string>, title: string, titleChain: string, updatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/Section/($sectionId)")
+  let full_url = (build-url $base ({section_id: $section_id} | format pattern "/api/Section/{section_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -335,7 +335,7 @@ export def "section list" [
 #
 # GET /api/Section/{sectionId},{step}
 export def "section get" [
-  sectionId: int
+  section_id: int
   step: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -349,7 +349,7 @@ export def "section get" [
 ]: nothing -> record<id: int, subSections: list<any>, title: string, titleChain: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/Section/($sectionId),($step)")
+  let full_url = (build-url $base ({section_id: $section_id, step: $step} | format pattern "/api/Section/{section_id},{step}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -71,7 +71,7 @@ def accept-completer [] { ["application/json" "text/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-network-interfaces ListAll" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-network-interfaces list-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,8 +95,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/networkInterfaces
 # operationId: NetworkInterfaces_ListAll
-export def "subscriptions-providers-microsoft-network-network-interfaces ListAll" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-network-network-interfaces list-all" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,7 +111,7 @@ export def "subscriptions-providers-microsoft-network-network-interfaces ListAll
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/networkInterfaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/networkInterfaces") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -121,9 +121,9 @@ export def "subscriptions-providers-microsoft-network-network-interfaces ListAll
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces
 # operationId: NetworkInterfaces_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces List" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,7 +138,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkInterfaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkInterfaces") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,10 +148,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}
 # operationId: NetworkInterfaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces Delete" [
-  resourceGroupName: string
-  networkInterfaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces delete" [
+  subscription_id: string
+  resource_group_name: string
+  network_interface_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkInterfaces/($networkInterfaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_interface_name: $network_interface_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkInterfaces/{network_interface_name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,10 +176,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}
 # operationId: NetworkInterfaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces Get" [
-  resourceGroupName: string
-  networkInterfaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces get" [
+  subscription_id: string
+  resource_group_name: string
+  network_interface_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkInterfaces/($networkInterfaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_interface_name: $network_interface_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkInterfaces/{network_interface_name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -205,10 +205,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}
 # operationId: NetworkInterfaces_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces UpdateTags" [
-  resourceGroupName: string
-  networkInterfaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces update-tags" [
+  subscription_id: string
+  resource_group_name: string
+  network_interface_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,8 +225,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkInterfaces/($networkInterfaceName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_interface_name: $network_interface_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkInterfaces/{network_interface_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -238,10 +238,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}
 # operationId: NetworkInterfaces_CreateOrUpdate
 # --properties shape: {dnsSettings?: any, enableAcceleratedNetworking?: bool, enableIPForwarding?: bool, ipConfigurations?: list, macAddress?: string, networkSecurityGroup?: any, primary?: bool, provisioningState?: string, resourceGuid?: string, virtualMachine?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces CreateOrUpdate" [
-  resourceGroupName: string
-  networkInterfaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  network_interface_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,8 +262,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkInterfaces/($networkInterfaceName)" $qp)
-  let body = {etag: $etag, properties: $properties, id: $id, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_interface_name: $network_interface_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkInterfaces/{network_interface_name}") $qp)
+  let body = {"etag": $etag, "properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -274,10 +274,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}/effectiveNetworkSecurityGroups
 # operationId: NetworkInterfaces_ListEffectiveNetworkSecurityGroups
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-effective-network-security-groups ListEffectiveNetworkSecurityGroups" [
-  resourceGroupName: string
-  networkInterfaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-effective-network-security-groups list" [
+  subscription_id: string
+  resource_group_name: string
+  network_interface_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkInterfaces/($networkInterfaceName)/effectiveNetworkSecurityGroups" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_interface_name: $network_interface_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkInterfaces/{network_interface_name}/effectiveNetworkSecurityGroups") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -302,10 +302,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}/effectiveRouteTable
 # operationId: NetworkInterfaces_GetEffectiveRouteTable
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-effective-route-table GetEffectiveRouteTable" [
-  resourceGroupName: string
-  networkInterfaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-effective-route-table get" [
+  subscription_id: string
+  resource_group_name: string
+  network_interface_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,7 +320,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkInterfaces/($networkInterfaceName)/effectiveRouteTable" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_interface_name: $network_interface_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkInterfaces/{network_interface_name}/effectiveRouteTable") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -330,10 +330,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}/ipConfigurations
 # operationId: NetworkInterfaceIPConfigurations_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-ip-configurations List" [
-  resourceGroupName: string
-  networkInterfaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-ip-configurations list" [
+  subscription_id: string
+  resource_group_name: string
+  network_interface_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,7 +348,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkInterfaces/($networkInterfaceName)/ipConfigurations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_interface_name: $network_interface_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkInterfaces/{network_interface_name}/ipConfigurations") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -358,11 +358,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}/ipConfigurations/{ipConfigurationName}
 # operationId: NetworkInterfaceIPConfigurations_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-ip-configurations Get" [
-  resourceGroupName: string
-  networkInterfaceName: string
-  ipConfigurationName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-ip-configurations get" [
+  subscription_id: string
+  resource_group_name: string
+  network_interface_name: string
+  ip_configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +377,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkInterfaces/($networkInterfaceName)/ipConfigurations/($ipConfigurationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_interface_name: $network_interface_name, ip_configuration_name: $ip_configuration_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkInterfaces/{network_interface_name}/ipConfigurations/{ip_configuration_name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -387,10 +387,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}/loadBalancers
 # operationId: NetworkInterfaceLoadBalancers_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-load-balancers List" [
-  resourceGroupName: string
-  networkInterfaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-load-balancers list" [
+  subscription_id: string
+  resource_group_name: string
+  network_interface_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,7 +405,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkInterfaces/($networkInterfaceName)/loadBalancers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_interface_name: $network_interface_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkInterfaces/{network_interface_name}/loadBalancers") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

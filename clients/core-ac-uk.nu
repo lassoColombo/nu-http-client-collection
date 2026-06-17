@@ -108,11 +108,11 @@ export def "articles-dedup nearDuplicateArticles" [
   --description: string # Abstract for an article based on which its duplicates will be found. Only useful when value for @title is supplied.
   --fulltext: string # Full text for an article based on which its duplicates will be found.
   --identifier: string # Article identifier for which the duplicates will be identified. Only useful when either values for @doi or (@title and @year) or (@title and @abstract) or @fulltext are supplied.
-  --repositoryId: string # Limit the duplicates search to particular repository id. 
+  --repository-id: string # Limit the duplicates search to particular repository id. 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "doi" $doi "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "identifier" $identifier "scalar") (serialize-qp "repositoryId" $repositoryId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "doi" $doi "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "identifier" $identifier "scalar") (serialize-qp "repositoryId" $repository_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/articles/dedup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -123,7 +123,7 @@ export def "articles-dedup nearDuplicateArticles" [
 #
 # POST /articles/get
 # operationId: getArticleByCoreIdBatch
-export def "articles-get post" [
+export def "articles-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,13 +138,13 @@ export def "articles-get post" [
   --similar: oneof<nothing, bool> # Whether to retrieve lists of similar articles. The default value is false. Because the similar articles are calculated on demand, setting this parameter to true might slightly slow down the response time (default: false)
   --duplicate: oneof<nothing, bool> # Whether to retrieve CORE IDs of different versions of the articles. The default value is false (default: false)
   --urls: oneof<nothing, bool> # Whether to retrieve lists of URLs of the article fulltexts. The default value is false (default: false)
-  --faithfulMetadata: oneof<nothing, bool> # Returns the records raw XML metadata from the original repository. The default value is false (default: false)
+  --faithful-metadata: oneof<nothing, bool> # Returns the records raw XML metadata from the original repository. The default value is false (default: false)
   --body: record
 ]: any -> table<data: record<authors: list, citations: list, contributors: list, datePublished: string, description: string, doi: string, downloadUrl: string, fulltext: string, fulltextIdentifier: string, fulltextUrls: list, id: int, identifiers: list, journals: list, language: record, oai: string, publisher: string, rawRecordXml: record, relations: list, repositories: list, repositoryDocument: any, similarities: list, subjects: list, title: string, topics: list, types: list, year: int>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "metadata" $metadata "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "citations" $citations "scalar") (serialize-qp "similar" $similar "scalar") (serialize-qp "duplicate" $duplicate "scalar") (serialize-qp "urls" $urls "scalar") (serialize-qp "faithfulMetadata" $faithfulMetadata "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "metadata" $metadata "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "citations" $citations "scalar") (serialize-qp "similar" $similar "scalar") (serialize-qp "duplicate" $duplicate "scalar") (serialize-qp "urls" $urls "scalar") (serialize-qp "faithfulMetadata" $faithful_metadata "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/articles/get" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -156,8 +156,8 @@ export def "articles-get post" [
 #
 # GET /articles/get/{coreId}
 # operationId: getArticleByCoreId
-export def "articles-get get" [
-  coreId: int
+export def "articles-get get-by-coreId" [
+  core_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,12 +172,12 @@ export def "articles-get get" [
   --similar: oneof<nothing, bool> # Whether to retrieve a list of similar articles. The default value is false. Because the similar articles are calculated on demand, setting this parameter to true might slightly slow down the response time (default: false)
   --duplicate: oneof<nothing, bool> # Whether to retrieve a list of CORE IDs of different versions of the article. The default value is false (default: false)
   --urls: oneof<nothing, bool> # Whether to retrieve a list of URLs from which the article can be downloaded. This can include links to PDFs as well as HTML pages. The default value is false (default: false)
-  --faithfulMetadata: oneof<nothing, bool> # Returns the records raw XML metadata from the original repository. The default value is false (default: false)
+  --faithful-metadata: oneof<nothing, bool> # Returns the records raw XML metadata from the original repository. The default value is false (default: false)
 ]: nothing -> record<data: record<authors: list<string>, citations: list<record>, contributors: list<string>, datePublished: string, description: string, doi: string, downloadUrl: string, fulltext: string, fulltextIdentifier: string, fulltextUrls: list<string>, id: int, identifiers: list<string>, journals: list<record>, language: record<deletedStatus: int, depositedDate: string, indexed: int, metadataUpdated: string, pdfOrigin: string, pdfSize: int, pdfStatus: int, tdmOnly: bool, textStatus: int, timestamp: string>, oai: string, publisher: string, rawRecordXml: record<datetime: string, metadata: string>, relations: list<string>, repositories: list<record>, repositoryDocument: any, similarities: list<record>, subjects: list<string>, title: string, topics: list<string>, types: list<string>, year: int>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "metadata" $metadata "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "citations" $citations "scalar") (serialize-qp "similar" $similar "scalar") (serialize-qp "duplicate" $duplicate "scalar") (serialize-qp "urls" $urls "scalar") (serialize-qp "faithfulMetadata" $faithfulMetadata "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/articles/get/($coreId)" $qp)
+  let qp = [(serialize-qp "metadata" $metadata "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "citations" $citations "scalar") (serialize-qp "similar" $similar "scalar") (serialize-qp "duplicate" $duplicate "scalar") (serialize-qp "urls" $urls "scalar") (serialize-qp "faithfulMetadata" $faithful_metadata "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({core_id: $core_id} | format pattern "/articles/get/{core_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,7 +188,7 @@ export def "articles-get get" [
 # GET /articles/get/{coreId}/download/pdf
 # operationId: getArticlePdfByCoreId
 export def "articles-get-download-pdf get" [
-  coreId: string
+  core_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "articles-get-download-pdf get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/articles/get/($coreId)/download/pdf")
+  let full_url = (build-url $base ({core_id: $core_id} | format pattern "/articles/get/{core_id}/download/pdf"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -211,7 +211,7 @@ export def "articles-get-download-pdf get" [
 # GET /articles/get/{coreId}/history
 # operationId: getArticleHistoryByCoreId
 export def "articles-get-history get" [
-  coreId: string
+  core_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,12 +221,12 @@ export def "articles-get-history get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Which page of the history results should be retrieved. Can be any number betwen 1 and 100, default is 1 (first page). (format: int32, default: 1)
-  --pageSize: int # The number of results to return per page. Can be any number between 10 and 100, default is 10. (format: int32, default: 10)
+  --page-size: int # The number of results to return per page. Can be any number between 10 and 100, default is 10. (format: int32, default: 10)
 ]: nothing -> record<data: table<datetime: string, metadata: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/articles/get/($coreId)/history" $qp)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({core_id: $core_id} | format pattern "/articles/get/{core_id}/history") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -236,7 +236,7 @@ export def "articles-get-history get" [
 #
 # POST /articles/search
 # operationId: searchArticlesBatch
-export def "articles-search searchArticlesBatch" [
+export def "articles-search list-articles-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,13 +251,13 @@ export def "articles-search searchArticlesBatch" [
   --similar: oneof<nothing, bool> # Whether to retrieve a list of similar articles. The default value is false. Because the similar articles are calculated on demand, setting this parameter to true might slightly slow down the response time (default: false)
   --duplicate: oneof<nothing, bool> # Whether to retrieve a list of CORE IDs of different versions of the article. The default value is false (default: false)
   --urls: oneof<nothing, bool> # Whether to retrieve a list of URLs from which the article can be downloaded. This can include links to PDFs as well as HTML pages. The default value is false (default: false)
-  --faithfulMetadata: oneof<nothing, bool> # Whether to retrieve the raw XML metadata of the article. The default value is false (default: false)
+  --faithful-metadata: oneof<nothing, bool> # Whether to retrieve the raw XML metadata of the article. The default value is false (default: false)
   --body: record
 ]: any -> table<data: list<record>, status: string, totalHits: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "metadata" $metadata "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "citations" $citations "scalar") (serialize-qp "similar" $similar "scalar") (serialize-qp "duplicate" $duplicate "scalar") (serialize-qp "urls" $urls "scalar") (serialize-qp "faithfulMetadata" $faithfulMetadata "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "metadata" $metadata "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "citations" $citations "scalar") (serialize-qp "similar" $similar "scalar") (serialize-qp "duplicate" $duplicate "scalar") (serialize-qp "urls" $urls "scalar") (serialize-qp "faithfulMetadata" $faithful_metadata "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/articles/search" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -269,7 +269,7 @@ export def "articles-search searchArticlesBatch" [
 #
 # GET /articles/search/{query}
 # operationId: searchArticles
-export def "articles-search searchArticles" [
+export def "articles-search list" [
   query: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -280,19 +280,19 @@ export def "articles-search searchArticles" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Which page of the search results should be retrieved. Can be any number betwen 1 and 100, default is 1 (first page). (format: int32, default: 1)
-  --pageSize: int # The number of results to return per page. Can be any number between 10 and 100, default is 10. (format: int32, default: 10)
+  --page-size: int # The number of results to return per page. Can be any number between 10 and 100, default is 10. (format: int32, default: 10)
   --metadata: oneof<nothing, bool> # Whether to retrieve the full article metadata or only the ID. The default value is true. (default: true)
   --fulltext: oneof<nothing, bool> # Whether to retrieve full text of the article. The default value is false (default: false)
   --citations: oneof<nothing, bool> # Whether to retrieve citations found in the article. The default value is false (default: false)
   --similar: oneof<nothing, bool> # Whether to retrieve a list of similar articles. The default value is false. Because the similar articles are calculated on demand, setting this parameter to true might slightly slow down the response time (default: false)
   --duplicate: oneof<nothing, bool> # Whether to retrieve a list of CORE IDs of different versions of the article. The default value is false (default: false)
   --urls: oneof<nothing, bool> # Whether to retrieve a list of URLs from which the article can be downloaded. This can include links to PDFs as well as HTML pages. The default value is false (default: false)
-  --faithfulMetadata: oneof<nothing, bool> # Returns the records raw XML metadata from the original repository. The default value is false (default: false)
+  --faithful-metadata: oneof<nothing, bool> # Returns the records raw XML metadata from the original repository. The default value is false (default: false)
 ]: nothing -> record<data: table<authors: list, citations: list, contributors: list, datePublished: string, description: string, doi: string, downloadUrl: string, fulltext: string, fulltextIdentifier: string, fulltextUrls: list, id: int, identifiers: list, journals: list, language: record, oai: string, publisher: string, rawRecordXml: record, relations: list, repositories: list, repositoryDocument: any, similarities: list, subjects: list, title: string, topics: list, types: list, year: int>, status: string, totalHits: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "citations" $citations "scalar") (serialize-qp "similar" $similar "scalar") (serialize-qp "duplicate" $duplicate "scalar") (serialize-qp "urls" $urls "scalar") (serialize-qp "faithfulMetadata" $faithfulMetadata "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/articles/search/($query)" $qp)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "citations" $citations "scalar") (serialize-qp "similar" $similar "scalar") (serialize-qp "duplicate" $duplicate "scalar") (serialize-qp "urls" $urls "scalar") (serialize-qp "faithfulMetadata" $faithful_metadata "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({query: $query} | format pattern "/articles/search/{query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,15 +318,15 @@ export def "articles-similar similarArticles" [
   --similar: oneof<nothing, bool> # Whether to retrieve lists of similar articles. The default value is false. Because the similar articles are calculated on demand, setting this parameter to true might slightly slow down the response time (default: false)
   --duplicate: oneof<nothing, bool> # Whether to retrieve CORE IDs of different versions of the articles. The default value is false (default: false)
   --urls: oneof<nothing, bool> # Whether to retrieve lists of URLs of the article fulltexts. The default value is false (default: false)
-  --faithfulMetadata: oneof<nothing, bool> # Whether to retrieve the raw XML metadata of the articles. The default value is false (default: false)
+  --faithful-metadata: oneof<nothing, bool> # Whether to retrieve the raw XML metadata of the articles. The default value is false (default: false)
   text: string # Find Similar articles based on this string
 ]: any -> record<data: table<authors: list, citations: list, contributors: list, datePublished: string, description: string, doi: string, downloadUrl: string, fulltext: string, fulltextIdentifier: string, fulltextUrls: list, id: int, identifiers: list, journals: list, language: record, oai: string, publisher: string, rawRecordXml: record, relations: list, repositories: list, repositoryDocument: any, similarities: list, subjects: list, title: string, topics: list, types: list, year: int>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "citations" $citations "scalar") (serialize-qp "similar" $similar "scalar") (serialize-qp "duplicate" $duplicate "scalar") (serialize-qp "urls" $urls "scalar") (serialize-qp "faithfulMetadata" $faithfulMetadata "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "fulltext" $fulltext "scalar") (serialize-qp "citations" $citations "scalar") (serialize-qp "similar" $similar "scalar") (serialize-qp "duplicate" $duplicate "scalar") (serialize-qp "urls" $urls "scalar") (serialize-qp "faithfulMetadata" $faithful_metadata "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/articles/similar" $qp)
-  let body = {text: $text} | compact
+  let body = {"text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -337,7 +337,7 @@ export def "articles-similar similarArticles" [
 #
 # POST /journals/get
 # operationId: getJournalByIssnBatch
-export def "journals-get post" [
+export def "journals-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +362,7 @@ export def "journals-get post" [
 #
 # GET /journals/get/{issn}
 # operationId: getJournalByIssn
-export def "journals-get get" [
+export def "journals-get get-by-issn" [
   issn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -375,7 +375,7 @@ export def "journals-get get" [
 ]: nothing -> record<data: record<identifiers: list<string>, language: string, publisher: string, rights: string, subjects: list<string>, title: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/journals/get/($issn)")
+  let full_url = (build-url $base ({issn: $issn} | format pattern "/journals/get/{issn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -419,12 +419,12 @@ export def "journals-search get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Which page of the search results should be retrieved. Can be any number betwen 1 and 100, default is 1 (first page). (format: int32, default: 1)
-  --pageSize: int # The number of results to return per page. Can be any number between 10 and 100, default is 10. (format: int32, default: 10)
+  --page-size: int # The number of results to return per page. Can be any number between 10 and 100, default is 10. (format: int32, default: 10)
 ]: nothing -> record<data: table<identifiers: list, language: string, publisher: string, rights: string, subjects: list, title: string>, status: string, totalHits: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/journals/search/($query)" $qp)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({query: $query} | format pattern "/journals/search/{query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -434,7 +434,7 @@ export def "journals-search get" [
 #
 # POST /repositories/get
 # operationId: getRepositoryByIdBatch
-export def "repositories-get post" [
+export def "repositories-get get-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,14 +444,14 @@ export def "repositories-get post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --stats: oneof<nothing, bool> # Whether to retrieve statistics about the repository. The default value is false (default: false)
-  --depositHistory: oneof<nothing, bool> # Returns deposit history over time (default: false)
-  --depositHistoryCumulative: oneof<nothing, bool> # Returns deposit history over time (default: false)
+  --deposit-history: oneof<nothing, bool> # Returns deposit history over time (default: false)
+  --deposit-history-cumulative: oneof<nothing, bool> # Returns deposit history over time (default: false)
   --body: record
 ]: any -> table<data: record<dataProviderSourceStats: list, history: list, historyCumulative: list, id: int, lastSeen: string, name: string, openDoarId: int, repositoryLocation: record, repositoryStats: record, uri: string, urlHomepage: string, urlOaipmh: string>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "stats" $stats "scalar") (serialize-qp "depositHistory" $depositHistory "scalar") (serialize-qp "depositHistoryCumulative" $depositHistoryCumulative "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "stats" $stats "scalar") (serialize-qp "depositHistory" $deposit_history "scalar") (serialize-qp "depositHistoryCumulative" $deposit_history_cumulative "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repositories/get" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -463,8 +463,8 @@ export def "repositories-get post" [
 #
 # GET /repositories/get/{repositoryId}
 # operationId: getRepositoryById
-export def "repositories-get get" [
-  repositoryId: int
+export def "repositories-get get-repository-by-repositoryId" [
+  repository_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -474,13 +474,13 @@ export def "repositories-get get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --stats: oneof<nothing, bool> # Whether to retrieve statistics about the repository. The default value is false (default: false)
-  --depositHistory: oneof<nothing, bool> # Returns deposit history over time (default: false)
-  --depositHistoryCumulative: oneof<nothing, bool> # Returns deposit history over time (default: false)
+  --deposit-history: oneof<nothing, bool> # Returns deposit history over time (default: false)
+  --deposit-history-cumulative: oneof<nothing, bool> # Returns deposit history over time (default: false)
 ]: nothing -> record<data: record<dataProviderSourceStats: list<any>, history: list<any>, historyCumulative: list<any>, id: int, lastSeen: string, name: string, openDoarId: int, repositoryLocation: record<country: string, countryCode: string, id: int, latitude: int, longitude: int, repositoryName: string>, repositoryStats: record<countFulltext: int, countMetadata: int, dateLastProcessed: string>, uri: string, urlHomepage: string, urlOaipmh: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "stats" $stats "scalar") (serialize-qp "depositHistory" $depositHistory "scalar") (serialize-qp "depositHistoryCumulative" $depositHistoryCumulative "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/get/($repositoryId)" $qp)
+  let qp = [(serialize-qp "stats" $stats "scalar") (serialize-qp "depositHistory" $deposit_history "scalar") (serialize-qp "depositHistoryCumulative" $deposit_history_cumulative "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({repository_id: $repository_id} | format pattern "/repositories/get/{repository_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -499,14 +499,14 @@ export def "repositories-search post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --stats: oneof<nothing, bool> # Whether to retrieve statistics about the repository. The default value is false (default: false)
-  --depositHistory: oneof<nothing, bool> # Returns deposit history over time (default: false)
-  --depositHistoryCumulative: oneof<nothing, bool> # Returns deposit history over time (default: false)
+  --deposit-history: oneof<nothing, bool> # Returns deposit history over time (default: false)
+  --deposit-history-cumulative: oneof<nothing, bool> # Returns deposit history over time (default: false)
   --body: record
 ]: any -> record<data: table<dataProviderSourceStats: list, history: list, historyCumulative: list, id: int, lastSeen: string, name: string, openDoarId: int, repositoryLocation: record, repositoryStats: record, uri: string, urlHomepage: string, urlOaipmh: string>, status: string, totalHits: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "stats" $stats "scalar") (serialize-qp "depositHistory" $depositHistory "scalar") (serialize-qp "depositHistoryCumulative" $depositHistoryCumulative "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "stats" $stats "scalar") (serialize-qp "depositHistory" $deposit_history "scalar") (serialize-qp "depositHistoryCumulative" $deposit_history_cumulative "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repositories/search" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -528,15 +528,15 @@ export def "repositories-search get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Which page of the search results should be retrieved. Can be any number betwen 1 and 100, default is 1 (first page). (format: int32, default: 1)
-  --pageSize: int # The number of results to return per page. Can be any number between 10 and 100, default is 10. (format: int32, default: 10)
+  --page-size: int # The number of results to return per page. Can be any number between 10 and 100, default is 10. (format: int32, default: 10)
   --stats: oneof<nothing, bool> # Whether to retrieve statistics about the repository. The default value is false (default: false)
-  --depositHistory: oneof<nothing, bool> # Returns deposit history over time (default: false)
-  --depositHistoryCumulative: oneof<nothing, bool> # Returns deposit history over time (default: false)
+  --deposit-history: oneof<nothing, bool> # Returns deposit history over time (default: false)
+  --deposit-history-cumulative: oneof<nothing, bool> # Returns deposit history over time (default: false)
 ]: nothing -> record<data: table<dataProviderSourceStats: list, history: list, historyCumulative: list, id: int, lastSeen: string, name: string, openDoarId: int, repositoryLocation: record, repositoryStats: record, uri: string, urlHomepage: string, urlOaipmh: string>, status: string, totalHits: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "depositHistory" $depositHistory "scalar") (serialize-qp "depositHistoryCumulative" $depositHistoryCumulative "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/search/($query)" $qp)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "depositHistory" $deposit_history "scalar") (serialize-qp "depositHistoryCumulative" $deposit_history_cumulative "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({query: $query} | format pattern "/repositories/search/{query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -580,12 +580,12 @@ export def "search get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Which page of the search results should be retrieved. Can be any number betwen 1 and 100, default is 1 (first page). (format: int32, default: 1)
-  --pageSize: int # The number of results to return per page. Can be any number between 10 and 100, default is 10. (format: int32, default: 10)
+  --page-size: int # The number of results to return per page. Can be any number between 10 and 100, default is 10. (format: int32, default: 10)
 ]: nothing -> record<data: table<id: string, type: string>, status: string, totalHits: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/($query)" $qp)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({query: $query} | format pattern "/search/{query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

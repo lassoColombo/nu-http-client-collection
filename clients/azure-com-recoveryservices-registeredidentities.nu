@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-certificates Create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-certificates create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,11 +94,11 @@ export def commands []: nothing -> table {
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/certificates/{certificateName}
 # operationId: VaultCertificates_Create
 # --properties shape: {authType?: "Invalid"|"ACS"|"AAD"|"AccessControlService"|"AzureActiveDirectory", certificate?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-certificates Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  vaultName: string
-  certificateName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-certificates create" [
+  subscription_id: string
+  resource_group_name: string
+  vault_name: string
+  certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,8 +114,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($vaultName)/certificates/($certificateName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vault_name: $vault_name, certificate_name: $certificate_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{vault_name}/certificates/{certificate_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -126,11 +126,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/registeredIdentities/{identityName}
 # operationId: RegisteredIdentities_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-registered-identities Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  vaultName: string
-  identityName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-registered-identities delete" [
+  subscription_id: string
+  resource_group_name: string
+  vault_name: string
+  identity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -144,7 +144,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($vaultName)/registeredIdentities/($identityName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vault_name: $vault_name, identity_name: $identity_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{vault_name}/registeredIdentities/{identity_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

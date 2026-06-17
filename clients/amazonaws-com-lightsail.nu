@@ -66,170 +66,170 @@ def base-url-completer [] { ["http://lightsail.us-east-1.amazonaws.com" "http://
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["Lightsail_20161128.AllocateStaticIp"] }
-def X-Amz-Target-completer-1 [] { ["Lightsail_20161128.AttachCertificateToDistribution"] }
-def X-Amz-Target-completer-2 [] { ["Lightsail_20161128.AttachDisk"] }
-def X-Amz-Target-completer-3 [] { ["Lightsail_20161128.AttachInstancesToLoadBalancer"] }
-def X-Amz-Target-completer-4 [] { ["Lightsail_20161128.AttachLoadBalancerTlsCertificate"] }
-def X-Amz-Target-completer-5 [] { ["Lightsail_20161128.AttachStaticIp"] }
-def X-Amz-Target-completer-6 [] { ["Lightsail_20161128.CloseInstancePublicPorts"] }
-def X-Amz-Target-completer-7 [] { ["Lightsail_20161128.CopySnapshot"] }
-def X-Amz-Target-completer-8 [] { ["Lightsail_20161128.CreateBucket"] }
-def X-Amz-Target-completer-9 [] { ["Lightsail_20161128.CreateBucketAccessKey"] }
-def X-Amz-Target-completer-10 [] { ["Lightsail_20161128.CreateCertificate"] }
-def X-Amz-Target-completer-11 [] { ["Lightsail_20161128.CreateCloudFormationStack"] }
-def X-Amz-Target-completer-12 [] { ["Lightsail_20161128.CreateContactMethod"] }
-def X-Amz-Target-completer-13 [] { ["Lightsail_20161128.CreateContainerService"] }
-def X-Amz-Target-completer-14 [] { ["Lightsail_20161128.CreateContainerServiceDeployment"] }
-def X-Amz-Target-completer-15 [] { ["Lightsail_20161128.CreateContainerServiceRegistryLogin"] }
-def X-Amz-Target-completer-16 [] { ["Lightsail_20161128.CreateDisk"] }
-def X-Amz-Target-completer-17 [] { ["Lightsail_20161128.CreateDiskFromSnapshot"] }
-def X-Amz-Target-completer-18 [] { ["Lightsail_20161128.CreateDiskSnapshot"] }
-def X-Amz-Target-completer-19 [] { ["Lightsail_20161128.CreateDistribution"] }
-def X-Amz-Target-completer-20 [] { ["Lightsail_20161128.CreateDomain"] }
-def X-Amz-Target-completer-21 [] { ["Lightsail_20161128.CreateDomainEntry"] }
-def X-Amz-Target-completer-22 [] { ["Lightsail_20161128.CreateGUISessionAccessDetails"] }
-def X-Amz-Target-completer-23 [] { ["Lightsail_20161128.CreateInstanceSnapshot"] }
-def X-Amz-Target-completer-24 [] { ["Lightsail_20161128.CreateInstances"] }
-def X-Amz-Target-completer-25 [] { ["Lightsail_20161128.CreateInstancesFromSnapshot"] }
-def X-Amz-Target-completer-26 [] { ["Lightsail_20161128.CreateKeyPair"] }
-def X-Amz-Target-completer-27 [] { ["Lightsail_20161128.CreateLoadBalancer"] }
-def X-Amz-Target-completer-28 [] { ["Lightsail_20161128.CreateLoadBalancerTlsCertificate"] }
-def X-Amz-Target-completer-29 [] { ["Lightsail_20161128.CreateRelationalDatabase"] }
-def X-Amz-Target-completer-30 [] { ["Lightsail_20161128.CreateRelationalDatabaseFromSnapshot"] }
-def X-Amz-Target-completer-31 [] { ["Lightsail_20161128.CreateRelationalDatabaseSnapshot"] }
-def X-Amz-Target-completer-32 [] { ["Lightsail_20161128.DeleteAlarm"] }
-def X-Amz-Target-completer-33 [] { ["Lightsail_20161128.DeleteAutoSnapshot"] }
-def X-Amz-Target-completer-34 [] { ["Lightsail_20161128.DeleteBucket"] }
-def X-Amz-Target-completer-35 [] { ["Lightsail_20161128.DeleteBucketAccessKey"] }
-def X-Amz-Target-completer-36 [] { ["Lightsail_20161128.DeleteCertificate"] }
-def X-Amz-Target-completer-37 [] { ["Lightsail_20161128.DeleteContactMethod"] }
-def X-Amz-Target-completer-38 [] { ["Lightsail_20161128.DeleteContainerImage"] }
-def X-Amz-Target-completer-39 [] { ["Lightsail_20161128.DeleteContainerService"] }
-def X-Amz-Target-completer-40 [] { ["Lightsail_20161128.DeleteDisk"] }
-def X-Amz-Target-completer-41 [] { ["Lightsail_20161128.DeleteDiskSnapshot"] }
-def X-Amz-Target-completer-42 [] { ["Lightsail_20161128.DeleteDistribution"] }
-def X-Amz-Target-completer-43 [] { ["Lightsail_20161128.DeleteDomain"] }
-def X-Amz-Target-completer-44 [] { ["Lightsail_20161128.DeleteDomainEntry"] }
-def X-Amz-Target-completer-45 [] { ["Lightsail_20161128.DeleteInstance"] }
-def X-Amz-Target-completer-46 [] { ["Lightsail_20161128.DeleteInstanceSnapshot"] }
-def X-Amz-Target-completer-47 [] { ["Lightsail_20161128.DeleteKeyPair"] }
-def X-Amz-Target-completer-48 [] { ["Lightsail_20161128.DeleteKnownHostKeys"] }
-def X-Amz-Target-completer-49 [] { ["Lightsail_20161128.DeleteLoadBalancer"] }
-def X-Amz-Target-completer-50 [] { ["Lightsail_20161128.DeleteLoadBalancerTlsCertificate"] }
-def X-Amz-Target-completer-51 [] { ["Lightsail_20161128.DeleteRelationalDatabase"] }
-def X-Amz-Target-completer-52 [] { ["Lightsail_20161128.DeleteRelationalDatabaseSnapshot"] }
-def X-Amz-Target-completer-53 [] { ["Lightsail_20161128.DetachCertificateFromDistribution"] }
-def X-Amz-Target-completer-54 [] { ["Lightsail_20161128.DetachDisk"] }
-def X-Amz-Target-completer-55 [] { ["Lightsail_20161128.DetachInstancesFromLoadBalancer"] }
-def X-Amz-Target-completer-56 [] { ["Lightsail_20161128.DetachStaticIp"] }
-def X-Amz-Target-completer-57 [] { ["Lightsail_20161128.DisableAddOn"] }
-def X-Amz-Target-completer-58 [] { ["Lightsail_20161128.DownloadDefaultKeyPair"] }
-def X-Amz-Target-completer-59 [] { ["Lightsail_20161128.EnableAddOn"] }
-def X-Amz-Target-completer-60 [] { ["Lightsail_20161128.ExportSnapshot"] }
-def X-Amz-Target-completer-61 [] { ["Lightsail_20161128.GetActiveNames"] }
-def X-Amz-Target-completer-62 [] { ["Lightsail_20161128.GetAlarms"] }
-def X-Amz-Target-completer-63 [] { ["Lightsail_20161128.GetAutoSnapshots"] }
-def X-Amz-Target-completer-64 [] { ["Lightsail_20161128.GetBlueprints"] }
-def X-Amz-Target-completer-65 [] { ["Lightsail_20161128.GetBucketAccessKeys"] }
-def X-Amz-Target-completer-66 [] { ["Lightsail_20161128.GetBucketBundles"] }
-def X-Amz-Target-completer-67 [] { ["Lightsail_20161128.GetBucketMetricData"] }
-def X-Amz-Target-completer-68 [] { ["Lightsail_20161128.GetBuckets"] }
-def X-Amz-Target-completer-69 [] { ["Lightsail_20161128.GetBundles"] }
-def X-Amz-Target-completer-70 [] { ["Lightsail_20161128.GetCertificates"] }
-def X-Amz-Target-completer-71 [] { ["Lightsail_20161128.GetCloudFormationStackRecords"] }
-def X-Amz-Target-completer-72 [] { ["Lightsail_20161128.GetContactMethods"] }
-def X-Amz-Target-completer-73 [] { ["Lightsail_20161128.GetContainerAPIMetadata"] }
-def X-Amz-Target-completer-74 [] { ["Lightsail_20161128.GetContainerImages"] }
-def X-Amz-Target-completer-75 [] { ["Lightsail_20161128.GetContainerLog"] }
-def X-Amz-Target-completer-76 [] { ["Lightsail_20161128.GetContainerServiceDeployments"] }
-def X-Amz-Target-completer-77 [] { ["Lightsail_20161128.GetContainerServiceMetricData"] }
-def X-Amz-Target-completer-78 [] { ["Lightsail_20161128.GetContainerServicePowers"] }
-def X-Amz-Target-completer-79 [] { ["Lightsail_20161128.GetContainerServices"] }
-def X-Amz-Target-completer-80 [] { ["Lightsail_20161128.GetCostEstimate"] }
-def X-Amz-Target-completer-81 [] { ["Lightsail_20161128.GetDisk"] }
-def X-Amz-Target-completer-82 [] { ["Lightsail_20161128.GetDiskSnapshot"] }
-def X-Amz-Target-completer-83 [] { ["Lightsail_20161128.GetDiskSnapshots"] }
-def X-Amz-Target-completer-84 [] { ["Lightsail_20161128.GetDisks"] }
-def X-Amz-Target-completer-85 [] { ["Lightsail_20161128.GetDistributionBundles"] }
-def X-Amz-Target-completer-86 [] { ["Lightsail_20161128.GetDistributionLatestCacheReset"] }
-def X-Amz-Target-completer-87 [] { ["Lightsail_20161128.GetDistributionMetricData"] }
-def X-Amz-Target-completer-88 [] { ["Lightsail_20161128.GetDistributions"] }
-def X-Amz-Target-completer-89 [] { ["Lightsail_20161128.GetDomain"] }
-def X-Amz-Target-completer-90 [] { ["Lightsail_20161128.GetDomains"] }
-def X-Amz-Target-completer-91 [] { ["Lightsail_20161128.GetExportSnapshotRecords"] }
-def X-Amz-Target-completer-92 [] { ["Lightsail_20161128.GetInstance"] }
-def X-Amz-Target-completer-93 [] { ["Lightsail_20161128.GetInstanceAccessDetails"] }
-def X-Amz-Target-completer-94 [] { ["Lightsail_20161128.GetInstanceMetricData"] }
-def X-Amz-Target-completer-95 [] { ["Lightsail_20161128.GetInstancePortStates"] }
-def X-Amz-Target-completer-96 [] { ["Lightsail_20161128.GetInstanceSnapshot"] }
-def X-Amz-Target-completer-97 [] { ["Lightsail_20161128.GetInstanceSnapshots"] }
-def X-Amz-Target-completer-98 [] { ["Lightsail_20161128.GetInstanceState"] }
-def X-Amz-Target-completer-99 [] { ["Lightsail_20161128.GetInstances"] }
-def X-Amz-Target-completer-100 [] { ["Lightsail_20161128.GetKeyPair"] }
-def X-Amz-Target-completer-101 [] { ["Lightsail_20161128.GetKeyPairs"] }
-def X-Amz-Target-completer-102 [] { ["Lightsail_20161128.GetLoadBalancer"] }
-def X-Amz-Target-completer-103 [] { ["Lightsail_20161128.GetLoadBalancerMetricData"] }
-def X-Amz-Target-completer-104 [] { ["Lightsail_20161128.GetLoadBalancerTlsCertificates"] }
-def X-Amz-Target-completer-105 [] { ["Lightsail_20161128.GetLoadBalancerTlsPolicies"] }
-def X-Amz-Target-completer-106 [] { ["Lightsail_20161128.GetLoadBalancers"] }
-def X-Amz-Target-completer-107 [] { ["Lightsail_20161128.GetOperation"] }
-def X-Amz-Target-completer-108 [] { ["Lightsail_20161128.GetOperations"] }
-def X-Amz-Target-completer-109 [] { ["Lightsail_20161128.GetOperationsForResource"] }
-def X-Amz-Target-completer-110 [] { ["Lightsail_20161128.GetRegions"] }
-def X-Amz-Target-completer-111 [] { ["Lightsail_20161128.GetRelationalDatabase"] }
-def X-Amz-Target-completer-112 [] { ["Lightsail_20161128.GetRelationalDatabaseBlueprints"] }
-def X-Amz-Target-completer-113 [] { ["Lightsail_20161128.GetRelationalDatabaseBundles"] }
-def X-Amz-Target-completer-114 [] { ["Lightsail_20161128.GetRelationalDatabaseEvents"] }
-def X-Amz-Target-completer-115 [] { ["Lightsail_20161128.GetRelationalDatabaseLogEvents"] }
-def X-Amz-Target-completer-116 [] { ["Lightsail_20161128.GetRelationalDatabaseLogStreams"] }
-def X-Amz-Target-completer-117 [] { ["Lightsail_20161128.GetRelationalDatabaseMasterUserPassword"] }
-def X-Amz-Target-completer-118 [] { ["Lightsail_20161128.GetRelationalDatabaseMetricData"] }
-def X-Amz-Target-completer-119 [] { ["Lightsail_20161128.GetRelationalDatabaseParameters"] }
-def X-Amz-Target-completer-120 [] { ["Lightsail_20161128.GetRelationalDatabaseSnapshot"] }
-def X-Amz-Target-completer-121 [] { ["Lightsail_20161128.GetRelationalDatabaseSnapshots"] }
-def X-Amz-Target-completer-122 [] { ["Lightsail_20161128.GetRelationalDatabases"] }
-def X-Amz-Target-completer-123 [] { ["Lightsail_20161128.GetStaticIp"] }
-def X-Amz-Target-completer-124 [] { ["Lightsail_20161128.GetStaticIps"] }
-def X-Amz-Target-completer-125 [] { ["Lightsail_20161128.ImportKeyPair"] }
-def X-Amz-Target-completer-126 [] { ["Lightsail_20161128.IsVpcPeered"] }
-def X-Amz-Target-completer-127 [] { ["Lightsail_20161128.OpenInstancePublicPorts"] }
-def X-Amz-Target-completer-128 [] { ["Lightsail_20161128.PeerVpc"] }
-def X-Amz-Target-completer-129 [] { ["Lightsail_20161128.PutAlarm"] }
-def X-Amz-Target-completer-130 [] { ["Lightsail_20161128.PutInstancePublicPorts"] }
-def X-Amz-Target-completer-131 [] { ["Lightsail_20161128.RebootInstance"] }
-def X-Amz-Target-completer-132 [] { ["Lightsail_20161128.RebootRelationalDatabase"] }
-def X-Amz-Target-completer-133 [] { ["Lightsail_20161128.RegisterContainerImage"] }
-def X-Amz-Target-completer-134 [] { ["Lightsail_20161128.ReleaseStaticIp"] }
-def X-Amz-Target-completer-135 [] { ["Lightsail_20161128.ResetDistributionCache"] }
-def X-Amz-Target-completer-136 [] { ["Lightsail_20161128.SendContactMethodVerification"] }
-def X-Amz-Target-completer-137 [] { ["Lightsail_20161128.SetIpAddressType"] }
-def X-Amz-Target-completer-138 [] { ["Lightsail_20161128.SetResourceAccessForBucket"] }
-def X-Amz-Target-completer-139 [] { ["Lightsail_20161128.StartGUISession"] }
-def X-Amz-Target-completer-140 [] { ["Lightsail_20161128.StartInstance"] }
-def X-Amz-Target-completer-141 [] { ["Lightsail_20161128.StartRelationalDatabase"] }
-def X-Amz-Target-completer-142 [] { ["Lightsail_20161128.StopGUISession"] }
-def X-Amz-Target-completer-143 [] { ["Lightsail_20161128.StopInstance"] }
-def X-Amz-Target-completer-144 [] { ["Lightsail_20161128.StopRelationalDatabase"] }
-def X-Amz-Target-completer-145 [] { ["Lightsail_20161128.TagResource"] }
-def X-Amz-Target-completer-146 [] { ["Lightsail_20161128.TestAlarm"] }
-def X-Amz-Target-completer-147 [] { ["Lightsail_20161128.UnpeerVpc"] }
-def X-Amz-Target-completer-148 [] { ["Lightsail_20161128.UntagResource"] }
-def X-Amz-Target-completer-149 [] { ["Lightsail_20161128.UpdateBucket"] }
-def X-Amz-Target-completer-150 [] { ["Lightsail_20161128.UpdateBucketBundle"] }
-def X-Amz-Target-completer-151 [] { ["Lightsail_20161128.UpdateContainerService"] }
-def X-Amz-Target-completer-152 [] { ["Lightsail_20161128.UpdateDistribution"] }
-def X-Amz-Target-completer-153 [] { ["Lightsail_20161128.UpdateDistributionBundle"] }
-def X-Amz-Target-completer-154 [] { ["Lightsail_20161128.UpdateDomainEntry"] }
-def X-Amz-Target-completer-155 [] { ["Lightsail_20161128.UpdateInstanceMetadataOptions"] }
-def X-Amz-Target-completer-156 [] { ["Lightsail_20161128.UpdateLoadBalancerAttribute"] }
-def X-Amz-Target-completer-157 [] { ["Lightsail_20161128.UpdateRelationalDatabase"] }
-def X-Amz-Target-completer-158 [] { ["Lightsail_20161128.UpdateRelationalDatabaseParameters"] }
+def x-amz-target-completer [] { ["Lightsail_20161128.AllocateStaticIp"] }
+def x-amz-target-completer-1 [] { ["Lightsail_20161128.AttachCertificateToDistribution"] }
+def x-amz-target-completer-2 [] { ["Lightsail_20161128.AttachDisk"] }
+def x-amz-target-completer-3 [] { ["Lightsail_20161128.AttachInstancesToLoadBalancer"] }
+def x-amz-target-completer-4 [] { ["Lightsail_20161128.AttachLoadBalancerTlsCertificate"] }
+def x-amz-target-completer-5 [] { ["Lightsail_20161128.AttachStaticIp"] }
+def x-amz-target-completer-6 [] { ["Lightsail_20161128.CloseInstancePublicPorts"] }
+def x-amz-target-completer-7 [] { ["Lightsail_20161128.CopySnapshot"] }
+def x-amz-target-completer-8 [] { ["Lightsail_20161128.CreateBucket"] }
+def x-amz-target-completer-9 [] { ["Lightsail_20161128.CreateBucketAccessKey"] }
+def x-amz-target-completer-10 [] { ["Lightsail_20161128.CreateCertificate"] }
+def x-amz-target-completer-11 [] { ["Lightsail_20161128.CreateCloudFormationStack"] }
+def x-amz-target-completer-12 [] { ["Lightsail_20161128.CreateContactMethod"] }
+def x-amz-target-completer-13 [] { ["Lightsail_20161128.CreateContainerService"] }
+def x-amz-target-completer-14 [] { ["Lightsail_20161128.CreateContainerServiceDeployment"] }
+def x-amz-target-completer-15 [] { ["Lightsail_20161128.CreateContainerServiceRegistryLogin"] }
+def x-amz-target-completer-16 [] { ["Lightsail_20161128.CreateDisk"] }
+def x-amz-target-completer-17 [] { ["Lightsail_20161128.CreateDiskFromSnapshot"] }
+def x-amz-target-completer-18 [] { ["Lightsail_20161128.CreateDiskSnapshot"] }
+def x-amz-target-completer-19 [] { ["Lightsail_20161128.CreateDistribution"] }
+def x-amz-target-completer-20 [] { ["Lightsail_20161128.CreateDomain"] }
+def x-amz-target-completer-21 [] { ["Lightsail_20161128.CreateDomainEntry"] }
+def x-amz-target-completer-22 [] { ["Lightsail_20161128.CreateGUISessionAccessDetails"] }
+def x-amz-target-completer-23 [] { ["Lightsail_20161128.CreateInstanceSnapshot"] }
+def x-amz-target-completer-24 [] { ["Lightsail_20161128.CreateInstances"] }
+def x-amz-target-completer-25 [] { ["Lightsail_20161128.CreateInstancesFromSnapshot"] }
+def x-amz-target-completer-26 [] { ["Lightsail_20161128.CreateKeyPair"] }
+def x-amz-target-completer-27 [] { ["Lightsail_20161128.CreateLoadBalancer"] }
+def x-amz-target-completer-28 [] { ["Lightsail_20161128.CreateLoadBalancerTlsCertificate"] }
+def x-amz-target-completer-29 [] { ["Lightsail_20161128.CreateRelationalDatabase"] }
+def x-amz-target-completer-30 [] { ["Lightsail_20161128.CreateRelationalDatabaseFromSnapshot"] }
+def x-amz-target-completer-31 [] { ["Lightsail_20161128.CreateRelationalDatabaseSnapshot"] }
+def x-amz-target-completer-32 [] { ["Lightsail_20161128.DeleteAlarm"] }
+def x-amz-target-completer-33 [] { ["Lightsail_20161128.DeleteAutoSnapshot"] }
+def x-amz-target-completer-34 [] { ["Lightsail_20161128.DeleteBucket"] }
+def x-amz-target-completer-35 [] { ["Lightsail_20161128.DeleteBucketAccessKey"] }
+def x-amz-target-completer-36 [] { ["Lightsail_20161128.DeleteCertificate"] }
+def x-amz-target-completer-37 [] { ["Lightsail_20161128.DeleteContactMethod"] }
+def x-amz-target-completer-38 [] { ["Lightsail_20161128.DeleteContainerImage"] }
+def x-amz-target-completer-39 [] { ["Lightsail_20161128.DeleteContainerService"] }
+def x-amz-target-completer-40 [] { ["Lightsail_20161128.DeleteDisk"] }
+def x-amz-target-completer-41 [] { ["Lightsail_20161128.DeleteDiskSnapshot"] }
+def x-amz-target-completer-42 [] { ["Lightsail_20161128.DeleteDistribution"] }
+def x-amz-target-completer-43 [] { ["Lightsail_20161128.DeleteDomain"] }
+def x-amz-target-completer-44 [] { ["Lightsail_20161128.DeleteDomainEntry"] }
+def x-amz-target-completer-45 [] { ["Lightsail_20161128.DeleteInstance"] }
+def x-amz-target-completer-46 [] { ["Lightsail_20161128.DeleteInstanceSnapshot"] }
+def x-amz-target-completer-47 [] { ["Lightsail_20161128.DeleteKeyPair"] }
+def x-amz-target-completer-48 [] { ["Lightsail_20161128.DeleteKnownHostKeys"] }
+def x-amz-target-completer-49 [] { ["Lightsail_20161128.DeleteLoadBalancer"] }
+def x-amz-target-completer-50 [] { ["Lightsail_20161128.DeleteLoadBalancerTlsCertificate"] }
+def x-amz-target-completer-51 [] { ["Lightsail_20161128.DeleteRelationalDatabase"] }
+def x-amz-target-completer-52 [] { ["Lightsail_20161128.DeleteRelationalDatabaseSnapshot"] }
+def x-amz-target-completer-53 [] { ["Lightsail_20161128.DetachCertificateFromDistribution"] }
+def x-amz-target-completer-54 [] { ["Lightsail_20161128.DetachDisk"] }
+def x-amz-target-completer-55 [] { ["Lightsail_20161128.DetachInstancesFromLoadBalancer"] }
+def x-amz-target-completer-56 [] { ["Lightsail_20161128.DetachStaticIp"] }
+def x-amz-target-completer-57 [] { ["Lightsail_20161128.DisableAddOn"] }
+def x-amz-target-completer-58 [] { ["Lightsail_20161128.DownloadDefaultKeyPair"] }
+def x-amz-target-completer-59 [] { ["Lightsail_20161128.EnableAddOn"] }
+def x-amz-target-completer-60 [] { ["Lightsail_20161128.ExportSnapshot"] }
+def x-amz-target-completer-61 [] { ["Lightsail_20161128.GetActiveNames"] }
+def x-amz-target-completer-62 [] { ["Lightsail_20161128.GetAlarms"] }
+def x-amz-target-completer-63 [] { ["Lightsail_20161128.GetAutoSnapshots"] }
+def x-amz-target-completer-64 [] { ["Lightsail_20161128.GetBlueprints"] }
+def x-amz-target-completer-65 [] { ["Lightsail_20161128.GetBucketAccessKeys"] }
+def x-amz-target-completer-66 [] { ["Lightsail_20161128.GetBucketBundles"] }
+def x-amz-target-completer-67 [] { ["Lightsail_20161128.GetBucketMetricData"] }
+def x-amz-target-completer-68 [] { ["Lightsail_20161128.GetBuckets"] }
+def x-amz-target-completer-69 [] { ["Lightsail_20161128.GetBundles"] }
+def x-amz-target-completer-70 [] { ["Lightsail_20161128.GetCertificates"] }
+def x-amz-target-completer-71 [] { ["Lightsail_20161128.GetCloudFormationStackRecords"] }
+def x-amz-target-completer-72 [] { ["Lightsail_20161128.GetContactMethods"] }
+def x-amz-target-completer-73 [] { ["Lightsail_20161128.GetContainerAPIMetadata"] }
+def x-amz-target-completer-74 [] { ["Lightsail_20161128.GetContainerImages"] }
+def x-amz-target-completer-75 [] { ["Lightsail_20161128.GetContainerLog"] }
+def x-amz-target-completer-76 [] { ["Lightsail_20161128.GetContainerServiceDeployments"] }
+def x-amz-target-completer-77 [] { ["Lightsail_20161128.GetContainerServiceMetricData"] }
+def x-amz-target-completer-78 [] { ["Lightsail_20161128.GetContainerServicePowers"] }
+def x-amz-target-completer-79 [] { ["Lightsail_20161128.GetContainerServices"] }
+def x-amz-target-completer-80 [] { ["Lightsail_20161128.GetCostEstimate"] }
+def x-amz-target-completer-81 [] { ["Lightsail_20161128.GetDisk"] }
+def x-amz-target-completer-82 [] { ["Lightsail_20161128.GetDiskSnapshot"] }
+def x-amz-target-completer-83 [] { ["Lightsail_20161128.GetDiskSnapshots"] }
+def x-amz-target-completer-84 [] { ["Lightsail_20161128.GetDisks"] }
+def x-amz-target-completer-85 [] { ["Lightsail_20161128.GetDistributionBundles"] }
+def x-amz-target-completer-86 [] { ["Lightsail_20161128.GetDistributionLatestCacheReset"] }
+def x-amz-target-completer-87 [] { ["Lightsail_20161128.GetDistributionMetricData"] }
+def x-amz-target-completer-88 [] { ["Lightsail_20161128.GetDistributions"] }
+def x-amz-target-completer-89 [] { ["Lightsail_20161128.GetDomain"] }
+def x-amz-target-completer-90 [] { ["Lightsail_20161128.GetDomains"] }
+def x-amz-target-completer-91 [] { ["Lightsail_20161128.GetExportSnapshotRecords"] }
+def x-amz-target-completer-92 [] { ["Lightsail_20161128.GetInstance"] }
+def x-amz-target-completer-93 [] { ["Lightsail_20161128.GetInstanceAccessDetails"] }
+def x-amz-target-completer-94 [] { ["Lightsail_20161128.GetInstanceMetricData"] }
+def x-amz-target-completer-95 [] { ["Lightsail_20161128.GetInstancePortStates"] }
+def x-amz-target-completer-96 [] { ["Lightsail_20161128.GetInstanceSnapshot"] }
+def x-amz-target-completer-97 [] { ["Lightsail_20161128.GetInstanceSnapshots"] }
+def x-amz-target-completer-98 [] { ["Lightsail_20161128.GetInstanceState"] }
+def x-amz-target-completer-99 [] { ["Lightsail_20161128.GetInstances"] }
+def x-amz-target-completer-100 [] { ["Lightsail_20161128.GetKeyPair"] }
+def x-amz-target-completer-101 [] { ["Lightsail_20161128.GetKeyPairs"] }
+def x-amz-target-completer-102 [] { ["Lightsail_20161128.GetLoadBalancer"] }
+def x-amz-target-completer-103 [] { ["Lightsail_20161128.GetLoadBalancerMetricData"] }
+def x-amz-target-completer-104 [] { ["Lightsail_20161128.GetLoadBalancerTlsCertificates"] }
+def x-amz-target-completer-105 [] { ["Lightsail_20161128.GetLoadBalancerTlsPolicies"] }
+def x-amz-target-completer-106 [] { ["Lightsail_20161128.GetLoadBalancers"] }
+def x-amz-target-completer-107 [] { ["Lightsail_20161128.GetOperation"] }
+def x-amz-target-completer-108 [] { ["Lightsail_20161128.GetOperations"] }
+def x-amz-target-completer-109 [] { ["Lightsail_20161128.GetOperationsForResource"] }
+def x-amz-target-completer-110 [] { ["Lightsail_20161128.GetRegions"] }
+def x-amz-target-completer-111 [] { ["Lightsail_20161128.GetRelationalDatabase"] }
+def x-amz-target-completer-112 [] { ["Lightsail_20161128.GetRelationalDatabaseBlueprints"] }
+def x-amz-target-completer-113 [] { ["Lightsail_20161128.GetRelationalDatabaseBundles"] }
+def x-amz-target-completer-114 [] { ["Lightsail_20161128.GetRelationalDatabaseEvents"] }
+def x-amz-target-completer-115 [] { ["Lightsail_20161128.GetRelationalDatabaseLogEvents"] }
+def x-amz-target-completer-116 [] { ["Lightsail_20161128.GetRelationalDatabaseLogStreams"] }
+def x-amz-target-completer-117 [] { ["Lightsail_20161128.GetRelationalDatabaseMasterUserPassword"] }
+def x-amz-target-completer-118 [] { ["Lightsail_20161128.GetRelationalDatabaseMetricData"] }
+def x-amz-target-completer-119 [] { ["Lightsail_20161128.GetRelationalDatabaseParameters"] }
+def x-amz-target-completer-120 [] { ["Lightsail_20161128.GetRelationalDatabaseSnapshot"] }
+def x-amz-target-completer-121 [] { ["Lightsail_20161128.GetRelationalDatabaseSnapshots"] }
+def x-amz-target-completer-122 [] { ["Lightsail_20161128.GetRelationalDatabases"] }
+def x-amz-target-completer-123 [] { ["Lightsail_20161128.GetStaticIp"] }
+def x-amz-target-completer-124 [] { ["Lightsail_20161128.GetStaticIps"] }
+def x-amz-target-completer-125 [] { ["Lightsail_20161128.ImportKeyPair"] }
+def x-amz-target-completer-126 [] { ["Lightsail_20161128.IsVpcPeered"] }
+def x-amz-target-completer-127 [] { ["Lightsail_20161128.OpenInstancePublicPorts"] }
+def x-amz-target-completer-128 [] { ["Lightsail_20161128.PeerVpc"] }
+def x-amz-target-completer-129 [] { ["Lightsail_20161128.PutAlarm"] }
+def x-amz-target-completer-130 [] { ["Lightsail_20161128.PutInstancePublicPorts"] }
+def x-amz-target-completer-131 [] { ["Lightsail_20161128.RebootInstance"] }
+def x-amz-target-completer-132 [] { ["Lightsail_20161128.RebootRelationalDatabase"] }
+def x-amz-target-completer-133 [] { ["Lightsail_20161128.RegisterContainerImage"] }
+def x-amz-target-completer-134 [] { ["Lightsail_20161128.ReleaseStaticIp"] }
+def x-amz-target-completer-135 [] { ["Lightsail_20161128.ResetDistributionCache"] }
+def x-amz-target-completer-136 [] { ["Lightsail_20161128.SendContactMethodVerification"] }
+def x-amz-target-completer-137 [] { ["Lightsail_20161128.SetIpAddressType"] }
+def x-amz-target-completer-138 [] { ["Lightsail_20161128.SetResourceAccessForBucket"] }
+def x-amz-target-completer-139 [] { ["Lightsail_20161128.StartGUISession"] }
+def x-amz-target-completer-140 [] { ["Lightsail_20161128.StartInstance"] }
+def x-amz-target-completer-141 [] { ["Lightsail_20161128.StartRelationalDatabase"] }
+def x-amz-target-completer-142 [] { ["Lightsail_20161128.StopGUISession"] }
+def x-amz-target-completer-143 [] { ["Lightsail_20161128.StopInstance"] }
+def x-amz-target-completer-144 [] { ["Lightsail_20161128.StopRelationalDatabase"] }
+def x-amz-target-completer-145 [] { ["Lightsail_20161128.TagResource"] }
+def x-amz-target-completer-146 [] { ["Lightsail_20161128.TestAlarm"] }
+def x-amz-target-completer-147 [] { ["Lightsail_20161128.UnpeerVpc"] }
+def x-amz-target-completer-148 [] { ["Lightsail_20161128.UntagResource"] }
+def x-amz-target-completer-149 [] { ["Lightsail_20161128.UpdateBucket"] }
+def x-amz-target-completer-150 [] { ["Lightsail_20161128.UpdateBucketBundle"] }
+def x-amz-target-completer-151 [] { ["Lightsail_20161128.UpdateContainerService"] }
+def x-amz-target-completer-152 [] { ["Lightsail_20161128.UpdateDistribution"] }
+def x-amz-target-completer-153 [] { ["Lightsail_20161128.UpdateDistributionBundle"] }
+def x-amz-target-completer-154 [] { ["Lightsail_20161128.UpdateDomainEntry"] }
+def x-amz-target-completer-155 [] { ["Lightsail_20161128.UpdateInstanceMetadataOptions"] }
+def x-amz-target-completer-156 [] { ["Lightsail_20161128.UpdateLoadBalancerAttribute"] }
+def x-amz-target-completer-157 [] { ["Lightsail_20161128.UpdateRelationalDatabase"] }
+def x-amz-target-completer-158 [] { ["Lightsail_20161128.UpdateRelationalDatabaseParameters"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-lightsail-20161128allocate-static-ip AllocateStaticIp" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-lightsail-20161128allocate-static-ip post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -253,7 +253,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=Lightsail_20161128.AllocateStaticIp
 # operationId: AllocateStaticIp
-export def "x-amz-target-lightsail-20161128allocate-static-ip AllocateStaticIp" [
+export def "x-amz-target-lightsail-20161128allocate-static-ip post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,23 +262,23 @@ export def "x-amz-target-lightsail-20161128allocate-static-ip AllocateStaticIp" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  staticIpName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  static_ip_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.AllocateStaticIp")
-  let body = {staticIpName: $staticIpName} | compact
+  let body = {"staticIpName": $static_ip_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -289,7 +289,7 @@ export def "x-amz-target-lightsail-20161128allocate-static-ip AllocateStaticIp" 
 #
 # POST /#X-Amz-Target=Lightsail_20161128.AttachCertificateToDistribution
 # operationId: AttachCertificateToDistribution
-export def "x-amz-target-lightsail-20161128attach-certificate-to-distribution AttachCertificateToDistribution" [
+export def "x-amz-target-lightsail-20161128attach-certificate-to-distribution attach" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,24 +298,24 @@ export def "x-amz-target-lightsail-20161128attach-certificate-to-distribution At
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  distributionName: any
-  certificateName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  distribution_name: any
+  certificate_name: any
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.AttachCertificateToDistribution")
-  let body = {distributionName: $distributionName, certificateName: $certificateName} | compact
+  let body = {"distributionName": $distribution_name, "certificateName": $certificate_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -326,7 +326,7 @@ export def "x-amz-target-lightsail-20161128attach-certificate-to-distribution At
 #
 # POST /#X-Amz-Target=Lightsail_20161128.AttachDisk
 # operationId: AttachDisk
-export def "x-amz-target-lightsail-20161128attach-disk AttachDisk" [
+export def "x-amz-target-lightsail-20161128attach-disk attach" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,26 +335,26 @@ export def "x-amz-target-lightsail-20161128attach-disk AttachDisk" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  diskName: any
-  instanceName: any
-  diskPath: any
-  --autoMounting: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  disk_name: any
+  instance_name: any
+  disk_path: any
+  --auto-mounting: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.AttachDisk")
-  let body = {diskName: $diskName, instanceName: $instanceName, diskPath: $diskPath, autoMounting: $autoMounting} | compact
+  let body = {"diskName": $disk_name, "instanceName": $instance_name, "diskPath": $disk_path, "autoMounting": $auto_mounting} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -365,7 +365,7 @@ export def "x-amz-target-lightsail-20161128attach-disk AttachDisk" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.AttachInstancesToLoadBalancer
 # operationId: AttachInstancesToLoadBalancer
-export def "x-amz-target-lightsail-20161128attach-instances-to-load-balancer AttachInstancesToLoadBalancer" [
+export def "x-amz-target-lightsail-20161128attach-instances-to-load-balancer attach" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,24 +374,24 @@ export def "x-amz-target-lightsail-20161128attach-instances-to-load-balancer Att
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  loadBalancerName: any
-  instanceNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  load_balancer_name: any
+  instance_names: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.AttachInstancesToLoadBalancer")
-  let body = {loadBalancerName: $loadBalancerName, instanceNames: $instanceNames} | compact
+  let body = {"loadBalancerName": $load_balancer_name, "instanceNames": $instance_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -402,7 +402,7 @@ export def "x-amz-target-lightsail-20161128attach-instances-to-load-balancer Att
 #
 # POST /#X-Amz-Target=Lightsail_20161128.AttachLoadBalancerTlsCertificate
 # operationId: AttachLoadBalancerTlsCertificate
-export def "x-amz-target-lightsail-20161128attach-load-balancer-tls-certificate AttachLoadBalancerTlsCertificate" [
+export def "x-amz-target-lightsail-20161128attach-load-balancer-tls-certificate attach" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,24 +411,24 @@ export def "x-amz-target-lightsail-20161128attach-load-balancer-tls-certificate 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  loadBalancerName: any
-  certificateName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  load_balancer_name: any
+  certificate_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.AttachLoadBalancerTlsCertificate")
-  let body = {loadBalancerName: $loadBalancerName, certificateName: $certificateName} | compact
+  let body = {"loadBalancerName": $load_balancer_name, "certificateName": $certificate_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -439,7 +439,7 @@ export def "x-amz-target-lightsail-20161128attach-load-balancer-tls-certificate 
 #
 # POST /#X-Amz-Target=Lightsail_20161128.AttachStaticIp
 # operationId: AttachStaticIp
-export def "x-amz-target-lightsail-20161128attach-static-ip AttachStaticIp" [
+export def "x-amz-target-lightsail-20161128attach-static-ip attach" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,24 +448,24 @@ export def "x-amz-target-lightsail-20161128attach-static-ip AttachStaticIp" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  staticIpName: any
-  instanceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  static_ip_name: any
+  instance_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.AttachStaticIp")
-  let body = {staticIpName: $staticIpName, instanceName: $instanceName} | compact
+  let body = {"staticIpName": $static_ip_name, "instanceName": $instance_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -476,7 +476,7 @@ export def "x-amz-target-lightsail-20161128attach-static-ip AttachStaticIp" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CloseInstancePublicPorts
 # operationId: CloseInstancePublicPorts
-export def "x-amz-target-lightsail-20161128close-instance-public-ports CloseInstancePublicPorts" [
+export def "x-amz-target-lightsail-20161128close-instance-public-ports close" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,24 +485,24 @@ export def "x-amz-target-lightsail-20161128close-instance-public-ports CloseInst
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  portInfo: any
-  instanceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  port_info: any
+  instance_name: any
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CloseInstancePublicPorts")
-  let body = {portInfo: $portInfo, instanceName: $instanceName} | compact
+  let body = {"portInfo": $port_info, "instanceName": $instance_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -513,7 +513,7 @@ export def "x-amz-target-lightsail-20161128close-instance-public-ports CloseInst
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CopySnapshot
 # operationId: CopySnapshot
-export def "x-amz-target-lightsail-20161128copy-snapshot CopySnapshot" [
+export def "x-amz-target-lightsail-20161128copy-snapshot copy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,28 +522,28 @@ export def "x-amz-target-lightsail-20161128copy-snapshot CopySnapshot" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  --sourceSnapshotName: any
-  --sourceResourceName: any
-  --restoreDate: any
-  --useLatestRestorableAutoSnapshot: any
-  targetSnapshotName: any
-  sourceRegion: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  --source-snapshot-name: any
+  --source-resource-name: any
+  --restore-date: any
+  --use-latest-restorable-auto-snapshot: any
+  target_snapshot_name: any
+  source_region: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CopySnapshot")
-  let body = {sourceSnapshotName: $sourceSnapshotName, sourceResourceName: $sourceResourceName, restoreDate: $restoreDate, useLatestRestorableAutoSnapshot: $useLatestRestorableAutoSnapshot, targetSnapshotName: $targetSnapshotName, sourceRegion: $sourceRegion} | compact
+  let body = {"sourceSnapshotName": $source_snapshot_name, "sourceResourceName": $source_resource_name, "restoreDate": $restore_date, "useLatestRestorableAutoSnapshot": $use_latest_restorable_auto_snapshot, "targetSnapshotName": $target_snapshot_name, "sourceRegion": $source_region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -554,7 +554,7 @@ export def "x-amz-target-lightsail-20161128copy-snapshot CopySnapshot" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateBucket
 # operationId: CreateBucket
-export def "x-amz-target-lightsail-20161128create-bucket CreateBucket" [
+export def "x-amz-target-lightsail-20161128create-bucket create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,26 +563,26 @@ export def "x-amz-target-lightsail-20161128create-bucket CreateBucket" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  bucketName: any
-  bundleId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  bucket_name: any
+  bundle_id: any
   --tags: any
-  --enableObjectVersioning: any
+  --enable-object-versioning: any
 ]: any -> record<bucket: record<resourceType: record, accessRules: record<getObject: record, allowPublicOverrides: record>, arn: record, bundleId: record, createdAt: record, url: record, location: record<availabilityZone: record, regionName: record>, name: record, supportCode: record, tags: record, objectVersioning: record, ableToUpdateBundle: record, readonlyAccessAccounts: record, resourcesReceivingAccess: record, state: record<code: record, message: record>, accessLogConfig: record<enabled: record, destination: record, prefix: record>>, operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateBucket")
-  let body = {bucketName: $bucketName, bundleId: $bundleId, tags: $tags, enableObjectVersioning: $enableObjectVersioning} | compact
+  let body = {"bucketName": $bucket_name, "bundleId": $bundle_id, "tags": $tags, "enableObjectVersioning": $enable_object_versioning} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -593,7 +593,7 @@ export def "x-amz-target-lightsail-20161128create-bucket CreateBucket" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateBucketAccessKey
 # operationId: CreateBucketAccessKey
-export def "x-amz-target-lightsail-20161128create-bucket-access-key CreateBucketAccessKey" [
+export def "x-amz-target-lightsail-20161128create-bucket-access-key create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,23 +602,23 @@ export def "x-amz-target-lightsail-20161128create-bucket-access-key CreateBucket
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  bucketName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  bucket_name: any
 ]: any -> record<accessKey: record<accessKeyId: record, secretAccessKey: record, status: record, createdAt: record, lastUsed: record<lastUsedDate: record, region: record, serviceName: record>>, operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateBucketAccessKey")
-  let body = {bucketName: $bucketName} | compact
+  let body = {"bucketName": $bucket_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -629,7 +629,7 @@ export def "x-amz-target-lightsail-20161128create-bucket-access-key CreateBucket
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateCertificate
 # operationId: CreateCertificate
-export def "x-amz-target-lightsail-20161128create-certificate CreateCertificate" [
+export def "x-amz-target-lightsail-20161128create-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -638,26 +638,26 @@ export def "x-amz-target-lightsail-20161128create-certificate CreateCertificate"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  certificateName: any
-  domainName: any
-  --subjectAlternativeNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  certificate_name: any
+  domain_name: any
+  --subject-alternative-names: any
   --tags: any
 ]: any -> record<certificate: record<certificateArn: record, certificateName: record, domainName: record, certificateDetail: record<arn: record, name: record, domainName: record, status: record, serialNumber: record, subjectAlternativeNames: record, domainValidationRecords: record, requestFailureReason: record, inUseResourceCount: record, keyAlgorithm: record, createdAt: record, issuedAt: record, issuerCA: record, notBefore: record, notAfter: record, eligibleToRenew: record, renewalSummary: record, revokedAt: record, revocationReason: record, tags: record, supportCode: record>, tags: record>, operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateCertificate")
-  let body = {certificateName: $certificateName, domainName: $domainName, subjectAlternativeNames: $subjectAlternativeNames, tags: $tags} | compact
+  let body = {"certificateName": $certificate_name, "domainName": $domain_name, "subjectAlternativeNames": $subject_alternative_names, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -668,7 +668,7 @@ export def "x-amz-target-lightsail-20161128create-certificate CreateCertificate"
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateCloudFormationStack
 # operationId: CreateCloudFormationStack
-export def "x-amz-target-lightsail-20161128create-cloud-formation-stack CreateCloudFormationStack" [
+export def "x-amz-target-lightsail-20161128create-cloud-formation-stack create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -677,23 +677,23 @@ export def "x-amz-target-lightsail-20161128create-cloud-formation-stack CreateCl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
   instances: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateCloudFormationStack")
-  let body = {instances: $instances} | compact
+  let body = {"instances": $instances} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -704,7 +704,7 @@ export def "x-amz-target-lightsail-20161128create-cloud-formation-stack CreateCl
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateContactMethod
 # operationId: CreateContactMethod
-export def "x-amz-target-lightsail-20161128create-contact-method CreateContactMethod" [
+export def "x-amz-target-lightsail-20161128create-contact-method create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,24 +713,24 @@ export def "x-amz-target-lightsail-20161128create-contact-method CreateContactMe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
   protocol: any
-  contactEndpoint: any
+  contact_endpoint: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateContactMethod")
-  let body = {protocol: $protocol, contactEndpoint: $contactEndpoint} | compact
+  let body = {"protocol": $protocol, "contactEndpoint": $contact_endpoint} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -741,7 +741,7 @@ export def "x-amz-target-lightsail-20161128create-contact-method CreateContactMe
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateContainerService
 # operationId: CreateContainerService
-export def "x-amz-target-lightsail-20161128create-container-service CreateContainerService" [
+export def "x-amz-target-lightsail-20161128create-container-service create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,29 +750,29 @@ export def "x-amz-target-lightsail-20161128create-container-service CreateContai
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  serviceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  service_name: any
   power: any
   scale: any
   --tags: any
-  --publicDomainNames: any
+  --public-domain-names: any
   --deployment: any
-  --privateRegistryAccess: any
+  --private-registry-access: any
 ]: any -> record<containerService: record<containerServiceName: record, arn: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, resourceType: record, tags: record, power: record, powerId: record, state: record, stateDetail: record<code: record, message: record>, scale: record, currentDeployment: record<version: record, state: record, containers: record, publicEndpoint: record, createdAt: record>, nextDeployment: record<version: record, state: record, containers: record, publicEndpoint: record, createdAt: record>, isDisabled: record, principalArn: record, privateDomainName: record, publicDomainNames: record, url: record, privateRegistryAccess: record<ecrImagePullerRole: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateContainerService")
-  let body = {serviceName: $serviceName, power: $power, scale: $scale, tags: $tags, publicDomainNames: $publicDomainNames, deployment: $deployment, privateRegistryAccess: $privateRegistryAccess} | compact
+  let body = {"serviceName": $service_name, "power": $power, "scale": $scale, "tags": $tags, "publicDomainNames": $public_domain_names, "deployment": $deployment, "privateRegistryAccess": $private_registry_access} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -783,7 +783,7 @@ export def "x-amz-target-lightsail-20161128create-container-service CreateContai
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateContainerServiceDeployment
 # operationId: CreateContainerServiceDeployment
-export def "x-amz-target-lightsail-20161128create-container-service-deployment CreateContainerServiceDeployment" [
+export def "x-amz-target-lightsail-20161128create-container-service-deployment create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -792,25 +792,25 @@ export def "x-amz-target-lightsail-20161128create-container-service-deployment C
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  serviceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  service_name: any
   --containers: any
-  --publicEndpoint: any
+  --public-endpoint: any
 ]: any -> record<containerService: record<containerServiceName: record, arn: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, resourceType: record, tags: record, power: record, powerId: record, state: record, stateDetail: record<code: record, message: record>, scale: record, currentDeployment: record<version: record, state: record, containers: record, publicEndpoint: record, createdAt: record>, nextDeployment: record<version: record, state: record, containers: record, publicEndpoint: record, createdAt: record>, isDisabled: record, principalArn: record, privateDomainName: record, publicDomainNames: record, url: record, privateRegistryAccess: record<ecrImagePullerRole: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateContainerServiceDeployment")
-  let body = {serviceName: $serviceName, containers: $containers, publicEndpoint: $publicEndpoint} | compact
+  let body = {"serviceName": $service_name, "containers": $containers, "publicEndpoint": $public_endpoint} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -821,7 +821,7 @@ export def "x-amz-target-lightsail-20161128create-container-service-deployment C
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateContainerServiceRegistryLogin
 # operationId: CreateContainerServiceRegistryLogin
-export def "x-amz-target-lightsail-20161128create-container-service-registry-login CreateContainerServiceRegistryLogin" [
+export def "x-amz-target-lightsail-20161128create-container-service-registry-login create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,14 +830,14 @@ export def "x-amz-target-lightsail-20161128create-container-service-registry-log
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
   --body: record
 ]: any -> record<registryLogin: record<username: record, password: record, expiresAt: record, registry: record>> {
   let input = $in
@@ -845,7 +845,7 @@ export def "x-amz-target-lightsail-20161128create-container-service-registry-log
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateContainerServiceRegistryLogin")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -856,7 +856,7 @@ export def "x-amz-target-lightsail-20161128create-container-service-registry-log
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateDisk
 # operationId: CreateDisk
-export def "x-amz-target-lightsail-20161128create-disk CreateDisk" [
+export def "x-amz-target-lightsail-20161128create-disk create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -865,27 +865,27 @@ export def "x-amz-target-lightsail-20161128create-disk CreateDisk" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  diskName: any
-  availabilityZone: any
-  sizeInGb: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  disk_name: any
+  availability_zone: any
+  size_in_gb: any
   --tags: any
-  --addOns: any
+  --add-ons: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateDisk")
-  let body = {diskName: $diskName, availabilityZone: $availabilityZone, sizeInGb: $sizeInGb, tags: $tags, addOns: $addOns} | compact
+  let body = {"diskName": $disk_name, "availabilityZone": $availability_zone, "sizeInGb": $size_in_gb, "tags": $tags, "addOns": $add_ons} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -896,7 +896,7 @@ export def "x-amz-target-lightsail-20161128create-disk CreateDisk" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateDiskFromSnapshot
 # operationId: CreateDiskFromSnapshot
-export def "x-amz-target-lightsail-20161128create-disk-from-snapshot CreateDiskFromSnapshot" [
+export def "x-amz-target-lightsail-20161128create-disk-from-snapshot create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,31 +905,31 @@ export def "x-amz-target-lightsail-20161128create-disk-from-snapshot CreateDiskF
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  diskName: any
-  --diskSnapshotName: any
-  availabilityZone: any
-  sizeInGb: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  disk_name: any
+  --disk-snapshot-name: any
+  availability_zone: any
+  size_in_gb: any
   --tags: any
-  --addOns: any
-  --sourceDiskName: any
-  --restoreDate: any
-  --useLatestRestorableAutoSnapshot: any
+  --add-ons: any
+  --source-disk-name: any
+  --restore-date: any
+  --use-latest-restorable-auto-snapshot: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateDiskFromSnapshot")
-  let body = {diskName: $diskName, diskSnapshotName: $diskSnapshotName, availabilityZone: $availabilityZone, sizeInGb: $sizeInGb, tags: $tags, addOns: $addOns, sourceDiskName: $sourceDiskName, restoreDate: $restoreDate, useLatestRestorableAutoSnapshot: $useLatestRestorableAutoSnapshot} | compact
+  let body = {"diskName": $disk_name, "diskSnapshotName": $disk_snapshot_name, "availabilityZone": $availability_zone, "sizeInGb": $size_in_gb, "tags": $tags, "addOns": $add_ons, "sourceDiskName": $source_disk_name, "restoreDate": $restore_date, "useLatestRestorableAutoSnapshot": $use_latest_restorable_auto_snapshot} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -940,7 +940,7 @@ export def "x-amz-target-lightsail-20161128create-disk-from-snapshot CreateDiskF
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateDiskSnapshot
 # operationId: CreateDiskSnapshot
-export def "x-amz-target-lightsail-20161128create-disk-snapshot CreateDiskSnapshot" [
+export def "x-amz-target-lightsail-20161128create-disk-snapshot create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -949,26 +949,26 @@ export def "x-amz-target-lightsail-20161128create-disk-snapshot CreateDiskSnapsh
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  --diskName: any
-  diskSnapshotName: any
-  --instanceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  --disk-name: any
+  disk_snapshot_name: any
+  --instance-name: any
   --tags: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateDiskSnapshot")
-  let body = {diskName: $diskName, diskSnapshotName: $diskSnapshotName, instanceName: $instanceName, tags: $tags} | compact
+  let body = {"diskName": $disk_name, "diskSnapshotName": $disk_snapshot_name, "instanceName": $instance_name, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -979,7 +979,7 @@ export def "x-amz-target-lightsail-20161128create-disk-snapshot CreateDiskSnapsh
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateDistribution
 # operationId: CreateDistribution
-export def "x-amz-target-lightsail-20161128create-distribution CreateDistribution" [
+export def "x-amz-target-lightsail-20161128create-distribution create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -988,30 +988,30 @@ export def "x-amz-target-lightsail-20161128create-distribution CreateDistributio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  distributionName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  distribution_name: any
   origin: any
-  defaultCacheBehavior: any
-  --cacheBehaviorSettings: any
-  --cacheBehaviors: any
-  bundleId: any
-  --ipAddressType: any
+  default_cache_behavior: any
+  --cache-behavior-settings: any
+  --cache-behaviors: any
+  bundle_id: any
+  --ip-address-type: any
   --tags: any
 ]: any -> record<distribution: record<name: record, arn: record, supportCode: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, resourceType: record, alternativeDomainNames: record, status: record, isEnabled: record, domainName: record, bundleId: record, certificateName: record, origin: record<name: record, resourceType: record, regionName: record, protocolPolicy: record>, originPublicDNS: record, defaultCacheBehavior: record<behavior: record>, cacheBehaviorSettings: record<defaultTTL: record, minimumTTL: record, maximumTTL: record, allowedHTTPMethods: record, cachedHTTPMethods: record, forwardedCookies: record, forwardedHeaders: record, forwardedQueryStrings: record>, cacheBehaviors: record, ableToUpdateBundle: record, ipAddressType: record, tags: record>, operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateDistribution")
-  let body = {distributionName: $distributionName, origin: $origin, defaultCacheBehavior: $defaultCacheBehavior, cacheBehaviorSettings: $cacheBehaviorSettings, cacheBehaviors: $cacheBehaviors, bundleId: $bundleId, ipAddressType: $ipAddressType, tags: $tags} | compact
+  let body = {"distributionName": $distribution_name, "origin": $origin, "defaultCacheBehavior": $default_cache_behavior, "cacheBehaviorSettings": $cache_behavior_settings, "cacheBehaviors": $cache_behaviors, "bundleId": $bundle_id, "ipAddressType": $ip_address_type, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1022,7 +1022,7 @@ export def "x-amz-target-lightsail-20161128create-distribution CreateDistributio
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateDomain
 # operationId: CreateDomain
-export def "x-amz-target-lightsail-20161128create-domain CreateDomain" [
+export def "x-amz-target-lightsail-20161128create-domain create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1031,24 +1031,24 @@ export def "x-amz-target-lightsail-20161128create-domain CreateDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  domainName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  domain_name: any
   --tags: any
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateDomain")
-  let body = {domainName: $domainName, tags: $tags} | compact
+  let body = {"domainName": $domain_name, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1059,7 +1059,7 @@ export def "x-amz-target-lightsail-20161128create-domain CreateDomain" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateDomainEntry
 # operationId: CreateDomainEntry
-export def "x-amz-target-lightsail-20161128create-domain-entry CreateDomainEntry" [
+export def "x-amz-target-lightsail-20161128create-domain-entry create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1068,24 +1068,24 @@ export def "x-amz-target-lightsail-20161128create-domain-entry CreateDomainEntry
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  domainName: any
-  domainEntry: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  domain_name: any
+  domain_entry: any
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateDomainEntry")
-  let body = {domainName: $domainName, domainEntry: $domainEntry} | compact
+  let body = {"domainName": $domain_name, "domainEntry": $domain_entry} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1096,7 +1096,7 @@ export def "x-amz-target-lightsail-20161128create-domain-entry CreateDomainEntry
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateGUISessionAccessDetails
 # operationId: CreateGUISessionAccessDetails
-export def "x-amz-target-lightsail-20161128create-gui-session-access-details CreateGUISessionAccessDetails" [
+export def "x-amz-target-lightsail-20161128create-gui-session-access-details create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1105,23 +1105,23 @@ export def "x-amz-target-lightsail-20161128create-gui-session-access-details Cre
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  resourceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  resource_name: any
 ]: any -> record<resourceName: record, status: record, percentageComplete: record, failureReason: record, sessions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateGUISessionAccessDetails")
-  let body = {resourceName: $resourceName} | compact
+  let body = {"resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1132,7 +1132,7 @@ export def "x-amz-target-lightsail-20161128create-gui-session-access-details Cre
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateInstanceSnapshot
 # operationId: CreateInstanceSnapshot
-export def "x-amz-target-lightsail-20161128create-instance-snapshot CreateInstanceSnapshot" [
+export def "x-amz-target-lightsail-20161128create-instance-snapshot create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1141,25 +1141,25 @@ export def "x-amz-target-lightsail-20161128create-instance-snapshot CreateInstan
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  instanceSnapshotName: any
-  instanceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  instance_snapshot_name: any
+  instance_name: any
   --tags: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateInstanceSnapshot")
-  let body = {instanceSnapshotName: $instanceSnapshotName, instanceName: $instanceName, tags: $tags} | compact
+  let body = {"instanceSnapshotName": $instance_snapshot_name, "instanceName": $instance_name, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1170,7 +1170,7 @@ export def "x-amz-target-lightsail-20161128create-instance-snapshot CreateInstan
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateInstances
 # operationId: CreateInstances
-export def "x-amz-target-lightsail-20161128create-instances CreateInstances" [
+export def "x-amz-target-lightsail-20161128create-instances create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1179,32 +1179,32 @@ export def "x-amz-target-lightsail-20161128create-instances CreateInstances" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  instanceNames: any
-  availabilityZone: any
-  --customImageName: any
-  blueprintId: any
-  bundleId: any
-  --userData: any
-  --keyPairName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  instance_names: any
+  availability_zone: any
+  --custom-image-name: any
+  blueprint_id: any
+  bundle_id: any
+  --user-data: any
+  --key-pair-name: any
   --tags: any
-  --addOns: any
-  --ipAddressType: any
+  --add-ons: any
+  --ip-address-type: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateInstances")
-  let body = {instanceNames: $instanceNames, availabilityZone: $availabilityZone, customImageName: $customImageName, blueprintId: $blueprintId, bundleId: $bundleId, userData: $userData, keyPairName: $keyPairName, tags: $tags, addOns: $addOns, ipAddressType: $ipAddressType} | compact
+  let body = {"instanceNames": $instance_names, "availabilityZone": $availability_zone, "customImageName": $custom_image_name, "blueprintId": $blueprint_id, "bundleId": $bundle_id, "userData": $user_data, "keyPairName": $key_pair_name, "tags": $tags, "addOns": $add_ons, "ipAddressType": $ip_address_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1215,7 +1215,7 @@ export def "x-amz-target-lightsail-20161128create-instances CreateInstances" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateInstancesFromSnapshot
 # operationId: CreateInstancesFromSnapshot
-export def "x-amz-target-lightsail-20161128create-instances-from-snapshot CreateInstancesFromSnapshot" [
+export def "x-amz-target-lightsail-20161128create-instances-from-snapshot create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1224,35 +1224,35 @@ export def "x-amz-target-lightsail-20161128create-instances-from-snapshot Create
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  instanceNames: any
-  --attachedDiskMapping: any
-  availabilityZone: any
-  --instanceSnapshotName: any
-  bundleId: any
-  --userData: any
-  --keyPairName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  instance_names: any
+  --attached-disk-mapping: any
+  availability_zone: any
+  --instance-snapshot-name: any
+  bundle_id: any
+  --user-data: any
+  --key-pair-name: any
   --tags: any
-  --addOns: any
-  --ipAddressType: any
-  --sourceInstanceName: any
-  --restoreDate: any
-  --useLatestRestorableAutoSnapshot: any
+  --add-ons: any
+  --ip-address-type: any
+  --source-instance-name: any
+  --restore-date: any
+  --use-latest-restorable-auto-snapshot: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateInstancesFromSnapshot")
-  let body = {instanceNames: $instanceNames, attachedDiskMapping: $attachedDiskMapping, availabilityZone: $availabilityZone, instanceSnapshotName: $instanceSnapshotName, bundleId: $bundleId, userData: $userData, keyPairName: $keyPairName, tags: $tags, addOns: $addOns, ipAddressType: $ipAddressType, sourceInstanceName: $sourceInstanceName, restoreDate: $restoreDate, useLatestRestorableAutoSnapshot: $useLatestRestorableAutoSnapshot} | compact
+  let body = {"instanceNames": $instance_names, "attachedDiskMapping": $attached_disk_mapping, "availabilityZone": $availability_zone, "instanceSnapshotName": $instance_snapshot_name, "bundleId": $bundle_id, "userData": $user_data, "keyPairName": $key_pair_name, "tags": $tags, "addOns": $add_ons, "ipAddressType": $ip_address_type, "sourceInstanceName": $source_instance_name, "restoreDate": $restore_date, "useLatestRestorableAutoSnapshot": $use_latest_restorable_auto_snapshot} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1263,7 +1263,7 @@ export def "x-amz-target-lightsail-20161128create-instances-from-snapshot Create
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateKeyPair
 # operationId: CreateKeyPair
-export def "x-amz-target-lightsail-20161128create-key-pair CreateKeyPair" [
+export def "x-amz-target-lightsail-20161128create-key-pair create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1272,24 +1272,24 @@ export def "x-amz-target-lightsail-20161128create-key-pair CreateKeyPair" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  keyPairName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  key_pair_name: any
   --tags: any
 ]: any -> record<keyPair: record<name: record, arn: record, supportCode: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, resourceType: record, tags: record, fingerprint: record>, publicKeyBase64: record, privateKeyBase64: record, operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateKeyPair")
-  let body = {keyPairName: $keyPairName, tags: $tags} | compact
+  let body = {"keyPairName": $key_pair_name, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1300,7 +1300,7 @@ export def "x-amz-target-lightsail-20161128create-key-pair CreateKeyPair" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateLoadBalancer
 # operationId: CreateLoadBalancer
-export def "x-amz-target-lightsail-20161128create-load-balancer CreateLoadBalancer" [
+export def "x-amz-target-lightsail-20161128create-load-balancer create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1309,31 +1309,31 @@ export def "x-amz-target-lightsail-20161128create-load-balancer CreateLoadBalanc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  loadBalancerName: any
-  instancePort: any
-  --healthCheckPath: any
-  --certificateName: any
-  --certificateDomainName: any
-  --certificateAlternativeNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  load_balancer_name: any
+  instance_port: any
+  --health-check-path: any
+  --certificate-name: any
+  --certificate-domain-name: any
+  --certificate-alternative-names: any
   --tags: any
-  --ipAddressType: any
-  --tlsPolicyName: any
+  --ip-address-type: any
+  --tls-policy-name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateLoadBalancer")
-  let body = {loadBalancerName: $loadBalancerName, instancePort: $instancePort, healthCheckPath: $healthCheckPath, certificateName: $certificateName, certificateDomainName: $certificateDomainName, certificateAlternativeNames: $certificateAlternativeNames, tags: $tags, ipAddressType: $ipAddressType, tlsPolicyName: $tlsPolicyName} | compact
+  let body = {"loadBalancerName": $load_balancer_name, "instancePort": $instance_port, "healthCheckPath": $health_check_path, "certificateName": $certificate_name, "certificateDomainName": $certificate_domain_name, "certificateAlternativeNames": $certificate_alternative_names, "tags": $tags, "ipAddressType": $ip_address_type, "tlsPolicyName": $tls_policy_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1344,7 +1344,7 @@ export def "x-amz-target-lightsail-20161128create-load-balancer CreateLoadBalanc
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateLoadBalancerTlsCertificate
 # operationId: CreateLoadBalancerTlsCertificate
-export def "x-amz-target-lightsail-20161128create-load-balancer-tls-certificate CreateLoadBalancerTlsCertificate" [
+export def "x-amz-target-lightsail-20161128create-load-balancer-tls-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1353,27 +1353,27 @@ export def "x-amz-target-lightsail-20161128create-load-balancer-tls-certificate 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  loadBalancerName: any
-  certificateName: any
-  certificateDomainName: any
-  --certificateAlternativeNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  load_balancer_name: any
+  certificate_name: any
+  certificate_domain_name: any
+  --certificate-alternative-names: any
   --tags: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateLoadBalancerTlsCertificate")
-  let body = {loadBalancerName: $loadBalancerName, certificateName: $certificateName, certificateDomainName: $certificateDomainName, certificateAlternativeNames: $certificateAlternativeNames, tags: $tags} | compact
+  let body = {"loadBalancerName": $load_balancer_name, "certificateName": $certificate_name, "certificateDomainName": $certificate_domain_name, "certificateAlternativeNames": $certificate_alternative_names, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1384,7 +1384,7 @@ export def "x-amz-target-lightsail-20161128create-load-balancer-tls-certificate 
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateRelationalDatabase
 # operationId: CreateRelationalDatabase
-export def "x-amz-target-lightsail-20161128create-relational-database CreateRelationalDatabase" [
+export def "x-amz-target-lightsail-20161128create-relational-database create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1393,33 +1393,33 @@ export def "x-amz-target-lightsail-20161128create-relational-database CreateRela
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  relationalDatabaseName: any
-  --availabilityZone: any
-  relationalDatabaseBlueprintId: any
-  relationalDatabaseBundleId: any
-  masterDatabaseName: any
-  masterUsername: any
-  --masterUserPassword: any
-  --preferredBackupWindow: any
-  --preferredMaintenanceWindow: any
-  --publiclyAccessible: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  relational_database_name: any
+  --availability-zone: any
+  relational_database_blueprint_id: any
+  relational_database_bundle_id: any
+  master_database_name: any
+  master_username: any
+  --master-user-password: any
+  --preferred-backup-window: any
+  --preferred-maintenance-window: any
+  --publicly-accessible: any
   --tags: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateRelationalDatabase")
-  let body = {relationalDatabaseName: $relationalDatabaseName, availabilityZone: $availabilityZone, relationalDatabaseBlueprintId: $relationalDatabaseBlueprintId, relationalDatabaseBundleId: $relationalDatabaseBundleId, masterDatabaseName: $masterDatabaseName, masterUsername: $masterUsername, masterUserPassword: $masterUserPassword, preferredBackupWindow: $preferredBackupWindow, preferredMaintenanceWindow: $preferredMaintenanceWindow, publiclyAccessible: $publiclyAccessible, tags: $tags} | compact
+  let body = {"relationalDatabaseName": $relational_database_name, "availabilityZone": $availability_zone, "relationalDatabaseBlueprintId": $relational_database_blueprint_id, "relationalDatabaseBundleId": $relational_database_bundle_id, "masterDatabaseName": $master_database_name, "masterUsername": $master_username, "masterUserPassword": $master_user_password, "preferredBackupWindow": $preferred_backup_window, "preferredMaintenanceWindow": $preferred_maintenance_window, "publiclyAccessible": $publicly_accessible, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1430,7 +1430,7 @@ export def "x-amz-target-lightsail-20161128create-relational-database CreateRela
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateRelationalDatabaseFromSnapshot
 # operationId: CreateRelationalDatabaseFromSnapshot
-export def "x-amz-target-lightsail-20161128create-relational-database-from-snapshot CreateRelationalDatabaseFromSnapshot" [
+export def "x-amz-target-lightsail-20161128create-relational-database-from-snapshot create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1439,31 +1439,31 @@ export def "x-amz-target-lightsail-20161128create-relational-database-from-snaps
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  relationalDatabaseName: any
-  --availabilityZone: any
-  --publiclyAccessible: any
-  --relationalDatabaseSnapshotName: any
-  --relationalDatabaseBundleId: any
-  --sourceRelationalDatabaseName: any
-  --restoreTime: any
-  --useLatestRestorableTime: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  relational_database_name: any
+  --availability-zone: any
+  --publicly-accessible: any
+  --relational-database-snapshot-name: any
+  --relational-database-bundle-id: any
+  --source-relational-database-name: any
+  --restore-time: any
+  --use-latest-restorable-time: any
   --tags: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateRelationalDatabaseFromSnapshot")
-  let body = {relationalDatabaseName: $relationalDatabaseName, availabilityZone: $availabilityZone, publiclyAccessible: $publiclyAccessible, relationalDatabaseSnapshotName: $relationalDatabaseSnapshotName, relationalDatabaseBundleId: $relationalDatabaseBundleId, sourceRelationalDatabaseName: $sourceRelationalDatabaseName, restoreTime: $restoreTime, useLatestRestorableTime: $useLatestRestorableTime, tags: $tags} | compact
+  let body = {"relationalDatabaseName": $relational_database_name, "availabilityZone": $availability_zone, "publiclyAccessible": $publicly_accessible, "relationalDatabaseSnapshotName": $relational_database_snapshot_name, "relationalDatabaseBundleId": $relational_database_bundle_id, "sourceRelationalDatabaseName": $source_relational_database_name, "restoreTime": $restore_time, "useLatestRestorableTime": $use_latest_restorable_time, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1474,7 +1474,7 @@ export def "x-amz-target-lightsail-20161128create-relational-database-from-snaps
 #
 # POST /#X-Amz-Target=Lightsail_20161128.CreateRelationalDatabaseSnapshot
 # operationId: CreateRelationalDatabaseSnapshot
-export def "x-amz-target-lightsail-20161128create-relational-database-snapshot CreateRelationalDatabaseSnapshot" [
+export def "x-amz-target-lightsail-20161128create-relational-database-snapshot create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1483,25 +1483,25 @@ export def "x-amz-target-lightsail-20161128create-relational-database-snapshot C
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  relationalDatabaseName: any
-  relationalDatabaseSnapshotName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  relational_database_name: any
+  relational_database_snapshot_name: any
   --tags: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.CreateRelationalDatabaseSnapshot")
-  let body = {relationalDatabaseName: $relationalDatabaseName, relationalDatabaseSnapshotName: $relationalDatabaseSnapshotName, tags: $tags} | compact
+  let body = {"relationalDatabaseName": $relational_database_name, "relationalDatabaseSnapshotName": $relational_database_snapshot_name, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1512,7 +1512,7 @@ export def "x-amz-target-lightsail-20161128create-relational-database-snapshot C
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteAlarm
 # operationId: DeleteAlarm
-export def "x-amz-target-lightsail-20161128delete-alarm DeleteAlarm" [
+export def "x-amz-target-lightsail-20161128delete-alarm delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1521,23 +1521,23 @@ export def "x-amz-target-lightsail-20161128delete-alarm DeleteAlarm" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  alarmName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  alarm_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteAlarm")
-  let body = {alarmName: $alarmName} | compact
+  let body = {"alarmName": $alarm_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1548,7 +1548,7 @@ export def "x-amz-target-lightsail-20161128delete-alarm DeleteAlarm" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteAutoSnapshot
 # operationId: DeleteAutoSnapshot
-export def "x-amz-target-lightsail-20161128delete-auto-snapshot DeleteAutoSnapshot" [
+export def "x-amz-target-lightsail-20161128delete-auto-snapshot delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1557,24 +1557,24 @@ export def "x-amz-target-lightsail-20161128delete-auto-snapshot DeleteAutoSnapsh
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  resourceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  resource_name: any
   date: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteAutoSnapshot")
-  let body = {resourceName: $resourceName, date: $date} | compact
+  let body = {"resourceName": $resource_name, "date": $date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1585,7 +1585,7 @@ export def "x-amz-target-lightsail-20161128delete-auto-snapshot DeleteAutoSnapsh
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteBucket
 # operationId: DeleteBucket
-export def "x-amz-target-lightsail-20161128delete-bucket DeleteBucket" [
+export def "x-amz-target-lightsail-20161128delete-bucket delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1594,24 +1594,24 @@ export def "x-amz-target-lightsail-20161128delete-bucket DeleteBucket" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  bucketName: any
-  --forceDelete: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  bucket_name: any
+  --force-delete: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteBucket")
-  let body = {bucketName: $bucketName, forceDelete: $forceDelete} | compact
+  let body = {"bucketName": $bucket_name, "forceDelete": $force_delete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1622,7 +1622,7 @@ export def "x-amz-target-lightsail-20161128delete-bucket DeleteBucket" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteBucketAccessKey
 # operationId: DeleteBucketAccessKey
-export def "x-amz-target-lightsail-20161128delete-bucket-access-key DeleteBucketAccessKey" [
+export def "x-amz-target-lightsail-20161128delete-bucket-access-key delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1631,24 +1631,24 @@ export def "x-amz-target-lightsail-20161128delete-bucket-access-key DeleteBucket
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  bucketName: any
-  accessKeyId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  bucket_name: any
+  access_key_id: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteBucketAccessKey")
-  let body = {bucketName: $bucketName, accessKeyId: $accessKeyId} | compact
+  let body = {"bucketName": $bucket_name, "accessKeyId": $access_key_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1659,7 +1659,7 @@ export def "x-amz-target-lightsail-20161128delete-bucket-access-key DeleteBucket
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteCertificate
 # operationId: DeleteCertificate
-export def "x-amz-target-lightsail-20161128delete-certificate DeleteCertificate" [
+export def "x-amz-target-lightsail-20161128delete-certificate delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1668,23 +1668,23 @@ export def "x-amz-target-lightsail-20161128delete-certificate DeleteCertificate"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  certificateName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  certificate_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteCertificate")
-  let body = {certificateName: $certificateName} | compact
+  let body = {"certificateName": $certificate_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1695,7 +1695,7 @@ export def "x-amz-target-lightsail-20161128delete-certificate DeleteCertificate"
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteContactMethod
 # operationId: DeleteContactMethod
-export def "x-amz-target-lightsail-20161128delete-contact-method DeleteContactMethod" [
+export def "x-amz-target-lightsail-20161128delete-contact-method delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1704,23 +1704,23 @@ export def "x-amz-target-lightsail-20161128delete-contact-method DeleteContactMe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
   protocol: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteContactMethod")
-  let body = {protocol: $protocol} | compact
+  let body = {"protocol": $protocol} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1731,7 +1731,7 @@ export def "x-amz-target-lightsail-20161128delete-contact-method DeleteContactMe
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteContainerImage
 # operationId: DeleteContainerImage
-export def "x-amz-target-lightsail-20161128delete-container-image DeleteContainerImage" [
+export def "x-amz-target-lightsail-20161128delete-container-image delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1740,24 +1740,24 @@ export def "x-amz-target-lightsail-20161128delete-container-image DeleteContaine
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  serviceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  service_name: any
   image: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteContainerImage")
-  let body = {serviceName: $serviceName, image: $image} | compact
+  let body = {"serviceName": $service_name, "image": $image} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1768,7 +1768,7 @@ export def "x-amz-target-lightsail-20161128delete-container-image DeleteContaine
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteContainerService
 # operationId: DeleteContainerService
-export def "x-amz-target-lightsail-20161128delete-container-service DeleteContainerService" [
+export def "x-amz-target-lightsail-20161128delete-container-service delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1777,23 +1777,23 @@ export def "x-amz-target-lightsail-20161128delete-container-service DeleteContai
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  serviceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  service_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteContainerService")
-  let body = {serviceName: $serviceName} | compact
+  let body = {"serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1804,7 +1804,7 @@ export def "x-amz-target-lightsail-20161128delete-container-service DeleteContai
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteDisk
 # operationId: DeleteDisk
-export def "x-amz-target-lightsail-20161128delete-disk DeleteDisk" [
+export def "x-amz-target-lightsail-20161128delete-disk delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1813,24 +1813,24 @@ export def "x-amz-target-lightsail-20161128delete-disk DeleteDisk" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  diskName: any
-  --forceDeleteAddOns: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  disk_name: any
+  --force-delete-add-ons: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteDisk")
-  let body = {diskName: $diskName, forceDeleteAddOns: $forceDeleteAddOns} | compact
+  let body = {"diskName": $disk_name, "forceDeleteAddOns": $force_delete_add_ons} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1841,7 +1841,7 @@ export def "x-amz-target-lightsail-20161128delete-disk DeleteDisk" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteDiskSnapshot
 # operationId: DeleteDiskSnapshot
-export def "x-amz-target-lightsail-20161128delete-disk-snapshot DeleteDiskSnapshot" [
+export def "x-amz-target-lightsail-20161128delete-disk-snapshot delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1850,23 +1850,23 @@ export def "x-amz-target-lightsail-20161128delete-disk-snapshot DeleteDiskSnapsh
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  diskSnapshotName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  disk_snapshot_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteDiskSnapshot")
-  let body = {diskSnapshotName: $diskSnapshotName} | compact
+  let body = {"diskSnapshotName": $disk_snapshot_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1877,7 +1877,7 @@ export def "x-amz-target-lightsail-20161128delete-disk-snapshot DeleteDiskSnapsh
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteDistribution
 # operationId: DeleteDistribution
-export def "x-amz-target-lightsail-20161128delete-distribution DeleteDistribution" [
+export def "x-amz-target-lightsail-20161128delete-distribution delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1886,23 +1886,23 @@ export def "x-amz-target-lightsail-20161128delete-distribution DeleteDistributio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  --distributionName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  --distribution-name: any
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteDistribution")
-  let body = {distributionName: $distributionName} | compact
+  let body = {"distributionName": $distribution_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1913,7 +1913,7 @@ export def "x-amz-target-lightsail-20161128delete-distribution DeleteDistributio
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteDomain
 # operationId: DeleteDomain
-export def "x-amz-target-lightsail-20161128delete-domain DeleteDomain" [
+export def "x-amz-target-lightsail-20161128delete-domain delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1922,23 +1922,23 @@ export def "x-amz-target-lightsail-20161128delete-domain DeleteDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  domainName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  domain_name: any
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteDomain")
-  let body = {domainName: $domainName} | compact
+  let body = {"domainName": $domain_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1949,7 +1949,7 @@ export def "x-amz-target-lightsail-20161128delete-domain DeleteDomain" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteDomainEntry
 # operationId: DeleteDomainEntry
-export def "x-amz-target-lightsail-20161128delete-domain-entry DeleteDomainEntry" [
+export def "x-amz-target-lightsail-20161128delete-domain-entry delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1958,24 +1958,24 @@ export def "x-amz-target-lightsail-20161128delete-domain-entry DeleteDomainEntry
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  domainName: any
-  domainEntry: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  domain_name: any
+  domain_entry: any
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteDomainEntry")
-  let body = {domainName: $domainName, domainEntry: $domainEntry} | compact
+  let body = {"domainName": $domain_name, "domainEntry": $domain_entry} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1986,7 +1986,7 @@ export def "x-amz-target-lightsail-20161128delete-domain-entry DeleteDomainEntry
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteInstance
 # operationId: DeleteInstance
-export def "x-amz-target-lightsail-20161128delete-instance DeleteInstance" [
+export def "x-amz-target-lightsail-20161128delete-instance delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1995,24 +1995,24 @@ export def "x-amz-target-lightsail-20161128delete-instance DeleteInstance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  instanceName: any
-  --forceDeleteAddOns: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  instance_name: any
+  --force-delete-add-ons: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteInstance")
-  let body = {instanceName: $instanceName, forceDeleteAddOns: $forceDeleteAddOns} | compact
+  let body = {"instanceName": $instance_name, "forceDeleteAddOns": $force_delete_add_ons} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2023,7 +2023,7 @@ export def "x-amz-target-lightsail-20161128delete-instance DeleteInstance" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteInstanceSnapshot
 # operationId: DeleteInstanceSnapshot
-export def "x-amz-target-lightsail-20161128delete-instance-snapshot DeleteInstanceSnapshot" [
+export def "x-amz-target-lightsail-20161128delete-instance-snapshot delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2032,23 +2032,23 @@ export def "x-amz-target-lightsail-20161128delete-instance-snapshot DeleteInstan
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  instanceSnapshotName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  instance_snapshot_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteInstanceSnapshot")
-  let body = {instanceSnapshotName: $instanceSnapshotName} | compact
+  let body = {"instanceSnapshotName": $instance_snapshot_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2059,7 +2059,7 @@ export def "x-amz-target-lightsail-20161128delete-instance-snapshot DeleteInstan
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteKeyPair
 # operationId: DeleteKeyPair
-export def "x-amz-target-lightsail-20161128delete-key-pair DeleteKeyPair" [
+export def "x-amz-target-lightsail-20161128delete-key-pair delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2068,24 +2068,24 @@ export def "x-amz-target-lightsail-20161128delete-key-pair DeleteKeyPair" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
-  keyPairName: any
-  --expectedFingerprint: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
+  key_pair_name: any
+  --expected-fingerprint: any
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteKeyPair")
-  let body = {keyPairName: $keyPairName, expectedFingerprint: $expectedFingerprint} | compact
+  let body = {"keyPairName": $key_pair_name, "expectedFingerprint": $expected_fingerprint} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2096,7 +2096,7 @@ export def "x-amz-target-lightsail-20161128delete-key-pair DeleteKeyPair" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteKnownHostKeys
 # operationId: DeleteKnownHostKeys
-export def "x-amz-target-lightsail-20161128delete-known-host-keys DeleteKnownHostKeys" [
+export def "x-amz-target-lightsail-20161128delete-known-host-keys delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2105,23 +2105,23 @@ export def "x-amz-target-lightsail-20161128delete-known-host-keys DeleteKnownHos
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
-  instanceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
+  instance_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteKnownHostKeys")
-  let body = {instanceName: $instanceName} | compact
+  let body = {"instanceName": $instance_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2132,7 +2132,7 @@ export def "x-amz-target-lightsail-20161128delete-known-host-keys DeleteKnownHos
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteLoadBalancer
 # operationId: DeleteLoadBalancer
-export def "x-amz-target-lightsail-20161128delete-load-balancer DeleteLoadBalancer" [
+export def "x-amz-target-lightsail-20161128delete-load-balancer delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2141,23 +2141,23 @@ export def "x-amz-target-lightsail-20161128delete-load-balancer DeleteLoadBalanc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-49
-  loadBalancerName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-49
+  load_balancer_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteLoadBalancer")
-  let body = {loadBalancerName: $loadBalancerName} | compact
+  let body = {"loadBalancerName": $load_balancer_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2168,7 +2168,7 @@ export def "x-amz-target-lightsail-20161128delete-load-balancer DeleteLoadBalanc
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteLoadBalancerTlsCertificate
 # operationId: DeleteLoadBalancerTlsCertificate
-export def "x-amz-target-lightsail-20161128delete-load-balancer-tls-certificate DeleteLoadBalancerTlsCertificate" [
+export def "x-amz-target-lightsail-20161128delete-load-balancer-tls-certificate delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2177,25 +2177,25 @@ export def "x-amz-target-lightsail-20161128delete-load-balancer-tls-certificate 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-50
-  loadBalancerName: any
-  certificateName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-50
+  load_balancer_name: any
+  certificate_name: any
   --force: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteLoadBalancerTlsCertificate")
-  let body = {loadBalancerName: $loadBalancerName, certificateName: $certificateName, force: $force} | compact
+  let body = {"loadBalancerName": $load_balancer_name, "certificateName": $certificate_name, "force": $force} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2206,7 +2206,7 @@ export def "x-amz-target-lightsail-20161128delete-load-balancer-tls-certificate 
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteRelationalDatabase
 # operationId: DeleteRelationalDatabase
-export def "x-amz-target-lightsail-20161128delete-relational-database DeleteRelationalDatabase" [
+export def "x-amz-target-lightsail-20161128delete-relational-database delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2215,25 +2215,25 @@ export def "x-amz-target-lightsail-20161128delete-relational-database DeleteRela
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-51
-  relationalDatabaseName: any
-  --skipFinalSnapshot: any
-  --finalRelationalDatabaseSnapshotName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-51
+  relational_database_name: any
+  --skip-final-snapshot: any
+  --final-relational-database-snapshot-name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteRelationalDatabase")
-  let body = {relationalDatabaseName: $relationalDatabaseName, skipFinalSnapshot: $skipFinalSnapshot, finalRelationalDatabaseSnapshotName: $finalRelationalDatabaseSnapshotName} | compact
+  let body = {"relationalDatabaseName": $relational_database_name, "skipFinalSnapshot": $skip_final_snapshot, "finalRelationalDatabaseSnapshotName": $final_relational_database_snapshot_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2244,7 +2244,7 @@ export def "x-amz-target-lightsail-20161128delete-relational-database DeleteRela
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DeleteRelationalDatabaseSnapshot
 # operationId: DeleteRelationalDatabaseSnapshot
-export def "x-amz-target-lightsail-20161128delete-relational-database-snapshot DeleteRelationalDatabaseSnapshot" [
+export def "x-amz-target-lightsail-20161128delete-relational-database-snapshot delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2253,23 +2253,23 @@ export def "x-amz-target-lightsail-20161128delete-relational-database-snapshot D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-52
-  relationalDatabaseSnapshotName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-52
+  relational_database_snapshot_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DeleteRelationalDatabaseSnapshot")
-  let body = {relationalDatabaseSnapshotName: $relationalDatabaseSnapshotName} | compact
+  let body = {"relationalDatabaseSnapshotName": $relational_database_snapshot_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2280,7 +2280,7 @@ export def "x-amz-target-lightsail-20161128delete-relational-database-snapshot D
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DetachCertificateFromDistribution
 # operationId: DetachCertificateFromDistribution
-export def "x-amz-target-lightsail-20161128detach-certificate-from-distribution DetachCertificateFromDistribution" [
+export def "x-amz-target-lightsail-20161128detach-certificate-from-distribution post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2289,23 +2289,23 @@ export def "x-amz-target-lightsail-20161128detach-certificate-from-distribution 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-53
-  distributionName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-53
+  distribution_name: any
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DetachCertificateFromDistribution")
-  let body = {distributionName: $distributionName} | compact
+  let body = {"distributionName": $distribution_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2316,7 +2316,7 @@ export def "x-amz-target-lightsail-20161128detach-certificate-from-distribution 
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DetachDisk
 # operationId: DetachDisk
-export def "x-amz-target-lightsail-20161128detach-disk DetachDisk" [
+export def "x-amz-target-lightsail-20161128detach-disk post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2325,23 +2325,23 @@ export def "x-amz-target-lightsail-20161128detach-disk DetachDisk" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-54
-  diskName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-54
+  disk_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DetachDisk")
-  let body = {diskName: $diskName} | compact
+  let body = {"diskName": $disk_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2352,7 +2352,7 @@ export def "x-amz-target-lightsail-20161128detach-disk DetachDisk" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DetachInstancesFromLoadBalancer
 # operationId: DetachInstancesFromLoadBalancer
-export def "x-amz-target-lightsail-20161128detach-instances-from-load-balancer DetachInstancesFromLoadBalancer" [
+export def "x-amz-target-lightsail-20161128detach-instances-from-load-balancer post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2361,24 +2361,24 @@ export def "x-amz-target-lightsail-20161128detach-instances-from-load-balancer D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-55
-  loadBalancerName: any
-  instanceNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-55
+  load_balancer_name: any
+  instance_names: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DetachInstancesFromLoadBalancer")
-  let body = {loadBalancerName: $loadBalancerName, instanceNames: $instanceNames} | compact
+  let body = {"loadBalancerName": $load_balancer_name, "instanceNames": $instance_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2389,7 +2389,7 @@ export def "x-amz-target-lightsail-20161128detach-instances-from-load-balancer D
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DetachStaticIp
 # operationId: DetachStaticIp
-export def "x-amz-target-lightsail-20161128detach-static-ip DetachStaticIp" [
+export def "x-amz-target-lightsail-20161128detach-static-ip post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2398,23 +2398,23 @@ export def "x-amz-target-lightsail-20161128detach-static-ip DetachStaticIp" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-56
-  staticIpName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-56
+  static_ip_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DetachStaticIp")
-  let body = {staticIpName: $staticIpName} | compact
+  let body = {"staticIpName": $static_ip_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2425,7 +2425,7 @@ export def "x-amz-target-lightsail-20161128detach-static-ip DetachStaticIp" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DisableAddOn
 # operationId: DisableAddOn
-export def "x-amz-target-lightsail-20161128disable-add-on DisableAddOn" [
+export def "x-amz-target-lightsail-20161128disable-add-on disable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2434,24 +2434,24 @@ export def "x-amz-target-lightsail-20161128disable-add-on DisableAddOn" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-57
-  addOnType: any
-  resourceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-57
+  add_on_type: any
+  resource_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DisableAddOn")
-  let body = {addOnType: $addOnType, resourceName: $resourceName} | compact
+  let body = {"addOnType": $add_on_type, "resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2462,7 +2462,7 @@ export def "x-amz-target-lightsail-20161128disable-add-on DisableAddOn" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.DownloadDefaultKeyPair
 # operationId: DownloadDefaultKeyPair
-export def "x-amz-target-lightsail-20161128download-default-key-pair DownloadDefaultKeyPair" [
+export def "x-amz-target-lightsail-20161128download-default-key-pair download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2471,14 +2471,14 @@ export def "x-amz-target-lightsail-20161128download-default-key-pair DownloadDef
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-58
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-58
   --body: record
 ]: any -> record<publicKeyBase64: record, privateKeyBase64: record, createdAt: record> {
   let input = $in
@@ -2486,7 +2486,7 @@ export def "x-amz-target-lightsail-20161128download-default-key-pair DownloadDef
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.DownloadDefaultKeyPair")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2497,7 +2497,7 @@ export def "x-amz-target-lightsail-20161128download-default-key-pair DownloadDef
 #
 # POST /#X-Amz-Target=Lightsail_20161128.EnableAddOn
 # operationId: EnableAddOn
-export def "x-amz-target-lightsail-20161128enable-add-on EnableAddOn" [
+export def "x-amz-target-lightsail-20161128enable-add-on enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2506,24 +2506,24 @@ export def "x-amz-target-lightsail-20161128enable-add-on EnableAddOn" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-59
-  resourceName: any
-  addOnRequest: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-59
+  resource_name: any
+  add_on_request: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.EnableAddOn")
-  let body = {resourceName: $resourceName, addOnRequest: $addOnRequest} | compact
+  let body = {"resourceName": $resource_name, "addOnRequest": $add_on_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2534,7 +2534,7 @@ export def "x-amz-target-lightsail-20161128enable-add-on EnableAddOn" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.ExportSnapshot
 # operationId: ExportSnapshot
-export def "x-amz-target-lightsail-20161128export-snapshot ExportSnapshot" [
+export def "x-amz-target-lightsail-20161128export-snapshot export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2543,23 +2543,23 @@ export def "x-amz-target-lightsail-20161128export-snapshot ExportSnapshot" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-60
-  sourceSnapshotName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-60
+  source_snapshot_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.ExportSnapshot")
-  let body = {sourceSnapshotName: $sourceSnapshotName} | compact
+  let body = {"sourceSnapshotName": $source_snapshot_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2570,7 +2570,7 @@ export def "x-amz-target-lightsail-20161128export-snapshot ExportSnapshot" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetActiveNames
 # operationId: GetActiveNames
-export def "x-amz-target-lightsail-20161128get-active-names GetActiveNames" [
+export def "x-amz-target-lightsail-20161128get-active-names get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2579,23 +2579,23 @@ export def "x-amz-target-lightsail-20161128get-active-names GetActiveNames" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-61
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-61
+  --page-token: any
 ]: any -> record<activeNames: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetActiveNames")
-  let body = {pageToken: $pageToken} | compact
+  let body = {"pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2606,7 +2606,7 @@ export def "x-amz-target-lightsail-20161128get-active-names GetActiveNames" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetAlarms
 # operationId: GetAlarms
-export def "x-amz-target-lightsail-20161128get-alarms GetAlarms" [
+export def "x-amz-target-lightsail-20161128get-alarms get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2615,25 +2615,25 @@ export def "x-amz-target-lightsail-20161128get-alarms GetAlarms" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-62
-  --alarmName: any
-  --pageToken: any
-  --monitoredResourceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-62
+  --alarm-name: any
+  --page-token: any
+  --monitored-resource-name: any
 ]: any -> record<alarms: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetAlarms")
-  let body = {alarmName: $alarmName, pageToken: $pageToken, monitoredResourceName: $monitoredResourceName} | compact
+  let body = {"alarmName": $alarm_name, "pageToken": $page_token, "monitoredResourceName": $monitored_resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2644,7 +2644,7 @@ export def "x-amz-target-lightsail-20161128get-alarms GetAlarms" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetAutoSnapshots
 # operationId: GetAutoSnapshots
-export def "x-amz-target-lightsail-20161128get-auto-snapshots GetAutoSnapshots" [
+export def "x-amz-target-lightsail-20161128get-auto-snapshots get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2653,23 +2653,23 @@ export def "x-amz-target-lightsail-20161128get-auto-snapshots GetAutoSnapshots" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-63
-  resourceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-63
+  resource_name: any
 ]: any -> record<resourceName: record, resourceType: record, autoSnapshots: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetAutoSnapshots")
-  let body = {resourceName: $resourceName} | compact
+  let body = {"resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2680,7 +2680,7 @@ export def "x-amz-target-lightsail-20161128get-auto-snapshots GetAutoSnapshots" 
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetBlueprints
 # operationId: GetBlueprints
-export def "x-amz-target-lightsail-20161128get-blueprints GetBlueprints" [
+export def "x-amz-target-lightsail-20161128get-blueprints get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2689,25 +2689,25 @@ export def "x-amz-target-lightsail-20161128get-blueprints GetBlueprints" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-64
-  --includeInactive: any
-  --pageToken: any
-  --appCategory: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-64
+  --include-inactive: any
+  --page-token: any
+  --app-category: any
 ]: any -> record<blueprints: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetBlueprints")
-  let body = {includeInactive: $includeInactive, pageToken: $pageToken, appCategory: $appCategory} | compact
+  let body = {"includeInactive": $include_inactive, "pageToken": $page_token, "appCategory": $app_category} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2718,7 +2718,7 @@ export def "x-amz-target-lightsail-20161128get-blueprints GetBlueprints" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetBucketAccessKeys
 # operationId: GetBucketAccessKeys
-export def "x-amz-target-lightsail-20161128get-bucket-access-keys GetBucketAccessKeys" [
+export def "x-amz-target-lightsail-20161128get-bucket-access-keys get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2727,23 +2727,23 @@ export def "x-amz-target-lightsail-20161128get-bucket-access-keys GetBucketAcces
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-65
-  bucketName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-65
+  bucket_name: any
 ]: any -> record<accessKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetBucketAccessKeys")
-  let body = {bucketName: $bucketName} | compact
+  let body = {"bucketName": $bucket_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2754,7 +2754,7 @@ export def "x-amz-target-lightsail-20161128get-bucket-access-keys GetBucketAcces
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetBucketBundles
 # operationId: GetBucketBundles
-export def "x-amz-target-lightsail-20161128get-bucket-bundles GetBucketBundles" [
+export def "x-amz-target-lightsail-20161128get-bucket-bundles get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2763,23 +2763,23 @@ export def "x-amz-target-lightsail-20161128get-bucket-bundles GetBucketBundles" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-66
-  --includeInactive: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-66
+  --include-inactive: any
 ]: any -> record<bundles: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetBucketBundles")
-  let body = {includeInactive: $includeInactive} | compact
+  let body = {"includeInactive": $include_inactive} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2790,7 +2790,7 @@ export def "x-amz-target-lightsail-20161128get-bucket-bundles GetBucketBundles" 
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetBucketMetricData
 # operationId: GetBucketMetricData
-export def "x-amz-target-lightsail-20161128get-bucket-metric-data GetBucketMetricData" [
+export def "x-amz-target-lightsail-20161128get-bucket-metric-data get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2799,18 +2799,18 @@ export def "x-amz-target-lightsail-20161128get-bucket-metric-data GetBucketMetri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-67
-  bucketName: any
-  metricName: any
-  startTime: any
-  endTime: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-67
+  bucket_name: any
+  metric_name: any
+  start_time: any
+  end_time: any
   period: any
   statistics: any
   unit: any
@@ -2819,9 +2819,9 @@ export def "x-amz-target-lightsail-20161128get-bucket-metric-data GetBucketMetri
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetBucketMetricData")
-  let body = {bucketName: $bucketName, metricName: $metricName, startTime: $startTime, endTime: $endTime, period: $period, statistics: $statistics, unit: $unit} | compact
+  let body = {"bucketName": $bucket_name, "metricName": $metric_name, "startTime": $start_time, "endTime": $end_time, "period": $period, "statistics": $statistics, "unit": $unit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2832,7 +2832,7 @@ export def "x-amz-target-lightsail-20161128get-bucket-metric-data GetBucketMetri
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetBuckets
 # operationId: GetBuckets
-export def "x-amz-target-lightsail-20161128get-buckets GetBuckets" [
+export def "x-amz-target-lightsail-20161128get-buckets get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2841,25 +2841,25 @@ export def "x-amz-target-lightsail-20161128get-buckets GetBuckets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-68
-  --bucketName: any
-  --pageToken: any
-  --includeConnectedResources: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-68
+  --bucket-name: any
+  --page-token: any
+  --include-connected-resources: any
 ]: any -> record<buckets: record, nextPageToken: record, accountLevelBpaSync: record<status: record, lastSyncedAt: record, message: record, bpaImpactsLightsail: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetBuckets")
-  let body = {bucketName: $bucketName, pageToken: $pageToken, includeConnectedResources: $includeConnectedResources} | compact
+  let body = {"bucketName": $bucket_name, "pageToken": $page_token, "includeConnectedResources": $include_connected_resources} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2870,7 +2870,7 @@ export def "x-amz-target-lightsail-20161128get-buckets GetBuckets" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetBundles
 # operationId: GetBundles
-export def "x-amz-target-lightsail-20161128get-bundles GetBundles" [
+export def "x-amz-target-lightsail-20161128get-bundles get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2879,25 +2879,25 @@ export def "x-amz-target-lightsail-20161128get-bundles GetBundles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-69
-  --includeInactive: any
-  --pageToken: any
-  --appCategory: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-69
+  --include-inactive: any
+  --page-token: any
+  --app-category: any
 ]: any -> record<bundles: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetBundles")
-  let body = {includeInactive: $includeInactive, pageToken: $pageToken, appCategory: $appCategory} | compact
+  let body = {"includeInactive": $include_inactive, "pageToken": $page_token, "appCategory": $app_category} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2908,7 +2908,7 @@ export def "x-amz-target-lightsail-20161128get-bundles GetBundles" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetCertificates
 # operationId: GetCertificates
-export def "x-amz-target-lightsail-20161128get-certificates GetCertificates" [
+export def "x-amz-target-lightsail-20161128get-certificates get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2917,25 +2917,25 @@ export def "x-amz-target-lightsail-20161128get-certificates GetCertificates" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-70
-  --certificateStatuses: any
-  --includeCertificateDetails: any
-  --certificateName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-70
+  --certificate-statuses: any
+  --include-certificate-details: any
+  --certificate-name: any
 ]: any -> record<certificates: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetCertificates")
-  let body = {certificateStatuses: $certificateStatuses, includeCertificateDetails: $includeCertificateDetails, certificateName: $certificateName} | compact
+  let body = {"certificateStatuses": $certificate_statuses, "includeCertificateDetails": $include_certificate_details, "certificateName": $certificate_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2946,7 +2946,7 @@ export def "x-amz-target-lightsail-20161128get-certificates GetCertificates" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetCloudFormationStackRecords
 # operationId: GetCloudFormationStackRecords
-export def "x-amz-target-lightsail-20161128get-cloud-formation-stack-records GetCloudFormationStackRecords" [
+export def "x-amz-target-lightsail-20161128get-cloud-formation-stack-records get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2955,23 +2955,23 @@ export def "x-amz-target-lightsail-20161128get-cloud-formation-stack-records Get
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-71
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-71
+  --page-token: any
 ]: any -> record<cloudFormationStackRecords: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetCloudFormationStackRecords")
-  let body = {pageToken: $pageToken} | compact
+  let body = {"pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2982,7 +2982,7 @@ export def "x-amz-target-lightsail-20161128get-cloud-formation-stack-records Get
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetContactMethods
 # operationId: GetContactMethods
-export def "x-amz-target-lightsail-20161128get-contact-methods GetContactMethods" [
+export def "x-amz-target-lightsail-20161128get-contact-methods get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2991,23 +2991,23 @@ export def "x-amz-target-lightsail-20161128get-contact-methods GetContactMethods
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-72
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-72
   --protocols: any
 ]: any -> record<contactMethods: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetContactMethods")
-  let body = {protocols: $protocols} | compact
+  let body = {"protocols": $protocols} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3018,7 +3018,7 @@ export def "x-amz-target-lightsail-20161128get-contact-methods GetContactMethods
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetContainerAPIMetadata
 # operationId: GetContainerAPIMetadata
-export def "x-amz-target-lightsail-20161128get-container-api-metadata GetContainerAPIMetadata" [
+export def "x-amz-target-lightsail-20161128get-container-api-metadata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3027,14 +3027,14 @@ export def "x-amz-target-lightsail-20161128get-container-api-metadata GetContain
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-73
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-73
   --body: record
 ]: any -> record<metadata: record> {
   let input = $in
@@ -3042,7 +3042,7 @@ export def "x-amz-target-lightsail-20161128get-container-api-metadata GetContain
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetContainerAPIMetadata")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3053,7 +3053,7 @@ export def "x-amz-target-lightsail-20161128get-container-api-metadata GetContain
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetContainerImages
 # operationId: GetContainerImages
-export def "x-amz-target-lightsail-20161128get-container-images GetContainerImages" [
+export def "x-amz-target-lightsail-20161128get-container-images get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3062,23 +3062,23 @@ export def "x-amz-target-lightsail-20161128get-container-images GetContainerImag
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-74
-  serviceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-74
+  service_name: any
 ]: any -> record<containerImages: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetContainerImages")
-  let body = {serviceName: $serviceName} | compact
+  let body = {"serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3089,7 +3089,7 @@ export def "x-amz-target-lightsail-20161128get-container-images GetContainerImag
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetContainerLog
 # operationId: GetContainerLog
-export def "x-amz-target-lightsail-20161128get-container-log GetContainerLog" [
+export def "x-amz-target-lightsail-20161128get-container-log get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3098,28 +3098,28 @@ export def "x-amz-target-lightsail-20161128get-container-log GetContainerLog" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-75
-  serviceName: any
-  containerName: any
-  --startTime: any
-  --endTime: any
-  --filterPattern: any
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-75
+  service_name: any
+  container_name: any
+  --start-time: any
+  --end-time: any
+  --filter-pattern: any
+  --page-token: any
 ]: any -> record<logEvents: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetContainerLog")
-  let body = {serviceName: $serviceName, containerName: $containerName, startTime: $startTime, endTime: $endTime, filterPattern: $filterPattern, pageToken: $pageToken} | compact
+  let body = {"serviceName": $service_name, "containerName": $container_name, "startTime": $start_time, "endTime": $end_time, "filterPattern": $filter_pattern, "pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3130,7 +3130,7 @@ export def "x-amz-target-lightsail-20161128get-container-log GetContainerLog" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetContainerServiceDeployments
 # operationId: GetContainerServiceDeployments
-export def "x-amz-target-lightsail-20161128get-container-service-deployments GetContainerServiceDeployments" [
+export def "x-amz-target-lightsail-20161128get-container-service-deployments get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3139,23 +3139,23 @@ export def "x-amz-target-lightsail-20161128get-container-service-deployments Get
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-76
-  serviceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-76
+  service_name: any
 ]: any -> record<deployments: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetContainerServiceDeployments")
-  let body = {serviceName: $serviceName} | compact
+  let body = {"serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3166,7 +3166,7 @@ export def "x-amz-target-lightsail-20161128get-container-service-deployments Get
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetContainerServiceMetricData
 # operationId: GetContainerServiceMetricData
-export def "x-amz-target-lightsail-20161128get-container-service-metric-data GetContainerServiceMetricData" [
+export def "x-amz-target-lightsail-20161128get-container-service-metric-data get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3175,18 +3175,18 @@ export def "x-amz-target-lightsail-20161128get-container-service-metric-data Get
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-77
-  serviceName: any
-  metricName: any
-  startTime: any
-  endTime: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-77
+  service_name: any
+  metric_name: any
+  start_time: any
+  end_time: any
   period: any
   statistics: any
 ]: any -> record<metricName: record, metricData: record> {
@@ -3194,9 +3194,9 @@ export def "x-amz-target-lightsail-20161128get-container-service-metric-data Get
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetContainerServiceMetricData")
-  let body = {serviceName: $serviceName, metricName: $metricName, startTime: $startTime, endTime: $endTime, period: $period, statistics: $statistics} | compact
+  let body = {"serviceName": $service_name, "metricName": $metric_name, "startTime": $start_time, "endTime": $end_time, "period": $period, "statistics": $statistics} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3207,7 +3207,7 @@ export def "x-amz-target-lightsail-20161128get-container-service-metric-data Get
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetContainerServicePowers
 # operationId: GetContainerServicePowers
-export def "x-amz-target-lightsail-20161128get-container-service-powers GetContainerServicePowers" [
+export def "x-amz-target-lightsail-20161128get-container-service-powers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3216,14 +3216,14 @@ export def "x-amz-target-lightsail-20161128get-container-service-powers GetConta
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-78
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-78
   --body: record
 ]: any -> record<powers: record> {
   let input = $in
@@ -3231,7 +3231,7 @@ export def "x-amz-target-lightsail-20161128get-container-service-powers GetConta
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetContainerServicePowers")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3242,7 +3242,7 @@ export def "x-amz-target-lightsail-20161128get-container-service-powers GetConta
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetContainerServices
 # operationId: GetContainerServices
-export def "x-amz-target-lightsail-20161128get-container-services GetContainerServices" [
+export def "x-amz-target-lightsail-20161128get-container-services get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3251,23 +3251,23 @@ export def "x-amz-target-lightsail-20161128get-container-services GetContainerSe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-79
-  --serviceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-79
+  --service-name: any
 ]: any -> record<containerServices: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetContainerServices")
-  let body = {serviceName: $serviceName} | compact
+  let body = {"serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3278,7 +3278,7 @@ export def "x-amz-target-lightsail-20161128get-container-services GetContainerSe
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetCostEstimate
 # operationId: GetCostEstimate
-export def "x-amz-target-lightsail-20161128get-cost-estimate GetCostEstimate" [
+export def "x-amz-target-lightsail-20161128get-cost-estimate get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3287,25 +3287,25 @@ export def "x-amz-target-lightsail-20161128get-cost-estimate GetCostEstimate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-80
-  resourceName: any
-  startTime: any
-  endTime: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-80
+  resource_name: any
+  start_time: any
+  end_time: any
 ]: any -> record<resourcesBudgetEstimate: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetCostEstimate")
-  let body = {resourceName: $resourceName, startTime: $startTime, endTime: $endTime} | compact
+  let body = {"resourceName": $resource_name, "startTime": $start_time, "endTime": $end_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3316,7 +3316,7 @@ export def "x-amz-target-lightsail-20161128get-cost-estimate GetCostEstimate" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetDisk
 # operationId: GetDisk
-export def "x-amz-target-lightsail-20161128get-disk GetDisk" [
+export def "x-amz-target-lightsail-20161128get-disk get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3325,23 +3325,23 @@ export def "x-amz-target-lightsail-20161128get-disk GetDisk" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-81
-  diskName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-81
+  disk_name: any
 ]: any -> record<disk: record<name: record, arn: record, supportCode: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, resourceType: record, tags: record, addOns: record, sizeInGb: record, isSystemDisk: record, iops: record, path: record, state: record, attachedTo: record, isAttached: record, attachmentState: record, gbInUse: record, autoMountStatus: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetDisk")
-  let body = {diskName: $diskName} | compact
+  let body = {"diskName": $disk_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3352,7 +3352,7 @@ export def "x-amz-target-lightsail-20161128get-disk GetDisk" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetDiskSnapshot
 # operationId: GetDiskSnapshot
-export def "x-amz-target-lightsail-20161128get-disk-snapshot GetDiskSnapshot" [
+export def "x-amz-target-lightsail-20161128get-disk-snapshot get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3361,23 +3361,23 @@ export def "x-amz-target-lightsail-20161128get-disk-snapshot GetDiskSnapshot" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-82
-  diskSnapshotName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-82
+  disk_snapshot_name: any
 ]: any -> record<diskSnapshot: record<name: record, arn: record, supportCode: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, resourceType: record, tags: record, sizeInGb: record, state: record, progress: record, fromDiskName: record, fromDiskArn: record, fromInstanceName: record, fromInstanceArn: record, isFromAutoSnapshot: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetDiskSnapshot")
-  let body = {diskSnapshotName: $diskSnapshotName} | compact
+  let body = {"diskSnapshotName": $disk_snapshot_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3388,7 +3388,7 @@ export def "x-amz-target-lightsail-20161128get-disk-snapshot GetDiskSnapshot" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetDiskSnapshots
 # operationId: GetDiskSnapshots
-export def "x-amz-target-lightsail-20161128get-disk-snapshots GetDiskSnapshots" [
+export def "x-amz-target-lightsail-20161128get-disk-snapshots get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3397,23 +3397,23 @@ export def "x-amz-target-lightsail-20161128get-disk-snapshots GetDiskSnapshots" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-83
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-83
+  --page-token: any
 ]: any -> record<diskSnapshots: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetDiskSnapshots")
-  let body = {pageToken: $pageToken} | compact
+  let body = {"pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3424,7 +3424,7 @@ export def "x-amz-target-lightsail-20161128get-disk-snapshots GetDiskSnapshots" 
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetDisks
 # operationId: GetDisks
-export def "x-amz-target-lightsail-20161128get-disks GetDisks" [
+export def "x-amz-target-lightsail-20161128get-disks get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3433,23 +3433,23 @@ export def "x-amz-target-lightsail-20161128get-disks GetDisks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-84
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-84
+  --page-token: any
 ]: any -> record<disks: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetDisks")
-  let body = {pageToken: $pageToken} | compact
+  let body = {"pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3460,7 +3460,7 @@ export def "x-amz-target-lightsail-20161128get-disks GetDisks" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetDistributionBundles
 # operationId: GetDistributionBundles
-export def "x-amz-target-lightsail-20161128get-distribution-bundles GetDistributionBundles" [
+export def "x-amz-target-lightsail-20161128get-distribution-bundles get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3469,14 +3469,14 @@ export def "x-amz-target-lightsail-20161128get-distribution-bundles GetDistribut
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-85
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-85
   --body: record
 ]: any -> record<bundles: record> {
   let input = $in
@@ -3484,7 +3484,7 @@ export def "x-amz-target-lightsail-20161128get-distribution-bundles GetDistribut
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetDistributionBundles")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3495,7 +3495,7 @@ export def "x-amz-target-lightsail-20161128get-distribution-bundles GetDistribut
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetDistributionLatestCacheReset
 # operationId: GetDistributionLatestCacheReset
-export def "x-amz-target-lightsail-20161128get-distribution-latest-cache-reset GetDistributionLatestCacheReset" [
+export def "x-amz-target-lightsail-20161128get-distribution-latest-cache-reset get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3504,23 +3504,23 @@ export def "x-amz-target-lightsail-20161128get-distribution-latest-cache-reset G
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-86
-  --distributionName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-86
+  --distribution-name: any
 ]: any -> record<status: record, createTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetDistributionLatestCacheReset")
-  let body = {distributionName: $distributionName} | compact
+  let body = {"distributionName": $distribution_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3531,7 +3531,7 @@ export def "x-amz-target-lightsail-20161128get-distribution-latest-cache-reset G
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetDistributionMetricData
 # operationId: GetDistributionMetricData
-export def "x-amz-target-lightsail-20161128get-distribution-metric-data GetDistributionMetricData" [
+export def "x-amz-target-lightsail-20161128get-distribution-metric-data get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3540,18 +3540,18 @@ export def "x-amz-target-lightsail-20161128get-distribution-metric-data GetDistr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-87
-  distributionName: any
-  metricName: any
-  startTime: any
-  endTime: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-87
+  distribution_name: any
+  metric_name: any
+  start_time: any
+  end_time: any
   period: any
   unit: any
   statistics: any
@@ -3560,9 +3560,9 @@ export def "x-amz-target-lightsail-20161128get-distribution-metric-data GetDistr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetDistributionMetricData")
-  let body = {distributionName: $distributionName, metricName: $metricName, startTime: $startTime, endTime: $endTime, period: $period, unit: $unit, statistics: $statistics} | compact
+  let body = {"distributionName": $distribution_name, "metricName": $metric_name, "startTime": $start_time, "endTime": $end_time, "period": $period, "unit": $unit, "statistics": $statistics} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3573,7 +3573,7 @@ export def "x-amz-target-lightsail-20161128get-distribution-metric-data GetDistr
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetDistributions
 # operationId: GetDistributions
-export def "x-amz-target-lightsail-20161128get-distributions GetDistributions" [
+export def "x-amz-target-lightsail-20161128get-distributions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3582,24 +3582,24 @@ export def "x-amz-target-lightsail-20161128get-distributions GetDistributions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-88
-  --distributionName: any
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-88
+  --distribution-name: any
+  --page-token: any
 ]: any -> record<distributions: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetDistributions")
-  let body = {distributionName: $distributionName, pageToken: $pageToken} | compact
+  let body = {"distributionName": $distribution_name, "pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3610,7 +3610,7 @@ export def "x-amz-target-lightsail-20161128get-distributions GetDistributions" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetDomain
 # operationId: GetDomain
-export def "x-amz-target-lightsail-20161128get-domain GetDomain" [
+export def "x-amz-target-lightsail-20161128get-domain get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3619,23 +3619,23 @@ export def "x-amz-target-lightsail-20161128get-domain GetDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-89
-  domainName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-89
+  domain_name: any
 ]: any -> record<domain: record<name: record, arn: record, supportCode: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, resourceType: record, tags: record, domainEntries: record, registeredDomainDelegationInfo: record<nameServersUpdateState: record, r53HostedZoneDeletionState: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetDomain")
-  let body = {domainName: $domainName} | compact
+  let body = {"domainName": $domain_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3646,7 +3646,7 @@ export def "x-amz-target-lightsail-20161128get-domain GetDomain" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetDomains
 # operationId: GetDomains
-export def "x-amz-target-lightsail-20161128get-domains GetDomains" [
+export def "x-amz-target-lightsail-20161128get-domains get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3655,23 +3655,23 @@ export def "x-amz-target-lightsail-20161128get-domains GetDomains" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-90
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-90
+  --page-token: any
 ]: any -> record<domains: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetDomains")
-  let body = {pageToken: $pageToken} | compact
+  let body = {"pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3682,7 +3682,7 @@ export def "x-amz-target-lightsail-20161128get-domains GetDomains" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetExportSnapshotRecords
 # operationId: GetExportSnapshotRecords
-export def "x-amz-target-lightsail-20161128get-export-snapshot-records GetExportSnapshotRecords" [
+export def "x-amz-target-lightsail-20161128get-export-snapshot-records get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3691,23 +3691,23 @@ export def "x-amz-target-lightsail-20161128get-export-snapshot-records GetExport
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-91
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-91
+  --page-token: any
 ]: any -> record<exportSnapshotRecords: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetExportSnapshotRecords")
-  let body = {pageToken: $pageToken} | compact
+  let body = {"pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3718,7 +3718,7 @@ export def "x-amz-target-lightsail-20161128get-export-snapshot-records GetExport
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetInstance
 # operationId: GetInstance
-export def "x-amz-target-lightsail-20161128get-instance GetInstance" [
+export def "x-amz-target-lightsail-20161128get-instance get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3727,23 +3727,23 @@ export def "x-amz-target-lightsail-20161128get-instance GetInstance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-92
-  instanceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-92
+  instance_name: any
 ]: any -> record<instance: record<name: record, arn: record, supportCode: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, resourceType: record, tags: record, blueprintId: record, blueprintName: record, bundleId: record, addOns: record, isStaticIp: record, privateIpAddress: record, publicIpAddress: record, ipv6Addresses: record, ipAddressType: record, hardware: record<cpuCount: record, disks: record, ramSizeInGb: record>, networking: record<monthlyTransfer: record, ports: record>, state: record<code: record, name: record>, username: record, sshKeyName: record, metadataOptions: record<state: record, httpTokens: record, httpEndpoint: record, httpPutResponseHopLimit: record, httpProtocolIpv6: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetInstance")
-  let body = {instanceName: $instanceName} | compact
+  let body = {"instanceName": $instance_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3754,7 +3754,7 @@ export def "x-amz-target-lightsail-20161128get-instance GetInstance" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetInstanceAccessDetails
 # operationId: GetInstanceAccessDetails
-export def "x-amz-target-lightsail-20161128get-instance-access-details GetInstanceAccessDetails" [
+export def "x-amz-target-lightsail-20161128get-instance-access-details get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3763,24 +3763,24 @@ export def "x-amz-target-lightsail-20161128get-instance-access-details GetInstan
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-93
-  instanceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-93
+  instance_name: any
   --protocol: any
 ]: any -> record<accessDetails: record<certKey: record, expiresAt: record, ipAddress: record, password: record, passwordData: record<ciphertext: record, keyPairName: record>, privateKey: record, protocol: record, instanceName: record, username: record, hostKeys: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetInstanceAccessDetails")
-  let body = {instanceName: $instanceName, protocol: $protocol} | compact
+  let body = {"instanceName": $instance_name, "protocol": $protocol} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3791,7 +3791,7 @@ export def "x-amz-target-lightsail-20161128get-instance-access-details GetInstan
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetInstanceMetricData
 # operationId: GetInstanceMetricData
-export def "x-amz-target-lightsail-20161128get-instance-metric-data GetInstanceMetricData" [
+export def "x-amz-target-lightsail-20161128get-instance-metric-data get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3800,19 +3800,19 @@ export def "x-amz-target-lightsail-20161128get-instance-metric-data GetInstanceM
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-94
-  instanceName: any
-  metricName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-94
+  instance_name: any
+  metric_name: any
   period: any
-  startTime: any
-  endTime: any
+  start_time: any
+  end_time: any
   unit: any
   statistics: any
 ]: any -> record<metricName: record, metricData: record> {
@@ -3820,9 +3820,9 @@ export def "x-amz-target-lightsail-20161128get-instance-metric-data GetInstanceM
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetInstanceMetricData")
-  let body = {instanceName: $instanceName, metricName: $metricName, period: $period, startTime: $startTime, endTime: $endTime, unit: $unit, statistics: $statistics} | compact
+  let body = {"instanceName": $instance_name, "metricName": $metric_name, "period": $period, "startTime": $start_time, "endTime": $end_time, "unit": $unit, "statistics": $statistics} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3833,7 +3833,7 @@ export def "x-amz-target-lightsail-20161128get-instance-metric-data GetInstanceM
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetInstancePortStates
 # operationId: GetInstancePortStates
-export def "x-amz-target-lightsail-20161128get-instance-port-states GetInstancePortStates" [
+export def "x-amz-target-lightsail-20161128get-instance-port-states get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3842,23 +3842,23 @@ export def "x-amz-target-lightsail-20161128get-instance-port-states GetInstanceP
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-95
-  instanceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-95
+  instance_name: any
 ]: any -> record<portStates: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetInstancePortStates")
-  let body = {instanceName: $instanceName} | compact
+  let body = {"instanceName": $instance_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3869,7 +3869,7 @@ export def "x-amz-target-lightsail-20161128get-instance-port-states GetInstanceP
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetInstanceSnapshot
 # operationId: GetInstanceSnapshot
-export def "x-amz-target-lightsail-20161128get-instance-snapshot GetInstanceSnapshot" [
+export def "x-amz-target-lightsail-20161128get-instance-snapshot get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3878,23 +3878,23 @@ export def "x-amz-target-lightsail-20161128get-instance-snapshot GetInstanceSnap
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-96
-  instanceSnapshotName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-96
+  instance_snapshot_name: any
 ]: any -> record<instanceSnapshot: record<name: record, arn: record, supportCode: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, resourceType: record, tags: record, state: record, progress: record, fromAttachedDisks: record, fromInstanceName: record, fromInstanceArn: record, fromBlueprintId: record, fromBundleId: record, isFromAutoSnapshot: record, sizeInGb: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetInstanceSnapshot")
-  let body = {instanceSnapshotName: $instanceSnapshotName} | compact
+  let body = {"instanceSnapshotName": $instance_snapshot_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3905,7 +3905,7 @@ export def "x-amz-target-lightsail-20161128get-instance-snapshot GetInstanceSnap
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetInstanceSnapshots
 # operationId: GetInstanceSnapshots
-export def "x-amz-target-lightsail-20161128get-instance-snapshots GetInstanceSnapshots" [
+export def "x-amz-target-lightsail-20161128get-instance-snapshots get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3914,23 +3914,23 @@ export def "x-amz-target-lightsail-20161128get-instance-snapshots GetInstanceSna
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-97
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-97
+  --page-token: any
 ]: any -> record<instanceSnapshots: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetInstanceSnapshots")
-  let body = {pageToken: $pageToken} | compact
+  let body = {"pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3941,7 +3941,7 @@ export def "x-amz-target-lightsail-20161128get-instance-snapshots GetInstanceSna
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetInstanceState
 # operationId: GetInstanceState
-export def "x-amz-target-lightsail-20161128get-instance-state GetInstanceState" [
+export def "x-amz-target-lightsail-20161128get-instance-state get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3950,23 +3950,23 @@ export def "x-amz-target-lightsail-20161128get-instance-state GetInstanceState" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-98
-  instanceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-98
+  instance_name: any
 ]: any -> record<state: record<code: record, name: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetInstanceState")
-  let body = {instanceName: $instanceName} | compact
+  let body = {"instanceName": $instance_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3977,7 +3977,7 @@ export def "x-amz-target-lightsail-20161128get-instance-state GetInstanceState" 
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetInstances
 # operationId: GetInstances
-export def "x-amz-target-lightsail-20161128get-instances GetInstances" [
+export def "x-amz-target-lightsail-20161128get-instances get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3986,23 +3986,23 @@ export def "x-amz-target-lightsail-20161128get-instances GetInstances" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-99
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-99
+  --page-token: any
 ]: any -> record<instances: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetInstances")
-  let body = {pageToken: $pageToken} | compact
+  let body = {"pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4013,7 +4013,7 @@ export def "x-amz-target-lightsail-20161128get-instances GetInstances" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetKeyPair
 # operationId: GetKeyPair
-export def "x-amz-target-lightsail-20161128get-key-pair GetKeyPair" [
+export def "x-amz-target-lightsail-20161128get-key-pair get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4022,23 +4022,23 @@ export def "x-amz-target-lightsail-20161128get-key-pair GetKeyPair" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-100
-  keyPairName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-100
+  key_pair_name: any
 ]: any -> record<keyPair: record<name: record, arn: record, supportCode: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, resourceType: record, tags: record, fingerprint: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetKeyPair")
-  let body = {keyPairName: $keyPairName} | compact
+  let body = {"keyPairName": $key_pair_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4049,7 +4049,7 @@ export def "x-amz-target-lightsail-20161128get-key-pair GetKeyPair" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetKeyPairs
 # operationId: GetKeyPairs
-export def "x-amz-target-lightsail-20161128get-key-pairs GetKeyPairs" [
+export def "x-amz-target-lightsail-20161128get-key-pairs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4058,24 +4058,24 @@ export def "x-amz-target-lightsail-20161128get-key-pairs GetKeyPairs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-101
-  --pageToken: any
-  --includeDefaultKeyPair: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-101
+  --page-token: any
+  --include-default-key-pair: any
 ]: any -> record<keyPairs: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetKeyPairs")
-  let body = {pageToken: $pageToken, includeDefaultKeyPair: $includeDefaultKeyPair} | compact
+  let body = {"pageToken": $page_token, "includeDefaultKeyPair": $include_default_key_pair} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4086,7 +4086,7 @@ export def "x-amz-target-lightsail-20161128get-key-pairs GetKeyPairs" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetLoadBalancer
 # operationId: GetLoadBalancer
-export def "x-amz-target-lightsail-20161128get-load-balancer GetLoadBalancer" [
+export def "x-amz-target-lightsail-20161128get-load-balancer get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4095,23 +4095,23 @@ export def "x-amz-target-lightsail-20161128get-load-balancer GetLoadBalancer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-102
-  loadBalancerName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-102
+  load_balancer_name: any
 ]: any -> record<loadBalancer: record<name: record, arn: record, supportCode: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, resourceType: record, tags: record, dnsName: record, state: record, protocol: record, publicPorts: record, healthCheckPath: record, instancePort: record, instanceHealthSummary: record, tlsCertificateSummaries: record, configurationOptions: record, ipAddressType: record, httpsRedirectionEnabled: record, tlsPolicyName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetLoadBalancer")
-  let body = {loadBalancerName: $loadBalancerName} | compact
+  let body = {"loadBalancerName": $load_balancer_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4122,7 +4122,7 @@ export def "x-amz-target-lightsail-20161128get-load-balancer GetLoadBalancer" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetLoadBalancerMetricData
 # operationId: GetLoadBalancerMetricData
-export def "x-amz-target-lightsail-20161128get-load-balancer-metric-data GetLoadBalancerMetricData" [
+export def "x-amz-target-lightsail-20161128get-load-balancer-metric-data get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4131,19 +4131,19 @@ export def "x-amz-target-lightsail-20161128get-load-balancer-metric-data GetLoad
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-103
-  loadBalancerName: any
-  metricName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-103
+  load_balancer_name: any
+  metric_name: any
   period: any
-  startTime: any
-  endTime: any
+  start_time: any
+  end_time: any
   unit: any
   statistics: any
 ]: any -> record<metricName: record, metricData: record> {
@@ -4151,9 +4151,9 @@ export def "x-amz-target-lightsail-20161128get-load-balancer-metric-data GetLoad
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetLoadBalancerMetricData")
-  let body = {loadBalancerName: $loadBalancerName, metricName: $metricName, period: $period, startTime: $startTime, endTime: $endTime, unit: $unit, statistics: $statistics} | compact
+  let body = {"loadBalancerName": $load_balancer_name, "metricName": $metric_name, "period": $period, "startTime": $start_time, "endTime": $end_time, "unit": $unit, "statistics": $statistics} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4164,7 +4164,7 @@ export def "x-amz-target-lightsail-20161128get-load-balancer-metric-data GetLoad
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetLoadBalancerTlsCertificates
 # operationId: GetLoadBalancerTlsCertificates
-export def "x-amz-target-lightsail-20161128get-load-balancer-tls-certificates GetLoadBalancerTlsCertificates" [
+export def "x-amz-target-lightsail-20161128get-load-balancer-tls-certificates get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4173,23 +4173,23 @@ export def "x-amz-target-lightsail-20161128get-load-balancer-tls-certificates Ge
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-104
-  loadBalancerName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-104
+  load_balancer_name: any
 ]: any -> record<tlsCertificates: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetLoadBalancerTlsCertificates")
-  let body = {loadBalancerName: $loadBalancerName} | compact
+  let body = {"loadBalancerName": $load_balancer_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4200,7 +4200,7 @@ export def "x-amz-target-lightsail-20161128get-load-balancer-tls-certificates Ge
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetLoadBalancerTlsPolicies
 # operationId: GetLoadBalancerTlsPolicies
-export def "x-amz-target-lightsail-20161128get-load-balancer-tls-policies GetLoadBalancerTlsPolicies" [
+export def "x-amz-target-lightsail-20161128get-load-balancer-tls-policies get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4209,23 +4209,23 @@ export def "x-amz-target-lightsail-20161128get-load-balancer-tls-policies GetLoa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-105
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-105
+  --page-token: any
 ]: any -> record<tlsPolicies: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetLoadBalancerTlsPolicies")
-  let body = {pageToken: $pageToken} | compact
+  let body = {"pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4236,7 +4236,7 @@ export def "x-amz-target-lightsail-20161128get-load-balancer-tls-policies GetLoa
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetLoadBalancers
 # operationId: GetLoadBalancers
-export def "x-amz-target-lightsail-20161128get-load-balancers GetLoadBalancers" [
+export def "x-amz-target-lightsail-20161128get-load-balancers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4245,23 +4245,23 @@ export def "x-amz-target-lightsail-20161128get-load-balancers GetLoadBalancers" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-106
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-106
+  --page-token: any
 ]: any -> record<loadBalancers: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetLoadBalancers")
-  let body = {pageToken: $pageToken} | compact
+  let body = {"pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4272,7 +4272,7 @@ export def "x-amz-target-lightsail-20161128get-load-balancers GetLoadBalancers" 
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetOperation
 # operationId: GetOperation
-export def "x-amz-target-lightsail-20161128get-operation GetOperation" [
+export def "x-amz-target-lightsail-20161128get-operation get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4281,23 +4281,23 @@ export def "x-amz-target-lightsail-20161128get-operation GetOperation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-107
-  operationId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-107
+  operation_id: any
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetOperation")
-  let body = {operationId: $operationId} | compact
+  let body = {"operationId": $operation_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4308,7 +4308,7 @@ export def "x-amz-target-lightsail-20161128get-operation GetOperation" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetOperations
 # operationId: GetOperations
-export def "x-amz-target-lightsail-20161128get-operations GetOperations" [
+export def "x-amz-target-lightsail-20161128get-operations get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4317,23 +4317,23 @@ export def "x-amz-target-lightsail-20161128get-operations GetOperations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-108
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-108
+  --page-token: any
 ]: any -> record<operations: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetOperations")
-  let body = {pageToken: $pageToken} | compact
+  let body = {"pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4344,7 +4344,7 @@ export def "x-amz-target-lightsail-20161128get-operations GetOperations" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetOperationsForResource
 # operationId: GetOperationsForResource
-export def "x-amz-target-lightsail-20161128get-operations-for-resource GetOperationsForResource" [
+export def "x-amz-target-lightsail-20161128get-operations-for-resource get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4353,24 +4353,24 @@ export def "x-amz-target-lightsail-20161128get-operations-for-resource GetOperat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-109
-  resourceName: any
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-109
+  resource_name: any
+  --page-token: any
 ]: any -> record<operations: record, nextPageCount: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetOperationsForResource")
-  let body = {resourceName: $resourceName, pageToken: $pageToken} | compact
+  let body = {"resourceName": $resource_name, "pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4381,7 +4381,7 @@ export def "x-amz-target-lightsail-20161128get-operations-for-resource GetOperat
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetRegions
 # operationId: GetRegions
-export def "x-amz-target-lightsail-20161128get-regions GetRegions" [
+export def "x-amz-target-lightsail-20161128get-regions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4390,24 +4390,24 @@ export def "x-amz-target-lightsail-20161128get-regions GetRegions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-110
-  --includeAvailabilityZones: any
-  --includeRelationalDatabaseAvailabilityZones: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-110
+  --include-availability-zones: any
+  --include-relational-database-availability-zones: any
 ]: any -> record<regions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetRegions")
-  let body = {includeAvailabilityZones: $includeAvailabilityZones, includeRelationalDatabaseAvailabilityZones: $includeRelationalDatabaseAvailabilityZones} | compact
+  let body = {"includeAvailabilityZones": $include_availability_zones, "includeRelationalDatabaseAvailabilityZones": $include_relational_database_availability_zones} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4418,7 +4418,7 @@ export def "x-amz-target-lightsail-20161128get-regions GetRegions" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetRelationalDatabase
 # operationId: GetRelationalDatabase
-export def "x-amz-target-lightsail-20161128get-relational-database GetRelationalDatabase" [
+export def "x-amz-target-lightsail-20161128get-relational-database get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4427,23 +4427,23 @@ export def "x-amz-target-lightsail-20161128get-relational-database GetRelational
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-111
-  relationalDatabaseName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-111
+  relational_database_name: any
 ]: any -> record<relationalDatabase: record<name: record, arn: record, supportCode: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, resourceType: record, tags: record, relationalDatabaseBlueprintId: record, relationalDatabaseBundleId: record, masterDatabaseName: record, hardware: record<cpuCount: record, diskSizeInGb: record, ramSizeInGb: record>, state: record, secondaryAvailabilityZone: record, backupRetentionEnabled: record, pendingModifiedValues: record<masterUserPassword: record, engineVersion: record, backupRetentionEnabled: record>, engine: record, engineVersion: record, latestRestorableTime: record, masterUsername: record, parameterApplyStatus: record, preferredBackupWindow: record, preferredMaintenanceWindow: record, publiclyAccessible: record, masterEndpoint: record<port: record, address: record>, pendingMaintenanceActions: record, caCertificateIdentifier: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetRelationalDatabase")
-  let body = {relationalDatabaseName: $relationalDatabaseName} | compact
+  let body = {"relationalDatabaseName": $relational_database_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4454,7 +4454,7 @@ export def "x-amz-target-lightsail-20161128get-relational-database GetRelational
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseBlueprints
 # operationId: GetRelationalDatabaseBlueprints
-export def "x-amz-target-lightsail-20161128get-relational-database-blueprints GetRelationalDatabaseBlueprints" [
+export def "x-amz-target-lightsail-20161128get-relational-database-blueprints get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4463,23 +4463,23 @@ export def "x-amz-target-lightsail-20161128get-relational-database-blueprints Ge
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-112
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-112
+  --page-token: any
 ]: any -> record<blueprints: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseBlueprints")
-  let body = {pageToken: $pageToken} | compact
+  let body = {"pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4490,7 +4490,7 @@ export def "x-amz-target-lightsail-20161128get-relational-database-blueprints Ge
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseBundles
 # operationId: GetRelationalDatabaseBundles
-export def "x-amz-target-lightsail-20161128get-relational-database-bundles GetRelationalDatabaseBundles" [
+export def "x-amz-target-lightsail-20161128get-relational-database-bundles get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4499,24 +4499,24 @@ export def "x-amz-target-lightsail-20161128get-relational-database-bundles GetRe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-113
-  --pageToken: any
-  --includeInactive: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-113
+  --page-token: any
+  --include-inactive: any
 ]: any -> record<bundles: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseBundles")
-  let body = {pageToken: $pageToken, includeInactive: $includeInactive} | compact
+  let body = {"pageToken": $page_token, "includeInactive": $include_inactive} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4527,7 +4527,7 @@ export def "x-amz-target-lightsail-20161128get-relational-database-bundles GetRe
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseEvents
 # operationId: GetRelationalDatabaseEvents
-export def "x-amz-target-lightsail-20161128get-relational-database-events GetRelationalDatabaseEvents" [
+export def "x-amz-target-lightsail-20161128get-relational-database-events get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4536,25 +4536,25 @@ export def "x-amz-target-lightsail-20161128get-relational-database-events GetRel
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-114
-  relationalDatabaseName: any
-  --durationInMinutes: any
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-114
+  relational_database_name: any
+  --duration-in-minutes: any
+  --page-token: any
 ]: any -> record<relationalDatabaseEvents: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseEvents")
-  let body = {relationalDatabaseName: $relationalDatabaseName, durationInMinutes: $durationInMinutes, pageToken: $pageToken} | compact
+  let body = {"relationalDatabaseName": $relational_database_name, "durationInMinutes": $duration_in_minutes, "pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4565,7 +4565,7 @@ export def "x-amz-target-lightsail-20161128get-relational-database-events GetRel
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseLogEvents
 # operationId: GetRelationalDatabaseLogEvents
-export def "x-amz-target-lightsail-20161128get-relational-database-log-events GetRelationalDatabaseLogEvents" [
+export def "x-amz-target-lightsail-20161128get-relational-database-log-events get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4574,28 +4574,28 @@ export def "x-amz-target-lightsail-20161128get-relational-database-log-events Ge
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-115
-  relationalDatabaseName: any
-  logStreamName: any
-  --startTime: any
-  --endTime: any
-  --startFromHead: any
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-115
+  relational_database_name: any
+  log_stream_name: any
+  --start-time: any
+  --end-time: any
+  --start-from-head: any
+  --page-token: any
 ]: any -> record<resourceLogEvents: record, nextBackwardToken: record, nextForwardToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseLogEvents")
-  let body = {relationalDatabaseName: $relationalDatabaseName, logStreamName: $logStreamName, startTime: $startTime, endTime: $endTime, startFromHead: $startFromHead, pageToken: $pageToken} | compact
+  let body = {"relationalDatabaseName": $relational_database_name, "logStreamName": $log_stream_name, "startTime": $start_time, "endTime": $end_time, "startFromHead": $start_from_head, "pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4606,7 +4606,7 @@ export def "x-amz-target-lightsail-20161128get-relational-database-log-events Ge
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseLogStreams
 # operationId: GetRelationalDatabaseLogStreams
-export def "x-amz-target-lightsail-20161128get-relational-database-log-streams GetRelationalDatabaseLogStreams" [
+export def "x-amz-target-lightsail-20161128get-relational-database-log-streams get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4615,23 +4615,23 @@ export def "x-amz-target-lightsail-20161128get-relational-database-log-streams G
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-116
-  relationalDatabaseName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-116
+  relational_database_name: any
 ]: any -> record<logStreams: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseLogStreams")
-  let body = {relationalDatabaseName: $relationalDatabaseName} | compact
+  let body = {"relationalDatabaseName": $relational_database_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4642,7 +4642,7 @@ export def "x-amz-target-lightsail-20161128get-relational-database-log-streams G
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseMasterUserPassword
 # operationId: GetRelationalDatabaseMasterUserPassword
-export def "x-amz-target-lightsail-20161128get-relational-database-master-user-password GetRelationalDatabaseMasterUserPassword" [
+export def "x-amz-target-lightsail-20161128get-relational-database-master-user-password get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4651,24 +4651,24 @@ export def "x-amz-target-lightsail-20161128get-relational-database-master-user-p
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-117
-  relationalDatabaseName: any
-  --passwordVersion: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-117
+  relational_database_name: any
+  --password-version: any
 ]: any -> record<masterUserPassword: record, createdAt: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseMasterUserPassword")
-  let body = {relationalDatabaseName: $relationalDatabaseName, passwordVersion: $passwordVersion} | compact
+  let body = {"relationalDatabaseName": $relational_database_name, "passwordVersion": $password_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4679,7 +4679,7 @@ export def "x-amz-target-lightsail-20161128get-relational-database-master-user-p
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseMetricData
 # operationId: GetRelationalDatabaseMetricData
-export def "x-amz-target-lightsail-20161128get-relational-database-metric-data GetRelationalDatabaseMetricData" [
+export def "x-amz-target-lightsail-20161128get-relational-database-metric-data get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4688,19 +4688,19 @@ export def "x-amz-target-lightsail-20161128get-relational-database-metric-data G
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-118
-  relationalDatabaseName: any
-  metricName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-118
+  relational_database_name: any
+  metric_name: any
   period: any
-  startTime: any
-  endTime: any
+  start_time: any
+  end_time: any
   unit: any
   statistics: any
 ]: any -> record<metricName: record, metricData: record> {
@@ -4708,9 +4708,9 @@ export def "x-amz-target-lightsail-20161128get-relational-database-metric-data G
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseMetricData")
-  let body = {relationalDatabaseName: $relationalDatabaseName, metricName: $metricName, period: $period, startTime: $startTime, endTime: $endTime, unit: $unit, statistics: $statistics} | compact
+  let body = {"relationalDatabaseName": $relational_database_name, "metricName": $metric_name, "period": $period, "startTime": $start_time, "endTime": $end_time, "unit": $unit, "statistics": $statistics} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4721,7 +4721,7 @@ export def "x-amz-target-lightsail-20161128get-relational-database-metric-data G
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseParameters
 # operationId: GetRelationalDatabaseParameters
-export def "x-amz-target-lightsail-20161128get-relational-database-parameters GetRelationalDatabaseParameters" [
+export def "x-amz-target-lightsail-20161128get-relational-database-parameters get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4730,24 +4730,24 @@ export def "x-amz-target-lightsail-20161128get-relational-database-parameters Ge
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-119
-  relationalDatabaseName: any
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-119
+  relational_database_name: any
+  --page-token: any
 ]: any -> record<parameters: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseParameters")
-  let body = {relationalDatabaseName: $relationalDatabaseName, pageToken: $pageToken} | compact
+  let body = {"relationalDatabaseName": $relational_database_name, "pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4758,7 +4758,7 @@ export def "x-amz-target-lightsail-20161128get-relational-database-parameters Ge
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseSnapshot
 # operationId: GetRelationalDatabaseSnapshot
-export def "x-amz-target-lightsail-20161128get-relational-database-snapshot GetRelationalDatabaseSnapshot" [
+export def "x-amz-target-lightsail-20161128get-relational-database-snapshot get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4767,23 +4767,23 @@ export def "x-amz-target-lightsail-20161128get-relational-database-snapshot GetR
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-120
-  relationalDatabaseSnapshotName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-120
+  relational_database_snapshot_name: any
 ]: any -> record<relationalDatabaseSnapshot: record<name: record, arn: record, supportCode: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, resourceType: record, tags: record, engine: record, engineVersion: record, sizeInGb: record, state: record, fromRelationalDatabaseName: record, fromRelationalDatabaseArn: record, fromRelationalDatabaseBundleId: record, fromRelationalDatabaseBlueprintId: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseSnapshot")
-  let body = {relationalDatabaseSnapshotName: $relationalDatabaseSnapshotName} | compact
+  let body = {"relationalDatabaseSnapshotName": $relational_database_snapshot_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4794,7 +4794,7 @@ export def "x-amz-target-lightsail-20161128get-relational-database-snapshot GetR
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseSnapshots
 # operationId: GetRelationalDatabaseSnapshots
-export def "x-amz-target-lightsail-20161128get-relational-database-snapshots GetRelationalDatabaseSnapshots" [
+export def "x-amz-target-lightsail-20161128get-relational-database-snapshots get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4803,23 +4803,23 @@ export def "x-amz-target-lightsail-20161128get-relational-database-snapshots Get
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-121
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-121
+  --page-token: any
 ]: any -> record<relationalDatabaseSnapshots: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetRelationalDatabaseSnapshots")
-  let body = {pageToken: $pageToken} | compact
+  let body = {"pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4830,7 +4830,7 @@ export def "x-amz-target-lightsail-20161128get-relational-database-snapshots Get
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetRelationalDatabases
 # operationId: GetRelationalDatabases
-export def "x-amz-target-lightsail-20161128get-relational-databases GetRelationalDatabases" [
+export def "x-amz-target-lightsail-20161128get-relational-databases get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4839,23 +4839,23 @@ export def "x-amz-target-lightsail-20161128get-relational-databases GetRelationa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-122
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-122
+  --page-token: any
 ]: any -> record<relationalDatabases: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetRelationalDatabases")
-  let body = {pageToken: $pageToken} | compact
+  let body = {"pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4866,7 +4866,7 @@ export def "x-amz-target-lightsail-20161128get-relational-databases GetRelationa
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetStaticIp
 # operationId: GetStaticIp
-export def "x-amz-target-lightsail-20161128get-static-ip GetStaticIp" [
+export def "x-amz-target-lightsail-20161128get-static-ip get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4875,23 +4875,23 @@ export def "x-amz-target-lightsail-20161128get-static-ip GetStaticIp" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-123
-  staticIpName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-123
+  static_ip_name: any
 ]: any -> record<staticIp: record<name: record, arn: record, supportCode: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, resourceType: record, ipAddress: record, attachedTo: record, isAttached: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetStaticIp")
-  let body = {staticIpName: $staticIpName} | compact
+  let body = {"staticIpName": $static_ip_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4902,7 +4902,7 @@ export def "x-amz-target-lightsail-20161128get-static-ip GetStaticIp" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.GetStaticIps
 # operationId: GetStaticIps
-export def "x-amz-target-lightsail-20161128get-static-ips GetStaticIps" [
+export def "x-amz-target-lightsail-20161128get-static-ips get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4911,23 +4911,23 @@ export def "x-amz-target-lightsail-20161128get-static-ips GetStaticIps" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-124
-  --pageToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-124
+  --page-token: any
 ]: any -> record<staticIps: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.GetStaticIps")
-  let body = {pageToken: $pageToken} | compact
+  let body = {"pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4938,7 +4938,7 @@ export def "x-amz-target-lightsail-20161128get-static-ips GetStaticIps" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.ImportKeyPair
 # operationId: ImportKeyPair
-export def "x-amz-target-lightsail-20161128import-key-pair ImportKeyPair" [
+export def "x-amz-target-lightsail-20161128import-key-pair import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4947,24 +4947,24 @@ export def "x-amz-target-lightsail-20161128import-key-pair ImportKeyPair" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-125
-  keyPairName: any
-  publicKeyBase64: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-125
+  key_pair_name: any
+  public_key_base64: any
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.ImportKeyPair")
-  let body = {keyPairName: $keyPairName, publicKeyBase64: $publicKeyBase64} | compact
+  let body = {"keyPairName": $key_pair_name, "publicKeyBase64": $public_key_base64} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4975,7 +4975,7 @@ export def "x-amz-target-lightsail-20161128import-key-pair ImportKeyPair" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.IsVpcPeered
 # operationId: IsVpcPeered
-export def "x-amz-target-lightsail-20161128is-vpc-peered IsVpcPeered" [
+export def "x-amz-target-lightsail-20161128is-vpc-peered post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4984,14 +4984,14 @@ export def "x-amz-target-lightsail-20161128is-vpc-peered IsVpcPeered" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-126
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-126
   --body: record
 ]: any -> record<isPeered: record> {
   let input = $in
@@ -4999,7 +4999,7 @@ export def "x-amz-target-lightsail-20161128is-vpc-peered IsVpcPeered" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.IsVpcPeered")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5010,7 +5010,7 @@ export def "x-amz-target-lightsail-20161128is-vpc-peered IsVpcPeered" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.OpenInstancePublicPorts
 # operationId: OpenInstancePublicPorts
-export def "x-amz-target-lightsail-20161128open-instance-public-ports OpenInstancePublicPorts" [
+export def "x-amz-target-lightsail-20161128open-instance-public-ports open" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5019,24 +5019,24 @@ export def "x-amz-target-lightsail-20161128open-instance-public-ports OpenInstan
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-127
-  portInfo: any
-  instanceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-127
+  port_info: any
+  instance_name: any
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.OpenInstancePublicPorts")
-  let body = {portInfo: $portInfo, instanceName: $instanceName} | compact
+  let body = {"portInfo": $port_info, "instanceName": $instance_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5047,7 +5047,7 @@ export def "x-amz-target-lightsail-20161128open-instance-public-ports OpenInstan
 #
 # POST /#X-Amz-Target=Lightsail_20161128.PeerVpc
 # operationId: PeerVpc
-export def "x-amz-target-lightsail-20161128peer-vpc PeerVpc" [
+export def "x-amz-target-lightsail-20161128peer-vpc post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5056,14 +5056,14 @@ export def "x-amz-target-lightsail-20161128peer-vpc PeerVpc" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-128
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-128
   --body: record
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
@@ -5071,7 +5071,7 @@ export def "x-amz-target-lightsail-20161128peer-vpc PeerVpc" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.PeerVpc")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5082,7 +5082,7 @@ export def "x-amz-target-lightsail-20161128peer-vpc PeerVpc" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.PutAlarm
 # operationId: PutAlarm
-export def "x-amz-target-lightsail-20161128put-alarm PutAlarm" [
+export def "x-amz-target-lightsail-20161128put-alarm update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5091,33 +5091,33 @@ export def "x-amz-target-lightsail-20161128put-alarm PutAlarm" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-129
-  alarmName: any
-  metricName: any
-  monitoredResourceName: any
-  comparisonOperator: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-129
+  alarm_name: any
+  metric_name: any
+  monitored_resource_name: any
+  comparison_operator: any
   threshold: any
-  evaluationPeriods: any
-  --datapointsToAlarm: any
-  --treatMissingData: any
-  --contactProtocols: any
-  --notificationTriggers: any
-  --notificationEnabled: any
+  evaluation_periods: any
+  --datapoints-to-alarm: any
+  --treat-missing-data: any
+  --contact-protocols: any
+  --notification-triggers: any
+  --notification-enabled: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.PutAlarm")
-  let body = {alarmName: $alarmName, metricName: $metricName, monitoredResourceName: $monitoredResourceName, comparisonOperator: $comparisonOperator, threshold: $threshold, evaluationPeriods: $evaluationPeriods, datapointsToAlarm: $datapointsToAlarm, treatMissingData: $treatMissingData, contactProtocols: $contactProtocols, notificationTriggers: $notificationTriggers, notificationEnabled: $notificationEnabled} | compact
+  let body = {"alarmName": $alarm_name, "metricName": $metric_name, "monitoredResourceName": $monitored_resource_name, "comparisonOperator": $comparison_operator, "threshold": $threshold, "evaluationPeriods": $evaluation_periods, "datapointsToAlarm": $datapoints_to_alarm, "treatMissingData": $treat_missing_data, "contactProtocols": $contact_protocols, "notificationTriggers": $notification_triggers, "notificationEnabled": $notification_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5128,7 +5128,7 @@ export def "x-amz-target-lightsail-20161128put-alarm PutAlarm" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.PutInstancePublicPorts
 # operationId: PutInstancePublicPorts
-export def "x-amz-target-lightsail-20161128put-instance-public-ports PutInstancePublicPorts" [
+export def "x-amz-target-lightsail-20161128put-instance-public-ports update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5137,24 +5137,24 @@ export def "x-amz-target-lightsail-20161128put-instance-public-ports PutInstance
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-130
-  portInfos: any
-  instanceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-130
+  port_infos: any
+  instance_name: any
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.PutInstancePublicPorts")
-  let body = {portInfos: $portInfos, instanceName: $instanceName} | compact
+  let body = {"portInfos": $port_infos, "instanceName": $instance_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5165,7 +5165,7 @@ export def "x-amz-target-lightsail-20161128put-instance-public-ports PutInstance
 #
 # POST /#X-Amz-Target=Lightsail_20161128.RebootInstance
 # operationId: RebootInstance
-export def "x-amz-target-lightsail-20161128reboot-instance RebootInstance" [
+export def "x-amz-target-lightsail-20161128reboot-instance post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5174,23 +5174,23 @@ export def "x-amz-target-lightsail-20161128reboot-instance RebootInstance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-131
-  instanceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-131
+  instance_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.RebootInstance")
-  let body = {instanceName: $instanceName} | compact
+  let body = {"instanceName": $instance_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5201,7 +5201,7 @@ export def "x-amz-target-lightsail-20161128reboot-instance RebootInstance" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.RebootRelationalDatabase
 # operationId: RebootRelationalDatabase
-export def "x-amz-target-lightsail-20161128reboot-relational-database RebootRelationalDatabase" [
+export def "x-amz-target-lightsail-20161128reboot-relational-database post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5210,23 +5210,23 @@ export def "x-amz-target-lightsail-20161128reboot-relational-database RebootRela
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-132
-  relationalDatabaseName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-132
+  relational_database_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.RebootRelationalDatabase")
-  let body = {relationalDatabaseName: $relationalDatabaseName} | compact
+  let body = {"relationalDatabaseName": $relational_database_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5237,7 +5237,7 @@ export def "x-amz-target-lightsail-20161128reboot-relational-database RebootRela
 #
 # POST /#X-Amz-Target=Lightsail_20161128.RegisterContainerImage
 # operationId: RegisterContainerImage
-export def "x-amz-target-lightsail-20161128register-container-image RegisterContainerImage" [
+export def "x-amz-target-lightsail-20161128register-container-image create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5246,15 +5246,15 @@ export def "x-amz-target-lightsail-20161128register-container-image RegisterCont
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-133
-  serviceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-133
+  service_name: any
   label: any
   digest: any
 ]: any -> record<containerImage: record<image: record, digest: record, createdAt: record>> {
@@ -5262,9 +5262,9 @@ export def "x-amz-target-lightsail-20161128register-container-image RegisterCont
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.RegisterContainerImage")
-  let body = {serviceName: $serviceName, label: $label, digest: $digest} | compact
+  let body = {"serviceName": $service_name, "label": $label, "digest": $digest} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5275,7 +5275,7 @@ export def "x-amz-target-lightsail-20161128register-container-image RegisterCont
 #
 # POST /#X-Amz-Target=Lightsail_20161128.ReleaseStaticIp
 # operationId: ReleaseStaticIp
-export def "x-amz-target-lightsail-20161128release-static-ip ReleaseStaticIp" [
+export def "x-amz-target-lightsail-20161128release-static-ip post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5284,23 +5284,23 @@ export def "x-amz-target-lightsail-20161128release-static-ip ReleaseStaticIp" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-134
-  staticIpName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-134
+  static_ip_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.ReleaseStaticIp")
-  let body = {staticIpName: $staticIpName} | compact
+  let body = {"staticIpName": $static_ip_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5311,7 +5311,7 @@ export def "x-amz-target-lightsail-20161128release-static-ip ReleaseStaticIp" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.ResetDistributionCache
 # operationId: ResetDistributionCache
-export def "x-amz-target-lightsail-20161128reset-distribution-cache ResetDistributionCache" [
+export def "x-amz-target-lightsail-20161128reset-distribution-cache reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5320,23 +5320,23 @@ export def "x-amz-target-lightsail-20161128reset-distribution-cache ResetDistrib
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-135
-  --distributionName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-135
+  --distribution-name: any
 ]: any -> record<status: record, createTime: record, operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.ResetDistributionCache")
-  let body = {distributionName: $distributionName} | compact
+  let body = {"distributionName": $distribution_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5347,7 +5347,7 @@ export def "x-amz-target-lightsail-20161128reset-distribution-cache ResetDistrib
 #
 # POST /#X-Amz-Target=Lightsail_20161128.SendContactMethodVerification
 # operationId: SendContactMethodVerification
-export def "x-amz-target-lightsail-20161128send-contact-method-verification SendContactMethodVerification" [
+export def "x-amz-target-lightsail-20161128send-contact-method-verification send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5356,23 +5356,23 @@ export def "x-amz-target-lightsail-20161128send-contact-method-verification Send
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-136
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-136
   protocol: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.SendContactMethodVerification")
-  let body = {protocol: $protocol} | compact
+  let body = {"protocol": $protocol} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5383,7 +5383,7 @@ export def "x-amz-target-lightsail-20161128send-contact-method-verification Send
 #
 # POST /#X-Amz-Target=Lightsail_20161128.SetIpAddressType
 # operationId: SetIpAddressType
-export def "x-amz-target-lightsail-20161128set-ip-address-type SetIpAddressType" [
+export def "x-amz-target-lightsail-20161128set-ip-address-type post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5392,25 +5392,25 @@ export def "x-amz-target-lightsail-20161128set-ip-address-type SetIpAddressType"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-137
-  resourceType: any
-  resourceName: any
-  ipAddressType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-137
+  resource_type: any
+  resource_name: any
+  ip_address_type: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.SetIpAddressType")
-  let body = {resourceType: $resourceType, resourceName: $resourceName, ipAddressType: $ipAddressType} | compact
+  let body = {"resourceType": $resource_type, "resourceName": $resource_name, "ipAddressType": $ip_address_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5421,7 +5421,7 @@ export def "x-amz-target-lightsail-20161128set-ip-address-type SetIpAddressType"
 #
 # POST /#X-Amz-Target=Lightsail_20161128.SetResourceAccessForBucket
 # operationId: SetResourceAccessForBucket
-export def "x-amz-target-lightsail-20161128set-resource-access-for-bucket SetResourceAccessForBucket" [
+export def "x-amz-target-lightsail-20161128set-resource-access-for-bucket post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5430,25 +5430,25 @@ export def "x-amz-target-lightsail-20161128set-resource-access-for-bucket SetRes
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-138
-  resourceName: any
-  bucketName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-138
+  resource_name: any
+  bucket_name: any
   access: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.SetResourceAccessForBucket")
-  let body = {resourceName: $resourceName, bucketName: $bucketName, access: $access} | compact
+  let body = {"resourceName": $resource_name, "bucketName": $bucket_name, "access": $access} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5459,7 +5459,7 @@ export def "x-amz-target-lightsail-20161128set-resource-access-for-bucket SetRes
 #
 # POST /#X-Amz-Target=Lightsail_20161128.StartGUISession
 # operationId: StartGUISession
-export def "x-amz-target-lightsail-20161128start-gui-session StartGUISession" [
+export def "x-amz-target-lightsail-20161128start-gui-session start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5468,23 +5468,23 @@ export def "x-amz-target-lightsail-20161128start-gui-session StartGUISession" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-139
-  resourceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-139
+  resource_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.StartGUISession")
-  let body = {resourceName: $resourceName} | compact
+  let body = {"resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5495,7 +5495,7 @@ export def "x-amz-target-lightsail-20161128start-gui-session StartGUISession" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.StartInstance
 # operationId: StartInstance
-export def "x-amz-target-lightsail-20161128start-instance StartInstance" [
+export def "x-amz-target-lightsail-20161128start-instance start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5504,23 +5504,23 @@ export def "x-amz-target-lightsail-20161128start-instance StartInstance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-140
-  instanceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-140
+  instance_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.StartInstance")
-  let body = {instanceName: $instanceName} | compact
+  let body = {"instanceName": $instance_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5531,7 +5531,7 @@ export def "x-amz-target-lightsail-20161128start-instance StartInstance" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.StartRelationalDatabase
 # operationId: StartRelationalDatabase
-export def "x-amz-target-lightsail-20161128start-relational-database StartRelationalDatabase" [
+export def "x-amz-target-lightsail-20161128start-relational-database start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5540,23 +5540,23 @@ export def "x-amz-target-lightsail-20161128start-relational-database StartRelati
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-141
-  relationalDatabaseName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-141
+  relational_database_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.StartRelationalDatabase")
-  let body = {relationalDatabaseName: $relationalDatabaseName} | compact
+  let body = {"relationalDatabaseName": $relational_database_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5567,7 +5567,7 @@ export def "x-amz-target-lightsail-20161128start-relational-database StartRelati
 #
 # POST /#X-Amz-Target=Lightsail_20161128.StopGUISession
 # operationId: StopGUISession
-export def "x-amz-target-lightsail-20161128stop-gui-session StopGUISession" [
+export def "x-amz-target-lightsail-20161128stop-gui-session stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5576,23 +5576,23 @@ export def "x-amz-target-lightsail-20161128stop-gui-session StopGUISession" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-142
-  resourceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-142
+  resource_name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.StopGUISession")
-  let body = {resourceName: $resourceName} | compact
+  let body = {"resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5603,7 +5603,7 @@ export def "x-amz-target-lightsail-20161128stop-gui-session StopGUISession" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.StopInstance
 # operationId: StopInstance
-export def "x-amz-target-lightsail-20161128stop-instance StopInstance" [
+export def "x-amz-target-lightsail-20161128stop-instance stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5612,24 +5612,24 @@ export def "x-amz-target-lightsail-20161128stop-instance StopInstance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-143
-  instanceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-143
+  instance_name: any
   --force: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.StopInstance")
-  let body = {instanceName: $instanceName, force: $force} | compact
+  let body = {"instanceName": $instance_name, "force": $force} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5640,7 +5640,7 @@ export def "x-amz-target-lightsail-20161128stop-instance StopInstance" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.StopRelationalDatabase
 # operationId: StopRelationalDatabase
-export def "x-amz-target-lightsail-20161128stop-relational-database StopRelationalDatabase" [
+export def "x-amz-target-lightsail-20161128stop-relational-database stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5649,24 +5649,24 @@ export def "x-amz-target-lightsail-20161128stop-relational-database StopRelation
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-144
-  relationalDatabaseName: any
-  --relationalDatabaseSnapshotName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-144
+  relational_database_name: any
+  --relational-database-snapshot-name: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.StopRelationalDatabase")
-  let body = {relationalDatabaseName: $relationalDatabaseName, relationalDatabaseSnapshotName: $relationalDatabaseSnapshotName} | compact
+  let body = {"relationalDatabaseName": $relational_database_name, "relationalDatabaseSnapshotName": $relational_database_snapshot_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5677,7 +5677,7 @@ export def "x-amz-target-lightsail-20161128stop-relational-database StopRelation
 #
 # POST /#X-Amz-Target=Lightsail_20161128.TagResource
 # operationId: TagResource
-export def "x-amz-target-lightsail-20161128tag-resource TagResource" [
+export def "x-amz-target-lightsail-20161128tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5686,25 +5686,25 @@ export def "x-amz-target-lightsail-20161128tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-145
-  resourceName: any
-  --resourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-145
+  resource_name: any
+  --resource-arn: any
   tags: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.TagResource")
-  let body = {resourceName: $resourceName, resourceArn: $resourceArn, tags: $tags} | compact
+  let body = {"resourceName": $resource_name, "resourceArn": $resource_arn, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5715,7 +5715,7 @@ export def "x-amz-target-lightsail-20161128tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.TestAlarm
 # operationId: TestAlarm
-export def "x-amz-target-lightsail-20161128test-alarm TestAlarm" [
+export def "x-amz-target-lightsail-20161128test-alarm test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5724,24 +5724,24 @@ export def "x-amz-target-lightsail-20161128test-alarm TestAlarm" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-146
-  alarmName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-146
+  alarm_name: any
   state: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.TestAlarm")
-  let body = {alarmName: $alarmName, state: $state} | compact
+  let body = {"alarmName": $alarm_name, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5752,7 +5752,7 @@ export def "x-amz-target-lightsail-20161128test-alarm TestAlarm" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.UnpeerVpc
 # operationId: UnpeerVpc
-export def "x-amz-target-lightsail-20161128unpeer-vpc UnpeerVpc" [
+export def "x-amz-target-lightsail-20161128unpeer-vpc post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5761,14 +5761,14 @@ export def "x-amz-target-lightsail-20161128unpeer-vpc UnpeerVpc" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-147
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-147
   --body: record
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
@@ -5776,7 +5776,7 @@ export def "x-amz-target-lightsail-20161128unpeer-vpc UnpeerVpc" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.UnpeerVpc")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5787,7 +5787,7 @@ export def "x-amz-target-lightsail-20161128unpeer-vpc UnpeerVpc" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-lightsail-20161128untag-resource UntagResource" [
+export def "x-amz-target-lightsail-20161128untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5796,25 +5796,25 @@ export def "x-amz-target-lightsail-20161128untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-148
-  resourceName: any
-  --resourceArn: any
-  tagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-148
+  resource_name: any
+  --resource-arn: any
+  tag_keys: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.UntagResource")
-  let body = {resourceName: $resourceName, resourceArn: $resourceArn, tagKeys: $tagKeys} | compact
+  let body = {"resourceName": $resource_name, "resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5825,7 +5825,7 @@ export def "x-amz-target-lightsail-20161128untag-resource UntagResource" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.UpdateBucket
 # operationId: UpdateBucket
-export def "x-amz-target-lightsail-20161128update-bucket UpdateBucket" [
+export def "x-amz-target-lightsail-20161128update-bucket update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5834,27 +5834,27 @@ export def "x-amz-target-lightsail-20161128update-bucket UpdateBucket" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-149
-  bucketName: any
-  --accessRules: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-149
+  bucket_name: any
+  --access-rules: any
   --versioning: any
-  --readonlyAccessAccounts: any
-  --accessLogConfig: any
+  --readonly-access-accounts: any
+  --access-log-config: any
 ]: any -> record<bucket: record<resourceType: record, accessRules: record<getObject: record, allowPublicOverrides: record>, arn: record, bundleId: record, createdAt: record, url: record, location: record<availabilityZone: record, regionName: record>, name: record, supportCode: record, tags: record, objectVersioning: record, ableToUpdateBundle: record, readonlyAccessAccounts: record, resourcesReceivingAccess: record, state: record<code: record, message: record>, accessLogConfig: record<enabled: record, destination: record, prefix: record>>, operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.UpdateBucket")
-  let body = {bucketName: $bucketName, accessRules: $accessRules, versioning: $versioning, readonlyAccessAccounts: $readonlyAccessAccounts, accessLogConfig: $accessLogConfig} | compact
+  let body = {"bucketName": $bucket_name, "accessRules": $access_rules, "versioning": $versioning, "readonlyAccessAccounts": $readonly_access_accounts, "accessLogConfig": $access_log_config} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5865,7 +5865,7 @@ export def "x-amz-target-lightsail-20161128update-bucket UpdateBucket" [
 #
 # POST /#X-Amz-Target=Lightsail_20161128.UpdateBucketBundle
 # operationId: UpdateBucketBundle
-export def "x-amz-target-lightsail-20161128update-bucket-bundle UpdateBucketBundle" [
+export def "x-amz-target-lightsail-20161128update-bucket-bundle update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5874,24 +5874,24 @@ export def "x-amz-target-lightsail-20161128update-bucket-bundle UpdateBucketBund
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-150
-  bucketName: any
-  bundleId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-150
+  bucket_name: any
+  bundle_id: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.UpdateBucketBundle")
-  let body = {bucketName: $bucketName, bundleId: $bundleId} | compact
+  let body = {"bucketName": $bucket_name, "bundleId": $bundle_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5902,7 +5902,7 @@ export def "x-amz-target-lightsail-20161128update-bucket-bundle UpdateBucketBund
 #
 # POST /#X-Amz-Target=Lightsail_20161128.UpdateContainerService
 # operationId: UpdateContainerService
-export def "x-amz-target-lightsail-20161128update-container-service UpdateContainerService" [
+export def "x-amz-target-lightsail-20161128update-container-service update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5911,28 +5911,28 @@ export def "x-amz-target-lightsail-20161128update-container-service UpdateContai
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-151
-  serviceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-151
+  service_name: any
   --power: any
   --scale: any
-  --isDisabled: any
-  --publicDomainNames: any
-  --privateRegistryAccess: any
+  --is-disabled: any
+  --public-domain-names: any
+  --private-registry-access: any
 ]: any -> record<containerService: record<containerServiceName: record, arn: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, resourceType: record, tags: record, power: record, powerId: record, state: record, stateDetail: record<code: record, message: record>, scale: record, currentDeployment: record<version: record, state: record, containers: record, publicEndpoint: record, createdAt: record>, nextDeployment: record<version: record, state: record, containers: record, publicEndpoint: record, createdAt: record>, isDisabled: record, principalArn: record, privateDomainName: record, publicDomainNames: record, url: record, privateRegistryAccess: record<ecrImagePullerRole: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.UpdateContainerService")
-  let body = {serviceName: $serviceName, power: $power, scale: $scale, isDisabled: $isDisabled, publicDomainNames: $publicDomainNames, privateRegistryAccess: $privateRegistryAccess} | compact
+  let body = {"serviceName": $service_name, "power": $power, "scale": $scale, "isDisabled": $is_disabled, "publicDomainNames": $public_domain_names, "privateRegistryAccess": $private_registry_access} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5943,7 +5943,7 @@ export def "x-amz-target-lightsail-20161128update-container-service UpdateContai
 #
 # POST /#X-Amz-Target=Lightsail_20161128.UpdateDistribution
 # operationId: UpdateDistribution
-export def "x-amz-target-lightsail-20161128update-distribution UpdateDistribution" [
+export def "x-amz-target-lightsail-20161128update-distribution update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5952,28 +5952,28 @@ export def "x-amz-target-lightsail-20161128update-distribution UpdateDistributio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-152
-  distributionName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-152
+  distribution_name: any
   --origin: any
-  --defaultCacheBehavior: any
-  --cacheBehaviorSettings: any
-  --cacheBehaviors: any
-  --isEnabled: any
+  --default-cache-behavior: any
+  --cache-behavior-settings: any
+  --cache-behaviors: any
+  --is-enabled: any
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.UpdateDistribution")
-  let body = {distributionName: $distributionName, origin: $origin, defaultCacheBehavior: $defaultCacheBehavior, cacheBehaviorSettings: $cacheBehaviorSettings, cacheBehaviors: $cacheBehaviors, isEnabled: $isEnabled} | compact
+  let body = {"distributionName": $distribution_name, "origin": $origin, "defaultCacheBehavior": $default_cache_behavior, "cacheBehaviorSettings": $cache_behavior_settings, "cacheBehaviors": $cache_behaviors, "isEnabled": $is_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5984,7 +5984,7 @@ export def "x-amz-target-lightsail-20161128update-distribution UpdateDistributio
 #
 # POST /#X-Amz-Target=Lightsail_20161128.UpdateDistributionBundle
 # operationId: UpdateDistributionBundle
-export def "x-amz-target-lightsail-20161128update-distribution-bundle UpdateDistributionBundle" [
+export def "x-amz-target-lightsail-20161128update-distribution-bundle update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5993,24 +5993,24 @@ export def "x-amz-target-lightsail-20161128update-distribution-bundle UpdateDist
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-153
-  --distributionName: any
-  --bundleId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-153
+  --distribution-name: any
+  --bundle-id: any
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.UpdateDistributionBundle")
-  let body = {distributionName: $distributionName, bundleId: $bundleId} | compact
+  let body = {"distributionName": $distribution_name, "bundleId": $bundle_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6021,7 +6021,7 @@ export def "x-amz-target-lightsail-20161128update-distribution-bundle UpdateDist
 #
 # POST /#X-Amz-Target=Lightsail_20161128.UpdateDomainEntry
 # operationId: UpdateDomainEntry
-export def "x-amz-target-lightsail-20161128update-domain-entry UpdateDomainEntry" [
+export def "x-amz-target-lightsail-20161128update-domain-entry update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6030,24 +6030,24 @@ export def "x-amz-target-lightsail-20161128update-domain-entry UpdateDomainEntry
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-154
-  domainName: any
-  domainEntry: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-154
+  domain_name: any
+  domain_entry: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.UpdateDomainEntry")
-  let body = {domainName: $domainName, domainEntry: $domainEntry} | compact
+  let body = {"domainName": $domain_name, "domainEntry": $domain_entry} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6058,7 +6058,7 @@ export def "x-amz-target-lightsail-20161128update-domain-entry UpdateDomainEntry
 #
 # POST /#X-Amz-Target=Lightsail_20161128.UpdateInstanceMetadataOptions
 # operationId: UpdateInstanceMetadataOptions
-export def "x-amz-target-lightsail-20161128update-instance-metadata-options UpdateInstanceMetadataOptions" [
+export def "x-amz-target-lightsail-20161128update-instance-metadata-options update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6067,27 +6067,27 @@ export def "x-amz-target-lightsail-20161128update-instance-metadata-options Upda
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-155
-  instanceName: any
-  --httpTokens: any
-  --httpEndpoint: any
-  --httpPutResponseHopLimit: any
-  --httpProtocolIpv6: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-155
+  instance_name: any
+  --http-tokens: any
+  --http-endpoint: any
+  --http-put-response-hop-limit: any
+  --http-protocol-ipv6: any
 ]: any -> record<operation: record<id: record, resourceName: record, resourceType: record, createdAt: record, location: record<availabilityZone: record, regionName: record>, isTerminal: record, operationDetails: record, operationType: record, status: record, statusChangedAt: record, errorCode: record, errorDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.UpdateInstanceMetadataOptions")
-  let body = {instanceName: $instanceName, httpTokens: $httpTokens, httpEndpoint: $httpEndpoint, httpPutResponseHopLimit: $httpPutResponseHopLimit, httpProtocolIpv6: $httpProtocolIpv6} | compact
+  let body = {"instanceName": $instance_name, "httpTokens": $http_tokens, "httpEndpoint": $http_endpoint, "httpPutResponseHopLimit": $http_put_response_hop_limit, "httpProtocolIpv6": $http_protocol_ipv6} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6098,7 +6098,7 @@ export def "x-amz-target-lightsail-20161128update-instance-metadata-options Upda
 #
 # POST /#X-Amz-Target=Lightsail_20161128.UpdateLoadBalancerAttribute
 # operationId: UpdateLoadBalancerAttribute
-export def "x-amz-target-lightsail-20161128update-load-balancer-attribute UpdateLoadBalancerAttribute" [
+export def "x-amz-target-lightsail-20161128update-load-balancer-attribute update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6107,25 +6107,25 @@ export def "x-amz-target-lightsail-20161128update-load-balancer-attribute Update
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-156
-  loadBalancerName: any
-  attributeName: any
-  attributeValue: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-156
+  load_balancer_name: any
+  attribute_name: any
+  attribute_value: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.UpdateLoadBalancerAttribute")
-  let body = {loadBalancerName: $loadBalancerName, attributeName: $attributeName, attributeValue: $attributeValue} | compact
+  let body = {"loadBalancerName": $load_balancer_name, "attributeName": $attribute_name, "attributeValue": $attribute_value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6136,7 +6136,7 @@ export def "x-amz-target-lightsail-20161128update-load-balancer-attribute Update
 #
 # POST /#X-Amz-Target=Lightsail_20161128.UpdateRelationalDatabase
 # operationId: UpdateRelationalDatabase
-export def "x-amz-target-lightsail-20161128update-relational-database UpdateRelationalDatabase" [
+export def "x-amz-target-lightsail-20161128update-relational-database update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6145,32 +6145,32 @@ export def "x-amz-target-lightsail-20161128update-relational-database UpdateRela
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-157
-  relationalDatabaseName: any
-  --masterUserPassword: any
-  --rotateMasterUserPassword: any
-  --preferredBackupWindow: any
-  --preferredMaintenanceWindow: any
-  --enableBackupRetention: any
-  --disableBackupRetention: any
-  --publiclyAccessible: any
-  --applyImmediately: any
-  --caCertificateIdentifier: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-157
+  relational_database_name: any
+  --master-user-password: any
+  --rotate-master-user-password: any
+  --preferred-backup-window: any
+  --preferred-maintenance-window: any
+  --enable-backup-retention: any
+  --disable-backup-retention: any
+  --publicly-accessible: any
+  --apply-immediately: any
+  --ca-certificate-identifier: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.UpdateRelationalDatabase")
-  let body = {relationalDatabaseName: $relationalDatabaseName, masterUserPassword: $masterUserPassword, rotateMasterUserPassword: $rotateMasterUserPassword, preferredBackupWindow: $preferredBackupWindow, preferredMaintenanceWindow: $preferredMaintenanceWindow, enableBackupRetention: $enableBackupRetention, disableBackupRetention: $disableBackupRetention, publiclyAccessible: $publiclyAccessible, applyImmediately: $applyImmediately, caCertificateIdentifier: $caCertificateIdentifier} | compact
+  let body = {"relationalDatabaseName": $relational_database_name, "masterUserPassword": $master_user_password, "rotateMasterUserPassword": $rotate_master_user_password, "preferredBackupWindow": $preferred_backup_window, "preferredMaintenanceWindow": $preferred_maintenance_window, "enableBackupRetention": $enable_backup_retention, "disableBackupRetention": $disable_backup_retention, "publiclyAccessible": $publicly_accessible, "applyImmediately": $apply_immediately, "caCertificateIdentifier": $ca_certificate_identifier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6181,7 +6181,7 @@ export def "x-amz-target-lightsail-20161128update-relational-database UpdateRela
 #
 # POST /#X-Amz-Target=Lightsail_20161128.UpdateRelationalDatabaseParameters
 # operationId: UpdateRelationalDatabaseParameters
-export def "x-amz-target-lightsail-20161128update-relational-database-parameters UpdateRelationalDatabaseParameters" [
+export def "x-amz-target-lightsail-20161128update-relational-database-parameters update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6190,24 +6190,24 @@ export def "x-amz-target-lightsail-20161128update-relational-database-parameters
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-158
-  relationalDatabaseName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-158
+  relational_database_name: any
   parameters: any
 ]: any -> record<operations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Lightsail_20161128.UpdateRelationalDatabaseParameters")
-  let body = {relationalDatabaseName: $relationalDatabaseName, parameters: $parameters} | compact
+  let body = {"relationalDatabaseName": $relational_database_name, "parameters": $parameters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

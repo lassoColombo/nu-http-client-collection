@@ -65,14 +65,14 @@ def base-url-completer [] { ["https://azure.local"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def queryType-completer [] { ["full" "simple"] }
-def searchMode-completer [] { ["all" "any"] }
-def autocompleteMode-completer [] { ["oneTerm" "oneTermWithContext" "twoTerms"] }
+def query-type-completer [] { ["full" "simple"] }
+def search-mode-completer [] { ["all" "any"] }
+def autocomplete-mode-completer [] { ["oneTerm" "oneTermWithContext" "twoTerms"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "docs SearchGet" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "docs list-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +97,7 @@ export def commands []: nothing -> table {
 # GET /docs
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Search-Documents
 # operationId: Documents_SearchGet
-export def "docs SearchGet" [
+export def "docs list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,15 +111,15 @@ export def "docs SearchGet" [
   --facet: list # The list of facet expressions to apply to the search query. Each facet expression contains a field name, optionally followed by a comma-separated list of name:value pairs.
   --filter: string # The OData $filter expression to apply to the search query.
   --highlight: list # The list of field names to use for hit highlights. Only searchable fields can be used for hit highlighting.
-  --highlightPostTag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. Default is &lt;/em&gt;.
-  --highlightPreTag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. Default is &lt;em&gt;.
-  --minimumCoverage: float # A number between 0 and 100 indicating the percentage of the index that must be covered by a search query in order for the query to be reported as a success. This parameter can be useful for ensuring search availability even for services with only one replica. The default is 100. (format: double)
+  --highlight-post-tag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. Default is &lt;/em&gt;.
+  --highlight-pre-tag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. Default is &lt;em&gt;.
+  --minimum-coverage: float # A number between 0 and 100 indicating the percentage of the index that must be covered by a search query in order for the query to be reported as a success. This parameter can be useful for ensuring search availability even for services with only one replica. The default is 100. (format: double)
   --orderby: list # The list of OData $orderby expressions by which to sort the results. Each expression can be either a field name or a call to either the geo.distance() or the search.score() functions. Each expression can be followed by asc to indicate ascending, and desc to indicate descending. The default is ascending order. Ties will be broken by the match scores of documents. If no OrderBy is specified, the default sort order is descending by document match score. There can be at most 32 $orderby clauses.
-  --queryType: string@queryType-completer # A value that specifies the syntax of the search query. The default is 'simple'. Use 'full' if your query uses the Lucene query syntax.
-  --scoringParameter: list # The list of parameter values to be used in scoring functions (for example, referencePointParameter) using the format name-values. For example, if the scoring profile defines a function with a parameter called 'mylocation' the parameter string would be "mylocation--122.2,44.8" (without the quotes).
-  --scoringProfile: string # The name of a scoring profile to evaluate match scores for matching documents in order to sort the results.
-  --searchFields: list # The list of field names to which to scope the full-text search. When using fielded search (fieldName:searchExpression) in a full Lucene query, the field names of each fielded search expression take precedence over any field names listed in this parameter.
-  --searchMode: string@searchMode-completer # A value that specifies whether any or all of the search terms must be matched in order to count the document as a match.
+  --query-type: string@query-type-completer # A value that specifies the syntax of the search query. The default is 'simple'. Use 'full' if your query uses the Lucene query syntax.
+  --scoring-parameter: list # The list of parameter values to be used in scoring functions (for example, referencePointParameter) using the format name-values. For example, if the scoring profile defines a function with a parameter called 'mylocation' the parameter string would be "mylocation--122.2,44.8" (without the quotes).
+  --scoring-profile: string # The name of a scoring profile to evaluate match scores for matching documents in order to sort the results.
+  --search-fields: list # The list of field names to which to scope the full-text search. When using fielded search (fieldName:searchExpression) in a full Lucene query, the field names of each fielded search expression take precedence over any field names listed in this parameter.
+  --search-mode: string@search-mode-completer # A value that specifies whether any or all of the search terms must be matched in order to count the document as a match.
   --select: list # The list of fields to retrieve. If unspecified, all fields marked as retrievable in the schema are included.
   --skip: int # The number of search results to skip. This value cannot be greater than 100,000. If you need to scan documents in sequence, but cannot use $skip due to this limitation, consider using $orderby on a totally-ordered key and $filter with a range query instead. (format: int32)
   --top: int # The number of search results to retrieve. This can be used in conjunction with $skip to implement client-side paging of search results. If results are truncated due to server-side paging, the response will include a continuation token that can be used to issue another Search request for the next page of results. (format: int32)
@@ -128,7 +128,7 @@ export def "docs SearchGet" [
 ]: nothing -> record<_odata_count: int, _odata_nextLink: string, _search_coverage: float, _search_facets: record, _search_nextPageParameters: record<count: bool, facets: list<string>, filter: string, highlight: string, highlightPostTag: string, highlightPreTag: string, minimumCoverage: float, orderby: string, queryType: string, scoringParameters: list<string>, scoringProfile: string, search: string, searchFields: string, searchMode: string, select: string, skip: int, top: int>, value: table<_search_highlights: record, _search_score: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "$filter" $filter "scalar") (serialize-qp "highlight" $highlight "csv") (serialize-qp "highlightPostTag" $highlightPostTag "scalar") (serialize-qp "highlightPreTag" $highlightPreTag "scalar") (serialize-qp "minimumCoverage" $minimumCoverage "scalar") (serialize-qp "$orderby" $orderby "csv") (serialize-qp "queryType" $queryType "scalar") (serialize-qp "scoringParameter" $scoringParameter "multi") (serialize-qp "scoringProfile" $scoringProfile "scalar") (serialize-qp "searchFields" $searchFields "csv") (serialize-qp "searchMode" $searchMode "scalar") (serialize-qp "$select" $select "csv") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "$filter" $filter "scalar") (serialize-qp "highlight" $highlight "csv") (serialize-qp "highlightPostTag" $highlight_post_tag "scalar") (serialize-qp "highlightPreTag" $highlight_pre_tag "scalar") (serialize-qp "minimumCoverage" $minimum_coverage "scalar") (serialize-qp "$orderby" $orderby "csv") (serialize-qp "queryType" $query_type "scalar") (serialize-qp "scoringParameter" $scoring_parameter "multi") (serialize-qp "scoringProfile" $scoring_profile "scalar") (serialize-qp "searchFields" $search_fields "csv") (serialize-qp "searchMode" $search_mode "scalar") (serialize-qp "$select" $select "csv") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/docs" $qp)
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -142,7 +142,7 @@ export def "docs SearchGet" [
 # GET /docs('{key}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/lookup-document
 # operationId: Documents_Get
-export def "docs-key Get" [
+export def "docs get" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +159,7 @@ export def "docs-key Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$select" $select "csv") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/docs('($key)')" $qp)
+  let full_url = (build-url $base ({key: $key} | format pattern "/docs('{key}')") $qp)
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -172,7 +172,7 @@ export def "docs-key Get" [
 # GET /docs/$count
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Count-Documents
 # operationId: Documents_Count
-export def "docs-count Count" [
+export def "docs-count get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "docs-count Count" [
 # GET /docs/search.autocomplete
 # Docs: https://docs.microsoft.com/rest/api/searchservice/autocomplete
 # operationId: Documents_AutocompleteGet
-export def "docs-searchautocomplete AutocompleteGet" [
+export def "docs-searchautocomplete get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,20 +211,20 @@ export def "docs-searchautocomplete AutocompleteGet" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --search: string # The incomplete term which should be auto-completed.
-  --suggesterName: string # The name of the suggester as specified in the suggesters collection that's part of the index definition.
-  --autocompleteMode: string@autocompleteMode-completer # Specifies the mode for Autocomplete. The default is 'oneTerm'. Use 'twoTerms' to get shingles and 'oneTermWithContext' to use the current context while producing auto-completed terms.
+  --suggester-name: string # The name of the suggester as specified in the suggesters collection that's part of the index definition.
+  --autocomplete-mode: string@autocomplete-mode-completer # Specifies the mode for Autocomplete. The default is 'oneTerm'. Use 'twoTerms' to get shingles and 'oneTermWithContext' to use the current context while producing auto-completed terms.
   --filter: string # An OData expression that filters the documents used to produce completed terms for the Autocomplete result.
   --fuzzy: oneof<nothing, bool> # A value indicating whether to use fuzzy matching for the autocomplete query. Default is false. When set to true, the query will find terms even if there's a substituted or missing character in the search text. While this provides a better experience in some scenarios, it comes at a performance cost as fuzzy autocomplete queries are slower and consume more resources.
-  --highlightPostTag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. If omitted, hit highlighting is disabled.
-  --highlightPreTag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. If omitted, hit highlighting is disabled.
-  --minimumCoverage: float # A number between 0 and 100 indicating the percentage of the index that must be covered by an autocomplete query in order for the query to be reported as a success. This parameter can be useful for ensuring search availability even for services with only one replica. The default is 80. (format: double)
-  --searchFields: list # The list of field names to consider when querying for auto-completed terms. Target fields must be included in the specified suggester.
+  --highlight-post-tag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. If omitted, hit highlighting is disabled.
+  --highlight-pre-tag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. If omitted, hit highlighting is disabled.
+  --minimum-coverage: float # A number between 0 and 100 indicating the percentage of the index that must be covered by an autocomplete query in order for the query to be reported as a success. This parameter can be useful for ensuring search availability even for services with only one replica. The default is 80. (format: double)
+  --search-fields: list # The list of field names to consider when querying for auto-completed terms. Target fields must be included in the specified suggester.
   --top: int # The number of auto-completed terms to retrieve. This must be a value between 1 and 100. The default is 5. (format: int32)
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
 ]: nothing -> record<value: table<queryPlusText: string, text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "suggesterName" $suggesterName "scalar") (serialize-qp "autocompleteMode" $autocompleteMode "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "fuzzy" $fuzzy "scalar") (serialize-qp "highlightPostTag" $highlightPostTag "scalar") (serialize-qp "highlightPreTag" $highlightPreTag "scalar") (serialize-qp "minimumCoverage" $minimumCoverage "scalar") (serialize-qp "searchFields" $searchFields "csv") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "suggesterName" $suggester_name "scalar") (serialize-qp "autocompleteMode" $autocomplete_mode "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "fuzzy" $fuzzy "scalar") (serialize-qp "highlightPostTag" $highlight_post_tag "scalar") (serialize-qp "highlightPreTag" $highlight_pre_tag "scalar") (serialize-qp "minimumCoverage" $minimum_coverage "scalar") (serialize-qp "searchFields" $search_fields "csv") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/docs/search.autocomplete" $qp)
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -239,7 +239,7 @@ export def "docs-searchautocomplete AutocompleteGet" [
 # Docs: https://docs.microsoft.com/rest/api/searchservice/addupdate-or-delete-documents
 # operationId: Documents_Index
 # --value item shape: {@search.action?: "upload"|"merge"|"mergeOrUpload"|"delete"}
-export def "docs-searchindex Index" [
+export def "docs-searchindex post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,7 +257,7 @@ export def "docs-searchindex Index" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/docs/search.index" $qp)
-  let body = {value: $value} | compact
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -271,7 +271,7 @@ export def "docs-searchindex Index" [
 # POST /docs/search.post.autocomplete
 # Docs: https://docs.microsoft.com/rest/api/searchservice/autocomplete
 # operationId: Documents_AutocompletePost
-export def "docs-searchpostautocomplete AutocompletePost" [
+export def "docs-searchpostautocomplete post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,15 +282,15 @@ export def "docs-searchpostautocomplete AutocompletePost" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-  --autocompleteMode: string@autocompleteMode-completer # Specifies the mode for Autocomplete. The default is 'oneTerm'. Use 'twoTerms' to get shingles and 'oneTermWithContext' to use the current context in producing autocomplete terms.
+  --autocomplete-mode: string@autocomplete-mode-completer # Specifies the mode for Autocomplete. The default is 'oneTerm'. Use 'twoTerms' to get shingles and 'oneTermWithContext' to use the current context in producing autocomplete terms.
   --filter: string # An OData expression that filters the documents used to produce completed terms for the Autocomplete result.
   --fuzzy: oneof<nothing, bool> # A value indicating whether to use fuzzy matching for the autocomplete query. Default is false. When set to true, the query will autocomplete terms even if there's a substituted or missing character in the search text. While this provides a better experience in some scenarios, it comes at a performance cost as fuzzy autocomplete queries are slower and consume more resources.
-  --highlightPostTag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. If omitted, hit highlighting is disabled.
-  --highlightPreTag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. If omitted, hit highlighting is disabled.
-  --minimumCoverage: float # A number between 0 and 100 indicating the percentage of the index that must be covered by an autocomplete query in order for the query to be reported as a success. This parameter can be useful for ensuring search availability even for services with only one replica. The default is 80. (format: double)
+  --highlight-post-tag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. If omitted, hit highlighting is disabled.
+  --highlight-pre-tag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. If omitted, hit highlighting is disabled.
+  --minimum-coverage: float # A number between 0 and 100 indicating the percentage of the index that must be covered by an autocomplete query in order for the query to be reported as a success. This parameter can be useful for ensuring search availability even for services with only one replica. The default is 80. (format: double)
   --search: string # The search text on which to base autocomplete results.
-  --searchFields: string # The comma-separated list of field names to consider when querying for auto-completed terms. Target fields must be included in the specified suggester.
-  --suggesterName: string # The name of the suggester as specified in the suggesters collection that's part of the index definition.
+  --search-fields: string # The comma-separated list of field names to consider when querying for auto-completed terms. Target fields must be included in the specified suggester.
+  --suggester-name: string # The name of the suggester as specified in the suggesters collection that's part of the index definition.
   --top: int # The number of auto-completed terms to retrieve. This must be a value between 1 and 100. The default is 5. (format: int32)
 ]: any -> record<value: table<queryPlusText: string, text: string>> {
   let input = $in
@@ -298,7 +298,7 @@ export def "docs-searchpostautocomplete AutocompletePost" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/docs/search.post.autocomplete" $qp)
-  let body = {autocompleteMode: $autocompleteMode, filter: $filter, fuzzy: $fuzzy, highlightPostTag: $highlightPostTag, highlightPreTag: $highlightPreTag, minimumCoverage: $minimumCoverage, search: $search, searchFields: $searchFields, suggesterName: $suggesterName, top: $top} | compact
+  let body = {"autocompleteMode": $autocomplete_mode, "filter": $filter, "fuzzy": $fuzzy, "highlightPostTag": $highlight_post_tag, "highlightPreTag": $highlight_pre_tag, "minimumCoverage": $minimum_coverage, "search": $search, "searchFields": $search_fields, "suggesterName": $suggester_name, "top": $top} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -312,7 +312,7 @@ export def "docs-searchpostautocomplete AutocompletePost" [
 # POST /docs/search.post.search
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Search-Documents
 # operationId: Documents_SearchPost
-export def "docs-searchpostsearch SearchPost" [
+export def "docs-searchpostsearch list-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,16 +327,16 @@ export def "docs-searchpostsearch SearchPost" [
   --facets: list # The list of facet expressions to apply to the search query. Each facet expression contains a field name, optionally followed by a comma-separated list of name:value pairs.
   --filter: string # The OData $filter expression to apply to the search query.
   --highlight: string # The comma-separated list of field names to use for hit highlights. Only searchable fields can be used for hit highlighting.
-  --highlightPostTag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. Default is &lt;/em&gt;.
-  --highlightPreTag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. Default is &lt;em&gt;.
-  --minimumCoverage: float # A number between 0 and 100 indicating the percentage of the index that must be covered by a search query in order for the query to be reported as a success. This parameter can be useful for ensuring search availability even for services with only one replica. The default is 100. (format: double)
+  --highlight-post-tag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. Default is &lt;/em&gt;.
+  --highlight-pre-tag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. Default is &lt;em&gt;.
+  --minimum-coverage: float # A number between 0 and 100 indicating the percentage of the index that must be covered by a search query in order for the query to be reported as a success. This parameter can be useful for ensuring search availability even for services with only one replica. The default is 100. (format: double)
   --orderby: string # The comma-separated list of OData $orderby expressions by which to sort the results. Each expression can be either a field name or a call to either the geo.distance() or the search.score() functions. Each expression can be followed by asc to indicate ascending, or desc to indicate descending. The default is ascending order. Ties will be broken by the match scores of documents. If no $orderby is specified, the default sort order is descending by document match score. There can be at most 32 $orderby clauses.
-  --queryType: string@queryType-completer # Specifies the syntax of the search query. The default is 'simple'. Use 'full' if your query uses the Lucene query syntax.
-  --scoringParameters: list # The list of parameter values to be used in scoring functions (for example, referencePointParameter) using the format name-values. For example, if the scoring profile defines a function with a parameter called 'mylocation' the parameter string would be "mylocation--122.2,44.8" (without the quotes).
-  --scoringProfile: string # The name of a scoring profile to evaluate match scores for matching documents in order to sort the results.
+  --query-type: string@query-type-completer # Specifies the syntax of the search query. The default is 'simple'. Use 'full' if your query uses the Lucene query syntax.
+  --scoring-parameters: list # The list of parameter values to be used in scoring functions (for example, referencePointParameter) using the format name-values. For example, if the scoring profile defines a function with a parameter called 'mylocation' the parameter string would be "mylocation--122.2,44.8" (without the quotes).
+  --scoring-profile: string # The name of a scoring profile to evaluate match scores for matching documents in order to sort the results.
   --search: string # A full-text search query expression; Use "*" or omit this parameter to match all documents.
-  --searchFields: string # The comma-separated list of field names to which to scope the full-text search. When using fielded search (fieldName:searchExpression) in a full Lucene query, the field names of each fielded search expression take precedence over any field names listed in this parameter.
-  --searchMode: string@searchMode-completer # Specifies whether any or all of the search terms must be matched in order to count the document as a match.
+  --search-fields: string # The comma-separated list of field names to which to scope the full-text search. When using fielded search (fieldName:searchExpression) in a full Lucene query, the field names of each fielded search expression take precedence over any field names listed in this parameter.
+  --search-mode: string@search-mode-completer # Specifies whether any or all of the search terms must be matched in order to count the document as a match.
   --select: string # The comma-separated list of fields to retrieve. If unspecified, all fields marked as retrievable in the schema are included.
   --skip: int # The number of search results to skip. This value cannot be greater than 100,000. If you need to scan documents in sequence, but cannot use skip due to this limitation, consider using orderby on a totally-ordered key and filter with a range query instead. (format: int32)
   --top: int # The number of search results to retrieve. This can be used in conjunction with $skip to implement client-side paging of search results. If results are truncated due to server-side paging, the response will include a continuation token that can be used to issue another Search request for the next page of results. (format: int32)
@@ -346,7 +346,7 @@ export def "docs-searchpostsearch SearchPost" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/docs/search.post.search" $qp)
-  let body = {count: $count, facets: $facets, filter: $filter, highlight: $highlight, highlightPostTag: $highlightPostTag, highlightPreTag: $highlightPreTag, minimumCoverage: $minimumCoverage, orderby: $orderby, queryType: $queryType, scoringParameters: $scoringParameters, scoringProfile: $scoringProfile, search: $search, searchFields: $searchFields, searchMode: $searchMode, select: $select, skip: $skip, top: $top} | compact
+  let body = {"count": $count, "facets": $facets, "filter": $filter, "highlight": $highlight, "highlightPostTag": $highlight_post_tag, "highlightPreTag": $highlight_pre_tag, "minimumCoverage": $minimum_coverage, "orderby": $orderby, "queryType": $query_type, "scoringParameters": $scoring_parameters, "scoringProfile": $scoring_profile, "search": $search, "searchFields": $search_fields, "searchMode": $search_mode, "select": $select, "skip": $skip, "top": $top} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -360,7 +360,7 @@ export def "docs-searchpostsearch SearchPost" [
 # POST /docs/search.post.suggest
 # Docs: https://docs.microsoft.com/rest/api/searchservice/suggestions
 # operationId: Documents_SuggestPost
-export def "docs-searchpostsuggest SuggestPost" [
+export def "docs-searchpostsuggest post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,14 +373,14 @@ export def "docs-searchpostsuggest SuggestPost" [
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
   --filter: string # An OData expression that filters the documents considered for suggestions.
   --fuzzy: oneof<nothing, bool> # A value indicating whether to use fuzzy matching for the suggestion query. Default is false. When set to true, the query will find suggestions even if there's a substituted or missing character in the search text. While this provides a better experience in some scenarios, it comes at a performance cost as fuzzy suggestion searches are slower and consume more resources.
-  --highlightPostTag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. If omitted, hit highlighting of suggestions is disabled.
-  --highlightPreTag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. If omitted, hit highlighting of suggestions is disabled.
-  --minimumCoverage: float # A number between 0 and 100 indicating the percentage of the index that must be covered by a suggestion query in order for the query to be reported as a success. This parameter can be useful for ensuring search availability even for services with only one replica. The default is 80. (format: double)
+  --highlight-post-tag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. If omitted, hit highlighting of suggestions is disabled.
+  --highlight-pre-tag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. If omitted, hit highlighting of suggestions is disabled.
+  --minimum-coverage: float # A number between 0 and 100 indicating the percentage of the index that must be covered by a suggestion query in order for the query to be reported as a success. This parameter can be useful for ensuring search availability even for services with only one replica. The default is 80. (format: double)
   --orderby: string # The comma-separated list of OData $orderby expressions by which to sort the results. Each expression can be either a field name or a call to either the geo.distance() or the search.score() functions. Each expression can be followed by asc to indicate ascending, or desc to indicate descending. The default is ascending order. Ties will be broken by the match scores of documents. If no $orderby is specified, the default sort order is descending by document match score. There can be at most 32 $orderby clauses.
   --search: string # The search text to use to suggest documents. Must be at least 1 character, and no more than 100 characters.
-  --searchFields: string # The comma-separated list of field names to search for the specified search text. Target fields must be included in the specified suggester.
+  --search-fields: string # The comma-separated list of field names to search for the specified search text. Target fields must be included in the specified suggester.
   --select: string # The comma-separated list of fields to retrieve. If unspecified, only the key field will be included in the results.
-  --suggesterName: string # The name of the suggester as specified in the suggesters collection that's part of the index definition.
+  --suggester-name: string # The name of the suggester as specified in the suggesters collection that's part of the index definition.
   --top: int # The number of suggestions to retrieve. This must be a value between 1 and 100. The default is 5. (format: int32)
 ]: any -> record<_search_coverage: float, value: table<_search_text: string>> {
   let input = $in
@@ -388,7 +388,7 @@ export def "docs-searchpostsuggest SuggestPost" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/docs/search.post.suggest" $qp)
-  let body = {filter: $filter, fuzzy: $fuzzy, highlightPostTag: $highlightPostTag, highlightPreTag: $highlightPreTag, minimumCoverage: $minimumCoverage, orderby: $orderby, search: $search, searchFields: $searchFields, select: $select, suggesterName: $suggesterName, top: $top} | compact
+  let body = {"filter": $filter, "fuzzy": $fuzzy, "highlightPostTag": $highlight_post_tag, "highlightPreTag": $highlight_pre_tag, "minimumCoverage": $minimum_coverage, "orderby": $orderby, "search": $search, "searchFields": $search_fields, "select": $select, "suggesterName": $suggester_name, "top": $top} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -402,7 +402,7 @@ export def "docs-searchpostsuggest SuggestPost" [
 # GET /docs/search.suggest
 # Docs: https://docs.microsoft.com/rest/api/searchservice/suggestions
 # operationId: Documents_SuggestGet
-export def "docs-searchsuggest SuggestGet" [
+export def "docs-searchsuggest get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,14 +412,14 @@ export def "docs-searchsuggest SuggestGet" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # The search text to use to suggest documents. Must be at least 1 character, and no more than 100 characters.
-  --suggesterName: string # The name of the suggester as specified in the suggesters collection that's part of the index definition.
+  --suggester-name: string # The name of the suggester as specified in the suggesters collection that's part of the index definition.
   --filter: string # An OData expression that filters the documents considered for suggestions.
   --fuzzy: oneof<nothing, bool> # A value indicating whether to use fuzzy matching for the suggestions query. Default is false. When set to true, the query will find terms even if there's a substituted or missing character in the search text. While this provides a better experience in some scenarios, it comes at a performance cost as fuzzy suggestions queries are slower and consume more resources.
-  --highlightPostTag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. If omitted, hit highlighting of suggestions is disabled.
-  --highlightPreTag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. If omitted, hit highlighting of suggestions is disabled.
-  --minimumCoverage: float # A number between 0 and 100 indicating the percentage of the index that must be covered by a suggestions query in order for the query to be reported as a success. This parameter can be useful for ensuring search availability even for services with only one replica. The default is 80. (format: double)
+  --highlight-post-tag: string # A string tag that is appended to hit highlights. Must be set with highlightPreTag. If omitted, hit highlighting of suggestions is disabled.
+  --highlight-pre-tag: string # A string tag that is prepended to hit highlights. Must be set with highlightPostTag. If omitted, hit highlighting of suggestions is disabled.
+  --minimum-coverage: float # A number between 0 and 100 indicating the percentage of the index that must be covered by a suggestions query in order for the query to be reported as a success. This parameter can be useful for ensuring search availability even for services with only one replica. The default is 80. (format: double)
   --orderby: list # The list of OData $orderby expressions by which to sort the results. Each expression can be either a field name or a call to either the geo.distance() or the search.score() functions. Each expression can be followed by asc to indicate ascending, or desc to indicate descending. The default is ascending order. Ties will be broken by the match scores of documents. If no $orderby is specified, the default sort order is descending by document match score. There can be at most 32 $orderby clauses.
-  --searchFields: list # The list of field names to search for the specified search text. Target fields must be included in the specified suggester.
+  --search-fields: list # The list of field names to search for the specified search text. Target fields must be included in the specified suggester.
   --select: list # The list of fields to retrieve. If unspecified, only the key field will be included in the results.
   --top: int # The number of suggestions to retrieve. The value must be a number between 1 and 100. The default is 5. (format: int32)
   --api-version: string # Client Api Version.
@@ -427,7 +427,7 @@ export def "docs-searchsuggest SuggestGet" [
 ]: nothing -> record<_search_coverage: float, value: table<_search_text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "suggesterName" $suggesterName "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "fuzzy" $fuzzy "scalar") (serialize-qp "highlightPostTag" $highlightPostTag "scalar") (serialize-qp "highlightPreTag" $highlightPreTag "scalar") (serialize-qp "minimumCoverage" $minimumCoverage "scalar") (serialize-qp "$orderby" $orderby "csv") (serialize-qp "searchFields" $searchFields "csv") (serialize-qp "$select" $select "csv") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "suggesterName" $suggester_name "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "fuzzy" $fuzzy "scalar") (serialize-qp "highlightPostTag" $highlight_post_tag "scalar") (serialize-qp "highlightPreTag" $highlight_pre_tag "scalar") (serialize-qp "minimumCoverage" $minimum_coverage "scalar") (serialize-qp "$orderby" $orderby "csv") (serialize-qp "searchFields" $search_fields "csv") (serialize-qp "$select" $select "csv") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/docs/search.suggest" $qp)
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

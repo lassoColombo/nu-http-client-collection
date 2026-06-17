@@ -66,76 +66,76 @@ def base-url-completer [] { ["http://kendra.us-east-1.amazonaws.com" "http://ken
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AWSKendraFrontendService.AssociateEntitiesToExperience"] }
-def X-Amz-Target-completer-1 [] { ["AWSKendraFrontendService.AssociatePersonasToEntities"] }
-def X-Amz-Target-completer-2 [] { ["AWSKendraFrontendService.BatchDeleteDocument"] }
-def X-Amz-Target-completer-3 [] { ["AWSKendraFrontendService.BatchDeleteFeaturedResultsSet"] }
-def X-Amz-Target-completer-4 [] { ["AWSKendraFrontendService.BatchGetDocumentStatus"] }
-def X-Amz-Target-completer-5 [] { ["AWSKendraFrontendService.BatchPutDocument"] }
-def X-Amz-Target-completer-6 [] { ["AWSKendraFrontendService.ClearQuerySuggestions"] }
-def X-Amz-Target-completer-7 [] { ["AWSKendraFrontendService.CreateAccessControlConfiguration"] }
-def X-Amz-Target-completer-8 [] { ["AWSKendraFrontendService.CreateDataSource"] }
-def X-Amz-Target-completer-9 [] { ["AWSKendraFrontendService.CreateExperience"] }
-def X-Amz-Target-completer-10 [] { ["AWSKendraFrontendService.CreateFaq"] }
-def X-Amz-Target-completer-11 [] { ["AWSKendraFrontendService.CreateFeaturedResultsSet"] }
-def X-Amz-Target-completer-12 [] { ["AWSKendraFrontendService.CreateIndex"] }
-def X-Amz-Target-completer-13 [] { ["AWSKendraFrontendService.CreateQuerySuggestionsBlockList"] }
-def X-Amz-Target-completer-14 [] { ["AWSKendraFrontendService.CreateThesaurus"] }
-def X-Amz-Target-completer-15 [] { ["AWSKendraFrontendService.DeleteAccessControlConfiguration"] }
-def X-Amz-Target-completer-16 [] { ["AWSKendraFrontendService.DeleteDataSource"] }
-def X-Amz-Target-completer-17 [] { ["AWSKendraFrontendService.DeleteExperience"] }
-def X-Amz-Target-completer-18 [] { ["AWSKendraFrontendService.DeleteFaq"] }
-def X-Amz-Target-completer-19 [] { ["AWSKendraFrontendService.DeleteIndex"] }
-def X-Amz-Target-completer-20 [] { ["AWSKendraFrontendService.DeletePrincipalMapping"] }
-def X-Amz-Target-completer-21 [] { ["AWSKendraFrontendService.DeleteQuerySuggestionsBlockList"] }
-def X-Amz-Target-completer-22 [] { ["AWSKendraFrontendService.DeleteThesaurus"] }
-def X-Amz-Target-completer-23 [] { ["AWSKendraFrontendService.DescribeAccessControlConfiguration"] }
-def X-Amz-Target-completer-24 [] { ["AWSKendraFrontendService.DescribeDataSource"] }
-def X-Amz-Target-completer-25 [] { ["AWSKendraFrontendService.DescribeExperience"] }
-def X-Amz-Target-completer-26 [] { ["AWSKendraFrontendService.DescribeFaq"] }
-def X-Amz-Target-completer-27 [] { ["AWSKendraFrontendService.DescribeFeaturedResultsSet"] }
-def X-Amz-Target-completer-28 [] { ["AWSKendraFrontendService.DescribeIndex"] }
-def X-Amz-Target-completer-29 [] { ["AWSKendraFrontendService.DescribePrincipalMapping"] }
-def X-Amz-Target-completer-30 [] { ["AWSKendraFrontendService.DescribeQuerySuggestionsBlockList"] }
-def X-Amz-Target-completer-31 [] { ["AWSKendraFrontendService.DescribeQuerySuggestionsConfig"] }
-def X-Amz-Target-completer-32 [] { ["AWSKendraFrontendService.DescribeThesaurus"] }
-def X-Amz-Target-completer-33 [] { ["AWSKendraFrontendService.DisassociateEntitiesFromExperience"] }
-def X-Amz-Target-completer-34 [] { ["AWSKendraFrontendService.DisassociatePersonasFromEntities"] }
-def X-Amz-Target-completer-35 [] { ["AWSKendraFrontendService.GetQuerySuggestions"] }
-def X-Amz-Target-completer-36 [] { ["AWSKendraFrontendService.GetSnapshots"] }
-def X-Amz-Target-completer-37 [] { ["AWSKendraFrontendService.ListAccessControlConfigurations"] }
-def X-Amz-Target-completer-38 [] { ["AWSKendraFrontendService.ListDataSourceSyncJobs"] }
-def X-Amz-Target-completer-39 [] { ["AWSKendraFrontendService.ListDataSources"] }
-def X-Amz-Target-completer-40 [] { ["AWSKendraFrontendService.ListEntityPersonas"] }
-def X-Amz-Target-completer-41 [] { ["AWSKendraFrontendService.ListExperienceEntities"] }
-def X-Amz-Target-completer-42 [] { ["AWSKendraFrontendService.ListExperiences"] }
-def X-Amz-Target-completer-43 [] { ["AWSKendraFrontendService.ListFaqs"] }
-def X-Amz-Target-completer-44 [] { ["AWSKendraFrontendService.ListFeaturedResultsSets"] }
-def X-Amz-Target-completer-45 [] { ["AWSKendraFrontendService.ListGroupsOlderThanOrderingId"] }
-def X-Amz-Target-completer-46 [] { ["AWSKendraFrontendService.ListIndices"] }
-def X-Amz-Target-completer-47 [] { ["AWSKendraFrontendService.ListQuerySuggestionsBlockLists"] }
-def X-Amz-Target-completer-48 [] { ["AWSKendraFrontendService.ListTagsForResource"] }
-def X-Amz-Target-completer-49 [] { ["AWSKendraFrontendService.ListThesauri"] }
-def X-Amz-Target-completer-50 [] { ["AWSKendraFrontendService.PutPrincipalMapping"] }
-def X-Amz-Target-completer-51 [] { ["AWSKendraFrontendService.Query"] }
-def X-Amz-Target-completer-52 [] { ["AWSKendraFrontendService.StartDataSourceSyncJob"] }
-def X-Amz-Target-completer-53 [] { ["AWSKendraFrontendService.StopDataSourceSyncJob"] }
-def X-Amz-Target-completer-54 [] { ["AWSKendraFrontendService.SubmitFeedback"] }
-def X-Amz-Target-completer-55 [] { ["AWSKendraFrontendService.TagResource"] }
-def X-Amz-Target-completer-56 [] { ["AWSKendraFrontendService.UntagResource"] }
-def X-Amz-Target-completer-57 [] { ["AWSKendraFrontendService.UpdateAccessControlConfiguration"] }
-def X-Amz-Target-completer-58 [] { ["AWSKendraFrontendService.UpdateDataSource"] }
-def X-Amz-Target-completer-59 [] { ["AWSKendraFrontendService.UpdateExperience"] }
-def X-Amz-Target-completer-60 [] { ["AWSKendraFrontendService.UpdateFeaturedResultsSet"] }
-def X-Amz-Target-completer-61 [] { ["AWSKendraFrontendService.UpdateIndex"] }
-def X-Amz-Target-completer-62 [] { ["AWSKendraFrontendService.UpdateQuerySuggestionsBlockList"] }
-def X-Amz-Target-completer-63 [] { ["AWSKendraFrontendService.UpdateQuerySuggestionsConfig"] }
-def X-Amz-Target-completer-64 [] { ["AWSKendraFrontendService.UpdateThesaurus"] }
+def x-amz-target-completer [] { ["AWSKendraFrontendService.AssociateEntitiesToExperience"] }
+def x-amz-target-completer-1 [] { ["AWSKendraFrontendService.AssociatePersonasToEntities"] }
+def x-amz-target-completer-2 [] { ["AWSKendraFrontendService.BatchDeleteDocument"] }
+def x-amz-target-completer-3 [] { ["AWSKendraFrontendService.BatchDeleteFeaturedResultsSet"] }
+def x-amz-target-completer-4 [] { ["AWSKendraFrontendService.BatchGetDocumentStatus"] }
+def x-amz-target-completer-5 [] { ["AWSKendraFrontendService.BatchPutDocument"] }
+def x-amz-target-completer-6 [] { ["AWSKendraFrontendService.ClearQuerySuggestions"] }
+def x-amz-target-completer-7 [] { ["AWSKendraFrontendService.CreateAccessControlConfiguration"] }
+def x-amz-target-completer-8 [] { ["AWSKendraFrontendService.CreateDataSource"] }
+def x-amz-target-completer-9 [] { ["AWSKendraFrontendService.CreateExperience"] }
+def x-amz-target-completer-10 [] { ["AWSKendraFrontendService.CreateFaq"] }
+def x-amz-target-completer-11 [] { ["AWSKendraFrontendService.CreateFeaturedResultsSet"] }
+def x-amz-target-completer-12 [] { ["AWSKendraFrontendService.CreateIndex"] }
+def x-amz-target-completer-13 [] { ["AWSKendraFrontendService.CreateQuerySuggestionsBlockList"] }
+def x-amz-target-completer-14 [] { ["AWSKendraFrontendService.CreateThesaurus"] }
+def x-amz-target-completer-15 [] { ["AWSKendraFrontendService.DeleteAccessControlConfiguration"] }
+def x-amz-target-completer-16 [] { ["AWSKendraFrontendService.DeleteDataSource"] }
+def x-amz-target-completer-17 [] { ["AWSKendraFrontendService.DeleteExperience"] }
+def x-amz-target-completer-18 [] { ["AWSKendraFrontendService.DeleteFaq"] }
+def x-amz-target-completer-19 [] { ["AWSKendraFrontendService.DeleteIndex"] }
+def x-amz-target-completer-20 [] { ["AWSKendraFrontendService.DeletePrincipalMapping"] }
+def x-amz-target-completer-21 [] { ["AWSKendraFrontendService.DeleteQuerySuggestionsBlockList"] }
+def x-amz-target-completer-22 [] { ["AWSKendraFrontendService.DeleteThesaurus"] }
+def x-amz-target-completer-23 [] { ["AWSKendraFrontendService.DescribeAccessControlConfiguration"] }
+def x-amz-target-completer-24 [] { ["AWSKendraFrontendService.DescribeDataSource"] }
+def x-amz-target-completer-25 [] { ["AWSKendraFrontendService.DescribeExperience"] }
+def x-amz-target-completer-26 [] { ["AWSKendraFrontendService.DescribeFaq"] }
+def x-amz-target-completer-27 [] { ["AWSKendraFrontendService.DescribeFeaturedResultsSet"] }
+def x-amz-target-completer-28 [] { ["AWSKendraFrontendService.DescribeIndex"] }
+def x-amz-target-completer-29 [] { ["AWSKendraFrontendService.DescribePrincipalMapping"] }
+def x-amz-target-completer-30 [] { ["AWSKendraFrontendService.DescribeQuerySuggestionsBlockList"] }
+def x-amz-target-completer-31 [] { ["AWSKendraFrontendService.DescribeQuerySuggestionsConfig"] }
+def x-amz-target-completer-32 [] { ["AWSKendraFrontendService.DescribeThesaurus"] }
+def x-amz-target-completer-33 [] { ["AWSKendraFrontendService.DisassociateEntitiesFromExperience"] }
+def x-amz-target-completer-34 [] { ["AWSKendraFrontendService.DisassociatePersonasFromEntities"] }
+def x-amz-target-completer-35 [] { ["AWSKendraFrontendService.GetQuerySuggestions"] }
+def x-amz-target-completer-36 [] { ["AWSKendraFrontendService.GetSnapshots"] }
+def x-amz-target-completer-37 [] { ["AWSKendraFrontendService.ListAccessControlConfigurations"] }
+def x-amz-target-completer-38 [] { ["AWSKendraFrontendService.ListDataSourceSyncJobs"] }
+def x-amz-target-completer-39 [] { ["AWSKendraFrontendService.ListDataSources"] }
+def x-amz-target-completer-40 [] { ["AWSKendraFrontendService.ListEntityPersonas"] }
+def x-amz-target-completer-41 [] { ["AWSKendraFrontendService.ListExperienceEntities"] }
+def x-amz-target-completer-42 [] { ["AWSKendraFrontendService.ListExperiences"] }
+def x-amz-target-completer-43 [] { ["AWSKendraFrontendService.ListFaqs"] }
+def x-amz-target-completer-44 [] { ["AWSKendraFrontendService.ListFeaturedResultsSets"] }
+def x-amz-target-completer-45 [] { ["AWSKendraFrontendService.ListGroupsOlderThanOrderingId"] }
+def x-amz-target-completer-46 [] { ["AWSKendraFrontendService.ListIndices"] }
+def x-amz-target-completer-47 [] { ["AWSKendraFrontendService.ListQuerySuggestionsBlockLists"] }
+def x-amz-target-completer-48 [] { ["AWSKendraFrontendService.ListTagsForResource"] }
+def x-amz-target-completer-49 [] { ["AWSKendraFrontendService.ListThesauri"] }
+def x-amz-target-completer-50 [] { ["AWSKendraFrontendService.PutPrincipalMapping"] }
+def x-amz-target-completer-51 [] { ["AWSKendraFrontendService.Query"] }
+def x-amz-target-completer-52 [] { ["AWSKendraFrontendService.StartDataSourceSyncJob"] }
+def x-amz-target-completer-53 [] { ["AWSKendraFrontendService.StopDataSourceSyncJob"] }
+def x-amz-target-completer-54 [] { ["AWSKendraFrontendService.SubmitFeedback"] }
+def x-amz-target-completer-55 [] { ["AWSKendraFrontendService.TagResource"] }
+def x-amz-target-completer-56 [] { ["AWSKendraFrontendService.UntagResource"] }
+def x-amz-target-completer-57 [] { ["AWSKendraFrontendService.UpdateAccessControlConfiguration"] }
+def x-amz-target-completer-58 [] { ["AWSKendraFrontendService.UpdateDataSource"] }
+def x-amz-target-completer-59 [] { ["AWSKendraFrontendService.UpdateExperience"] }
+def x-amz-target-completer-60 [] { ["AWSKendraFrontendService.UpdateFeaturedResultsSet"] }
+def x-amz-target-completer-61 [] { ["AWSKendraFrontendService.UpdateIndex"] }
+def x-amz-target-completer-62 [] { ["AWSKendraFrontendService.UpdateQuerySuggestionsBlockList"] }
+def x-amz-target-completer-63 [] { ["AWSKendraFrontendService.UpdateQuerySuggestionsConfig"] }
+def x-amz-target-completer-64 [] { ["AWSKendraFrontendService.UpdateThesaurus"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-kendra-frontend-service-associate-entities-to-experience AssociateEntitiesToExperience" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-kendra-frontend-service-associate-entities-to-experience post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.AssociateEntitiesToExperience
 # operationId: AssociateEntitiesToExperience
-export def "x-amz-target-aws-kendra-frontend-service-associate-entities-to-experience AssociateEntitiesToExperience" [
+export def "x-amz-target-aws-kendra-frontend-service-associate-entities-to-experience post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,25 +168,25 @@ export def "x-amz-target-aws-kendra-frontend-service-associate-entities-to-exper
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  Id: any
-  IndexId: any
-  EntityList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  id: any
+  index_id: any
+  entity_list: any
 ]: any -> record<FailedEntityList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.AssociateEntitiesToExperience")
-  let body = {Id: $Id, IndexId: $IndexId, EntityList: $EntityList} | compact
+  let body = {"Id": $id, "IndexId": $index_id, "EntityList": $entity_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -197,7 +197,7 @@ export def "x-amz-target-aws-kendra-frontend-service-associate-entities-to-exper
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.AssociatePersonasToEntities
 # operationId: AssociatePersonasToEntities
-export def "x-amz-target-aws-kendra-frontend-service-associate-personas-to-entities AssociatePersonasToEntities" [
+export def "x-amz-target-aws-kendra-frontend-service-associate-personas-to-entities post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,25 +206,25 @@ export def "x-amz-target-aws-kendra-frontend-service-associate-personas-to-entit
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  Id: any
-  IndexId: any
-  Personas: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  id: any
+  index_id: any
+  personas: any
 ]: any -> record<FailedEntityList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.AssociatePersonasToEntities")
-  let body = {Id: $Id, IndexId: $IndexId, Personas: $Personas} | compact
+  let body = {"Id": $id, "IndexId": $index_id, "Personas": $personas} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -236,7 +236,7 @@ export def "x-amz-target-aws-kendra-frontend-service-associate-personas-to-entit
 # POST /#X-Amz-Target=AWSKendraFrontendService.BatchDeleteDocument
 # operationId: BatchDeleteDocument
 # --DataSourceSyncJobMetricTarget shape: {DataSourceId: any, DataSourceSyncJobId?: any}
-export def "x-amz-target-aws-kendra-frontend-service-batch-delete-document BatchDeleteDocument" [
+export def "x-amz-target-aws-kendra-frontend-service-batch-delete-document post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,25 +245,25 @@ export def "x-amz-target-aws-kendra-frontend-service-batch-delete-document Batch
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  IndexId: any
-  DocumentIdList: any
-  --DataSourceSyncJobMetricTarget: record # Maps a particular data source sync job to a particular data source. — shape: {DataSourceId: any, DataSourceSyncJobId?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  index_id: any
+  document_id_list: any
+  --data-source-sync-job-metric-target: record # Maps a particular data source sync job to a particular data source. — shape: {DataSourceId: any, DataSourceSyncJobId?: any}
 ]: any -> record<FailedDocuments: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.BatchDeleteDocument")
-  let body = {IndexId: $IndexId, DocumentIdList: $DocumentIdList, DataSourceSyncJobMetricTarget: $DataSourceSyncJobMetricTarget} | compact
+  let body = {"IndexId": $index_id, "DocumentIdList": $document_id_list, "DataSourceSyncJobMetricTarget": $data_source_sync_job_metric_target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -274,7 +274,7 @@ export def "x-amz-target-aws-kendra-frontend-service-batch-delete-document Batch
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.BatchDeleteFeaturedResultsSet
 # operationId: BatchDeleteFeaturedResultsSet
-export def "x-amz-target-aws-kendra-frontend-service-batch-delete-featured-results-set BatchDeleteFeaturedResultsSet" [
+export def "x-amz-target-aws-kendra-frontend-service-batch-delete-featured-results-set post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,24 +283,24 @@ export def "x-amz-target-aws-kendra-frontend-service-batch-delete-featured-resul
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  IndexId: any
-  FeaturedResultsSetIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  index_id: any
+  featured_results_set_ids: any
 ]: any -> record<Errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.BatchDeleteFeaturedResultsSet")
-  let body = {IndexId: $IndexId, FeaturedResultsSetIds: $FeaturedResultsSetIds} | compact
+  let body = {"IndexId": $index_id, "FeaturedResultsSetIds": $featured_results_set_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -311,7 +311,7 @@ export def "x-amz-target-aws-kendra-frontend-service-batch-delete-featured-resul
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.BatchGetDocumentStatus
 # operationId: BatchGetDocumentStatus
-export def "x-amz-target-aws-kendra-frontend-service-batch-get-document-status BatchGetDocumentStatus" [
+export def "x-amz-target-aws-kendra-frontend-service-batch-get-document-status post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,24 +320,24 @@ export def "x-amz-target-aws-kendra-frontend-service-batch-get-document-status B
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  IndexId: any
-  DocumentInfoList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  index_id: any
+  document_info_list: any
 ]: any -> record<Errors: record, DocumentStatusList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.BatchGetDocumentStatus")
-  let body = {IndexId: $IndexId, DocumentInfoList: $DocumentInfoList} | compact
+  let body = {"IndexId": $index_id, "DocumentInfoList": $document_info_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -348,7 +348,7 @@ export def "x-amz-target-aws-kendra-frontend-service-batch-get-document-status B
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.BatchPutDocument
 # operationId: BatchPutDocument
-export def "x-amz-target-aws-kendra-frontend-service-batch-put-document BatchPutDocument" [
+export def "x-amz-target-aws-kendra-frontend-service-batch-put-document post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,26 +357,26 @@ export def "x-amz-target-aws-kendra-frontend-service-batch-put-document BatchPut
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  IndexId: any
-  --RoleArn: any
-  Documents: any
-  --CustomDocumentEnrichmentConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  index_id: any
+  --role-arn: any
+  documents: any
+  --custom-document-enrichment-configuration: any
 ]: any -> record<FailedDocuments: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.BatchPutDocument")
-  let body = {IndexId: $IndexId, RoleArn: $RoleArn, Documents: $Documents, CustomDocumentEnrichmentConfiguration: $CustomDocumentEnrichmentConfiguration} | compact
+  let body = {"IndexId": $index_id, "RoleArn": $role_arn, "Documents": $documents, "CustomDocumentEnrichmentConfiguration": $custom_document_enrichment_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -387,7 +387,7 @@ export def "x-amz-target-aws-kendra-frontend-service-batch-put-document BatchPut
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.ClearQuerySuggestions
 # operationId: ClearQuerySuggestions
-export def "x-amz-target-aws-kendra-frontend-service-clear-query-suggestions ClearQuerySuggestions" [
+export def "x-amz-target-aws-kendra-frontend-service-clear-query-suggestions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,23 +396,23 @@ export def "x-amz-target-aws-kendra-frontend-service-clear-query-suggestions Cle
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  IndexId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  index_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.ClearQuerySuggestions")
-  let body = {IndexId: $IndexId} | compact
+  let body = {"IndexId": $index_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -423,7 +423,7 @@ export def "x-amz-target-aws-kendra-frontend-service-clear-query-suggestions Cle
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.CreateAccessControlConfiguration
 # operationId: CreateAccessControlConfiguration
-export def "x-amz-target-aws-kendra-frontend-service-create-access-control-configuration CreateAccessControlConfiguration" [
+export def "x-amz-target-aws-kendra-frontend-service-create-access-control-configuration create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,28 +432,28 @@ export def "x-amz-target-aws-kendra-frontend-service-create-access-control-confi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  IndexId: any
-  Name: any
-  --Description: any
-  --AccessControlList: any
-  --HierarchicalAccessControlList: any
-  --ClientToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  index_id: any
+  name: any
+  --description: any
+  --access-control-list: any
+  --hierarchical-access-control-list: any
+  --client-token: any
 ]: any -> record<Id: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.CreateAccessControlConfiguration")
-  let body = {IndexId: $IndexId, Name: $Name, Description: $Description, AccessControlList: $AccessControlList, HierarchicalAccessControlList: $HierarchicalAccessControlList, ClientToken: $ClientToken} | compact
+  let body = {"IndexId": $index_id, "Name": $name, "Description": $description, "AccessControlList": $access_control_list, "HierarchicalAccessControlList": $hierarchical_access_control_list, "ClientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -464,7 +464,7 @@ export def "x-amz-target-aws-kendra-frontend-service-create-access-control-confi
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.CreateDataSource
 # operationId: CreateDataSource
-export def "x-amz-target-aws-kendra-frontend-service-create-data-source CreateDataSource" [
+export def "x-amz-target-aws-kendra-frontend-service-create-data-source create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -473,34 +473,34 @@ export def "x-amz-target-aws-kendra-frontend-service-create-data-source CreateDa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  Name: any
-  IndexId: any
-  Type: any
-  --Configuration: any
-  --VpcConfiguration: any
-  --Description: any
-  --Schedule: any
-  --RoleArn: any
-  --Tags: any
-  --ClientToken: any
-  --LanguageCode: any
-  --CustomDocumentEnrichmentConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  name: any
+  index_id: any
+  type: any
+  --configuration: any
+  --vpc-configuration: any
+  --description: any
+  --schedule: any
+  --role-arn: any
+  --tags: any
+  --client-token: any
+  --language-code: any
+  --custom-document-enrichment-configuration: any
 ]: any -> record<Id: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.CreateDataSource")
-  let body = {Name: $Name, IndexId: $IndexId, Type: $Type, Configuration: $Configuration, VpcConfiguration: $VpcConfiguration, Description: $Description, Schedule: $Schedule, RoleArn: $RoleArn, Tags: $Tags, ClientToken: $ClientToken, LanguageCode: $LanguageCode, CustomDocumentEnrichmentConfiguration: $CustomDocumentEnrichmentConfiguration} | compact
+  let body = {"Name": $name, "IndexId": $index_id, "Type": $type, "Configuration": $configuration, "VpcConfiguration": $vpc_configuration, "Description": $description, "Schedule": $schedule, "RoleArn": $role_arn, "Tags": $tags, "ClientToken": $client_token, "LanguageCode": $language_code, "CustomDocumentEnrichmentConfiguration": $custom_document_enrichment_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -511,7 +511,7 @@ export def "x-amz-target-aws-kendra-frontend-service-create-data-source CreateDa
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.CreateExperience
 # operationId: CreateExperience
-export def "x-amz-target-aws-kendra-frontend-service-create-experience CreateExperience" [
+export def "x-amz-target-aws-kendra-frontend-service-create-experience create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -520,28 +520,28 @@ export def "x-amz-target-aws-kendra-frontend-service-create-experience CreateExp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  Name: any
-  IndexId: any
-  --RoleArn: any
-  --Configuration: any
-  --Description: any
-  --ClientToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  name: any
+  index_id: any
+  --role-arn: any
+  --configuration: any
+  --description: any
+  --client-token: any
 ]: any -> record<Id: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.CreateExperience")
-  let body = {Name: $Name, IndexId: $IndexId, RoleArn: $RoleArn, Configuration: $Configuration, Description: $Description, ClientToken: $ClientToken} | compact
+  let body = {"Name": $name, "IndexId": $index_id, "RoleArn": $role_arn, "Configuration": $configuration, "Description": $description, "ClientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -552,7 +552,7 @@ export def "x-amz-target-aws-kendra-frontend-service-create-experience CreateExp
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.CreateFaq
 # operationId: CreateFaq
-export def "x-amz-target-aws-kendra-frontend-service-create-faq CreateFaq" [
+export def "x-amz-target-aws-kendra-frontend-service-create-faq create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -561,31 +561,31 @@ export def "x-amz-target-aws-kendra-frontend-service-create-faq CreateFaq" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  IndexId: any
-  Name: any
-  --Description: any
-  S3Path: any
-  RoleArn: any
-  --Tags: any
-  --FileFormat: any
-  --ClientToken: any
-  --LanguageCode: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  index_id: any
+  name: any
+  --description: any
+  s3_path: any
+  role_arn: any
+  --tags: any
+  --file-format: any
+  --client-token: any
+  --language-code: any
 ]: any -> record<Id: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.CreateFaq")
-  let body = {IndexId: $IndexId, Name: $Name, Description: $Description, S3Path: $S3Path, RoleArn: $RoleArn, Tags: $Tags, FileFormat: $FileFormat, ClientToken: $ClientToken, LanguageCode: $LanguageCode} | compact
+  let body = {"IndexId": $index_id, "Name": $name, "Description": $description, "S3Path": $s3_path, "RoleArn": $role_arn, "Tags": $tags, "FileFormat": $file_format, "ClientToken": $client_token, "LanguageCode": $language_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -596,7 +596,7 @@ export def "x-amz-target-aws-kendra-frontend-service-create-faq CreateFaq" [
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.CreateFeaturedResultsSet
 # operationId: CreateFeaturedResultsSet
-export def "x-amz-target-aws-kendra-frontend-service-create-featured-results-set CreateFeaturedResultsSet" [
+export def "x-amz-target-aws-kendra-frontend-service-create-featured-results-set create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -605,30 +605,30 @@ export def "x-amz-target-aws-kendra-frontend-service-create-featured-results-set
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  IndexId: any
-  FeaturedResultsSetName: any
-  --Description: any
-  --ClientToken: any
-  --Status: any
-  --QueryTexts: any
-  --FeaturedDocuments: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  index_id: any
+  featured_results_set_name: any
+  --description: any
+  --client-token: any
+  --status: any
+  --query-texts: any
+  --featured-documents: any
+  --tags: any
 ]: any -> record<FeaturedResultsSet: record<FeaturedResultsSetId: record, FeaturedResultsSetName: record, Description: record, Status: record, QueryTexts: record, FeaturedDocuments: record, LastUpdatedTimestamp: record, CreationTimestamp: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.CreateFeaturedResultsSet")
-  let body = {IndexId: $IndexId, FeaturedResultsSetName: $FeaturedResultsSetName, Description: $Description, ClientToken: $ClientToken, Status: $Status, QueryTexts: $QueryTexts, FeaturedDocuments: $FeaturedDocuments, Tags: $Tags} | compact
+  let body = {"IndexId": $index_id, "FeaturedResultsSetName": $featured_results_set_name, "Description": $description, "ClientToken": $client_token, "Status": $status, "QueryTexts": $query_texts, "FeaturedDocuments": $featured_documents, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -639,7 +639,7 @@ export def "x-amz-target-aws-kendra-frontend-service-create-featured-results-set
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.CreateIndex
 # operationId: CreateIndex
-export def "x-amz-target-aws-kendra-frontend-service-create-index CreateIndex" [
+export def "x-amz-target-aws-kendra-frontend-service-create-index create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -648,32 +648,32 @@ export def "x-amz-target-aws-kendra-frontend-service-create-index CreateIndex" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  Name: any
-  --Edition: any
-  RoleArn: any
-  --ServerSideEncryptionConfiguration: any
-  --Description: any
-  --ClientToken: any
-  --Tags: any
-  --UserTokenConfigurations: any
-  --UserContextPolicy: any
-  --UserGroupResolutionConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  name: any
+  --edition: any
+  role_arn: any
+  --server-side-encryption-configuration: any
+  --description: any
+  --client-token: any
+  --tags: any
+  --user-token-configurations: any
+  --user-context-policy: any
+  --user-group-resolution-configuration: any
 ]: any -> record<Id: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.CreateIndex")
-  let body = {Name: $Name, Edition: $Edition, RoleArn: $RoleArn, ServerSideEncryptionConfiguration: $ServerSideEncryptionConfiguration, Description: $Description, ClientToken: $ClientToken, Tags: $Tags, UserTokenConfigurations: $UserTokenConfigurations, UserContextPolicy: $UserContextPolicy, UserGroupResolutionConfiguration: $UserGroupResolutionConfiguration} | compact
+  let body = {"Name": $name, "Edition": $edition, "RoleArn": $role_arn, "ServerSideEncryptionConfiguration": $server_side_encryption_configuration, "Description": $description, "ClientToken": $client_token, "Tags": $tags, "UserTokenConfigurations": $user_token_configurations, "UserContextPolicy": $user_context_policy, "UserGroupResolutionConfiguration": $user_group_resolution_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -684,7 +684,7 @@ export def "x-amz-target-aws-kendra-frontend-service-create-index CreateIndex" [
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.CreateQuerySuggestionsBlockList
 # operationId: CreateQuerySuggestionsBlockList
-export def "x-amz-target-aws-kendra-frontend-service-create-query-suggestions-block-list CreateQuerySuggestionsBlockList" [
+export def "x-amz-target-aws-kendra-frontend-service-create-query-suggestions-block-list create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -693,29 +693,29 @@ export def "x-amz-target-aws-kendra-frontend-service-create-query-suggestions-bl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  IndexId: any
-  Name: any
-  --Description: any
-  SourceS3Path: any
-  --ClientToken: any
-  RoleArn: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  index_id: any
+  name: any
+  --description: any
+  source_s3_path: any
+  --client-token: any
+  role_arn: any
+  --tags: any
 ]: any -> record<Id: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.CreateQuerySuggestionsBlockList")
-  let body = {IndexId: $IndexId, Name: $Name, Description: $Description, SourceS3Path: $SourceS3Path, ClientToken: $ClientToken, RoleArn: $RoleArn, Tags: $Tags} | compact
+  let body = {"IndexId": $index_id, "Name": $name, "Description": $description, "SourceS3Path": $source_s3_path, "ClientToken": $client_token, "RoleArn": $role_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -726,7 +726,7 @@ export def "x-amz-target-aws-kendra-frontend-service-create-query-suggestions-bl
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.CreateThesaurus
 # operationId: CreateThesaurus
-export def "x-amz-target-aws-kendra-frontend-service-create-thesaurus CreateThesaurus" [
+export def "x-amz-target-aws-kendra-frontend-service-create-thesaurus create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -735,29 +735,29 @@ export def "x-amz-target-aws-kendra-frontend-service-create-thesaurus CreateThes
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  IndexId: any
-  Name: any
-  --Description: any
-  RoleArn: any
-  --Tags: any
-  SourceS3Path: any
-  --ClientToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  index_id: any
+  name: any
+  --description: any
+  role_arn: any
+  --tags: any
+  source_s3_path: any
+  --client-token: any
 ]: any -> record<Id: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.CreateThesaurus")
-  let body = {IndexId: $IndexId, Name: $Name, Description: $Description, RoleArn: $RoleArn, Tags: $Tags, SourceS3Path: $SourceS3Path, ClientToken: $ClientToken} | compact
+  let body = {"IndexId": $index_id, "Name": $name, "Description": $description, "RoleArn": $role_arn, "Tags": $tags, "SourceS3Path": $source_s3_path, "ClientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -768,7 +768,7 @@ export def "x-amz-target-aws-kendra-frontend-service-create-thesaurus CreateThes
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DeleteAccessControlConfiguration
 # operationId: DeleteAccessControlConfiguration
-export def "x-amz-target-aws-kendra-frontend-service-delete-access-control-configuration DeleteAccessControlConfiguration" [
+export def "x-amz-target-aws-kendra-frontend-service-delete-access-control-configuration delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -777,24 +777,24 @@ export def "x-amz-target-aws-kendra-frontend-service-delete-access-control-confi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  IndexId: any
-  Id: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  index_id: any
+  id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DeleteAccessControlConfiguration")
-  let body = {IndexId: $IndexId, Id: $Id} | compact
+  let body = {"IndexId": $index_id, "Id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -805,7 +805,7 @@ export def "x-amz-target-aws-kendra-frontend-service-delete-access-control-confi
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DeleteDataSource
 # operationId: DeleteDataSource
-export def "x-amz-target-aws-kendra-frontend-service-delete-data-source DeleteDataSource" [
+export def "x-amz-target-aws-kendra-frontend-service-delete-data-source delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -814,24 +814,24 @@ export def "x-amz-target-aws-kendra-frontend-service-delete-data-source DeleteDa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  Id: any
-  IndexId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  id: any
+  index_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DeleteDataSource")
-  let body = {Id: $Id, IndexId: $IndexId} | compact
+  let body = {"Id": $id, "IndexId": $index_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -842,7 +842,7 @@ export def "x-amz-target-aws-kendra-frontend-service-delete-data-source DeleteDa
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DeleteExperience
 # operationId: DeleteExperience
-export def "x-amz-target-aws-kendra-frontend-service-delete-experience DeleteExperience" [
+export def "x-amz-target-aws-kendra-frontend-service-delete-experience delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -851,24 +851,24 @@ export def "x-amz-target-aws-kendra-frontend-service-delete-experience DeleteExp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  Id: any
-  IndexId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  id: any
+  index_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DeleteExperience")
-  let body = {Id: $Id, IndexId: $IndexId} | compact
+  let body = {"Id": $id, "IndexId": $index_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -879,7 +879,7 @@ export def "x-amz-target-aws-kendra-frontend-service-delete-experience DeleteExp
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DeleteFaq
 # operationId: DeleteFaq
-export def "x-amz-target-aws-kendra-frontend-service-delete-faq DeleteFaq" [
+export def "x-amz-target-aws-kendra-frontend-service-delete-faq delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -888,24 +888,24 @@ export def "x-amz-target-aws-kendra-frontend-service-delete-faq DeleteFaq" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  Id: any
-  IndexId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  id: any
+  index_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DeleteFaq")
-  let body = {Id: $Id, IndexId: $IndexId} | compact
+  let body = {"Id": $id, "IndexId": $index_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -916,7 +916,7 @@ export def "x-amz-target-aws-kendra-frontend-service-delete-faq DeleteFaq" [
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DeleteIndex
 # operationId: DeleteIndex
-export def "x-amz-target-aws-kendra-frontend-service-delete-index DeleteIndex" [
+export def "x-amz-target-aws-kendra-frontend-service-delete-index delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,23 +925,23 @@ export def "x-amz-target-aws-kendra-frontend-service-delete-index DeleteIndex" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  Id: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DeleteIndex")
-  let body = {Id: $Id} | compact
+  let body = {"Id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -952,7 +952,7 @@ export def "x-amz-target-aws-kendra-frontend-service-delete-index DeleteIndex" [
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DeletePrincipalMapping
 # operationId: DeletePrincipalMapping
-export def "x-amz-target-aws-kendra-frontend-service-delete-principal-mapping DeletePrincipalMapping" [
+export def "x-amz-target-aws-kendra-frontend-service-delete-principal-mapping delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -961,26 +961,26 @@ export def "x-amz-target-aws-kendra-frontend-service-delete-principal-mapping De
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  IndexId: any
-  --DataSourceId: any
-  GroupId: any
-  --OrderingId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  index_id: any
+  --data-source-id: any
+  group_id: any
+  --ordering-id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DeletePrincipalMapping")
-  let body = {IndexId: $IndexId, DataSourceId: $DataSourceId, GroupId: $GroupId, OrderingId: $OrderingId} | compact
+  let body = {"IndexId": $index_id, "DataSourceId": $data_source_id, "GroupId": $group_id, "OrderingId": $ordering_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -991,7 +991,7 @@ export def "x-amz-target-aws-kendra-frontend-service-delete-principal-mapping De
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DeleteQuerySuggestionsBlockList
 # operationId: DeleteQuerySuggestionsBlockList
-export def "x-amz-target-aws-kendra-frontend-service-delete-query-suggestions-block-list DeleteQuerySuggestionsBlockList" [
+export def "x-amz-target-aws-kendra-frontend-service-delete-query-suggestions-block-list delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,24 +1000,24 @@ export def "x-amz-target-aws-kendra-frontend-service-delete-query-suggestions-bl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  IndexId: any
-  Id: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  index_id: any
+  id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DeleteQuerySuggestionsBlockList")
-  let body = {IndexId: $IndexId, Id: $Id} | compact
+  let body = {"IndexId": $index_id, "Id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1028,7 +1028,7 @@ export def "x-amz-target-aws-kendra-frontend-service-delete-query-suggestions-bl
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DeleteThesaurus
 # operationId: DeleteThesaurus
-export def "x-amz-target-aws-kendra-frontend-service-delete-thesaurus DeleteThesaurus" [
+export def "x-amz-target-aws-kendra-frontend-service-delete-thesaurus delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,24 +1037,24 @@ export def "x-amz-target-aws-kendra-frontend-service-delete-thesaurus DeleteThes
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  Id: any
-  IndexId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  id: any
+  index_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DeleteThesaurus")
-  let body = {Id: $Id, IndexId: $IndexId} | compact
+  let body = {"Id": $id, "IndexId": $index_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1065,7 +1065,7 @@ export def "x-amz-target-aws-kendra-frontend-service-delete-thesaurus DeleteThes
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DescribeAccessControlConfiguration
 # operationId: DescribeAccessControlConfiguration
-export def "x-amz-target-aws-kendra-frontend-service-describe-access-control-configuration DescribeAccessControlConfiguration" [
+export def "x-amz-target-aws-kendra-frontend-service-describe-access-control-configuration post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1074,24 +1074,24 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-access-control-con
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  IndexId: any
-  Id: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  index_id: any
+  id: any
 ]: any -> record<Name: record, Description: record, ErrorMessage: record, AccessControlList: record, HierarchicalAccessControlList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DescribeAccessControlConfiguration")
-  let body = {IndexId: $IndexId, Id: $Id} | compact
+  let body = {"IndexId": $index_id, "Id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1102,7 +1102,7 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-access-control-con
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DescribeDataSource
 # operationId: DescribeDataSource
-export def "x-amz-target-aws-kendra-frontend-service-describe-data-source DescribeDataSource" [
+export def "x-amz-target-aws-kendra-frontend-service-describe-data-source post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1111,24 +1111,24 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-data-source Descri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  Id: any
-  IndexId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  id: any
+  index_id: any
 ]: any -> record<Id: record, IndexId: record, Name: record, Type: record, Configuration: record<S3Configuration: record<BucketName: record, InclusionPrefixes: record, InclusionPatterns: record, ExclusionPatterns: record, DocumentsMetadataConfiguration: record, AccessControlListConfiguration: record>, SharePointConfiguration: record<SharePointVersion: record, Urls: record, SecretArn: record, CrawlAttachments: record, UseChangeLog: record, InclusionPatterns: record, ExclusionPatterns: record, VpcConfiguration: record, FieldMappings: record, DocumentTitleFieldName: record, DisableLocalGroups: record, SslCertificateS3Path: record, AuthenticationType: record, ProxyConfiguration: record>, DatabaseConfiguration: record<DatabaseEngineType: record, ConnectionConfiguration: record, VpcConfiguration: record, ColumnConfiguration: record, AclConfiguration: record, SqlConfiguration: record>, SalesforceConfiguration: record<ServerUrl: record, SecretArn: record, StandardObjectConfigurations: record, KnowledgeArticleConfiguration: record, ChatterFeedConfiguration: record, CrawlAttachments: record, StandardObjectAttachmentConfiguration: record, IncludeAttachmentFilePatterns: record, ExcludeAttachmentFilePatterns: record>, OneDriveConfiguration: record<TenantDomain: record, SecretArn: record, OneDriveUsers: record, InclusionPatterns: record, ExclusionPatterns: record, FieldMappings: record, DisableLocalGroups: record>, ServiceNowConfiguration: record<HostUrl: record, SecretArn: record, ServiceNowBuildVersion: record, KnowledgeArticleConfiguration: record, ServiceCatalogConfiguration: record, AuthenticationType: record>, ConfluenceConfiguration: record<ServerUrl: record, SecretArn: record, Version: record, SpaceConfiguration: record, PageConfiguration: record, BlogConfiguration: record, AttachmentConfiguration: record, VpcConfiguration: record, InclusionPatterns: record, ExclusionPatterns: record, ProxyConfiguration: record, AuthenticationType: record>, GoogleDriveConfiguration: record<SecretArn: record, InclusionPatterns: record, ExclusionPatterns: record, FieldMappings: record, ExcludeMimeTypes: record, ExcludeUserAccounts: record, ExcludeSharedDrives: record>, WebCrawlerConfiguration: record<Urls: record, CrawlDepth: record, MaxLinksPerPage: record, MaxContentSizePerPageInMegaBytes: record, MaxUrlsPerMinuteCrawlRate: record, UrlInclusionPatterns: record, UrlExclusionPatterns: record, ProxyConfiguration: record, AuthenticationConfiguration: record>, WorkDocsConfiguration: record<OrganizationId: record, CrawlComments: record, UseChangeLog: record, InclusionPatterns: record, ExclusionPatterns: record, FieldMappings: record>, FsxConfiguration: record<FileSystemId: record, FileSystemType: record, VpcConfiguration: record, SecretArn: record, InclusionPatterns: record, ExclusionPatterns: record, FieldMappings: record>, SlackConfiguration: record<TeamId: record, SecretArn: record, VpcConfiguration: record, SlackEntityList: record, UseChangeLog: record, CrawlBotMessage: record, ExcludeArchived: record, SinceCrawlDate: record, LookBackPeriod: record, PrivateChannelFilter: record, PublicChannelFilter: record, InclusionPatterns: record, ExclusionPatterns: record, FieldMappings: record>, BoxConfiguration: record<EnterpriseId: record, SecretArn: record, UseChangeLog: record, CrawlComments: record, CrawlTasks: record, CrawlWebLinks: record, FileFieldMappings: record, TaskFieldMappings: record, CommentFieldMappings: record, WebLinkFieldMappings: record, InclusionPatterns: record, ExclusionPatterns: record, VpcConfiguration: record>, QuipConfiguration: record<Domain: record, SecretArn: record, CrawlFileComments: record, CrawlChatRooms: record, CrawlAttachments: record, FolderIds: record, ThreadFieldMappings: record, MessageFieldMappings: record, AttachmentFieldMappings: record, InclusionPatterns: record, ExclusionPatterns: record, VpcConfiguration: record>, JiraConfiguration: record<JiraAccountUrl: record, SecretArn: record, UseChangeLog: record, Project: record, IssueType: record, Status: record, IssueSubEntityFilter: record, AttachmentFieldMappings: record, CommentFieldMappings: record, IssueFieldMappings: record, ProjectFieldMappings: record, WorkLogFieldMappings: record, InclusionPatterns: record, ExclusionPatterns: record, VpcConfiguration: record>, GitHubConfiguration: record<SaaSConfiguration: record, OnPremiseConfiguration: record, Type: record, SecretArn: record, UseChangeLog: record, GitHubDocumentCrawlProperties: record, RepositoryFilter: record, InclusionFolderNamePatterns: record, InclusionFileTypePatterns: record, InclusionFileNamePatterns: record, ExclusionFolderNamePatterns: record, ExclusionFileTypePatterns: record, ExclusionFileNamePatterns: record, VpcConfiguration: record, GitHubRepositoryConfigurationFieldMappings: record, GitHubCommitConfigurationFieldMappings: record, GitHubIssueDocumentConfigurationFieldMappings: record, GitHubIssueCommentConfigurationFieldMappings: record, GitHubIssueAttachmentConfigurationFieldMappings: record, GitHubPullRequestCommentConfigurationFieldMappings: record, GitHubPullRequestDocumentConfigurationFieldMappings: record, GitHubPullRequestDocumentAttachmentConfigurationFieldMappings: record>, AlfrescoConfiguration: record<SiteUrl: record, SiteId: record, SecretArn: record, SslCertificateS3Path: record, CrawlSystemFolders: record, CrawlComments: record, EntityFilter: record, DocumentLibraryFieldMappings: record, BlogFieldMappings: record, WikiFieldMappings: record, InclusionPatterns: record, ExclusionPatterns: record, VpcConfiguration: record>, TemplateConfiguration: record<Template: record>>, VpcConfiguration: record<SubnetIds: record, SecurityGroupIds: record>, CreatedAt: record, UpdatedAt: record, Description: record, Status: record, Schedule: record, RoleArn: record, ErrorMessage: record, LanguageCode: record, CustomDocumentEnrichmentConfiguration: record<InlineConfigurations: record, PreExtractionHookConfiguration: record<InvocationCondition: record, LambdaArn: record, S3Bucket: record>, PostExtractionHookConfiguration: record<InvocationCondition: record, LambdaArn: record, S3Bucket: record>, RoleArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DescribeDataSource")
-  let body = {Id: $Id, IndexId: $IndexId} | compact
+  let body = {"Id": $id, "IndexId": $index_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1139,7 +1139,7 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-data-source Descri
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DescribeExperience
 # operationId: DescribeExperience
-export def "x-amz-target-aws-kendra-frontend-service-describe-experience DescribeExperience" [
+export def "x-amz-target-aws-kendra-frontend-service-describe-experience post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1148,24 +1148,24 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-experience Describ
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  Id: any
-  IndexId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  id: any
+  index_id: any
 ]: any -> record<Id: record, IndexId: record, Name: record, Endpoints: record, Configuration: record<ContentSourceConfiguration: record<DataSourceIds: record, FaqIds: record, DirectPutContent: record>, UserIdentityConfiguration: record<IdentityAttributeName: record>>, CreatedAt: record, UpdatedAt: record, Description: record, Status: record, RoleArn: record, ErrorMessage: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DescribeExperience")
-  let body = {Id: $Id, IndexId: $IndexId} | compact
+  let body = {"Id": $id, "IndexId": $index_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1176,7 +1176,7 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-experience Describ
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DescribeFaq
 # operationId: DescribeFaq
-export def "x-amz-target-aws-kendra-frontend-service-describe-faq DescribeFaq" [
+export def "x-amz-target-aws-kendra-frontend-service-describe-faq post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1185,24 +1185,24 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-faq DescribeFaq" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  Id: any
-  IndexId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  id: any
+  index_id: any
 ]: any -> record<Id: record, IndexId: record, Name: record, Description: record, CreatedAt: record, UpdatedAt: record, S3Path: record<Bucket: record, Key: record>, Status: record, RoleArn: record, ErrorMessage: record, FileFormat: record, LanguageCode: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DescribeFaq")
-  let body = {Id: $Id, IndexId: $IndexId} | compact
+  let body = {"Id": $id, "IndexId": $index_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1213,7 +1213,7 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-faq DescribeFaq" [
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DescribeFeaturedResultsSet
 # operationId: DescribeFeaturedResultsSet
-export def "x-amz-target-aws-kendra-frontend-service-describe-featured-results-set DescribeFeaturedResultsSet" [
+export def "x-amz-target-aws-kendra-frontend-service-describe-featured-results-set post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1222,24 +1222,24 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-featured-results-s
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  IndexId: any
-  FeaturedResultsSetId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  index_id: any
+  featured_results_set_id: any
 ]: any -> record<FeaturedResultsSetId: record, FeaturedResultsSetName: record, Description: record, Status: record, QueryTexts: record, FeaturedDocumentsWithMetadata: record, FeaturedDocumentsMissing: record, LastUpdatedTimestamp: record, CreationTimestamp: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DescribeFeaturedResultsSet")
-  let body = {IndexId: $IndexId, FeaturedResultsSetId: $FeaturedResultsSetId} | compact
+  let body = {"IndexId": $index_id, "FeaturedResultsSetId": $featured_results_set_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1250,7 +1250,7 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-featured-results-s
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DescribeIndex
 # operationId: DescribeIndex
-export def "x-amz-target-aws-kendra-frontend-service-describe-index DescribeIndex" [
+export def "x-amz-target-aws-kendra-frontend-service-describe-index post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1259,23 +1259,23 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-index DescribeInde
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  Id: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  id: any
 ]: any -> record<Name: record, Id: record, Edition: record, RoleArn: record, ServerSideEncryptionConfiguration: record<KmsKeyId: record>, Status: record, Description: record, CreatedAt: record, UpdatedAt: record, DocumentMetadataConfigurations: record, IndexStatistics: record<FaqStatistics: record<IndexedQuestionAnswersCount: record>, TextDocumentStatistics: record<IndexedTextDocumentsCount: record, IndexedTextBytes: record>>, ErrorMessage: record, CapacityUnits: record<StorageCapacityUnits: record, QueryCapacityUnits: record>, UserTokenConfigurations: record, UserContextPolicy: record, UserGroupResolutionConfiguration: record<UserGroupResolutionMode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DescribeIndex")
-  let body = {Id: $Id} | compact
+  let body = {"Id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1286,7 +1286,7 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-index DescribeInde
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DescribePrincipalMapping
 # operationId: DescribePrincipalMapping
-export def "x-amz-target-aws-kendra-frontend-service-describe-principal-mapping DescribePrincipalMapping" [
+export def "x-amz-target-aws-kendra-frontend-service-describe-principal-mapping post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1295,25 +1295,25 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-principal-mapping 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  IndexId: any
-  --DataSourceId: any
-  GroupId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  index_id: any
+  --data-source-id: any
+  group_id: any
 ]: any -> record<IndexId: record, DataSourceId: record, GroupId: record, GroupOrderingIdSummaries: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DescribePrincipalMapping")
-  let body = {IndexId: $IndexId, DataSourceId: $DataSourceId, GroupId: $GroupId} | compact
+  let body = {"IndexId": $index_id, "DataSourceId": $data_source_id, "GroupId": $group_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1324,7 +1324,7 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-principal-mapping 
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DescribeQuerySuggestionsBlockList
 # operationId: DescribeQuerySuggestionsBlockList
-export def "x-amz-target-aws-kendra-frontend-service-describe-query-suggestions-block-list DescribeQuerySuggestionsBlockList" [
+export def "x-amz-target-aws-kendra-frontend-service-describe-query-suggestions-block-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1333,24 +1333,24 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-query-suggestions-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  IndexId: any
-  Id: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  index_id: any
+  id: any
 ]: any -> record<IndexId: record, Id: record, Name: record, Description: record, Status: record, ErrorMessage: record, CreatedAt: record, UpdatedAt: record, SourceS3Path: record<Bucket: record, Key: record>, ItemCount: record, FileSizeBytes: record, RoleArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DescribeQuerySuggestionsBlockList")
-  let body = {IndexId: $IndexId, Id: $Id} | compact
+  let body = {"IndexId": $index_id, "Id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1361,7 +1361,7 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-query-suggestions-
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DescribeQuerySuggestionsConfig
 # operationId: DescribeQuerySuggestionsConfig
-export def "x-amz-target-aws-kendra-frontend-service-describe-query-suggestions-config DescribeQuerySuggestionsConfig" [
+export def "x-amz-target-aws-kendra-frontend-service-describe-query-suggestions-config post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1370,23 +1370,23 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-query-suggestions-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  IndexId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  index_id: any
 ]: any -> record<Mode: record, Status: record, QueryLogLookBackWindowInDays: record, IncludeQueriesWithoutUserInformation: record, MinimumNumberOfQueryingUsers: record, MinimumQueryCount: record, LastSuggestionsBuildTime: record, LastClearTime: record, TotalSuggestionsCount: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DescribeQuerySuggestionsConfig")
-  let body = {IndexId: $IndexId} | compact
+  let body = {"IndexId": $index_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1397,7 +1397,7 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-query-suggestions-
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DescribeThesaurus
 # operationId: DescribeThesaurus
-export def "x-amz-target-aws-kendra-frontend-service-describe-thesaurus DescribeThesaurus" [
+export def "x-amz-target-aws-kendra-frontend-service-describe-thesaurus post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1406,24 +1406,24 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-thesaurus Describe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  Id: any
-  IndexId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  id: any
+  index_id: any
 ]: any -> record<Id: record, IndexId: record, Name: record, Description: record, Status: record, ErrorMessage: record, CreatedAt: record, UpdatedAt: record, RoleArn: record, SourceS3Path: record<Bucket: record, Key: record>, FileSizeBytes: record, TermCount: record, SynonymRuleCount: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DescribeThesaurus")
-  let body = {Id: $Id, IndexId: $IndexId} | compact
+  let body = {"Id": $id, "IndexId": $index_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1434,7 +1434,7 @@ export def "x-amz-target-aws-kendra-frontend-service-describe-thesaurus Describe
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DisassociateEntitiesFromExperience
 # operationId: DisassociateEntitiesFromExperience
-export def "x-amz-target-aws-kendra-frontend-service-disassociate-entities-from-experience DisassociateEntitiesFromExperience" [
+export def "x-amz-target-aws-kendra-frontend-service-disassociate-entities-from-experience post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1443,25 +1443,25 @@ export def "x-amz-target-aws-kendra-frontend-service-disassociate-entities-from-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  Id: any
-  IndexId: any
-  EntityList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  id: any
+  index_id: any
+  entity_list: any
 ]: any -> record<FailedEntityList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DisassociateEntitiesFromExperience")
-  let body = {Id: $Id, IndexId: $IndexId, EntityList: $EntityList} | compact
+  let body = {"Id": $id, "IndexId": $index_id, "EntityList": $entity_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1472,7 +1472,7 @@ export def "x-amz-target-aws-kendra-frontend-service-disassociate-entities-from-
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.DisassociatePersonasFromEntities
 # operationId: DisassociatePersonasFromEntities
-export def "x-amz-target-aws-kendra-frontend-service-disassociate-personas-from-entities DisassociatePersonasFromEntities" [
+export def "x-amz-target-aws-kendra-frontend-service-disassociate-personas-from-entities post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1481,25 +1481,25 @@ export def "x-amz-target-aws-kendra-frontend-service-disassociate-personas-from-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  Id: any
-  IndexId: any
-  EntityIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  id: any
+  index_id: any
+  entity_ids: any
 ]: any -> record<FailedEntityList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.DisassociatePersonasFromEntities")
-  let body = {Id: $Id, IndexId: $IndexId, EntityIds: $EntityIds} | compact
+  let body = {"Id": $id, "IndexId": $index_id, "EntityIds": $entity_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1510,7 +1510,7 @@ export def "x-amz-target-aws-kendra-frontend-service-disassociate-personas-from-
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.GetQuerySuggestions
 # operationId: GetQuerySuggestions
-export def "x-amz-target-aws-kendra-frontend-service-get-query-suggestions GetQuerySuggestions" [
+export def "x-amz-target-aws-kendra-frontend-service-get-query-suggestions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1519,25 +1519,25 @@ export def "x-amz-target-aws-kendra-frontend-service-get-query-suggestions GetQu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  IndexId: any
-  QueryText: any
-  --MaxSuggestionsCount: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  index_id: any
+  query_text: any
+  --max-suggestions-count: any
 ]: any -> record<QuerySuggestionsId: record, Suggestions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.GetQuerySuggestions")
-  let body = {IndexId: $IndexId, QueryText: $QueryText, MaxSuggestionsCount: $MaxSuggestionsCount} | compact
+  let body = {"IndexId": $index_id, "QueryText": $query_text, "MaxSuggestionsCount": $max_suggestions_count} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1548,7 +1548,7 @@ export def "x-amz-target-aws-kendra-frontend-service-get-query-suggestions GetQu
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.GetSnapshots
 # operationId: GetSnapshots
-export def "x-amz-target-aws-kendra-frontend-service-get-snapshots GetSnapshots" [
+export def "x-amz-target-aws-kendra-frontend-service-get-snapshots get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1557,30 +1557,30 @@ export def "x-amz-target-aws-kendra-frontend-service-get-snapshots GetSnapshots"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  IndexId: any
-  Interval: any
-  MetricType: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  index_id: any
+  interval: any
+  metric_type: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<SnapShotTimeFilter: record<StartTime: record, EndTime: record>, SnapshotsDataHeader: record, SnapshotsData: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.GetSnapshots" $qp)
-  let body = {IndexId: $IndexId, Interval: $Interval, MetricType: $MetricType, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"IndexId": $index_id, "Interval": $interval, "MetricType": $metric_type, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1591,7 +1591,7 @@ export def "x-amz-target-aws-kendra-frontend-service-get-snapshots GetSnapshots"
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.ListAccessControlConfigurations
 # operationId: ListAccessControlConfigurations
-export def "x-amz-target-aws-kendra-frontend-service-list-access-control-configurations ListAccessControlConfigurations" [
+export def "x-amz-target-aws-kendra-frontend-service-list-access-control-configurations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1600,28 +1600,28 @@ export def "x-amz-target-aws-kendra-frontend-service-list-access-control-configu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  IndexId: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  index_id: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: record, AccessControlConfigurations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.ListAccessControlConfigurations" $qp)
-  let body = {IndexId: $IndexId, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"IndexId": $index_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1632,7 +1632,7 @@ export def "x-amz-target-aws-kendra-frontend-service-list-access-control-configu
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.ListDataSourceSyncJobs
 # operationId: ListDataSourceSyncJobs
-export def "x-amz-target-aws-kendra-frontend-service-list-data-source-sync-jobs ListDataSourceSyncJobs" [
+export def "x-amz-target-aws-kendra-frontend-service-list-data-source-sync-jobs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1641,31 +1641,31 @@ export def "x-amz-target-aws-kendra-frontend-service-list-data-source-sync-jobs 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  Id: any
-  IndexId: any
-  --NextToken: any
-  --MaxResults: any
-  --StartTimeFilter: any
-  --StatusFilter: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  id: any
+  index_id: any
+  --next-token: any
+  --max-results: any
+  --start-time-filter: any
+  --status-filter: any
 ]: any -> record<History: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.ListDataSourceSyncJobs" $qp)
-  let body = {Id: $Id, IndexId: $IndexId, NextToken: $NextToken, MaxResults: $MaxResults, StartTimeFilter: $StartTimeFilter, StatusFilter: $StatusFilter} | compact
+  let body = {"Id": $id, "IndexId": $index_id, "NextToken": $next_token, "MaxResults": $max_results, "StartTimeFilter": $start_time_filter, "StatusFilter": $status_filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1676,7 +1676,7 @@ export def "x-amz-target-aws-kendra-frontend-service-list-data-source-sync-jobs 
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.ListDataSources
 # operationId: ListDataSources
-export def "x-amz-target-aws-kendra-frontend-service-list-data-sources ListDataSources" [
+export def "x-amz-target-aws-kendra-frontend-service-list-data-sources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1685,28 +1685,28 @@ export def "x-amz-target-aws-kendra-frontend-service-list-data-sources ListDataS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  IndexId: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  index_id: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<SummaryItems: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.ListDataSources" $qp)
-  let body = {IndexId: $IndexId, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"IndexId": $index_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1717,7 +1717,7 @@ export def "x-amz-target-aws-kendra-frontend-service-list-data-sources ListDataS
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.ListEntityPersonas
 # operationId: ListEntityPersonas
-export def "x-amz-target-aws-kendra-frontend-service-list-entity-personas ListEntityPersonas" [
+export def "x-amz-target-aws-kendra-frontend-service-list-entity-personas list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1726,29 +1726,29 @@ export def "x-amz-target-aws-kendra-frontend-service-list-entity-personas ListEn
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  Id: any
-  IndexId: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  id: any
+  index_id: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<SummaryItems: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.ListEntityPersonas" $qp)
-  let body = {Id: $Id, IndexId: $IndexId, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Id": $id, "IndexId": $index_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1759,7 +1759,7 @@ export def "x-amz-target-aws-kendra-frontend-service-list-entity-personas ListEn
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.ListExperienceEntities
 # operationId: ListExperienceEntities
-export def "x-amz-target-aws-kendra-frontend-service-list-experience-entities ListExperienceEntities" [
+export def "x-amz-target-aws-kendra-frontend-service-list-experience-entities list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1768,27 +1768,27 @@ export def "x-amz-target-aws-kendra-frontend-service-list-experience-entities Li
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  Id: any
-  IndexId: any
-  --NextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  id: any
+  index_id: any
+  --next-token: any
 ]: any -> record<SummaryItems: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.ListExperienceEntities" $qp)
-  let body = {Id: $Id, IndexId: $IndexId, NextToken: $NextToken} | compact
+  let body = {"Id": $id, "IndexId": $index_id, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1799,7 +1799,7 @@ export def "x-amz-target-aws-kendra-frontend-service-list-experience-entities Li
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.ListExperiences
 # operationId: ListExperiences
-export def "x-amz-target-aws-kendra-frontend-service-list-experiences ListExperiences" [
+export def "x-amz-target-aws-kendra-frontend-service-list-experiences list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1808,28 +1808,28 @@ export def "x-amz-target-aws-kendra-frontend-service-list-experiences ListExperi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  IndexId: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  index_id: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<SummaryItems: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.ListExperiences" $qp)
-  let body = {IndexId: $IndexId, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"IndexId": $index_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1840,7 +1840,7 @@ export def "x-amz-target-aws-kendra-frontend-service-list-experiences ListExperi
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.ListFaqs
 # operationId: ListFaqs
-export def "x-amz-target-aws-kendra-frontend-service-list-faqs ListFaqs" [
+export def "x-amz-target-aws-kendra-frontend-service-list-faqs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1849,28 +1849,28 @@ export def "x-amz-target-aws-kendra-frontend-service-list-faqs ListFaqs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  IndexId: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  index_id: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: record, FaqSummaryItems: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.ListFaqs" $qp)
-  let body = {IndexId: $IndexId, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"IndexId": $index_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1881,7 +1881,7 @@ export def "x-amz-target-aws-kendra-frontend-service-list-faqs ListFaqs" [
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.ListFeaturedResultsSets
 # operationId: ListFeaturedResultsSets
-export def "x-amz-target-aws-kendra-frontend-service-list-featured-results-sets ListFeaturedResultsSets" [
+export def "x-amz-target-aws-kendra-frontend-service-list-featured-results-sets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1890,25 +1890,25 @@ export def "x-amz-target-aws-kendra-frontend-service-list-featured-results-sets 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  IndexId: any
-  --NextToken: any
-  --MaxResults: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  index_id: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<FeaturedResultsSetSummaryItems: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.ListFeaturedResultsSets")
-  let body = {IndexId: $IndexId, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"IndexId": $index_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1919,7 +1919,7 @@ export def "x-amz-target-aws-kendra-frontend-service-list-featured-results-sets 
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.ListGroupsOlderThanOrderingId
 # operationId: ListGroupsOlderThanOrderingId
-export def "x-amz-target-aws-kendra-frontend-service-list-groups-older-than-ordering-id ListGroupsOlderThanOrderingId" [
+export def "x-amz-target-aws-kendra-frontend-service-list-groups-older-than-ordering-id list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1928,30 +1928,30 @@ export def "x-amz-target-aws-kendra-frontend-service-list-groups-older-than-orde
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  IndexId: any
-  --DataSourceId: any
-  OrderingId: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  index_id: any
+  --data-source-id: any
+  ordering_id: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<GroupsSummaries: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.ListGroupsOlderThanOrderingId" $qp)
-  let body = {IndexId: $IndexId, DataSourceId: $DataSourceId, OrderingId: $OrderingId, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"IndexId": $index_id, "DataSourceId": $data_source_id, "OrderingId": $ordering_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1962,7 +1962,7 @@ export def "x-amz-target-aws-kendra-frontend-service-list-groups-older-than-orde
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.ListIndices
 # operationId: ListIndices
-export def "x-amz-target-aws-kendra-frontend-service-list-indices ListIndices" [
+export def "x-amz-target-aws-kendra-frontend-service-list-indices list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1971,27 +1971,27 @@ export def "x-amz-target-aws-kendra-frontend-service-list-indices ListIndices" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  --next-token: any
+  --max-results: any
 ]: any -> record<IndexConfigurationSummaryItems: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.ListIndices" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2002,7 +2002,7 @@ export def "x-amz-target-aws-kendra-frontend-service-list-indices ListIndices" [
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.ListQuerySuggestionsBlockLists
 # operationId: ListQuerySuggestionsBlockLists
-export def "x-amz-target-aws-kendra-frontend-service-list-query-suggestions-block-lists ListQuerySuggestionsBlockLists" [
+export def "x-amz-target-aws-kendra-frontend-service-list-query-suggestions-block-lists list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2011,28 +2011,28 @@ export def "x-amz-target-aws-kendra-frontend-service-list-query-suggestions-bloc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
-  IndexId: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
+  index_id: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<BlockListSummaryItems: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.ListQuerySuggestionsBlockLists" $qp)
-  let body = {IndexId: $IndexId, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"IndexId": $index_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2043,7 +2043,7 @@ export def "x-amz-target-aws-kendra-frontend-service-list-query-suggestions-bloc
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-aws-kendra-frontend-service-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-aws-kendra-frontend-service-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2052,23 +2052,23 @@ export def "x-amz-target-aws-kendra-frontend-service-list-tags-for-resource List
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
-  ResourceARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
+  resource_arn: any
 ]: any -> record<Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.ListTagsForResource")
-  let body = {ResourceARN: $ResourceARN} | compact
+  let body = {"ResourceARN": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2079,7 +2079,7 @@ export def "x-amz-target-aws-kendra-frontend-service-list-tags-for-resource List
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.ListThesauri
 # operationId: ListThesauri
-export def "x-amz-target-aws-kendra-frontend-service-list-thesauri ListThesauri" [
+export def "x-amz-target-aws-kendra-frontend-service-list-thesauri list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2088,28 +2088,28 @@ export def "x-amz-target-aws-kendra-frontend-service-list-thesauri ListThesauri"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-49
-  IndexId: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-49
+  index_id: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: record, ThesaurusSummaryItems: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.ListThesauri" $qp)
-  let body = {IndexId: $IndexId, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"IndexId": $index_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2120,7 +2120,7 @@ export def "x-amz-target-aws-kendra-frontend-service-list-thesauri ListThesauri"
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.PutPrincipalMapping
 # operationId: PutPrincipalMapping
-export def "x-amz-target-aws-kendra-frontend-service-put-principal-mapping PutPrincipalMapping" [
+export def "x-amz-target-aws-kendra-frontend-service-put-principal-mapping update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2129,28 +2129,28 @@ export def "x-amz-target-aws-kendra-frontend-service-put-principal-mapping PutPr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-50
-  IndexId: any
-  --DataSourceId: any
-  GroupId: any
-  GroupMembers: any
-  --OrderingId: any
-  --RoleArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-50
+  index_id: any
+  --data-source-id: any
+  group_id: any
+  group_members: any
+  --ordering-id: any
+  --role-arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.PutPrincipalMapping")
-  let body = {IndexId: $IndexId, DataSourceId: $DataSourceId, GroupId: $GroupId, GroupMembers: $GroupMembers, OrderingId: $OrderingId, RoleArn: $RoleArn} | compact
+  let body = {"IndexId": $index_id, "DataSourceId": $data_source_id, "GroupId": $group_id, "GroupMembers": $group_members, "OrderingId": $ordering_id, "RoleArn": $role_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2161,7 +2161,7 @@ export def "x-amz-target-aws-kendra-frontend-service-put-principal-mapping PutPr
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.Query
 # operationId: Query
-export def "x-amz-target-aws-kendra-frontend-service-query Query" [
+export def "x-amz-target-aws-kendra-frontend-service-query list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2170,35 +2170,35 @@ export def "x-amz-target-aws-kendra-frontend-service-query Query" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-51
-  IndexId: any
-  --QueryText: any
-  --AttributeFilter: any
-  --Facets: any
-  --RequestedDocumentAttributes: any
-  --QueryResultTypeFilter: any
-  --DocumentRelevanceOverrideConfigurations: any
-  --PageNumber: any
-  --PageSize: any
-  --SortingConfiguration: any
-  --UserContext: any
-  --VisitorId: any
-  --SpellCorrectionConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-51
+  index_id: any
+  --query-text: any
+  --attribute-filter: any
+  --facets: any
+  --requested-document-attributes: any
+  --query-result-type-filter: any
+  --document-relevance-override-configurations: any
+  --page-number: any
+  --page-size: any
+  --sorting-configuration: any
+  --user-context: any
+  --visitor-id: any
+  --spell-correction-configuration: any
 ]: any -> record<QueryId: record, ResultItems: record, FacetResults: record, TotalNumberOfResults: record, Warnings: record, SpellCorrectedQueries: record, FeaturedResultsItems: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.Query")
-  let body = {IndexId: $IndexId, QueryText: $QueryText, AttributeFilter: $AttributeFilter, Facets: $Facets, RequestedDocumentAttributes: $RequestedDocumentAttributes, QueryResultTypeFilter: $QueryResultTypeFilter, DocumentRelevanceOverrideConfigurations: $DocumentRelevanceOverrideConfigurations, PageNumber: $PageNumber, PageSize: $PageSize, SortingConfiguration: $SortingConfiguration, UserContext: $UserContext, VisitorId: $VisitorId, SpellCorrectionConfiguration: $SpellCorrectionConfiguration} | compact
+  let body = {"IndexId": $index_id, "QueryText": $query_text, "AttributeFilter": $attribute_filter, "Facets": $facets, "RequestedDocumentAttributes": $requested_document_attributes, "QueryResultTypeFilter": $query_result_type_filter, "DocumentRelevanceOverrideConfigurations": $document_relevance_override_configurations, "PageNumber": $page_number, "PageSize": $page_size, "SortingConfiguration": $sorting_configuration, "UserContext": $user_context, "VisitorId": $visitor_id, "SpellCorrectionConfiguration": $spell_correction_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2209,7 +2209,7 @@ export def "x-amz-target-aws-kendra-frontend-service-query Query" [
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.StartDataSourceSyncJob
 # operationId: StartDataSourceSyncJob
-export def "x-amz-target-aws-kendra-frontend-service-start-data-source-sync-job StartDataSourceSyncJob" [
+export def "x-amz-target-aws-kendra-frontend-service-start-data-source-sync-job start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2218,24 +2218,24 @@ export def "x-amz-target-aws-kendra-frontend-service-start-data-source-sync-job 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-52
-  Id: any
-  IndexId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-52
+  id: any
+  index_id: any
 ]: any -> record<ExecutionId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.StartDataSourceSyncJob")
-  let body = {Id: $Id, IndexId: $IndexId} | compact
+  let body = {"Id": $id, "IndexId": $index_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2246,7 +2246,7 @@ export def "x-amz-target-aws-kendra-frontend-service-start-data-source-sync-job 
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.StopDataSourceSyncJob
 # operationId: StopDataSourceSyncJob
-export def "x-amz-target-aws-kendra-frontend-service-stop-data-source-sync-job StopDataSourceSyncJob" [
+export def "x-amz-target-aws-kendra-frontend-service-stop-data-source-sync-job stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2255,24 +2255,24 @@ export def "x-amz-target-aws-kendra-frontend-service-stop-data-source-sync-job S
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-53
-  Id: any
-  IndexId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-53
+  id: any
+  index_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.StopDataSourceSyncJob")
-  let body = {Id: $Id, IndexId: $IndexId} | compact
+  let body = {"Id": $id, "IndexId": $index_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2283,7 +2283,7 @@ export def "x-amz-target-aws-kendra-frontend-service-stop-data-source-sync-job S
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.SubmitFeedback
 # operationId: SubmitFeedback
-export def "x-amz-target-aws-kendra-frontend-service-submit-feedback SubmitFeedback" [
+export def "x-amz-target-aws-kendra-frontend-service-submit-feedback submit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2292,26 +2292,26 @@ export def "x-amz-target-aws-kendra-frontend-service-submit-feedback SubmitFeedb
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-54
-  IndexId: any
-  QueryId: any
-  --ClickFeedbackItems: any
-  --RelevanceFeedbackItems: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-54
+  index_id: any
+  query_id: any
+  --click-feedback-items: any
+  --relevance-feedback-items: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.SubmitFeedback")
-  let body = {IndexId: $IndexId, QueryId: $QueryId, ClickFeedbackItems: $ClickFeedbackItems, RelevanceFeedbackItems: $RelevanceFeedbackItems} | compact
+  let body = {"IndexId": $index_id, "QueryId": $query_id, "ClickFeedbackItems": $click_feedback_items, "RelevanceFeedbackItems": $relevance_feedback_items} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2322,7 +2322,7 @@ export def "x-amz-target-aws-kendra-frontend-service-submit-feedback SubmitFeedb
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.TagResource
 # operationId: TagResource
-export def "x-amz-target-aws-kendra-frontend-service-tag-resource TagResource" [
+export def "x-amz-target-aws-kendra-frontend-service-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2331,24 +2331,24 @@ export def "x-amz-target-aws-kendra-frontend-service-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-55
-  ResourceARN: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-55
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.TagResource")
-  let body = {ResourceARN: $ResourceARN, Tags: $Tags} | compact
+  let body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2359,7 +2359,7 @@ export def "x-amz-target-aws-kendra-frontend-service-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-aws-kendra-frontend-service-untag-resource UntagResource" [
+export def "x-amz-target-aws-kendra-frontend-service-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2368,24 +2368,24 @@ export def "x-amz-target-aws-kendra-frontend-service-untag-resource UntagResourc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-56
-  ResourceARN: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-56
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.UntagResource")
-  let body = {ResourceARN: $ResourceARN, TagKeys: $TagKeys} | compact
+  let body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2396,7 +2396,7 @@ export def "x-amz-target-aws-kendra-frontend-service-untag-resource UntagResourc
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.UpdateAccessControlConfiguration
 # operationId: UpdateAccessControlConfiguration
-export def "x-amz-target-aws-kendra-frontend-service-update-access-control-configuration UpdateAccessControlConfiguration" [
+export def "x-amz-target-aws-kendra-frontend-service-update-access-control-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2405,28 +2405,28 @@ export def "x-amz-target-aws-kendra-frontend-service-update-access-control-confi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-57
-  IndexId: any
-  Id: any
-  --Name: any
-  --Description: any
-  --AccessControlList: any
-  --HierarchicalAccessControlList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-57
+  index_id: any
+  id: any
+  --name: any
+  --description: any
+  --access-control-list: any
+  --hierarchical-access-control-list: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.UpdateAccessControlConfiguration")
-  let body = {IndexId: $IndexId, Id: $Id, Name: $Name, Description: $Description, AccessControlList: $AccessControlList, HierarchicalAccessControlList: $HierarchicalAccessControlList} | compact
+  let body = {"IndexId": $index_id, "Id": $id, "Name": $name, "Description": $description, "AccessControlList": $access_control_list, "HierarchicalAccessControlList": $hierarchical_access_control_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2437,7 +2437,7 @@ export def "x-amz-target-aws-kendra-frontend-service-update-access-control-confi
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.UpdateDataSource
 # operationId: UpdateDataSource
-export def "x-amz-target-aws-kendra-frontend-service-update-data-source UpdateDataSource" [
+export def "x-amz-target-aws-kendra-frontend-service-update-data-source update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2446,32 +2446,32 @@ export def "x-amz-target-aws-kendra-frontend-service-update-data-source UpdateDa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-58
-  Id: any
-  --Name: any
-  IndexId: any
-  --Configuration: any
-  --VpcConfiguration: any
-  --Description: any
-  --Schedule: any
-  --RoleArn: any
-  --LanguageCode: any
-  --CustomDocumentEnrichmentConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-58
+  id: any
+  --name: any
+  index_id: any
+  --configuration: any
+  --vpc-configuration: any
+  --description: any
+  --schedule: any
+  --role-arn: any
+  --language-code: any
+  --custom-document-enrichment-configuration: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.UpdateDataSource")
-  let body = {Id: $Id, Name: $Name, IndexId: $IndexId, Configuration: $Configuration, VpcConfiguration: $VpcConfiguration, Description: $Description, Schedule: $Schedule, RoleArn: $RoleArn, LanguageCode: $LanguageCode, CustomDocumentEnrichmentConfiguration: $CustomDocumentEnrichmentConfiguration} | compact
+  let body = {"Id": $id, "Name": $name, "IndexId": $index_id, "Configuration": $configuration, "VpcConfiguration": $vpc_configuration, "Description": $description, "Schedule": $schedule, "RoleArn": $role_arn, "LanguageCode": $language_code, "CustomDocumentEnrichmentConfiguration": $custom_document_enrichment_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2482,7 +2482,7 @@ export def "x-amz-target-aws-kendra-frontend-service-update-data-source UpdateDa
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.UpdateExperience
 # operationId: UpdateExperience
-export def "x-amz-target-aws-kendra-frontend-service-update-experience UpdateExperience" [
+export def "x-amz-target-aws-kendra-frontend-service-update-experience update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2491,28 +2491,28 @@ export def "x-amz-target-aws-kendra-frontend-service-update-experience UpdateExp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-59
-  Id: any
-  --Name: any
-  IndexId: any
-  --RoleArn: any
-  --Configuration: any
-  --Description: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-59
+  id: any
+  --name: any
+  index_id: any
+  --role-arn: any
+  --configuration: any
+  --description: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.UpdateExperience")
-  let body = {Id: $Id, Name: $Name, IndexId: $IndexId, RoleArn: $RoleArn, Configuration: $Configuration, Description: $Description} | compact
+  let body = {"Id": $id, "Name": $name, "IndexId": $index_id, "RoleArn": $role_arn, "Configuration": $configuration, "Description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2523,7 +2523,7 @@ export def "x-amz-target-aws-kendra-frontend-service-update-experience UpdateExp
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.UpdateFeaturedResultsSet
 # operationId: UpdateFeaturedResultsSet
-export def "x-amz-target-aws-kendra-frontend-service-update-featured-results-set UpdateFeaturedResultsSet" [
+export def "x-amz-target-aws-kendra-frontend-service-update-featured-results-set update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2532,29 +2532,29 @@ export def "x-amz-target-aws-kendra-frontend-service-update-featured-results-set
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-60
-  IndexId: any
-  FeaturedResultsSetId: any
-  --FeaturedResultsSetName: any
-  --Description: any
-  --Status: any
-  --QueryTexts: any
-  --FeaturedDocuments: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-60
+  index_id: any
+  featured_results_set_id: any
+  --featured-results-set-name: any
+  --description: any
+  --status: any
+  --query-texts: any
+  --featured-documents: any
 ]: any -> record<FeaturedResultsSet: record<FeaturedResultsSetId: record, FeaturedResultsSetName: record, Description: record, Status: record, QueryTexts: record, FeaturedDocuments: record, LastUpdatedTimestamp: record, CreationTimestamp: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.UpdateFeaturedResultsSet")
-  let body = {IndexId: $IndexId, FeaturedResultsSetId: $FeaturedResultsSetId, FeaturedResultsSetName: $FeaturedResultsSetName, Description: $Description, Status: $Status, QueryTexts: $QueryTexts, FeaturedDocuments: $FeaturedDocuments} | compact
+  let body = {"IndexId": $index_id, "FeaturedResultsSetId": $featured_results_set_id, "FeaturedResultsSetName": $featured_results_set_name, "Description": $description, "Status": $status, "QueryTexts": $query_texts, "FeaturedDocuments": $featured_documents} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2565,7 +2565,7 @@ export def "x-amz-target-aws-kendra-frontend-service-update-featured-results-set
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.UpdateIndex
 # operationId: UpdateIndex
-export def "x-amz-target-aws-kendra-frontend-service-update-index UpdateIndex" [
+export def "x-amz-target-aws-kendra-frontend-service-update-index update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2574,31 +2574,31 @@ export def "x-amz-target-aws-kendra-frontend-service-update-index UpdateIndex" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-61
-  Id: any
-  --Name: any
-  --RoleArn: any
-  --Description: any
-  --DocumentMetadataConfigurationUpdates: any
-  --CapacityUnits: any
-  --UserTokenConfigurations: any
-  --UserContextPolicy: any
-  --UserGroupResolutionConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-61
+  id: any
+  --name: any
+  --role-arn: any
+  --description: any
+  --document-metadata-configuration-updates: any
+  --capacity-units: any
+  --user-token-configurations: any
+  --user-context-policy: any
+  --user-group-resolution-configuration: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.UpdateIndex")
-  let body = {Id: $Id, Name: $Name, RoleArn: $RoleArn, Description: $Description, DocumentMetadataConfigurationUpdates: $DocumentMetadataConfigurationUpdates, CapacityUnits: $CapacityUnits, UserTokenConfigurations: $UserTokenConfigurations, UserContextPolicy: $UserContextPolicy, UserGroupResolutionConfiguration: $UserGroupResolutionConfiguration} | compact
+  let body = {"Id": $id, "Name": $name, "RoleArn": $role_arn, "Description": $description, "DocumentMetadataConfigurationUpdates": $document_metadata_configuration_updates, "CapacityUnits": $capacity_units, "UserTokenConfigurations": $user_token_configurations, "UserContextPolicy": $user_context_policy, "UserGroupResolutionConfiguration": $user_group_resolution_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2609,7 +2609,7 @@ export def "x-amz-target-aws-kendra-frontend-service-update-index UpdateIndex" [
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.UpdateQuerySuggestionsBlockList
 # operationId: UpdateQuerySuggestionsBlockList
-export def "x-amz-target-aws-kendra-frontend-service-update-query-suggestions-block-list UpdateQuerySuggestionsBlockList" [
+export def "x-amz-target-aws-kendra-frontend-service-update-query-suggestions-block-list update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2618,28 +2618,28 @@ export def "x-amz-target-aws-kendra-frontend-service-update-query-suggestions-bl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-62
-  IndexId: any
-  Id: any
-  --Name: any
-  --Description: any
-  --SourceS3Path: any
-  --RoleArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-62
+  index_id: any
+  id: any
+  --name: any
+  --description: any
+  --source-s3-path: any
+  --role-arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.UpdateQuerySuggestionsBlockList")
-  let body = {IndexId: $IndexId, Id: $Id, Name: $Name, Description: $Description, SourceS3Path: $SourceS3Path, RoleArn: $RoleArn} | compact
+  let body = {"IndexId": $index_id, "Id": $id, "Name": $name, "Description": $description, "SourceS3Path": $source_s3_path, "RoleArn": $role_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2650,7 +2650,7 @@ export def "x-amz-target-aws-kendra-frontend-service-update-query-suggestions-bl
 #
 # POST /#X-Amz-Target=AWSKendraFrontendService.UpdateQuerySuggestionsConfig
 # operationId: UpdateQuerySuggestionsConfig
-export def "x-amz-target-aws-kendra-frontend-service-update-query-suggestions-config UpdateQuerySuggestionsConfig" [
+export def "x-amz-target-aws-kendra-frontend-service-update-query-suggestions-config update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2659,28 +2659,28 @@ export def "x-amz-target-aws-kendra-frontend-service-update-query-suggestions-co
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-63
-  IndexId: any
-  --Mode: any
-  --QueryLogLookBackWindowInDays: any
-  --IncludeQueriesWithoutUserInformation: any
-  --MinimumNumberOfQueryingUsers: any
-  --MinimumQueryCount: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-63
+  index_id: any
+  --mode: any
+  --query-log-look-back-window-in-days: any
+  --include-queries-without-user-information: any
+  --minimum-number-of-querying-users: any
+  --minimum-query-count: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.UpdateQuerySuggestionsConfig")
-  let body = {IndexId: $IndexId, Mode: $Mode, QueryLogLookBackWindowInDays: $QueryLogLookBackWindowInDays, IncludeQueriesWithoutUserInformation: $IncludeQueriesWithoutUserInformation, MinimumNumberOfQueryingUsers: $MinimumNumberOfQueryingUsers, MinimumQueryCount: $MinimumQueryCount} | compact
+  let body = {"IndexId": $index_id, "Mode": $mode, "QueryLogLookBackWindowInDays": $query_log_look_back_window_in_days, "IncludeQueriesWithoutUserInformation": $include_queries_without_user_information, "MinimumNumberOfQueryingUsers": $minimum_number_of_querying_users, "MinimumQueryCount": $minimum_query_count} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2692,7 +2692,7 @@ export def "x-amz-target-aws-kendra-frontend-service-update-query-suggestions-co
 # POST /#X-Amz-Target=AWSKendraFrontendService.UpdateThesaurus
 # operationId: UpdateThesaurus
 # --SourceS3Path shape: {Bucket: any, Key: any}
-export def "x-amz-target-aws-kendra-frontend-service-update-thesaurus UpdateThesaurus" [
+export def "x-amz-target-aws-kendra-frontend-service-update-thesaurus update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2701,28 +2701,28 @@ export def "x-amz-target-aws-kendra-frontend-service-update-thesaurus UpdateThes
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-64
-  Id: any
-  --Name: any
-  IndexId: any
-  --Description: any
-  --RoleArn: any
-  --SourceS3Path: record # Information required to find a specific file in an Amazon S3 bucket. — shape: {Bucket: any, Key: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-64
+  id: any
+  --name: any
+  index_id: any
+  --description: any
+  --role-arn: any
+  --source-s3-path: record # Information required to find a specific file in an Amazon S3 bucket. — shape: {Bucket: any, Key: any}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSKendraFrontendService.UpdateThesaurus")
-  let body = {Id: $Id, Name: $Name, IndexId: $IndexId, Description: $Description, RoleArn: $RoleArn, SourceS3Path: $SourceS3Path} | compact
+  let body = {"Id": $id, "Name": $name, "IndexId": $index_id, "Description": $description, "RoleArn": $role_arn, "SourceS3Path": $source_s3_path} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

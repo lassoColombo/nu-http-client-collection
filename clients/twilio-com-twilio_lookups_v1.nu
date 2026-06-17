@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "phone-numbers FetchPhoneNumber" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "phone-numbers get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,8 +92,8 @@ export def commands []: nothing -> table {
 # GET /v1/PhoneNumbers/{PhoneNumber}
 #
 # operationId: FetchPhoneNumber
-export def "phone-numbers FetchPhoneNumber" [
-  PhoneNumber: string
+export def "phone-numbers get" [
+  phone_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,15 +102,15 @@ export def "phone-numbers FetchPhoneNumber" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CountryCode: string # The [ISO country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) of the phone number to fetch. This is used to specify the country when the phone number is provided in a national format.
-  --Type: list # The type of information to return. Can be: `carrier` or `caller-name`. The default is null.  Carrier information costs $0.005 per phone number looked up.  Caller Name information is currently available only in the US and costs $0.01 per phone number looked up.  To retrieve both types on information, specify this parameter twice; once with `carrier` and once with `caller-name` as the value.
-  --AddOns: list # The `unique_name` of an Add-on you would like to invoke. Can be the `unique_name` of an Add-on that is installed on your account. You can specify multiple instances of this parameter to invoke multiple Add-ons. For more information about  Add-ons, see the [Add-ons documentation](https://www.twilio.com/docs/add-ons).
-  --AddOnsData: record # Data specific to the add-on you would like to invoke. The content and format of this value depends on the add-on. (format: prefixed-collapsible-map-AddOns)
+  --country-code: string # The [ISO country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) of the phone number to fetch. This is used to specify the country when the phone number is provided in a national format.
+  --type: list # The type of information to return. Can be: `carrier` or `caller-name`. The default is null.  Carrier information costs $0.005 per phone number looked up.  Caller Name information is currently available only in the US and costs $0.01 per phone number looked up.  To retrieve both types on information, specify this parameter twice; once with `carrier` and once with `caller-name` as the value.
+  --add-ons: list # The `unique_name` of an Add-on you would like to invoke. Can be the `unique_name` of an Add-on that is installed on your account. You can specify multiple instances of this parameter to invoke multiple Add-ons. For more information about  Add-ons, see the [Add-ons documentation](https://www.twilio.com/docs/add-ons).
+  --add-ons-data: record # Data specific to the add-on you would like to invoke. The content and format of this value depends on the add-on. (format: prefixed-collapsible-map-AddOns)
 ]: nothing -> record<add_ons: any, caller_name: any, carrier: any, country_code: string, national_format: string, phone_number: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://lookups.twilio.com")
-  let qp = [(serialize-qp "CountryCode" $CountryCode "scalar") (serialize-qp "Type" $Type "multi") (serialize-qp "AddOns" $AddOns "multi") (serialize-qp "AddOnsData" $AddOnsData "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/PhoneNumbers/($PhoneNumber)" $qp)
+  let qp = [(serialize-qp "CountryCode" $country_code "scalar") (serialize-qp "Type" $type "multi") (serialize-qp "AddOns" $add_ons "multi") (serialize-qp "AddOnsData" $add_ons_data "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({phone_number: $phone_number} | format pattern "/v1/PhoneNumbers/{phone_number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

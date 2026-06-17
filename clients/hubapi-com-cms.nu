@@ -72,7 +72,7 @@ def auth-scheme-completer [] { ["query-hapikey" "bearer" "private-app" "private-
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cms-domains list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cms-domains get-page" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /cms/v3/domains/
 # operationId: get-/cms/v3/domains/_getPage
-export def "cms-domains list" [
+export def "cms-domains get-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,12 +105,12 @@ export def "cms-domains list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --createdAt: string # Only return domains created at this date. (format: date-time)
-  --createdAfter: string # Only return domains created after this date. (format: date-time)
-  --createdBefore: string # Only return domains created before this date. (format: date-time)
-  --updatedAt: string # Only return domains updated at this date. (format: date-time)
-  --updatedAfter: string # Only return domains updated after this date. (format: date-time)
-  --updatedBefore: string # Only return domains updated before this date. (format: date-time)
+  --created-at: string # Only return domains created at this date. (format: date-time)
+  --created-after: string # Only return domains created after this date. (format: date-time)
+  --created-before: string # Only return domains created before this date. (format: date-time)
+  --updated-at: string # Only return domains updated at this date. (format: date-time)
+  --updated-after: string # Only return domains updated after this date. (format: date-time)
+  --updated-before: string # Only return domains updated before this date. (format: date-time)
   --qp-sort: list
   --after: string # The paging cursor token of the last successfully read resource will be returned as the `paging.next.after` JSON property of a paged response containing more results.
   --limit: int # Maximum number of results per page. (format: int32)
@@ -118,7 +118,7 @@ export def "cms-domains list" [
 ]: nothing -> record<paging: record<next: record<after: string, link: string>>, results: table<correctCname: string, created: string, domain: string, id: string, isResolving: bool, isSslEnabled: bool, isSslOnly: bool, isUsedForBlogPost: bool, isUsedForEmail: bool, isUsedForKnowledge: bool, isUsedForLandingPage: bool, isUsedForSitePage: bool, manuallyMarkedAsResolving: bool, primaryBlogPost: bool, primaryEmail: bool, primaryKnowledge: bool, primaryLandingPage: bool, primarySitePage: bool, secondaryToDomain: string, updated: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "createdAt" $createdAt "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar") (serialize-qp "updatedAt" $updatedAt "scalar") (serialize-qp "updatedAfter" $updatedAfter "scalar") (serialize-qp "updatedBefore" $updatedBefore "scalar") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "after" $after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "archived" $archived "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "createdAt" $created_at "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "updatedAt" $updated_at "scalar") (serialize-qp "updatedAfter" $updated_after "scalar") (serialize-qp "updatedBefore" $updated_before "scalar") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "after" $after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "archived" $archived "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cms/v3/domains/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -129,8 +129,8 @@ export def "cms-domains list" [
 #
 # GET /cms/v3/domains/{domainId}
 # operationId: get-/cms/v3/domains/{domainId}_getById
-export def "cms-domains get" [
-  domainId: string
+export def "cms-domains get-by" [
+  domain_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,7 +142,7 @@ export def "cms-domains get" [
 ]: nothing -> record<correctCname: string, created: string, domain: string, id: string, isResolving: bool, isSslEnabled: bool, isSslOnly: bool, isUsedForBlogPost: bool, isUsedForEmail: bool, isUsedForKnowledge: bool, isUsedForLandingPage: bool, isUsedForSitePage: bool, manuallyMarkedAsResolving: bool, primaryBlogPost: bool, primaryEmail: bool, primaryKnowledge: bool, primaryLandingPage: bool, primarySitePage: bool, secondaryToDomain: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/cms/v3/domains/($domainId)")
+  let full_url = (build-url $base ({domain_id: $domain_id} | format pattern "/cms/v3/domains/{domain_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

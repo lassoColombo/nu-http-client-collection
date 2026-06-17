@@ -71,7 +71,7 @@ def status-completer [] { ["CANCELED" "FAILED" "IN_PROGRESS" "QUEUED" "REJECTED"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "things-jobs DescribeJobExecution" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "things-jobs get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,9 +95,9 @@ export def commands []: nothing -> table {
 #
 # GET /things/{thingName}/jobs/{jobId}
 # operationId: DescribeJobExecution
-export def "things-jobs DescribeJobExecution" [
-  jobId: string
-  thingName: string
+export def "things-jobs get" [
+  thing_name: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,21 +106,21 @@ export def "things-jobs DescribeJobExecution" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --includeJobDocument: oneof<nothing, bool> # Optional. When set to true, the response contains the job document. The default is false.
-  --executionNumber: int # Optional. A number that identifies a particular job execution on a particular device. If not specified, the latest job execution is returned.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --include-job-document: oneof<nothing, bool> # Optional. When set to true, the response contains the job document. The default is false.
+  --execution-number: int # Optional. A number that identifies a particular job execution on a particular device. If not specified, the latest job execution is returned.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<execution: record<jobId: record, thingName: record, status: record, statusDetails: record, queuedAt: record, startedAt: record, lastUpdatedAt: record, approximateSecondsBeforeTimedOut: record, versionNumber: record, executionNumber: record, jobDocument: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includeJobDocument" $includeJobDocument "scalar") (serialize-qp "executionNumber" $executionNumber "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/things/($thingName)/jobs/($jobId)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "includeJobDocument" $include_job_document "scalar") (serialize-qp "executionNumber" $execution_number "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({thing_name: $thing_name, job_id: $job_id} | format pattern "/things/{thing_name}/jobs/{job_id}") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -131,9 +131,9 @@ export def "things-jobs DescribeJobExecution" [
 #
 # POST /things/{thingName}/jobs/{jobId}
 # operationId: UpdateJobExecution
-export def "things-jobs UpdateJobExecution" [
-  jobId: string
-  thingName: string
+export def "things-jobs update-job-execution" [
+  thing_name: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,28 +142,28 @@ export def "things-jobs UpdateJobExecution" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   status: string@status-completer # The new status for the job execution (IN_PROGRESS, FAILED, SUCCESS, or REJECTED). This must be specified on every update.
-  --statusDetails: record #  Optional. A collection of name/value pairs that describe the status of the job execution. If not specified, the statusDetails are unchanged.
-  --stepTimeoutInMinutes: int # Specifies the amount of time this device has to finish execution of this job. If the job execution status is not set to a terminal state before this timer expires, or before the timer is reset (by again calling <code>UpdateJobExecution</code>, setting the status to <code>IN_PROGRESS</code> and specifying a new timeout value in this field) the job execution status will be automatically set to <code>TIMED_OUT</code>. Note that setting or resetting this timeout has no effect on that job execution timeout which may have been specified when the job was created (<code>CreateJob</code> using field <code>timeoutConfig</code>).
-  --expectedVersion: int # Optional. The expected current version of the job execution. Each time you update the job execution, its version is incremented. If the version of the job execution stored in Jobs does not match, the update is rejected with a VersionMismatch error, and an ErrorResponse that contains the current job execution status data is returned. (This makes it unnecessary to perform a separate DescribeJobExecution request in order to obtain the job execution status data.)
-  --includeJobExecutionState: oneof<nothing, bool> # Optional. When included and set to true, the response contains the JobExecutionState data. The default is false.
-  --includeJobDocument: oneof<nothing, bool> # Optional. When set to true, the response contains the job document. The default is false.
-  --executionNumber: int # Optional. A number that identifies a particular job execution on a particular device.
+  --status-details: record #  Optional. A collection of name/value pairs that describe the status of the job execution. If not specified, the statusDetails are unchanged.
+  --step-timeout-in-minutes: int # Specifies the amount of time this device has to finish execution of this job. If the job execution status is not set to a terminal state before this timer expires, or before the timer is reset (by again calling <code>UpdateJobExecution</code>, setting the status to <code>IN_PROGRESS</code> and specifying a new timeout value in this field) the job execution status will be automatically set to <code>TIMED_OUT</code>. Note that setting or resetting this timeout has no effect on that job execution timeout which may have been specified when the job was created (<code>CreateJob</code> using field <code>timeoutConfig</code>).
+  --expected-version: int # Optional. The expected current version of the job execution. Each time you update the job execution, its version is incremented. If the version of the job execution stored in Jobs does not match, the update is rejected with a VersionMismatch error, and an ErrorResponse that contains the current job execution status data is returned. (This makes it unnecessary to perform a separate DescribeJobExecution request in order to obtain the job execution status data.)
+  --include-job-execution-state: oneof<nothing, bool> # Optional. When included and set to true, the response contains the JobExecutionState data. The default is false.
+  --include-job-document: oneof<nothing, bool> # Optional. When set to true, the response contains the job document. The default is false.
+  --execution-number: int # Optional. A number that identifies a particular job execution on a particular device.
 ]: any -> record<executionState: record<status: record, statusDetails: record, versionNumber: record>, jobDocument: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/things/($thingName)/jobs/($jobId)")
-  let body = {status: $status, statusDetails: $statusDetails, stepTimeoutInMinutes: $stepTimeoutInMinutes, expectedVersion: $expectedVersion, includeJobExecutionState: $includeJobExecutionState, includeJobDocument: $includeJobDocument, executionNumber: $executionNumber} | compact
+  let full_url = (build-url $base ({thing_name: $thing_name, job_id: $job_id} | format pattern "/things/{thing_name}/jobs/{job_id}"))
+  let body = {"status": $status, "statusDetails": $status_details, "stepTimeoutInMinutes": $step_timeout_in_minutes, "expectedVersion": $expected_version, "includeJobExecutionState": $include_job_execution_state, "includeJobDocument": $include_job_document, "executionNumber": $execution_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -174,8 +174,8 @@ export def "things-jobs UpdateJobExecution" [
 #
 # GET /things/{thingName}/jobs
 # operationId: GetPendingJobExecutions
-export def "things-jobs GetPendingJobExecutions" [
-  thingName: string
+export def "things-jobs get-pending-job-executions" [
+  thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,18 +184,18 @@ export def "things-jobs GetPendingJobExecutions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<inProgressJobs: record, queuedJobs: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/things/($thingName)/jobs")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({thing_name: $thing_name} | format pattern "/things/{thing_name}/jobs"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -206,8 +206,8 @@ export def "things-jobs GetPendingJobExecutions" [
 #
 # PUT /things/{thingName}/jobs/$next
 # operationId: StartNextPendingJobExecution
-export def "things-jobs-next StartNextPendingJobExecution" [
-  thingName: string
+export def "things-jobs-next start-next-pending-job-execution" [
+  thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,23 +216,23 @@ export def "things-jobs-next StartNextPendingJobExecution" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --statusDetails: record # A collection of name/value pairs that describe the status of the job execution. If not specified, the statusDetails are unchanged.
-  --stepTimeoutInMinutes: int # Specifies the amount of time this device has to finish execution of this job. If the job execution status is not set to a terminal state before this timer expires, or before the timer is reset (by calling <code>UpdateJobExecution</code>, setting the status to <code>IN_PROGRESS</code> and specifying a new timeout value in field <code>stepTimeoutInMinutes</code>) the job execution status will be automatically set to <code>TIMED_OUT</code>. Note that setting this timeout has no effect on that job execution timeout which may have been specified when the job was created (<code>CreateJob</code> using field <code>timeoutConfig</code>).
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --status-details: record # A collection of name/value pairs that describe the status of the job execution. If not specified, the statusDetails are unchanged.
+  --step-timeout-in-minutes: int # Specifies the amount of time this device has to finish execution of this job. If the job execution status is not set to a terminal state before this timer expires, or before the timer is reset (by calling <code>UpdateJobExecution</code>, setting the status to <code>IN_PROGRESS</code> and specifying a new timeout value in field <code>stepTimeoutInMinutes</code>) the job execution status will be automatically set to <code>TIMED_OUT</code>. Note that setting this timeout has no effect on that job execution timeout which may have been specified when the job was created (<code>CreateJob</code> using field <code>timeoutConfig</code>).
 ]: any -> record<execution: record<jobId: record, thingName: record, status: record, statusDetails: record, queuedAt: record, startedAt: record, lastUpdatedAt: record, approximateSecondsBeforeTimedOut: record, versionNumber: record, executionNumber: record, jobDocument: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/things/($thingName)/jobs/$next")
-  let body = {statusDetails: $statusDetails, stepTimeoutInMinutes: $stepTimeoutInMinutes} | compact
+  let full_url = (build-url $base ({thing_name: $thing_name} | format pattern "/things/{thing_name}/jobs/$next"))
+  let body = {"statusDetails": $status_details, "stepTimeoutInMinutes": $step_timeout_in_minutes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -103,12 +103,12 @@ export def "district-events get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<address: string, city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, division_keys: list<string>, end_date: string, event_code: string, event_type: int, event_type_string: string, first_event_code: string, first_event_id: string, gmaps_place_id: string, gmaps_url: string, key: string, lat: float, lng: float, location_name: string, name: string, parent_event_key: string, playoff_type: int, playoff_type_string: string, postal_code: string, short_name: string, start_date: string, state_prov: string, timezone: string, webcasts: list<record>, website: string, week: int, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/district/($district_key)/events")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({district_key: $district_key} | format pattern "/district/{district_key}/events"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -129,12 +129,12 @@ export def "district-events-keys get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/district/($district_key)/events/keys")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({district_key: $district_key} | format pattern "/district/{district_key}/events/keys"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -155,12 +155,12 @@ export def "district-events-simple get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, end_date: string, event_code: string, event_type: int, key: string, name: string, start_date: string, state_prov: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/district/($district_key)/events/simple")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({district_key: $district_key} | format pattern "/district/{district_key}/events/simple"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -181,12 +181,12 @@ export def "district-rankings get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<event_points: list<record>, point_total: int, rank: int, rookie_bonus: int, team_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/district/($district_key)/rankings")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({district_key: $district_key} | format pattern "/district/{district_key}/rankings"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -207,12 +207,12 @@ export def "district-teams get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<address: string, city: string, country: string, gmaps_place_id: string, gmaps_url: string, home_championship: record, key: string, lat: float, lng: float, location_name: string, motto: string, name: string, nickname: string, postal_code: string, rookie_year: int, school_name: string, state_prov: string, team_number: int, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/district/($district_key)/teams")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({district_key: $district_key} | format pattern "/district/{district_key}/teams"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -233,12 +233,12 @@ export def "district-teams-keys get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/district/($district_key)/teams/keys")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({district_key: $district_key} | format pattern "/district/{district_key}/teams/keys"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -259,12 +259,12 @@ export def "district-teams-simple get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<city: string, country: string, key: string, name: string, nickname: string, state_prov: string, team_number: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/district/($district_key)/teams/simple")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({district_key: $district_key} | format pattern "/district/{district_key}/teams/simple"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -285,12 +285,12 @@ export def "districts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<abbreviation: string, display_name: string, key: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/districts/($year)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({year: $year} | format pattern "/districts/{year}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -311,12 +311,12 @@ export def "event get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> record<address: string, city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, division_keys: list<string>, end_date: string, event_code: string, event_type: int, event_type_string: string, first_event_code: string, first_event_id: string, gmaps_place_id: string, gmaps_url: string, key: string, lat: float, lng: float, location_name: string, name: string, parent_event_key: string, playoff_type: int, playoff_type_string: string, postal_code: string, short_name: string, start_date: string, state_prov: string, timezone: string, webcasts: table<channel: string, date: string, file: string, type: string>, website: string, week: int, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -337,12 +337,12 @@ export def "event-alliances get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<backup: record<in: string, out: string>, declines: list<string>, name: string, picks: list<string>, status: record<current_level_record: record, level: string, playoff_average: float, record: record, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)/alliances")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/alliances"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -363,12 +363,12 @@ export def "event-awards get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<award_type: int, event_key: string, name: string, recipient_list: list<record>, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)/awards")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/awards"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -389,12 +389,12 @@ export def "event-district-points get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> record<points: record, tiebreakers: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)/district_points")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/district_points"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -415,12 +415,12 @@ export def "event-insights get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> record<playoff: record, qual: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)/insights")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/insights"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -441,12 +441,12 @@ export def "event-matches get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<actual_time: int, alliances: record<blue: record, red: record>, comp_level: string, event_key: string, key: string, match_number: int, post_result_time: int, predicted_time: int, score_breakdown: record, set_number: int, time: int, videos: list<record>, winning_alliance: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)/matches")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/matches"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -467,12 +467,12 @@ export def "event-matches-keys get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)/matches/keys")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/matches/keys"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -493,12 +493,12 @@ export def "event-matches-simple get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<actual_time: int, alliances: record<blue: record, red: record>, comp_level: string, event_key: string, key: string, match_number: int, predicted_time: int, set_number: int, time: int, winning_alliance: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)/matches/simple")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/matches/simple"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -509,7 +509,7 @@ export def "event-matches-simple get" [
 #
 # GET /event/{event_key}/matches/timeseries
 # operationId: getEventMatchTimeseries
-export def "event-matches-timeseries get" [
+export def "event-matches-timeseries get-event-match" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -519,12 +519,12 @@ export def "event-matches-timeseries get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)/matches/timeseries")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/matches/timeseries"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -545,12 +545,12 @@ export def "event-oprs get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> record<ccwms: record, dprs: record, oprs: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)/oprs")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/oprs"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -571,12 +571,12 @@ export def "event-predictions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)/predictions")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/predictions"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -597,12 +597,12 @@ export def "event-rankings get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> record<extra_stats_info: table<name: string, precision: float>, rankings: table<dq: int, extra_stats: list, matches_played: int, qual_average: int, rank: int, record: record, sort_orders: list, team_key: string>, sort_order_info: table<name: string, precision: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)/rankings")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/rankings"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -623,12 +623,12 @@ export def "event-simple get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> record<city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, end_date: string, event_code: string, event_type: int, key: string, name: string, start_date: string, state_prov: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)/simple")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/simple"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -649,12 +649,12 @@ export def "event-teams get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<address: string, city: string, country: string, gmaps_place_id: string, gmaps_url: string, home_championship: record, key: string, lat: float, lng: float, location_name: string, motto: string, name: string, nickname: string, postal_code: string, rookie_year: int, school_name: string, state_prov: string, team_number: int, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)/teams")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/teams"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -675,12 +675,12 @@ export def "event-teams-keys get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)/teams/keys")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/teams/keys"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -701,12 +701,12 @@ export def "event-teams-simple get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<city: string, country: string, key: string, name: string, nickname: string, state_prov: string, team_number: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)/teams/simple")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/teams/simple"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -727,12 +727,12 @@ export def "event-teams-statuses get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event/($event_key)/teams/statuses")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({event_key: $event_key} | format pattern "/event/{event_key}/teams/statuses"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -753,12 +753,12 @@ export def "events get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<address: string, city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, division_keys: list<string>, end_date: string, event_code: string, event_type: int, event_type_string: string, first_event_code: string, first_event_id: string, gmaps_place_id: string, gmaps_url: string, key: string, lat: float, lng: float, location_name: string, name: string, parent_event_key: string, playoff_type: int, playoff_type_string: string, postal_code: string, short_name: string, start_date: string, state_prov: string, timezone: string, webcasts: list<record>, website: string, week: int, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($year)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({year: $year} | format pattern "/events/{year}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -779,12 +779,12 @@ export def "events-keys get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($year)/keys")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({year: $year} | format pattern "/events/{year}/keys"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -805,12 +805,12 @@ export def "events-simple get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, end_date: string, event_code: string, event_type: int, key: string, name: string, start_date: string, state_prov: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($year)/simple")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({year: $year} | format pattern "/events/{year}/simple"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -831,12 +831,12 @@ export def "match get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> record<actual_time: int, alliances: record<blue: record<dq_team_keys: list, score: int, surrogate_team_keys: list, team_keys: list>, red: record<dq_team_keys: list, score: int, surrogate_team_keys: list, team_keys: list>>, comp_level: string, event_key: string, key: string, match_number: int, post_result_time: int, predicted_time: int, score_breakdown: record, set_number: int, time: int, videos: table<key: string, type: string>, winning_alliance: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/match/($match_key)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({match_key: $match_key} | format pattern "/match/{match_key}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -857,12 +857,12 @@ export def "match-simple get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> record<actual_time: int, alliances: record<blue: record<dq_team_keys: list, score: int, surrogate_team_keys: list, team_keys: list>, red: record<dq_team_keys: list, score: int, surrogate_team_keys: list, team_keys: list>>, comp_level: string, event_key: string, key: string, match_number: int, predicted_time: int, set_number: int, time: int, winning_alliance: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/match/($match_key)/simple")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({match_key: $match_key} | format pattern "/match/{match_key}/simple"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -883,12 +883,12 @@ export def "match-timeseries get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/match/($match_key)/timeseries")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({match_key: $match_key} | format pattern "/match/{match_key}/timeseries"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -909,12 +909,12 @@ export def "match-zebra-motionworks get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> record<alliances: record<blue: list<record>, red: list<record>>, key: string, times: list<float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/match/($match_key)/zebra_motionworks")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({match_key: $match_key} | format pattern "/match/{match_key}/zebra_motionworks"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -934,12 +934,12 @@ export def "status get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> record<android: record<latest_app_version: int, min_app_version: int>, current_season: int, down_events: list<string>, ios: record<latest_app_version: int, min_app_version: int>, is_datafeed_down: bool, max_season: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/status")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -960,12 +960,12 @@ export def "team get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> record<address: string, city: string, country: string, gmaps_place_id: string, gmaps_url: string, home_championship: record, key: string, lat: float, lng: float, location_name: string, motto: string, name: string, nickname: string, postal_code: string, rookie_year: int, school_name: string, state_prov: string, team_number: int, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -986,12 +986,12 @@ export def "team-awards list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<award_type: int, event_key: string, name: string, recipient_list: list<record>, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/awards")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/awards"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1013,12 +1013,12 @@ export def "team-awards get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<award_type: int, event_key: string, name: string, recipient_list: list<record>, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/awards/($year)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/awards/{year}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1039,12 +1039,12 @@ export def "team-districts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<abbreviation: string, display_name: string, key: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/districts")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/districts"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1066,12 +1066,12 @@ export def "team-event-awards get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<award_type: int, event_key: string, name: string, recipient_list: list<record>, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/event/($event_key)/awards")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key, event_key: $event_key} | format pattern "/team/{team_key}/event/{event_key}/awards"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1093,12 +1093,12 @@ export def "team-event-matches get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<actual_time: int, alliances: record<blue: record, red: record>, comp_level: string, event_key: string, key: string, match_number: int, post_result_time: int, predicted_time: int, score_breakdown: record, set_number: int, time: int, videos: list<record>, winning_alliance: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/event/($event_key)/matches")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key, event_key: $event_key} | format pattern "/team/{team_key}/event/{event_key}/matches"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1120,12 +1120,12 @@ export def "team-event-matches-keys get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/event/($event_key)/matches/keys")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key, event_key: $event_key} | format pattern "/team/{team_key}/event/{event_key}/matches/keys"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1147,12 +1147,12 @@ export def "team-event-matches-simple get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<actual_time: int, alliances: record<blue: record, red: record>, comp_level: string, event_key: string, key: string, match_number: int, post_result_time: int, predicted_time: int, score_breakdown: record, set_number: int, time: int, videos: list<record>, winning_alliance: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/event/($event_key)/matches/simple")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key, event_key: $event_key} | format pattern "/team/{team_key}/event/{event_key}/matches/simple"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1174,12 +1174,12 @@ export def "team-event-status get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> record<alliance: record<backup: record<in: string, out: string>, name: string, number: int, pick: int>, alliance_status_str: string, last_match_key: string, next_match_key: string, overall_status_str: string, playoff: record<current_level_record: record<losses: int, ties: int, wins: int>, level: string, playoff_average: int, record: record<losses: int, ties: int, wins: int>, status: string>, playoff_status_str: string, qual: record<num_teams: int, ranking: record<dq: int, matches_played: int, qual_average: float, rank: int, record: record, sort_orders: list, team_key: string>, sort_order_info: list<record>, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/event/($event_key)/status")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key, event_key: $event_key} | format pattern "/team/{team_key}/event/{event_key}/status"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1200,12 +1200,12 @@ export def "team-events list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<address: string, city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, division_keys: list<string>, end_date: string, event_code: string, event_type: int, event_type_string: string, first_event_code: string, first_event_id: string, gmaps_place_id: string, gmaps_url: string, key: string, lat: float, lng: float, location_name: string, name: string, parent_event_key: string, playoff_type: int, playoff_type_string: string, postal_code: string, short_name: string, start_date: string, state_prov: string, timezone: string, webcasts: list<record>, website: string, week: int, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/events")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/events"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1226,12 +1226,12 @@ export def "team-events-keys list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/events/keys")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/events/keys"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1252,12 +1252,12 @@ export def "team-events-simple list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, end_date: string, event_code: string, event_type: int, key: string, name: string, start_date: string, state_prov: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/events/simple")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/events/simple"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1279,12 +1279,12 @@ export def "team-events get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<address: string, city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, division_keys: list<string>, end_date: string, event_code: string, event_type: int, event_type_string: string, first_event_code: string, first_event_id: string, gmaps_place_id: string, gmaps_url: string, key: string, lat: float, lng: float, location_name: string, name: string, parent_event_key: string, playoff_type: int, playoff_type_string: string, postal_code: string, short_name: string, start_date: string, state_prov: string, timezone: string, webcasts: list<record>, website: string, week: int, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/events/($year)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/events/{year}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1306,12 +1306,12 @@ export def "team-events-keys get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/events/($year)/keys")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/events/{year}/keys"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1333,12 +1333,12 @@ export def "team-events-simple get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<city: string, country: string, district: record<abbreviation: string, display_name: string, key: string, year: int>, end_date: string, event_code: string, event_type: int, key: string, name: string, start_date: string, state_prov: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/events/($year)/simple")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/events/{year}/simple"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1360,12 +1360,12 @@ export def "team-events-statuses get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/events/($year)/statuses")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/events/{year}/statuses"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1387,12 +1387,12 @@ export def "team-matches get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<actual_time: int, alliances: record<blue: record, red: record>, comp_level: string, event_key: string, key: string, match_number: int, post_result_time: int, predicted_time: int, score_breakdown: record, set_number: int, time: int, videos: list<record>, winning_alliance: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/matches/($year)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/matches/{year}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1414,12 +1414,12 @@ export def "team-matches-keys get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/matches/($year)/keys")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/matches/{year}/keys"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1441,12 +1441,12 @@ export def "team-matches-simple get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<actual_time: int, alliances: record<blue: record, red: record>, comp_level: string, event_key: string, key: string, match_number: int, predicted_time: int, set_number: int, time: int, winning_alliance: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/matches/($year)/simple")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/matches/{year}/simple"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1468,12 +1468,12 @@ export def "team-media-tag list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<details: record, direct_url: string, foreign_key: string, preferred: bool, type: string, view_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/media/tag/($media_tag)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key, media_tag: $media_tag} | format pattern "/team/{team_key}/media/tag/{media_tag}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1496,12 +1496,12 @@ export def "team-media-tag get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<details: record, direct_url: string, foreign_key: string, preferred: bool, type: string, view_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/media/tag/($media_tag)/($year)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key, media_tag: $media_tag, year: $year} | format pattern "/team/{team_key}/media/tag/{media_tag}/{year}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1523,12 +1523,12 @@ export def "team-media get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<details: record, direct_url: string, foreign_key: string, preferred: bool, type: string, view_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/media/($year)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key, year: $year} | format pattern "/team/{team_key}/media/{year}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1549,12 +1549,12 @@ export def "team-robots get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<key: string, robot_name: string, team_key: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/robots")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/robots"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1575,12 +1575,12 @@ export def "team-simple get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> record<city: string, country: string, key: string, name: string, nickname: string, state_prov: string, team_number: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/simple")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/simple"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1601,12 +1601,12 @@ export def "team-social-media get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<details: record, direct_url: string, foreign_key: string, preferred: bool, type: string, view_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/social_media")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/social_media"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1627,12 +1627,12 @@ export def "team-years-participated get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/team/($team_key)/years_participated")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({team_key: $team_key} | format pattern "/team/{team_key}/years_participated"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1653,12 +1653,12 @@ export def "teams list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<address: string, city: string, country: string, gmaps_place_id: string, gmaps_url: string, home_championship: record, key: string, lat: float, lng: float, location_name: string, motto: string, name: string, nickname: string, postal_code: string, rookie_year: int, school_name: string, state_prov: string, team_number: int, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($page_num)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({page_num: $page_num} | format pattern "/teams/{page_num}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1679,12 +1679,12 @@ export def "teams-keys list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($page_num)/keys")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({page_num: $page_num} | format pattern "/teams/{page_num}/keys"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1705,12 +1705,12 @@ export def "teams-simple list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<city: string, country: string, key: string, name: string, nickname: string, state_prov: string, team_number: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($page_num)/simple")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({page_num: $page_num} | format pattern "/teams/{page_num}/simple"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1732,12 +1732,12 @@ export def "teams get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<address: string, city: string, country: string, gmaps_place_id: string, gmaps_url: string, home_championship: record, key: string, lat: float, lng: float, location_name: string, motto: string, name: string, nickname: string, postal_code: string, rookie_year: int, school_name: string, state_prov: string, team_number: int, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($year)/($page_num)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({year: $year, page_num: $page_num} | format pattern "/teams/{year}/{page_num}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1759,12 +1759,12 @@ export def "teams-keys get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($year)/($page_num)/keys")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({year: $year, page_num: $page_num} | format pattern "/teams/{year}/{page_num}/keys"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1786,12 +1786,12 @@ export def "teams-simple get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Value of the `ETag` header in the most recently cached response by the client.
+  --if-none-match: string # Value of the `ETag` header in the most recently cached response by the client.
 ]: nothing -> table<city: string, country: string, key: string, name: string, nickname: string, state_prov: string, team_number: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-tba-auth-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($year)/($page_num)/simple")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({year: $year, page_num: $page_num} | format pattern "/teams/{year}/{page_num}/simple"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

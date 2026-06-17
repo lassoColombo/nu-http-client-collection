@@ -102,13 +102,13 @@ export def "repower-repower repowerPost2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RepowerRequest: record # Contains the details of the repower request message. — shape: {AdditionalSenderInformation?: string, CardAcceptor?: record, CardNumber: string, CardSequenceNumber?: string, Channel: string, ICA: string, ICCEMVData?: string, LocalDate: string, LocalTime: string, MerchantType: string, POSCardDataTerminalInputCapabilityIndicator?: string, PaymentInitiationChannel?: string, PaymentPosEntryMode?: string, ProcessorId: string, ReceiverTrack2Data?: string, RoutingAndTransitNumber: string, TransactionAmount?: record, TransactionFee?: record, TransactionReference: string}
+  --repower-request: record # Contains the details of the repower request message. — shape: {AdditionalSenderInformation?: string, CardAcceptor?: record, CardNumber: string, CardSequenceNumber?: string, Channel: string, ICA: string, ICCEMVData?: string, LocalDate: string, LocalTime: string, MerchantType: string, POSCardDataTerminalInputCapabilityIndicator?: string, PaymentInitiationChannel?: string, PaymentPosEntryMode?: string, ProcessorId: string, ReceiverTrack2Data?: string, RoutingAndTransitNumber: string, TransactionAmount?: record, TransactionFee?: record, TransactionReference: string}
 ]: any -> record<Repower: record<AccountBalance: record<Currency: string, Value: string>, ICCEMVData: string, PANMappingFileInformation: string, PersonPresentIndicator: string, RequestId: string, TransactionHistory: record<Transaction: list>, TransactionReference: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/repower/v2/repower")
-  let body = {RepowerRequest: $RepowerRequest} | compact
+  let body = {"RepowerRequest": $repower_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -129,13 +129,13 @@ export def "repower-repowerreversal repowerReversalPost2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RepowerReversalRequest: record # Contains the details of the repower reversal request message. — shape: {ICA: string, ReversalReason: string, TransactionReference: string}
+  --repower-reversal-request: record # Contains the details of the repower reversal request message. — shape: {ICA: string, ReversalReason: string, TransactionReference: string}
 ]: any -> record<RepowerReversal: record<OriginalRequestId: string, RequestId: string, TransactionHistory: record<Transaction: list>, TransactionReference: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/repower/v2/repowerreversal")
-  let body = {RepowerReversalRequest: $RepowerReversalRequest} | compact
+  let body = {"RepowerReversalRequest": $repower_reversal_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

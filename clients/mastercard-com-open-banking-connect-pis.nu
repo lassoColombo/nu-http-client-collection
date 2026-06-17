@@ -104,14 +104,14 @@ export def "payments-aspsps post" [
   --country: string # Filter by country code (ISO 3166 Alpha 2), exact match pattern (e.g. GB)
   --id: string # Filter by internal id of ASPSP, exact match pattern (e.g. )
   --name: string # Filter by name of ASPSP, contains pattern (e.g. )
-  requestInfo: record # shape: {xRequestId: string}
-  --returnAdditionalData: list # Specifies what additional fields for ASPSP object should be included in response
+  request_info: record # shape: {xRequestId: string}
+  --return-additional-data: list # Specifies what additional fields for ASPSP object should be included in response
 ]: any -> record<aspsps: table<aspspServices: list, capabilities: record, country: string, id: string, logo: record, name: string, profile: string>, originalRequestInfo: record<xRequestId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payments/aspsps")
-  let body = {country: $country, id: $id, name: $name, requestInfo: $requestInfo, returnAdditionalData: $returnAdditionalData} | compact
+  let body = {"country": $country, "id": $id, "name": $name, "requestInfo": $request_info, "returnAdditionalData": $return_additional_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -131,13 +131,13 @@ export def "payments-consents-raw post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  requestInfo: any # shape: {aspspId: string, consentId: string, merchant?: record, xRequestId: string}
+  request_info: any # shape: {aspspId: string, consentId: string, merchant?: record, xRequestId: string}
 ]: any -> record<originalRequestInfo: record<xRequestId: string>, rawConsent: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payments/consents/raw")
-  let body = {requestInfo: $requestInfo} | compact
+  let body = {"requestInfo": $request_info} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -157,13 +157,13 @@ export def "payments-cross-border-credit-transfers post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  requestInfo: record # shape: {aspspId: string, authorization: string, merchant?: record, xRequestId: string}
+  request_info: record # shape: {aspspId: string, authorization: string, merchant?: record, xRequestId: string}
 ]: any -> record<consent: record<consentId: string, consentRequestId: string, signatureStatus: string>, originalRequestInfo: record<xRequestId: string>, transfer: record<paymentId: string, statusReasonCode: string, transactionStatus: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payments/cross-border-credit-transfers")
-  let body = {requestInfo: $requestInfo} | compact
+  let body = {"requestInfo": $request_info} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -185,13 +185,13 @@ export def "payments-cross-border-credit-transfers-consents post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   payments: record # shape: {creditorAccount: record, creditorAddress?: record, creditorAgent: record, creditorName: string, debtorAccount: record, debtorAddress?: any, debtorName?: string, endToEndIdentification: string, instructedAmount: record, instructionIdentification?: string, instructionPriority: "Normal"|"Urgent", localInstrument: "Swift", remittanceInformationReference?: string, remittanceInformationUnstructured?: string, requestedExecutionDate?: string, transferCharges?: "SEN"|"SHA"|"BEN"}
-  requestInfo: record # shape: {aspspId: string, flags?: list, merchant?: record, tppRedirectURI: string, xRequestId: string}
+  request_info: record # shape: {aspspId: string, flags?: list, merchant?: record, tppRedirectURI: string, xRequestId: string}
 ]: any -> record<_links: record<scaRedirect: string>, additionalData: record<rawConsent: string>, aspspSCAApproach: string, consentRequestId: string, originalRequestInfo: record<xRequestId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payments/cross-border-credit-transfers/consents")
-  let body = {payments: $payments, requestInfo: $requestInfo} | compact
+  let body = {"payments": $payments, "requestInfo": $request_info} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -211,14 +211,14 @@ export def "payments-cross-border-credit-transfers-payment-status post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  paymentId: string # Payment identification (e.g. 258aFR415:22Aa:6asdC)
-  requestInfo: record # shape: {aspspId: string, consentId: string, merchant?: record, xRequestId: string}
+  payment_id: string # Payment identification (e.g. 258aFR415:22Aa:6asdC)
+  request_info: record # shape: {aspspId: string, consentId: string, merchant?: record, xRequestId: string}
 ]: any -> record<originalRequestInfo: record<xRequestId: string>, payments: record<statusReasonCode: string, transactionStatus: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payments/cross-border-credit-transfers/payment-status")
-  let body = {paymentId: $paymentId, requestInfo: $requestInfo} | compact
+  let body = {"paymentId": $payment_id, "requestInfo": $request_info} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -238,13 +238,13 @@ export def "payments-domestic-credit-transfers post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  requestInfo: record # shape: {aspspId: string, authorization: string, merchant?: record, xRequestId: string}
+  request_info: record # shape: {aspspId: string, authorization: string, merchant?: record, xRequestId: string}
 ]: any -> record<consent: record<consentId: string, consentRequestId: string, signatureStatus: string>, originalRequestInfo: record<xRequestId: string>, transfer: record<paymentId: string, statusReasonCode: string, transactionStatus: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payments/domestic-credit-transfers")
-  let body = {requestInfo: $requestInfo} | compact
+  let body = {"requestInfo": $request_info} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -266,13 +266,13 @@ export def "payments-domestic-credit-transfers-consents post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   payments: record # shape: {creditorAccount: record, creditorAddress?: record, creditorAgent?: record, creditorName: string, debtorAccount?: any, debtorAgent?: any, endToEndIdentification: string, instructedAmount: record, instructionIdentification?: string, instructionPriority?: "Normal"|"Urgent", localInstrument: "UK.FasterPayments"|"PL.Elixir", remittanceInformationReference?: string, remittanceInformationUnstructured?: string, requestedExecutionDate?: string, schedule?: record}
-  requestInfo: record # shape: {aspspId: string, flags?: list, merchant?: record, tppRedirectURI: string, xRequestId: string}
+  request_info: record # shape: {aspspId: string, flags?: list, merchant?: record, tppRedirectURI: string, xRequestId: string}
 ]: any -> record<_links: record<scaRedirect: string>, additionalData: record<rawConsent: string>, aspspSCAApproach: string, consentRequestId: string, originalRequestInfo: record<xRequestId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payments/domestic-credit-transfers/consents")
-  let body = {payments: $payments, requestInfo: $requestInfo} | compact
+  let body = {"payments": $payments, "requestInfo": $request_info} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -292,14 +292,14 @@ export def "payments-domestic-credit-transfers-payment-status post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  paymentId: string # Payment identification (e.g. UK8aFR415:22Aa:6asdC)
-  requestInfo: record # shape: {aspspId: string, consentId: string, merchant?: record, xRequestId: string}
+  payment_id: string # Payment identification (e.g. UK8aFR415:22Aa:6asdC)
+  request_info: record # shape: {aspspId: string, consentId: string, merchant?: record, xRequestId: string}
 ]: any -> record<originalRequestInfo: record<xRequestId: string>, payments: record<statusReasonCode: string, transactionStatus: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payments/domestic-credit-transfers/payment-status")
-  let body = {paymentId: $paymentId, requestInfo: $requestInfo} | compact
+  let body = {"paymentId": $payment_id, "requestInfo": $request_info} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -340,13 +340,13 @@ export def "payments-sepa-credit-transfers post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  requestInfo: record # shape: {aspspId: string, authorization: string, merchant?: record, xRequestId: string}
+  request_info: record # shape: {aspspId: string, authorization: string, merchant?: record, xRequestId: string}
 ]: any -> record<consent: record<consentId: string, consentRequestId: string>, originalRequestInfo: record<xRequestId: string>, transfer: record<paymentId: string, statusReasonCode: string, transactionStatus: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payments/sepa-credit-transfers")
-  let body = {requestInfo: $requestInfo} | compact
+  let body = {"requestInfo": $request_info} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -368,13 +368,13 @@ export def "payments-sepa-credit-transfers-consents post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   payments: record # shape: {categoryPurpose?: "CASH"|"CORT"|"DVPM"|"INTC"|"TREA", creditorAccount: record, creditorAddress: record, creditorAgent: any, creditorName: string, debtorAccount?: record, debtorAddress?: record, debtorAgent?: any, debtorName: string, endToEndIdentification: string, instructedAmount: record, instructionPriority: "Normal"|"Urgent", localInstrument: "SEPA", remittanceInformationReference?: string, remittanceInformationStructured?: string, remittanceInformationUnstructured?: string, requestedExecutionDate?: string, schedule?: record}
-  requestInfo: record # shape: {aspspId: string, flags?: list, merchant?: record, tppRedirectURI: string, xRequestId: string}
+  request_info: record # shape: {aspspId: string, flags?: list, merchant?: record, tppRedirectURI: string, xRequestId: string}
 ]: any -> record<_links: record<scaRedirect: string>, additionalData: record<rawConsent: string>, aspspSCAApproach: string, consentRequestId: string, originalRequestInfo: record<xRequestId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payments/sepa-credit-transfers/consents")
-  let body = {payments: $payments, requestInfo: $requestInfo} | compact
+  let body = {"payments": $payments, "requestInfo": $request_info} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -394,14 +394,14 @@ export def "payments-sepa-credit-transfers-payment-status post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  paymentId: string # Payment identification (e.g. wAa:665hs5:r5544dhhKM)
-  requestInfo: record # shape: {aspspId: string, consentId: string, merchant?: record, xRequestId: string}
+  payment_id: string # Payment identification (e.g. wAa:665hs5:r5544dhhKM)
+  request_info: record # shape: {aspspId: string, consentId: string, merchant?: record, xRequestId: string}
 ]: any -> record<originalRequestInfo: record<xRequestId: string>, payments: record<statusReasonCode: string, transactionStatus: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payments/sepa-credit-transfers/payment-status")
-  let body = {paymentId: $paymentId, requestInfo: $requestInfo} | compact
+  let body = {"paymentId": $payment_id, "requestInfo": $request_info} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

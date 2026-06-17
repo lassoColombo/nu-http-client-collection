@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "article Delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "article delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /api/Article
 # operationId: Article_Delete
-export def "article Delete" [
+export def "article delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,11 +103,11 @@ export def "article Delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ArticleId: int # indentity number(primary key) for article object (format: int32)
+  --article-id: int # indentity number(primary key) for article object (format: int32)
 ]: nothing -> record<isError: bool, message: string, responseException: any, result: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ArticleId" $ArticleId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ArticleId" $article_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Article" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,7 +120,7 @@ export def "article Delete" [
 # operationId: Article_Post
 # --availableGyms item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
 # --gymArticles item shape: {articleId?: int, availableQty?: float, createdUser?: string, employeeDiscount?: float, employeePrice?: float, gymId?: int, gymIdList?: string, gymName?: string, id?: int, isDefault?: bool, isInventoryItem?: bool, isObsolete?: bool, modifiedUser?: string, reorderLevel?: float, revenueAccountId?: int, sellingPrice?: float}
-export def "article Post" [
+export def "article create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,42 +129,42 @@ export def "article Post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --activeStatus: oneof<nothing, bool> # Active Status 
-  --applyForAllGyms: oneof<nothing, bool>
-  --articleId: int # format: int32
-  availableGyms: list # item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
-  --availableQty: float # Default AvailableQty (format: decimal)
+  --active-status: oneof<nothing, bool> # Active Status 
+  --apply-for-all-gyms: oneof<nothing, bool>
+  --article-id: int # format: int32
+  available_gyms: list # item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
+  --available-qty: float # Default AvailableQty (format: decimal)
   --barcode: string # nullable
-  --createdDate: string # format: date-time
-  --createdUser: string # nullable
-  --cronExpression: string # Access Schedule CRON Expression  (nullable)
+  --created-date: string # format: date-time
+  --created-user: string # nullable
+  --cron-expression: string # Access Schedule CRON Expression  (nullable)
   --description: string # nullable
   --discount: float # format: decimal
-  --employeeDiscount: float # Default EmployeeDiscount (format: decimal)
-  --employeePrice: float # Default EmployeePrice (format: decimal)
-  --gymArticles: list # Gym Customizations  (nullable) — item shape: {articleId?: int, availableQty?: float, createdUser?: string, employeeDiscount?: float, employeePrice?: float, gymId?: int, gymIdList?: string, gymName?: string, id?: int, isDefault?: bool, isInventoryItem?: bool, isObsolete?: bool, modifiedUser?: string, reorderLevel?: float, revenueAccountId?: int, sellingPrice?: float}
-  --isAddOn: oneof<nothing, bool>
-  --isInventoryItem: oneof<nothing, bool> # Default IsInventoryItem of the Article 
-  --isObsolete: oneof<nothing, bool> # Default IsObsolete of the Article 
-  measureUnit: string
-  --modifiedDate: string # format: date-time
-  --modifiedUser: string # nullable
+  --employee-discount: float # Default EmployeeDiscount (format: decimal)
+  --employee-price: float # Default EmployeePrice (format: decimal)
+  --gym-articles: list # Gym Customizations  (nullable) — item shape: {articleId?: int, availableQty?: float, createdUser?: string, employeeDiscount?: float, employeePrice?: float, gymId?: int, gymIdList?: string, gymName?: string, id?: int, isDefault?: bool, isInventoryItem?: bool, isObsolete?: bool, modifiedUser?: string, reorderLevel?: float, revenueAccountId?: int, sellingPrice?: float}
+  --is-add-on: oneof<nothing, bool>
+  --is-inventory-item: oneof<nothing, bool> # Default IsInventoryItem of the Article 
+  --is-obsolete: oneof<nothing, bool> # Default IsObsolete of the Article 
+  measure_unit: string
+  --modified-date: string # format: date-time
+  --modified-user: string # nullable
   name: string
   --number: int # format: int32
   price: float # format: decimal
-  --reorderLevel: float # Deafault ReorderLevel (format: decimal)
-  --revenueAccountId: int # Default Revenue account (format: int32)
-  --sellingPrice: float # Default SellingPrice (format: decimal)
+  --reorder-level: float # Deafault ReorderLevel (format: decimal)
+  --revenue-account-id: int # Default Revenue account (format: int32)
+  --selling-price: float # Default SellingPrice (format: decimal)
   --tags: string # nullable
   type: string
   --vat: float # format: decimal
-  --vatApplicable: oneof<nothing, bool> # VAT Applicable 
+  --vat-applicable: oneof<nothing, bool> # VAT Applicable 
 ]: any -> record<isError: bool, message: string, responseException: any, result: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Article")
-  let body = {activeStatus: $activeStatus, applyForAllGyms: $applyForAllGyms, articleId: $articleId, availableGyms: $availableGyms, availableQty: $availableQty, barcode: $barcode, createdDate: $createdDate, createdUser: $createdUser, cronExpression: $cronExpression, description: $description, discount: $discount, employeeDiscount: $employeeDiscount, employeePrice: $employeePrice, gymArticles: $gymArticles, isAddOn: $isAddOn, isInventoryItem: $isInventoryItem, isObsolete: $isObsolete, measureUnit: $measureUnit, modifiedDate: $modifiedDate, modifiedUser: $modifiedUser, name: $name, number: $number, price: $price, reorderLevel: $reorderLevel, revenueAccountId: $revenueAccountId, sellingPrice: $sellingPrice, tags: $tags, type: $type, vat: $vat, vatApplicable: $vatApplicable} | compact
+  let body = {"activeStatus": $active_status, "applyForAllGyms": $apply_for_all_gyms, "articleId": $article_id, "availableGyms": $available_gyms, "availableQty": $available_qty, "barcode": $barcode, "createdDate": $created_date, "createdUser": $created_user, "cronExpression": $cron_expression, "description": $description, "discount": $discount, "employeeDiscount": $employee_discount, "employeePrice": $employee_price, "gymArticles": $gym_articles, "isAddOn": $is_add_on, "isInventoryItem": $is_inventory_item, "isObsolete": $is_obsolete, "measureUnit": $measure_unit, "modifiedDate": $modified_date, "modifiedUser": $modified_user, "name": $name, "number": $number, "price": $price, "reorderLevel": $reorder_level, "revenueAccountId": $revenue_account_id, "sellingPrice": $selling_price, "tags": $tags, "type": $type, "vat": $vat, "vatApplicable": $vat_applicable} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -177,7 +177,7 @@ export def "article Post" [
 # operationId: Article_Put
 # --availableGyms item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
 # --gymArticles item shape: {articleId?: int, availableQty?: float, createdUser?: string, employeeDiscount?: float, employeePrice?: float, gymId?: int, gymIdList?: string, gymName?: string, id?: int, isDefault?: bool, isInventoryItem?: bool, isObsolete?: bool, modifiedUser?: string, reorderLevel?: float, revenueAccountId?: int, sellingPrice?: float}
-export def "article Put" [
+export def "article update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,42 +186,42 @@ export def "article Put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --activeStatus: oneof<nothing, bool> # Active Status 
-  --applyForAllGyms: oneof<nothing, bool>
-  --articleId: int # format: int32
-  availableGyms: list # item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
-  --availableQty: float # Default AvailableQty (format: decimal)
+  --active-status: oneof<nothing, bool> # Active Status 
+  --apply-for-all-gyms: oneof<nothing, bool>
+  --article-id: int # format: int32
+  available_gyms: list # item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
+  --available-qty: float # Default AvailableQty (format: decimal)
   --barcode: string # nullable
-  --createdDate: string # format: date-time
-  --createdUser: string # nullable
-  --cronExpression: string # Access Schedule CRON Expression  (nullable)
+  --created-date: string # format: date-time
+  --created-user: string # nullable
+  --cron-expression: string # Access Schedule CRON Expression  (nullable)
   --description: string # nullable
   --discount: float # format: decimal
-  --employeeDiscount: float # Default EmployeeDiscount (format: decimal)
-  --employeePrice: float # Default EmployeePrice (format: decimal)
-  --gymArticles: list # Gym Customizations  (nullable) — item shape: {articleId?: int, availableQty?: float, createdUser?: string, employeeDiscount?: float, employeePrice?: float, gymId?: int, gymIdList?: string, gymName?: string, id?: int, isDefault?: bool, isInventoryItem?: bool, isObsolete?: bool, modifiedUser?: string, reorderLevel?: float, revenueAccountId?: int, sellingPrice?: float}
-  --isAddOn: oneof<nothing, bool>
-  --isInventoryItem: oneof<nothing, bool> # Default IsInventoryItem of the Article 
-  --isObsolete: oneof<nothing, bool> # Default IsObsolete of the Article 
-  measureUnit: string
-  --modifiedDate: string # format: date-time
-  --modifiedUser: string # nullable
+  --employee-discount: float # Default EmployeeDiscount (format: decimal)
+  --employee-price: float # Default EmployeePrice (format: decimal)
+  --gym-articles: list # Gym Customizations  (nullable) — item shape: {articleId?: int, availableQty?: float, createdUser?: string, employeeDiscount?: float, employeePrice?: float, gymId?: int, gymIdList?: string, gymName?: string, id?: int, isDefault?: bool, isInventoryItem?: bool, isObsolete?: bool, modifiedUser?: string, reorderLevel?: float, revenueAccountId?: int, sellingPrice?: float}
+  --is-add-on: oneof<nothing, bool>
+  --is-inventory-item: oneof<nothing, bool> # Default IsInventoryItem of the Article 
+  --is-obsolete: oneof<nothing, bool> # Default IsObsolete of the Article 
+  measure_unit: string
+  --modified-date: string # format: date-time
+  --modified-user: string # nullable
   name: string
   --number: int # format: int32
   price: float # format: decimal
-  --reorderLevel: float # Deafault ReorderLevel (format: decimal)
-  --revenueAccountId: int # Default Revenue account (format: int32)
-  --sellingPrice: float # Default SellingPrice (format: decimal)
+  --reorder-level: float # Deafault ReorderLevel (format: decimal)
+  --revenue-account-id: int # Default Revenue account (format: int32)
+  --selling-price: float # Default SellingPrice (format: decimal)
   --tags: string # nullable
   type: string
   --vat: float # format: decimal
-  --vatApplicable: oneof<nothing, bool> # VAT Applicable 
+  --vat-applicable: oneof<nothing, bool> # VAT Applicable 
 ]: any -> record<isError: bool, message: string, responseException: any, result: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Article")
-  let body = {activeStatus: $activeStatus, applyForAllGyms: $applyForAllGyms, articleId: $articleId, availableGyms: $availableGyms, availableQty: $availableQty, barcode: $barcode, createdDate: $createdDate, createdUser: $createdUser, cronExpression: $cronExpression, description: $description, discount: $discount, employeeDiscount: $employeeDiscount, employeePrice: $employeePrice, gymArticles: $gymArticles, isAddOn: $isAddOn, isInventoryItem: $isInventoryItem, isObsolete: $isObsolete, measureUnit: $measureUnit, modifiedDate: $modifiedDate, modifiedUser: $modifiedUser, name: $name, number: $number, price: $price, reorderLevel: $reorderLevel, revenueAccountId: $revenueAccountId, sellingPrice: $sellingPrice, tags: $tags, type: $type, vat: $vat, vatApplicable: $vatApplicable} | compact
+  let body = {"activeStatus": $active_status, "applyForAllGyms": $apply_for_all_gyms, "articleId": $article_id, "availableGyms": $available_gyms, "availableQty": $available_qty, "barcode": $barcode, "createdDate": $created_date, "createdUser": $created_user, "cronExpression": $cron_expression, "description": $description, "discount": $discount, "employeeDiscount": $employee_discount, "employeePrice": $employee_price, "gymArticles": $gym_articles, "isAddOn": $is_add_on, "isInventoryItem": $is_inventory_item, "isObsolete": $is_obsolete, "measureUnit": $measure_unit, "modifiedDate": $modified_date, "modifiedUser": $modified_user, "name": $name, "number": $number, "price": $price, "reorderLevel": $reorder_level, "revenueAccountId": $revenue_account_id, "sellingPrice": $selling_price, "tags": $tags, "type": $type, "vat": $vat, "vatApplicable": $vat_applicable} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,7 +232,7 @@ export def "article Put" [
 #
 # PUT /api/Article/ArticleGymDetails
 # operationId: Article_UpdateArticleGymDetails
-export def "article-article-gym-details UpdateArticleGymDetails" [
+export def "article-article-gym-details update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "article-article-gym-details UpdateArticleGymDetails" [
 # GET /api/Article/GetAddons
 #
 # operationId: Article_GetAddons
-export def "article-get-addons GetAddons" [
+export def "article-get-addons get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,15 +265,15 @@ export def "article-get-addons GetAddons" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --searchText: string # Search text - will be search by the name (nullable)
-  --gymIds: string # Comma separated gymIds deafult "-1" for all gyms (nullable, default: -1)
+  --search-text: string # Search text - will be search by the name (nullable)
+  --gym-ids: string # Comma separated gymIds deafult "-1" for all gyms (nullable, default: -1)
   --type: string # nullable, default: all
   --limit: int # format: int32, default: 100
   --offset: int # format: int32, default: 0
 ]: nothing -> record<isError: bool, message: string, responseException: any, result: table<activeStatus: bool, applyForAllGyms: bool, articleId: int, createdDate: string, createdUser: string, description: string, measureUnit: string, modifiedDate: string, modifiedUser: string, name: string, number: int, price: float, sellingPrice: float, tags: string, totalCount: int, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "searchText" $searchText "scalar") (serialize-qp "gymIds" $gymIds "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "searchText" $search_text "scalar") (serialize-qp "gymIds" $gym_ids "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Article/GetAddons" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -284,9 +284,9 @@ export def "article-get-addons GetAddons" [
 #
 # GET /api/Article/GymArticle/{articleId}/{gymId}
 # operationId: Article_GymArticleDetails
-export def "article-gym-article GymArticleDetails" [
-  articleId: int
-  gymId: int
+export def "article-gym-article get" [
+  article_id: int
+  gym_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,7 +298,7 @@ export def "article-gym-article GymArticleDetails" [
 ]: nothing -> record<articleId: int, availableQty: float, createdUser: string, employeeDiscount: float, employeePrice: float, gymId: int, gymIdList: string, gymName: string, id: int, isDefault: bool, isInventoryItem: bool, isObsolete: bool, modifiedUser: string, reorderLevel: float, revenueAccountId: int, sellingPrice: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/Article/GymArticle/($articleId)/($gymId)")
+  let full_url = (build-url $base ({article_id: $article_id, gym_id: $gym_id} | format pattern "/api/Article/GymArticle/{article_id}/{gym_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -308,7 +308,7 @@ export def "article-gym-article GymArticleDetails" [
 #
 # POST /api/Article/MeasureUnit
 # operationId: Article_AddMeasureUnit
-export def "article-measure-unit AddMeasureUnit" [
+export def "article-measure-unit create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "article-measure-unit AddMeasureUnit" [
 #
 # GET /api/Article/MeasureUnits
 # operationId: Article_GetMeasureUnits
-export def "article-measure-units GetMeasureUnits" [
+export def "article-measure-units get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +357,7 @@ export def "article-measure-units GetMeasureUnits" [
 #
 # GET /api/Article/RevenueAccounts
 # operationId: Article_GetRevenueAccounts
-export def "article-revenue-accounts GetRevenueAccounts" [
+export def "article-revenue-accounts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -379,7 +379,7 @@ export def "article-revenue-accounts GetRevenueAccounts" [
 #
 # GET /api/Article/Search
 # operationId: Article_Search
-export def "article-search Search" [
+export def "article-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,17 +388,17 @@ export def "article-search Search" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --searchText: string # part of article name (nullable)
-  --gymId: int # -1 for all gyms  (format: int32, default: -1)
+  --search-text: string # part of article name (nullable)
+  --gym-id: int # -1 for all gyms  (format: int32, default: -1)
   --type: string # filter article type. default is 'all' (nullable, default: all)
-  --orderBy: string # order by column.!-- invalid column will give internal server error (nullable, default: 1)
+  --order-by: string # order by column.!-- invalid column will give internal server error (nullable, default: 1)
   --limit: int # number of recode in result and default is 100. use negative numbers to order by desc (format: int32, default: 100)
   --offset: int # number of recodes to skip (format: int32, default: 0)
-  --activeStatus: int # Active Status 1 : Active, 2: Inactive, 3: All, Default : 1 (format: int32, default: 1)
+  --active-status: int # Active Status 1 : Active, 2: Inactive, 3: All, Default : 1 (format: int32, default: 1)
 ]: nothing -> record<isError: bool, message: string, responseException: any, result: table<activeStatus: bool, applyForAllGyms: bool, articleId: int, createdDate: string, createdUser: string, description: string, measureUnit: string, modifiedDate: string, modifiedUser: string, name: string, number: int, price: float, sellingPrice: float, tags: string, totalCount: int, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "searchText" $searchText "scalar") (serialize-qp "gymId" $gymId "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "activeStatus" $activeStatus "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "searchText" $search_text "scalar") (serialize-qp "gymId" $gym_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "activeStatus" $active_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Article/Search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -409,7 +409,7 @@ export def "article-search Search" [
 #
 # PUT /api/Article/UpdateStatus
 # operationId: Article_UpdateStatus
-export def "article-update-status UpdateStatus" [
+export def "article-update-status update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,13 +418,13 @@ export def "article-update-status UpdateStatus" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ArticleId: int # format: int32
+  --article-id: int # format: int32
   --status: int # 1 : activate , 2 deactivate (format: int32)
-  --userName: string # Updating user (nullable)
+  --user-name: string # Updating user (nullable)
 ]: nothing -> record<isError: bool, message: string, responseException: any, result: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ArticleId" $ArticleId "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "userName" $userName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ArticleId" $article_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Article/UpdateStatus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -436,7 +436,7 @@ export def "article-update-status UpdateStatus" [
 # GET /api/Article/{articleID}
 # operationId: Article_get
 export def "article get" [
-  articleID: int
+  article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,7 +448,7 @@ export def "article get" [
 ]: nothing -> record<isError: bool, message: string, responseException: any, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/Article/($articleID)")
+  let full_url = (build-url $base ({article_id: $article_id} | format pattern "/api/Article/{article_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -458,7 +458,7 @@ export def "article get" [
 #
 # POST /api/Auth/login
 # operationId: Auth_Login
-export def "auth-login Login" [
+export def "auth-login post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,7 +475,7 @@ export def "auth-login Login" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Auth/login")
-  let body = {password: $password, remember: $remember, username: $username} | compact
+  let body = {"password": $password, "remember": $remember, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -487,7 +487,7 @@ export def "auth-login Login" [
 # GET /api/Gym/{gymID}
 # operationId: Gym_get
 export def "gym get" [
-  gymID: int
+  gym_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -499,7 +499,7 @@ export def "gym get" [
 ]: nothing -> record<isError: bool, message: string, responseException: any, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/Gym/($gymID)")
+  let full_url = (build-url $base ({gym_id: $gym_id} | format pattern "/api/Gym/{gym_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -509,7 +509,7 @@ export def "gym get" [
 #
 # GET /api/Membership
 # operationId: Membership_Get
-export def "membership Get" [
+export def "membership get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -531,7 +531,7 @@ export def "membership Get" [
 #
 # POST /api/Membership
 # operationId: Membership_Post
-export def "membership Post" [
+export def "membership create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,7 +546,7 @@ export def "membership Post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Membership")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -557,7 +557,7 @@ export def "membership Post" [
 #
 # DELETE /api/Package
 # operationId: Package_Delete
-export def "package Delete" [
+export def "package delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,11 +566,11 @@ export def "package Delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PackageId: int # primary key of package entity (format: int32)
+  --package-id: int # primary key of package entity (format: int32)
 ]: nothing -> record<isError: bool, message: string, responseException: any, result: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "PackageId" $PackageId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PackageId" $package_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Package" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -581,7 +581,7 @@ export def "package Delete" [
 #
 # GET /api/Package
 # operationId: Package_Get
-export def "package Get" [
+export def "package get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,11 +590,11 @@ export def "package Get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --packageId: int # primary key of package entity (format: int32)
+  --package-id: int # primary key of package entity (format: int32)
 ]: nothing -> record<isError: bool, message: string, responseException: any, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "packageId" $packageId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "packageId" $package_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Package" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -607,7 +607,7 @@ export def "package Get" [
 # operationId: Package_Post
 # --addOns item shape: {articleId: int, articleName?: string, articleNumber?: int, articlePrice?: float, endOrder?: int, isIncludeServiceInCharge?: bool, measureUnit?: string, numberOfItems?: float, startOrder?: int}
 # --availableGyms item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
-export def "package Post" [
+export def "package create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,55 +616,55 @@ export def "package Post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --addOns: list # Extra articles list added to the given package.              (nullable) — item shape: {articleId: int, articleName?: string, articleNumber?: int, articlePrice?: float, endOrder?: int, isIncludeServiceInCharge?: bool, measureUnit?: string, numberOfItems?: float, startOrder?: int}
-  --addonFee: float # sum of addon fees. incoming values for this filed will ignore.              (format: decimal)
-  --applyForAllGyms: oneof<nothing, bool> # Boolean value to indicate wheather package is available in all the gyms.             
-  --availableGyms: list # Gyms list where this package is available.              (nullable) — item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
-  --bindingPeriod: int # Range of period a member is bound to the contract if he/she choose this package.              (format: int32)
-  --createdDate: string # Package created DateTime.              (format: date-time)
-  --createdUser: string # Package created user.              (nullable)
+  --add-ons: list # Extra articles list added to the given package.              (nullable) — item shape: {articleId: int, articleName?: string, articleNumber?: int, articlePrice?: float, endOrder?: int, isIncludeServiceInCharge?: bool, measureUnit?: string, numberOfItems?: float, startOrder?: int}
+  --addon-fee: float # sum of addon fees. incoming values for this filed will ignore.              (format: decimal)
+  --apply-for-all-gyms: oneof<nothing, bool> # Boolean value to indicate wheather package is available in all the gyms.             
+  --available-gyms: list # Gyms list where this package is available.              (nullable) — item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
+  --binding-period: int # Range of period a member is bound to the contract if he/she choose this package.              (format: int32)
+  --created-date: string # Package created DateTime.              (format: date-time)
+  --created-user: string # Package created user.              (nullable)
   --description: string # Common descriptions about package.If there are more instructions               can be stored as comma separated values.              (nullable)
-  --endDate: string # End date of the package.After that package is not valid for use.              (format: date-time)
-  --expireInMonths: int # No of months the fixed package is valid for sale              (format: int32)
+  --end-date: string # End date of the package.After that package is not valid for use.              (format: date-time)
+  --expire-in-months: int # No of months the fixed package is valid for sale              (format: int32)
   --features: string # What are the facilities, features available for package.ex:- wifi, ACm etc.Can be stored as comma seperated values.              (nullable)
-  --freeMonths: int # No of months gym member can come without payments.              (format: int32)
-  --instructionsToGymUsers: string # Instruction to the gym members relevant to the package.              If there are more instructions can be stored as comma seperated values.              (nullable)
-  --instructionsToWebUsers: string # Instruction to the MRM members relevant to the package.              If there are more instructions can be stored as comma seperated values.              (nullable)
-  --isActive: oneof<nothing, bool> # Boolean value to indicate this package is still active or not.             
-  --isAtg: oneof<nothing, bool> # Boolean value to indicate ATG transaction from bank is applicable or not.             
-  --isAutoRenew: oneof<nothing, bool> # Boolean value to indicate the contract will auto renew after expiration               if this package would be chosen.             
-  --isFirstMonthFree: oneof<nothing, bool> # Boolean value to indicate if the first month charges is free.             
-  --isRegistrationFee: oneof<nothing, bool> # Boolean value to indicate this package has registration fee or not.             
-  --isRestAmount: oneof<nothing, bool> # Boolean value to indicate rest amount is applicable or not.             
-  --isShownInMobile: oneof<nothing, bool> # Boolean value to indicate package is visible in Mobile App or not.             
-  --isSponsorPackage: oneof<nothing, bool> # Boolean value to indicate package can be sponsored or not by other party.             
-  --maximumGiveAwayRestAmount: float # If a member join the gym middle of a month via this package,               what is the maximum amount of price can be neglected from payment from the member.              (format: decimal)
-  --memberCanAddAddOns: oneof<nothing, bool> # Boolean value to indicate member can add extra addons he wish if he choose this package.             
-  --memberCanLeaveWithinFreePeriod: oneof<nothing, bool> # Boolean value to indicate if member can leave from contract within               free period if he/she choose this package.             
-  --memberCanRemoveAddOns: oneof<nothing, bool> # Boolean value to indicate member can remove already added addons if he choose this package.             
-  --modifiedDate: string # Package last modified DateTime.              (format: date-time)
-  --modifiedUser: string # Package last modified user.              (nullable)
-  --monthlyFee: float # Monthly installment fee if package is not fixed visit. addition of the servicefee and addon fees divided by binding period.              read only              (format: decimal)
-  --nextPackageNumber: int # Next Package the contract continue after the binding period of this package.              (format: int32)
-  --numberOfInstallments: int # Maximum Number of installment a member can divide the package price/cost to pay.              (format: int32)
-  --numberOfVisits: int # If package is fixed visit type, then how many visits are available for this package.              (format: int32)
-  --packageId: int # format: int32
-  packageName: string
-  --packageNumber: string # nullable
-  packageType: string # Package type can be either fixed visit or unlimited.             
-  --perVisitPrice: float # Cost/Price of the single visit to gym.              (format: decimal)
-  registrationFee: float # Registartion fee for the package at a gym.              read only              (format: decimal)
-  serviceFee: float # total Service charge of the package for entire period.              (format: decimal)
-  --shownInWeb: oneof<nothing, bool> # Boolean value to show this package in MRM system or not.             
-  --startDate: string # Start date of the package.              (format: date-time)
+  --free-months: int # No of months gym member can come without payments.              (format: int32)
+  --instructions-to-gym-users: string # Instruction to the gym members relevant to the package.              If there are more instructions can be stored as comma seperated values.              (nullable)
+  --instructions-to-web-users: string # Instruction to the MRM members relevant to the package.              If there are more instructions can be stored as comma seperated values.              (nullable)
+  --is-active: oneof<nothing, bool> # Boolean value to indicate this package is still active or not.             
+  --is-atg: oneof<nothing, bool> # Boolean value to indicate ATG transaction from bank is applicable or not.             
+  --is-auto-renew: oneof<nothing, bool> # Boolean value to indicate the contract will auto renew after expiration               if this package would be chosen.             
+  --is-first-month-free: oneof<nothing, bool> # Boolean value to indicate if the first month charges is free.             
+  --is-registration-fee: oneof<nothing, bool> # Boolean value to indicate this package has registration fee or not.             
+  --is-rest-amount: oneof<nothing, bool> # Boolean value to indicate rest amount is applicable or not.             
+  --is-shown-in-mobile: oneof<nothing, bool> # Boolean value to indicate package is visible in Mobile App or not.             
+  --is-sponsor-package: oneof<nothing, bool> # Boolean value to indicate package can be sponsored or not by other party.             
+  --maximum-give-away-rest-amount: float # If a member join the gym middle of a month via this package,               what is the maximum amount of price can be neglected from payment from the member.              (format: decimal)
+  --member-can-add-add-ons: oneof<nothing, bool> # Boolean value to indicate member can add extra addons he wish if he choose this package.             
+  --member-can-leave-within-free-period: oneof<nothing, bool> # Boolean value to indicate if member can leave from contract within               free period if he/she choose this package.             
+  --member-can-remove-add-ons: oneof<nothing, bool> # Boolean value to indicate member can remove already added addons if he choose this package.             
+  --modified-date: string # Package last modified DateTime.              (format: date-time)
+  --modified-user: string # Package last modified user.              (nullable)
+  --monthly-fee: float # Monthly installment fee if package is not fixed visit. addition of the servicefee and addon fees divided by binding period.              read only              (format: decimal)
+  --next-package-number: int # Next Package the contract continue after the binding period of this package.              (format: int32)
+  --number-of-installments: int # Maximum Number of installment a member can divide the package price/cost to pay.              (format: int32)
+  --number-of-visits: int # If package is fixed visit type, then how many visits are available for this package.              (format: int32)
+  --package-id: int # format: int32
+  package_name: string
+  --package-number: string # nullable
+  package_type: string # Package type can be either fixed visit or unlimited.             
+  --per-visit-price: float # Cost/Price of the single visit to gym.              (format: decimal)
+  registration_fee: float # Registartion fee for the package at a gym.              read only              (format: decimal)
+  service_fee: float # total Service charge of the package for entire period.              (format: decimal)
+  --shown-in-web: oneof<nothing, bool> # Boolean value to show this package in MRM system or not.             
+  --start-date: string # Start date of the package.              (format: date-time)
   --tags: string # Comma separated string values in case of need of maintain some labels kind of               stuff relevant to the package.              (nullable)
-  --totalPrice: float # total price for the package including Addon fees, service fee and registration fee. incoming values for this field will ignore.              (format: decimal)
+  --total-price: float # total price for the package including Addon fees, service fee and registration fee. incoming values for this field will ignore.              (format: decimal)
 ]: any -> record<isError: bool, message: string, responseException: any, result: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Package")
-  let body = {addOns: $addOns, addonFee: $addonFee, applyForAllGyms: $applyForAllGyms, availableGyms: $availableGyms, bindingPeriod: $bindingPeriod, createdDate: $createdDate, createdUser: $createdUser, description: $description, endDate: $endDate, expireInMonths: $expireInMonths, features: $features, freeMonths: $freeMonths, instructionsToGymUsers: $instructionsToGymUsers, instructionsToWebUsers: $instructionsToWebUsers, isActive: $isActive, isAtg: $isAtg, isAutoRenew: $isAutoRenew, isFirstMonthFree: $isFirstMonthFree, isRegistrationFee: $isRegistrationFee, isRestAmount: $isRestAmount, isShownInMobile: $isShownInMobile, isSponsorPackage: $isSponsorPackage, maximumGiveAwayRestAmount: $maximumGiveAwayRestAmount, memberCanAddAddOns: $memberCanAddAddOns, memberCanLeaveWithinFreePeriod: $memberCanLeaveWithinFreePeriod, memberCanRemoveAddOns: $memberCanRemoveAddOns, modifiedDate: $modifiedDate, modifiedUser: $modifiedUser, monthlyFee: $monthlyFee, nextPackageNumber: $nextPackageNumber, numberOfInstallments: $numberOfInstallments, numberOfVisits: $numberOfVisits, packageId: $packageId, packageName: $packageName, packageNumber: $packageNumber, packageType: $packageType, perVisitPrice: $perVisitPrice, registrationFee: $registrationFee, serviceFee: $serviceFee, shownInWeb: $shownInWeb, startDate: $startDate, tags: $tags, totalPrice: $totalPrice} | compact
+  let body = {"addOns": $add_ons, "addonFee": $addon_fee, "applyForAllGyms": $apply_for_all_gyms, "availableGyms": $available_gyms, "bindingPeriod": $binding_period, "createdDate": $created_date, "createdUser": $created_user, "description": $description, "endDate": $end_date, "expireInMonths": $expire_in_months, "features": $features, "freeMonths": $free_months, "instructionsToGymUsers": $instructions_to_gym_users, "instructionsToWebUsers": $instructions_to_web_users, "isActive": $is_active, "isAtg": $is_atg, "isAutoRenew": $is_auto_renew, "isFirstMonthFree": $is_first_month_free, "isRegistrationFee": $is_registration_fee, "isRestAmount": $is_rest_amount, "isShownInMobile": $is_shown_in_mobile, "isSponsorPackage": $is_sponsor_package, "maximumGiveAwayRestAmount": $maximum_give_away_rest_amount, "memberCanAddAddOns": $member_can_add_add_ons, "memberCanLeaveWithinFreePeriod": $member_can_leave_within_free_period, "memberCanRemoveAddOns": $member_can_remove_add_ons, "modifiedDate": $modified_date, "modifiedUser": $modified_user, "monthlyFee": $monthly_fee, "nextPackageNumber": $next_package_number, "numberOfInstallments": $number_of_installments, "numberOfVisits": $number_of_visits, "packageId": $package_id, "packageName": $package_name, "packageNumber": $package_number, "packageType": $package_type, "perVisitPrice": $per_visit_price, "registrationFee": $registration_fee, "serviceFee": $service_fee, "shownInWeb": $shown_in_web, "startDate": $start_date, "tags": $tags, "totalPrice": $total_price} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -677,7 +677,7 @@ export def "package Post" [
 # operationId: Package_Put
 # --addOns item shape: {articleId: int, articleName?: string, articleNumber?: int, articlePrice?: float, endOrder?: int, isIncludeServiceInCharge?: bool, measureUnit?: string, numberOfItems?: float, startOrder?: int}
 # --availableGyms item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
-export def "package Put" [
+export def "package update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,55 +686,55 @@ export def "package Put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --addOns: list # Extra articles list added to the given package.              (nullable) — item shape: {articleId: int, articleName?: string, articleNumber?: int, articlePrice?: float, endOrder?: int, isIncludeServiceInCharge?: bool, measureUnit?: string, numberOfItems?: float, startOrder?: int}
-  --addonFee: float # sum of addon fees. incoming values for this filed will ignore.              (format: decimal)
-  --applyForAllGyms: oneof<nothing, bool> # Boolean value to indicate wheather package is available in all the gyms.             
-  --availableGyms: list # Gyms list where this package is available.              (nullable) — item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
-  --bindingPeriod: int # Range of period a member is bound to the contract if he/she choose this package.              (format: int32)
-  --createdDate: string # Package created DateTime.              (format: date-time)
-  --createdUser: string # Package created user.              (nullable)
+  --add-ons: list # Extra articles list added to the given package.              (nullable) — item shape: {articleId: int, articleName?: string, articleNumber?: int, articlePrice?: float, endOrder?: int, isIncludeServiceInCharge?: bool, measureUnit?: string, numberOfItems?: float, startOrder?: int}
+  --addon-fee: float # sum of addon fees. incoming values for this filed will ignore.              (format: decimal)
+  --apply-for-all-gyms: oneof<nothing, bool> # Boolean value to indicate wheather package is available in all the gyms.             
+  --available-gyms: list # Gyms list where this package is available.              (nullable) — item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
+  --binding-period: int # Range of period a member is bound to the contract if he/she choose this package.              (format: int32)
+  --created-date: string # Package created DateTime.              (format: date-time)
+  --created-user: string # Package created user.              (nullable)
   --description: string # Common descriptions about package.If there are more instructions               can be stored as comma separated values.              (nullable)
-  --endDate: string # End date of the package.After that package is not valid for use.              (format: date-time)
-  --expireInMonths: int # No of months the fixed package is valid for sale              (format: int32)
+  --end-date: string # End date of the package.After that package is not valid for use.              (format: date-time)
+  --expire-in-months: int # No of months the fixed package is valid for sale              (format: int32)
   --features: string # What are the facilities, features available for package.ex:- wifi, ACm etc.Can be stored as comma seperated values.              (nullable)
-  --freeMonths: int # No of months gym member can come without payments.              (format: int32)
-  --instructionsToGymUsers: string # Instruction to the gym members relevant to the package.              If there are more instructions can be stored as comma seperated values.              (nullable)
-  --instructionsToWebUsers: string # Instruction to the MRM members relevant to the package.              If there are more instructions can be stored as comma seperated values.              (nullable)
-  --isActive: oneof<nothing, bool> # Boolean value to indicate this package is still active or not.             
-  --isAtg: oneof<nothing, bool> # Boolean value to indicate ATG transaction from bank is applicable or not.             
-  --isAutoRenew: oneof<nothing, bool> # Boolean value to indicate the contract will auto renew after expiration               if this package would be chosen.             
-  --isFirstMonthFree: oneof<nothing, bool> # Boolean value to indicate if the first month charges is free.             
-  --isRegistrationFee: oneof<nothing, bool> # Boolean value to indicate this package has registration fee or not.             
-  --isRestAmount: oneof<nothing, bool> # Boolean value to indicate rest amount is applicable or not.             
-  --isShownInMobile: oneof<nothing, bool> # Boolean value to indicate package is visible in Mobile App or not.             
-  --isSponsorPackage: oneof<nothing, bool> # Boolean value to indicate package can be sponsored or not by other party.             
-  --maximumGiveAwayRestAmount: float # If a member join the gym middle of a month via this package,               what is the maximum amount of price can be neglected from payment from the member.              (format: decimal)
-  --memberCanAddAddOns: oneof<nothing, bool> # Boolean value to indicate member can add extra addons he wish if he choose this package.             
-  --memberCanLeaveWithinFreePeriod: oneof<nothing, bool> # Boolean value to indicate if member can leave from contract within               free period if he/she choose this package.             
-  --memberCanRemoveAddOns: oneof<nothing, bool> # Boolean value to indicate member can remove already added addons if he choose this package.             
-  --modifiedDate: string # Package last modified DateTime.              (format: date-time)
-  --modifiedUser: string # Package last modified user.              (nullable)
-  --monthlyFee: float # Monthly installment fee if package is not fixed visit. addition of the servicefee and addon fees divided by binding period.              read only              (format: decimal)
-  --nextPackageNumber: int # Next Package the contract continue after the binding period of this package.              (format: int32)
-  --numberOfInstallments: int # Maximum Number of installment a member can divide the package price/cost to pay.              (format: int32)
-  --numberOfVisits: int # If package is fixed visit type, then how many visits are available for this package.              (format: int32)
-  --packageId: int # format: int32
-  packageName: string
-  --packageNumber: string # nullable
-  packageType: string # Package type can be either fixed visit or unlimited.             
-  --perVisitPrice: float # Cost/Price of the single visit to gym.              (format: decimal)
-  registrationFee: float # Registartion fee for the package at a gym.              read only              (format: decimal)
-  serviceFee: float # total Service charge of the package for entire period.              (format: decimal)
-  --shownInWeb: oneof<nothing, bool> # Boolean value to show this package in MRM system or not.             
-  --startDate: string # Start date of the package.              (format: date-time)
+  --free-months: int # No of months gym member can come without payments.              (format: int32)
+  --instructions-to-gym-users: string # Instruction to the gym members relevant to the package.              If there are more instructions can be stored as comma seperated values.              (nullable)
+  --instructions-to-web-users: string # Instruction to the MRM members relevant to the package.              If there are more instructions can be stored as comma seperated values.              (nullable)
+  --is-active: oneof<nothing, bool> # Boolean value to indicate this package is still active or not.             
+  --is-atg: oneof<nothing, bool> # Boolean value to indicate ATG transaction from bank is applicable or not.             
+  --is-auto-renew: oneof<nothing, bool> # Boolean value to indicate the contract will auto renew after expiration               if this package would be chosen.             
+  --is-first-month-free: oneof<nothing, bool> # Boolean value to indicate if the first month charges is free.             
+  --is-registration-fee: oneof<nothing, bool> # Boolean value to indicate this package has registration fee or not.             
+  --is-rest-amount: oneof<nothing, bool> # Boolean value to indicate rest amount is applicable or not.             
+  --is-shown-in-mobile: oneof<nothing, bool> # Boolean value to indicate package is visible in Mobile App or not.             
+  --is-sponsor-package: oneof<nothing, bool> # Boolean value to indicate package can be sponsored or not by other party.             
+  --maximum-give-away-rest-amount: float # If a member join the gym middle of a month via this package,               what is the maximum amount of price can be neglected from payment from the member.              (format: decimal)
+  --member-can-add-add-ons: oneof<nothing, bool> # Boolean value to indicate member can add extra addons he wish if he choose this package.             
+  --member-can-leave-within-free-period: oneof<nothing, bool> # Boolean value to indicate if member can leave from contract within               free period if he/she choose this package.             
+  --member-can-remove-add-ons: oneof<nothing, bool> # Boolean value to indicate member can remove already added addons if he choose this package.             
+  --modified-date: string # Package last modified DateTime.              (format: date-time)
+  --modified-user: string # Package last modified user.              (nullable)
+  --monthly-fee: float # Monthly installment fee if package is not fixed visit. addition of the servicefee and addon fees divided by binding period.              read only              (format: decimal)
+  --next-package-number: int # Next Package the contract continue after the binding period of this package.              (format: int32)
+  --number-of-installments: int # Maximum Number of installment a member can divide the package price/cost to pay.              (format: int32)
+  --number-of-visits: int # If package is fixed visit type, then how many visits are available for this package.              (format: int32)
+  --package-id: int # format: int32
+  package_name: string
+  --package-number: string # nullable
+  package_type: string # Package type can be either fixed visit or unlimited.             
+  --per-visit-price: float # Cost/Price of the single visit to gym.              (format: decimal)
+  registration_fee: float # Registartion fee for the package at a gym.              read only              (format: decimal)
+  service_fee: float # total Service charge of the package for entire period.              (format: decimal)
+  --shown-in-web: oneof<nothing, bool> # Boolean value to show this package in MRM system or not.             
+  --start-date: string # Start date of the package.              (format: date-time)
   --tags: string # Comma separated string values in case of need of maintain some labels kind of               stuff relevant to the package.              (nullable)
-  --totalPrice: float # total price for the package including Addon fees, service fee and registration fee. incoming values for this field will ignore.              (format: decimal)
+  --total-price: float # total price for the package including Addon fees, service fee and registration fee. incoming values for this field will ignore.              (format: decimal)
 ]: any -> record<isError: bool, message: string, responseException: any, result: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Package")
-  let body = {addOns: $addOns, addonFee: $addonFee, applyForAllGyms: $applyForAllGyms, availableGyms: $availableGyms, bindingPeriod: $bindingPeriod, createdDate: $createdDate, createdUser: $createdUser, description: $description, endDate: $endDate, expireInMonths: $expireInMonths, features: $features, freeMonths: $freeMonths, instructionsToGymUsers: $instructionsToGymUsers, instructionsToWebUsers: $instructionsToWebUsers, isActive: $isActive, isAtg: $isAtg, isAutoRenew: $isAutoRenew, isFirstMonthFree: $isFirstMonthFree, isRegistrationFee: $isRegistrationFee, isRestAmount: $isRestAmount, isShownInMobile: $isShownInMobile, isSponsorPackage: $isSponsorPackage, maximumGiveAwayRestAmount: $maximumGiveAwayRestAmount, memberCanAddAddOns: $memberCanAddAddOns, memberCanLeaveWithinFreePeriod: $memberCanLeaveWithinFreePeriod, memberCanRemoveAddOns: $memberCanRemoveAddOns, modifiedDate: $modifiedDate, modifiedUser: $modifiedUser, monthlyFee: $monthlyFee, nextPackageNumber: $nextPackageNumber, numberOfInstallments: $numberOfInstallments, numberOfVisits: $numberOfVisits, packageId: $packageId, packageName: $packageName, packageNumber: $packageNumber, packageType: $packageType, perVisitPrice: $perVisitPrice, registrationFee: $registrationFee, serviceFee: $serviceFee, shownInWeb: $shownInWeb, startDate: $startDate, tags: $tags, totalPrice: $totalPrice} | compact
+  let body = {"addOns": $add_ons, "addonFee": $addon_fee, "applyForAllGyms": $apply_for_all_gyms, "availableGyms": $available_gyms, "bindingPeriod": $binding_period, "createdDate": $created_date, "createdUser": $created_user, "description": $description, "endDate": $end_date, "expireInMonths": $expire_in_months, "features": $features, "freeMonths": $free_months, "instructionsToGymUsers": $instructions_to_gym_users, "instructionsToWebUsers": $instructions_to_web_users, "isActive": $is_active, "isAtg": $is_atg, "isAutoRenew": $is_auto_renew, "isFirstMonthFree": $is_first_month_free, "isRegistrationFee": $is_registration_fee, "isRestAmount": $is_rest_amount, "isShownInMobile": $is_shown_in_mobile, "isSponsorPackage": $is_sponsor_package, "maximumGiveAwayRestAmount": $maximum_give_away_rest_amount, "memberCanAddAddOns": $member_can_add_add_ons, "memberCanLeaveWithinFreePeriod": $member_can_leave_within_free_period, "memberCanRemoveAddOns": $member_can_remove_add_ons, "modifiedDate": $modified_date, "modifiedUser": $modified_user, "monthlyFee": $monthly_fee, "nextPackageNumber": $next_package_number, "numberOfInstallments": $number_of_installments, "numberOfVisits": $number_of_visits, "packageId": $package_id, "packageName": $package_name, "packageNumber": $package_number, "packageType": $package_type, "perVisitPrice": $per_visit_price, "registrationFee": $registration_fee, "serviceFee": $service_fee, "shownInWeb": $shown_in_web, "startDate": $start_date, "tags": $tags, "totalPrice": $total_price} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -745,7 +745,7 @@ export def "package Put" [
 #
 # GET /api/Package/Search
 # operationId: Package_Search
-export def "package-search Search" [
+export def "package-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -754,21 +754,21 @@ export def "package-search Search" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --searchText: string # part of package name (nullable)
-  --gymId: int # primary key of TL gym entity (format: int32, default: -1)
+  --search-text: string # part of package name (nullable)
+  --gym-id: int # primary key of TL gym entity (format: int32, default: -1)
   --type: string # filter package type.!-- default is 'all' (nullable, default: all)
-  --orderBy: string # order by column.!-- invalid column will give internal server error (nullable, default: 1)
+  --order-by: string # order by column.!-- invalid column will give internal server error (nullable, default: 1)
   --limit: int # number of recode in result and default is 100. use negative numbers to order by desc (format: int32, default: 100)
   --offset: int # number of recodes to skip (format: int32, default: 0)
-  --activeStatus: int # active status active : 1, inactive : 2, all 3, deafult : 1 (format: int32, default: 1)
-  --categoryId: int # Packge Category Id (format: int32, default: -1)
-  --startpPrice: float # Start price of the price Range (format: decimal, default: 0)
-  --endPrice: float # End Price of the price Range (format: decimal, default: 9999999)
-  --requestSource: int # 1 : MRM, 2 : Mobile  (format: int32, default: 1)
+  --active-status: int # active status active : 1, inactive : 2, all 3, deafult : 1 (format: int32, default: 1)
+  --category-id: int # Packge Category Id (format: int32, default: -1)
+  --startp-price: float # Start price of the price Range (format: decimal, default: 0)
+  --end-price: float # End Price of the price Range (format: decimal, default: 9999999)
+  --request-source: int # 1 : MRM, 2 : Mobile  (format: int32, default: 1)
 ]: nothing -> table<isError: bool, message: string, responseException: any, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "searchText" $searchText "scalar") (serialize-qp "gymId" $gymId "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "activeStatus" $activeStatus "scalar") (serialize-qp "categoryId" $categoryId "scalar") (serialize-qp "startpPrice" $startpPrice "scalar") (serialize-qp "endPrice" $endPrice "scalar") (serialize-qp "requestSource" $requestSource "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "searchText" $search_text "scalar") (serialize-qp "gymId" $gym_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "activeStatus" $active_status "scalar") (serialize-qp "categoryId" $category_id "scalar") (serialize-qp "startpPrice" $startp_price "scalar") (serialize-qp "endPrice" $end_price "scalar") (serialize-qp "requestSource" $request_source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Package/Search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -779,7 +779,7 @@ export def "package-search Search" [
 #
 # PUT /api/Package/UpdateStatus
 # operationId: Package_UpdateStatus
-export def "package-update-status UpdateStatus" [
+export def "package-update-status update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,13 +788,13 @@ export def "package-update-status UpdateStatus" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --packageId: int # package Id (format: int32)
+  --package-id: int # package Id (format: int32)
   --status: int # status : 1 activate, 2 : deactivate (format: int32, default: 1)
-  --userName: string # Status updated User (nullable, default: system)
+  --user-name: string # Status updated User (nullable, default: system)
 ]: nothing -> record<isError: bool, message: string, responseException: any, result: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "packageId" $packageId "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "userName" $userName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "packageId" $package_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Package/UpdateStatus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -805,7 +805,7 @@ export def "package-update-status UpdateStatus" [
 #
 # GET /api/Status
 # operationId: Status_Get
-export def "status Get" [
+export def "status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -814,11 +814,11 @@ export def "status Get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --messageId: string # respose of POST request (nullable)
+  --message-id: string # respose of POST request (nullable)
 ]: nothing -> record<messageId: string, referenceId: int, source: any, statusId: int, statusText: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "messageId" $messageId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "messageId" $message_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -851,7 +851,7 @@ export def "test get" [
 #
 # GET /api/User
 # operationId: User_Get
-export def "user Get" [
+export def "user get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -873,7 +873,7 @@ export def "user Get" [
 #
 # POST /api/User/registerUser
 # operationId: User_registerUser
-export def "user-register-user registerUser" [
+export def "user-register-user create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -882,19 +882,19 @@ export def "user-register-user registerUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --UserId: int # Indentity number(primary key) for user object. Generated in DB table when inserting a record.              (format: int32)
-  --AccountNumber: string # Account number of the user.It can be any stakeholder of the application.even can be a gym.              (nullable)
-  --GymNumber: string # If this user is a gym, then the gym number.              (nullable)
-  --ExternalEntityNumber: string # Entity number that make a relationship with BOX API DB.              (nullable)
-  --Name: string # Name of the user.              (nullable)
-  --Number: string # Unique number maintain by application to idenify user.              (nullable)
-  --IntroduceBy: int # If Someone introduced this user to the system, then that user's UserId.              (format: int32)
-  --Guardian: int # Gaurdian of the this user if he/she is under 18 years old.              (format: int32)
-  --TypeId: int # Type of the user.              (format: int32)
+  --user-id: int # Indentity number(primary key) for user object. Generated in DB table when inserting a record.              (format: int32)
+  --account-number: string # Account number of the user.It can be any stakeholder of the application.even can be a gym.              (nullable)
+  --gym-number: string # If this user is a gym, then the gym number.              (nullable)
+  --external-entity-number: string # Entity number that make a relationship with BOX API DB.              (nullable)
+  --name: string # Name of the user.              (nullable)
+  --number: string # Unique number maintain by application to idenify user.              (nullable)
+  --introduce-by: int # If Someone introduced this user to the system, then that user's UserId.              (format: int32)
+  --guardian: int # Gaurdian of the this user if he/she is under 18 years old.              (format: int32)
+  --type-id: int # Type of the user.              (format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "UserId" $UserId "scalar") (serialize-qp "AccountNumber" $AccountNumber "scalar") (serialize-qp "GymNumber" $GymNumber "scalar") (serialize-qp "ExternalEntityNumber" $ExternalEntityNumber "scalar") (serialize-qp "Name" $Name "scalar") (serialize-qp "Number" $Number "scalar") (serialize-qp "IntroduceBy" $IntroduceBy "scalar") (serialize-qp "Guardian" $Guardian "scalar") (serialize-qp "TypeId" $TypeId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "UserId" $user_id "scalar") (serialize-qp "AccountNumber" $account_number "scalar") (serialize-qp "GymNumber" $gym_number "scalar") (serialize-qp "ExternalEntityNumber" $external_entity_number "scalar") (serialize-qp "Name" $name "scalar") (serialize-qp "Number" $number "scalar") (serialize-qp "IntroduceBy" $introduce_by "scalar") (serialize-qp "Guardian" $guardian "scalar") (serialize-qp "TypeId" $type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/User/registerUser" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -905,7 +905,7 @@ export def "user-register-user registerUser" [
 #
 # PUT /api/User/updateuser
 # operationId: User_updateUser
-export def "user-updateuser updateUser" [
+export def "user-updateuser update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -914,19 +914,19 @@ export def "user-updateuser updateUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --UserId: int # Indentity number(primary key) for user object. Generated in DB table when inserting a record.              (format: int32)
-  --AccountNumber: string # Account number of the user.It can be any stakeholder of the application.even can be a gym.              (nullable)
-  --GymNumber: string # If this user is a gym, then the gym number.              (nullable)
-  --ExternalEntityNumber: string # Entity number that make a relationship with BOX API DB.              (nullable)
-  --Name: string # Name of the user.              (nullable)
-  --Number: string # Unique number maintain by application to idenify user.              (nullable)
-  --IntroduceBy: int # If Someone introduced this user to the system, then that user's UserId.              (format: int32)
-  --Guardian: int # Gaurdian of the this user if he/she is under 18 years old.              (format: int32)
-  --TypeId: int # Type of the user.              (format: int32)
+  --user-id: int # Indentity number(primary key) for user object. Generated in DB table when inserting a record.              (format: int32)
+  --account-number: string # Account number of the user.It can be any stakeholder of the application.even can be a gym.              (nullable)
+  --gym-number: string # If this user is a gym, then the gym number.              (nullable)
+  --external-entity-number: string # Entity number that make a relationship with BOX API DB.              (nullable)
+  --name: string # Name of the user.              (nullable)
+  --number: string # Unique number maintain by application to idenify user.              (nullable)
+  --introduce-by: int # If Someone introduced this user to the system, then that user's UserId.              (format: int32)
+  --guardian: int # Gaurdian of the this user if he/she is under 18 years old.              (format: int32)
+  --type-id: int # Type of the user.              (format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "UserId" $UserId "scalar") (serialize-qp "AccountNumber" $AccountNumber "scalar") (serialize-qp "GymNumber" $GymNumber "scalar") (serialize-qp "ExternalEntityNumber" $ExternalEntityNumber "scalar") (serialize-qp "Name" $Name "scalar") (serialize-qp "Number" $Number "scalar") (serialize-qp "IntroduceBy" $IntroduceBy "scalar") (serialize-qp "Guardian" $Guardian "scalar") (serialize-qp "TypeId" $TypeId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "UserId" $user_id "scalar") (serialize-qp "AccountNumber" $account_number "scalar") (serialize-qp "GymNumber" $gym_number "scalar") (serialize-qp "ExternalEntityNumber" $external_entity_number "scalar") (serialize-qp "Name" $name "scalar") (serialize-qp "Number" $number "scalar") (serialize-qp "IntroduceBy" $introduce_by "scalar") (serialize-qp "Guardian" $guardian "scalar") (serialize-qp "TypeId" $type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/User/updateuser" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

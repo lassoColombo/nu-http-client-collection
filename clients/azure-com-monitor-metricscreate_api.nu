@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-metrics Create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-metrics create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,12 +93,12 @@ export def commands []: nothing -> table {
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProvider}/{resourceTypeName}/{resourceName}/metrics
 # operationId: Metrics_Create
 # --data shape: {baseData: record}
-export def "subscriptions-resourcegroups-providers-metrics Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceProvider: string
-  resourceTypeName: string
-  resourceName: string
+export def "subscriptions-resourcegroups-providers-metrics create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_provider: string
+  resource_type_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,19 +107,19 @@ export def "subscriptions-resourcegroups-providers-metrics Create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Supports application/json and application/x-ndjson
-  --Content-Length: int # Content length of the payload
-  --Authorization: string # Authorization token issue for issued for audience "https:\\monitoring.azure.com\"
+  --content-type: string # Supports application/json and application/x-ndjson
+  --content-length: int # Content length of the payload
+  --authorization: string # Authorization token issue for issued for audience "https:\\monitoring.azure.com\"
   data: record # shape: {baseData: record}
   time: string # Gets or sets Time property (in ISO 8601 format)
 ]: any -> record<apiFailureResponse: record<error: record<code: string, message: string>>, statusCode: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($resourceProvider)/($resourceTypeName)/($resourceName)/metrics")
-  let body = {data: $data, time: $time} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_provider: $resource_provider, resource_type_name: $resource_type_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{resource_provider}/{resource_type_name}/{resource_name}/metrics"))
+  let body = {"data": $data, "time": $time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Content-Length": $Content_Length, "Authorization": $Authorization} | compact
+  let extra_headers = {"Content-Type": $content_type, "Content-Length": $content_length, "Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

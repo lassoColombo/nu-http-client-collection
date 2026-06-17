@@ -67,9 +67,8 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 def method-completer [] { ["icueMLN" "icueMLO" "icueMLP"] }
-def ErrorType-completer [] { ["MeanAbsoluteError" "MeanAbsolutePercentageError" "MeanSquaredError" "MedianAbsoluteDeviation" "None"] }
-def Method-completer [] { ["AutoBestPick" "BoxJenkins" "Croston" "DoubleExponentialSmoothing" "HoltWinters" "SimpleMovingAverage" "SingleExponentialSmoothing" "iCUE1"] }
-def errorType-completer [] { ["MeanAbsoluteError" "MeanAbsolutePercentageError" "MeanSquaredError" "MedianAbsoluteDeviation" "None"] }
+def error-type-completer [] { ["MeanAbsoluteError" "MeanAbsolutePercentageError" "MeanSquaredError" "MedianAbsoluteDeviation" "None"] }
+def method-completer-1 [] { ["AutoBestPick" "BoxJenkins" "Croston" "DoubleExponentialSmoothing" "HoltWinters" "SimpleMovingAverage" "SingleExponentialSmoothing" "iCUE1"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -107,12 +106,12 @@ export def "administration-entity get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> table<address: string, dbConnection: string, email: string, id: int, isActive: bool, name: string, token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administration/entity")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -132,7 +131,7 @@ export def "administration-entity post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --address: string # nullable
   --email: string # nullable
   --name: string # nullable
@@ -141,9 +140,9 @@ export def "administration-entity post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administration/entity")
-  let body = {address: $address, email: $email, name: $name} | compact
+  let body = {"address": $address, "email": $email, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -162,17 +161,17 @@ export def "administration-entity put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --id: int # format: int32
-  --isActive: oneof<nothing, bool>
+  --is-active: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administration/entity")
-  let body = {id: $id, isActive: $isActive} | compact
+  let body = {"id": $id, "isActive": $is_active} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -192,12 +191,12 @@ export def "administration-entity delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/administration/entity/($id)")
-  let extra_headers = {"Token": $Token} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/administration/entity/{id}"))
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -217,17 +216,17 @@ export def "administration-file-to-json post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
-  File: string # format: binary
-  Periodicity: int # format: int32
+  --hdr-token: string # User Authentication Token
+  file: string # format: binary
+  periodicity: int # format: int32
 ]: any -> record<data: table<historyValues: list, timeSeriesId: string>, planningLevelId: string, startDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administration/file-to-json")
-  let body = {File: $File, Periodicity: $Periodicity} | compact
+  let body = {"File": $file, "Periodicity": $periodicity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -247,12 +246,12 @@ export def "administration-model list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> table<key: string, name: string, queue: string, replyQueue: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administration/model")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -272,7 +271,7 @@ export def "administration-model post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --key: string # nullable
   --name: string # nullable
 ]: any -> record<key: string, name: string, queue: string, replyQueue: string> {
@@ -280,9 +279,9 @@ export def "administration-model post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administration/model")
-  let body = {key: $key, name: $name} | compact
+  let body = {"key": $key, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -293,7 +292,7 @@ export def "administration-model post" [
 #
 # GET /administration/model/{entityId}
 export def "administration-model get" [
-  entityId: int
+  entity_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,12 +302,12 @@ export def "administration-model get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> table<key: string, name: string, queue: string, replyQueue: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/administration/model/($entityId)")
-  let extra_headers = {"Token": $Token} | compact
+  let full_url = (build-url $base ({entity_id: $entity_id} | format pattern "/administration/model/{entity_id}"))
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -319,7 +318,7 @@ export def "administration-model get" [
 #
 # POST /administration/model/{entityId}
 export def "administration-model post-by-entityId" [
-  entityId: int
+  entity_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,17 +328,17 @@ export def "administration-model post-by-entityId" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --key: string # nullable
   --name: string # nullable
 ]: any -> record<key: string, name: string, queue: string, replyQueue: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/administration/model/($entityId)")
-  let body = {key: $key, name: $name} | compact
+  let full_url = (build-url $base ({entity_id: $entity_id} | format pattern "/administration/model/{entity_id}"))
+  let body = {"key": $key, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -358,12 +357,12 @@ export def "administration-planning-level-lock post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administration/planning-level/lock")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -374,7 +373,7 @@ export def "administration-planning-level-lock post" [
 #
 # DELETE /administration/planning-level/{entityId}/{id}
 export def "administration-planning-level delete" [
-  entityId: int
+  entity_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -384,12 +383,12 @@ export def "administration-planning-level delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/administration/planning-level/($entityId)/($id)")
-  let extra_headers = {"Token": $Token} | compact
+  let full_url = (build-url $base ({entity_id: $entity_id, id: $id} | format pattern "/administration/planning-level/{entity_id}/{id}"))
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -409,18 +408,18 @@ export def "administration-token post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
-  --entityToken: string # format: uuid
-  --expirationDate: string # format: date-time
-  --userToken: string # format: uuid
+  --hdr-token: string # User Authentication Token
+  --entity-token: string # format: uuid
+  --expiration-date: string # format: date-time
+  --user-token: string # format: uuid
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administration/token")
-  let body = {entityToken: $entityToken, expirationDate: $expirationDate, userToken: $userToken} | compact
+  let body = {"entityToken": $entity_token, "expirationDate": $expiration_date, "userToken": $user_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -440,9 +439,9 @@ export def "administration-user post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --email: string # nullable
-  --entityToken: string # format: uuid
+  --entity-token: string # format: uuid
   --firstname: string # nullable
   --lastname: string # nullable
   --phone: string # nullable
@@ -451,9 +450,9 @@ export def "administration-user post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administration/user")
-  let body = {email: $email, entityToken: $entityToken, firstname: $firstname, lastname: $lastname, phone: $phone} | compact
+  let body = {"email": $email, "entityToken": $entity_token, "firstname": $firstname, "lastname": $lastname, "phone": $phone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -472,12 +471,12 @@ export def "administration-user put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administration/user")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -496,18 +495,18 @@ export def "administration-user-lock put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
-  --entityId: int # format: int32
+  --hdr-token: string # User Authentication Token
+  --entity-id: int # format: int32
   --id: int # format: int32
-  --isActive: oneof<nothing, bool>
+  --is-active: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administration/user/lock")
-  let body = {entityId: $entityId, id: $id, isActive: $isActive} | compact
+  let body = {"entityId": $entity_id, "id": $id, "isActive": $is_active} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -518,7 +517,7 @@ export def "administration-user-lock put" [
 #
 # GET /administration/user/{entityId}
 export def "administration-user get" [
-  entityId: int
+  entity_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -527,12 +526,12 @@ export def "administration-user get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/administration/user/($entityId)")
-  let extra_headers = {"Token": $Token} | compact
+  let full_url = (build-url $base ({entity_id: $entity_id} | format pattern "/administration/user/{entity_id}"))
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -543,7 +542,7 @@ export def "administration-user get" [
 #
 # DELETE /administration/user/{entityId}/{id}
 export def "administration-user delete" [
-  entityId: int
+  entity_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -553,12 +552,12 @@ export def "administration-user delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/administration/user/($entityId)/($id)")
-  let extra_headers = {"Token": $Token} | compact
+  let full_url = (build-url $base ({entity_id: $entity_id, id: $id} | format pattern "/administration/user/{entity_id}/{id}"))
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -580,21 +579,21 @@ export def "forecast post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --data: list # nullable — item shape: {historyValues?: list, timeSeriesId?: string}
   method: string # e.g. iCUE1
   --override: oneof<nothing, bool> # e.g. false
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-  planningLevelId: string
-  startDate: string # e.g. 1/16/2016
+  planning_level_id: string
+  start_date: string # e.g. 1/16/2016
 ]: any -> record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, method: string, timeSeriesId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forecast")
-  let body = {data: $data, method: $method, override: $override, params: $params, planningLevelId: $planningLevelId, startDate: $startDate} | compact
+  let body = {"data": $data, "method": $method, "override": $override, "params": $params, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -616,20 +615,20 @@ export def "forecast-ai post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --data: list # nullable — item shape: {historyValues?: list, timeSeriesId?: string}
   method: string@method-completer # e.g. icueMLP | icueMLO
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-  planningLevelId: string
-  startDate: string # e.g. 1/16/2016
+  planning_level_id: string
+  start_date: string # e.g. 1/16/2016
 ]: any -> record<jobId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forecast/AI")
-  let body = {data: $data, method: $method, params: $params, planningLevelId: $planningLevelId, startDate: $startDate} | compact
+  let body = {"data": $data, "method": $method, "params": $params, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -651,20 +650,20 @@ export def "forecast-ai-history-and-forecast post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --data: list # nullable — item shape: {historyValues?: list, timeSeriesId?: string}
   method: string@method-completer # e.g. icueMLP | icueMLO
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-  planningLevelId: string
-  startDate: string # e.g. 1/16/2016
+  planning_level_id: string
+  start_date: string # e.g. 1/16/2016
 ]: any -> record<jobId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forecast/AI/history-and-forecast")
-  let body = {data: $data, method: $method, params: $params, planningLevelId: $planningLevelId, startDate: $startDate} | compact
+  let body = {"data": $data, "method": $method, "params": $params, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -684,23 +683,23 @@ export def "forecast-file-to-forecast post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
-  --DiscardData: oneof<nothing, bool>
-  --ErrorType: string@ErrorType-completer
-  File: string # format: binary
-  --HoldOutPeriod: int # format: int32
-  Method: string@Method-completer # e.g. iCUE1
-  --NoFcst: int # format: int32
-  --OutlierDetection: oneof<nothing, bool>
-  --Periodicity: int # format: int32
+  --hdr-token: string # User Authentication Token
+  --discard-data: oneof<nothing, bool>
+  --error-type: string@error-type-completer
+  file: string # format: binary
+  --hold-out-period: int # format: int32
+  method: string@method-completer-1 # e.g. iCUE1
+  --no-fcst: int # format: int32
+  --outlier-detection: oneof<nothing, bool>
+  --periodicity: int # format: int32
 ]: any -> record<jobId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forecast/file-to-forecast")
-  let body = {DiscardData: $DiscardData, ErrorType: $ErrorType, File: $File, HoldOutPeriod: $HoldOutPeriod, Method: $Method, NoFcst: $NoFcst, OutlierDetection: $OutlierDetection, Periodicity: $Periodicity} | compact
+  let body = {"DiscardData": $discard_data, "ErrorType": $error_type, "File": $file, "HoldOutPeriod": $hold_out_period, "Method": $method, "NoFcst": $no_fcst, "OutlierDetection": $outlier_detection, "Periodicity": $periodicity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -722,21 +721,21 @@ export def "forecast-forecast-bottom-up post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --data: list # nullable — item shape: {historyValues?: list, timeSeriesId?: string}
   method: string # e.g. iCUE1
   --override: oneof<nothing, bool> # e.g. false
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-  planningLevelId: string
-  startDate: string # e.g. 1/16/2016
+  planning_level_id: string
+  start_date: string # e.g. 1/16/2016
 ]: any -> record<forecastData: table<date: string, value: float>, hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forecast/forecast-bottom-up")
-  let body = {data: $data, method: $method, override: $override, params: $params, planningLevelId: $planningLevelId, startDate: $startDate} | compact
+  let body = {"data": $data, "method": $method, "override": $override, "params": $params, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -757,21 +756,21 @@ export def "forecast-forecast-top-down post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --data: list # nullable — item shape: {historyValues?: list, timeSeriesId?: string}
   method: string # e.g. iCUE1
   --override: oneof<nothing, bool> # e.g. false
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-  planningLevelId: string
-  startDate: string # e.g. 1/16/2016
+  planning_level_id: string
+  start_date: string # e.g. 1/16/2016
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forecast/forecast-top-down")
-  let body = {data: $data, method: $method, override: $override, params: $params, planningLevelId: $planningLevelId, startDate: $startDate} | compact
+  let body = {"data": $data, "method": $method, "override": $override, "params": $params, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -793,21 +792,21 @@ export def "forecast-full-detail post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --data: list # nullable — item shape: {historyValues?: list, timeSeriesId?: string}
   method: string # e.g. iCUE1
   --override: oneof<nothing, bool> # e.g. false
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-  planningLevelId: string
-  startDate: string # e.g. 1/16/2016
+  planning_level_id: string
+  start_date: string # e.g. 1/16/2016
 ]: any -> record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, historyData: list, method: string, optimalParameters: record, outliers: list, timeSeriesId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forecast/full-detail")
-  let body = {data: $data, method: $method, override: $override, params: $params, planningLevelId: $planningLevelId, startDate: $startDate} | compact
+  let body = {"data": $data, "method": $method, "override": $override, "params": $params, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -829,21 +828,21 @@ export def "forecast-history-and-forecast post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --data: list # nullable — item shape: {historyValues?: list, timeSeriesId?: string}
   method: string # e.g. iCUE1
   --override: oneof<nothing, bool> # e.g. false
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-  planningLevelId: string
-  startDate: string # e.g. 1/16/2016
+  planning_level_id: string
+  start_date: string # e.g. 1/16/2016
 ]: any -> record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, historyData: list, method: string, timeSeriesId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forecast/history-and-forecast")
-  let body = {data: $data, method: $method, override: $override, params: $params, planningLevelId: $planningLevelId, startDate: $startDate} | compact
+  let body = {"data": $data, "method": $method, "override": $override, "params": $params, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -865,21 +864,21 @@ export def "forecast-optimal-parameter post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --data: list # nullable — item shape: {historyValues?: list, timeSeriesId?: string}
   method: string # e.g. iCUE1
   --override: oneof<nothing, bool> # e.g. false
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-  planningLevelId: string
-  startDate: string # e.g. 1/16/2016
+  planning_level_id: string
+  start_date: string # e.g. 1/16/2016
 ]: any -> record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<method: string, optimalParameters: record, timeSeriesId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forecast/optimal-parameter")
-  let body = {data: $data, method: $method, override: $override, params: $params, planningLevelId: $planningLevelId, startDate: $startDate} | compact
+  let body = {"data": $data, "method": $method, "override": $override, "params": $params, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -900,18 +899,18 @@ export def "forecast-rerun post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   method: string # e.g. iCUE1
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-  planningLevelId: int # format: int32
+  planning_level_id: int # format: int32
 ]: any -> record<hyperparameters: record<discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int>, timeSeries: table<error: float, forecastData: list, method: string, timeSeriesId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forecast/rerun")
-  let body = {method: $method, params: $params, planningLevelId: $planningLevelId} | compact
+  let body = {"method": $method, "params": $params, "planningLevelId": $planning_level_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -922,7 +921,7 @@ export def "forecast-rerun post" [
 #
 # GET /forecast/result/{jobId}
 export def "forecast-result get" [
-  jobId: int
+  job_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -931,12 +930,12 @@ export def "forecast-result get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/forecast/result/($jobId)")
-  let extra_headers = {"Token": $Token} | compact
+  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/forecast/result/{job_id}"))
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -947,7 +946,7 @@ export def "forecast-result get" [
 #
 # GET /forecast/status/{jobId}
 export def "forecast-status get" [
-  jobId: int
+  job_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -956,12 +955,12 @@ export def "forecast-status get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/forecast/status/($jobId)")
-  let extra_headers = {"Token": $Token} | compact
+  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/forecast/status/{job_id}"))
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -981,12 +980,12 @@ export def "hyperparameter get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> record<abcClassificationThresholdA: float, abcClassificationThresholdB: float, abcClassificationThresholdC: float, discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int, xyzClassificationThresholdX: float, xyzClassificationThresholdY: float, xyzClassificationThresholdZ: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hyperparameter")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1005,27 +1004,27 @@ export def "hyperparameter post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
-  --abcClassificationThresholdA: float # nullable, format: double, e.g. 0.8
-  --abcClassificationThresholdB: float # nullable, format: double, e.g. 0.95
-  --abcClassificationThresholdC: float # nullable, format: double, e.g. 0.95
-  --discardData: oneof<nothing, bool> # nullable, e.g. false
-  --errorType: string@errorType-completer # e.g. MeanAbsolutePercentageError
-  --holdOutPeriod: int # nullable, format: int32, e.g. 4
-  --noFcst: int # nullable, format: int32, e.g. 18
-  --outlierDetection: oneof<nothing, bool> # nullable, e.g. true
+  --hdr-token: string # User Authentication Token
+  --abc-classification-threshold-a: float # nullable, format: double, e.g. 0.8
+  --abc-classification-threshold-b: float # nullable, format: double, e.g. 0.95
+  --abc-classification-threshold-c: float # nullable, format: double, e.g. 0.95
+  --discard-data: oneof<nothing, bool> # nullable, e.g. false
+  --error-type: string@error-type-completer # e.g. MeanAbsolutePercentageError
+  --hold-out-period: int # nullable, format: int32, e.g. 4
+  --no-fcst: int # nullable, format: int32, e.g. 18
+  --outlier-detection: oneof<nothing, bool> # nullable, e.g. true
   --periodicity: int # nullable, format: int32, e.g. 12
-  --xyzClassificationThresholdX: float # nullable, format: double, e.g. 0.3
-  --xyzClassificationThresholdY: float # nullable, format: double, e.g. 0.6
-  --xyzClassificationThresholdZ: float # nullable, format: double, e.g. 0.6
+  --xyz-classification-threshold-x: float # nullable, format: double, e.g. 0.3
+  --xyz-classification-threshold-y: float # nullable, format: double, e.g. 0.6
+  --xyz-classification-threshold-z: float # nullable, format: double, e.g. 0.6
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hyperparameter")
-  let body = {abcClassificationThresholdA: $abcClassificationThresholdA, abcClassificationThresholdB: $abcClassificationThresholdB, abcClassificationThresholdC: $abcClassificationThresholdC, discardData: $discardData, errorType: $errorType, holdOutPeriod: $holdOutPeriod, noFcst: $noFcst, outlierDetection: $outlierDetection, periodicity: $periodicity, xyzClassificationThresholdX: $xyzClassificationThresholdX, xyzClassificationThresholdY: $xyzClassificationThresholdY, xyzClassificationThresholdZ: $xyzClassificationThresholdZ} | compact
+  let body = {"abcClassificationThresholdA": $abc_classification_threshold_a, "abcClassificationThresholdB": $abc_classification_threshold_b, "abcClassificationThresholdC": $abc_classification_threshold_c, "discardData": $discard_data, "errorType": $error_type, "holdOutPeriod": $hold_out_period, "noFcst": $no_fcst, "outlierDetection": $outlier_detection, "periodicity": $periodicity, "xyzClassificationThresholdX": $xyz_classification_threshold_x, "xyzClassificationThresholdY": $xyz_classification_threshold_y, "xyzClassificationThresholdZ": $xyz_classification_threshold_z} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1044,12 +1043,12 @@ export def "inventory-amazon-ipi post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventory/amazon-ipi")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1068,12 +1067,12 @@ export def "inventory-caryying-cost post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventory/caryying-cost")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1092,12 +1091,12 @@ export def "inventory-eoq post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventory/eoq")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1116,12 +1115,12 @@ export def "inventory-fill-rate post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventory/fill-rate")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1140,12 +1139,12 @@ export def "inventory-financial-imapct-forecast-accuracy post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventory/financial-imapct-forecast-accuracy")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1164,12 +1163,12 @@ export def "inventory-inventory-turnover post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventory/inventory-turnover")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1188,12 +1187,12 @@ export def "inventory-ltd post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventory/ltd")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1212,12 +1211,12 @@ export def "inventory-moq post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventory/moq")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1236,12 +1235,12 @@ export def "inventory-optimal-service-level post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventory/optimal-service-level")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1260,12 +1259,12 @@ export def "inventory-reorder-point post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventory/reorder-point")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1284,12 +1283,12 @@ export def "inventory-safety-stock post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventory/safety-stock")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1308,12 +1307,12 @@ export def "inventory-service-level post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventory/service-level")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1332,12 +1331,12 @@ export def "inventory-turns post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventory/turns")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1358,18 +1357,18 @@ export def "lifecycle-many-to-one post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --data: list # nullable — item shape: {historyValues?: list, timeSeriesId?: string}
-  planningLevelId: string
+  planning_level_id: string
   --ratios: list # nullable
 ]: any -> record<historyValues: list<float>, timeSeriesId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lifecycle/many-to-one")
-  let body = {data: $data, planningLevelId: $planningLevelId, ratios: $ratios} | compact
+  let body = {"data": $data, "planningLevelId": $planning_level_id, "ratios": $ratios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1390,18 +1389,18 @@ export def "lifecycle-one-to-one post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --data: record # shape: {historyValues?: list, timeSeriesId?: string}
-  planningLevelId: string
+  planning_level_id: string
   --ratio: float # format: double, e.g. 15
 ]: any -> record<historyValues: list<float>, timeSeriesId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lifecycle/one-to-one")
-  let body = {data: $data, planningLevelId: $planningLevelId, ratio: $ratio} | compact
+  let body = {"data": $data, "planningLevelId": $planning_level_id, "ratio": $ratio} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1422,18 +1421,18 @@ export def "outlier post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --data: list # nullable — item shape: {historyValues?: list, timeSeriesId?: string}
-  planningLevelId: string
-  startDate: string # e.g. 1/16/2016
+  planning_level_id: string
+  start_date: string # e.g. 1/16/2016
 ]: any -> table<outliers: list<record>, timeSeriesId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/outlier")
-  let body = {data: $data, planningLevelId: $planningLevelId, startDate: $startDate} | compact
+  let body = {"data": $data, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1454,18 +1453,18 @@ export def "portfolio post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --data: list # nullable — item shape: {historyValues?: list, timeSeriesId?: string}
-  planningLevelId: string
-  startDate: string # e.g. 1/16/2016
+  planning_level_id: string
+  start_date: string # e.g. 1/16/2016
 ]: any -> table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio")
-  let body = {data: $data, planningLevelId: $planningLevelId, startDate: $startDate} | compact
+  let body = {"data": $data, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1486,18 +1485,18 @@ export def "portfolio-abc post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --data: list # nullable — item shape: {historyValues?: list, timeSeriesId?: string}
-  planningLevelId: string
-  startDate: string # e.g. 1/16/2016
+  planning_level_id: string
+  start_date: string # e.g. 1/16/2016
 ]: any -> table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/abc")
-  let body = {data: $data, planningLevelId: $planningLevelId, startDate: $startDate} | compact
+  let body = {"data": $data, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1516,16 +1515,16 @@ export def "portfolio-file-to-portfolio post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
-  File: string # format: binary
+  --hdr-token: string # User Authentication Token
+  file: string # format: binary
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/file-to-portfolio")
-  let body = {File: $File} | compact
+  let body = {"File": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1547,22 +1546,22 @@ export def "portfolio-forecast-performance-rewind post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
-  --costOfError: float # format: double, e.g. 200
+  --hdr-token: string # User Authentication Token
+  --cost-of-error: float # format: double, e.g. 200
   --data: list # nullable — item shape: {forecastValues?: list, historyValues?: list, timeSeriesId?: string}
   method: string # e.g. iCUE1
   --params: record # shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-  planningLevelId: string
-  rewindTimeFrame: int # format: int32, e.g. 12
-  startDate: string # e.g. 1/16/2016
+  planning_level_id: string
+  rewind_time_frame: int # format: int32, e.g. 12
+  start_date: string # e.g. 1/16/2016
 ]: any -> record<hyperparameters: record<costOfError: float, discardData: bool, errorType: string, holdOutPeriod: int, noFcst: int, periodicity: int, rewindTimeFrame: int>, timeSeries: table<customerError: float, errorDiff: float, icueError: float, timeSeries: string, totalCost: float, useIcue: bool>, totalCost: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/forecast-performance-rewind")
-  let body = {costOfError: $costOfError, data: $data, method: $method, params: $params, planningLevelId: $planningLevelId, rewindTimeFrame: $rewindTimeFrame, startDate: $startDate} | compact
+  let body = {"costOfError": $cost_of_error, "data": $data, "method": $method, "params": $params, "planningLevelId": $planning_level_id, "rewindTimeFrame": $rewind_time_frame, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1583,18 +1582,18 @@ export def "portfolio-xyz post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
   --data: list # nullable — item shape: {historyValues?: list, timeSeriesId?: string}
-  planningLevelId: string
-  startDate: string # e.g. 1/16/2016
+  planning_level_id: string
+  start_date: string # e.g. 1/16/2016
 ]: any -> table<id: string, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/xyz")
-  let body = {data: $data, planningLevelId: $planningLevelId, startDate: $startDate} | compact
+  let body = {"data": $data, "planningLevelId": $planning_level_id, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1613,12 +1612,12 @@ export def "pricing-bundle-pricing post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pricing/bundle-pricing")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1635,12 +1634,12 @@ export def "pricing-competitive-pricing post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pricing/competitive-pricing")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1657,12 +1656,12 @@ export def "pricing-cost-plus-pricing post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pricing/cost-plus-pricing")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1679,12 +1678,12 @@ export def "pricing-decoy-pricing post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pricing/decoy-pricing")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1701,12 +1700,12 @@ export def "pricing-odd-pricing post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pricing/odd-pricing")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1723,12 +1722,12 @@ export def "pricing-penetration-pricing post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pricing/penetration-pricing")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1745,12 +1744,12 @@ export def "pricing-price-elasticity-of-demand post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pricing/price-elasticity-of-demand")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1761,7 +1760,7 @@ export def "pricing-price-elasticity-of-demand post" [
 #
 # GET /report/performance/sku-rationalization/{planningLevelId}
 export def "report-performance-sku-rationalization get" [
-  planningLevelId: int
+  planning_level_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1771,12 +1770,12 @@ export def "report-performance-sku-rationalization get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> table<abc12: string, abc12Value: float, abc6: string, abc6Value: float, abc9: string, abc9Value: float, id: string, thresholdA: float, thresholdB: float, thresholdC: float, thresholdX: float, thresholdY: float, thresholdZ: float, xyz12: string, xyz12Value: float, xyz6: string, xyz6Value: float, xyz9: string, xyz9Value: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/report/performance/sku-rationalization/($planningLevelId)")
-  let extra_headers = {"Token": $Token} | compact
+  let full_url = (build-url $base ({planning_level_id: $planning_level_id} | format pattern "/report/performance/sku-rationalization/{planning_level_id}"))
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1787,7 +1786,7 @@ export def "report-performance-sku-rationalization get" [
 #
 # GET /report/performance/{planningLevelId}
 export def "report-performance get" [
-  planningLevelId: string
+  planning_level_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1796,12 +1795,12 @@ export def "report-performance get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/report/performance/($planningLevelId)")
-  let extra_headers = {"Token": $Token} | compact
+  let full_url = (build-url $base ({planning_level_id: $planning_level_id} | format pattern "/report/performance/{planning_level_id}"))
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1820,12 +1819,12 @@ export def "report-planning-level-organization get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/report/planning-level/organization")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1844,12 +1843,12 @@ export def "report-planning-level-user get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/report/planning-level/user")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1868,12 +1867,12 @@ export def "report-user get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Token: string # User Authentication Token
+  --hdr-token: string # User Authentication Token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/report/user")
-  let extra_headers = {"Token": $Token} | compact
+  let extra_headers = {"Token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

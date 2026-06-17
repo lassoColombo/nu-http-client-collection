@@ -110,7 +110,7 @@ export def "mostemailed mostemailed-section-time-period-json" [
 ]: nothing -> record<copyright: string, num_results: int, results: table<abstract: string, byline: string, column: string, count_type: string, des_facet: any, geo_facet: any, media: list, org_facet: list, per_facet: list, published_date: string, section: string, source: string, title: string, url: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mostemailed/($section)/($time_period).json")
+  let full_url = (build-url $base ({section: $section, time_period: $time_period} | format pattern "/mostemailed/{section}/{time_period}.json"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -134,7 +134,7 @@ export def "mostshared mostshared-section-time-period-json" [
 ]: nothing -> record<copyright: string, num_results: int, results: table<abstract: string, byline: string, column: string, des_facet: any, geo_facet: any, media: any, org_facet: list, per_facet: list, published_date: string, section: string, source: string, title: string, url: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mostshared/($section)/($time_period).json")
+  let full_url = (build-url $base ({section: $section, time_period: $time_period} | format pattern "/mostshared/{section}/{time_period}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -158,7 +158,7 @@ export def "mostviewed mostviewed-section-time-period-json" [
 ]: nothing -> record<copyright: string, num_results: int, results: table<abstract: string, byline: string, column: string, des_facet: any, geo_facet: any, media: any, org_facet: list, per_facet: list, published_date: string, section: string, source: string, title: string, url: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mostviewed/($section)/($time_period).json")
+  let full_url = (build-url $base ({section: $section, time_period: $time_period} | format pattern "/mostviewed/{section}/{time_period}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

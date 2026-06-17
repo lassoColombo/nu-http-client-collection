@@ -66,64 +66,64 @@ def base-url-completer [] { ["http://elasticmapreduce.us-east-1.amazonaws.com" "
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["ElasticMapReduce.AddInstanceFleet"] }
-def X-Amz-Target-completer-1 [] { ["ElasticMapReduce.AddInstanceGroups"] }
-def X-Amz-Target-completer-2 [] { ["ElasticMapReduce.AddJobFlowSteps"] }
-def X-Amz-Target-completer-3 [] { ["ElasticMapReduce.AddTags"] }
-def X-Amz-Target-completer-4 [] { ["ElasticMapReduce.CancelSteps"] }
-def X-Amz-Target-completer-5 [] { ["ElasticMapReduce.CreateSecurityConfiguration"] }
-def X-Amz-Target-completer-6 [] { ["ElasticMapReduce.CreateStudio"] }
-def X-Amz-Target-completer-7 [] { ["ElasticMapReduce.CreateStudioSessionMapping"] }
-def X-Amz-Target-completer-8 [] { ["ElasticMapReduce.DeleteSecurityConfiguration"] }
-def X-Amz-Target-completer-9 [] { ["ElasticMapReduce.DeleteStudio"] }
-def X-Amz-Target-completer-10 [] { ["ElasticMapReduce.DeleteStudioSessionMapping"] }
-def X-Amz-Target-completer-11 [] { ["ElasticMapReduce.DescribeCluster"] }
-def X-Amz-Target-completer-12 [] { ["ElasticMapReduce.DescribeJobFlows"] }
-def X-Amz-Target-completer-13 [] { ["ElasticMapReduce.DescribeNotebookExecution"] }
-def X-Amz-Target-completer-14 [] { ["ElasticMapReduce.DescribeReleaseLabel"] }
-def X-Amz-Target-completer-15 [] { ["ElasticMapReduce.DescribeSecurityConfiguration"] }
-def X-Amz-Target-completer-16 [] { ["ElasticMapReduce.DescribeStep"] }
-def X-Amz-Target-completer-17 [] { ["ElasticMapReduce.DescribeStudio"] }
-def X-Amz-Target-completer-18 [] { ["ElasticMapReduce.GetAutoTerminationPolicy"] }
-def X-Amz-Target-completer-19 [] { ["ElasticMapReduce.GetBlockPublicAccessConfiguration"] }
-def X-Amz-Target-completer-20 [] { ["ElasticMapReduce.GetClusterSessionCredentials"] }
-def X-Amz-Target-completer-21 [] { ["ElasticMapReduce.GetManagedScalingPolicy"] }
-def X-Amz-Target-completer-22 [] { ["ElasticMapReduce.GetStudioSessionMapping"] }
-def X-Amz-Target-completer-23 [] { ["ElasticMapReduce.ListBootstrapActions"] }
-def X-Amz-Target-completer-24 [] { ["ElasticMapReduce.ListClusters"] }
-def X-Amz-Target-completer-25 [] { ["ElasticMapReduce.ListInstanceFleets"] }
-def X-Amz-Target-completer-26 [] { ["ElasticMapReduce.ListInstanceGroups"] }
-def X-Amz-Target-completer-27 [] { ["ElasticMapReduce.ListInstances"] }
-def X-Amz-Target-completer-28 [] { ["ElasticMapReduce.ListNotebookExecutions"] }
-def X-Amz-Target-completer-29 [] { ["ElasticMapReduce.ListReleaseLabels"] }
-def X-Amz-Target-completer-30 [] { ["ElasticMapReduce.ListSecurityConfigurations"] }
-def X-Amz-Target-completer-31 [] { ["ElasticMapReduce.ListSteps"] }
-def X-Amz-Target-completer-32 [] { ["ElasticMapReduce.ListStudioSessionMappings"] }
-def X-Amz-Target-completer-33 [] { ["ElasticMapReduce.ListStudios"] }
-def X-Amz-Target-completer-34 [] { ["ElasticMapReduce.ModifyCluster"] }
-def X-Amz-Target-completer-35 [] { ["ElasticMapReduce.ModifyInstanceFleet"] }
-def X-Amz-Target-completer-36 [] { ["ElasticMapReduce.ModifyInstanceGroups"] }
-def X-Amz-Target-completer-37 [] { ["ElasticMapReduce.PutAutoScalingPolicy"] }
-def X-Amz-Target-completer-38 [] { ["ElasticMapReduce.PutAutoTerminationPolicy"] }
-def X-Amz-Target-completer-39 [] { ["ElasticMapReduce.PutBlockPublicAccessConfiguration"] }
-def X-Amz-Target-completer-40 [] { ["ElasticMapReduce.PutManagedScalingPolicy"] }
-def X-Amz-Target-completer-41 [] { ["ElasticMapReduce.RemoveAutoScalingPolicy"] }
-def X-Amz-Target-completer-42 [] { ["ElasticMapReduce.RemoveAutoTerminationPolicy"] }
-def X-Amz-Target-completer-43 [] { ["ElasticMapReduce.RemoveManagedScalingPolicy"] }
-def X-Amz-Target-completer-44 [] { ["ElasticMapReduce.RemoveTags"] }
-def X-Amz-Target-completer-45 [] { ["ElasticMapReduce.RunJobFlow"] }
-def X-Amz-Target-completer-46 [] { ["ElasticMapReduce.SetTerminationProtection"] }
-def X-Amz-Target-completer-47 [] { ["ElasticMapReduce.SetVisibleToAllUsers"] }
-def X-Amz-Target-completer-48 [] { ["ElasticMapReduce.StartNotebookExecution"] }
-def X-Amz-Target-completer-49 [] { ["ElasticMapReduce.StopNotebookExecution"] }
-def X-Amz-Target-completer-50 [] { ["ElasticMapReduce.TerminateJobFlows"] }
-def X-Amz-Target-completer-51 [] { ["ElasticMapReduce.UpdateStudio"] }
-def X-Amz-Target-completer-52 [] { ["ElasticMapReduce.UpdateStudioSessionMapping"] }
+def x-amz-target-completer [] { ["ElasticMapReduce.AddInstanceFleet"] }
+def x-amz-target-completer-1 [] { ["ElasticMapReduce.AddInstanceGroups"] }
+def x-amz-target-completer-2 [] { ["ElasticMapReduce.AddJobFlowSteps"] }
+def x-amz-target-completer-3 [] { ["ElasticMapReduce.AddTags"] }
+def x-amz-target-completer-4 [] { ["ElasticMapReduce.CancelSteps"] }
+def x-amz-target-completer-5 [] { ["ElasticMapReduce.CreateSecurityConfiguration"] }
+def x-amz-target-completer-6 [] { ["ElasticMapReduce.CreateStudio"] }
+def x-amz-target-completer-7 [] { ["ElasticMapReduce.CreateStudioSessionMapping"] }
+def x-amz-target-completer-8 [] { ["ElasticMapReduce.DeleteSecurityConfiguration"] }
+def x-amz-target-completer-9 [] { ["ElasticMapReduce.DeleteStudio"] }
+def x-amz-target-completer-10 [] { ["ElasticMapReduce.DeleteStudioSessionMapping"] }
+def x-amz-target-completer-11 [] { ["ElasticMapReduce.DescribeCluster"] }
+def x-amz-target-completer-12 [] { ["ElasticMapReduce.DescribeJobFlows"] }
+def x-amz-target-completer-13 [] { ["ElasticMapReduce.DescribeNotebookExecution"] }
+def x-amz-target-completer-14 [] { ["ElasticMapReduce.DescribeReleaseLabel"] }
+def x-amz-target-completer-15 [] { ["ElasticMapReduce.DescribeSecurityConfiguration"] }
+def x-amz-target-completer-16 [] { ["ElasticMapReduce.DescribeStep"] }
+def x-amz-target-completer-17 [] { ["ElasticMapReduce.DescribeStudio"] }
+def x-amz-target-completer-18 [] { ["ElasticMapReduce.GetAutoTerminationPolicy"] }
+def x-amz-target-completer-19 [] { ["ElasticMapReduce.GetBlockPublicAccessConfiguration"] }
+def x-amz-target-completer-20 [] { ["ElasticMapReduce.GetClusterSessionCredentials"] }
+def x-amz-target-completer-21 [] { ["ElasticMapReduce.GetManagedScalingPolicy"] }
+def x-amz-target-completer-22 [] { ["ElasticMapReduce.GetStudioSessionMapping"] }
+def x-amz-target-completer-23 [] { ["ElasticMapReduce.ListBootstrapActions"] }
+def x-amz-target-completer-24 [] { ["ElasticMapReduce.ListClusters"] }
+def x-amz-target-completer-25 [] { ["ElasticMapReduce.ListInstanceFleets"] }
+def x-amz-target-completer-26 [] { ["ElasticMapReduce.ListInstanceGroups"] }
+def x-amz-target-completer-27 [] { ["ElasticMapReduce.ListInstances"] }
+def x-amz-target-completer-28 [] { ["ElasticMapReduce.ListNotebookExecutions"] }
+def x-amz-target-completer-29 [] { ["ElasticMapReduce.ListReleaseLabels"] }
+def x-amz-target-completer-30 [] { ["ElasticMapReduce.ListSecurityConfigurations"] }
+def x-amz-target-completer-31 [] { ["ElasticMapReduce.ListSteps"] }
+def x-amz-target-completer-32 [] { ["ElasticMapReduce.ListStudioSessionMappings"] }
+def x-amz-target-completer-33 [] { ["ElasticMapReduce.ListStudios"] }
+def x-amz-target-completer-34 [] { ["ElasticMapReduce.ModifyCluster"] }
+def x-amz-target-completer-35 [] { ["ElasticMapReduce.ModifyInstanceFleet"] }
+def x-amz-target-completer-36 [] { ["ElasticMapReduce.ModifyInstanceGroups"] }
+def x-amz-target-completer-37 [] { ["ElasticMapReduce.PutAutoScalingPolicy"] }
+def x-amz-target-completer-38 [] { ["ElasticMapReduce.PutAutoTerminationPolicy"] }
+def x-amz-target-completer-39 [] { ["ElasticMapReduce.PutBlockPublicAccessConfiguration"] }
+def x-amz-target-completer-40 [] { ["ElasticMapReduce.PutManagedScalingPolicy"] }
+def x-amz-target-completer-41 [] { ["ElasticMapReduce.RemoveAutoScalingPolicy"] }
+def x-amz-target-completer-42 [] { ["ElasticMapReduce.RemoveAutoTerminationPolicy"] }
+def x-amz-target-completer-43 [] { ["ElasticMapReduce.RemoveManagedScalingPolicy"] }
+def x-amz-target-completer-44 [] { ["ElasticMapReduce.RemoveTags"] }
+def x-amz-target-completer-45 [] { ["ElasticMapReduce.RunJobFlow"] }
+def x-amz-target-completer-46 [] { ["ElasticMapReduce.SetTerminationProtection"] }
+def x-amz-target-completer-47 [] { ["ElasticMapReduce.SetVisibleToAllUsers"] }
+def x-amz-target-completer-48 [] { ["ElasticMapReduce.StartNotebookExecution"] }
+def x-amz-target-completer-49 [] { ["ElasticMapReduce.StopNotebookExecution"] }
+def x-amz-target-completer-50 [] { ["ElasticMapReduce.TerminateJobFlows"] }
+def x-amz-target-completer-51 [] { ["ElasticMapReduce.UpdateStudio"] }
+def x-amz-target-completer-52 [] { ["ElasticMapReduce.UpdateStudioSessionMapping"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-elastic-map-reduce-add-instance-fleet AddInstanceFleet" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-elastic-map-reduce-add-instance-fleet create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=ElasticMapReduce.AddInstanceFleet
 # operationId: AddInstanceFleet
-export def "x-amz-target-elastic-map-reduce-add-instance-fleet AddInstanceFleet" [
+export def "x-amz-target-elastic-map-reduce-add-instance-fleet create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,24 +156,24 @@ export def "x-amz-target-elastic-map-reduce-add-instance-fleet AddInstanceFleet"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  ClusterId: any
-  InstanceFleet: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  cluster_id: any
+  instance_fleet: any
 ]: any -> record<ClusterId: record, InstanceFleetId: record, ClusterArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.AddInstanceFleet")
-  let body = {ClusterId: $ClusterId, InstanceFleet: $InstanceFleet} | compact
+  let body = {"ClusterId": $cluster_id, "InstanceFleet": $instance_fleet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -184,7 +184,7 @@ export def "x-amz-target-elastic-map-reduce-add-instance-fleet AddInstanceFleet"
 #
 # POST /#X-Amz-Target=ElasticMapReduce.AddInstanceGroups
 # operationId: AddInstanceGroups
-export def "x-amz-target-elastic-map-reduce-add-instance-groups AddInstanceGroups" [
+export def "x-amz-target-elastic-map-reduce-add-instance-groups create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,24 +193,24 @@ export def "x-amz-target-elastic-map-reduce-add-instance-groups AddInstanceGroup
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  InstanceGroups: any
-  JobFlowId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  instance_groups: any
+  job_flow_id: any
 ]: any -> record<JobFlowId: record, InstanceGroupIds: record, ClusterArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.AddInstanceGroups")
-  let body = {InstanceGroups: $InstanceGroups, JobFlowId: $JobFlowId} | compact
+  let body = {"InstanceGroups": $instance_groups, "JobFlowId": $job_flow_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -221,7 +221,7 @@ export def "x-amz-target-elastic-map-reduce-add-instance-groups AddInstanceGroup
 #
 # POST /#X-Amz-Target=ElasticMapReduce.AddJobFlowSteps
 # operationId: AddJobFlowSteps
-export def "x-amz-target-elastic-map-reduce-add-job-flow-steps AddJobFlowSteps" [
+export def "x-amz-target-elastic-map-reduce-add-job-flow-steps create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,25 +230,25 @@ export def "x-amz-target-elastic-map-reduce-add-job-flow-steps AddJobFlowSteps" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  JobFlowId: any
-  Steps: any
-  --ExecutionRoleArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  job_flow_id: any
+  steps: any
+  --execution-role-arn: any
 ]: any -> record<StepIds: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.AddJobFlowSteps")
-  let body = {JobFlowId: $JobFlowId, Steps: $Steps, ExecutionRoleArn: $ExecutionRoleArn} | compact
+  let body = {"JobFlowId": $job_flow_id, "Steps": $steps, "ExecutionRoleArn": $execution_role_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -259,7 +259,7 @@ export def "x-amz-target-elastic-map-reduce-add-job-flow-steps AddJobFlowSteps" 
 #
 # POST /#X-Amz-Target=ElasticMapReduce.AddTags
 # operationId: AddTags
-export def "x-amz-target-elastic-map-reduce-add-tags AddTags" [
+export def "x-amz-target-elastic-map-reduce-add-tags create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,24 +268,24 @@ export def "x-amz-target-elastic-map-reduce-add-tags AddTags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  ResourceId: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  resource_id: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.AddTags")
-  let body = {ResourceId: $ResourceId, Tags: $Tags} | compact
+  let body = {"ResourceId": $resource_id, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -296,7 +296,7 @@ export def "x-amz-target-elastic-map-reduce-add-tags AddTags" [
 #
 # POST /#X-Amz-Target=ElasticMapReduce.CancelSteps
 # operationId: CancelSteps
-export def "x-amz-target-elastic-map-reduce-cancel-steps CancelSteps" [
+export def "x-amz-target-elastic-map-reduce-cancel-steps cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,25 +305,25 @@ export def "x-amz-target-elastic-map-reduce-cancel-steps CancelSteps" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  ClusterId: any
-  StepIds: any
-  --StepCancellationOption: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  cluster_id: any
+  step_ids: any
+  --step-cancellation-option: any
 ]: any -> record<CancelStepsInfoList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.CancelSteps")
-  let body = {ClusterId: $ClusterId, StepIds: $StepIds, StepCancellationOption: $StepCancellationOption} | compact
+  let body = {"ClusterId": $cluster_id, "StepIds": $step_ids, "StepCancellationOption": $step_cancellation_option} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -334,7 +334,7 @@ export def "x-amz-target-elastic-map-reduce-cancel-steps CancelSteps" [
 #
 # POST /#X-Amz-Target=ElasticMapReduce.CreateSecurityConfiguration
 # operationId: CreateSecurityConfiguration
-export def "x-amz-target-elastic-map-reduce-create-security-configuration CreateSecurityConfiguration" [
+export def "x-amz-target-elastic-map-reduce-create-security-configuration create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,24 +343,24 @@ export def "x-amz-target-elastic-map-reduce-create-security-configuration Create
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  Name: any
-  SecurityConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  name: any
+  security_configuration: any
 ]: any -> record<Name: record, CreationDateTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.CreateSecurityConfiguration")
-  let body = {Name: $Name, SecurityConfiguration: $SecurityConfiguration} | compact
+  let body = {"Name": $name, "SecurityConfiguration": $security_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -371,7 +371,7 @@ export def "x-amz-target-elastic-map-reduce-create-security-configuration Create
 #
 # POST /#X-Amz-Target=ElasticMapReduce.CreateStudio
 # operationId: CreateStudio
-export def "x-amz-target-elastic-map-reduce-create-studio CreateStudio" [
+export def "x-amz-target-elastic-map-reduce-create-studio create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,35 +380,35 @@ export def "x-amz-target-elastic-map-reduce-create-studio CreateStudio" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  Name: any
-  --Description: any
-  AuthMode: any
-  VpcId: any
-  SubnetIds: any
-  ServiceRole: any
-  --UserRole: any
-  WorkspaceSecurityGroupId: any
-  EngineSecurityGroupId: any
-  DefaultS3Location: any
-  --IdpAuthUrl: any
-  --IdpRelayStateParameterName: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  name: any
+  --description: any
+  auth_mode: any
+  vpc_id: any
+  subnet_ids: any
+  service_role: any
+  --user-role: any
+  workspace_security_group_id: any
+  engine_security_group_id: any
+  default_s3_location: any
+  --idp-auth-url: any
+  --idp-relay-state-parameter-name: any
+  --tags: any
 ]: any -> record<StudioId: record, Url: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.CreateStudio")
-  let body = {Name: $Name, Description: $Description, AuthMode: $AuthMode, VpcId: $VpcId, SubnetIds: $SubnetIds, ServiceRole: $ServiceRole, UserRole: $UserRole, WorkspaceSecurityGroupId: $WorkspaceSecurityGroupId, EngineSecurityGroupId: $EngineSecurityGroupId, DefaultS3Location: $DefaultS3Location, IdpAuthUrl: $IdpAuthUrl, IdpRelayStateParameterName: $IdpRelayStateParameterName, Tags: $Tags} | compact
+  let body = {"Name": $name, "Description": $description, "AuthMode": $auth_mode, "VpcId": $vpc_id, "SubnetIds": $subnet_ids, "ServiceRole": $service_role, "UserRole": $user_role, "WorkspaceSecurityGroupId": $workspace_security_group_id, "EngineSecurityGroupId": $engine_security_group_id, "DefaultS3Location": $default_s3_location, "IdpAuthUrl": $idp_auth_url, "IdpRelayStateParameterName": $idp_relay_state_parameter_name, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -419,7 +419,7 @@ export def "x-amz-target-elastic-map-reduce-create-studio CreateStudio" [
 #
 # POST /#X-Amz-Target=ElasticMapReduce.CreateStudioSessionMapping
 # operationId: CreateStudioSessionMapping
-export def "x-amz-target-elastic-map-reduce-create-studio-session-mapping CreateStudioSessionMapping" [
+export def "x-amz-target-elastic-map-reduce-create-studio-session-mapping create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,27 +428,27 @@ export def "x-amz-target-elastic-map-reduce-create-studio-session-mapping Create
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  StudioId: any
-  --IdentityId: any
-  --IdentityName: any
-  IdentityType: any
-  SessionPolicyArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  studio_id: any
+  --identity-id: any
+  --identity-name: any
+  identity_type: any
+  session_policy_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.CreateStudioSessionMapping")
-  let body = {StudioId: $StudioId, IdentityId: $IdentityId, IdentityName: $IdentityName, IdentityType: $IdentityType, SessionPolicyArn: $SessionPolicyArn} | compact
+  let body = {"StudioId": $studio_id, "IdentityId": $identity_id, "IdentityName": $identity_name, "IdentityType": $identity_type, "SessionPolicyArn": $session_policy_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -459,7 +459,7 @@ export def "x-amz-target-elastic-map-reduce-create-studio-session-mapping Create
 #
 # POST /#X-Amz-Target=ElasticMapReduce.DeleteSecurityConfiguration
 # operationId: DeleteSecurityConfiguration
-export def "x-amz-target-elastic-map-reduce-delete-security-configuration DeleteSecurityConfiguration" [
+export def "x-amz-target-elastic-map-reduce-delete-security-configuration delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -468,23 +468,23 @@ export def "x-amz-target-elastic-map-reduce-delete-security-configuration Delete
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.DeleteSecurityConfiguration")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -495,7 +495,7 @@ export def "x-amz-target-elastic-map-reduce-delete-security-configuration Delete
 #
 # POST /#X-Amz-Target=ElasticMapReduce.DeleteStudio
 # operationId: DeleteStudio
-export def "x-amz-target-elastic-map-reduce-delete-studio DeleteStudio" [
+export def "x-amz-target-elastic-map-reduce-delete-studio delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,23 +504,23 @@ export def "x-amz-target-elastic-map-reduce-delete-studio DeleteStudio" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  StudioId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  studio_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.DeleteStudio")
-  let body = {StudioId: $StudioId} | compact
+  let body = {"StudioId": $studio_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -531,7 +531,7 @@ export def "x-amz-target-elastic-map-reduce-delete-studio DeleteStudio" [
 #
 # POST /#X-Amz-Target=ElasticMapReduce.DeleteStudioSessionMapping
 # operationId: DeleteStudioSessionMapping
-export def "x-amz-target-elastic-map-reduce-delete-studio-session-mapping DeleteStudioSessionMapping" [
+export def "x-amz-target-elastic-map-reduce-delete-studio-session-mapping delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,26 +540,26 @@ export def "x-amz-target-elastic-map-reduce-delete-studio-session-mapping Delete
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  StudioId: any
-  --IdentityId: any
-  --IdentityName: any
-  IdentityType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  studio_id: any
+  --identity-id: any
+  --identity-name: any
+  identity_type: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.DeleteStudioSessionMapping")
-  let body = {StudioId: $StudioId, IdentityId: $IdentityId, IdentityName: $IdentityName, IdentityType: $IdentityType} | compact
+  let body = {"StudioId": $studio_id, "IdentityId": $identity_id, "IdentityName": $identity_name, "IdentityType": $identity_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -570,7 +570,7 @@ export def "x-amz-target-elastic-map-reduce-delete-studio-session-mapping Delete
 #
 # POST /#X-Amz-Target=ElasticMapReduce.DescribeCluster
 # operationId: DescribeCluster
-export def "x-amz-target-elastic-map-reduce-describe-cluster DescribeCluster" [
+export def "x-amz-target-elastic-map-reduce-describe-cluster post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -579,23 +579,23 @@ export def "x-amz-target-elastic-map-reduce-describe-cluster DescribeCluster" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  ClusterId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  cluster_id: any
 ]: any -> record<Cluster: record<Id: record, Name: record, Status: record<State: record, StateChangeReason: record, Timeline: record, ErrorDetails: record>, Ec2InstanceAttributes: record<Ec2KeyName: record, Ec2SubnetId: record, RequestedEc2SubnetIds: record, Ec2AvailabilityZone: record, RequestedEc2AvailabilityZones: record, IamInstanceProfile: record, EmrManagedMasterSecurityGroup: record, EmrManagedSlaveSecurityGroup: record, ServiceAccessSecurityGroup: record, AdditionalMasterSecurityGroups: record, AdditionalSlaveSecurityGroups: record>, InstanceCollectionType: record, LogUri: record, LogEncryptionKmsKeyId: record, RequestedAmiVersion: record, RunningAmiVersion: record, ReleaseLabel: record, AutoTerminate: record, TerminationProtected: record, VisibleToAllUsers: record, Applications: record, Tags: record, ServiceRole: record, NormalizedInstanceHours: record, MasterPublicDnsName: record, Configurations: record, SecurityConfiguration: record, AutoScalingRole: record, ScaleDownBehavior: record, CustomAmiId: record, EbsRootVolumeSize: record, RepoUpgradeOnBoot: record, KerberosAttributes: record<Realm: record, KdcAdminPassword: record, CrossRealmTrustPrincipalPassword: record, ADDomainJoinUser: record, ADDomainJoinPassword: record>, ClusterArn: record, OutpostArn: record, StepConcurrencyLevel: record, PlacementGroups: record, OSReleaseLabel: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.DescribeCluster")
-  let body = {ClusterId: $ClusterId} | compact
+  let body = {"ClusterId": $cluster_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -608,7 +608,7 @@ export def "x-amz-target-elastic-map-reduce-describe-cluster DescribeCluster" [
 # DEPRECATED
 # operationId: DescribeJobFlows
 @deprecated
-export def "x-amz-target-elastic-map-reduce-describe-job-flows DescribeJobFlows" [
+export def "x-amz-target-elastic-map-reduce-describe-job-flows post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,26 +617,26 @@ export def "x-amz-target-elastic-map-reduce-describe-job-flows DescribeJobFlows"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  --CreatedAfter: any
-  --CreatedBefore: any
-  --JobFlowIds: any
-  --JobFlowStates: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  --created-after: any
+  --created-before: any
+  --job-flow-ids: any
+  --job-flow-states: any
 ]: any -> record<JobFlows: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.DescribeJobFlows")
-  let body = {CreatedAfter: $CreatedAfter, CreatedBefore: $CreatedBefore, JobFlowIds: $JobFlowIds, JobFlowStates: $JobFlowStates} | compact
+  let body = {"CreatedAfter": $created_after, "CreatedBefore": $created_before, "JobFlowIds": $job_flow_ids, "JobFlowStates": $job_flow_states} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -647,7 +647,7 @@ export def "x-amz-target-elastic-map-reduce-describe-job-flows DescribeJobFlows"
 #
 # POST /#X-Amz-Target=ElasticMapReduce.DescribeNotebookExecution
 # operationId: DescribeNotebookExecution
-export def "x-amz-target-elastic-map-reduce-describe-notebook-execution DescribeNotebookExecution" [
+export def "x-amz-target-elastic-map-reduce-describe-notebook-execution post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,23 +656,23 @@ export def "x-amz-target-elastic-map-reduce-describe-notebook-execution Describe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  NotebookExecutionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  notebook_execution_id: any
 ]: any -> record<NotebookExecution: record<NotebookExecutionId: record, EditorId: record, ExecutionEngine: record<Id: record, Type: record, MasterInstanceSecurityGroupId: record>, NotebookExecutionName: record, NotebookParams: record, Status: record, StartTime: record, EndTime: record, Arn: record, OutputNotebookURI: record, LastStateChangeReason: record, NotebookInstanceSecurityGroupId: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.DescribeNotebookExecution")
-  let body = {NotebookExecutionId: $NotebookExecutionId} | compact
+  let body = {"NotebookExecutionId": $notebook_execution_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -683,7 +683,7 @@ export def "x-amz-target-elastic-map-reduce-describe-notebook-execution Describe
 #
 # POST /#X-Amz-Target=ElasticMapReduce.DescribeReleaseLabel
 # operationId: DescribeReleaseLabel
-export def "x-amz-target-elastic-map-reduce-describe-release-label DescribeReleaseLabel" [
+export def "x-amz-target-elastic-map-reduce-describe-release-label post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,25 +692,25 @@ export def "x-amz-target-elastic-map-reduce-describe-release-label DescribeRelea
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  --ReleaseLabel: any
-  --NextToken: any
-  --MaxResults: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  --release-label: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<ReleaseLabel: record, Applications: record, NextToken: record, AvailableOSReleases: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.DescribeReleaseLabel")
-  let body = {ReleaseLabel: $ReleaseLabel, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ReleaseLabel": $release_label, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -721,7 +721,7 @@ export def "x-amz-target-elastic-map-reduce-describe-release-label DescribeRelea
 #
 # POST /#X-Amz-Target=ElasticMapReduce.DescribeSecurityConfiguration
 # operationId: DescribeSecurityConfiguration
-export def "x-amz-target-elastic-map-reduce-describe-security-configuration DescribeSecurityConfiguration" [
+export def "x-amz-target-elastic-map-reduce-describe-security-configuration post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -730,23 +730,23 @@ export def "x-amz-target-elastic-map-reduce-describe-security-configuration Desc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  name: any
 ]: any -> record<Name: record, SecurityConfiguration: record, CreationDateTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.DescribeSecurityConfiguration")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -757,7 +757,7 @@ export def "x-amz-target-elastic-map-reduce-describe-security-configuration Desc
 #
 # POST /#X-Amz-Target=ElasticMapReduce.DescribeStep
 # operationId: DescribeStep
-export def "x-amz-target-elastic-map-reduce-describe-step DescribeStep" [
+export def "x-amz-target-elastic-map-reduce-describe-step post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -766,24 +766,24 @@ export def "x-amz-target-elastic-map-reduce-describe-step DescribeStep" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  ClusterId: any
-  StepId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  cluster_id: any
+  step_id: any
 ]: any -> record<Step: record<Id: record, Name: record, Config: record<Jar: record, Properties: record, MainClass: record, Args: record>, ActionOnFailure: record, Status: record<State: record, StateChangeReason: record, FailureDetails: record, Timeline: record>, ExecutionRoleArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.DescribeStep")
-  let body = {ClusterId: $ClusterId, StepId: $StepId} | compact
+  let body = {"ClusterId": $cluster_id, "StepId": $step_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -794,7 +794,7 @@ export def "x-amz-target-elastic-map-reduce-describe-step DescribeStep" [
 #
 # POST /#X-Amz-Target=ElasticMapReduce.DescribeStudio
 # operationId: DescribeStudio
-export def "x-amz-target-elastic-map-reduce-describe-studio DescribeStudio" [
+export def "x-amz-target-elastic-map-reduce-describe-studio post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -803,23 +803,23 @@ export def "x-amz-target-elastic-map-reduce-describe-studio DescribeStudio" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  StudioId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  studio_id: any
 ]: any -> record<Studio: record<StudioId: record, StudioArn: record, Name: record, Description: record, AuthMode: record, VpcId: record, SubnetIds: record, ServiceRole: record, UserRole: record, WorkspaceSecurityGroupId: record, EngineSecurityGroupId: record, Url: record, CreationTime: record, DefaultS3Location: record, IdpAuthUrl: record, IdpRelayStateParameterName: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.DescribeStudio")
-  let body = {StudioId: $StudioId} | compact
+  let body = {"StudioId": $studio_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -830,7 +830,7 @@ export def "x-amz-target-elastic-map-reduce-describe-studio DescribeStudio" [
 #
 # POST /#X-Amz-Target=ElasticMapReduce.GetAutoTerminationPolicy
 # operationId: GetAutoTerminationPolicy
-export def "x-amz-target-elastic-map-reduce-get-auto-termination-policy GetAutoTerminationPolicy" [
+export def "x-amz-target-elastic-map-reduce-get-auto-termination-policy get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -839,23 +839,23 @@ export def "x-amz-target-elastic-map-reduce-get-auto-termination-policy GetAutoT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  ClusterId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  cluster_id: any
 ]: any -> record<AutoTerminationPolicy: record<IdleTimeout: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.GetAutoTerminationPolicy")
-  let body = {ClusterId: $ClusterId} | compact
+  let body = {"ClusterId": $cluster_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -866,7 +866,7 @@ export def "x-amz-target-elastic-map-reduce-get-auto-termination-policy GetAutoT
 #
 # POST /#X-Amz-Target=ElasticMapReduce.GetBlockPublicAccessConfiguration
 # operationId: GetBlockPublicAccessConfiguration
-export def "x-amz-target-elastic-map-reduce-get-block-public-access-configuration GetBlockPublicAccessConfiguration" [
+export def "x-amz-target-elastic-map-reduce-get-block-public-access-configuration get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -875,14 +875,14 @@ export def "x-amz-target-elastic-map-reduce-get-block-public-access-configuratio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
   --body: record
 ]: any -> record<BlockPublicAccessConfiguration: record<BlockPublicSecurityGroupRules: record, PermittedPublicSecurityGroupRuleRanges: record>, BlockPublicAccessConfigurationMetadata: record<CreationDateTime: record, CreatedByArn: record>> {
   let input = $in
@@ -890,7 +890,7 @@ export def "x-amz-target-elastic-map-reduce-get-block-public-access-configuratio
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.GetBlockPublicAccessConfiguration")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -901,7 +901,7 @@ export def "x-amz-target-elastic-map-reduce-get-block-public-access-configuratio
 #
 # POST /#X-Amz-Target=ElasticMapReduce.GetClusterSessionCredentials
 # operationId: GetClusterSessionCredentials
-export def "x-amz-target-elastic-map-reduce-get-cluster-session-credentials GetClusterSessionCredentials" [
+export def "x-amz-target-elastic-map-reduce-get-cluster-session-credentials get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -910,24 +910,24 @@ export def "x-amz-target-elastic-map-reduce-get-cluster-session-credentials GetC
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  ClusterId: any
-  ExecutionRoleArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  cluster_id: any
+  execution_role_arn: any
 ]: any -> record<Credentials: record<UsernamePassword: record<Username: record, Password: record>>, ExpiresAt: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.GetClusterSessionCredentials")
-  let body = {ClusterId: $ClusterId, ExecutionRoleArn: $ExecutionRoleArn} | compact
+  let body = {"ClusterId": $cluster_id, "ExecutionRoleArn": $execution_role_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -938,7 +938,7 @@ export def "x-amz-target-elastic-map-reduce-get-cluster-session-credentials GetC
 #
 # POST /#X-Amz-Target=ElasticMapReduce.GetManagedScalingPolicy
 # operationId: GetManagedScalingPolicy
-export def "x-amz-target-elastic-map-reduce-get-managed-scaling-policy GetManagedScalingPolicy" [
+export def "x-amz-target-elastic-map-reduce-get-managed-scaling-policy get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -947,23 +947,23 @@ export def "x-amz-target-elastic-map-reduce-get-managed-scaling-policy GetManage
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  ClusterId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  cluster_id: any
 ]: any -> record<ManagedScalingPolicy: record<ComputeLimits: record<UnitType: record, MinimumCapacityUnits: record, MaximumCapacityUnits: record, MaximumOnDemandCapacityUnits: record, MaximumCoreCapacityUnits: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.GetManagedScalingPolicy")
-  let body = {ClusterId: $ClusterId} | compact
+  let body = {"ClusterId": $cluster_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -974,7 +974,7 @@ export def "x-amz-target-elastic-map-reduce-get-managed-scaling-policy GetManage
 #
 # POST /#X-Amz-Target=ElasticMapReduce.GetStudioSessionMapping
 # operationId: GetStudioSessionMapping
-export def "x-amz-target-elastic-map-reduce-get-studio-session-mapping GetStudioSessionMapping" [
+export def "x-amz-target-elastic-map-reduce-get-studio-session-mapping get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -983,26 +983,26 @@ export def "x-amz-target-elastic-map-reduce-get-studio-session-mapping GetStudio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  StudioId: any
-  --IdentityId: any
-  --IdentityName: any
-  IdentityType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  studio_id: any
+  --identity-id: any
+  --identity-name: any
+  identity_type: any
 ]: any -> record<SessionMapping: record<StudioId: record, IdentityId: record, IdentityName: record, IdentityType: record, SessionPolicyArn: record, CreationTime: record, LastModifiedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.GetStudioSessionMapping")
-  let body = {StudioId: $StudioId, IdentityId: $IdentityId, IdentityName: $IdentityName, IdentityType: $IdentityType} | compact
+  let body = {"StudioId": $studio_id, "IdentityId": $identity_id, "IdentityName": $identity_name, "IdentityType": $identity_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1013,7 +1013,7 @@ export def "x-amz-target-elastic-map-reduce-get-studio-session-mapping GetStudio
 #
 # POST /#X-Amz-Target=ElasticMapReduce.ListBootstrapActions
 # operationId: ListBootstrapActions
-export def "x-amz-target-elastic-map-reduce-list-bootstrap-actions ListBootstrapActions" [
+export def "x-amz-target-elastic-map-reduce-list-bootstrap-actions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1022,26 +1022,26 @@ export def "x-amz-target-elastic-map-reduce-list-bootstrap-actions ListBootstrap
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  ClusterId: any
-  --Marker: any
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  cluster_id: any
+  --marker: any
 ]: any -> record<BootstrapActions: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.ListBootstrapActions" $qp)
-  let body = {ClusterId: $ClusterId, Marker: $Marker} | compact
+  let body = {"ClusterId": $cluster_id, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1052,7 +1052,7 @@ export def "x-amz-target-elastic-map-reduce-list-bootstrap-actions ListBootstrap
 #
 # POST /#X-Amz-Target=ElasticMapReduce.ListClusters
 # operationId: ListClusters
-export def "x-amz-target-elastic-map-reduce-list-clusters ListClusters" [
+export def "x-amz-target-elastic-map-reduce-list-clusters list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1061,28 +1061,28 @@ export def "x-amz-target-elastic-map-reduce-list-clusters ListClusters" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  --CreatedAfter: any
-  --CreatedBefore: any
-  --ClusterStates: any
-  --Marker: any
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  --created-after: any
+  --created-before: any
+  --cluster-states: any
+  --marker: any
 ]: any -> record<Clusters: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.ListClusters" $qp)
-  let body = {CreatedAfter: $CreatedAfter, CreatedBefore: $CreatedBefore, ClusterStates: $ClusterStates, Marker: $Marker} | compact
+  let body = {"CreatedAfter": $created_after, "CreatedBefore": $created_before, "ClusterStates": $cluster_states, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1093,7 +1093,7 @@ export def "x-amz-target-elastic-map-reduce-list-clusters ListClusters" [
 #
 # POST /#X-Amz-Target=ElasticMapReduce.ListInstanceFleets
 # operationId: ListInstanceFleets
-export def "x-amz-target-elastic-map-reduce-list-instance-fleets ListInstanceFleets" [
+export def "x-amz-target-elastic-map-reduce-list-instance-fleets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1102,26 +1102,26 @@ export def "x-amz-target-elastic-map-reduce-list-instance-fleets ListInstanceFle
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  ClusterId: any
-  --Marker: any
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  cluster_id: any
+  --marker: any
 ]: any -> record<InstanceFleets: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.ListInstanceFleets" $qp)
-  let body = {ClusterId: $ClusterId, Marker: $Marker} | compact
+  let body = {"ClusterId": $cluster_id, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1132,7 +1132,7 @@ export def "x-amz-target-elastic-map-reduce-list-instance-fleets ListInstanceFle
 #
 # POST /#X-Amz-Target=ElasticMapReduce.ListInstanceGroups
 # operationId: ListInstanceGroups
-export def "x-amz-target-elastic-map-reduce-list-instance-groups ListInstanceGroups" [
+export def "x-amz-target-elastic-map-reduce-list-instance-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1141,26 +1141,26 @@ export def "x-amz-target-elastic-map-reduce-list-instance-groups ListInstanceGro
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  ClusterId: any
-  --Marker: any
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  cluster_id: any
+  --marker: any
 ]: any -> record<InstanceGroups: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.ListInstanceGroups" $qp)
-  let body = {ClusterId: $ClusterId, Marker: $Marker} | compact
+  let body = {"ClusterId": $cluster_id, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1171,7 +1171,7 @@ export def "x-amz-target-elastic-map-reduce-list-instance-groups ListInstanceGro
 #
 # POST /#X-Amz-Target=ElasticMapReduce.ListInstances
 # operationId: ListInstances
-export def "x-amz-target-elastic-map-reduce-list-instances ListInstances" [
+export def "x-amz-target-elastic-map-reduce-list-instances list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1180,31 +1180,31 @@ export def "x-amz-target-elastic-map-reduce-list-instances ListInstances" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  ClusterId: any
-  --InstanceGroupId: any
-  --InstanceGroupTypes: any
-  --InstanceFleetId: any
-  --InstanceFleetType: any
-  --InstanceStates: any
-  --Marker: any
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  cluster_id: any
+  --instance-group-id: any
+  --instance-group-types: any
+  --instance-fleet-id: any
+  --instance-fleet-type: any
+  --instance-states: any
+  --marker: any
 ]: any -> record<Instances: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.ListInstances" $qp)
-  let body = {ClusterId: $ClusterId, InstanceGroupId: $InstanceGroupId, InstanceGroupTypes: $InstanceGroupTypes, InstanceFleetId: $InstanceFleetId, InstanceFleetType: $InstanceFleetType, InstanceStates: $InstanceStates, Marker: $Marker} | compact
+  let body = {"ClusterId": $cluster_id, "InstanceGroupId": $instance_group_id, "InstanceGroupTypes": $instance_group_types, "InstanceFleetId": $instance_fleet_id, "InstanceFleetType": $instance_fleet_type, "InstanceStates": $instance_states, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1215,7 +1215,7 @@ export def "x-amz-target-elastic-map-reduce-list-instances ListInstances" [
 #
 # POST /#X-Amz-Target=ElasticMapReduce.ListNotebookExecutions
 # operationId: ListNotebookExecutions
-export def "x-amz-target-elastic-map-reduce-list-notebook-executions ListNotebookExecutions" [
+export def "x-amz-target-elastic-map-reduce-list-notebook-executions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1224,29 +1224,29 @@ export def "x-amz-target-elastic-map-reduce-list-notebook-executions ListNoteboo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  --EditorId: any
-  --Status: any
-  --From: any
-  --To: any
-  --Marker: any
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  --editor-id: any
+  --status: any
+  --body-from: any
+  --body-to: any
+  --marker: any
 ]: any -> record<NotebookExecutions: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.ListNotebookExecutions" $qp)
-  let body = {EditorId: $EditorId, Status: $Status, From: $From, To: $To, Marker: $Marker} | compact
+  let body = {"EditorId": $editor_id, "Status": $status, "From": $body_from, "To": $body_to, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1257,7 +1257,7 @@ export def "x-amz-target-elastic-map-reduce-list-notebook-executions ListNoteboo
 #
 # POST /#X-Amz-Target=ElasticMapReduce.ListReleaseLabels
 # operationId: ListReleaseLabels
-export def "x-amz-target-elastic-map-reduce-list-release-labels ListReleaseLabels" [
+export def "x-amz-target-elastic-map-reduce-list-release-labels list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1266,28 +1266,28 @@ export def "x-amz-target-elastic-map-reduce-list-release-labels ListReleaseLabel
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  --Filters: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  --filters: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<ReleaseLabels: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.ListReleaseLabels" $qp)
-  let body = {Filters: $Filters, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Filters": $filters, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1298,7 +1298,7 @@ export def "x-amz-target-elastic-map-reduce-list-release-labels ListReleaseLabel
 #
 # POST /#X-Amz-Target=ElasticMapReduce.ListSecurityConfigurations
 # operationId: ListSecurityConfigurations
-export def "x-amz-target-elastic-map-reduce-list-security-configurations ListSecurityConfigurations" [
+export def "x-amz-target-elastic-map-reduce-list-security-configurations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1307,25 +1307,25 @@ export def "x-amz-target-elastic-map-reduce-list-security-configurations ListSec
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  --Marker: any
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  --marker: any
 ]: any -> record<SecurityConfigurations: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.ListSecurityConfigurations" $qp)
-  let body = {Marker: $Marker} | compact
+  let body = {"Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1336,7 +1336,7 @@ export def "x-amz-target-elastic-map-reduce-list-security-configurations ListSec
 #
 # POST /#X-Amz-Target=ElasticMapReduce.ListSteps
 # operationId: ListSteps
-export def "x-amz-target-elastic-map-reduce-list-steps ListSteps" [
+export def "x-amz-target-elastic-map-reduce-list-steps list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1345,28 +1345,28 @@ export def "x-amz-target-elastic-map-reduce-list-steps ListSteps" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  ClusterId: any
-  --StepStates: any
-  --StepIds: any
-  --Marker: any
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  cluster_id: any
+  --step-states: any
+  --step-ids: any
+  --marker: any
 ]: any -> record<Steps: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.ListSteps" $qp)
-  let body = {ClusterId: $ClusterId, StepStates: $StepStates, StepIds: $StepIds, Marker: $Marker} | compact
+  let body = {"ClusterId": $cluster_id, "StepStates": $step_states, "StepIds": $step_ids, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1377,7 +1377,7 @@ export def "x-amz-target-elastic-map-reduce-list-steps ListSteps" [
 #
 # POST /#X-Amz-Target=ElasticMapReduce.ListStudioSessionMappings
 # operationId: ListStudioSessionMappings
-export def "x-amz-target-elastic-map-reduce-list-studio-session-mappings ListStudioSessionMappings" [
+export def "x-amz-target-elastic-map-reduce-list-studio-session-mappings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1386,27 +1386,27 @@ export def "x-amz-target-elastic-map-reduce-list-studio-session-mappings ListStu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  --StudioId: any
-  --IdentityType: any
-  --Marker: any
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  --studio-id: any
+  --identity-type: any
+  --marker: any
 ]: any -> record<SessionMappings: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.ListStudioSessionMappings" $qp)
-  let body = {StudioId: $StudioId, IdentityType: $IdentityType, Marker: $Marker} | compact
+  let body = {"StudioId": $studio_id, "IdentityType": $identity_type, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1417,7 +1417,7 @@ export def "x-amz-target-elastic-map-reduce-list-studio-session-mappings ListStu
 #
 # POST /#X-Amz-Target=ElasticMapReduce.ListStudios
 # operationId: ListStudios
-export def "x-amz-target-elastic-map-reduce-list-studios ListStudios" [
+export def "x-amz-target-elastic-map-reduce-list-studios list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1426,25 +1426,25 @@ export def "x-amz-target-elastic-map-reduce-list-studios ListStudios" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  --Marker: any
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  --marker: any
 ]: any -> record<Studios: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.ListStudios" $qp)
-  let body = {Marker: $Marker} | compact
+  let body = {"Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1455,7 +1455,7 @@ export def "x-amz-target-elastic-map-reduce-list-studios ListStudios" [
 #
 # POST /#X-Amz-Target=ElasticMapReduce.ModifyCluster
 # operationId: ModifyCluster
-export def "x-amz-target-elastic-map-reduce-modify-cluster ModifyCluster" [
+export def "x-amz-target-elastic-map-reduce-modify-cluster post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1464,24 +1464,24 @@ export def "x-amz-target-elastic-map-reduce-modify-cluster ModifyCluster" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  ClusterId: any
-  --StepConcurrencyLevel: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  cluster_id: any
+  --step-concurrency-level: any
 ]: any -> record<StepConcurrencyLevel: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.ModifyCluster")
-  let body = {ClusterId: $ClusterId, StepConcurrencyLevel: $StepConcurrencyLevel} | compact
+  let body = {"ClusterId": $cluster_id, "StepConcurrencyLevel": $step_concurrency_level} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1492,7 +1492,7 @@ export def "x-amz-target-elastic-map-reduce-modify-cluster ModifyCluster" [
 #
 # POST /#X-Amz-Target=ElasticMapReduce.ModifyInstanceFleet
 # operationId: ModifyInstanceFleet
-export def "x-amz-target-elastic-map-reduce-modify-instance-fleet ModifyInstanceFleet" [
+export def "x-amz-target-elastic-map-reduce-modify-instance-fleet post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1501,24 +1501,24 @@ export def "x-amz-target-elastic-map-reduce-modify-instance-fleet ModifyInstance
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  ClusterId: any
-  InstanceFleet: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  cluster_id: any
+  instance_fleet: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.ModifyInstanceFleet")
-  let body = {ClusterId: $ClusterId, InstanceFleet: $InstanceFleet} | compact
+  let body = {"ClusterId": $cluster_id, "InstanceFleet": $instance_fleet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1529,7 +1529,7 @@ export def "x-amz-target-elastic-map-reduce-modify-instance-fleet ModifyInstance
 #
 # POST /#X-Amz-Target=ElasticMapReduce.ModifyInstanceGroups
 # operationId: ModifyInstanceGroups
-export def "x-amz-target-elastic-map-reduce-modify-instance-groups ModifyInstanceGroups" [
+export def "x-amz-target-elastic-map-reduce-modify-instance-groups post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1538,24 +1538,24 @@ export def "x-amz-target-elastic-map-reduce-modify-instance-groups ModifyInstanc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  --ClusterId: any
-  --InstanceGroups: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  --cluster-id: any
+  --instance-groups: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.ModifyInstanceGroups")
-  let body = {ClusterId: $ClusterId, InstanceGroups: $InstanceGroups} | compact
+  let body = {"ClusterId": $cluster_id, "InstanceGroups": $instance_groups} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1566,7 +1566,7 @@ export def "x-amz-target-elastic-map-reduce-modify-instance-groups ModifyInstanc
 #
 # POST /#X-Amz-Target=ElasticMapReduce.PutAutoScalingPolicy
 # operationId: PutAutoScalingPolicy
-export def "x-amz-target-elastic-map-reduce-put-auto-scaling-policy PutAutoScalingPolicy" [
+export def "x-amz-target-elastic-map-reduce-put-auto-scaling-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1575,25 +1575,25 @@ export def "x-amz-target-elastic-map-reduce-put-auto-scaling-policy PutAutoScali
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  ClusterId: any
-  InstanceGroupId: any
-  AutoScalingPolicy: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  cluster_id: any
+  instance_group_id: any
+  auto_scaling_policy: any
 ]: any -> record<ClusterId: record, InstanceGroupId: record, AutoScalingPolicy: record<Status: record<State: record, StateChangeReason: record>, Constraints: record<MinCapacity: record, MaxCapacity: record>, Rules: record>, ClusterArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.PutAutoScalingPolicy")
-  let body = {ClusterId: $ClusterId, InstanceGroupId: $InstanceGroupId, AutoScalingPolicy: $AutoScalingPolicy} | compact
+  let body = {"ClusterId": $cluster_id, "InstanceGroupId": $instance_group_id, "AutoScalingPolicy": $auto_scaling_policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1604,7 +1604,7 @@ export def "x-amz-target-elastic-map-reduce-put-auto-scaling-policy PutAutoScali
 #
 # POST /#X-Amz-Target=ElasticMapReduce.PutAutoTerminationPolicy
 # operationId: PutAutoTerminationPolicy
-export def "x-amz-target-elastic-map-reduce-put-auto-termination-policy PutAutoTerminationPolicy" [
+export def "x-amz-target-elastic-map-reduce-put-auto-termination-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1613,24 +1613,24 @@ export def "x-amz-target-elastic-map-reduce-put-auto-termination-policy PutAutoT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  ClusterId: any
-  --AutoTerminationPolicy: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  cluster_id: any
+  --auto-termination-policy: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.PutAutoTerminationPolicy")
-  let body = {ClusterId: $ClusterId, AutoTerminationPolicy: $AutoTerminationPolicy} | compact
+  let body = {"ClusterId": $cluster_id, "AutoTerminationPolicy": $auto_termination_policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1641,7 +1641,7 @@ export def "x-amz-target-elastic-map-reduce-put-auto-termination-policy PutAutoT
 #
 # POST /#X-Amz-Target=ElasticMapReduce.PutBlockPublicAccessConfiguration
 # operationId: PutBlockPublicAccessConfiguration
-export def "x-amz-target-elastic-map-reduce-put-block-public-access-configuration PutBlockPublicAccessConfiguration" [
+export def "x-amz-target-elastic-map-reduce-put-block-public-access-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1650,23 +1650,23 @@ export def "x-amz-target-elastic-map-reduce-put-block-public-access-configuratio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  BlockPublicAccessConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  block_public_access_configuration: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.PutBlockPublicAccessConfiguration")
-  let body = {BlockPublicAccessConfiguration: $BlockPublicAccessConfiguration} | compact
+  let body = {"BlockPublicAccessConfiguration": $block_public_access_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1677,7 +1677,7 @@ export def "x-amz-target-elastic-map-reduce-put-block-public-access-configuratio
 #
 # POST /#X-Amz-Target=ElasticMapReduce.PutManagedScalingPolicy
 # operationId: PutManagedScalingPolicy
-export def "x-amz-target-elastic-map-reduce-put-managed-scaling-policy PutManagedScalingPolicy" [
+export def "x-amz-target-elastic-map-reduce-put-managed-scaling-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1686,24 +1686,24 @@ export def "x-amz-target-elastic-map-reduce-put-managed-scaling-policy PutManage
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  ClusterId: any
-  ManagedScalingPolicy: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  cluster_id: any
+  managed_scaling_policy: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.PutManagedScalingPolicy")
-  let body = {ClusterId: $ClusterId, ManagedScalingPolicy: $ManagedScalingPolicy} | compact
+  let body = {"ClusterId": $cluster_id, "ManagedScalingPolicy": $managed_scaling_policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1714,7 +1714,7 @@ export def "x-amz-target-elastic-map-reduce-put-managed-scaling-policy PutManage
 #
 # POST /#X-Amz-Target=ElasticMapReduce.RemoveAutoScalingPolicy
 # operationId: RemoveAutoScalingPolicy
-export def "x-amz-target-elastic-map-reduce-remove-auto-scaling-policy RemoveAutoScalingPolicy" [
+export def "x-amz-target-elastic-map-reduce-remove-auto-scaling-policy delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1723,24 +1723,24 @@ export def "x-amz-target-elastic-map-reduce-remove-auto-scaling-policy RemoveAut
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  ClusterId: any
-  InstanceGroupId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  cluster_id: any
+  instance_group_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.RemoveAutoScalingPolicy")
-  let body = {ClusterId: $ClusterId, InstanceGroupId: $InstanceGroupId} | compact
+  let body = {"ClusterId": $cluster_id, "InstanceGroupId": $instance_group_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1751,7 +1751,7 @@ export def "x-amz-target-elastic-map-reduce-remove-auto-scaling-policy RemoveAut
 #
 # POST /#X-Amz-Target=ElasticMapReduce.RemoveAutoTerminationPolicy
 # operationId: RemoveAutoTerminationPolicy
-export def "x-amz-target-elastic-map-reduce-remove-auto-termination-policy RemoveAutoTerminationPolicy" [
+export def "x-amz-target-elastic-map-reduce-remove-auto-termination-policy delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1760,23 +1760,23 @@ export def "x-amz-target-elastic-map-reduce-remove-auto-termination-policy Remov
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  ClusterId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  cluster_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.RemoveAutoTerminationPolicy")
-  let body = {ClusterId: $ClusterId} | compact
+  let body = {"ClusterId": $cluster_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1787,7 +1787,7 @@ export def "x-amz-target-elastic-map-reduce-remove-auto-termination-policy Remov
 #
 # POST /#X-Amz-Target=ElasticMapReduce.RemoveManagedScalingPolicy
 # operationId: RemoveManagedScalingPolicy
-export def "x-amz-target-elastic-map-reduce-remove-managed-scaling-policy RemoveManagedScalingPolicy" [
+export def "x-amz-target-elastic-map-reduce-remove-managed-scaling-policy delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1796,23 +1796,23 @@ export def "x-amz-target-elastic-map-reduce-remove-managed-scaling-policy Remove
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  ClusterId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  cluster_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.RemoveManagedScalingPolicy")
-  let body = {ClusterId: $ClusterId} | compact
+  let body = {"ClusterId": $cluster_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1823,7 +1823,7 @@ export def "x-amz-target-elastic-map-reduce-remove-managed-scaling-policy Remove
 #
 # POST /#X-Amz-Target=ElasticMapReduce.RemoveTags
 # operationId: RemoveTags
-export def "x-amz-target-elastic-map-reduce-remove-tags RemoveTags" [
+export def "x-amz-target-elastic-map-reduce-remove-tags delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1832,24 +1832,24 @@ export def "x-amz-target-elastic-map-reduce-remove-tags RemoveTags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  ResourceId: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  resource_id: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.RemoveTags")
-  let body = {ResourceId: $ResourceId, TagKeys: $TagKeys} | compact
+  let body = {"ResourceId": $resource_id, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1861,7 +1861,7 @@ export def "x-amz-target-elastic-map-reduce-remove-tags RemoveTags" [
 # POST /#X-Amz-Target=ElasticMapReduce.RunJobFlow
 # operationId: RunJobFlow
 # --AutoTerminationPolicy shape: {IdleTimeout?: any}
-export def "x-amz-target-elastic-map-reduce-run-job-flow RunJobFlow" [
+export def "x-amz-target-elastic-map-reduce-run-job-flow post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1870,51 +1870,51 @@ export def "x-amz-target-elastic-map-reduce-run-job-flow RunJobFlow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  Name: any
-  --LogUri: any
-  --LogEncryptionKmsKeyId: any
-  --AdditionalInfo: any
-  --AmiVersion: any
-  --ReleaseLabel: any
-  Instances: any
-  --Steps: any
-  --BootstrapActions: any
-  --SupportedProducts: any
-  --NewSupportedProducts: any
-  --Applications: any
-  --Configurations: any
-  --VisibleToAllUsers: any
-  --JobFlowRole: any
-  --ServiceRole: any
-  --Tags: any
-  --SecurityConfiguration: any
-  --AutoScalingRole: any
-  --ScaleDownBehavior: any
-  --CustomAmiId: any
-  --EbsRootVolumeSize: any
-  --RepoUpgradeOnBoot: any
-  --KerberosAttributes: any
-  --StepConcurrencyLevel: any
-  --ManagedScalingPolicy: any
-  --PlacementGroupConfigs: any
-  --AutoTerminationPolicy: record # An auto-termination policy for an Amazon EMR cluster. An auto-termination policy defines the amount of idle time in seconds after which a cluster automatically terminates. For alternative cluster termination options, see <a href="https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-termination.html">Control cluster termination</a>. — shape: {IdleTimeout?: any}
-  --OSReleaseLabel: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  name: any
+  --log-uri: any
+  --log-encryption-kms-key-id: any
+  --additional-info: any
+  --ami-version: any
+  --release-label: any
+  instances: any
+  --steps: any
+  --bootstrap-actions: any
+  --supported-products: any
+  --new-supported-products: any
+  --applications: any
+  --configurations: any
+  --visible-to-all-users: any
+  --job-flow-role: any
+  --service-role: any
+  --tags: any
+  --security-configuration: any
+  --auto-scaling-role: any
+  --scale-down-behavior: any
+  --custom-ami-id: any
+  --ebs-root-volume-size: any
+  --repo-upgrade-on-boot: any
+  --kerberos-attributes: any
+  --step-concurrency-level: any
+  --managed-scaling-policy: any
+  --placement-group-configs: any
+  --auto-termination-policy: record # An auto-termination policy for an Amazon EMR cluster. An auto-termination policy defines the amount of idle time in seconds after which a cluster automatically terminates. For alternative cluster termination options, see <a href="https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-termination.html">Control cluster termination</a>. — shape: {IdleTimeout?: any}
+  --os-release-label: any
 ]: any -> record<JobFlowId: record, ClusterArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.RunJobFlow")
-  let body = {Name: $Name, LogUri: $LogUri, LogEncryptionKmsKeyId: $LogEncryptionKmsKeyId, AdditionalInfo: $AdditionalInfo, AmiVersion: $AmiVersion, ReleaseLabel: $ReleaseLabel, Instances: $Instances, Steps: $Steps, BootstrapActions: $BootstrapActions, SupportedProducts: $SupportedProducts, NewSupportedProducts: $NewSupportedProducts, Applications: $Applications, Configurations: $Configurations, VisibleToAllUsers: $VisibleToAllUsers, JobFlowRole: $JobFlowRole, ServiceRole: $ServiceRole, Tags: $Tags, SecurityConfiguration: $SecurityConfiguration, AutoScalingRole: $AutoScalingRole, ScaleDownBehavior: $ScaleDownBehavior, CustomAmiId: $CustomAmiId, EbsRootVolumeSize: $EbsRootVolumeSize, RepoUpgradeOnBoot: $RepoUpgradeOnBoot, KerberosAttributes: $KerberosAttributes, StepConcurrencyLevel: $StepConcurrencyLevel, ManagedScalingPolicy: $ManagedScalingPolicy, PlacementGroupConfigs: $PlacementGroupConfigs, AutoTerminationPolicy: $AutoTerminationPolicy, OSReleaseLabel: $OSReleaseLabel} | compact
+  let body = {"Name": $name, "LogUri": $log_uri, "LogEncryptionKmsKeyId": $log_encryption_kms_key_id, "AdditionalInfo": $additional_info, "AmiVersion": $ami_version, "ReleaseLabel": $release_label, "Instances": $instances, "Steps": $steps, "BootstrapActions": $bootstrap_actions, "SupportedProducts": $supported_products, "NewSupportedProducts": $new_supported_products, "Applications": $applications, "Configurations": $configurations, "VisibleToAllUsers": $visible_to_all_users, "JobFlowRole": $job_flow_role, "ServiceRole": $service_role, "Tags": $tags, "SecurityConfiguration": $security_configuration, "AutoScalingRole": $auto_scaling_role, "ScaleDownBehavior": $scale_down_behavior, "CustomAmiId": $custom_ami_id, "EbsRootVolumeSize": $ebs_root_volume_size, "RepoUpgradeOnBoot": $repo_upgrade_on_boot, "KerberosAttributes": $kerberos_attributes, "StepConcurrencyLevel": $step_concurrency_level, "ManagedScalingPolicy": $managed_scaling_policy, "PlacementGroupConfigs": $placement_group_configs, "AutoTerminationPolicy": $auto_termination_policy, "OSReleaseLabel": $os_release_label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1925,7 +1925,7 @@ export def "x-amz-target-elastic-map-reduce-run-job-flow RunJobFlow" [
 #
 # POST /#X-Amz-Target=ElasticMapReduce.SetTerminationProtection
 # operationId: SetTerminationProtection
-export def "x-amz-target-elastic-map-reduce-set-termination-protection SetTerminationProtection" [
+export def "x-amz-target-elastic-map-reduce-set-termination-protection post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1934,24 +1934,24 @@ export def "x-amz-target-elastic-map-reduce-set-termination-protection SetTermin
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  JobFlowIds: any
-  TerminationProtected: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  job_flow_ids: any
+  termination_protected: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.SetTerminationProtection")
-  let body = {JobFlowIds: $JobFlowIds, TerminationProtected: $TerminationProtected} | compact
+  let body = {"JobFlowIds": $job_flow_ids, "TerminationProtected": $termination_protected} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1962,7 +1962,7 @@ export def "x-amz-target-elastic-map-reduce-set-termination-protection SetTermin
 #
 # POST /#X-Amz-Target=ElasticMapReduce.SetVisibleToAllUsers
 # operationId: SetVisibleToAllUsers
-export def "x-amz-target-elastic-map-reduce-set-visible-to-all-users SetVisibleToAllUsers" [
+export def "x-amz-target-elastic-map-reduce-set-visible-to-all-users post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1971,24 +1971,24 @@ export def "x-amz-target-elastic-map-reduce-set-visible-to-all-users SetVisibleT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
-  JobFlowIds: any
-  VisibleToAllUsers: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
+  job_flow_ids: any
+  visible_to_all_users: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.SetVisibleToAllUsers")
-  let body = {JobFlowIds: $JobFlowIds, VisibleToAllUsers: $VisibleToAllUsers} | compact
+  let body = {"JobFlowIds": $job_flow_ids, "VisibleToAllUsers": $visible_to_all_users} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1999,7 +1999,7 @@ export def "x-amz-target-elastic-map-reduce-set-visible-to-all-users SetVisibleT
 #
 # POST /#X-Amz-Target=ElasticMapReduce.StartNotebookExecution
 # operationId: StartNotebookExecution
-export def "x-amz-target-elastic-map-reduce-start-notebook-execution StartNotebookExecution" [
+export def "x-amz-target-elastic-map-reduce-start-notebook-execution start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2008,30 +2008,30 @@ export def "x-amz-target-elastic-map-reduce-start-notebook-execution StartNotebo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
-  EditorId: any
-  RelativePath: any
-  --NotebookExecutionName: any
-  --NotebookParams: any
-  ExecutionEngine: any
-  ServiceRole: any
-  --NotebookInstanceSecurityGroupId: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
+  editor_id: any
+  relative_path: any
+  --notebook-execution-name: any
+  --notebook-params: any
+  execution_engine: any
+  service_role: any
+  --notebook-instance-security-group-id: any
+  --tags: any
 ]: any -> record<NotebookExecutionId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.StartNotebookExecution")
-  let body = {EditorId: $EditorId, RelativePath: $RelativePath, NotebookExecutionName: $NotebookExecutionName, NotebookParams: $NotebookParams, ExecutionEngine: $ExecutionEngine, ServiceRole: $ServiceRole, NotebookInstanceSecurityGroupId: $NotebookInstanceSecurityGroupId, Tags: $Tags} | compact
+  let body = {"EditorId": $editor_id, "RelativePath": $relative_path, "NotebookExecutionName": $notebook_execution_name, "NotebookParams": $notebook_params, "ExecutionEngine": $execution_engine, "ServiceRole": $service_role, "NotebookInstanceSecurityGroupId": $notebook_instance_security_group_id, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2042,7 +2042,7 @@ export def "x-amz-target-elastic-map-reduce-start-notebook-execution StartNotebo
 #
 # POST /#X-Amz-Target=ElasticMapReduce.StopNotebookExecution
 # operationId: StopNotebookExecution
-export def "x-amz-target-elastic-map-reduce-stop-notebook-execution StopNotebookExecution" [
+export def "x-amz-target-elastic-map-reduce-stop-notebook-execution stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2051,23 +2051,23 @@ export def "x-amz-target-elastic-map-reduce-stop-notebook-execution StopNotebook
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-49
-  NotebookExecutionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-49
+  notebook_execution_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.StopNotebookExecution")
-  let body = {NotebookExecutionId: $NotebookExecutionId} | compact
+  let body = {"NotebookExecutionId": $notebook_execution_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2078,7 +2078,7 @@ export def "x-amz-target-elastic-map-reduce-stop-notebook-execution StopNotebook
 #
 # POST /#X-Amz-Target=ElasticMapReduce.TerminateJobFlows
 # operationId: TerminateJobFlows
-export def "x-amz-target-elastic-map-reduce-terminate-job-flows TerminateJobFlows" [
+export def "x-amz-target-elastic-map-reduce-terminate-job-flows post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2087,23 +2087,23 @@ export def "x-amz-target-elastic-map-reduce-terminate-job-flows TerminateJobFlow
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-50
-  JobFlowIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-50
+  job_flow_ids: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.TerminateJobFlows")
-  let body = {JobFlowIds: $JobFlowIds} | compact
+  let body = {"JobFlowIds": $job_flow_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2114,7 +2114,7 @@ export def "x-amz-target-elastic-map-reduce-terminate-job-flows TerminateJobFlow
 #
 # POST /#X-Amz-Target=ElasticMapReduce.UpdateStudio
 # operationId: UpdateStudio
-export def "x-amz-target-elastic-map-reduce-update-studio UpdateStudio" [
+export def "x-amz-target-elastic-map-reduce-update-studio update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2123,27 +2123,27 @@ export def "x-amz-target-elastic-map-reduce-update-studio UpdateStudio" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-51
-  StudioId: any
-  --Name: any
-  --Description: any
-  --SubnetIds: any
-  --DefaultS3Location: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-51
+  studio_id: any
+  --name: any
+  --description: any
+  --subnet-ids: any
+  --default-s3-location: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.UpdateStudio")
-  let body = {StudioId: $StudioId, Name: $Name, Description: $Description, SubnetIds: $SubnetIds, DefaultS3Location: $DefaultS3Location} | compact
+  let body = {"StudioId": $studio_id, "Name": $name, "Description": $description, "SubnetIds": $subnet_ids, "DefaultS3Location": $default_s3_location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2154,7 +2154,7 @@ export def "x-amz-target-elastic-map-reduce-update-studio UpdateStudio" [
 #
 # POST /#X-Amz-Target=ElasticMapReduce.UpdateStudioSessionMapping
 # operationId: UpdateStudioSessionMapping
-export def "x-amz-target-elastic-map-reduce-update-studio-session-mapping UpdateStudioSessionMapping" [
+export def "x-amz-target-elastic-map-reduce-update-studio-session-mapping update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2163,27 +2163,27 @@ export def "x-amz-target-elastic-map-reduce-update-studio-session-mapping Update
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-52
-  StudioId: any
-  --IdentityId: any
-  --IdentityName: any
-  IdentityType: any
-  SessionPolicyArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-52
+  studio_id: any
+  --identity-id: any
+  --identity-name: any
+  identity_type: any
+  session_policy_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ElasticMapReduce.UpdateStudioSessionMapping")
-  let body = {StudioId: $StudioId, IdentityId: $IdentityId, IdentityName: $IdentityName, IdentityType: $IdentityType, SessionPolicyArn: $SessionPolicyArn} | compact
+  let body = {"StudioId": $studio_id, "IdentityId": $identity_id, "IdentityName": $identity_name, "IdentityType": $identity_type, "SessionPolicyArn": $session_policy_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

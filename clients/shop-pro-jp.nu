@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "appstore-application-chargesjson post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "appstore-application-chargesjson create-application-charge" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 # POST /appstore/v1/application_charges.json
 # operationId: postApplicationCharge
 # --application_charge shape: {application_charge_source_id?: string}
-export def "appstore-application-chargesjson post" [
+export def "appstore-application-chargesjson create-application-charge" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,7 +109,7 @@ export def "appstore-application-chargesjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/appstore/v1/application_charges.json")
-  let body = {application_charge: $application_charge} | compact
+  let body = {"application_charge": $application_charge} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,7 +120,7 @@ export def "appstore-application-chargesjson post" [
 #
 # DELETE /appstore/v1/installation.json
 # operationId: deleteInstallation
-export def "appstore-installationjson delete" [
+export def "appstore-installationjson delete-installation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,8 +143,8 @@ export def "appstore-installationjson delete" [
 # POST /appstore/v1/recurring_application_charges/{recurringApplicationChargeId}/usage_charges.json
 # operationId: createUsageCharge
 # --usage_charge shape: {description: string, point: int}
-export def "appstore-recurring-application-charges-usage-chargesjson createUsageCharge" [
-  recurringApplicationChargeId: string
+export def "appstore-recurring-application-charges-usage-chargesjson create" [
+  recurring_application_charge_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,16 +153,16 @@ export def "appstore-recurring-application-charges-usage-chargesjson createUsage
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Appstore-Usage-Charge-Token: string # アンインストール後の従量課金の精算をする際に、 `Authorization` ヘッダへアクセストークンを指定する代わりにこのヘッダを指定することで、このAPIを実行することができます。 インストール中は指定不要で、アンインストール後のみ必須となります。 アンインストールフックで通知される `usage_charge.api_token` の値を指定してください。 このヘッダは、アンインストールフックで通知される `usage_charge.closing_on` まで有効です。この期間を過ぎると従量課金を精算できなくなりますのでご注意ください。詳しくは [アプリのアンインストール](#section/API/アプリのアンインストール) をご確認ください。
+  --x-appstore-usage-charge-token: string # アンインストール後の従量課金の精算をする際に、 `Authorization` ヘッダへアクセストークンを指定する代わりにこのヘッダを指定することで、このAPIを実行することができます。 インストール中は指定不要で、アンインストール後のみ必須となります。 アンインストールフックで通知される `usage_charge.api_token` の値を指定してください。 このヘッダは、アンインストールフックで通知される `usage_charge.closing_on` まで有効です。この期間を過ぎると従量課金を精算できなくなりますのでご注意ください。詳しくは [アプリのアンインストール](#section/API/アプリのアンインストール) をご確認ください。
   --usage-charge: record # shape: {description: string, point: int}
 ]: any -> record<usage_charge: record<description: string, id: string, make_date: int, point: int, update_date: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/appstore/v1/recurring_application_charges/($recurringApplicationChargeId)/usage_charges.json")
-  let body = {usage_charge: $usage_charge} | compact
+  let full_url = (build-url $base ({recurring_application_charge_id: $recurring_application_charge_id} | format pattern "/appstore/v1/recurring_application_charges/{recurring_application_charge_id}/usage_charges.json"))
+  let body = {"usage_charge": $usage_charge} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Appstore-Usage-Charge-Token": $X_Appstore_Usage_Charge_Token} | compact
+  let extra_headers = {"X-Appstore-Usage-Charge-Token": $x_appstore_usage_charge_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -173,7 +173,7 @@ export def "appstore-recurring-application-charges-usage-chargesjson createUsage
 #
 # GET /appstore/v1/script_tags.json
 # operationId: getShopScriptTags
-export def "appstore-script-tagsjson get" [
+export def "appstore-script-tagsjson get-shop-script-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "appstore-script-tagsjson get" [
 # POST /appstore/v1/script_tags.json
 # operationId: createShopScriptTag
 # --script_tag shape: {display_scope?: "shop"|"thanks_page", integrity?: string, src?: string}
-export def "appstore-script-tagsjson createShopScriptTag" [
+export def "appstore-script-tagsjson create-shop-script-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "appstore-script-tagsjson createShopScriptTag" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/appstore/v1/script_tags.json")
-  let body = {script_tag: $script_tag} | compact
+  let body = {"script_tag": $script_tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -223,7 +223,7 @@ export def "appstore-script-tagsjson createShopScriptTag" [
 # DELETE /appstore/v1/script_tags/{scriptTagId}.json
 # operationId: deleteScriptTag
 export def "appstore-script-tags delete" [
-  scriptTagId: int
+  script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "appstore-script-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/appstore/v1/script_tags/($scriptTagId).json")
+  let full_url = (build-url $base ({script_tag_id: $script_tag_id} | format pattern "/appstore/v1/script_tags/{script_tag_id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -245,8 +245,8 @@ export def "appstore-script-tags delete" [
 #
 # GET /appstore/v1/script_tags/{scriptTagId}.json
 # operationId: getShopScriptTag
-export def "appstore-script-tags get" [
-  scriptTagId: int
+export def "appstore-script-tags get-shop" [
+  script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,7 +258,7 @@ export def "appstore-script-tags get" [
 ]: nothing -> record<script_tag: record<account_id: string, display_scope: string, id: int, integrity: string, make_date: int, oauth_application_id: int, src: string, update_date: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/appstore/v1/script_tags/($scriptTagId).json")
+  let full_url = (build-url $base ({script_tag_id: $script_tag_id} | format pattern "/appstore/v1/script_tags/{script_tag_id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -269,8 +269,8 @@ export def "appstore-script-tags get" [
 # PUT /appstore/v1/script_tags/{scriptTagId}.json
 # operationId: updateShopScriptTag
 # --script_tag shape: {display_scope?: "shop"|"thanks_page", integrity?: string, src?: string}
-export def "appstore-script-tags updateShopScriptTag" [
-  scriptTagId: int
+export def "appstore-script-tags update-shop" [
+  script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,8 +284,8 @@ export def "appstore-script-tags updateShopScriptTag" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/appstore/v1/script_tags/($scriptTagId).json")
-  let body = {script_tag: $script_tag} | compact
+  let full_url = (build-url $base ({script_tag_id: $script_tag_id} | format pattern "/appstore/v1/script_tags/{script_tag_id}.json"))
+  let body = {"script_tag": $script_tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -296,7 +296,7 @@ export def "appstore-script-tags updateShopScriptTag" [
 #
 # GET /v1/inline_script_tags.json
 # operationId: getInlineScriptTags
-export def "inline-script-tagsjson get" [
+export def "inline-script-tagsjson get-inline-script-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "inline-script-tagsjson get" [
 # POST /v1/inline_script_tags.json
 # operationId: createInlineScriptTag
 # --inline_script_tag shape: {display_scope?: "all"|"thanks_page"|"cart", script?: string, trigger_event?: "object_builded"}
-export def "inline-script-tagsjson createInlineScriptTag" [
+export def "inline-script-tagsjson create-inline-script-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "inline-script-tagsjson createInlineScriptTag" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/inline_script_tags.json")
-  let body = {inline_script_tag: $inline_script_tag} | compact
+  let body = {"inline_script_tag": $inline_script_tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -346,7 +346,7 @@ export def "inline-script-tagsjson createInlineScriptTag" [
 # DELETE /v1/inline_script_tags/{inlineScriptTagId}.json
 # operationId: deleteInlineScriptTag
 export def "inline-script-tags delete" [
-  inlineScriptTagId: int
+  inline_script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,7 +358,7 @@ export def "inline-script-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/inline_script_tags/($inlineScriptTagId).json")
+  let full_url = (build-url $base ({inline_script_tag_id: $inline_script_tag_id} | format pattern "/v1/inline_script_tags/{inline_script_tag_id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -369,7 +369,7 @@ export def "inline-script-tags delete" [
 # GET /v1/inline_script_tags/{inlineScriptTagId}.json
 # operationId: getInlineScriptTag
 export def "inline-script-tags get" [
-  inlineScriptTagId: int
+  inline_script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,7 +381,7 @@ export def "inline-script-tags get" [
 ]: nothing -> record<inline_script_tag: record<account_id: string, display_scope: string, id: int, make_date: int, oauth_application_id: int, script: string, trigger_event: string, update_date: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/inline_script_tags/($inlineScriptTagId).json")
+  let full_url = (build-url $base ({inline_script_tag_id: $inline_script_tag_id} | format pattern "/v1/inline_script_tags/{inline_script_tag_id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -392,8 +392,8 @@ export def "inline-script-tags get" [
 # PUT /v1/inline_script_tags/{inlineScriptTagId}.json
 # operationId: updateInlineScriptTag
 # --inline_script_tag shape: {display_scope?: "all"|"thanks_page"|"cart", script?: string, trigger_event?: "object_builded"}
-export def "inline-script-tags updateInlineScriptTag" [
-  inlineScriptTagId: int
+export def "inline-script-tags update" [
+  inline_script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,8 +407,8 @@ export def "inline-script-tags updateInlineScriptTag" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/inline_script_tags/($inlineScriptTagId).json")
-  let body = {inline_script_tag: $inline_script_tag} | compact
+  let full_url = (build-url $base ({inline_script_tag_id: $inline_script_tag_id} | format pattern "/v1/inline_script_tags/{inline_script_tag_id}.json"))
+  let body = {"inline_script_tag": $inline_script_tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -419,7 +419,7 @@ export def "inline-script-tags updateInlineScriptTag" [
 #
 # GET /v1/script_tags.json
 # operationId: getScriptTags
-export def "script-tagsjson get" [
+export def "script-tagsjson get-script-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -442,7 +442,7 @@ export def "script-tagsjson get" [
 # POST /v1/script_tags.json
 # operationId: createScriptTag
 # --script_tag shape: {display_scope?: "all"|"shop"|"thanks_page"|"cart", src?: string}
-export def "script-tagsjson createScriptTag" [
+export def "script-tagsjson create-script-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -457,7 +457,7 @@ export def "script-tagsjson createScriptTag" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/script_tags.json")
-  let body = {script_tag: $script_tag} | compact
+  let body = {"script_tag": $script_tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -468,7 +468,7 @@ export def "script-tagsjson createScriptTag" [
 #
 # DELETE /v1/script_tags/{scriptTagId}.json
 export def "script-tags delete" [
-  scriptTagId: int
+  script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,7 +480,7 @@ export def "script-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/script_tags/($scriptTagId).json")
+  let full_url = (build-url $base ({script_tag_id: $script_tag_id} | format pattern "/v1/script_tags/{script_tag_id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -491,7 +491,7 @@ export def "script-tags delete" [
 # GET /v1/script_tags/{scriptTagId}.json
 # operationId: getScriptTag
 export def "script-tags get" [
-  scriptTagId: int
+  script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -503,7 +503,7 @@ export def "script-tags get" [
 ]: nothing -> record<script_tag: record<display_scope: string, id: int, make_date: int, src: string, update_date: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/script_tags/($scriptTagId).json")
+  let full_url = (build-url $base ({script_tag_id: $script_tag_id} | format pattern "/v1/script_tags/{script_tag_id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -514,8 +514,8 @@ export def "script-tags get" [
 # PUT /v1/script_tags/{scriptTagId}.json
 # operationId: updateScriptTag
 # --script_tag shape: {display_scope?: "all"|"shop"|"thanks_page"|"cart", src?: string}
-export def "script-tags updateScriptTag" [
-  scriptTagId: int
+export def "script-tags update" [
+  script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,8 +529,8 @@ export def "script-tags updateScriptTag" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/script_tags/($scriptTagId).json")
-  let body = {script_tag: $script_tag} | compact
+  let full_url = (build-url $base ({script_tag_id: $script_tag_id} | format pattern "/v1/script_tags/{script_tag_id}.json"))
+  let body = {"script_tag": $script_tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -106,7 +106,7 @@ export def "category-tree get" [
 ]: nothing -> record<applicableMarketplaceIds: list<string>, categoryTreeId: string, categoryTreeVersion: string, rootCategoryNode: record<category: record<categoryId: string, categoryName: string>, categoryTreeNodeLevel: int, childCategoryTreeNodes: list<any>, leafCategoryTreeNode: bool, parentCategoryTreeNodeHref: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/category_tree/($category_tree_id)")
+  let full_url = (build-url $base ({category_tree_id: $category_tree_id} | format pattern "/category_tree/{category_tree_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -116,7 +116,7 @@ export def "category-tree get" [
 #
 # GET /category_tree/{category_tree_id}/fetch_item_aspects
 # operationId: fetchItemAspects
-export def "category-tree-fetch-item-aspects fetchItemAspects" [
+export def "category-tree-fetch-item-aspects get" [
   category_tree_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -129,7 +129,7 @@ export def "category-tree-fetch-item-aspects fetchItemAspects" [
 ]: nothing -> record<categoryAspects: table<aspects: list, category: record>, categoryTreeId: string, categoryTreeVersion: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/category_tree/($category_tree_id)/fetch_item_aspects")
+  let full_url = (build-url $base ({category_tree_id: $category_tree_id} | format pattern "/category_tree/{category_tree_id}/fetch_item_aspects"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -154,7 +154,7 @@ export def "category-tree-get-category-subtree get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category_id" $category_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/category_tree/($category_tree_id)/get_category_subtree" $qp)
+  let full_url = (build-url $base ({category_tree_id: $category_tree_id} | format pattern "/category_tree/{category_tree_id}/get_category_subtree") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,7 +179,7 @@ export def "category-tree-get-category-suggestions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/category_tree/($category_tree_id)/get_category_suggestions" $qp)
+  let full_url = (build-url $base ({category_tree_id: $category_tree_id} | format pattern "/category_tree/{category_tree_id}/get_category_suggestions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,7 +204,7 @@ export def "category-tree-get-compatibility-properties get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category_id" $category_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/category_tree/($category_tree_id)/get_compatibility_properties" $qp)
+  let full_url = (build-url $base ({category_tree_id: $category_tree_id} | format pattern "/category_tree/{category_tree_id}/get_compatibility_properties") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -231,7 +231,7 @@ export def "category-tree-get-compatibility-property-values get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "compatibility_property" $compatibility_property "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/category_tree/($category_tree_id)/get_compatibility_property_values" $qp)
+  let full_url = (build-url $base ({category_tree_id: $category_tree_id} | format pattern "/category_tree/{category_tree_id}/get_compatibility_property_values") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,7 +256,7 @@ export def "category-tree-get-item-aspects-for-category get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category_id" $category_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/category_tree/($category_tree_id)/get_item_aspects_for_category" $qp)
+  let full_url = (build-url $base ({category_tree_id: $category_tree_id} | format pattern "/category_tree/{category_tree_id}/get_item_aspects_for_category") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -276,13 +276,13 @@ export def "get-default-category-tree-id get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --marketplace-id: string # The ID of the eBay marketplace for which the category tree ID is being requested. For a list of supported marketplace IDs, see Marketplaces with Default Category Trees.
-  --Accept-Language: string # A header used to indicate the natural language the seller prefers for the response. This specifies the language that the seller wants to use when the field values provided in the request body are displayed to consumers. Note: For details, see Accept-Language in HTTP request headers. Valid Values: For EBAY_CA in French: Accept-Language: fr-CA For EBAY_BE in French: Accept-Language: fr-BE
+  --accept-language: string # A header used to indicate the natural language the seller prefers for the response. This specifies the language that the seller wants to use when the field values provided in the request body are displayed to consumers. Note: For details, see Accept-Language in HTTP request headers. Valid Values: For EBAY_CA in French: Accept-Language: fr-CA For EBAY_BE in French: Accept-Language: fr-BE
 ]: nothing -> record<categoryTreeId: string, categoryTreeVersion: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "marketplace_id" $marketplace_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/get_default_category_tree_id" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

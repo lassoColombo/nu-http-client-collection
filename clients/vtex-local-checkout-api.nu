@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "checkout-pub-gateway-callback ProcessOrder" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "checkout-pub-gateway-callback post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,8 +94,8 @@ export def commands []: nothing -> table {
 #
 # POST /api/checkout/pub/gatewayCallback/{orderGroup}
 # operationId: ProcessOrder
-export def "checkout-pub-gateway-callback ProcessOrder" [
-  orderGroup: string
+export def "checkout-pub-gateway-callback post" [
+  order_group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,14 +104,14 @@ export def "checkout-pub-gateway-callback ProcessOrder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --Cookie: string # VTEX Chekout cookie associated with a specific order. Use the `Vtex_CHKO_Auth` and the `CheckoutDataAccess` cookies returned by the [Place order](https://developers.vtex.com/vtex-rest-api/reference/order-placement-1#placeorder) or [Place order from existing cart](https://developers.vtex.com/vtex-rest-api/reference/order-placement-1#placeorderfromexistingorderform) API requests, like a browser would.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --cookie: string # VTEX Chekout cookie associated with a specific order. Use the `Vtex_CHKO_Auth` and the `CheckoutDataAccess` cookies returned by the [Place order](https://developers.vtex.com/vtex-rest-api/reference/order-placement-1#placeorder) or [Place order from existing cart](https://developers.vtex.com/vtex-rest-api/reference/order-placement-1#placeorderfromexistingorderform) API requests, like a browser would.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/gatewayCallback/($orderGroup)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept, "Cookie": $Cookie} | compact
+  let full_url = (build-url $base ({order_group: $order_group} | format pattern "/api/checkout/pub/gatewayCallback/{order_group}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "Cookie": $cookie} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -122,7 +122,7 @@ export def "checkout-pub-gateway-callback ProcessOrder" [
 #
 # GET /api/checkout/pub/orderForm
 # operationId: CreateANewCart
-export def "checkout-pub-order-form CreateANewCart" [
+export def "checkout-pub-order-form create-new-cart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,15 +131,15 @@ export def "checkout-pub-order-form CreateANewCart" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --forceNewCart: oneof<nothing, bool> # Use this query parameter to create a new empty shopping cart. (default: true)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --force-new-cart: oneof<nothing, bool> # Use this query parameter to create a new empty shopping cart. (default: true)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "forceNewCart" $forceNewCart "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "forceNewCart" $force_new_cart "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/orderForm" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -150,8 +150,8 @@ export def "checkout-pub-order-form CreateANewCart" [
 #
 # GET /api/checkout/pub/orderForm/{orderFormId}
 # operationId: GetCartInformationById
-export def "checkout-pub-order-form GetCartInformationById" [
-  orderFormId: string
+export def "checkout-pub-order-form get-cart-information" [
+  order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,15 +160,15 @@ export def "checkout-pub-order-form GetCartInformationById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --refreshOutdatedData: oneof<nothing, bool> # It is possible to use the [Update cart items request](https://developers.vtex.com/vtex-rest-api/reference/cart-update#itemsupdate) so as to allow outdated information in the `orderForm`, which may improve performance in some cases. To guarantee that all cart information is updated, send this request with this parameter as `true`. We recommend doing this in the final stages of the shopping experience, starting from the checkout page. (default: true)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --refresh-outdated-data: oneof<nothing, bool> # It is possible to use the [Update cart items request](https://developers.vtex.com/vtex-rest-api/reference/cart-update#itemsupdate) so as to allow outdated information in the `orderForm`, which may improve performance in some cases. To guarantee that all cart information is updated, send this request with this parameter as `true`. We recommend doing this in the final stages of the shopping experience, starting from the checkout page. (default: true)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "refreshOutdatedData" $refreshOutdatedData "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let qp = [(serialize-qp "refreshOutdatedData" $refresh_outdated_data "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({order_form_id: $order_form_id} | format pattern "/api/checkout/pub/orderForm/{order_form_id}") $qp)
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -179,8 +179,8 @@ export def "checkout-pub-order-form GetCartInformationById" [
 #
 # POST /api/checkout/pub/orderForm/{orderFormId}/attachments/clientPreferencesData
 # operationId: AddClientPreferences
-export def "checkout-pub-order-form-attachments-client-preferences-data AddClientPreferences" [
-  orderFormId: string
+export def "checkout-pub-order-form-attachments-client-preferences-data create" [
+  order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,18 +189,18 @@ export def "checkout-pub-order-form-attachments-client-preferences-data AddClien
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --locale: string # Locale chosen by the shopper. Determines website language. (default: EN)
-  --optinNewsLetter: oneof<nothing, bool> # Indicates whether the shopper opted in to receive the store's news letter. (default: false)
+  --optin-news-letter: oneof<nothing, bool> # Indicates whether the shopper opted in to receive the store's news letter. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/attachments/clientPreferencesData")
-  let body = {locale: $locale, optinNewsLetter: $optinNewsLetter} | compact
+  let full_url = (build-url $base ({order_form_id: $order_form_id} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/clientPreferencesData"))
+  let body = {"locale": $locale, "optinNewsLetter": $optin_news_letter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -211,8 +211,8 @@ export def "checkout-pub-order-form-attachments-client-preferences-data AddClien
 #
 # POST /api/checkout/pub/orderForm/{orderFormId}/attachments/clientProfileData
 # operationId: AddClientProfile
-export def "checkout-pub-order-form-attachments-client-profile-data AddClientProfile" [
-  orderFormId: string
+export def "checkout-pub-order-form-attachments-client-profile-data create" [
+  order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,28 +221,28 @@ export def "checkout-pub-order-form-attachments-client-profile-data AddClientPro
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --corporateDocument: string # Corporate document, if the customer is a legal entity. (default: 12345678000100)
-  --corporateName: string # Company name, if the customer is a legal entity. (default: company-name)
-  --corporatePhone: string # Corporate phone number, if the customer is a legal entity. (default: +551100988887777)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --corporate-document: string # Corporate document, if the customer is a legal entity. (default: 12345678000100)
+  --corporate-name: string # Company name, if the customer is a legal entity. (default: company-name)
+  --corporate-phone: string # Corporate phone number, if the customer is a legal entity. (default: +551100988887777)
   document: string # Document number informed by the customer. (default: 123456789)
-  documentType: string # Type of the document informed by the customer. (default: cpf)
+  document_type: string # Type of the document informed by the customer. (default: cpf)
   email: string # Customer's email address. (default: customer@examplemail.com)
-  firstName: string # Customer's first name. (default: first-name)
-  --isCorporate: oneof<nothing, bool> # `true` if the customer is a legal entity. (default: false)
-  lastName: string # Customer's last name. (default: last-name)
+  first_name: string # Customer's first name. (default: first-name)
+  --is-corporate: oneof<nothing, bool> # `true` if the customer is a legal entity. (default: false)
+  last_name: string # Customer's last name. (default: last-name)
   --phone: string # Customer's phone number. (default: +55110988887777)
-  --stateInscription: string # State inscription, if the customer is a legal entity. (default: 12345678)
-  --tradeName: string # Trade name, if the customer is a legal entity. (default: trade-name)
+  --state-inscription: string # State inscription, if the customer is a legal entity. (default: 12345678)
+  --trade-name: string # Trade name, if the customer is a legal entity. (default: trade-name)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/attachments/clientProfileData")
-  let body = {corporateDocument: $corporateDocument, corporateName: $corporateName, corporatePhone: $corporatePhone, document: $document, documentType: $documentType, email: $email, firstName: $firstName, isCorporate: $isCorporate, lastName: $lastName, phone: $phone, stateInscription: $stateInscription, tradeName: $tradeName} | compact
+  let full_url = (build-url $base ({order_form_id: $order_form_id} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/clientProfileData"))
+  let body = {"corporateDocument": $corporate_document, "corporateName": $corporate_name, "corporatePhone": $corporate_phone, "document": $document, "documentType": $document_type, "email": $email, "firstName": $first_name, "isCorporate": $is_corporate, "lastName": $last_name, "phone": $phone, "stateInscription": $state_inscription, "tradeName": $trade_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,8 +253,8 @@ export def "checkout-pub-order-form-attachments-client-profile-data AddClientPro
 #
 # POST /api/checkout/pub/orderForm/{orderFormId}/attachments/marketingData
 # operationId: AddMarketingData
-export def "checkout-pub-order-form-attachments-marketing-data AddMarketingData" [
-  orderFormId: string
+export def "checkout-pub-order-form-attachments-marketing-data create" [
+  order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,24 +263,24 @@ export def "checkout-pub-order-form-attachments-marketing-data AddMarketingData"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --coupon: string # Sending an existing coupon code in this field will return the corresponding discount in the purchase. Use the [cart simulation](https://developers.vtex.com/vtex-rest-api/reference/orderform#orderformsimulation) request to check which coupons might apply before placing the order. (default: free-shipping)
-  --marketingTags: list # Marketing tags. (default: [tag1, tag2])
-  --utmCampaign: string # UTM campaign (default: Black friday)
-  --utmMedium: string # UTM medium. (default: CPC)
-  --utmSource: string # UTM source. (default: Facebook)
-  --utmiCampaign: string # utmi_campaign (internal utm) (default: utmi_campaign-exmaple)
-  --utmiPage: string # utmi_page (internal utm) (default: utmi_page-example)
-  --utmiPart: string # utmi_part (internal utm) (default: utmi_part-exmaple)
+  --marketing-tags: list # Marketing tags. (default: [tag1, tag2])
+  --utm-campaign: string # UTM campaign (default: Black friday)
+  --utm-medium: string # UTM medium. (default: CPC)
+  --utm-source: string # UTM source. (default: Facebook)
+  --utmi-campaign: string # utmi_campaign (internal utm) (default: utmi_campaign-exmaple)
+  --utmi-page: string # utmi_page (internal utm) (default: utmi_page-example)
+  --utmi-part: string # utmi_part (internal utm) (default: utmi_part-exmaple)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/attachments/marketingData")
-  let body = {coupon: $coupon, marketingTags: $marketingTags, utmCampaign: $utmCampaign, utmMedium: $utmMedium, utmSource: $utmSource, utmiCampaign: $utmiCampaign, utmiPage: $utmiPage, utmiPart: $utmiPart} | compact
+  let full_url = (build-url $base ({order_form_id: $order_form_id} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/marketingData"))
+  let body = {"coupon": $coupon, "marketingTags": $marketing_tags, "utmCampaign": $utm_campaign, "utmMedium": $utm_medium, "utmSource": $utm_source, "utmiCampaign": $utmi_campaign, "utmiPage": $utmi_page, "utmiPart": $utmi_part} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -292,8 +292,8 @@ export def "checkout-pub-order-form-attachments-marketing-data AddMarketingData"
 # POST /api/checkout/pub/orderForm/{orderFormId}/attachments/merchantContextData
 # operationId: AddMerchantContextData
 # --salesAssociateData shape: {salesAssociateId?: string}
-export def "checkout-pub-order-form-attachments-merchant-context-data AddMerchantContextData" [
-  orderFormId: string
+export def "checkout-pub-order-form-attachments-merchant-context-data create" [
+  order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,17 +302,17 @@ export def "checkout-pub-order-form-attachments-merchant-context-data AddMerchan
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  salesAssociateData: record # Sales Associate information. — shape: {salesAssociateId?: string}
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  sales_associate_data: record # Sales Associate information. — shape: {salesAssociateId?: string}
 ]: any -> record<salesAssociateId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/attachments/merchantContextData")
-  let body = {salesAssociateData: $salesAssociateData} | compact
+  let full_url = (build-url $base ({order_form_id: $order_form_id} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/merchantContextData"))
+  let body = {"salesAssociateData": $sales_associate_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -324,8 +324,8 @@ export def "checkout-pub-order-form-attachments-merchant-context-data AddMerchan
 # POST /api/checkout/pub/orderForm/{orderFormId}/attachments/paymentData
 # operationId: AddPaymentData
 # --payments item shape: {group?: string, hasDefaultBillingAddress?: bool, installments?: int, installmentsInterestRate?: float, installmentsValue?: int, paymentSystem?: int, paymentSystemName?: string, referenceValue?: int, value?: int}
-export def "checkout-pub-order-form-attachments-payment-data AddPaymentData" [
-  orderFormId: string
+export def "checkout-pub-order-form-attachments-payment-data create" [
+  order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,17 +334,17 @@ export def "checkout-pub-order-form-attachments-payment-data AddPaymentData" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --payments: list # Array with information on each payment chosen by the shopper. — item shape: {group?: string, hasDefaultBillingAddress?: bool, installments?: int, installmentsInterestRate?: float, installmentsValue?: int, paymentSystem?: int, paymentSystemName?: string, referenceValue?: int, value?: int}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/attachments/paymentData")
-  let body = {payments: $payments} | compact
+  let full_url = (build-url $base ({order_form_id: $order_form_id} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/paymentData"))
+  let body = {"payments": $payments} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -357,8 +357,8 @@ export def "checkout-pub-order-form-attachments-payment-data AddPaymentData" [
 # operationId: AddShippingAddress
 # --logisticsInfo item shape: {itemIndex?: int, selectedDeliveryChannel?: string, selectedSla?: string}
 # --selectedAddresses item shape: {addressType?: string, city?: string, complement?: string, country?: string, geoCoordinates?: list, neighborhood?: string, number?: string, postalCode?: string, receiverName?: string, reference?: string, state?: string, street?: string}
-export def "checkout-pub-order-form-attachments-shipping-data AddShippingAddress" [
-  orderFormId: string
+export def "checkout-pub-order-form-attachments-shipping-data create-shipping-address" [
+  order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,19 +367,19 @@ export def "checkout-pub-order-form-attachments-shipping-data AddShippingAddress
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --clearAddressIfPostalCodeNotFound: oneof<nothing, bool> # This field should be sent as `false` to prevent the address information from being filled in automatically based on the `postalCode` information. (e.g. false)
-  --logisticsInfo: list # Array with logistics information on each item of the `items` array in the `orderForm`. — item shape: {itemIndex?: int, selectedDeliveryChannel?: string, selectedSla?: string}
-  --selectedAddresses: list # List of objects with addresses information. — item shape: {addressType?: string, city?: string, complement?: string, country?: string, geoCoordinates?: list, neighborhood?: string, number?: string, postalCode?: string, receiverName?: string, reference?: string, state?: string, street?: string}
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --clear-address-if-postal-code-not-found: oneof<nothing, bool> # This field should be sent as `false` to prevent the address information from being filled in automatically based on the `postalCode` information. (e.g. false)
+  --logistics-info: list # Array with logistics information on each item of the `items` array in the `orderForm`. — item shape: {itemIndex?: int, selectedDeliveryChannel?: string, selectedSla?: string}
+  --selected-addresses: list # List of objects with addresses information. — item shape: {addressType?: string, city?: string, complement?: string, country?: string, geoCoordinates?: list, neighborhood?: string, number?: string, postalCode?: string, receiverName?: string, reference?: string, state?: string, street?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/attachments/shippingData")
-  let body = {clearAddressIfPostalCodeNotFound: $clearAddressIfPostalCodeNotFound, logisticsInfo: $logisticsInfo, selectedAddresses: $selectedAddresses} | compact
+  let full_url = (build-url $base ({order_form_id: $order_form_id} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/shippingData"))
+  let body = {"clearAddressIfPostalCodeNotFound": $clear_address_if_postal_code_not_found, "logisticsInfo": $logistics_info, "selectedAddresses": $selected_addresses} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -390,8 +390,8 @@ export def "checkout-pub-order-form-attachments-shipping-data AddShippingAddress
 #
 # POST /api/checkout/pub/orderForm/{orderFormId}/coupons
 # operationId: AddCoupons
-export def "checkout-pub-order-form-coupons AddCoupons" [
-  orderFormId: string
+export def "checkout-pub-order-form-coupons create" [
+  order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,17 +400,17 @@ export def "checkout-pub-order-form-coupons AddCoupons" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --text: string # Sending an existing coupon code in this field will return the corresponding discount in the purchase. Use the [cart simulation](https://developers.vtex.com/vtex-rest-api/reference/orderform#orderformsimulation) request to check which coupons might apply before placing the order. (default: freeshipping)
 ]: any -> record<allowManualPrice: bool, availableAccounts: list<string>, availableAddresses: table<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, receiverName: string, reference: string, state: string, street: string>, canEditData: bool, clientPreferencesData: record<locale: string, optinNewsLetter: bool>, clientProfileData: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, isCorporate: bool, lastName: string, phone: string, profileCompleteOnLoading: bool, profileErrorOnLoading: bool, stateInscription: string, tradeName: string>, commercialConditionData: record, customData: record, giftRegistryData: record, hooksData: record, ignoreProfileData: bool, invoiceData: record, isCheckedIn: bool, itemMetadata: record<items: list<record>>, items: table<additionalInfo: record, attachments: list, availability: string, bundleItems: list, detailUrl: string, ean: string, id: string, imageUrl: string, isGift: bool, listPrice: int, manualPrice: int, manualPriceAppliedBy: string, manufacturerCode: string, measurementUnit: string, modalType: string, name: string, parentAssemblyBinding: string, parentItemIndex: int, preSaleDate: string, price: int, priceDefinition: record, priceTags: list, priceValidUntil: string, productCategories: record, productCategoryIds: string, productId: string, productRefId: string, quantity: int, refId: string, rewardValue: int, seller: string, sellerChain: list, sellingPrice: int, skuName: string, tax: int, uniqueId: string, unitMultiplier: int>, itemsOrdination: record<ascending: bool, criteria: string>, loggedIn: bool, marketingData: record<coupon: string, utmCampaign: string, utmMedium: string, utmSource: string, utmiCampaign: string, utmiPage: string, utmiPart: string>, messages: list<any>, openTextField: string, orderFormId: string, paymentData: record<giftCards: list<record>, transactions: list<record>>, profileProvider: string, ratesAndBenefitsData: record<rateAndBenefitsIdentifiers: list<string>, teaser: list<string>>, salesChannel: string, selectableGifts: list<any>, sellers: table<id: string, logo: string, name: string>, shippingData: record<address: record<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string>, availableAddresses: list<record>, logisticsInfo: list<record>, selectedAddresses: list<record>>, storeId: string, storePreferencesData: record, subscriptionData: record, totalizers: list<any>, userProfileId: string, userType: string, value: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/coupons")
-  let body = {text: $text} | compact
+  let full_url = (build-url $base ({order_form_id: $order_form_id} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/coupons"))
+  let body = {"text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -421,9 +421,9 @@ export def "checkout-pub-order-form-coupons AddCoupons" [
 #
 # PUT /api/checkout/pub/orderForm/{orderFormId}/customData/{appId}
 # operationId: SetMultipleCustomFieldValues
-export def "checkout-pub-order-form-custom-data SetMultipleCustomFieldValues" [
-  orderFormId: string
-  appId: string
+export def "checkout-pub-order-form-custom-data put-by-orderFormId-appId" [
+  order_form_id: string
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,16 +432,16 @@ export def "checkout-pub-order-form-custom-data SetMultipleCustomFieldValues" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/customData/($appId)")
+  let full_url = (build-url $base ({order_form_id: $order_form_id, app_id: $app_id} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/customData/{app_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -452,10 +452,10 @@ export def "checkout-pub-order-form-custom-data SetMultipleCustomFieldValues" [
 #
 # DELETE /api/checkout/pub/orderForm/{orderFormId}/customData/{appId}/{appFieldName}
 # operationId: Removesinglecustomfieldvalue
-export def "checkout-pub-order-form-custom-data Removesinglecustomfieldvalue" [
-  orderFormId: string
-  appId: string
-  appFieldName: string
+export def "checkout-pub-order-form-custom-data delete-singlecustomfieldvalue" [
+  order_form_id: string
+  app_id: string
+  app_field_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -464,13 +464,13 @@ export def "checkout-pub-order-form-custom-data Removesinglecustomfieldvalue" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/customData/($appId)/($appFieldName)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({order_form_id: $order_form_id, app_id: $app_id, app_field_name: $app_field_name} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/customData/{app_id}/{app_field_name}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -481,10 +481,10 @@ export def "checkout-pub-order-form-custom-data Removesinglecustomfieldvalue" [
 #
 # PUT /api/checkout/pub/orderForm/{orderFormId}/customData/{appId}/{appFieldName}
 # operationId: SetSingleCustomFieldValue
-export def "checkout-pub-order-form-custom-data SetSingleCustomFieldValue" [
-  orderFormId: string
-  appId: string
-  appFieldName: string
+export def "checkout-pub-order-form-custom-data put-by-orderFormId-appId-appFieldName" [
+  order_form_id: string
+  app_id: string
+  app_field_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,17 +493,17 @@ export def "checkout-pub-order-form-custom-data SetSingleCustomFieldValue" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   value: string # The value you want to set to the specified field.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/customData/($appId)/($appFieldName)")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({order_form_id: $order_form_id, app_id: $app_id, app_field_name: $app_field_name} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/customData/{app_id}/{app_field_name}"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -514,8 +514,8 @@ export def "checkout-pub-order-form-custom-data SetSingleCustomFieldValue" [
 #
 # GET /api/checkout/pub/orderForm/{orderFormId}/installments
 # operationId: GetCartInstallments
-export def "checkout-pub-order-form-installments GetCartInstallments" [
-  orderFormId: string
+export def "checkout-pub-order-form-installments get-cart" [
+  order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -524,15 +524,15 @@ export def "checkout-pub-order-form-installments GetCartInstallments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --paymentSystem: int # ID of the payment method to be consulted for installments.
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --payment-system: int # ID of the payment method to be consulted for installments.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "paymentSystem" $paymentSystem "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/installments" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let qp = [(serialize-qp "paymentSystem" $payment_system "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({order_form_id: $order_form_id} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/installments") $qp)
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -544,8 +544,8 @@ export def "checkout-pub-order-form-installments GetCartInstallments" [
 # POST /api/checkout/pub/orderForm/{orderFormId}/items
 # operationId: Items
 # --orderItems item shape: {id: string, index: int, price?: int, quantity: int, seller: string}
-export def "checkout-pub-order-form-items Items" [
-  orderFormId: string
+export def "checkout-pub-order-form-items post" [
+  order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -554,19 +554,19 @@ export def "checkout-pub-order-form-items Items" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allowedOutdatedData: list # In order to optimize performance, this parameter allows some information to not be updated when there are changes in the minicart. For instance, if a shopper adds another unit of a given SKU to the cart, it may not be necessary to recalculate payment information, which could impact performance.  This array accepts strings and currently the only possible value is `”paymentData”`. (default: [paymentData])
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --orderItems: list # Array containing the cart items. Each object inside this array corresponds to a different item. — item shape: {id: string, index: int, price?: int, quantity: int, seller: string}
+  --allowed-outdated-data: list # In order to optimize performance, this parameter allows some information to not be updated when there are changes in the minicart. For instance, if a shopper adds another unit of a given SKU to the cart, it may not be necessary to recalculate payment information, which could impact performance.  This array accepts strings and currently the only possible value is `”paymentData”`. (default: [paymentData])
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --order-items: list # Array containing the cart items. Each object inside this array corresponds to a different item. — item shape: {id: string, index: int, price?: int, quantity: int, seller: string}
 ]: any -> record<allowManualPrice: bool, availableAccounts: list<string>, availableAddresses: table<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, receiverName: string, reference: string, state: string, street: string>, canEditData: bool, clientPreferencesData: record<locale: string, optinNewsLetter: bool>, clientProfileData: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, isCorporate: bool, lastName: string, phone: string, profileCompleteOnLoading: bool, profileErrorOnLoading: bool, stateInscription: string, tradeName: string>, commercialConditionData: record, customData: record, giftRegistryData: record, hooksData: record, ignoreProfileData: bool, invoiceData: record, isCheckedIn: bool, itemMetadata: record<items: list<record>>, items: table<additionalInfo: record, attachments: list, availability: string, bundleItems: list, detailUrl: string, ean: string, id: string, imageUrl: string, isGift: bool, listPrice: int, manualPrice: int, manualPriceAppliedBy: string, manufacturerCode: string, measurementUnit: string, modalType: string, name: string, parentAssemblyBinding: string, parentItemIndex: int, preSaleDate: string, price: int, priceDefinition: record, priceTags: list, priceValidUntil: string, productCategories: record, productCategoryIds: string, productId: string, productRefId: string, quantity: int, refId: string, rewardValue: int, seller: string, sellerChain: list, sellingPrice: int, skuName: string, tax: int, uniqueId: string, unitMultiplier: int>, itemsOrdination: record<ascending: bool, criteria: string>, loggedIn: bool, marketingData: record<coupon: string, utmCampaign: string, utmMedium: string, utmSource: string, utmiCampaign: string, utmiPage: string, utmiPart: string>, messages: list<any>, openTextField: string, orderFormId: string, paymentData: record<giftCards: list<record>, transactions: list<record>>, profileProvider: string, ratesAndBenefitsData: record<rateAndBenefitsIdentifiers: list<string>, teaser: list<string>>, salesChannel: string, selectableGifts: list<any>, sellers: table<id: string, logo: string, name: string>, shippingData: record<address: record<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string>, availableAddresses: list<record>, logisticsInfo: list<record>, selectedAddresses: list<record>>, storeId: string, storePreferencesData: record, subscriptionData: record, totalizers: list<any>, userProfileId: string, userType: string, value: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "allowedOutdatedData" $allowedOutdatedData "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/items" $qp)
-  let body = {orderItems: $orderItems} | compact
+  let qp = [(serialize-qp "allowedOutdatedData" $allowed_outdated_data "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({order_form_id: $order_form_id} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items") $qp)
+  let body = {"orderItems": $order_items} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -577,8 +577,8 @@ export def "checkout-pub-order-form-items Items" [
 #
 # POST /api/checkout/pub/orderForm/{orderFormId}/items/removeAll
 # operationId: RemoveAllItems
-export def "checkout-pub-order-form-items-remove-all RemoveAllItems" [
-  orderFormId: string
+export def "checkout-pub-order-form-items-remove-all delete" [
+  order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,16 +587,16 @@ export def "checkout-pub-order-form-items-remove-all RemoveAllItems" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/items/removeAll")
+  let full_url = (build-url $base ({order_form_id: $order_form_id} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items/removeAll"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -608,8 +608,8 @@ export def "checkout-pub-order-form-items-remove-all RemoveAllItems" [
 # POST /api/checkout/pub/orderForm/{orderFormId}/items/update
 # operationId: ItemsUpdate
 # --orderItems item shape: {index: int, quantity: int}
-export def "checkout-pub-order-form-items-update ItemsUpdate" [
-  orderFormId: string
+export def "checkout-pub-order-form-items-update update" [
+  order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -618,19 +618,19 @@ export def "checkout-pub-order-form-items-update ItemsUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allowedOutdatedData: list # In order to optimize performance, this parameter allows some information to not be updated when there are changes in the minicart. For instance, if a shopper adds another unit of a given SKU to the cart, it may not be necessary to recalculate payment information, which could impact performance.  This array accepts strings and currently the only possible value is `”paymentData”`. (default: [paymentData])
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --orderItems: list # Array containing the cart items. Each object inside this array corresponds to a different item. — item shape: {index: int, quantity: int}
+  --allowed-outdated-data: list # In order to optimize performance, this parameter allows some information to not be updated when there are changes in the minicart. For instance, if a shopper adds another unit of a given SKU to the cart, it may not be necessary to recalculate payment information, which could impact performance.  This array accepts strings and currently the only possible value is `”paymentData”`. (default: [paymentData])
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --order-items: list # Array containing the cart items. Each object inside this array corresponds to a different item. — item shape: {index: int, quantity: int}
 ]: any -> record<allowManualPrice: bool, availableAccounts: list<string>, availableAddresses: table<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, receiverName: string, reference: string, state: string, street: string>, canEditData: bool, clientPreferencesData: record<locale: string, optinNewsLetter: bool>, clientProfileData: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, isCorporate: bool, lastName: string, phone: string, profileCompleteOnLoading: bool, profileErrorOnLoading: bool, stateInscription: string, tradeName: string>, commercialConditionData: record, customData: record, giftRegistryData: record, hooksData: record, ignoreProfileData: bool, invoiceData: record, isCheckedIn: bool, itemMetadata: record<items: list<record>>, items: table<additionalInfo: record, attachments: list, availability: string, bundleItems: list, detailUrl: string, ean: string, id: string, imageUrl: string, isGift: bool, listPrice: int, manualPrice: int, manualPriceAppliedBy: string, manufacturerCode: string, measurementUnit: string, modalType: string, name: string, parentAssemblyBinding: string, parentItemIndex: int, preSaleDate: string, price: int, priceDefinition: record, priceTags: list, priceValidUntil: string, productCategories: record, productCategoryIds: string, productId: string, productRefId: string, quantity: int, refId: string, rewardValue: int, seller: string, sellerChain: list, sellingPrice: int, skuName: string, tax: int, uniqueId: string, unitMultiplier: int>, itemsOrdination: record<ascending: bool, criteria: string>, loggedIn: bool, marketingData: record<coupon: string, utmCampaign: string, utmMedium: string, utmSource: string, utmiCampaign: string, utmiPage: string, utmiPart: string>, messages: list<any>, openTextField: string, orderFormId: string, paymentData: record<giftCards: list<record>, transactions: list<record>>, profileProvider: string, ratesAndBenefitsData: record<rateAndBenefitsIdentifiers: list<string>, teaser: list<string>>, salesChannel: string, selectableGifts: list<any>, sellers: table<id: string, logo: string, name: string>, shippingData: record<address: record<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string>, availableAddresses: list<record>, logisticsInfo: list<record>, selectedAddresses: list<record>>, storeId: string, storePreferencesData: record, subscriptionData: record, totalizers: list<any>, userProfileId: string, userType: string, value: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "allowedOutdatedData" $allowedOutdatedData "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/items/update" $qp)
-  let body = {orderItems: $orderItems} | compact
+  let qp = [(serialize-qp "allowedOutdatedData" $allowed_outdated_data "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({order_form_id: $order_form_id} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items/update") $qp)
+  let body = {"orderItems": $order_items} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -641,9 +641,9 @@ export def "checkout-pub-order-form-items-update ItemsUpdate" [
 #
 # PUT /api/checkout/pub/orderForm/{orderFormId}/items/{itemIndex}/price
 # operationId: PriceChange
-export def "checkout-pub-order-form-items-price PriceChange" [
-  orderFormId: string
-  itemIndex: string
+export def "checkout-pub-order-form-items-price put" [
+  order_form_id: string
+  item_index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -652,17 +652,17 @@ export def "checkout-pub-order-form-items-price PriceChange" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   price: int # The new price of the item. (format: int32)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/items/($itemIndex)/price")
-  let body = {price: $price} | compact
+  let full_url = (build-url $base ({order_form_id: $order_form_id, item_index: $item_index} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items/{item_index}/price"))
+  let body = {"price": $price} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -673,8 +673,8 @@ export def "checkout-pub-order-form-items-price PriceChange" [
 #
 # POST /api/checkout/pub/orderForm/{orderFormId}/messages/clear
 # operationId: ClearorderFormMessages
-export def "checkout-pub-order-form-messages-clear ClearorderFormMessages" [
-  orderFormId: string
+export def "checkout-pub-order-form-messages-clear post" [
+  order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -683,16 +683,16 @@ export def "checkout-pub-order-form-messages-clear ClearorderFormMessages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --body: record
 ]: any -> record<allowManualPrice: bool, availableAccounts: list<string>, availableAddresses: table<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, receiverName: string, reference: string, state: string, street: string>, canEditData: bool, clientPreferencesData: record<locale: string, optinNewsLetter: bool>, clientProfileData: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, isCorporate: bool, lastName: string, phone: string, profileCompleteOnLoading: bool, profileErrorOnLoading: bool, stateInscription: string, tradeName: string>, commercialConditionData: record, customData: record, giftRegistryData: record, hooksData: record, ignoreProfileData: bool, invoiceData: record, isCheckedIn: bool, itemMetadata: record<items: list<record>>, items: table<additionalInfo: record, attachments: list, availability: string, bundleItems: list, detailUrl: string, ean: string, id: string, imageUrl: string, isGift: bool, listPrice: int, manualPrice: int, manualPriceAppliedBy: string, manufacturerCode: string, measurementUnit: string, modalType: string, name: string, parentAssemblyBinding: string, parentItemIndex: int, preSaleDate: string, price: int, priceDefinition: record, priceTags: list, priceValidUntil: string, productCategories: record, productCategoryIds: string, productId: string, productRefId: string, quantity: int, refId: string, rewardValue: int, seller: string, sellerChain: list, sellingPrice: int, skuName: string, tax: int, uniqueId: string, unitMultiplier: int>, itemsOrdination: record<ascending: bool, criteria: string>, loggedIn: bool, marketingData: record<coupon: string, utmCampaign: string, utmMedium: string, utmSource: string, utmiCampaign: string, utmiPage: string, utmiPart: string>, messages: list<any>, openTextField: string, orderFormId: string, paymentData: record<giftCards: list<record>, transactions: list<record>>, profileProvider: string, ratesAndBenefitsData: record<rateAndBenefitsIdentifiers: list<string>, teaser: list<string>>, salesChannel: string, selectableGifts: list<any>, sellers: table<id: string, logo: string, name: string>, shippingData: record<address: record<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string>, availableAddresses: list<record>, logisticsInfo: list<record>, selectedAddresses: list<record>>, storeId: string, storePreferencesData: record, subscriptionData: record, totalizers: list<any>, userProfileId: string, userType: string, value: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/messages/clear")
+  let full_url = (build-url $base ({order_form_id: $order_form_id} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/messages/clear"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -703,8 +703,8 @@ export def "checkout-pub-order-form-messages-clear ClearorderFormMessages" [
 #
 # PATCH /api/checkout/pub/orderForm/{orderFormId}/profile
 # operationId: IgnoreProfileData
-export def "checkout-pub-order-form-profile IgnoreProfileData" [
-  orderFormId: string
+export def "checkout-pub-order-form-profile patch" [
+  order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,17 +713,17 @@ export def "checkout-pub-order-form-profile IgnoreProfileData" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --ignoreProfileData: oneof<nothing, bool> # Indicates whether profile data should be ignored. (default: false)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --ignore-profile-data: oneof<nothing, bool> # Indicates whether profile data should be ignored. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/profile")
-  let body = {ignoreProfileData: $ignoreProfileData} | compact
+  let full_url = (build-url $base ({order_form_id: $order_form_id} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/profile"))
+  let body = {"ignoreProfileData": $ignore_profile_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -734,8 +734,8 @@ export def "checkout-pub-order-form-profile IgnoreProfileData" [
 #
 # POST /api/checkout/pub/orderForm/{orderFormId}/transaction
 # operationId: PlaceOrderFromExistingOrderForm
-export def "checkout-pub-order-form-transaction PlaceOrderFromExistingOrderForm" [
-  orderFormId: string
+export def "checkout-pub-order-form-transaction post" [
+  order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -744,22 +744,22 @@ export def "checkout-pub-order-form-transaction PlaceOrderFromExistingOrderForm"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  interestValue: int # Interest rate to be used in case it applies. (default: 0)
-  --optinNewsLetter: oneof<nothing, bool> # True if the shopper opted to receive the newsletter. (default: false)
-  referenceId: string # ID of the `orderForm` corresponding to the cart from which to place the order. This is the same as the `orderFormId` parameter. (default: 41a22925298a4ddca95318131a25b000)
-  referenceValue: int # Reference value of the order for calculating interest if that is the case. Can be equal to the total value and does not separate cents. For example, $24.99 is represented `2499`. (default: 6800)
-  --savePersonalData: oneof<nothing, bool> # `true` if the shopper's data provided during checkout should be saved for future reference. (default: false)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  interest_value: int # Interest rate to be used in case it applies. (default: 0)
+  --optin-news-letter: oneof<nothing, bool> # True if the shopper opted to receive the newsletter. (default: false)
+  reference_id: string # ID of the `orderForm` corresponding to the cart from which to place the order. This is the same as the `orderFormId` parameter. (default: 41a22925298a4ddca95318131a25b000)
+  reference_value: int # Reference value of the order for calculating interest if that is the case. Can be equal to the total value and does not separate cents. For example, $24.99 is represented `2499`. (default: 6800)
+  --save-personal-data: oneof<nothing, bool> # `true` if the shopper's data provided during checkout should be saved for future reference. (default: false)
   value: int # Total value of the order without separating cents. For example, $24.99 is represented `2499`. (default: 6800)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/orderForm/($orderFormId)/transaction")
-  let body = {interestValue: $interestValue, optinNewsLetter: $optinNewsLetter, referenceId: $referenceId, referenceValue: $referenceValue, savePersonalData: $savePersonalData, value: $value} | compact
+  let full_url = (build-url $base ({order_form_id: $order_form_id} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/transaction"))
+  let body = {"interestValue": $interest_value, "optinNewsLetter": $optin_news_letter, "referenceId": $reference_id, "referenceValue": $reference_value, "savePersonalData": $save_personal_data, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -771,7 +771,7 @@ export def "checkout-pub-order-form-transaction PlaceOrderFromExistingOrderForm"
 # POST /api/checkout/pub/orderForms/simulation
 # operationId: CartSimulation
 # --items item shape: {id?: string, quantity?: int, seller?: string}
-export def "checkout-pub-order-forms-simulation CartSimulation" [
+export def "checkout-pub-order-forms-simulation post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -780,23 +780,23 @@ export def "checkout-pub-order-forms-simulation CartSimulation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RnbBehavior: int # This parameter defines which promotions apply to the simulation. Use `0` for simulations at cart stage, which means all promotions apply. In case of window simulation use `1`, which indicates promotions that apply nominal discounts over the total purchase value shouldn't be considered on the simulation.  Note that if this not sent, the parameter is `1`. (default: 0)
+  --rnb-behavior: int # This parameter defines which promotions apply to the simulation. Use `0` for simulations at cart stage, which means all promotions apply. In case of window simulation use `1`, which indicates promotions that apply nominal discounts over the total purchase value shouldn't be considered on the simulation.  Note that if this not sent, the parameter is `1`. (default: 0)
   --sc: int # Trade Policy (Sales Channel) identification. (e.g. 1)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --country: string # Three letter ISO code of the country of the shipping address. This value must be sent along with the `postalCode` or `geoCoordinates` values. (e.g. BRA)
-  --geoCoordinates: list # Array containing two floats with geocoordinates, first longitude, then latitude. (default: [-47.924747467041016, -15.832582473754883])
+  --geo-coordinates: list # Array containing two floats with geocoordinates, first longitude, then latitude. (default: [-47.924747467041016, -15.832582473754883])
   --items: list # Array containing information about the SKUs inside the cart to be simulated. — item shape: {id?: string, quantity?: int, seller?: string}
-  --postalCode: string # Postal code. (e.g. 12345-000)
+  --postal-code: string # Postal code. (e.g. 12345-000)
 ]: any -> record<country: string, items: table<availability: string, id: string, listPrice: int, measurementUnit: string, offerings: list, parentAssemblyBinding: string, parentItemIndex: int, price: int, priceDefinition: record, priceTags: list, priceValidUntil: string, quantity: int, requestIndex: int, rewardValue: int, seller: string, sellerChain: list, sellingPrice: int, tax: int, unitMultiplier: int>, logisticsInfo: table<addressId: string, deliveryChannels: list, itemIndex: int, itemMetadata: record, messages: list, pickupPoints: list, purchaseConditions: record, quantity: int, selectedDeliveryChannel: string, selectedSla: string, shipsTo: list, slas: list, subscriptionData: record, totals: list>, marketingData: record, paymentData: record<availableAccounts: list<any>, availableAssociations: record, availableTokens: list<any>, giftCardMessages: list<any>, giftCards: list<any>, installmentOptions: list<any>, paymentSystems: list<record>, payments: list<any>>, postalCode: string, ratesAndBenefitsData: record<rateAndBenefitsIdentifiers: list<any>, teaser: list<any>>, selectableGifts: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "RnbBehavior" $RnbBehavior "scalar") (serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "RnbBehavior" $rnb_behavior "scalar") (serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/orderForms/simulation" $qp)
-  let body = {country: $country, geoCoordinates: $geoCoordinates, items: $items, postalCode: $postalCode} | compact
+  let body = {"country": $country, "geoCoordinates": $geo_coordinates, "items": $items, "postalCode": $postal_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -813,7 +813,7 @@ export def "checkout-pub-order-forms-simulation CartSimulation" [
 # --paymentData shape: {giftCardMessages?: list, giftCards?: list, paymentSystems?: list, payments: list, updateStatus?: string}
 # --salesAssociateData shape: {salesAssociateId?: string}
 # --shippingData shape: {address?: record, logisticsInfo?: list, updateStatus?: string}
-export def "checkout-pub-orders PlaceOrder" [
+export def "checkout-pub-orders put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -823,24 +823,24 @@ export def "checkout-pub-orders PlaceOrder" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --sc: int # Trade Policy (Sales Channel) identification. This query can be used to create an order for a specific sales channel. (e.g. 1)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  clientProfileData: record # Customer's profile information. The `email` functions as a customer's ID.  For customers already in your database, sending only the email address is enough to register the order to the shopper’s existing account.  > If the shopper exists in you database but is not logged in, sending other profile information along with the email will cause the platform to fail placing the order. This happens because this action is interpreted as an attempt to edit profile data, which is not possible unless the customer is logged in to the store. — shape: {corporateDocument?: string, corporateName?: string, corporatePhone?: string, document?: string, documentType?: string, email: string, firstName?: string, isCorporate?: bool, lastName?: string, phone?: string, stateInscription?: string, tradeName?: string}
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  client_profile_data: record # Customer's profile information. The `email` functions as a customer's ID.  For customers already in your database, sending only the email address is enough to register the order to the shopper’s existing account.  > If the shopper exists in you database but is not logged in, sending other profile information along with the email will cause the platform to fail placing the order. This happens because this action is interpreted as an attempt to edit profile data, which is not possible unless the customer is logged in to the store. — shape: {corporateDocument?: string, corporateName?: string, corporatePhone?: string, document?: string, documentType?: string, email: string, firstName?: string, isCorporate?: bool, lastName?: string, phone?: string, stateInscription?: string, tradeName?: string}
   items: list # Array of objects containing information on each of the order's items. — item shape: {attachments?: list, bundleItems?: list, commission?: int, freightCommission?: int, id: string, isGift?: bool, itemAttachment?: record, measurementUnit?: string, price?: int, priceTags?: list, quantity: int, seller: string, unitMultiplier?: int}
-  --marketingData: record # shape: {coupon?: string, utmCampaign?: string, utmMedium?: string, utmSource?: string, utmiCampaign?: string, utmiPage?: string, utmiPart?: string}
-  --openTextField: string # Optional field meant to hold additional information about the order. We recommend using this field for text, not data formats such as `JSON` even if escaped. For that purpose, see [Creating customizable fields](https://developers.vtex.com/vtex-rest-api/docs/creating-customizable-fields-in-the-cart-with-checkout-api-1) (default: open-text-example)
-  paymentData: record # Payment infomation. — shape: {giftCardMessages?: list, giftCards?: list, paymentSystems?: list, payments: list, updateStatus?: string}
-  --salesAssociateData: record # Sales Associate information. — shape: {salesAssociateId?: string}
-  shippingData: record # Shipping information. — shape: {address?: record, logisticsInfo?: list, updateStatus?: string}
+  --marketing-data: record # shape: {coupon?: string, utmCampaign?: string, utmMedium?: string, utmSource?: string, utmiCampaign?: string, utmiPage?: string, utmiPart?: string}
+  --open-text-field: string # Optional field meant to hold additional information about the order. We recommend using this field for text, not data formats such as `JSON` even if escaped. For that purpose, see [Creating customizable fields](https://developers.vtex.com/vtex-rest-api/docs/creating-customizable-fields-in-the-cart-with-checkout-api-1) (default: open-text-example)
+  payment_data: record # Payment infomation. — shape: {giftCardMessages?: list, giftCards?: list, paymentSystems?: list, payments: list, updateStatus?: string}
+  --sales-associate-data: record # Sales Associate information. — shape: {salesAssociateId?: string}
+  shipping_data: record # Shipping information. — shape: {address?: record, logisticsInfo?: list, updateStatus?: string}
 ]: any -> record<orderForm: string, orders: table<allowCancelation: bool, allowChangeSeller: bool, allowEdition: bool, checkedInPickupPointId: string, clientProfileData: record, creationDate: string, followUpEmail: string, hostName: string, isCheckedIn: bool, isCompleted: bool, isUserDataVisible: bool, itemMetadata: record, items: list, lastChange: string, merchantName: string, orderFormCreationDate: string, orderGroup: string, orderId: string, paymentData: record, ratesAndBenefitsData: record, roundingError: int, salesAssociateId: string, salesChannel: string, sellerOrderId: string, sellers: list, shippingData: record, state: string, storeId: string, timeZoneCreationDate: string, timeZoneLastChange: string, totals: list, userType: string, value: int>, transactionData: record<gatewayCallbackTemplatePath: string, merchantTransactions: list<record>, receiverUri: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/orders" $qp)
-  let body = {clientProfileData: $clientProfileData, items: $items, marketingData: $marketingData, openTextField: $openTextField, paymentData: $paymentData, salesAssociateData: $salesAssociateData, shippingData: $shippingData} | compact
+  let body = {"clientProfileData": $client_profile_data, "items": $items, "marketingData": $marketing_data, "openTextField": $open_text_field, "paymentData": $payment_data, "salesAssociateData": $sales_associate_data, "shippingData": $shipping_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -851,7 +851,7 @@ export def "checkout-pub-orders PlaceOrder" [
 #
 # GET /api/checkout/pub/pickup-points
 # operationId: ListPickupPpointsByLocation
-export def "checkout-pub-pickup-points ListPickupPpointsByLocation" [
+export def "checkout-pub-pickup-points list-pickup-ppoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -860,17 +860,17 @@ export def "checkout-pub-pickup-points ListPickupPpointsByLocation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --geoCoordinates: list # Geocoordinates (first longitude, then latitude) around which to search for pickup points. If you use this type of search, do not pass postal and country codes. (default: [-47.924747467041016, -15.832582473754883])
-  --postalCode: string # Postal code around which to search for pickup points. If you use this type of search, make sure to pass a `countryCode` and do not pass `geoCoordinates`. (default: 1234000)
-  --countryCode: string # Three letter country code refering to the `postalCode` field. Pass the country code only if you are searching pickup points by postal code. (default: BRA)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --geo-coordinates: list # Geocoordinates (first longitude, then latitude) around which to search for pickup points. If you use this type of search, do not pass postal and country codes. (default: [-47.924747467041016, -15.832582473754883])
+  --postal-code: string # Postal code around which to search for pickup points. If you use this type of search, make sure to pass a `countryCode` and do not pass `geoCoordinates`. (default: 1234000)
+  --country-code: string # Three letter country code refering to the `postalCode` field. Pass the country code only if you are searching pickup points by postal code. (default: BRA)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "geoCoordinates" $geoCoordinates "multi") (serialize-qp "postalCode" $postalCode "scalar") (serialize-qp "countryCode" $countryCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "geoCoordinates" $geo_coordinates "multi") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "countryCode" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/pickup-points" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -881,9 +881,9 @@ export def "checkout-pub-pickup-points ListPickupPpointsByLocation" [
 #
 # GET /api/checkout/pub/postal-code/{countryCode}/{postalCode}
 # operationId: GetAddressByPostalCode
-export def "checkout-pub-postal-code GetAddressByPostalCode" [
-  countryCode: string
-  postalCode: string
+export def "checkout-pub-postal-code get-address" [
+  country_code: string
+  postal_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -892,13 +892,13 @@ export def "checkout-pub-postal-code GetAddressByPostalCode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/checkout/pub/postal-code/($countryCode)/($postalCode)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({country_code: $country_code, postal_code: $postal_code} | format pattern "/api/checkout/pub/postal-code/{country_code}/{postal_code}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -909,7 +909,7 @@ export def "checkout-pub-postal-code GetAddressByPostalCode" [
 #
 # GET /api/checkout/pub/profiles
 # operationId: GetClientProfileByEmail
-export def "checkout-pub-profiles GetClientProfileByEmail" [
+export def "checkout-pub-profiles get-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -919,14 +919,14 @@ export def "checkout-pub-profiles GetClientProfileByEmail" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Client's email address to be searched. (default: clark.kent@examplemail.com)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<availableAccounts: list<string>, availableAddresses: table<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, receiverName: string, reference: string, state: string, street: string>, isComplete: bool, profileProvider: string, userProfile: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, isCorporate: bool, lastName: string, phone: string, profileCompleteOnLoading: string, profileErrorOnLoading: string, stateInscription: string, tradeName: string>, userProfileId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/profiles" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -937,8 +937,8 @@ export def "checkout-pub-profiles GetClientProfileByEmail" [
 #
 # GET /api/checkout/pub/regions/{regionId}
 # operationId: GetSellersByRegion
-export def "checkout-pub-regions GetSellersByRegion" [
-  regionId: string
+export def "checkout-pub-regions get-sellers" [
+  region_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -948,16 +948,16 @@ export def "checkout-pub-regions GetSellersByRegion" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Three letter country code refering to the `postalCode` field. (default: BRA)
-  --postalCode: string # Postal code corresponding to the shopper's location. (default: 1234000)
-  --geoCoordinates: list # Geocoordinates (first longitude, semicolon, then latitude) corresponding to the shopper's location. (default: [-47.924747467041016, -15.832582473754883])
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --postal-code: string # Postal code corresponding to the shopper's location. (default: 1234000)
+  --geo-coordinates: list # Geocoordinates (first longitude, semicolon, then latitude) corresponding to the shopper's location. (default: [-47.924747467041016, -15.832582473754883])
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<id: string, sellers: table<id: string, logo: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "postalCode" $postalCode "scalar") (serialize-qp "geoCoordinates" $geoCoordinates "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/checkout/pub/regions/($regionId)" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "geoCoordinates" $geo_coordinates "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({region_id: $region_id} | format pattern "/api/checkout/pub/regions/{region_id}") $qp)
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -968,7 +968,7 @@ export def "checkout-pub-regions GetSellersByRegion" [
 #
 # GET /api/checkout/pvt/configuration/orderForm
 # operationId: GetorderFormconfiguration
-export def "checkout-pvt-configuration-order-form GetorderFormconfiguration" [
+export def "checkout-pvt-configuration-order-form get-order-formconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -977,13 +977,13 @@ export def "checkout-pvt-configuration-order-form GetorderFormconfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/checkout/pvt/configuration/orderForm")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -997,7 +997,7 @@ export def "checkout-pvt-configuration-order-form GetorderFormconfiguration" [
 # --apps item shape: {fields?: list, id?: string, major?: int}
 # --paymentConfiguration shape: {allowInstallmentsMerge?: bool, requiresAuthenticationForPreAuthorizedPaymentOption: bool}
 # --taxConfiguration shape: {appId?: string, authorizationHeader?: string, url?: string}
-export def "checkout-pvt-configuration-order-form UpdateorderFormconfiguration" [
+export def "checkout-pvt-configuration-order-form update-order-formconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1006,28 +1006,28 @@ export def "checkout-pvt-configuration-order-form UpdateorderFormconfiguration" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --allowManualPrice: oneof<nothing, bool> # Allows the editing of SKU prices right in the cart. (nullable)
-  --allowMultipleDeliveries: oneof<nothing, bool> # On the same purchase, allows the selection of items from multiple delivery channels. (nullable)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --allow-manual-price: oneof<nothing, bool> # Allows the editing of SKU prices right in the cart. (nullable)
+  --allow-multiple-deliveries: oneof<nothing, bool> # On the same purchase, allows the selection of items from multiple delivery channels. (nullable)
   --apps: list # Array of objects containing Apps configuration information. (nullable) — item shape: {fields?: list, id?: string, major?: int}
-  decimalDigitsPrecision: int # Number of price digits. (format: int32)
-  --maskFirstPurchaseData: oneof<nothing, bool> # Allows, on a first purchase, masking client's data. It could be useful when a shared cart is used and the client doesn't want to share its data.
-  --maxNumberOfWhiteLabelSellers: int # Allows the input of a limit of white label sellers involved on the cart.
-  minimumQuantityAccumulatedForItems: int # Minimum SKU quantity by cart. (format: int32)
-  --minimumValueAccumulated: int # Minimum cart value. (nullable)
-  paymentConfiguration: record # Payment Configuration object (e.g. {allowInstallmentsMerge: false, requiresAuthenticationForPreAuthorizedPaymentOption: false}) — shape: {allowInstallmentsMerge?: bool, requiresAuthenticationForPreAuthorizedPaymentOption: bool}
-  --paymentSystemToCheckFirstInstallment: string # If you want to apply a first installment discount to a particular payment system, set this field to that payment system's ID. Learn more: [Configuring a discount for orders prepaid in full](https://help.vtex.com/en/tutorial/configurar-desconto-de-preco-a-vista--7Lfcj9Wb5dpYfA2gKkACIt). (e.g. 6)
-  --recaptchaValidation: string # Configures reCAPTCHA validation for the account, defining in which situations the shopper will be prompted to validate a purchase with reCAPTCHA. Learn more about [reCAPTCHA validation for VTEX stores](https://help.vtex.com/tutorial/recaptcha-no-checkout--18Te3oDd7f4qcjKu9jhNzP)  Possible values are: - `"never"`: no purchases are validated with reCAPTCHA. - `"always"`: every purchase is validated with reCAPTCHA. - `"vtexCriteria"`: only some purchases are validated with reCAPTCHA in order to minimize friction and improve shopping experience. VTEX’s algorithm determines which sessions are trustworthy and which should be validated with reCAPTCHA. This is the recommended option. (default: vtexCriteria)
-  --taxConfiguration: record # External tax service configuration. (nullable) — shape: {appId?: string, authorizationHeader?: string, url?: string}
+  decimal_digits_precision: int # Number of price digits. (format: int32)
+  --mask-first-purchase-data: oneof<nothing, bool> # Allows, on a first purchase, masking client's data. It could be useful when a shared cart is used and the client doesn't want to share its data.
+  --max-number-of-white-label-sellers: int # Allows the input of a limit of white label sellers involved on the cart.
+  minimum_quantity_accumulated_for_items: int # Minimum SKU quantity by cart. (format: int32)
+  --minimum-value-accumulated: int # Minimum cart value. (nullable)
+  payment_configuration: record # Payment Configuration object (e.g. {allowInstallmentsMerge: false, requiresAuthenticationForPreAuthorizedPaymentOption: false}) — shape: {allowInstallmentsMerge?: bool, requiresAuthenticationForPreAuthorizedPaymentOption: bool}
+  --payment-system-to-check-first-installment: string # If you want to apply a first installment discount to a particular payment system, set this field to that payment system's ID. Learn more: [Configuring a discount for orders prepaid in full](https://help.vtex.com/en/tutorial/configurar-desconto-de-preco-a-vista--7Lfcj9Wb5dpYfA2gKkACIt). (e.g. 6)
+  --recaptcha-validation: string # Configures reCAPTCHA validation for the account, defining in which situations the shopper will be prompted to validate a purchase with reCAPTCHA. Learn more about [reCAPTCHA validation for VTEX stores](https://help.vtex.com/tutorial/recaptcha-no-checkout--18Te3oDd7f4qcjKu9jhNzP)  Possible values are: - `"never"`: no purchases are validated with reCAPTCHA. - `"always"`: every purchase is validated with reCAPTCHA. - `"vtexCriteria"`: only some purchases are validated with reCAPTCHA in order to minimize friction and improve shopping experience. VTEX’s algorithm determines which sessions are trustworthy and which should be validated with reCAPTCHA. This is the recommended option. (default: vtexCriteria)
+  --tax-configuration: record # External tax service configuration. (nullable) — shape: {appId?: string, authorizationHeader?: string, url?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/checkout/pvt/configuration/orderForm")
-  let body = {allowManualPrice: $allowManualPrice, allowMultipleDeliveries: $allowMultipleDeliveries, apps: $apps, decimalDigitsPrecision: $decimalDigitsPrecision, maskFirstPurchaseData: $maskFirstPurchaseData, maxNumberOfWhiteLabelSellers: $maxNumberOfWhiteLabelSellers, minimumQuantityAccumulatedForItems: $minimumQuantityAccumulatedForItems, minimumValueAccumulated: $minimumValueAccumulated, paymentConfiguration: $paymentConfiguration, paymentSystemToCheckFirstInstallment: $paymentSystemToCheckFirstInstallment, recaptchaValidation: $recaptchaValidation, taxConfiguration: $taxConfiguration} | compact
+  let body = {"allowManualPrice": $allow_manual_price, "allowMultipleDeliveries": $allow_multiple_deliveries, "apps": $apps, "decimalDigitsPrecision": $decimal_digits_precision, "maskFirstPurchaseData": $mask_first_purchase_data, "maxNumberOfWhiteLabelSellers": $max_number_of_white_label_sellers, "minimumQuantityAccumulatedForItems": $minimum_quantity_accumulated_for_items, "minimumValueAccumulated": $minimum_value_accumulated, "paymentConfiguration": $payment_configuration, "paymentSystemToCheckFirstInstallment": $payment_system_to_check_first_installment, "recaptchaValidation": $recaptcha_validation, "taxConfiguration": $tax_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1038,7 +1038,7 @@ export def "checkout-pvt-configuration-order-form UpdateorderFormconfiguration" 
 #
 # GET /api/checkout/pvt/configuration/window-to-change-seller
 # operationId: GetWindowToChangeSeller
-export def "checkout-pvt-configuration-window-to-change-seller GetWindowToChangeSeller" [
+export def "checkout-pvt-configuration-window-to-change-seller get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1047,13 +1047,13 @@ export def "checkout-pvt-configuration-window-to-change-seller GetWindowToChange
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/checkout/pvt/configuration/window-to-change-seller")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1064,7 +1064,7 @@ export def "checkout-pvt-configuration-window-to-change-seller GetWindowToChange
 #
 # POST /api/checkout/pvt/configuration/window-to-change-seller
 # operationId: UpdateWindowToChangeSeller
-export def "checkout-pvt-configuration-window-to-change-seller UpdateWindowToChangeSeller" [
+export def "checkout-pvt-configuration-window-to-change-seller update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1073,17 +1073,17 @@ export def "checkout-pvt-configuration-window-to-change-seller UpdateWindowToCha
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  waitingTime: int # Number of days after order cancelation by a seller, during which another seller may be assigned to fulfill the order.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  waiting_time: int # Number of days after order cancelation by a seller, during which another seller may be assigned to fulfill the order.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/checkout/pvt/configuration/window-to-change-seller")
-  let body = {waitingTime: $waitingTime} | compact
+  let body = {"waitingTime": $waiting_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1094,8 +1094,8 @@ export def "checkout-pvt-configuration-window-to-change-seller UpdateWindowToCha
 #
 # GET /checkout/changeToAnonymousUser/{orderFormId}
 # operationId: Removeallpersonaldata
-export def "checkout-change-to-anonymous-user Removeallpersonaldata" [
-  orderFormId: string
+export def "checkout-change-to-anonymous-user delete-allpersonaldata" [
+  order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1104,13 +1104,13 @@ export def "checkout-change-to-anonymous-user Removeallpersonaldata" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/checkout/changeToAnonymousUser/($orderFormId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({order_form_id: $order_form_id} | format pattern "/checkout/changeToAnonymousUser/{order_form_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

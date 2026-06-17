@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-databricks-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-databricks-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Databricks/operations
 # operationId: Operations_List
-export def "providers-microsoft-databricks-operations List" [
+export def "providers-microsoft-databricks-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-databricks-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Databricks/workspaces
 # operationId: Workspaces_ListBySubscription
-export def "subscriptions-providers-microsoft-databricks-workspaces ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-databricks-workspaces list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "subscriptions-providers-microsoft-databricks-workspaces ListBySubscr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Databricks/workspaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Databricks/workspaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,9 +142,9 @@ export def "subscriptions-providers-microsoft-databricks-workspaces ListBySubscr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Databricks/workspaces
 # operationId: Workspaces_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-databricks-workspaces ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-databricks-workspaces list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "subscriptions-resource-groups-providers-microsoft-databricks-workspa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Databricks/workspaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Databricks/workspaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -168,10 +168,10 @@ export def "subscriptions-resource-groups-providers-microsoft-databricks-workspa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Databricks/workspaces/{workspaceName}
 # operationId: Workspaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-databricks-workspaces Delete" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-databricks-workspaces delete" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-databricks-workspa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Databricks/workspaces/($workspaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Databricks/workspaces/{workspace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,10 +195,10 @@ export def "subscriptions-resource-groups-providers-microsoft-databricks-workspa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Databricks/workspaces/{workspaceName}
 # operationId: Workspaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-databricks-workspaces Get" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-databricks-workspaces get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "subscriptions-resource-groups-providers-microsoft-databricks-workspa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Databricks/workspaces/($workspaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Databricks/workspaces/{workspace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -222,10 +222,10 @@ export def "subscriptions-resource-groups-providers-microsoft-databricks-workspa
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Databricks/workspaces/{workspaceName}
 # operationId: Workspaces_Update
-export def "subscriptions-resource-groups-providers-microsoft-databricks-workspaces Update" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-databricks-workspaces update" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,8 +241,8 @@ export def "subscriptions-resource-groups-providers-microsoft-databricks-workspa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Databricks/workspaces/($workspaceName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Databricks/workspaces/{workspace_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -255,10 +255,10 @@ export def "subscriptions-resource-groups-providers-microsoft-databricks-workspa
 # operationId: Workspaces_CreateOrUpdate
 # --properties shape: {authorizations?: list, managedResourceGroupId: string, parameters?: any, uiDefinitionUri?: string}
 # --sku shape: {name: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-databricks-workspaces CreateOrUpdate" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-databricks-workspaces create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,8 +277,8 @@ export def "subscriptions-resource-groups-providers-microsoft-databricks-workspa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Databricks/workspaces/($workspaceName)" $qp)
-  let body = {properties: $properties, sku: $sku, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Databricks/workspaces/{workspace_name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

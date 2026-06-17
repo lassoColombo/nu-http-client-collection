@@ -66,30 +66,30 @@ def base-url-completer [] { ["http://opsworks-cm.us-east-1.amazonaws.com" "http:
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["OpsWorksCM_V2016_11_01.AssociateNode"] }
-def X-Amz-Target-completer-1 [] { ["OpsWorksCM_V2016_11_01.CreateBackup"] }
-def X-Amz-Target-completer-2 [] { ["OpsWorksCM_V2016_11_01.CreateServer"] }
-def X-Amz-Target-completer-3 [] { ["OpsWorksCM_V2016_11_01.DeleteBackup"] }
-def X-Amz-Target-completer-4 [] { ["OpsWorksCM_V2016_11_01.DeleteServer"] }
-def X-Amz-Target-completer-5 [] { ["OpsWorksCM_V2016_11_01.DescribeAccountAttributes"] }
-def X-Amz-Target-completer-6 [] { ["OpsWorksCM_V2016_11_01.DescribeBackups"] }
-def X-Amz-Target-completer-7 [] { ["OpsWorksCM_V2016_11_01.DescribeEvents"] }
-def X-Amz-Target-completer-8 [] { ["OpsWorksCM_V2016_11_01.DescribeNodeAssociationStatus"] }
-def X-Amz-Target-completer-9 [] { ["OpsWorksCM_V2016_11_01.DescribeServers"] }
-def X-Amz-Target-completer-10 [] { ["OpsWorksCM_V2016_11_01.DisassociateNode"] }
-def X-Amz-Target-completer-11 [] { ["OpsWorksCM_V2016_11_01.ExportServerEngineAttribute"] }
-def X-Amz-Target-completer-12 [] { ["OpsWorksCM_V2016_11_01.ListTagsForResource"] }
-def X-Amz-Target-completer-13 [] { ["OpsWorksCM_V2016_11_01.RestoreServer"] }
-def X-Amz-Target-completer-14 [] { ["OpsWorksCM_V2016_11_01.StartMaintenance"] }
-def X-Amz-Target-completer-15 [] { ["OpsWorksCM_V2016_11_01.TagResource"] }
-def X-Amz-Target-completer-16 [] { ["OpsWorksCM_V2016_11_01.UntagResource"] }
-def X-Amz-Target-completer-17 [] { ["OpsWorksCM_V2016_11_01.UpdateServer"] }
-def X-Amz-Target-completer-18 [] { ["OpsWorksCM_V2016_11_01.UpdateServerEngineAttributes"] }
+def x-amz-target-completer [] { ["OpsWorksCM_V2016_11_01.AssociateNode"] }
+def x-amz-target-completer-1 [] { ["OpsWorksCM_V2016_11_01.CreateBackup"] }
+def x-amz-target-completer-2 [] { ["OpsWorksCM_V2016_11_01.CreateServer"] }
+def x-amz-target-completer-3 [] { ["OpsWorksCM_V2016_11_01.DeleteBackup"] }
+def x-amz-target-completer-4 [] { ["OpsWorksCM_V2016_11_01.DeleteServer"] }
+def x-amz-target-completer-5 [] { ["OpsWorksCM_V2016_11_01.DescribeAccountAttributes"] }
+def x-amz-target-completer-6 [] { ["OpsWorksCM_V2016_11_01.DescribeBackups"] }
+def x-amz-target-completer-7 [] { ["OpsWorksCM_V2016_11_01.DescribeEvents"] }
+def x-amz-target-completer-8 [] { ["OpsWorksCM_V2016_11_01.DescribeNodeAssociationStatus"] }
+def x-amz-target-completer-9 [] { ["OpsWorksCM_V2016_11_01.DescribeServers"] }
+def x-amz-target-completer-10 [] { ["OpsWorksCM_V2016_11_01.DisassociateNode"] }
+def x-amz-target-completer-11 [] { ["OpsWorksCM_V2016_11_01.ExportServerEngineAttribute"] }
+def x-amz-target-completer-12 [] { ["OpsWorksCM_V2016_11_01.ListTagsForResource"] }
+def x-amz-target-completer-13 [] { ["OpsWorksCM_V2016_11_01.RestoreServer"] }
+def x-amz-target-completer-14 [] { ["OpsWorksCM_V2016_11_01.StartMaintenance"] }
+def x-amz-target-completer-15 [] { ["OpsWorksCM_V2016_11_01.TagResource"] }
+def x-amz-target-completer-16 [] { ["OpsWorksCM_V2016_11_01.UntagResource"] }
+def x-amz-target-completer-17 [] { ["OpsWorksCM_V2016_11_01.UpdateServer"] }
+def x-amz-target-completer-18 [] { ["OpsWorksCM_V2016_11_01.UpdateServerEngineAttributes"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-ops-works-cm-v2016-11-01associate-node AssociateNode" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-ops-works-cm-v2016-11-01associate-node post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -113,7 +113,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.AssociateNode
 # operationId: AssociateNode
-export def "x-amz-target-ops-works-cm-v2016-11-01associate-node AssociateNode" [
+export def "x-amz-target-ops-works-cm-v2016-11-01associate-node post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,25 +122,25 @@ export def "x-amz-target-ops-works-cm-v2016-11-01associate-node AssociateNode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  ServerName: any
-  NodeName: any
-  EngineAttributes: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  server_name: any
+  node_name: any
+  engine_attributes: any
 ]: any -> record<NodeAssociationStatusToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.AssociateNode")
-  let body = {ServerName: $ServerName, NodeName: $NodeName, EngineAttributes: $EngineAttributes} | compact
+  let body = {"ServerName": $server_name, "NodeName": $node_name, "EngineAttributes": $engine_attributes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -151,7 +151,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01associate-node AssociateNode" [
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.CreateBackup
 # operationId: CreateBackup
-export def "x-amz-target-ops-works-cm-v2016-11-01create-backup CreateBackup" [
+export def "x-amz-target-ops-works-cm-v2016-11-01create-backup create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,25 +160,25 @@ export def "x-amz-target-ops-works-cm-v2016-11-01create-backup CreateBackup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  ServerName: any
-  --Description: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  server_name: any
+  --description: any
+  --tags: any
 ]: any -> record<Backup: record<BackupArn: record, BackupId: record, BackupType: record, CreatedAt: record, Description: record, Engine: record, EngineModel: record, EngineVersion: record, InstanceProfileArn: record, InstanceType: record, KeyPair: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, S3DataSize: record, S3DataUrl: record, S3LogUrl: record, SecurityGroupIds: record, ServerName: record, ServiceRoleArn: record, Status: record, StatusDescription: record, SubnetIds: record, ToolsVersion: record, UserArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.CreateBackup")
-  let body = {ServerName: $ServerName, Description: $Description, Tags: $Tags} | compact
+  let body = {"ServerName": $server_name, "Description": $description, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -189,7 +189,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01create-backup CreateBackup" [
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.CreateServer
 # operationId: CreateServer
-export def "x-amz-target-ops-works-cm-v2016-11-01create-server CreateServer" [
+export def "x-amz-target-ops-works-cm-v2016-11-01create-server create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,43 +198,43 @@ export def "x-amz-target-ops-works-cm-v2016-11-01create-server CreateServer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  --AssociatePublicIpAddress: any
-  --CustomDomain: any
-  --CustomCertificate: any
-  --CustomPrivateKey: any
-  --DisableAutomatedBackup: any
-  Engine: any
-  --EngineModel: any
-  --EngineVersion: any
-  --EngineAttributes: any
-  --BackupRetentionCount: any
-  ServerName: any
-  InstanceProfileArn: any
-  InstanceType: any
-  --KeyPair: any
-  --PreferredMaintenanceWindow: any
-  --PreferredBackupWindow: any
-  --SecurityGroupIds: any
-  ServiceRoleArn: any
-  --SubnetIds: any
-  --Tags: any
-  --BackupId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  --associate-public-ip-address: any
+  --custom-domain: any
+  --custom-certificate: any
+  --custom-private-key: any
+  --disable-automated-backup: any
+  engine: any
+  --engine-model: any
+  --engine-version: any
+  --engine-attributes: any
+  --backup-retention-count: any
+  server_name: any
+  instance_profile_arn: any
+  instance_type: any
+  --key-pair: any
+  --preferred-maintenance-window: any
+  --preferred-backup-window: any
+  --security-group-ids: any
+  service_role_arn: any
+  --subnet-ids: any
+  --tags: any
+  --backup-id: any
 ]: any -> record<Server: record<AssociatePublicIpAddress: record, BackupRetentionCount: record, ServerName: record, CreatedAt: record, CloudFormationStackArn: record, CustomDomain: record, DisableAutomatedBackup: record, Endpoint: record, Engine: record, EngineModel: record, EngineAttributes: record, EngineVersion: record, InstanceProfileArn: record, InstanceType: record, KeyPair: record, MaintenanceStatus: record, PreferredMaintenanceWindow: record, PreferredBackupWindow: record, SecurityGroupIds: record, ServiceRoleArn: record, Status: record, StatusReason: record, SubnetIds: record, ServerArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.CreateServer")
-  let body = {AssociatePublicIpAddress: $AssociatePublicIpAddress, CustomDomain: $CustomDomain, CustomCertificate: $CustomCertificate, CustomPrivateKey: $CustomPrivateKey, DisableAutomatedBackup: $DisableAutomatedBackup, Engine: $Engine, EngineModel: $EngineModel, EngineVersion: $EngineVersion, EngineAttributes: $EngineAttributes, BackupRetentionCount: $BackupRetentionCount, ServerName: $ServerName, InstanceProfileArn: $InstanceProfileArn, InstanceType: $InstanceType, KeyPair: $KeyPair, PreferredMaintenanceWindow: $PreferredMaintenanceWindow, PreferredBackupWindow: $PreferredBackupWindow, SecurityGroupIds: $SecurityGroupIds, ServiceRoleArn: $ServiceRoleArn, SubnetIds: $SubnetIds, Tags: $Tags, BackupId: $BackupId} | compact
+  let body = {"AssociatePublicIpAddress": $associate_public_ip_address, "CustomDomain": $custom_domain, "CustomCertificate": $custom_certificate, "CustomPrivateKey": $custom_private_key, "DisableAutomatedBackup": $disable_automated_backup, "Engine": $engine, "EngineModel": $engine_model, "EngineVersion": $engine_version, "EngineAttributes": $engine_attributes, "BackupRetentionCount": $backup_retention_count, "ServerName": $server_name, "InstanceProfileArn": $instance_profile_arn, "InstanceType": $instance_type, "KeyPair": $key_pair, "PreferredMaintenanceWindow": $preferred_maintenance_window, "PreferredBackupWindow": $preferred_backup_window, "SecurityGroupIds": $security_group_ids, "ServiceRoleArn": $service_role_arn, "SubnetIds": $subnet_ids, "Tags": $tags, "BackupId": $backup_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -245,7 +245,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01create-server CreateServer" [
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.DeleteBackup
 # operationId: DeleteBackup
-export def "x-amz-target-ops-works-cm-v2016-11-01delete-backup DeleteBackup" [
+export def "x-amz-target-ops-works-cm-v2016-11-01delete-backup delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,23 +254,23 @@ export def "x-amz-target-ops-works-cm-v2016-11-01delete-backup DeleteBackup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  BackupId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  backup_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.DeleteBackup")
-  let body = {BackupId: $BackupId} | compact
+  let body = {"BackupId": $backup_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -281,7 +281,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01delete-backup DeleteBackup" [
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.DeleteServer
 # operationId: DeleteServer
-export def "x-amz-target-ops-works-cm-v2016-11-01delete-server DeleteServer" [
+export def "x-amz-target-ops-works-cm-v2016-11-01delete-server delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,23 +290,23 @@ export def "x-amz-target-ops-works-cm-v2016-11-01delete-server DeleteServer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  ServerName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  server_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.DeleteServer")
-  let body = {ServerName: $ServerName} | compact
+  let body = {"ServerName": $server_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -317,7 +317,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01delete-server DeleteServer" [
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.DescribeAccountAttributes
 # operationId: DescribeAccountAttributes
-export def "x-amz-target-ops-works-cm-v2016-11-01describe-account-attributes DescribeAccountAttributes" [
+export def "x-amz-target-ops-works-cm-v2016-11-01describe-account-attributes post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,14 +326,14 @@ export def "x-amz-target-ops-works-cm-v2016-11-01describe-account-attributes Des
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
   --body: record
 ]: any -> record<Attributes: record> {
   let input = $in
@@ -341,7 +341,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01describe-account-attributes Des
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.DescribeAccountAttributes")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -352,7 +352,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01describe-account-attributes Des
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.DescribeBackups
 # operationId: DescribeBackups
-export def "x-amz-target-ops-works-cm-v2016-11-01describe-backups DescribeBackups" [
+export def "x-amz-target-ops-works-cm-v2016-11-01describe-backups post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,29 +361,29 @@ export def "x-amz-target-ops-works-cm-v2016-11-01describe-backups DescribeBackup
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  --BackupId: any
-  --ServerName: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  --backup-id: any
+  --server-name: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<Backups: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.DescribeBackups" $qp)
-  let body = {BackupId: $BackupId, ServerName: $ServerName, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"BackupId": $backup_id, "ServerName": $server_name, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -394,7 +394,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01describe-backups DescribeBackup
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.DescribeEvents
 # operationId: DescribeEvents
-export def "x-amz-target-ops-works-cm-v2016-11-01describe-events DescribeEvents" [
+export def "x-amz-target-ops-works-cm-v2016-11-01describe-events post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,28 +403,28 @@ export def "x-amz-target-ops-works-cm-v2016-11-01describe-events DescribeEvents"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  ServerName: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  server_name: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<ServerEvents: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.DescribeEvents" $qp)
-  let body = {ServerName: $ServerName, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ServerName": $server_name, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -435,7 +435,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01describe-events DescribeEvents"
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.DescribeNodeAssociationStatus
 # operationId: DescribeNodeAssociationStatus
-export def "x-amz-target-ops-works-cm-v2016-11-01describe-node-association-status DescribeNodeAssociationStatus" [
+export def "x-amz-target-ops-works-cm-v2016-11-01describe-node-association-status post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,24 +444,24 @@ export def "x-amz-target-ops-works-cm-v2016-11-01describe-node-association-statu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  NodeAssociationStatusToken: any
-  ServerName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  node_association_status_token: any
+  server_name: any
 ]: any -> record<NodeAssociationStatus: record, EngineAttributes: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.DescribeNodeAssociationStatus")
-  let body = {NodeAssociationStatusToken: $NodeAssociationStatusToken, ServerName: $ServerName} | compact
+  let body = {"NodeAssociationStatusToken": $node_association_status_token, "ServerName": $server_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -472,7 +472,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01describe-node-association-statu
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.DescribeServers
 # operationId: DescribeServers
-export def "x-amz-target-ops-works-cm-v2016-11-01describe-servers DescribeServers" [
+export def "x-amz-target-ops-works-cm-v2016-11-01describe-servers post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,28 +481,28 @@ export def "x-amz-target-ops-works-cm-v2016-11-01describe-servers DescribeServer
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  --ServerName: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  --server-name: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<Servers: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.DescribeServers" $qp)
-  let body = {ServerName: $ServerName, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ServerName": $server_name, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -513,7 +513,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01describe-servers DescribeServer
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.DisassociateNode
 # operationId: DisassociateNode
-export def "x-amz-target-ops-works-cm-v2016-11-01disassociate-node DisassociateNode" [
+export def "x-amz-target-ops-works-cm-v2016-11-01disassociate-node post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,25 +522,25 @@ export def "x-amz-target-ops-works-cm-v2016-11-01disassociate-node DisassociateN
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  ServerName: any
-  NodeName: any
-  --EngineAttributes: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  server_name: any
+  node_name: any
+  --engine-attributes: any
 ]: any -> record<NodeAssociationStatusToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.DisassociateNode")
-  let body = {ServerName: $ServerName, NodeName: $NodeName, EngineAttributes: $EngineAttributes} | compact
+  let body = {"ServerName": $server_name, "NodeName": $node_name, "EngineAttributes": $engine_attributes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -551,7 +551,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01disassociate-node DisassociateN
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.ExportServerEngineAttribute
 # operationId: ExportServerEngineAttribute
-export def "x-amz-target-ops-works-cm-v2016-11-01export-server-engine-attribute ExportServerEngineAttribute" [
+export def "x-amz-target-ops-works-cm-v2016-11-01export-server-engine-attribute export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,25 +560,25 @@ export def "x-amz-target-ops-works-cm-v2016-11-01export-server-engine-attribute 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  ExportAttributeName: any
-  ServerName: any
-  --InputAttributes: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  export_attribute_name: any
+  server_name: any
+  --input-attributes: any
 ]: any -> record<EngineAttribute: record<Name: record, Value: record>, ServerName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.ExportServerEngineAttribute")
-  let body = {ExportAttributeName: $ExportAttributeName, ServerName: $ServerName, InputAttributes: $InputAttributes} | compact
+  let body = {"ExportAttributeName": $export_attribute_name, "ServerName": $server_name, "InputAttributes": $input_attributes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -589,7 +589,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01export-server-engine-attribute 
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-ops-works-cm-v2016-11-01list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-ops-works-cm-v2016-11-01list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -598,28 +598,28 @@ export def "x-amz-target-ops-works-cm-v2016-11-01list-tags-for-resource ListTags
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  ResourceArn: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  resource_arn: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<Tags: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.ListTagsForResource" $qp)
-  let body = {ResourceArn: $ResourceArn, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ResourceArn": $resource_arn, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -630,7 +630,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01list-tags-for-resource ListTags
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.RestoreServer
 # operationId: RestoreServer
-export def "x-amz-target-ops-works-cm-v2016-11-01restore-server RestoreServer" [
+export def "x-amz-target-ops-works-cm-v2016-11-01restore-server post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -639,26 +639,26 @@ export def "x-amz-target-ops-works-cm-v2016-11-01restore-server RestoreServer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  BackupId: any
-  ServerName: any
-  --InstanceType: any
-  --KeyPair: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  backup_id: any
+  server_name: any
+  --instance-type: any
+  --key-pair: any
 ]: any -> record<Server: record<AssociatePublicIpAddress: record, BackupRetentionCount: record, ServerName: record, CreatedAt: record, CloudFormationStackArn: record, CustomDomain: record, DisableAutomatedBackup: record, Endpoint: record, Engine: record, EngineModel: record, EngineAttributes: record, EngineVersion: record, InstanceProfileArn: record, InstanceType: record, KeyPair: record, MaintenanceStatus: record, PreferredMaintenanceWindow: record, PreferredBackupWindow: record, SecurityGroupIds: record, ServiceRoleArn: record, Status: record, StatusReason: record, SubnetIds: record, ServerArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.RestoreServer")
-  let body = {BackupId: $BackupId, ServerName: $ServerName, InstanceType: $InstanceType, KeyPair: $KeyPair} | compact
+  let body = {"BackupId": $backup_id, "ServerName": $server_name, "InstanceType": $instance_type, "KeyPair": $key_pair} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -669,7 +669,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01restore-server RestoreServer" [
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.StartMaintenance
 # operationId: StartMaintenance
-export def "x-amz-target-ops-works-cm-v2016-11-01start-maintenance StartMaintenance" [
+export def "x-amz-target-ops-works-cm-v2016-11-01start-maintenance start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -678,24 +678,24 @@ export def "x-amz-target-ops-works-cm-v2016-11-01start-maintenance StartMaintena
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  ServerName: any
-  --EngineAttributes: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  server_name: any
+  --engine-attributes: any
 ]: any -> record<Server: record<AssociatePublicIpAddress: record, BackupRetentionCount: record, ServerName: record, CreatedAt: record, CloudFormationStackArn: record, CustomDomain: record, DisableAutomatedBackup: record, Endpoint: record, Engine: record, EngineModel: record, EngineAttributes: record, EngineVersion: record, InstanceProfileArn: record, InstanceType: record, KeyPair: record, MaintenanceStatus: record, PreferredMaintenanceWindow: record, PreferredBackupWindow: record, SecurityGroupIds: record, ServiceRoleArn: record, Status: record, StatusReason: record, SubnetIds: record, ServerArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.StartMaintenance")
-  let body = {ServerName: $ServerName, EngineAttributes: $EngineAttributes} | compact
+  let body = {"ServerName": $server_name, "EngineAttributes": $engine_attributes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -706,7 +706,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01start-maintenance StartMaintena
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.TagResource
 # operationId: TagResource
-export def "x-amz-target-ops-works-cm-v2016-11-01tag-resource TagResource" [
+export def "x-amz-target-ops-works-cm-v2016-11-01tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,24 +715,24 @@ export def "x-amz-target-ops-works-cm-v2016-11-01tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  ResourceArn: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.TagResource")
-  let body = {ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -743,7 +743,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-ops-works-cm-v2016-11-01untag-resource UntagResource" [
+export def "x-amz-target-ops-works-cm-v2016-11-01untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -752,24 +752,24 @@ export def "x-amz-target-ops-works-cm-v2016-11-01untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  ResourceArn: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.UntagResource")
-  let body = {ResourceArn: $ResourceArn, TagKeys: $TagKeys} | compact
+  let body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -780,7 +780,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01untag-resource UntagResource" [
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.UpdateServer
 # operationId: UpdateServer
-export def "x-amz-target-ops-works-cm-v2016-11-01update-server UpdateServer" [
+export def "x-amz-target-ops-works-cm-v2016-11-01update-server update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -789,27 +789,27 @@ export def "x-amz-target-ops-works-cm-v2016-11-01update-server UpdateServer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  --DisableAutomatedBackup: any
-  --BackupRetentionCount: any
-  ServerName: any
-  --PreferredMaintenanceWindow: string # <p> <code>DDD:HH:MM</code> (weekly start time) or <code>HH:MM</code> (daily start time). </p> <p> Time windows always use coordinated universal time (UTC). Valid strings for day of week (<code>DDD</code>) are: <code>Mon</code>, <code>Tue</code>, <code>Wed</code>, <code>Thr</code>, <code>Fri</code>, <code>Sat</code>, or <code>Sun</code>.</p>
-  --PreferredBackupWindow: string # <p> <code>DDD:HH:MM</code> (weekly start time) or <code>HH:MM</code> (daily start time). </p> <p> Time windows always use coordinated universal time (UTC). Valid strings for day of week (<code>DDD</code>) are: <code>Mon</code>, <code>Tue</code>, <code>Wed</code>, <code>Thr</code>, <code>Fri</code>, <code>Sat</code>, or <code>Sun</code>.</p>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  --disable-automated-backup: any
+  --backup-retention-count: any
+  server_name: any
+  --preferred-maintenance-window: string # <p> <code>DDD:HH:MM</code> (weekly start time) or <code>HH:MM</code> (daily start time). </p> <p> Time windows always use coordinated universal time (UTC). Valid strings for day of week (<code>DDD</code>) are: <code>Mon</code>, <code>Tue</code>, <code>Wed</code>, <code>Thr</code>, <code>Fri</code>, <code>Sat</code>, or <code>Sun</code>.</p>
+  --preferred-backup-window: string # <p> <code>DDD:HH:MM</code> (weekly start time) or <code>HH:MM</code> (daily start time). </p> <p> Time windows always use coordinated universal time (UTC). Valid strings for day of week (<code>DDD</code>) are: <code>Mon</code>, <code>Tue</code>, <code>Wed</code>, <code>Thr</code>, <code>Fri</code>, <code>Sat</code>, or <code>Sun</code>.</p>
 ]: any -> record<Server: record<AssociatePublicIpAddress: record, BackupRetentionCount: record, ServerName: record, CreatedAt: record, CloudFormationStackArn: record, CustomDomain: record, DisableAutomatedBackup: record, Endpoint: record, Engine: record, EngineModel: record, EngineAttributes: record, EngineVersion: record, InstanceProfileArn: record, InstanceType: record, KeyPair: record, MaintenanceStatus: record, PreferredMaintenanceWindow: record, PreferredBackupWindow: record, SecurityGroupIds: record, ServiceRoleArn: record, Status: record, StatusReason: record, SubnetIds: record, ServerArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.UpdateServer")
-  let body = {DisableAutomatedBackup: $DisableAutomatedBackup, BackupRetentionCount: $BackupRetentionCount, ServerName: $ServerName, PreferredMaintenanceWindow: $PreferredMaintenanceWindow, PreferredBackupWindow: $PreferredBackupWindow} | compact
+  let body = {"DisableAutomatedBackup": $disable_automated_backup, "BackupRetentionCount": $backup_retention_count, "ServerName": $server_name, "PreferredMaintenanceWindow": $preferred_maintenance_window, "PreferredBackupWindow": $preferred_backup_window} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -820,7 +820,7 @@ export def "x-amz-target-ops-works-cm-v2016-11-01update-server UpdateServer" [
 #
 # POST /#X-Amz-Target=OpsWorksCM_V2016_11_01.UpdateServerEngineAttributes
 # operationId: UpdateServerEngineAttributes
-export def "x-amz-target-ops-works-cm-v2016-11-01update-server-engine-attributes UpdateServerEngineAttributes" [
+export def "x-amz-target-ops-works-cm-v2016-11-01update-server-engine-attributes update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -829,25 +829,25 @@ export def "x-amz-target-ops-works-cm-v2016-11-01update-server-engine-attributes
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  ServerName: any
-  AttributeName: any
-  --AttributeValue: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  server_name: any
+  attribute_name: any
+  --attribute-value: any
 ]: any -> record<Server: record<AssociatePublicIpAddress: record, BackupRetentionCount: record, ServerName: record, CreatedAt: record, CloudFormationStackArn: record, CustomDomain: record, DisableAutomatedBackup: record, Endpoint: record, Engine: record, EngineModel: record, EngineAttributes: record, EngineVersion: record, InstanceProfileArn: record, InstanceType: record, KeyPair: record, MaintenanceStatus: record, PreferredMaintenanceWindow: record, PreferredBackupWindow: record, SecurityGroupIds: record, ServiceRoleArn: record, Status: record, StatusReason: record, SubnetIds: record, ServerArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OpsWorksCM_V2016_11_01.UpdateServerEngineAttributes")
-  let body = {ServerName: $ServerName, AttributeName: $AttributeName, AttributeValue: $AttributeValue} | compact
+  let body = {"ServerName": $server_name, "AttributeName": $attribute_name, "AttributeValue": $attribute_value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

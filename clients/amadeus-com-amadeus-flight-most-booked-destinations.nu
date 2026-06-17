@@ -103,17 +103,17 @@ export def "travel-analytics-air-traffic-booked get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --originCityCode: string # Code for the origin city following IATA standard ([IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx)). - e.g. BOS for Boston (e.g. MAD)
+  --origin-city-code: string # Code for the origin city following IATA standard ([IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx)). - e.g. BOS for Boston (e.g. MAD)
   --period: string # period when consumers are traveling. * It can be a month only.  * ISO format must be used - e.g. 2015-05.  * Period ranges are not supported.  * Only periods from 2011-01 up to previous month are valid.  * Future dates are not supported.  (e.g. 2017-08)
   --max: float # maximum number of destinations in the response. Default value is 10 and maximum value is 50. (format: integer, default: 10)
   --fields: string # list of attributes desired in the response or list of attributes to remove from the response (with "-" before fields)  * The attributes names must contain the whole path (except resource name) e.g. travelers
-  --pagelimit: int # maximum items in one page (default: 10)
-  --pageoffset: int # start index of the requested page (default: 0)
+  --page-limit: int # maximum items in one page (default: 10)
+  --page-offset: int # start index of the requested page (default: 0)
   --qp-sort: string@sort-completer # defines on which attribute the sorting will be done: * analytics.flights.score - sort destinations by flights score (decreasing) * analytics.travelers.score - sort destination by traveler's score (decreasing)  (default: analytics.travelers.score)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "originCityCode" $originCityCode "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "page[limit]" $pagelimit "scalar") (serialize-qp "page[offset]" $pageoffset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "originCityCode" $origin_city_code "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[offset]" $page_offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/travel/analytics/air-traffic/booked" $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

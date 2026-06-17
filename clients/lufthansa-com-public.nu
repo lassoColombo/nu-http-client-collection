@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cargo-get-route CargoGetRouteFromDateProductCodeByOriginAndDestinationGet" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cargo-get-route get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,11 +93,11 @@ export def commands []: nothing -> table {
 #
 # GET /cargo/getRoute/{origin}-{destination}/{fromDate}/{productCode}
 # operationId: CargoGetRouteFromDateProductCodeByOriginAndDestinationGet
-export def "cargo-get-route CargoGetRouteFromDateProductCodeByOriginAndDestinationGet" [
+export def "cargo-get-route get" [
   origin: string
   destination: string
-  fromDate: string
-  productCode: string
+  from_date: string
+  product_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,12 +106,12 @@ export def "cargo-get-route CargoGetRouteFromDateProductCodeByOriginAndDestinati
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/cargo/getRoute/($origin)-($destination)/($fromDate)/($productCode)")
-  let extra_headers = {"Accept": $Accept} | compact
+  let full_url = (build-url $base ({origin: $origin, destination: $destination, from_date: $from_date, product_code: $product_code} | format pattern "/cargo/getRoute/{origin}-{destination}/{from_date}/{product_code}"))
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -122,9 +122,9 @@ export def "cargo-get-route CargoGetRouteFromDateProductCodeByOriginAndDestinati
 #
 # GET /cargo/shipmentTracking/{aWBPrefix}-{aWBNumber}
 # operationId: CargoShipmentTrackingByAWBPrefixAndAWBNumberGet
-export def "cargo-shipment-tracking CargoShipmentTrackingByAWBPrefixAndAWBNumberGet" [
-  aWBPrefix: string
-  aWBNumber: string
+export def "cargo-shipment-tracking get" [
+  a_wb_prefix: string
+  a_wb_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,12 +133,12 @@ export def "cargo-shipment-tracking CargoShipmentTrackingByAWBPrefixAndAWBNumber
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/cargo/shipmentTracking/($aWBPrefix)-($aWBNumber)")
-  let extra_headers = {"Accept": $Accept} | compact
+  let full_url = (build-url $base ({a_wb_prefix: $a_wb_prefix, a_wb_number: $a_wb_number} | format pattern "/cargo/shipmentTracking/{a_wb_prefix}-{a_wb_number}"))
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -149,7 +149,7 @@ export def "cargo-shipment-tracking CargoShipmentTrackingByAWBPrefixAndAWBNumber
 #
 # GET /offers/lounges/{location}
 # operationId: OffersLoungesByLocationGet
-export def "offers-lounges OffersLoungesByLocationGet" [
+export def "offers-lounges get" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,16 +159,16 @@ export def "offers-lounges OffersLoungesByLocationGet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cabinClass: string # Cabin class: 'M', 'E', 'C', 'F' (Acceptable values are: "", "M", "E", "C", "F")
-  --tierCode: string # Frequent flyer level ('FTL', 'SGC', 'SEN', 'HON') (Acceptable values are: "", "FTL", "SGC", "SEN", "HON")
+  --cabin-class: string # Cabin class: 'M', 'E', 'C', 'F' (Acceptable values are: "", "M", "E", "C", "F")
+  --tier-code: string # Frequent flyer level ('FTL', 'SGC', 'SEN', 'HON') (Acceptable values are: "", "FTL", "SGC", "SEN", "HON")
   --lang: string # Language code.
-  --Accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cabinClass" $cabinClass "scalar") (serialize-qp "tierCode" $tierCode "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/offers/lounges/($location)" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let qp = [(serialize-qp "cabinClass" $cabin_class "scalar") (serialize-qp "tierCode" $tier_code "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({location: $location} | format pattern "/offers/lounges/{location}") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -179,12 +179,12 @@ export def "offers-lounges OffersLoungesByLocationGet" [
 #
 # GET /offers/seatmaps/{flightNumber}/{origin}/{destination}/{date}/{cabinClass}
 # operationId: OffersSeatmapsDestinationDateCabinClassByFlightNumberAndOriginGet
-export def "offers-seatmaps OffersSeatmapsDestinationDateCabinClassByFlightNumberAndOriginGet" [
-  flightNumber: string
+export def "offers-seatmaps get" [
+  flight_number: string
   origin: string
   destination: string
   date: string
-  cabinClass: string
+  cabin_class: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,12 +193,12 @@ export def "offers-seatmaps OffersSeatmapsDestinationDateCabinClassByFlightNumbe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/offers/seatmaps/($flightNumber)/($origin)/($destination)/($date)/($cabinClass)")
-  let extra_headers = {"Accept": $Accept} | compact
+  let full_url = (build-url $base ({flight_number: $flight_number, origin: $origin, destination: $destination, date: $date, cabin_class: $cabin_class} | format pattern "/offers/seatmaps/{flight_number}/{origin}/{destination}/{date}/{cabin_class}"))
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -209,9 +209,9 @@ export def "offers-seatmaps OffersSeatmapsDestinationDateCabinClassByFlightNumbe
 #
 # GET /operations/flightstatus/arrivals/{airportCode}/{fromDateTime}
 # operationId: OperationsFlightstatusArrivalsByAirportCodeAndFromDateTimeGet
-export def "operations-flightstatus-arrivals OperationsFlightstatusArrivalsByAirportCodeAndFromDateTimeGet" [
-  airportCode: string
-  fromDateTime: string
+export def "operations-flightstatus-arrivals get" [
+  airport_code: string
+  from_date_time: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,13 +222,13 @@ export def "operations-flightstatus-arrivals OperationsFlightstatusArrivalsByAir
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken)
   --offset: string # Number of records skipped. Defaults to 0
-  --Accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/operations/flightstatus/arrivals/($airportCode)/($fromDateTime)" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let full_url = (build-url $base ({airport_code: $airport_code, from_date_time: $from_date_time} | format pattern "/operations/flightstatus/arrivals/{airport_code}/{from_date_time}") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -239,9 +239,9 @@ export def "operations-flightstatus-arrivals OperationsFlightstatusArrivalsByAir
 #
 # GET /operations/flightstatus/departures/{airportCode}/{fromDateTime}
 # operationId: OperationsFlightstatusDeparturesByAirportCodeAndFromDateTimeGet
-export def "operations-flightstatus-departures OperationsFlightstatusDeparturesByAirportCodeAndFromDateTimeGet" [
-  airportCode: string
-  fromDateTime: string
+export def "operations-flightstatus-departures get" [
+  airport_code: string
+  from_date_time: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,13 +252,13 @@ export def "operations-flightstatus-departures OperationsFlightstatusDeparturesB
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken)
   --offset: string # Number of records skipped. Defaults to 0
-  --Accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/operations/flightstatus/departures/($airportCode)/($fromDateTime)" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let full_url = (build-url $base ({airport_code: $airport_code, from_date_time: $from_date_time} | format pattern "/operations/flightstatus/departures/{airport_code}/{from_date_time}") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -269,7 +269,7 @@ export def "operations-flightstatus-departures OperationsFlightstatusDeparturesB
 #
 # GET /operations/flightstatus/route/{origin}/{destination}/{date}
 # operationId: OperationsFlightstatusRouteDateByOriginAndDestinationGet
-export def "operations-flightstatus-route OperationsFlightstatusRouteDateByOriginAndDestinationGet" [
+export def "operations-flightstatus-route get" [
   origin: string
   destination: string
   date: string
@@ -283,13 +283,13 @@ export def "operations-flightstatus-route OperationsFlightstatusRouteDateByOrigi
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken)
   --offset: string # Number of records skipped. Defaults to 0
-  --Accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/operations/flightstatus/route/($origin)/($destination)/($date)" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let full_url = (build-url $base ({origin: $origin, destination: $destination, date: $date} | format pattern "/operations/flightstatus/route/{origin}/{destination}/{date}") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -300,8 +300,8 @@ export def "operations-flightstatus-route OperationsFlightstatusRouteDateByOrigi
 #
 # GET /operations/flightstatus/{flightNumber}/{date}
 # operationId: OperationsFlightstatusByFlightNumberAndDateGet
-export def "operations-flightstatus OperationsFlightstatusByFlightNumberAndDateGet" [
-  flightNumber: string
+export def "operations-flightstatus get" [
+  flight_number: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -313,13 +313,13 @@ export def "operations-flightstatus OperationsFlightstatusByFlightNumberAndDateG
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken)
   --offset: string # Number of records skipped. Defaults to 0
-  --Accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/operations/flightstatus/($flightNumber)/($date)" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let full_url = (build-url $base ({flight_number: $flight_number, date: $date} | format pattern "/operations/flightstatus/{flight_number}/{date}") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -330,10 +330,10 @@ export def "operations-flightstatus OperationsFlightstatusByFlightNumberAndDateG
 #
 # GET /operations/schedules/{origin}/{destination}/{fromDateTime}
 # operationId: OperationsSchedulesFromDateTimeByOriginAndDestinationGet
-export def "operations-schedules OperationsSchedulesFromDateTimeByOriginAndDestinationGet" [
+export def "operations-schedules get" [
   origin: string
   destination: string
-  fromDateTime: string
+  from_date_time: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,16 +342,16 @@ export def "operations-schedules OperationsSchedulesFromDateTimeByOriginAndDesti
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --directFlights: oneof<nothing, bool> # Show only direct flights (false=0, true=1). Default is false
+  --direct-flights: oneof<nothing, bool> # Show only direct flights (false=0, true=1). Default is false
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken)
   --offset: string # Number of records skipped. Defaults to 0
-  --Accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "directFlights" $directFlights "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/operations/schedules/($origin)/($destination)/($fromDateTime)" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let qp = [(serialize-qp "directFlights" $direct_flights "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({origin: $origin, destination: $destination, from_date_time: $from_date_time} | format pattern "/operations/schedules/{origin}/{destination}/{from_date_time}") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -362,8 +362,8 @@ export def "operations-schedules OperationsSchedulesFromDateTimeByOriginAndDesti
 #
 # GET /references/aircraft/{aircraftCode}
 # operationId: ReferencesAircraftByAircraftCodeGet
-export def "references-aircraft ReferencesAircraftByAircraftCodeGet" [
-  aircraftCode: string
+export def "references-aircraft get" [
+  aircraft_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,13 +374,13 @@ export def "references-aircraft ReferencesAircraftByAircraftCodeGet" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken) (default: 20)
   --offset: string # Number of records skipped. Defaults to 0 (default: 0)
-  --Accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/references/aircraft/($aircraftCode)" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let full_url = (build-url $base ({aircraft_code: $aircraft_code} | format pattern "/references/aircraft/{aircraft_code}") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -391,8 +391,8 @@ export def "references-aircraft ReferencesAircraftByAircraftCodeGet" [
 #
 # GET /references/airlines/{airlineCode}
 # operationId: ReferencesAirlinesByAirlineCodeGet
-export def "references-airlines ReferencesAirlinesByAirlineCodeGet" [
-  airlineCode: string
+export def "references-airlines get" [
+  airline_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,13 +403,13 @@ export def "references-airlines ReferencesAirlinesByAirlineCodeGet" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken) (default: 20)
   --offset: string # Number of records skipped. Defaults to 0 (default: 0)
-  --Accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/references/airlines/($airlineCode)" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let full_url = (build-url $base ({airline_code: $airline_code} | format pattern "/references/airlines/{airline_code}") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -420,7 +420,7 @@ export def "references-airlines ReferencesAirlinesByAirlineCodeGet" [
 #
 # GET /references/airports/nearest/{latitude},{longitude}
 # operationId: ReferencesAirportsNearestByLatitudeAndLongitudeGet
-export def "references-airports-nearest ReferencesAirportsNearestByLatitudeAndLongitudeGet" [
+export def "references-airports-nearest get" [
   latitude: int
   longitude: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -432,13 +432,13 @@ export def "references-airports-nearest ReferencesAirportsNearestByLatitudeAndLo
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # 2 letter ISO 3166-1 language code
-  --Accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/references/airports/nearest/($latitude),($longitude)" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let full_url = (build-url $base ({latitude: $latitude, longitude: $longitude} | format pattern "/references/airports/nearest/{latitude},{longitude}") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -449,8 +449,8 @@ export def "references-airports-nearest ReferencesAirportsNearestByLatitudeAndLo
 #
 # GET /references/airports/{airportCode}
 # operationId: ReferencesAirportsByAirportCodeGet
-export def "references-airports ReferencesAirportsByAirportCodeGet" [
-  airportCode: string
+export def "references-airports get" [
+  airport_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -462,14 +462,14 @@ export def "references-airports ReferencesAirportsByAirportCodeGet" [
   --lang: string # 2-letter ISO 3166-1 language code
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken) (default: 20)
   --offset: string # Number of records skipped. Defaults to 0 (default: 0)
-  --LHoperated: oneof<nothing, bool> # Restrict the results to locations with flights operated by LH (false=0, true=1)
-  --Accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --l-hoperated: oneof<nothing, bool> # Restrict the results to locations with flights operated by LH (false=0, true=1)
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
 ]: nothing -> record<AirportResource: record<Airports: record<Airport: record>, Meta: record<_Version: string, Link: list, TotalCount: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "LHoperated" $LHoperated "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/references/airports/($airportCode)" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "LHoperated" $l_hoperated "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({airport_code: $airport_code} | format pattern "/references/airports/{airport_code}") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -480,8 +480,8 @@ export def "references-airports ReferencesAirportsByAirportCodeGet" [
 #
 # GET /references/cities/{cityCode}
 # operationId: ReferencesCitiesByCityCodeGet
-export def "references-cities ReferencesCitiesByCityCodeGet" [
-  cityCode: string
+export def "references-cities get" [
+  city_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,13 +493,13 @@ export def "references-cities ReferencesCitiesByCityCodeGet" [
   --lang: string # 2 letter ISO 3166-1 language code
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken) (default: 20)
   --offset: string # Number of records skipped. Defaults to 0 (default: 0)
-  --Accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/references/cities/($cityCode)" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let full_url = (build-url $base ({city_code: $city_code} | format pattern "/references/cities/{city_code}") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -510,8 +510,8 @@ export def "references-cities ReferencesCitiesByCityCodeGet" [
 #
 # GET /references/countries/{countryCode}
 # operationId: ReferencesCountriesByCountryCodeGet
-export def "references-countries ReferencesCountriesByCountryCodeGet" [
-  countryCode: string
+export def "references-countries get" [
+  country_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,13 +523,13 @@ export def "references-countries ReferencesCountriesByCountryCodeGet" [
   --lang: string # 2 letter ISO 3166-1 language code
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken) (default: 20)
   --offset: string # Number of records skipped. Defaults to 0 (default: 0)
-  --Accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/references/countries/($countryCode)" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let full_url = (build-url $base ({country_code: $country_code} | format pattern "/references/countries/{country_code}") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

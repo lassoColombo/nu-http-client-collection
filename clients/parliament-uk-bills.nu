@@ -65,13 +65,13 @@ def base-url-completer [] { ["https://bills-api.parliament.uk"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def Category-completer [] { ["Hybrid" "Private" "Public"] }
+def category-completer [] { ["Hybrid" "Private" "Public"] }
 def accept-completer [] { ["application/json" "text/json" "text/plain"] }
-def CurrentHouse-completer [] { ["All" "Commons" "Lords" "Unassigned"] }
-def OriginatingHouse-completer [] { ["All" "Commons" "Lords"] }
-def SortOrder-completer [] { ["DateUpdatedAscending" "DateUpdatedDescending" "TitleAscending" "TitleDescending"] }
-def Decision-completer [] { ["Agreed" "All" "Disagreed" "NoDecision" "NotMoved" "Withdrawn"] }
-def House-completer [] { ["All" "Commons" "Lords" "Unassigned"] }
+def current-house-completer [] { ["All" "Commons" "Lords" "Unassigned"] }
+def originating-house-completer [] { ["All" "Commons" "Lords"] }
+def sort-order-completer [] { ["DateUpdatedAscending" "DateUpdatedDescending" "TitleAscending" "TitleDescending"] }
+def decision-completer [] { ["Agreed" "All" "Disagreed" "NoDecision" "NotMoved" "Withdrawn"] }
+def house-completer [] { ["All" "Commons" "Lords" "Unassigned"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -109,13 +109,13 @@ export def "bill-types get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Category: string@Category-completer
-  --Skip: int # format: int32
-  --Take: int # format: int32
+  --category: string@category-completer
+  --skip: int # format: int32
+  --take: int # format: int32
 ]: nothing -> record<items: table<category: string, description: string, id: int, name: string>, itemsPerPage: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Category" $Category "scalar") (serialize-qp "Skip" $Skip "scalar") (serialize-qp "Take" $Take "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "Skip" $skip "scalar") (serialize-qp "Take" $take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/BillTypes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -126,7 +126,7 @@ export def "bill-types get" [
 #
 # GET /api/v1/Bills
 # operationId: GetBills
-export def "bills GetBills" [
+export def "bills list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,25 +136,25 @@ export def "bills GetBills" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --SearchTerm: string
-  --Session: int # format: int32
-  --CurrentHouse: string@CurrentHouse-completer
-  --OriginatingHouse: string@OriginatingHouse-completer
-  --MemberId: int # format: int32
-  --DepartmentId: int # format: int32
-  --BillStage: list
-  --BillStagesExcluded: list
-  --IsDefeated: oneof<nothing, bool>
-  --IsWithdrawn: oneof<nothing, bool>
-  --BillType: list
-  --SortOrder: string@SortOrder-completer
-  --BillIds: list
-  --Skip: int # format: int32
-  --Take: int # format: int32
+  --search-term: string
+  --session: int # format: int32
+  --current-house: string@current-house-completer
+  --originating-house: string@originating-house-completer
+  --member-id: int # format: int32
+  --department-id: int # format: int32
+  --bill-stage: list
+  --bill-stages-excluded: list
+  --is-defeated: oneof<nothing, bool>
+  --is-withdrawn: oneof<nothing, bool>
+  --bill-type: list
+  --sort-order: string@sort-order-completer
+  --bill-ids: list
+  --skip: int # format: int32
+  --take: int # format: int32
 ]: nothing -> record<items: table<billId: int, billTypeId: int, billWithdrawn: string, currentHouse: string, currentStage: record, includedSessionIds: list, introducedSessionId: int, isAct: bool, isDefeated: bool, lastUpdate: string, originatingHouse: string, shortTitle: string>, itemsPerPage: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "SearchTerm" $SearchTerm "scalar") (serialize-qp "Session" $Session "scalar") (serialize-qp "CurrentHouse" $CurrentHouse "scalar") (serialize-qp "OriginatingHouse" $OriginatingHouse "scalar") (serialize-qp "MemberId" $MemberId "scalar") (serialize-qp "DepartmentId" $DepartmentId "scalar") (serialize-qp "BillStage" $BillStage "multi") (serialize-qp "BillStagesExcluded" $BillStagesExcluded "multi") (serialize-qp "IsDefeated" $IsDefeated "scalar") (serialize-qp "IsWithdrawn" $IsWithdrawn "scalar") (serialize-qp "BillType" $BillType "multi") (serialize-qp "SortOrder" $SortOrder "scalar") (serialize-qp "BillIds" $BillIds "multi") (serialize-qp "Skip" $Skip "scalar") (serialize-qp "Take" $Take "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "SearchTerm" $search_term "scalar") (serialize-qp "Session" $session "scalar") (serialize-qp "CurrentHouse" $current_house "scalar") (serialize-qp "OriginatingHouse" $originating_house "scalar") (serialize-qp "MemberId" $member_id "scalar") (serialize-qp "DepartmentId" $department_id "scalar") (serialize-qp "BillStage" $bill_stage "multi") (serialize-qp "BillStagesExcluded" $bill_stages_excluded "multi") (serialize-qp "IsDefeated" $is_defeated "scalar") (serialize-qp "IsWithdrawn" $is_withdrawn "scalar") (serialize-qp "BillType" $bill_type "multi") (serialize-qp "SortOrder" $sort_order "scalar") (serialize-qp "BillIds" $bill_ids "multi") (serialize-qp "Skip" $skip "scalar") (serialize-qp "Take" $take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Bills" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -165,8 +165,8 @@ export def "bills GetBills" [
 #
 # GET /api/v1/Bills/{billId}
 # operationId: GetBill
-export def "bills GetBill" [
-  billId: int
+export def "bills get" [
+  bill_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "bills GetBill" [
 ]: nothing -> record<agent: record<address: string, email: string, name: string, phoneNo: string, website: string>, billId: int, billTypeId: int, billWithdrawn: string, currentHouse: string, currentStage: record<abbreviation: string, description: string, house: string, id: int, sessionId: int, sortOrder: int, stageId: int, stageSittings: list<record>>, includedSessionIds: list<int>, introducedSessionId: int, isAct: bool, isDefeated: bool, lastUpdate: string, longTitle: string, originatingHouse: string, petitionInformation: string, petitioningPeriod: string, promoters: table<organisationName: string, organisationUrl: string>, shortTitle: string, sponsors: table<member: record, organisation: record, sortOrder: int>, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Bills/($billId)")
+  let full_url = (build-url $base ({bill_id: $bill_id} | format pattern "/api/v1/Bills/{bill_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -189,8 +189,8 @@ export def "bills GetBill" [
 #
 # GET /api/v1/Bills/{billId}/NewsArticles
 # operationId: GetNewsArticles
-export def "bills-news-articles GetNewsArticles" [
-  billId: int
+export def "bills-news-articles get" [
+  bill_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,13 +200,13 @@ export def "bills-news-articles GetNewsArticles" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Skip: int # format: int32
-  --Take: int # format: int32
+  --skip: int # format: int32
+  --take: int # format: int32
 ]: nothing -> record<items: table<content: string, displayDate: string, id: int, title: string>, itemsPerPage: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Skip" $Skip "scalar") (serialize-qp "Take" $Take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Bills/($billId)/NewsArticles" $qp)
+  let qp = [(serialize-qp "Skip" $skip "scalar") (serialize-qp "Take" $take "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bill_id: $bill_id} | format pattern "/api/v1/Bills/{bill_id}/NewsArticles") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -216,8 +216,8 @@ export def "bills-news-articles GetNewsArticles" [
 #
 # GET /api/v1/Bills/{billId}/Publications
 # operationId: GetBillPublication
-export def "bills-publications GetBillPublication" [
-  billId: int
+export def "bills-publications get" [
+  bill_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "bills-publications GetBillPublication" [
 ]: nothing -> record<billId: int, publications: table<displayDate: string, files: list, house: string, id: int, links: list, publicationType: record, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Bills/($billId)/Publications")
+  let full_url = (build-url $base ({bill_id: $bill_id} | format pattern "/api/v1/Bills/{bill_id}/Publications"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -240,7 +240,7 @@ export def "bills-publications GetBillPublication" [
 #
 # GET /api/v1/Bills/{billId}/Stages
 export def "bills-stages get" [
-  billId: int
+  bill_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,13 +250,13 @@ export def "bills-stages get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Skip: int # format: int32
-  --Take: int # format: int32
+  --skip: int # format: int32
+  --take: int # format: int32
 ]: nothing -> record<items: table<abbreviation: string, description: string, house: string, id: int, sessionId: int, sortOrder: int, stageId: int, stageSittings: list>, itemsPerPage: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Skip" $Skip "scalar") (serialize-qp "Take" $Take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Bills/($billId)/Stages" $qp)
+  let qp = [(serialize-qp "Skip" $skip "scalar") (serialize-qp "Take" $take "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bill_id: $bill_id} | format pattern "/api/v1/Bills/{bill_id}/Stages") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -266,9 +266,9 @@ export def "bills-stages get" [
 #
 # GET /api/v1/Bills/{billId}/Stages/{billStageId}
 # operationId: GetBillStageDetails
-export def "bills-stages GetBillStageDetails" [
-  billId: int
-  billStageId: int
+export def "bills-stages get-bill-stage-details" [
+  bill_id: int
+  bill_stage_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "bills-stages GetBillStageDetails" [
 ]: nothing -> record<abbreviation: string, committee: record<category: string, house: string, id: int, name: string, url: string>, description: string, house: string, id: int, lastUpdate: string, nextStageBillStageId: int, previousStageBillStageId: int, sessionId: int, sortOrder: int, stageId: int, stageSittings: table<billId: int, billStageId: int, date: string, id: int, stageId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Bills/($billId)/Stages/($billStageId)")
+  let full_url = (build-url $base ({bill_id: $bill_id, bill_stage_id: $bill_stage_id} | format pattern "/api/v1/Bills/{bill_id}/Stages/{bill_stage_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -291,9 +291,9 @@ export def "bills-stages GetBillStageDetails" [
 #
 # GET /api/v1/Bills/{billId}/Stages/{billStageId}/Amendments
 # operationId: GetAmendments
-export def "bills-stages-amendments GetAmendments" [
-  billId: int
-  billStageId: int
+export def "bills-stages-amendments list" [
+  bill_id: int
+  bill_stage_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,16 +303,16 @@ export def "bills-stages-amendments GetAmendments" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --SearchTerm: string
-  --Decision: string@Decision-completer
-  --MemberId: int # format: int32
-  --Skip: int # format: int32
-  --Take: int # format: int32
+  --search-term: string
+  --decision: string@decision-completer
+  --member-id: int # format: int32
+  --skip: int # format: int32
+  --take: int # format: int32
 ]: nothing -> record<items: table<amendmentId: int, amendmentPosition: string, amendmentType: string, billId: int, billStageId: int, clause: int, decision: string, lineNumber: int, marshalledListText: string, pageNumber: int, schedule: int, sponsors: list, summaryText: list>, itemsPerPage: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "SearchTerm" $SearchTerm "scalar") (serialize-qp "Decision" $Decision "scalar") (serialize-qp "MemberId" $MemberId "scalar") (serialize-qp "Skip" $Skip "scalar") (serialize-qp "Take" $Take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Bills/($billId)/Stages/($billStageId)/Amendments" $qp)
+  let qp = [(serialize-qp "SearchTerm" $search_term "scalar") (serialize-qp "Decision" $decision "scalar") (serialize-qp "MemberId" $member_id "scalar") (serialize-qp "Skip" $skip "scalar") (serialize-qp "Take" $take "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bill_id: $bill_id, bill_stage_id: $bill_stage_id} | format pattern "/api/v1/Bills/{bill_id}/Stages/{bill_stage_id}/Amendments") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -322,10 +322,10 @@ export def "bills-stages-amendments GetAmendments" [
 #
 # GET /api/v1/Bills/{billId}/Stages/{billStageId}/Amendments/{amendmentId}
 # operationId: GetAmendment
-export def "bills-stages-amendments GetAmendment" [
-  billId: int
-  billStageId: int
-  amendmentId: int
+export def "bills-stages-amendments get" [
+  bill_id: int
+  bill_stage_id: int
+  amendment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "bills-stages-amendments GetAmendment" [
 ]: nothing -> record<amendmentId: int, amendmentLines: table<hangingIndentation: string, imageType: string, indentation: int, isImage: bool, text: string>, amendmentNote: string, amendmentPosition: string, amendmentType: string, billId: int, billStageId: int, clause: int, decision: string, explanatoryText: string, explanatoryTextPrefix: string, lineNumber: int, marshalledListText: string, pageNumber: int, schedule: int, sponsors: table<house: string, isLead: bool, memberFrom: string, memberId: int, memberPage: string, memberPhoto: string, name: string, party: string, partyColour: string, sortOrder: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Bills/($billId)/Stages/($billStageId)/Amendments/($amendmentId)")
+  let full_url = (build-url $base ({bill_id: $bill_id, bill_stage_id: $bill_stage_id, amendment_id: $amendment_id} | format pattern "/api/v1/Bills/{bill_id}/Stages/{bill_stage_id}/Amendments/{amendment_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -348,8 +348,8 @@ export def "bills-stages-amendments GetAmendment" [
 #
 # GET /api/v1/Bills/{billId}/Stages/{stageId}/Publications
 export def "bills-stages-publications get" [
-  billId: int
-  stageId: int
+  bill_id: int
+  stage_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +362,7 @@ export def "bills-stages-publications get" [
 ]: nothing -> record<billStageId: int, publications: table<displayDate: string, files: list, id: int, links: list, publicationType: record, title: string>, sittings: table<publications: list, sittingId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Bills/($billId)/Stages/($stageId)/Publications")
+  let full_url = (build-url $base ({bill_id: $bill_id, stage_id: $stage_id} | format pattern "/api/v1/Bills/{bill_id}/Stages/{stage_id}/Publications"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -381,12 +381,12 @@ export def "publication-types get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Skip: int # format: int32
-  --Take: int # format: int32
+  --skip: int # format: int32
+  --take: int # format: int32
 ]: nothing -> record<items: table<description: string, id: int, name: string>, itemsPerPage: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Skip" $Skip "scalar") (serialize-qp "Take" $Take "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Skip" $skip "scalar") (serialize-qp "Take" $take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/PublicationTypes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -397,8 +397,8 @@ export def "publication-types get" [
 #
 # GET /api/v1/Publications/{publicationId}/Documents/{documentId}
 export def "publications-documents get" [
-  publicationId: int
-  documentId: int
+  publication_id: int
+  document_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,7 +411,7 @@ export def "publications-documents get" [
 ]: nothing -> record<contentLength: int, contentType: string, filename: string, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Publications/($publicationId)/Documents/($documentId)")
+  let full_url = (build-url $base ({publication_id: $publication_id, document_id: $document_id} | format pattern "/api/v1/Publications/{publication_id}/Documents/{document_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -421,8 +421,8 @@ export def "publications-documents get" [
 #
 # GET /api/v1/Publications/{publicationId}/Documents/{documentId}/Download
 export def "publications-documents-download get" [
-  publicationId: int
-  documentId: int
+  publication_id: int
+  document_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "publications-documents-download get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Publications/($publicationId)/Documents/($documentId)/Download")
+  let full_url = (build-url $base ({publication_id: $publication_id, document_id: $document_id} | format pattern "/api/v1/Publications/{publication_id}/Documents/{document_id}/Download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -456,7 +456,7 @@ export def "rss-bills get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Rss/Bills/($id).rss")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/Rss/Bills/{id}.rss"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -529,7 +529,7 @@ export def "rss-publicbillsrss get" [
 #
 # GET /api/v1/Sittings
 # operationId: GetSittings
-export def "sittings GetSittings" [
+export def "sittings get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,15 +539,15 @@ export def "sittings GetSittings" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --House: string@House-completer
-  --DateFrom: string # format: date-time
-  --DateTo: string # format: date-time
-  --Skip: int # format: int32
-  --Take: int # format: int32
+  --house: string@house-completer
+  --date-from: string # format: date-time
+  --date-to: string # format: date-time
+  --skip: int # format: int32
+  --take: int # format: int32
 ]: nothing -> record<items: table<billId: int, billStageId: int, date: string, id: int, stageId: int>, itemsPerPage: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "House" $House "scalar") (serialize-qp "DateFrom" $DateFrom "scalar") (serialize-qp "DateTo" $DateTo "scalar") (serialize-qp "Skip" $Skip "scalar") (serialize-qp "Take" $Take "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "House" $house "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "Skip" $skip "scalar") (serialize-qp "Take" $take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Sittings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -567,12 +567,12 @@ export def "stages get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Skip: int # format: int32
-  --Take: int # format: int32
+  --skip: int # format: int32
+  --take: int # format: int32
 ]: nothing -> record<items: table<house: string, id: int, name: string>, itemsPerPage: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Skip" $Skip "scalar") (serialize-qp "Take" $Take "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Skip" $skip "scalar") (serialize-qp "Take" $take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Stages" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

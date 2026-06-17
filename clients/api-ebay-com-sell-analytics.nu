@@ -109,7 +109,7 @@ export def "customer-service-metric get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "evaluation_marketplace_id" $evaluation_marketplace_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/customer_service_metric/($customer_service_metric_type)/($evaluation_type)" $qp)
+  let full_url = (build-url $base ({customer_service_metric_type: $customer_service_metric_type, evaluation_type: $evaluation_type} | format pattern "/customer_service_metric/{customer_service_metric_type}/{evaluation_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,8 +142,8 @@ export def "seller-standards-profile findSellerStandardsProfiles" [
 # GET /seller_standards_profile/{program}/{cycle}
 # operationId: getSellerStandardsProfile
 export def "seller-standards-profile get" [
-  cycle: string
   program: string
+  cycle: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,7 +155,7 @@ export def "seller-standards-profile get" [
 ]: nothing -> record<cycle: record<cycleType: string, evaluationDate: string, evaluationMonth: string>, defaultProgram: bool, evaluationReason: string, metrics: table<benchmark: record, distributions: list, metricKey: string, value: string>, program: string, standardsLevel: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/seller_standards_profile/($program)/($cycle)")
+  let full_url = (build-url $base ({program: $program, cycle: $cycle} | format pattern "/seller_standards_profile/{program}/{cycle}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

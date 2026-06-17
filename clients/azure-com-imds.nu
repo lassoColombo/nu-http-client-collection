@@ -67,13 +67,13 @@ def auth-scheme-completer [] { ["basic"] }
 
 # Completers for enum parameters
 def api-version-completer [] { ["2018-10-01"] }
-def Metadata-completer [] { ["true"] }
+def metadata-completer [] { ["true"] }
 def bypass-cache-completer [] { ["true"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attested-document GetDocument" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attested-document get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +97,7 @@ export def commands []: nothing -> table {
 #
 # GET /attested/document
 # operationId: Attested_GetDocument
-export def "attested-document GetDocument" [
+export def "attested-document get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,13 +108,13 @@ export def "attested-document GetDocument" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # This is the API version to use.
   --nonce: string # This is a string of up to 32 random alphanumeric characters.
-  --Metadata: string@Metadata-completer # This must be set to 'true'.
+  --metadata: string@metadata-completer # This must be set to 'true'.
 ]: nothing -> record<encoding: string, signature: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "nonce" $nonce "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attested/document" $qp)
-  let extra_headers = {"Metadata": $Metadata} | compact
+  let extra_headers = {"Metadata": $metadata} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -125,7 +125,7 @@ export def "attested-document GetDocument" [
 #
 # GET /identity/info
 # operationId: Identity_GetInfo
-export def "identity-info GetInfo" [
+export def "identity-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,13 +135,13 @@ export def "identity-info GetInfo" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # This is the API version to use.
-  --Metadata: string@Metadata-completer # This must be set to 'true'.
+  --metadata: string@metadata-completer # This must be set to 'true'.
 ]: nothing -> record<tenantId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/identity/info" $qp)
-  let extra_headers = {"Metadata": $Metadata} | compact
+  let extra_headers = {"Metadata": $metadata} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -152,7 +152,7 @@ export def "identity-info GetInfo" [
 #
 # GET /identity/oauth2/token
 # operationId: Identity_GetToken
-export def "identity-oauth2-token GetToken" [
+export def "identity-oauth2-token get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,13 +168,13 @@ export def "identity-oauth2-token GetToken" [
   --msi-res-id: string # This identifies, by urlencoded ARM resource id, a specific explicit identity to use when authenticating to Azure AD. Mutually exclusive with client_id and object_id.
   --authority: string # This indicates the authority to request AAD tokens from. Defaults to the known authority of the identity to be used.
   --bypass-cache: string@bypass-cache-completer # If provided, the value must be 'true'. This indicates to the server that the token must be retrieved from Azure AD and cannot be retrieved from an internal cache.
-  --Metadata: string@Metadata-completer # This must be set to 'true'.
+  --metadata: string@metadata-completer # This must be set to 'true'.
 ]: nothing -> record<access_token: string, client_id: string, expires_in: string, expires_on: string, ext_expires_in: string, msi_res_id: string, not_before: string, object_id: string, resource: string, token_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "api-version" $api_version "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "object_id" $object_id "scalar") (serialize-qp "msi_res_id" $msi_res_id "scalar") (serialize-qp "authority" $authority "scalar") (serialize-qp "bypass_cache" $bypass_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/identity/oauth2/token" $qp)
-  let extra_headers = {"Metadata": $Metadata} | compact
+  let extra_headers = {"Metadata": $metadata} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -185,7 +185,7 @@ export def "identity-oauth2-token GetToken" [
 #
 # GET /instance
 # operationId: Instances_GetMetadata
-export def "instance GetMetadata" [
+export def "instance get-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,13 +195,13 @@ export def "instance GetMetadata" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # This is the API version to use.
-  --Metadata: string@Metadata-completer # This must be set to 'true'.
+  --metadata: string@metadata-completer # This must be set to 'true'.
 ]: nothing -> record<compute: record<azEnvironment: string, location: string, name: string, offer: string, osType: string, placementGroupId: string, plan: record<name: string, product: string, publisher: string>, platformFaultDomain: string, platformUpdateDomain: string, provider: string, publicKeys: list<record>, publisher: string, resourceGroupName: string, resourceId: string, sku: string, storageProfile: record<dataDisks: list, imageReference: record, osDisk: record>, subscriptionId: string, tags: string, version: string, vmId: string, vmScaleSetName: string, vmSize: string, zone: string>, network: record<interface: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/instance" $qp)
-  let extra_headers = {"Metadata": $Metadata} | compact
+  let extra_headers = {"Metadata": $metadata} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

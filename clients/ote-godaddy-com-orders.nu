@@ -105,23 +105,23 @@ export def "orders list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --periodStart: string # Start of range indicating what time-frame should be returned. Inclusive
-  --periodEnd: string # End of range indicating what time-frame should be returned. Inclusive
+  --period-start: string # Start of range indicating what time-frame should be returned. Inclusive
+  --period-end: string # End of range indicating what time-frame should be returned. Inclusive
   --domain: string # Domain name to use as the filter of results
-  --productGroupId: int # Product group id to use as the filter of results
-  --paymentProfileId: int # Payment profile id to use as the filter of results
-  --parentOrderId: string # Parent order id to use as the filter of results
+  --product-group-id: int # Product group id to use as the filter of results
+  --payment-profile-id: int # Payment profile id to use as the filter of results
+  --parent-order-id: string # Parent order id to use as the filter of results
   --offset: int # Number of results to skip for pagination (default: 0)
   --limit: int # Maximum number of items to return (default: 25)
   --qp-sort: string@sort-completer # Property name that will be used to sort results. '-' indicates descending (default: -createdAt)
-  --X-Shopper-Id: string # Shopper ID to be operated on, if different from JWT<br/><b>Reseller subaccounts are not supported</b>
-  --X-Market-Id: string # Unique identifier of the Market in which the request is happening
+  --x-shopper-id: string # Shopper ID to be operated on, if different from JWT<br/><b>Reseller subaccounts are not supported</b>
+  --x-market-id: string # Unique identifier of the Market in which the request is happening
 ]: nothing -> record<orders: table<createdAt: string, currency: string, items: list, orderId: string, parentOrderId: string, pricing: record>, pagination: record<first: string, last: string, next: string, previous: string, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "periodStart" $periodStart "scalar") (serialize-qp "periodEnd" $periodEnd "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "productGroupId" $productGroupId "scalar") (serialize-qp "paymentProfileId" $paymentProfileId "scalar") (serialize-qp "parentOrderId" $parentOrderId "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "periodStart" $period_start "scalar") (serialize-qp "periodEnd" $period_end "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "productGroupId" $product_group_id "scalar") (serialize-qp "paymentProfileId" $payment_profile_id "scalar") (serialize-qp "parentOrderId" $parent_order_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/orders" $qp)
-  let extra_headers = {"X-Shopper-Id": $X_Shopper_Id, "X-Market-Id": $X_Market_Id} | compact
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id, "X-Market-Id": $x_market_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -133,7 +133,7 @@ export def "orders list" [
 # GET /v1/orders/{orderId}
 # operationId: get
 export def "orders get" [
-  orderId: string
+  order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,13 +143,13 @@ export def "orders get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --X-Shopper-Id: string # Shopper ID to be operated on, if different from JWT<br/><b>Reseller subaccounts are not supported</b>
-  --X-Market-Id: string # Unique identifier of the Market in which the request is happening
+  --x-shopper-id: string # Shopper ID to be operated on, if different from JWT<br/><b>Reseller subaccounts are not supported</b>
+  --x-market-id: string # Unique identifier of the Market in which the request is happening
 ]: nothing -> record<billTo: record<contact: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, taxId: string>, createdAt: string, currency: string, items: table<domains: list, label: string, period: float, periodUnit: string, pfid: int, pricing: record, quantity: int, taxCollector: record>, orderId: string, parentOrderId: string, payments: table<amount: int, category: string, paymentProfileId: string, subcategory: string>, pricing: record<discount: int, fees: record<icann: int, total: int>, id: float, list: int, savings: int, subtotal: int, taxDetails: list<record>, taxes: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/orders/($orderId)")
-  let extra_headers = {"X-Shopper-Id": $X_Shopper_Id, "X-Market-Id": $X_Market_Id} | compact
+  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/v1/orders/{order_id}"))
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id, "X-Market-Id": $x_market_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

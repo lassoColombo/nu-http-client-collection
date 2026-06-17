@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-deployment-admin-locations-global-file-containers List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-deployment-admin-locations-global-file-containers list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/fileContainers
 # operationId: FileContainers_List
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-file-containers List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-deployment-admin-locations-global-file-containers list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Deployment.Admin/locations/global/fileContainers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/fileContainers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,9 +118,9 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/fileContainers/{fileContainerId}
 # operationId: FileContainers_Delete
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-file-containers Delete" [
-  subscriptionId: string
-  fileContainerId: string
+export def "subscriptions-providers-microsoft-deployment-admin-locations-global-file-containers delete" [
+  subscription_id: string
+  file_container_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Deployment.Admin/locations/global/fileContainers/($fileContainerId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, file_container_id: $file_container_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/fileContainers/{file_container_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,9 +144,9 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/fileContainers/{fileContainerId}
 # operationId: FileContainers_Get
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-file-containers Get" [
-  subscriptionId: string
-  fileContainerId: string
+export def "subscriptions-providers-microsoft-deployment-admin-locations-global-file-containers get" [
+  subscription_id: string
+  file_container_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Deployment.Admin/locations/global/fileContainers/($fileContainerId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, file_container_id: $file_container_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/fileContainers/{file_container_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,9 +170,9 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/fileContainers/{fileContainerId}
 # operationId: FileContainers_Create
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-file-containers Create" [
-  subscriptionId: string
-  fileContainerId: string
+export def "subscriptions-providers-microsoft-deployment-admin-locations-global-file-containers create" [
+  subscription_id: string
+  file_container_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Deployment.Admin/locations/global/fileContainers/($fileContainerId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, file_container_id: $file_container_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/fileContainers/{file_container_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

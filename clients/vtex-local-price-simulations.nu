@@ -100,10 +100,10 @@ export def "v-custom-prices-rules post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
   --email: any # User's email (default: )
-  --orderType: string # Order type (default: )
+  --order-type: string # Order type (default: )
   pricetable: string # Name of the Price Table associated with the scenario (default: )
   --state: string # Delivery location (default: )
 ]: any -> record<email: any, id: int, orderType: string, pricetable: string, state: string> {
@@ -111,9 +111,9 @@ export def "v-custom-prices-rules post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/_v/custom-prices/rules")
-  let body = {email: $email, orderType: $orderType, pricetable: $pricetable, state: $state} | compact
+  let body = {"email": $email, "orderType": $order_type, "pricetable": $pricetable, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -124,7 +124,7 @@ export def "v-custom-prices-rules post" [
 #
 # DELETE /_v/custom-prices/rules/{priceAssociationId}
 export def "v-custom-prices-rules delete" [
-  priceAssociationId: int
+  price_association_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,13 +133,13 @@ export def "v-custom-prices-rules delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/_v/custom-prices/rules/($priceAssociationId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({price_association_id: $price_association_id} | format pattern "/_v/custom-prices/rules/{price_association_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -150,7 +150,7 @@ export def "v-custom-prices-rules delete" [
 #
 # GET /_v/custom-prices/rules/{priceAssociationId}
 export def "v-custom-prices-rules get" [
-  priceAssociationId: int
+  price_association_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,13 +159,13 @@ export def "v-custom-prices-rules get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
 ]: nothing -> record<email: any, id: int, orderType: string, pricetable: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/_v/custom-prices/rules/($priceAssociationId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({price_association_id: $price_association_id} | format pattern "/_v/custom-prices/rules/{price_association_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -176,7 +176,7 @@ export def "v-custom-prices-rules get" [
 #
 # PUT /_v/custom-prices/rules/{priceAssociationId}
 export def "v-custom-prices-rules put" [
-  priceAssociationId: int
+  price_association_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,19 +185,19 @@ export def "v-custom-prices-rules put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
-  orderType: string # Order type (default: orderType)
+  --content-type: string # Describes the type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  order_type: string # Order type (default: orderType)
   pricetable: string # Name of the Price Table associated with the scenario (default: pricetable1)
   state: string # Delivery location (default: RR)
 ]: any -> record<email: any, id: int, orderType: string, pricetable: string, state: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/_v/custom-prices/rules/($priceAssociationId)")
-  let body = {orderType: $orderType, pricetable: $pricetable, state: $state} | compact
+  let full_url = (build-url $base ({price_association_id: $price_association_id} | format pattern "/_v/custom-prices/rules/{price_association_id}"))
+  let body = {"orderType": $order_type, "pricetable": $pricetable, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -216,13 +216,13 @@ export def "v-custom-prices-session-schema get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
 ]: nothing -> record<fields: table<name: string, type: string>, useEmail: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/_v/custom-prices/session/schema")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -242,18 +242,18 @@ export def "v-custom-prices-session-schema post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
   fields: list # Order Configuration criteria (default: [{name: orderType, type: string}, {name: state, type: string}]) — item shape: {name: string, type: string}
-  --useEmail: oneof<nothing, bool> # If the custom price should use the user's e-mail to validate it (default: true)
+  --use-email: oneof<nothing, bool> # If the custom price should use the user's e-mail to validate it (default: true)
 ]: any -> record<fields: table<name: string, type: string>, useEmail: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/_v/custom-prices/session/schema")
-  let body = {fields: $fields, useEmail: $useEmail} | compact
+  let body = {"fields": $fields, "useEmail": $use_email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -273,17 +273,17 @@ export def "sessions post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
   public: record # Object to register session criteria (default: {}) — shape: {customSessionKeys: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sessions/")
-  let body = {public: $public} | compact
+  let body = {"public": $public} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

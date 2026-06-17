@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-authorization-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-authorization-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Authorization/operations
 # operationId: AuthorizationOperations_List
-export def "providers-microsoft-authorization-operations List" [
+export def "providers-microsoft-authorization-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-authorization-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/locks
 # operationId: ManagementLocks_ListAtSubscriptionLevel
-export def "subscriptions-providers-microsoft-authorization-locks ListAtSubscriptionLevel" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-authorization-locks list-at-subscription-level" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,7 +133,7 @@ export def "subscriptions-providers-microsoft-authorization-locks ListAtSubscrip
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Authorization/locks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Authorization/locks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,9 +143,9 @@ export def "subscriptions-providers-microsoft-authorization-locks ListAtSubscrip
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_DeleteAtSubscriptionLevel
-export def "subscriptions-providers-microsoft-authorization-locks DeleteAtSubscriptionLevel" [
-  lockName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-authorization-locks delete-at-subscription-level" [
+  subscription_id: string
+  lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "subscriptions-providers-microsoft-authorization-locks DeleteAtSubscr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Authorization/locks/($lockName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, lock_name: $lock_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Authorization/locks/{lock_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,9 +169,9 @@ export def "subscriptions-providers-microsoft-authorization-locks DeleteAtSubscr
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_GetAtSubscriptionLevel
-export def "subscriptions-providers-microsoft-authorization-locks GetAtSubscriptionLevel" [
-  lockName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-authorization-locks get-at-subscription-level" [
+  subscription_id: string
+  lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "subscriptions-providers-microsoft-authorization-locks GetAtSubscript
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Authorization/locks/($lockName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, lock_name: $lock_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Authorization/locks/{lock_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -196,9 +196,9 @@ export def "subscriptions-providers-microsoft-authorization-locks GetAtSubscript
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_CreateOrUpdateAtSubscriptionLevel
 # --properties shape: {level: "NotSpecified"|"CanNotDelete"|"ReadOnly", notes?: string, owners?: list}
-export def "subscriptions-providers-microsoft-authorization-locks CreateOrUpdateAtSubscriptionLevel" [
-  lockName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-authorization-locks create-or-update-at-subscription-level" [
+  subscription_id: string
+  lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,8 +214,8 @@ export def "subscriptions-providers-microsoft-authorization-locks CreateOrUpdate
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Authorization/locks/($lockName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, lock_name: $lock_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Authorization/locks/{lock_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -226,9 +226,9 @@ export def "subscriptions-providers-microsoft-authorization-locks CreateOrUpdate
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/locks
 # operationId: ManagementLocks_ListAtResourceGroupLevel
-export def "subscriptions-resource-groups-providers-microsoft-authorization-locks ListAtResourceGroupLevel" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-authorization-locks list-at-resource-group-level" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-lock
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Authorization/locks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Authorization/locks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,10 +253,10 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-lock
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_DeleteAtResourceGroupLevel
-export def "subscriptions-resource-groups-providers-microsoft-authorization-locks DeleteAtResourceGroupLevel" [
-  resourceGroupName: string
-  lockName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-authorization-locks delete-at-resource-group-level" [
+  subscription_id: string
+  resource_group_name: string
+  lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-lock
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Authorization/locks/($lockName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lock_name: $lock_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Authorization/locks/{lock_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -280,10 +280,10 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-lock
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_GetAtResourceGroupLevel
-export def "subscriptions-resource-groups-providers-microsoft-authorization-locks GetAtResourceGroupLevel" [
-  resourceGroupName: string
-  lockName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-authorization-locks get-at-resource-group-level" [
+  subscription_id: string
+  resource_group_name: string
+  lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -297,7 +297,7 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-lock
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Authorization/locks/($lockName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lock_name: $lock_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Authorization/locks/{lock_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -308,10 +308,10 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-lock
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_CreateOrUpdateAtResourceGroupLevel
 # --properties shape: {level: "NotSpecified"|"CanNotDelete"|"ReadOnly", notes?: string, owners?: list}
-export def "subscriptions-resource-groups-providers-microsoft-authorization-locks CreateOrUpdateAtResourceGroupLevel" [
-  resourceGroupName: string
-  lockName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-authorization-locks create-or-update-at-resource-group-level" [
+  subscription_id: string
+  resource_group_name: string
+  lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,8 +327,8 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-lock
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Authorization/locks/($lockName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, lock_name: $lock_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Authorization/locks/{lock_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -339,13 +339,13 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-lock
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/locks
 # operationId: ManagementLocks_ListAtResourceLevel
-export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-locks ListAtResourceLevel" [
-  resourceGroupName: string
-  resourceProviderNamespace: string
-  parentResourcePath: string
-  resourceType: string
-  resourceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-locks list-at-resource-level" [
+  subscription_id: string
+  resource_group_name: string
+  resource_provider_namespace: string
+  parent_resource_path: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,7 +360,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($resourceProviderNamespace)/($parentResourcePath)/($resourceType)/($resourceName)/providers/Microsoft.Authorization/locks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_provider_namespace: $resource_provider_namespace, parent_resource_path: $parent_resource_path, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{resource_provider_namespace}/{parent_resource_path}/{resource_type}/{resource_name}/providers/Microsoft.Authorization/locks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -370,14 +370,14 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_DeleteAtResourceLevel
-export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-locks DeleteAtResourceLevel" [
-  resourceGroupName: string
-  resourceProviderNamespace: string
-  parentResourcePath: string
-  resourceType: string
-  resourceName: string
-  lockName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-locks delete-at-resource-level" [
+  subscription_id: string
+  resource_group_name: string
+  resource_provider_namespace: string
+  parent_resource_path: string
+  resource_type: string
+  resource_name: string
+  lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,7 +391,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($resourceProviderNamespace)/($parentResourcePath)/($resourceType)/($resourceName)/providers/Microsoft.Authorization/locks/($lockName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_provider_namespace: $resource_provider_namespace, parent_resource_path: $parent_resource_path, resource_type: $resource_type, resource_name: $resource_name, lock_name: $lock_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{resource_provider_namespace}/{parent_resource_path}/{resource_type}/{resource_name}/providers/Microsoft.Authorization/locks/{lock_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -401,14 +401,14 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_GetAtResourceLevel
-export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-locks GetAtResourceLevel" [
-  resourceGroupName: string
-  resourceProviderNamespace: string
-  parentResourcePath: string
-  resourceType: string
-  resourceName: string
-  lockName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-locks get-at-resource-level" [
+  subscription_id: string
+  resource_group_name: string
+  resource_provider_namespace: string
+  parent_resource_path: string
+  resource_type: string
+  resource_name: string
+  lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +422,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($resourceProviderNamespace)/($parentResourcePath)/($resourceType)/($resourceName)/providers/Microsoft.Authorization/locks/($lockName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_provider_namespace: $resource_provider_namespace, parent_resource_path: $parent_resource_path, resource_type: $resource_type, resource_name: $resource_name, lock_name: $lock_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{resource_provider_namespace}/{parent_resource_path}/{resource_type}/{resource_name}/providers/Microsoft.Authorization/locks/{lock_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -433,14 +433,14 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_CreateOrUpdateAtResourceLevel
 # --properties shape: {level: "NotSpecified"|"CanNotDelete"|"ReadOnly", notes?: string, owners?: list}
-export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-locks CreateOrUpdateAtResourceLevel" [
-  resourceGroupName: string
-  resourceProviderNamespace: string
-  parentResourcePath: string
-  resourceType: string
-  resourceName: string
-  lockName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-locks create-or-update-at-resource-level" [
+  subscription_id: string
+  resource_group_name: string
+  resource_provider_namespace: string
+  parent_resource_path: string
+  resource_type: string
+  resource_name: string
+  lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,8 +456,8 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($resourceProviderNamespace)/($parentResourcePath)/($resourceType)/($resourceName)/providers/Microsoft.Authorization/locks/($lockName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_provider_namespace: $resource_provider_namespace, parent_resource_path: $parent_resource_path, resource_type: $resource_type, resource_name: $resource_name, lock_name: $lock_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{resource_provider_namespace}/{parent_resource_path}/{resource_type}/{resource_name}/providers/Microsoft.Authorization/locks/{lock_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -468,7 +468,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
 #
 # GET /{scope}/providers/Microsoft.Authorization/locks
 # operationId: ManagementLocks_ListByScope
-export def "providers-microsoft-authorization-locks ListByScope" [
+export def "providers-microsoft-authorization-locks list-by" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -484,7 +484,7 @@ export def "providers-microsoft-authorization-locks ListByScope" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Authorization/locks" $qp)
+  let full_url = (build-url $base ({scope: $scope} | format pattern "/{scope}/providers/Microsoft.Authorization/locks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -494,9 +494,9 @@ export def "providers-microsoft-authorization-locks ListByScope" [
 #
 # DELETE /{scope}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_DeleteByScope
-export def "providers-microsoft-authorization-locks DeleteByScope" [
+export def "providers-microsoft-authorization-locks delete-by" [
   scope: string
-  lockName: string
+  lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,7 +510,7 @@ export def "providers-microsoft-authorization-locks DeleteByScope" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Authorization/locks/($lockName)" $qp)
+  let full_url = (build-url $base ({scope: $scope, lock_name: $lock_name} | format pattern "/{scope}/providers/Microsoft.Authorization/locks/{lock_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -520,9 +520,9 @@ export def "providers-microsoft-authorization-locks DeleteByScope" [
 #
 # GET /{scope}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_GetByScope
-export def "providers-microsoft-authorization-locks GetByScope" [
+export def "providers-microsoft-authorization-locks get-by" [
   scope: string
-  lockName: string
+  lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -536,7 +536,7 @@ export def "providers-microsoft-authorization-locks GetByScope" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Authorization/locks/($lockName)" $qp)
+  let full_url = (build-url $base ({scope: $scope, lock_name: $lock_name} | format pattern "/{scope}/providers/Microsoft.Authorization/locks/{lock_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -547,9 +547,9 @@ export def "providers-microsoft-authorization-locks GetByScope" [
 # PUT /{scope}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_CreateOrUpdateByScope
 # --properties shape: {level: "NotSpecified"|"CanNotDelete"|"ReadOnly", notes?: string, owners?: list}
-export def "providers-microsoft-authorization-locks CreateOrUpdateByScope" [
+export def "providers-microsoft-authorization-locks create-or-update" [
   scope: string
-  lockName: string
+  lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,8 +565,8 @@ export def "providers-microsoft-authorization-locks CreateOrUpdateByScope" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Authorization/locks/($lockName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({scope: $scope, lock_name: $lock_name} | format pattern "/{scope}/providers/Microsoft.Authorization/locks/{lock_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

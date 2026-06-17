@@ -122,15 +122,15 @@ export def "extractor post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  extractorId: string # e.g. 00000000-0000-0000-0000-000000000000
+  extractor_id: string # e.g. 00000000-0000-0000-0000-000000000000
   interval: string # e.g. 15 * * * *
-  --startTimestamp: int # format: int64, e.g. 1485448509727
+  --start-timestamp: int # format: int64, e.g. 1485448509727
 ]: any -> record<extractorId: string, interval: string, intervalData: record<minutes: string, time: string, type: string>, nextRunAt: int, ownerId: string, startTimestamp: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-_apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/extractor")
-  let body = {extractorId: $extractorId, interval: $interval, startTimestamp: $startTimestamp} | compact
+  let body = {"extractorId": $extractor_id, "interval": $interval, "startTimestamp": $start_timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -141,7 +141,7 @@ export def "extractor post" [
 #
 # DELETE /extractor/{extractorId}/
 export def "extractor delete" [
-  extractorId: string
+  extractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,7 +153,7 @@ export def "extractor delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-_apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extractor/($extractorId)/")
+  let full_url = (build-url $base ({extractor_id: $extractor_id} | format pattern "/extractor/{extractor_id}/"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -163,7 +163,7 @@ export def "extractor delete" [
 #
 # GET /extractor/{extractorId}/
 export def "extractor get" [
-  extractorId: string
+  extractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "extractor get" [
 ]: nothing -> record<extractorId: string, interval: string, intervalData: record<minutes: string, time: string, type: string>, nextRunAt: int, ownerId: string, startTimestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-_apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extractor/($extractorId)/")
+  let full_url = (build-url $base ({extractor_id: $extractor_id} | format pattern "/extractor/{extractor_id}/"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

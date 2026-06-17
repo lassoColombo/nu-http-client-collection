@@ -116,7 +116,7 @@ export def "post-review post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_email" $user_email "scalar") (serialize-qp "user_name" $user_name "scalar") (serialize-qp "rating" $rating "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/post-review" $qp)
-  let body = {rating: $rating, user_email: $user_email, user_name: $user_name} | compact
+  let body = {"rating": $rating, "user_email": $user_email, "user_name": $user_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

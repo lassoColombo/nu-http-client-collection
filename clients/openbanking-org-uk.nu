@@ -100,13 +100,13 @@ export def "atms get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Modified-Since: string # Used for conditional request, to retrieve data only if modified since a given date
-  --If-None-Match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
+  --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
+  --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/atms")
-  let extra_headers = {"If-Modified-Since": $If_Modified_Since, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/prs.openbanking.opendata.v1.3+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -125,13 +125,13 @@ export def "atms head" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Modified-Since: string # Used for conditional request, to retrieve data only if modified since a given date
-  --If-None-Match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
+  --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
+  --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/atms")
-  let extra_headers = {"If-Modified-Since": $If_Modified_Since, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/prs.openbanking.opendata.v1.3+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -150,13 +150,13 @@ export def "branches get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Modified-Since: string # Used for conditional request, to retrieve data only if modified since a given date
-  --If-None-Match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
+  --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
+  --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/branches")
-  let extra_headers = {"If-Modified-Since": $If_Modified_Since, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/prs.openbanking.opendata.v1.3+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -175,13 +175,13 @@ export def "branches head" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Modified-Since: string # Used for conditional request, to retrieve data only if modified since a given date
-  --If-None-Match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
+  --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
+  --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/branches")
-  let extra_headers = {"If-Modified-Since": $If_Modified_Since, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/prs.openbanking.opendata.v1.3+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,13 +200,13 @@ export def "business-current-accounts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Modified-Since: string # Used for conditional request, to retrieve data only if modified since a given date
-  --If-None-Match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
+  --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
+  --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/business-current-accounts")
-  let extra_headers = {"If-Modified-Since": $If_Modified_Since, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/prs.openbanking.opendata.v1.3+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -225,13 +225,13 @@ export def "business-current-accounts head" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Modified-Since: string # Used for conditional request, to retrieve data only if modified since a given date
-  --If-None-Match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
+  --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
+  --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/business-current-accounts")
-  let extra_headers = {"If-Modified-Since": $If_Modified_Since, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/prs.openbanking.opendata.v1.3+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -250,13 +250,13 @@ export def "commercial-credit-cards get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Modified-Since: string # Used for conditional request, to retrieve data only if modified since a given date
-  --If-None-Match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
+  --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
+  --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/commercial-credit-cards")
-  let extra_headers = {"If-Modified-Since": $If_Modified_Since, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/prs.openbanking.opendata.v1.3+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -275,13 +275,13 @@ export def "commercial-credit-cards head" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Modified-Since: string # Used for conditional request, to retrieve data only if modified since a given date
-  --If-None-Match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
+  --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
+  --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/commercial-credit-cards")
-  let extra_headers = {"If-Modified-Since": $If_Modified_Since, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/prs.openbanking.opendata.v1.3+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -300,13 +300,13 @@ export def "personal-current-accounts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Modified-Since: string # Used for conditional request, to retrieve data only if modified since a given date
-  --If-None-Match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
+  --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
+  --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/personal-current-accounts")
-  let extra_headers = {"If-Modified-Since": $If_Modified_Since, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/prs.openbanking.opendata.v1.3+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -325,13 +325,13 @@ export def "personal-current-accounts head" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Modified-Since: string # Used for conditional request, to retrieve data only if modified since a given date
-  --If-None-Match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
+  --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
+  --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/personal-current-accounts")
-  let extra_headers = {"If-Modified-Since": $If_Modified_Since, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/prs.openbanking.opendata.v1.3+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -350,13 +350,13 @@ export def "unsecured-sme-loans get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Modified-Since: string # Used for conditional request, to retrieve data only if modified since a given date
-  --If-None-Match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
+  --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
+  --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/unsecured-sme-loans")
-  let extra_headers = {"If-Modified-Since": $If_Modified_Since, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/prs.openbanking.opendata.v1.3+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -375,13 +375,13 @@ export def "unsecured-sme-loans head" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Modified-Since: string # Used for conditional request, to retrieve data only if modified since a given date
-  --If-None-Match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
+  --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
+  --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/unsecured-sme-loans")
-  let extra_headers = {"If-Modified-Since": $If_Modified_Since, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/prs.openbanking.opendata.v1.3+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

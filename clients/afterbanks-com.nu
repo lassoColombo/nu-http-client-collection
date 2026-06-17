@@ -148,7 +148,7 @@ export def "service-v3 post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --servicekey: string # Licencia que identifica al cliente. Si no tienes una, puedes solicitarla en https://www.afterbanks.com
   --service: string # Identificador único para cada banco. El listado de bancos soportados se obtiene de https://www.afterbanks.com/forms/
-  --documentType: float # Algunos bancos, en su formulario de login, solicitan el tipo de documento. En estos casos, se deberá identificar un número entero (de 0 a 4), que corresponde con su posición en el formulario de login del banco. (format: int32)
+  --document-type: float # Algunos bancos, en su formulario de login, solicitan el tipo de documento. En estos casos, se deberá identificar un número entero (de 0 a 4), que corresponde con su posición en el formulario de login del banco. (format: int32)
   --user: string # Usuario
   --pass: string # Contraseña
   --pass2: string # Algunos bancos utilizan una segunda contraseña.
@@ -157,7 +157,7 @@ export def "service-v3 post" [
 ]: nothing -> table<arranged_balance: float, balance: float, balance_credit_granted: float, balance_value: float, countable_balance: float, currency: string, description: string, product: string, transactions: list<record>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "servicekey" $servicekey "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "documentType" $documentType "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "pass" $pass "scalar") (serialize-qp "pass2" $pass2 "scalar") (serialize-qp "products" $products "scalar") (serialize-qp "startdate" $startdate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "servicekey" $servicekey "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "documentType" $document_type "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "pass" $pass "scalar") (serialize-qp "pass2" $pass2 "scalar") (serialize-qp "products" $products "scalar") (serialize-qp "startdate" $startdate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/serviceV3" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

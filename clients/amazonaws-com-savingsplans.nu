@@ -66,12 +66,12 @@ def base-url-completer [] { ["http://savingsplans.us-east-1.amazonaws.com" "http
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def productType-completer [] { ["EC2" "Fargate" "Lambda" "SageMaker"] }
+def product-type-completer [] { ["EC2" "Fargate" "Lambda" "SageMaker"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-savings-plan CreateSavingsPlan" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-savings-plan create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # POST /CreateSavingsPlan
 # operationId: CreateSavingsPlan
-export def "create-savings-plan CreateSavingsPlan" [
+export def "create-savings-plan create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,27 +104,27 @@ export def "create-savings-plan CreateSavingsPlan" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  savingsPlanOfferingId: string # The ID of the offering.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  savings_plan_offering_id: string # The ID of the offering.
   commitment: string # The hourly commitment, in USD. This is a value between 0.001 and 1 million. You cannot specify more than five digits after the decimal point.
-  --upfrontPaymentAmount: string # The up-front payment amount. This is a whole number between 50 and 99 percent of the total value of the Savings Plan. This parameter is supported only if the payment option is <code>Partial Upfront</code>.
-  --purchaseTime: string # The time at which to purchase the Savings Plan, in UTC format (YYYY-MM-DDTHH:MM:SSZ). (format: date-time)
-  --clientToken: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
+  --upfront-payment-amount: string # The up-front payment amount. This is a whole number between 50 and 99 percent of the total value of the Savings Plan. This parameter is supported only if the payment option is <code>Partial Upfront</code>.
+  --purchase-time: string # The time at which to purchase the Savings Plan, in UTC format (YYYY-MM-DDTHH:MM:SSZ). (format: date-time)
+  --client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   --tags: record # One or more tags.
 ]: any -> record<savingsPlanId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CreateSavingsPlan")
-  let body = {savingsPlanOfferingId: $savingsPlanOfferingId, commitment: $commitment, upfrontPaymentAmount: $upfrontPaymentAmount, purchaseTime: $purchaseTime, clientToken: $clientToken, tags: $tags} | compact
+  let body = {"savingsPlanOfferingId": $savings_plan_offering_id, "commitment": $commitment, "upfrontPaymentAmount": $upfront_payment_amount, "purchaseTime": $purchase_time, "clientToken": $client_token, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -135,7 +135,7 @@ export def "create-savings-plan CreateSavingsPlan" [
 #
 # POST /DeleteQueuedSavingsPlan
 # operationId: DeleteQueuedSavingsPlan
-export def "delete-queued-savings-plan DeleteQueuedSavingsPlan" [
+export def "delete-queued-savings-plan delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -144,22 +144,22 @@ export def "delete-queued-savings-plan DeleteQueuedSavingsPlan" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  savingsPlanId: string # The ID of the Savings Plan.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  savings_plan_id: string # The ID of the Savings Plan.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DeleteQueuedSavingsPlan")
-  let body = {savingsPlanId: $savingsPlanId} | compact
+  let body = {"savingsPlanId": $savings_plan_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -171,7 +171,7 @@ export def "delete-queued-savings-plan DeleteQueuedSavingsPlan" [
 # POST /DescribeSavingsPlanRates
 # operationId: DescribeSavingsPlanRates
 # --filters item shape: {name?: any, values?: any}
-export def "describe-savings-plan-rates DescribeSavingsPlanRates" [
+export def "describe-savings-plan-rates post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,25 +180,25 @@ export def "describe-savings-plan-rates DescribeSavingsPlanRates" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  savingsPlanId: string # The ID of the Savings Plan.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  savings_plan_id: string # The ID of the Savings Plan.
   --filters: list # The filters. — item shape: {name?: any, values?: any}
-  --nextToken: string # The token for the next page of results.
-  --maxResults: int # The maximum number of results to return with a single call. To retrieve additional results, make another call with the returned token value.
+  --next-token: string # The token for the next page of results.
+  --max-results: int # The maximum number of results to return with a single call. To retrieve additional results, make another call with the returned token value.
 ]: any -> record<savingsPlanId: record, searchResults: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DescribeSavingsPlanRates")
-  let body = {savingsPlanId: $savingsPlanId, filters: $filters, nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"savingsPlanId": $savings_plan_id, "filters": $filters, "nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -210,7 +210,7 @@ export def "describe-savings-plan-rates DescribeSavingsPlanRates" [
 # POST /DescribeSavingsPlans
 # operationId: DescribeSavingsPlans
 # --filters item shape: {name?: any, values?: any}
-export def "describe-savings-plans DescribeSavingsPlans" [
+export def "describe-savings-plans post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,17 +219,17 @@ export def "describe-savings-plans DescribeSavingsPlans" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --savingsPlanArns: list # The Amazon Resource Names (ARN) of the Savings Plans.
-  --savingsPlanIds: list # The IDs of the Savings Plans.
-  --nextToken: string # The token for the next page of results.
-  --maxResults: int # The maximum number of results to return with a single call. To retrieve additional results, make another call with the returned token value.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --savings-plan-arns: list # The Amazon Resource Names (ARN) of the Savings Plans.
+  --savings-plan-ids: list # The IDs of the Savings Plans.
+  --next-token: string # The token for the next page of results.
+  --max-results: int # The maximum number of results to return with a single call. To retrieve additional results, make another call with the returned token value.
   --states: list # The states.
   --filters: list # The filters. — item shape: {name?: any, values?: any}
 ]: any -> record<savingsPlans: record, nextToken: record> {
@@ -237,9 +237,9 @@ export def "describe-savings-plans DescribeSavingsPlans" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DescribeSavingsPlans")
-  let body = {savingsPlanArns: $savingsPlanArns, savingsPlanIds: $savingsPlanIds, nextToken: $nextToken, maxResults: $maxResults, states: $states, filters: $filters} | compact
+  let body = {"savingsPlanArns": $savings_plan_arns, "savingsPlanIds": $savings_plan_ids, "nextToken": $next_token, "maxResults": $max_results, "states": $states, "filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -251,7 +251,7 @@ export def "describe-savings-plans DescribeSavingsPlans" [
 # POST /DescribeSavingsPlansOfferingRates
 # operationId: DescribeSavingsPlansOfferingRates
 # --filters item shape: {name?: any, values?: any}
-export def "describe-savings-plans-offering-rates DescribeSavingsPlansOfferingRates" [
+export def "describe-savings-plans-offering-rates post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,31 +260,31 @@ export def "describe-savings-plans-offering-rates DescribeSavingsPlansOfferingRa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --savingsPlanOfferingIds: list # The IDs of the offerings.
-  --savingsPlanPaymentOptions: list # The payment options.
-  --savingsPlanTypes: list # The plan types.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --savings-plan-offering-ids: list # The IDs of the offerings.
+  --savings-plan-payment-options: list # The payment options.
+  --savings-plan-types: list # The plan types.
   --products: list # The AWS products.
-  --serviceCodes: list # The services.
-  --usageTypes: list # The usage details of the line item in the billing report.
+  --service-codes: list # The services.
+  --usage-types: list # The usage details of the line item in the billing report.
   --operations: list # The specific AWS operation for the line item in the billing report.
   --filters: list # The filters. — item shape: {name?: any, values?: any}
-  --nextToken: string # The token for the next page of results.
-  --maxResults: int # The maximum number of results to return with a single call. To retrieve additional results, make another call with the returned token value.
+  --next-token: string # The token for the next page of results.
+  --max-results: int # The maximum number of results to return with a single call. To retrieve additional results, make another call with the returned token value.
 ]: any -> record<searchResults: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DescribeSavingsPlansOfferingRates")
-  let body = {savingsPlanOfferingIds: $savingsPlanOfferingIds, savingsPlanPaymentOptions: $savingsPlanPaymentOptions, savingsPlanTypes: $savingsPlanTypes, products: $products, serviceCodes: $serviceCodes, usageTypes: $usageTypes, operations: $operations, filters: $filters, nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"savingsPlanOfferingIds": $savings_plan_offering_ids, "savingsPlanPaymentOptions": $savings_plan_payment_options, "savingsPlanTypes": $savings_plan_types, "products": $products, "serviceCodes": $service_codes, "usageTypes": $usage_types, "operations": $operations, "filters": $filters, "nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -296,7 +296,7 @@ export def "describe-savings-plans-offering-rates DescribeSavingsPlansOfferingRa
 # POST /DescribeSavingsPlansOfferings
 # operationId: DescribeSavingsPlansOfferings
 # --filters item shape: {name?: any, values?: any}
-export def "describe-savings-plans-offerings DescribeSavingsPlansOfferings" [
+export def "describe-savings-plans-offerings post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,34 +305,34 @@ export def "describe-savings-plans-offerings DescribeSavingsPlansOfferings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --offeringIds: list # The IDs of the offerings.
-  --paymentOptions: list # The payment options.
-  --productType: string@productType-completer # The product type.
-  --planTypes: list # The plan type.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --offering-ids: list # The IDs of the offerings.
+  --payment-options: list # The payment options.
+  --product-type: string@product-type-completer # The product type.
+  --plan-types: list # The plan type.
   --durations: list # The durations, in seconds.
   --currencies: list # The currencies.
   --descriptions: list # The descriptions.
-  --serviceCodes: list # The services.
-  --usageTypes: list # The usage details of the line item in the billing report.
+  --service-codes: list # The services.
+  --usage-types: list # The usage details of the line item in the billing report.
   --operations: list # The specific AWS operation for the line item in the billing report.
   --filters: list # The filters. — item shape: {name?: any, values?: any}
-  --nextToken: string # The token for the next page of results.
-  --maxResults: int # The maximum number of results to return with a single call. To retrieve additional results, make another call with the returned token value.
+  --next-token: string # The token for the next page of results.
+  --max-results: int # The maximum number of results to return with a single call. To retrieve additional results, make another call with the returned token value.
 ]: any -> record<searchResults: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DescribeSavingsPlansOfferings")
-  let body = {offeringIds: $offeringIds, paymentOptions: $paymentOptions, productType: $productType, planTypes: $planTypes, durations: $durations, currencies: $currencies, descriptions: $descriptions, serviceCodes: $serviceCodes, usageTypes: $usageTypes, operations: $operations, filters: $filters, nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"offeringIds": $offering_ids, "paymentOptions": $payment_options, "productType": $product_type, "planTypes": $plan_types, "durations": $durations, "currencies": $currencies, "descriptions": $descriptions, "serviceCodes": $service_codes, "usageTypes": $usage_types, "operations": $operations, "filters": $filters, "nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -343,7 +343,7 @@ export def "describe-savings-plans-offerings DescribeSavingsPlansOfferings" [
 #
 # POST /ListTagsForResource
 # operationId: ListTagsForResource
-export def "list-tags-for-resource ListTagsForResource" [
+export def "list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,22 +352,22 @@ export def "list-tags-for-resource ListTagsForResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  resourceArn: string # The Amazon Resource Name (ARN) of the resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource.
 ]: any -> record<tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ListTagsForResource")
-  let body = {resourceArn: $resourceArn} | compact
+  let body = {"resourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -378,7 +378,7 @@ export def "list-tags-for-resource ListTagsForResource" [
 #
 # POST /TagResource
 # operationId: TagResource
-export def "tag-resource TagResource" [
+export def "tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -387,23 +387,23 @@ export def "tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  resourceArn: string # The Amazon Resource Name (ARN) of the resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource.
   tags: record # One or more tags. For example, { "tags": {"key1":"value1", "key2":"value2"} }.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/TagResource")
-  let body = {resourceArn: $resourceArn, tags: $tags} | compact
+  let body = {"resourceArn": $resource_arn, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -414,7 +414,7 @@ export def "tag-resource TagResource" [
 #
 # POST /UntagResource
 # operationId: UntagResource
-export def "untag-resource UntagResource" [
+export def "untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,23 +423,23 @@ export def "untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  resourceArn: string # The Amazon Resource Name (ARN) of the resource.
-  tagKeys: list # The tag keys.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource.
+  tag_keys: list # The tag keys.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/UntagResource")
-  let body = {resourceArn: $resourceArn, tagKeys: $tagKeys} | compact
+  let body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

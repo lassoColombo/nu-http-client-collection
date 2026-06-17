@@ -72,7 +72,7 @@ def status-completer [] { ["accepted" "arrived" "canceled" "droppedOff" "pending
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cost GetCost" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cost get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /cost
 # operationId: GetCost
-export def "cost GetCost" [
+export def "cost get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -124,7 +124,7 @@ export def "cost GetCost" [
 #
 # GET /drivers
 # operationId: GetDrivers
-export def "drivers GetDrivers" [
+export def "drivers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -149,7 +149,7 @@ export def "drivers GetDrivers" [
 #
 # GET /eta
 # operationId: GetETA
-export def "eta GetETA" [
+export def "eta get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "eta GetETA" [
 #
 # GET /profile
 # operationId: GetProfile
-export def "profile GetProfile" [
+export def "profile get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "profile GetProfile" [
 #
 # GET /rides
 # operationId: GetRides
-export def "rides GetRides" [
+export def "rides list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +225,7 @@ export def "rides GetRides" [
 #
 # POST /rides
 # operationId: NewRide
-export def "rides NewRide" [
+export def "rides post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "rides NewRide" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rides")
-  let body = {cost_token: $cost_token, destination: $destination, origin: $origin, primetime_confirmation_token: $primetime_confirmation_token, ride_type: $ride_type} | compact
+  let body = {"cost_token": $cost_token, "destination": $destination, "origin": $origin, "primetime_confirmation_token": $primetime_confirmation_token, "ride_type": $ride_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -255,7 +255,7 @@ export def "rides NewRide" [
 #
 # GET /rides/{id}
 # operationId: GetRide
-export def "rides GetRide" [
+export def "rides get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -268,7 +268,7 @@ export def "rides GetRide" [
 ]: nothing -> record<beacon_color: string, can_cancel: list<string>, canceled_by: string, cancellation_price: record, destination: record, distance_miles: float, driver: record<first_name: string, image_url: string, phone_number: string, rating: string, user_id: string>, dropoff: record, duration_seconds: int, feedback: string, generated_at: string, line_items: table<amount: int, currency: string, type: string>, location: record, origin: record, passenger: record, pickup: record, price: record, pricing_details_url: string, primetime_percentage: string, rating: int, requested_at: string, ride_id: string, ride_profile: record, ride_type: string, route_url: string, status: string, vehicle: record<color: string, image_url: string, license_plate: string, license_plate_state: string, make: string, model: string, year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rides/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rides/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -278,7 +278,7 @@ export def "rides GetRide" [
 #
 # POST /rides/{id}/cancel
 # operationId: CancelRide
-export def "rides-cancel CancelRide" [
+export def "rides-cancel cancel" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,8 +293,8 @@ export def "rides-cancel CancelRide" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rides/($id)/cancel")
-  let body = {cancel_confirmation_token: $cancel_confirmation_token} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rides/{id}/cancel"))
+  let body = {"cancel_confirmation_token": $cancel_confirmation_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -305,7 +305,7 @@ export def "rides-cancel CancelRide" [
 #
 # PUT /rides/{id}/destination
 # operationId: SetRideDestination
-export def "rides-destination SetRideDestination" [
+export def "rides-destination put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -322,8 +322,8 @@ export def "rides-destination SetRideDestination" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rides/($id)/destination")
-  let body = {lat: $lat, lng: $lng, address: $address} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rides/{id}/destination"))
+  let body = {"lat": $lat, "lng": $lng, "address": $address} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -334,7 +334,7 @@ export def "rides-destination SetRideDestination" [
 #
 # PUT /rides/{id}/rating
 # operationId: SetRideRating
-export def "rides-rating SetRideRating" [
+export def "rides-rating put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -351,8 +351,8 @@ export def "rides-rating SetRideRating" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rides/($id)/rating")
-  let body = {feedback: $feedback, rating: $rating, tip: $tip} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rides/{id}/rating"))
+  let body = {"feedback": $feedback, "rating": $rating, "tip": $tip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -363,7 +363,7 @@ export def "rides-rating SetRideRating" [
 #
 # GET /rides/{id}/receipt
 # operationId: GetRideReceipt
-export def "rides-receipt GetRideReceipt" [
+export def "rides-receipt get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -376,7 +376,7 @@ export def "rides-receipt GetRideReceipt" [
 ]: nothing -> record<charges: table<amount: int, currency: string, payment_method: string>, line_items: table<amount: int, currency: string, type: string>, price: record, requested_at: string, ride_id: string, ride_profile: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rides/($id)/receipt")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rides/{id}/receipt"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -386,7 +386,7 @@ export def "rides-receipt GetRideReceipt" [
 #
 # GET /ridetypes
 # operationId: GetRideTypes
-export def "ridetypes GetRideTypes" [
+export def "ridetypes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +412,7 @@ export def "ridetypes GetRideTypes" [
 #
 # PUT /sandbox/primetime
 # operationId: SetPrimeTime
-export def "sandbox-primetime SetPrimeTime" [
+export def "sandbox-primetime put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,7 +429,7 @@ export def "sandbox-primetime SetPrimeTime" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/primetime")
-  let body = {lat: $lat, lng: $lng, primetime_percentage: $primetime_percentage} | compact
+  let body = {"lat": $lat, "lng": $lng, "primetime_percentage": $primetime_percentage} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -440,7 +440,7 @@ export def "sandbox-primetime SetPrimeTime" [
 #
 # PUT /sandbox/rides/{id}
 # operationId: SetRideStatus
-export def "sandbox-rides SetRideStatus" [
+export def "sandbox-rides put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -455,8 +455,8 @@ export def "sandbox-rides SetRideStatus" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sandbox/rides/($id)")
-  let body = {status: $status} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/sandbox/rides/{id}"))
+  let body = {"status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -467,7 +467,7 @@ export def "sandbox-rides SetRideStatus" [
 #
 # PUT /sandbox/ridetypes
 # operationId: SetRideTypes
-export def "sandbox-ridetypes SetRideTypes" [
+export def "sandbox-ridetypes put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "sandbox-ridetypes SetRideTypes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/ridetypes")
-  let body = {lat: $lat, lng: $lng, ride_types: $ride_types} | compact
+  let body = {"lat": $lat, "lng": $lng, "ride_types": $ride_types} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -495,7 +495,7 @@ export def "sandbox-ridetypes SetRideTypes" [
 #
 # PUT /sandbox/ridetypes/{ride_type}
 # operationId: SetRideTypeAvailability
-export def "sandbox-ridetypes SetRideTypeAvailability" [
+export def "sandbox-ridetypes put-by-ride_type" [
   ride_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,8 +512,8 @@ export def "sandbox-ridetypes SetRideTypeAvailability" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sandbox/ridetypes/($ride_type)")
-  let body = {driver_availability: $driver_availability, lat: $lat, lng: $lng} | compact
+  let full_url = (build-url $base ({ride_type: $ride_type} | format pattern "/sandbox/ridetypes/{ride_type}"))
+  let body = {"driver_availability": $driver_availability, "lat": $lat, "lng": $lng} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

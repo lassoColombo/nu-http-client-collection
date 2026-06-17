@@ -67,14 +67,14 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def type-completer [] { ["Microsoft.Cdn/Profiles/Endpoints"] }
-def certificateSource-completer [] { ["AzureKeyVault" "Cdn"] }
-def minimumTlsVersion-completer [] { ["None" "TLS10" "TLS12"] }
-def protocolType-completer [] { ["IPBased" "ServerNameIndication"] }
+def certificate-source-completer [] { ["AzureKeyVault" "Cdn"] }
+def minimum-tls-version-completer [] { ["None" "TLS10" "TLS12"] }
+def protocol-type-completer [] { ["IPBased" "ServerNameIndication"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-cdn-check-name-availability CheckNameAvailability" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-cdn-check-name-availability check" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +98,7 @@ export def commands []: nothing -> table {
 #
 # POST /providers/Microsoft.Cdn/checkNameAvailability
 # operationId: CheckNameAvailability
-export def "providers-microsoft-cdn-check-name-availability CheckNameAvailability" [
+export def "providers-microsoft-cdn-check-name-availability check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,7 +116,7 @@ export def "providers-microsoft-cdn-check-name-availability CheckNameAvailabilit
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Cdn/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -127,7 +127,7 @@ export def "providers-microsoft-cdn-check-name-availability CheckNameAvailabilit
 #
 # GET /providers/Microsoft.Cdn/edgenodes
 # operationId: EdgeNodes_List
-export def "providers-microsoft-cdn-edgenodes List" [
+export def "providers-microsoft-cdn-edgenodes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,7 +151,7 @@ export def "providers-microsoft-cdn-edgenodes List" [
 #
 # GET /providers/Microsoft.Cdn/operations
 # operationId: Operations_List
-export def "providers-microsoft-cdn-operations List" [
+export def "providers-microsoft-cdn-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,8 +175,8 @@ export def "providers-microsoft-cdn-operations List" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Cdn/checkNameAvailability
 # operationId: CheckNameAvailabilityWithSubscription
-export def "subscriptions-providers-microsoft-cdn-check-name-availability CheckNameAvailabilityWithSubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-cdn-check-name-availability check-name-availability-with" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,8 +193,8 @@ export def "subscriptions-providers-microsoft-cdn-check-name-availability CheckN
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Cdn/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Cdn/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -205,8 +205,8 @@ export def "subscriptions-providers-microsoft-cdn-check-name-availability CheckN
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Cdn/checkResourceUsage
 # operationId: ResourceUsage_List
-export def "subscriptions-providers-microsoft-cdn-check-resource-usage List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-cdn-check-resource-usage list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "subscriptions-providers-microsoft-cdn-check-resource-usage List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Cdn/checkResourceUsage" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Cdn/checkResourceUsage") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,8 +230,8 @@ export def "subscriptions-providers-microsoft-cdn-check-resource-usage List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Cdn/profiles
 # operationId: Profiles_List
-export def "subscriptions-providers-microsoft-cdn-profiles List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-cdn-profiles list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "subscriptions-providers-microsoft-cdn-profiles List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Cdn/profiles" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Cdn/profiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -255,8 +255,8 @@ export def "subscriptions-providers-microsoft-cdn-profiles List" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Cdn/validateProbe
 # operationId: ValidateProbe
-export def "subscriptions-providers-microsoft-cdn-validate-probe ValidateProbe" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-cdn-validate-probe validate" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,14 +266,14 @@ export def "subscriptions-providers-microsoft-cdn-validate-probe ValidateProbe" 
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-  probeURL: string # The probe URL to validate.
+  probe_url: string # The probe URL to validate.
 ]: any -> record<errorCode: string, isValid: bool, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Cdn/validateProbe" $qp)
-  let body = {probeURL: $probeURL} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Cdn/validateProbe") $qp)
+  let body = {"probeURL": $probe_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -284,9 +284,9 @@ export def "subscriptions-providers-microsoft-cdn-validate-probe ValidateProbe" 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles
 # operationId: Profiles_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +300,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles ListB
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -310,10 +310,10 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles ListB
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}
 # operationId: Profiles_Delete
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Delete" [
-  resourceGroupName: string
-  profileName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles delete" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Delet
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -337,10 +337,10 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Delet
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}
 # operationId: Profiles_Get
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Get" [
-  resourceGroupName: string
-  profileName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles get" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Get" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -364,10 +364,10 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Get" 
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}
 # operationId: Profiles_Update
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Update" [
-  resourceGroupName: string
-  profileName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles update" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -383,8 +383,8 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Updat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -396,10 +396,10 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Updat
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}
 # operationId: Profiles_Create
 # --sku shape: {name?: "Standard_Verizon"|"Premium_Verizon"|"Custom_Verizon"|"Standard_Akamai"|"Standard_ChinaCdn"|"Standard_Microsoft"|"Premium_ChinaCdn"}
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Create" [
-  resourceGroupName: string
-  profileName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles create" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,8 +418,8 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Creat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)" $qp)
-  let body = {properties: $properties, sku: $sku, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -430,10 +430,10 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles Creat
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/checkResourceUsage
 # operationId: Profiles_ListResourceUsage
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-check-resource-usage ListResourceUsage" [
-  resourceGroupName: string
-  profileName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-check-resource-usage list" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,7 +447,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-check
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/checkResourceUsage" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/checkResourceUsage") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -457,10 +457,10 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-check
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints
 # operationId: Endpoints_ListByProfile
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints ListByProfile" [
-  resourceGroupName: string
-  profileName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints list-by" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -474,7 +474,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -484,11 +484,11 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}
 # operationId: Endpoints_Delete
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints Delete" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints delete" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,7 +502,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -512,11 +512,11 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}
 # operationId: Endpoints_Get
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints Get" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints get" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,7 +530,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -541,11 +541,11 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}
 # operationId: Endpoints_Update
 # --properties shape: {contentTypesToCompress?: list, deliveryPolicy?: record, geoFilters?: list, isCompressionEnabled?: bool, isHttpAllowed?: bool, isHttpsAllowed?: bool, optimizationType?: "GeneralWebDelivery"|"GeneralMediaStreaming"|"VideoOnDemandMediaStreaming"|"LargeFileDownload"|"DynamicSiteAcceleration", originHostHeader?: string, originPath?: string, probePath?: string, queryStringCachingBehavior?: "IgnoreQueryString"|"BypassCaching"|"UseQueryString"|"NotSet", webApplicationFirewallPolicyLink?: record}
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints Update" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints update" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,8 +562,8 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -575,11 +575,11 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}
 # operationId: Endpoints_Create
 # --properties shape: {origins: list, contentTypesToCompress?: list, deliveryPolicy?: record, geoFilters?: list, isCompressionEnabled?: bool, isHttpAllowed?: bool, isHttpsAllowed?: bool, optimizationType?: "GeneralWebDelivery"|"GeneralMediaStreaming"|"VideoOnDemandMediaStreaming"|"LargeFileDownload"|"DynamicSiteAcceleration", originHostHeader?: string, originPath?: string, probePath?: string, queryStringCachingBehavior?: "IgnoreQueryString"|"BypassCaching"|"UseQueryString"|"NotSet", webApplicationFirewallPolicyLink?: record}
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints Create" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints create" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -597,8 +597,8 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -609,11 +609,11 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/checkResourceUsage
 # operationId: Endpoints_ListResourceUsage
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-check-resource-usage ListResourceUsage" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-check-resource-usage list" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -627,7 +627,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/checkResourceUsage" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/checkResourceUsage") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -637,11 +637,11 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/customDomains
 # operationId: CustomDomains_ListByEndpoint
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains ListByEndpoint" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains list-by" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,7 +655,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/customDomains" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/customDomains") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -665,12 +665,12 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/customDomains/{customDomainName}
 # operationId: CustomDomains_Delete
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains Delete" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  customDomainName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains delete" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
+  custom_domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,7 +684,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/customDomains/($customDomainName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name, custom_domain_name: $custom_domain_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/customDomains/{custom_domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -694,12 +694,12 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/customDomains/{customDomainName}
 # operationId: CustomDomains_Get
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains Get" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  customDomainName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains get" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
+  custom_domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,7 +713,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/customDomains/($customDomainName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name, custom_domain_name: $custom_domain_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/customDomains/{custom_domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -724,12 +724,12 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/customDomains/{customDomainName}
 # operationId: CustomDomains_Create
 # --properties shape: {hostName: string}
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains Create" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  customDomainName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains create" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
+  custom_domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -745,8 +745,8 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/customDomains/($customDomainName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name, custom_domain_name: $custom_domain_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/customDomains/{custom_domain_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -757,12 +757,12 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/customDomains/{customDomainName}/disableCustomHttps
 # operationId: CustomDomains_DisableCustomHttps
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains-disable-custom-https DisableCustomHttps" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  customDomainName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains-disable-custom-https disable" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
+  custom_domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -776,7 +776,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/customDomains/($customDomainName)/disableCustomHttps" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name, custom_domain_name: $custom_domain_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/customDomains/{custom_domain_name}/disableCustomHttps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -787,12 +787,12 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/customDomains/{customDomainName}/enableCustomHttps
 # Discriminator (request): certificateSource
 # operationId: CustomDomains_EnableCustomHttps
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains-enable-custom-https EnableCustomHttps" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  customDomainName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains-enable-custom-https enable" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
+  custom_domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,16 +802,16 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-  certificateSource: string@certificateSource-completer # Defines the source of the SSL certificate.
-  --minimumTlsVersion: string@minimumTlsVersion-completer # TLS protocol version that will be used for Https
-  protocolType: string@protocolType-completer # Defines the TLS extension protocol that is used for secure delivery.
+  certificate_source: string@certificate-source-completer # Defines the source of the SSL certificate.
+  --minimum-tls-version: string@minimum-tls-version-completer # TLS protocol version that will be used for Https
+  protocol_type: string@protocol-type-completer # Defines the TLS extension protocol that is used for secure delivery.
 ]: any -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/customDomains/($customDomainName)/enableCustomHttps" $qp)
-  let body = {certificateSource: $certificateSource, minimumTlsVersion: $minimumTlsVersion, protocolType: $protocolType} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name, custom_domain_name: $custom_domain_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/customDomains/{custom_domain_name}/enableCustomHttps") $qp)
+  let body = {"certificateSource": $certificate_source, "minimumTlsVersion": $minimum_tls_version, "protocolType": $protocol_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -822,11 +822,11 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/load
 # operationId: Endpoints_LoadContent
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-load LoadContent" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-load post" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -836,14 +836,14 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-  contentPaths: list # The path to the content to be loaded. Path should be a relative file URL of the origin.
+  content_paths: list # The path to the content to be loaded. Path should be a relative file URL of the origin.
 ]: any -> record<code: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/load" $qp)
-  let body = {contentPaths: $contentPaths} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/load") $qp)
+  let body = {"contentPaths": $content_paths} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -854,11 +854,11 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/origins
 # operationId: Origins_ListByEndpoint
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-origins ListByEndpoint" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-origins list-by" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,7 +872,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/origins" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/origins") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -882,12 +882,12 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/origins/{originName}
 # operationId: Origins_Get
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-origins Get" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  originName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-origins get" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
+  origin_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -901,7 +901,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/origins/($originName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name, origin_name: $origin_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/origins/{origin_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -912,12 +912,12 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/origins/{originName}
 # operationId: Origins_Update
 # --properties shape: {hostName?: string, httpPort?: int, httpsPort?: int}
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-origins Update" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  originName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-origins update" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
+  origin_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,8 +933,8 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/origins/($originName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name, origin_name: $origin_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/origins/{origin_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -945,11 +945,11 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/purge
 # operationId: Endpoints_PurgeContent
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-purge PurgeContent" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-purge post" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -959,14 +959,14 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-  contentPaths: list # The path to the content to be purged. Can describe a file path or a wild card directory.
+  content_paths: list # The path to the content to be purged. Can describe a file path or a wild card directory.
 ]: any -> record<code: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/purge" $qp)
-  let body = {contentPaths: $contentPaths} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/purge") $qp)
+  let body = {"contentPaths": $content_paths} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -977,11 +977,11 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/start
 # operationId: Endpoints_Start
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-start Start" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-start start" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -995,7 +995,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/start" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1005,11 +1005,11 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/stop
 # operationId: Endpoints_Stop
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-stop Stop" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-stop stop" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1023,7 +1023,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/stop" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1033,11 +1033,11 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/validateCustomDomain
 # operationId: Endpoints_ValidateCustomDomain
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-validate-custom-domain ValidateCustomDomain" [
-  resourceGroupName: string
-  profileName: string
-  endpointName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-validate-custom-domain validate" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1047,14 +1047,14 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-  hostName: string # The host name of the custom domain. Must be a domain name.
+  host_name: string # The host name of the custom domain. Must be a domain name.
 ]: any -> record<customDomainValidated: bool, message: string, reason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/endpoints/($endpointName)/validateCustomDomain" $qp)
-  let body = {hostName: $hostName} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/endpoints/{endpoint_name}/validateCustomDomain") $qp)
+  let body = {"hostName": $host_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1065,10 +1065,10 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/generateSsoUri
 # operationId: Profiles_GenerateSsoUri
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-generate-sso-uri GenerateSsoUri" [
-  resourceGroupName: string
-  profileName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-generate-sso-uri post" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1082,7 +1082,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-gener
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/generateSsoUri" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/generateSsoUri") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1092,10 +1092,10 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-gener
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/getSupportedOptimizationTypes
 # operationId: Profiles_ListSupportedOptimizationTypes
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-get-supported-optimization-types ListSupportedOptimizationTypes" [
-  resourceGroupName: string
-  profileName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-get-supported-optimization-types list" [
+  subscription_id: string
+  resource_group_name: string
+  profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1109,7 +1109,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-get-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/profiles/($profileName)/getSupportedOptimizationTypes" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/profiles/{profile_name}/getSupportedOptimizationTypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

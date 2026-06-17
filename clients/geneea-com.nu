@@ -72,7 +72,7 @@ def accept-completer [] { ["application/json" "text/plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get-info" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /account
 # operationId: getInfo
-export def "account get" [
+export def "account get-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,11 +132,11 @@ export def "s1-correction correctionGet" [
   --qp-url: string # document URL
   --extractor: string@extractor-completer # document extractor
   --language: string # document language
-  --returnTextInfo: oneof<nothing, bool>
+  --return-text-info: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $returnTextInfo "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $return_text_info "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/s1/correction" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -160,7 +160,7 @@ export def "s1-correction correctionPost" [
   --id: string # Unique identifier of the document, it's optional
   --language: string # [optional] The language of the document, auto-detection will be used if omitted
   --options: record # [optional] Additional options for the internal modules (key-value pairs)
-  --returnTextInfo: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
+  --return-text-info: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
   --text: string # The raw text to be analyzed, mutually exclusive with the 'url' parameter
   --body-url: string # URL of a document to be analysed, mutually exclusive with the 'text' parameter
 ]: any -> any {
@@ -168,7 +168,7 @@ export def "s1-correction correctionPost" [
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/s1/correction")
-  let body = {extractor: $extractor, id: $id, language: $language, options: $options, returnTextInfo: $returnTextInfo, text: $text, url: $body_url} | compact
+  let body = {"extractor": $extractor, "id": $id, "language": $language, "options": $options, "returnTextInfo": $return_text_info, "text": $text, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -193,11 +193,11 @@ export def "s1-entities entitiesGet" [
   --qp-url: string # document URL
   --extractor: string@extractor-completer # document extractor
   --language: string # document language
-  --returnTextInfo: oneof<nothing, bool>
+  --return-text-info: oneof<nothing, bool>
 ]: nothing -> record<entities: table<entity: string, links: record, sentiment: float, textOffset: int, type: string>, id: string, language: string, text: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $returnTextInfo "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $return_text_info "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/s1/entities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -221,7 +221,7 @@ export def "s1-entities entitiesPost" [
   --id: string # Unique identifier of the document, it's optional
   --language: string # [optional] The language of the document, auto-detection will be used if omitted
   --options: record # [optional] Additional options for the internal modules (key-value pairs)
-  --returnTextInfo: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
+  --return-text-info: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
   --text: string # The raw text to be analyzed, mutually exclusive with the 'url' parameter
   --body-url: string # URL of a document to be analysed, mutually exclusive with the 'text' parameter
 ]: any -> record<entities: table<entity: string, links: record, sentiment: float, textOffset: int, type: string>, id: string, language: string, text: string> {
@@ -229,7 +229,7 @@ export def "s1-entities entitiesPost" [
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/s1/entities")
-  let body = {extractor: $extractor, id: $id, language: $language, options: $options, returnTextInfo: $returnTextInfo, text: $text, url: $body_url} | compact
+  let body = {"extractor": $extractor, "id": $id, "language": $language, "options": $options, "returnTextInfo": $return_text_info, "text": $text, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -254,11 +254,11 @@ export def "s1-lemmatize lemmatizeGet" [
   --qp-url: string # document URL
   --extractor: string@extractor-completer # document extractor
   --language: string # document language
-  --returnTextInfo: oneof<nothing, bool>
+  --return-text-info: oneof<nothing, bool>
 ]: nothing -> record<id: string, language: string, lemmatizedText: string, text: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $returnTextInfo "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $return_text_info "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/s1/lemmatize" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -282,7 +282,7 @@ export def "s1-lemmatize lemmatizePost" [
   --id: string # Unique identifier of the document, it's optional
   --language: string # [optional] The language of the document, auto-detection will be used if omitted
   --options: record # [optional] Additional options for the internal modules (key-value pairs)
-  --returnTextInfo: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
+  --return-text-info: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
   --text: string # The raw text to be analyzed, mutually exclusive with the 'url' parameter
   --body-url: string # URL of a document to be analysed, mutually exclusive with the 'text' parameter
 ]: any -> record<id: string, language: string, lemmatizedText: string, text: string> {
@@ -290,7 +290,7 @@ export def "s1-lemmatize lemmatizePost" [
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/s1/lemmatize")
-  let body = {extractor: $extractor, id: $id, language: $language, options: $options, returnTextInfo: $returnTextInfo, text: $text, url: $body_url} | compact
+  let body = {"extractor": $extractor, "id": $id, "language": $language, "options": $options, "returnTextInfo": $return_text_info, "text": $text, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -315,11 +315,11 @@ export def "s1-sentiment sentimentGet" [
   --qp-url: string # document URL
   --extractor: string@extractor-completer # document extractor
   --language: string # document language
-  --returnTextInfo: oneof<nothing, bool>
+  --return-text-info: oneof<nothing, bool>
 ]: nothing -> record<id: string, language: string, sentiment: float, text: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $returnTextInfo "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $return_text_info "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/s1/sentiment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -343,7 +343,7 @@ export def "s1-sentiment sentimentPost" [
   --id: string # Unique identifier of the document, it's optional
   --language: string # [optional] The language of the document, auto-detection will be used if omitted
   --options: record # [optional] Additional options for the internal modules (key-value pairs)
-  --returnTextInfo: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
+  --return-text-info: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
   --text: string # The raw text to be analyzed, mutually exclusive with the 'url' parameter
   --body-url: string # URL of a document to be analysed, mutually exclusive with the 'text' parameter
 ]: any -> record<id: string, language: string, sentiment: float, text: string> {
@@ -351,7 +351,7 @@ export def "s1-sentiment sentimentPost" [
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/s1/sentiment")
-  let body = {extractor: $extractor, id: $id, language: $language, options: $options, returnTextInfo: $returnTextInfo, text: $text, url: $body_url} | compact
+  let body = {"extractor": $extractor, "id": $id, "language": $language, "options": $options, "returnTextInfo": $return_text_info, "text": $text, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -362,7 +362,7 @@ export def "s1-sentiment sentimentPost" [
 #
 # GET /s1/topic
 # operationId: topicGet
-export def "s1-topic topicGet" [
+export def "s1-topic top-ic-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,11 +376,11 @@ export def "s1-topic topicGet" [
   --qp-url: string # document URL
   --extractor: string@extractor-completer # document extractor
   --language: string # document language
-  --returnTextInfo: oneof<nothing, bool>
+  --return-text-info: oneof<nothing, bool>
 ]: nothing -> record<confidence: float, id: string, labels: table<confidence: float, label: string>, language: string, text: string, topic: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $returnTextInfo "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "extractor" $extractor "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "returnTextInfo" $return_text_info "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/s1/topic" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -391,7 +391,7 @@ export def "s1-topic topicGet" [
 #
 # POST /s1/topic
 # operationId: topicPost
-export def "s1-topic topicPost" [
+export def "s1-topic top-ic-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,7 +404,7 @@ export def "s1-topic topicPost" [
   --id: string # Unique identifier of the document, it's optional
   --language: string # [optional] The language of the document, auto-detection will be used if omitted
   --options: record # [optional] Additional options for the internal modules (key-value pairs)
-  --returnTextInfo: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
+  --return-text-info: oneof<nothing, bool> # [optional] Indicates whether to return the source text within the response object
   --text: string # The raw text to be analyzed, mutually exclusive with the 'url' parameter
   --body-url: string # URL of a document to be analysed, mutually exclusive with the 'text' parameter
 ]: any -> record<confidence: float, id: string, labels: table<confidence: float, label: string>, language: string, text: string, topic: string> {
@@ -412,7 +412,7 @@ export def "s1-topic topicPost" [
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/s1/topic")
-  let body = {extractor: $extractor, id: $id, language: $language, options: $options, returnTextInfo: $returnTextInfo, text: $text, url: $body_url} | compact
+  let body = {"extractor": $extractor, "id": $id, "language": $language, "options": $options, "returnTextInfo": $return_text_info, "text": $text, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -423,7 +423,7 @@ export def "s1-topic topicPost" [
 #
 # GET /status
 # operationId: status
-export def "status status" [
+export def "status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

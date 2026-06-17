@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-subscriptions-admin-locations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-subscriptions-admin-locations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Subscriptions.Admin/locations
 # operationId: Locations_List
-export def "subscriptions-providers-microsoft-subscriptions-admin-locations List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-subscriptions-admin-locations list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "subscriptions-providers-microsoft-subscriptions-admin-locations List
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Subscriptions.Admin/locations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Subscriptions.Admin/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,8 +118,8 @@ export def "subscriptions-providers-microsoft-subscriptions-admin-locations List
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Subscriptions.Admin/locations/{location}
 # operationId: Locations_Get
-export def "subscriptions-providers-microsoft-subscriptions-admin-locations Get" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-subscriptions-admin-locations get" [
+  subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -134,7 +134,7 @@ export def "subscriptions-providers-microsoft-subscriptions-admin-locations Get"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Subscriptions.Admin/locations/($location)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Subscriptions.Admin/locations/{location}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,8 +144,8 @@ export def "subscriptions-providers-microsoft-subscriptions-admin-locations Get"
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Subscriptions.Admin/locations/{location}
 # operationId: Locations_CreateOrUpdate
-export def "subscriptions-providers-microsoft-subscriptions-admin-locations CreateOrUpdate" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-subscriptions-admin-locations create-or-update" [
+  subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,7 +160,7 @@ export def "subscriptions-providers-microsoft-subscriptions-admin-locations Crea
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Subscriptions.Admin/locations/($location)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Subscriptions.Admin/locations/{location}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,10 +170,10 @@ export def "subscriptions-providers-microsoft-subscriptions-admin-locations Crea
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Subscriptions.Admin/locations/{location}/operationsStatus/{operationsStatusName}
 # operationId: Locations_GetOperationsStatus
-export def "subscriptions-providers-microsoft-subscriptions-admin-locations-operations-status GetOperationsStatus" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-subscriptions-admin-locations-operations-status get" [
+  subscription_id: string
   location: string
-  operationsStatusName: string
+  operations_status_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "subscriptions-providers-microsoft-subscriptions-admin-locations-oper
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Subscriptions.Admin/locations/($location)/operationsStatus/($operationsStatusName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location, operations_status_name: $operations_status_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Subscriptions.Admin/locations/{location}/operationsStatus/{operations_status_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

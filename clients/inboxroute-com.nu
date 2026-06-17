@@ -162,7 +162,7 @@ export def "contacts-lists post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contacts/lists")
-  let body = {customfields: $customfields, eventcustomizations: $eventcustomizations, name: $name} | compact
+  let body = {"customfields": $customfields, "eventcustomizations": $eventcustomizations, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -185,7 +185,7 @@ export def "contacts-lists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contacts/lists/($listid)")
+  let full_url = (build-url $base ({listid: $listid} | format pattern "/contacts/lists/{listid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -213,8 +213,8 @@ export def "contacts-lists put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contacts/lists/($listid)")
-  let body = {customfields: $customfields, eventcustomizations: $eventcustomizations, name: $name} | compact
+  let full_url = (build-url $base ({listid: $listid} | format pattern "/contacts/lists/{listid}"))
+  let body = {"customfields": $customfields, "eventcustomizations": $eventcustomizations, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -237,7 +237,7 @@ export def "contacts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contacts/($contactid)")
+  let full_url = (build-url $base ({contactid: $contactid} | format pattern "/contacts/{contactid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -265,8 +265,8 @@ export def "contacts put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/contacts/($contactid)")
-  let body = {confirmed: $confirmed, customfields: $customfields, email: $email, ip: $ip, status: $status} | compact
+  let full_url = (build-url $base ({contactid: $contactid} | format pattern "/contacts/{contactid}"))
+  let body = {"confirmed": $confirmed, "customfields": $customfields, "email": $email, "ip": $ip, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -296,8 +296,8 @@ export def "subscription post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscription/($listid)")
-  let body = {confirmed: $confirmed, email: $email, fullname: $fullname, ip: $ip, lang: $lang, singleoptin: $singleoptin} | compact
+  let full_url = (build-url $base ({listid: $listid} | format pattern "/subscription/{listid}"))
+  let body = {"confirmed": $confirmed, "email": $email, "fullname": $fullname, "ip": $ip, "lang": $lang, "singleoptin": $singleoptin} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

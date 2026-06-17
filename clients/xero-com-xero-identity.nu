@@ -103,11 +103,11 @@ export def "connections get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authEventId: string # Filter by authEventId (format: uuid, e.g. 00000000-0000-0000-0000-000000000000)
+  --auth-event-id: string # Filter by authEventId (format: uuid, e.g. 00000000-0000-0000-0000-000000000000)
 ]: nothing -> table<authEventId: string, createdDateUtc: string, id: string, tenantId: string, tenantName: string, tenantType: string, updatedDateUtc: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "authEventId" $authEventId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "authEventId" $auth_event_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Connections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -131,7 +131,7 @@ export def "connections delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Connections/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Connections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

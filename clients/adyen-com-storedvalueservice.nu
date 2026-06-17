@@ -67,9 +67,9 @@ def base-url-completer [] { ["https://pal-test.adyen.com/pal/servlet/StoredValue
 def auth-scheme-completer [] { ["x-api-key" "basic"] }
 
 # Completers for enum parameters
-def shopperInteraction-completer [] { ["ContAuth" "Ecommerce" "Moto" "POS"] }
+def shopper-interaction-completer [] { ["ContAuth" "Ecommerce" "Moto" "POS"] }
 def status-completer [] { ["active" "inactive"] }
-def loadType-completer [] { ["load" "merchandiseReturn"] }
+def load-type-completer [] { ["load" "merchandiseReturn"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -109,12 +109,12 @@ export def "change-status post-changeStatus" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --amount: record # shape: {currency: string, value: int}
-  merchantAccount: string # The merchant account identifier, with which you want to process the transaction.
-  paymentMethod: record # The collection that contains the type of the payment method and its specific information if available
-  --recurringDetailReference: string
+  merchant_account: string # The merchant account identifier, with which you want to process the transaction.
+  payment_method: record # The collection that contains the type of the payment method and its specific information if available
+  --recurring-detail-reference: string
   reference: string # The reference to uniquely identify a payment. This reference is used in all communication with you about the payment status. We recommend using a unique value per payment; however, it is not a requirement. If you need to provide multiple references for a transaction, separate them with hyphens ("-"). Maximum length: 80 characters.
-  --shopperInteraction: string@shopperInteraction-completer # Specifies the sales channel, through which the shopper gives their card details, and whether the shopper is a returning customer. For the web service API, Adyen assumes Ecommerce shopper interaction by default.  This field has the following possible values: * `Ecommerce` - Online transactions where the cardholder is present (online). For better authorisation rates, we recommend sending the card security code (CSC) along with the request. * `ContAuth` - Card on file and/or subscription transactions, where the cardholder is known to the merchant (returning customer). If the shopper is present (online), you can supply also the CSC to improve authorisation (one-click payment). * `Moto` - Mail-order and telephone-order transactions where the shopper is in contact with the merchant via email or telephone. * `POS` - Point-of-sale transactions where the shopper is physically present to make a payment using a secure payment terminal.
-  --shopperReference: string
+  --shopper-interaction: string@shopper-interaction-completer # Specifies the sales channel, through which the shopper gives their card details, and whether the shopper is a returning customer. For the web service API, Adyen assumes Ecommerce shopper interaction by default.  This field has the following possible values: * `Ecommerce` - Online transactions where the cardholder is present (online). For better authorisation rates, we recommend sending the card security code (CSC) along with the request. * `ContAuth` - Card on file and/or subscription transactions, where the cardholder is known to the merchant (returning customer). If the shopper is present (online), you can supply also the CSC to improve authorisation (one-click payment). * `Moto` - Mail-order and telephone-order transactions where the shopper is in contact with the merchant via email or telephone. * `POS` - Point-of-sale transactions where the shopper is physically present to make a payment using a secure payment terminal.
+  --shopper-reference: string
   status: string@status-completer # The status you want to change to
   --store: string # The physical store, for which this payment is processed.
 ]: any -> record<authCode: string, currentBalance: record<currency: string, value: int>, pspReference: string, refusalReason: string, resultCode: string, thirdPartyRefusalReason: string> {
@@ -122,7 +122,7 @@ export def "change-status post-changeStatus" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/changeStatus")
-  let body = {amount: $amount, merchantAccount: $merchantAccount, paymentMethod: $paymentMethod, recurringDetailReference: $recurringDetailReference, reference: $reference, shopperInteraction: $shopperInteraction, shopperReference: $shopperReference, status: $status, store: $store} | compact
+  let body = {"amount": $amount, "merchantAccount": $merchant_account, "paymentMethod": $payment_method, "recurringDetailReference": $recurring_detail_reference, "reference": $reference, "shopperInteraction": $shopper_interaction, "shopperReference": $shopper_reference, "status": $status, "store": $store} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -144,19 +144,19 @@ export def "check-balance post-checkBalance" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --amount: record # shape: {currency: string, value: int}
-  merchantAccount: string # The merchant account identifier, with which you want to process the transaction.
-  paymentMethod: record # The collection that contains the type of the payment method and its specific information if available
-  --recurringDetailReference: string
+  merchant_account: string # The merchant account identifier, with which you want to process the transaction.
+  payment_method: record # The collection that contains the type of the payment method and its specific information if available
+  --recurring-detail-reference: string
   reference: string # The reference to uniquely identify a payment. This reference is used in all communication with you about the payment status. We recommend using a unique value per payment; however, it is not a requirement. If you need to provide multiple references for a transaction, separate them with hyphens ("-"). Maximum length: 80 characters.
-  --shopperInteraction: string@shopperInteraction-completer # Specifies the sales channel, through which the shopper gives their card details, and whether the shopper is a returning customer. For the web service API, Adyen assumes Ecommerce shopper interaction by default.  This field has the following possible values: * `Ecommerce` - Online transactions where the cardholder is present (online). For better authorisation rates, we recommend sending the card security code (CSC) along with the request. * `ContAuth` - Card on file and/or subscription transactions, where the cardholder is known to the merchant (returning customer). If the shopper is present (online), you can supply also the CSC to improve authorisation (one-click payment). * `Moto` - Mail-order and telephone-order transactions where the shopper is in contact with the merchant via email or telephone. * `POS` - Point-of-sale transactions where the shopper is physically present to make a payment using a secure payment terminal.
-  --shopperReference: string
+  --shopper-interaction: string@shopper-interaction-completer # Specifies the sales channel, through which the shopper gives their card details, and whether the shopper is a returning customer. For the web service API, Adyen assumes Ecommerce shopper interaction by default.  This field has the following possible values: * `Ecommerce` - Online transactions where the cardholder is present (online). For better authorisation rates, we recommend sending the card security code (CSC) along with the request. * `ContAuth` - Card on file and/or subscription transactions, where the cardholder is known to the merchant (returning customer). If the shopper is present (online), you can supply also the CSC to improve authorisation (one-click payment). * `Moto` - Mail-order and telephone-order transactions where the shopper is in contact with the merchant via email or telephone. * `POS` - Point-of-sale transactions where the shopper is physically present to make a payment using a secure payment terminal.
+  --shopper-reference: string
   --store: string # The physical store, for which this payment is processed.
 ]: any -> record<currentBalance: record<currency: string, value: int>, pspReference: string, refusalReason: string, resultCode: string, thirdPartyRefusalReason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/checkBalance")
-  let body = {amount: $amount, merchantAccount: $merchantAccount, paymentMethod: $paymentMethod, recurringDetailReference: $recurringDetailReference, reference: $reference, shopperInteraction: $shopperInteraction, shopperReference: $shopperReference, store: $store} | compact
+  let body = {"amount": $amount, "merchantAccount": $merchant_account, "paymentMethod": $payment_method, "recurringDetailReference": $recurring_detail_reference, "reference": $reference, "shopperInteraction": $shopper_interaction, "shopperReference": $shopper_reference, "store": $store} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -178,19 +178,19 @@ export def "issue post-issue" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --amount: record # shape: {currency: string, value: int}
-  merchantAccount: string # The merchant account identifier, with which you want to process the transaction.
-  paymentMethod: record # The collection that contains the type of the payment method and its specific information if available
-  --recurringDetailReference: string
+  merchant_account: string # The merchant account identifier, with which you want to process the transaction.
+  payment_method: record # The collection that contains the type of the payment method and its specific information if available
+  --recurring-detail-reference: string
   reference: string # The reference to uniquely identify a payment. This reference is used in all communication with you about the payment status. We recommend using a unique value per payment; however, it is not a requirement. If you need to provide multiple references for a transaction, separate them with hyphens ("-"). Maximum length: 80 characters.
-  --shopperInteraction: string@shopperInteraction-completer # Specifies the sales channel, through which the shopper gives their card details, and whether the shopper is a returning customer. For the web service API, Adyen assumes Ecommerce shopper interaction by default.  This field has the following possible values: * `Ecommerce` - Online transactions where the cardholder is present (online). For better authorisation rates, we recommend sending the card security code (CSC) along with the request. * `ContAuth` - Card on file and/or subscription transactions, where the cardholder is known to the merchant (returning customer). If the shopper is present (online), you can supply also the CSC to improve authorisation (one-click payment). * `Moto` - Mail-order and telephone-order transactions where the shopper is in contact with the merchant via email or telephone. * `POS` - Point-of-sale transactions where the shopper is physically present to make a payment using a secure payment terminal.
-  --shopperReference: string
+  --shopper-interaction: string@shopper-interaction-completer # Specifies the sales channel, through which the shopper gives their card details, and whether the shopper is a returning customer. For the web service API, Adyen assumes Ecommerce shopper interaction by default.  This field has the following possible values: * `Ecommerce` - Online transactions where the cardholder is present (online). For better authorisation rates, we recommend sending the card security code (CSC) along with the request. * `ContAuth` - Card on file and/or subscription transactions, where the cardholder is known to the merchant (returning customer). If the shopper is present (online), you can supply also the CSC to improve authorisation (one-click payment). * `Moto` - Mail-order and telephone-order transactions where the shopper is in contact with the merchant via email or telephone. * `POS` - Point-of-sale transactions where the shopper is physically present to make a payment using a secure payment terminal.
+  --shopper-reference: string
   --store: string # The physical store, for which this payment is processed.
 ]: any -> record<authCode: string, currentBalance: record<currency: string, value: int>, paymentMethod: record, pspReference: string, refusalReason: string, resultCode: string, thirdPartyRefusalReason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/issue")
-  let body = {amount: $amount, merchantAccount: $merchantAccount, paymentMethod: $paymentMethod, recurringDetailReference: $recurringDetailReference, reference: $reference, shopperInteraction: $shopperInteraction, shopperReference: $shopperReference, store: $store} | compact
+  let body = {"amount": $amount, "merchantAccount": $merchant_account, "paymentMethod": $payment_method, "recurringDetailReference": $recurring_detail_reference, "reference": $reference, "shopperInteraction": $shopper_interaction, "shopperReference": $shopper_reference, "store": $store} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,20 +212,20 @@ export def "load post-load" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: record # shape: {currency: string, value: int}
-  --loadType: string@loadType-completer # The type of load you are trying to do, when absent we default to 'Load'
-  merchantAccount: string # The merchant account identifier, with which you want to process the transaction.
-  paymentMethod: record # The collection that contains the type of the payment method and its specific information if available
-  --recurringDetailReference: string
+  --load-type: string@load-type-completer # The type of load you are trying to do, when absent we default to 'Load'
+  merchant_account: string # The merchant account identifier, with which you want to process the transaction.
+  payment_method: record # The collection that contains the type of the payment method and its specific information if available
+  --recurring-detail-reference: string
   reference: string # The reference to uniquely identify a payment. This reference is used in all communication with you about the payment status. We recommend using a unique value per payment; however, it is not a requirement. If you need to provide multiple references for a transaction, separate them with hyphens ("-"). Maximum length: 80 characters.
-  --shopperInteraction: string@shopperInteraction-completer # Specifies the sales channel, through which the shopper gives their card details, and whether the shopper is a returning customer. For the web service API, Adyen assumes Ecommerce shopper interaction by default.  This field has the following possible values: * `Ecommerce` - Online transactions where the cardholder is present (online). For better authorisation rates, we recommend sending the card security code (CSC) along with the request. * `ContAuth` - Card on file and/or subscription transactions, where the cardholder is known to the merchant (returning customer). If the shopper is present (online), you can supply also the CSC to improve authorisation (one-click payment). * `Moto` - Mail-order and telephone-order transactions where the shopper is in contact with the merchant via email or telephone. * `POS` - Point-of-sale transactions where the shopper is physically present to make a payment using a secure payment terminal.
-  --shopperReference: string
+  --shopper-interaction: string@shopper-interaction-completer # Specifies the sales channel, through which the shopper gives their card details, and whether the shopper is a returning customer. For the web service API, Adyen assumes Ecommerce shopper interaction by default.  This field has the following possible values: * `Ecommerce` - Online transactions where the cardholder is present (online). For better authorisation rates, we recommend sending the card security code (CSC) along with the request. * `ContAuth` - Card on file and/or subscription transactions, where the cardholder is known to the merchant (returning customer). If the shopper is present (online), you can supply also the CSC to improve authorisation (one-click payment). * `Moto` - Mail-order and telephone-order transactions where the shopper is in contact with the merchant via email or telephone. * `POS` - Point-of-sale transactions where the shopper is physically present to make a payment using a secure payment terminal.
+  --shopper-reference: string
   --store: string # The physical store, for which this payment is processed.
 ]: any -> record<authCode: string, currentBalance: record<currency: string, value: int>, pspReference: string, refusalReason: string, resultCode: string, thirdPartyRefusalReason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/load")
-  let body = {amount: $amount, loadType: $loadType, merchantAccount: $merchantAccount, paymentMethod: $paymentMethod, recurringDetailReference: $recurringDetailReference, reference: $reference, shopperInteraction: $shopperInteraction, shopperReference: $shopperReference, store: $store} | compact
+  let body = {"amount": $amount, "loadType": $load_type, "merchantAccount": $merchant_account, "paymentMethod": $payment_method, "recurringDetailReference": $recurring_detail_reference, "reference": $reference, "shopperInteraction": $shopper_interaction, "shopperReference": $shopper_reference, "store": $store} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -247,20 +247,20 @@ export def "merge-balance post-mergeBalance" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --amount: record # shape: {currency: string, value: int}
-  merchantAccount: string # The merchant account identifier, with which you want to process the transaction.
-  paymentMethod: record # The collection that contains the type of the payment method and its specific information if available
-  --recurringDetailReference: string
+  merchant_account: string # The merchant account identifier, with which you want to process the transaction.
+  payment_method: record # The collection that contains the type of the payment method and its specific information if available
+  --recurring-detail-reference: string
   reference: string # The reference to uniquely identify a payment. This reference is used in all communication with you about the payment status. We recommend using a unique value per payment; however, it is not a requirement. If you need to provide multiple references for a transaction, separate them with hyphens ("-"). Maximum length: 80 characters.
-  --shopperInteraction: string@shopperInteraction-completer # Specifies the sales channel, through which the shopper gives their card details, and whether the shopper is a returning customer. For the web service API, Adyen assumes Ecommerce shopper interaction by default.  This field has the following possible values: * `Ecommerce` - Online transactions where the cardholder is present (online). For better authorisation rates, we recommend sending the card security code (CSC) along with the request. * `ContAuth` - Card on file and/or subscription transactions, where the cardholder is known to the merchant (returning customer). If the shopper is present (online), you can supply also the CSC to improve authorisation (one-click payment). * `Moto` - Mail-order and telephone-order transactions where the shopper is in contact with the merchant via email or telephone. * `POS` - Point-of-sale transactions where the shopper is physically present to make a payment using a secure payment terminal.
-  --shopperReference: string
-  sourcePaymentMethod: record # The collection that contains the source payment method and its specific information if available. Note that type should not be included since it is inferred from the (target) payment method
+  --shopper-interaction: string@shopper-interaction-completer # Specifies the sales channel, through which the shopper gives their card details, and whether the shopper is a returning customer. For the web service API, Adyen assumes Ecommerce shopper interaction by default.  This field has the following possible values: * `Ecommerce` - Online transactions where the cardholder is present (online). For better authorisation rates, we recommend sending the card security code (CSC) along with the request. * `ContAuth` - Card on file and/or subscription transactions, where the cardholder is known to the merchant (returning customer). If the shopper is present (online), you can supply also the CSC to improve authorisation (one-click payment). * `Moto` - Mail-order and telephone-order transactions where the shopper is in contact with the merchant via email or telephone. * `POS` - Point-of-sale transactions where the shopper is physically present to make a payment using a secure payment terminal.
+  --shopper-reference: string
+  source_payment_method: record # The collection that contains the source payment method and its specific information if available. Note that type should not be included since it is inferred from the (target) payment method
   --store: string # The physical store, for which this payment is processed.
 ]: any -> record<authCode: string, currentBalance: record<currency: string, value: int>, pspReference: string, refusalReason: string, resultCode: string, thirdPartyRefusalReason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mergeBalance")
-  let body = {amount: $amount, merchantAccount: $merchantAccount, paymentMethod: $paymentMethod, recurringDetailReference: $recurringDetailReference, reference: $reference, shopperInteraction: $shopperInteraction, shopperReference: $shopperReference, sourcePaymentMethod: $sourcePaymentMethod, store: $store} | compact
+  let body = {"amount": $amount, "merchantAccount": $merchant_account, "paymentMethod": $payment_method, "recurringDetailReference": $recurring_detail_reference, "reference": $reference, "shopperInteraction": $shopper_interaction, "shopperReference": $shopper_reference, "sourcePaymentMethod": $source_payment_method, "store": $store} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -280,18 +280,18 @@ export def "void-transaction post-voidTransaction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  merchantAccount: string # The merchant account identifier, with which you want to process the transaction.
-  originalReference: string # The original pspReference of the payment to modify.
+  merchant_account: string # The merchant account identifier, with which you want to process the transaction.
+  original_reference: string # The original pspReference of the payment to modify.
   --reference: string # Your reference for the payment modification. This reference is visible in Customer Area and in reports. Maximum length: 80 characters.
   --store: string # The physical store, for which this payment is processed.
-  --tenderReference: string # The reference of the tender.
-  --uniqueTerminalId: string # The unique ID of a POS terminal.
+  --tender-reference: string # The reference of the tender.
+  --unique-terminal-id: string # The unique ID of a POS terminal.
 ]: any -> record<currentBalance: record<currency: string, value: int>, pspReference: string, refusalReason: string, resultCode: string, thirdPartyRefusalReason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/voidTransaction")
-  let body = {merchantAccount: $merchantAccount, originalReference: $originalReference, reference: $reference, store: $store, tenderReference: $tenderReference, uniqueTerminalId: $uniqueTerminalId} | compact
+  let body = {"merchantAccount": $merchant_account, "originalReference": $original_reference, "reference": $reference, "store": $store, "tenderReference": $tender_reference, "uniqueTerminalId": $unique_terminal_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

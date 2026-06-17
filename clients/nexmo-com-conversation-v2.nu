@@ -142,7 +142,7 @@ export def "conversations-events get-events" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "start_id" $start_id "scalar") (serialize-qp "end_id" $end_id "scalar") (serialize-qp "event_type" $event_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/conversations/($conversation_id)/events" $qp)
+  let full_url = (build-url $base ({conversation_id: $conversation_id} | format pattern "/conversations/{conversation_id}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,7 +169,7 @@ export def "conversations-members get-members" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/conversations/($conversation_id)/members" $qp)
+  let full_url = (build-url $base ({conversation_id: $conversation_id} | format pattern "/conversations/{conversation_id}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -113,7 +113,7 @@ export def "exports-activityjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/exports/activity.json")
-  let body = {api_keys: $api_keys, date_from: $date_from, date_to: $date_to, key: $key, notify_email: $notify_email, senders: $senders, states: $states, tags: $tags} | compact
+  let body = {"api_keys": $api_keys, "date_from": $date_from, "date_to": $date_to, "key": $key, "notify_email": $notify_email, "senders": $senders, "states": $states, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -139,7 +139,7 @@ export def "exports-infojson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/exports/info.json")
-  let body = {id: $id, key: $key} | compact
+  let body = {"id": $id, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -164,7 +164,7 @@ export def "exports-listjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/exports/list.json")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -190,7 +190,7 @@ export def "exports-rejectsjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/exports/rejects.json")
-  let body = {key: $key, notify_email: $notify_email} | compact
+  let body = {"key": $key, "notify_email": $notify_email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -216,7 +216,7 @@ export def "exports-whitelistjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/exports/whitelist.json")
-  let body = {key: $key, notify_email: $notify_email} | compact
+  let body = {"key": $key, "notify_email": $notify_email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -242,7 +242,7 @@ export def "inbound-add-domainjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/add-domain.json")
-  let body = {domain: $domain, key: $key} | compact
+  let body = {"domain": $domain, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -270,7 +270,7 @@ export def "inbound-add-routejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/add-route.json")
-  let body = {domain: $domain, key: $key, pattern: $pattern, url: $body_url} | compact
+  let body = {"domain": $domain, "key": $key, "pattern": $pattern, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -296,7 +296,7 @@ export def "inbound-check-domainjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/check-domain.json")
-  let body = {domain: $domain, key: $key} | compact
+  let body = {"domain": $domain, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -322,7 +322,7 @@ export def "inbound-delete-domainjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/delete-domain.json")
-  let body = {domain: $domain, key: $key} | compact
+  let body = {"domain": $domain, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -348,7 +348,7 @@ export def "inbound-delete-routejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/delete-route.json")
-  let body = {id: $id, key: $key} | compact
+  let body = {"id": $id, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -373,7 +373,7 @@ export def "inbound-domainsjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/domains.json")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -399,7 +399,7 @@ export def "inbound-routesjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/routes.json")
-  let body = {domain: $domain, key: $key} | compact
+  let body = {"domain": $domain, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -429,7 +429,7 @@ export def "inbound-send-rawjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/send-raw.json")
-  let body = {client_address: $client_address, helo: $helo, key: $key, mail_from: $mail_from, raw_message: $raw_message, to: $body_to} | compact
+  let body = {"client_address": $client_address, "helo": $helo, "key": $key, "mail_from": $mail_from, "raw_message": $raw_message, "to": $body_to} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -457,7 +457,7 @@ export def "inbound-update-routejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/update-route.json")
-  let body = {id: $id, key: $key, pattern: $pattern, url: $body_url} | compact
+  let body = {"id": $id, "key": $key, "pattern": $pattern, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -483,7 +483,7 @@ export def "ips-cancel-warmupjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/cancel-warmup.json")
-  let body = {ip: $ip, key: $key} | compact
+  let body = {"ip": $ip, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -510,7 +510,7 @@ export def "ips-check-custom-dnsjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/check-custom-dns.json")
-  let body = {domain: $domain, ip: $ip, key: $key} | compact
+  let body = {"domain": $domain, "ip": $ip, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -536,7 +536,7 @@ export def "ips-create-pooljson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/create-pool.json")
-  let body = {key: $key, pool: $pool} | compact
+  let body = {"key": $key, "pool": $pool} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -562,7 +562,7 @@ export def "ips-delete-pooljson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/delete-pool.json")
-  let body = {key: $key, pool: $pool} | compact
+  let body = {"key": $key, "pool": $pool} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -588,7 +588,7 @@ export def "ips-deletejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/delete.json")
-  let body = {ip: $ip, key: $key} | compact
+  let body = {"ip": $ip, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -614,7 +614,7 @@ export def "ips-infojson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/info.json")
-  let body = {ip: $ip, key: $key} | compact
+  let body = {"ip": $ip, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -639,7 +639,7 @@ export def "ips-list-poolsjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/list-pools.json")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -664,7 +664,7 @@ export def "ips-listjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/list.json")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -690,7 +690,7 @@ export def "ips-pool-infojson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/pool-info.json")
-  let body = {key: $key, pool: $pool} | compact
+  let body = {"key": $key, "pool": $pool} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -717,7 +717,7 @@ export def "ips-provisionjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/provision.json")
-  let body = {key: $key, pool: $pool, warmup: $warmup} | compact
+  let body = {"key": $key, "pool": $pool, "warmup": $warmup} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -744,7 +744,7 @@ export def "ips-set-custom-dnsjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/set-custom-dns.json")
-  let body = {domain: $domain, ip: $ip, key: $key} | compact
+  let body = {"domain": $domain, "ip": $ip, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -772,7 +772,7 @@ export def "ips-set-pooljson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/set-pool.json")
-  let body = {create_pool: $create_pool, ip: $ip, key: $key, pool: $pool} | compact
+  let body = {"create_pool": $create_pool, "ip": $ip, "key": $key, "pool": $pool} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -798,7 +798,7 @@ export def "ips-start-warmupjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/start-warmup.json")
-  let body = {ip: $ip, key: $key} | compact
+  let body = {"ip": $ip, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -824,7 +824,7 @@ export def "messages-cancel-scheduledjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/cancel-scheduled.json")
-  let body = {id: $id, key: $key} | compact
+  let body = {"id": $id, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -850,7 +850,7 @@ export def "messages-contentjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/content.json")
-  let body = {id: $id, key: $key} | compact
+  let body = {"id": $id, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -876,7 +876,7 @@ export def "messages-infojson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/info.json")
-  let body = {id: $id, key: $key} | compact
+  let body = {"id": $id, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -902,7 +902,7 @@ export def "messages-list-scheduledjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/list-scheduled.json")
-  let body = {key: $key, to: $body_to} | compact
+  let body = {"key": $key, "to": $body_to} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -928,7 +928,7 @@ export def "messages-parsejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/parse.json")
-  let body = {key: $key, raw_message: $raw_message} | compact
+  let body = {"key": $key, "raw_message": $raw_message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -955,7 +955,7 @@ export def "messages-reschedulejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/reschedule.json")
-  let body = {id: $id, key: $key, send_at: $send_at} | compact
+  let body = {"id": $id, "key": $key, "send_at": $send_at} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -985,7 +985,7 @@ export def "messages-search-time-seriesjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/search-time-series.json")
-  let body = {date_from: $date_from, date_to: $date_to, key: $key, query: $query, senders: $senders, tags: $tags} | compact
+  let body = {"date_from": $date_from, "date_to": $date_to, "key": $key, "query": $query, "senders": $senders, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1017,7 +1017,7 @@ export def "messages-searchjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/search.json")
-  let body = {api_keys: $api_keys, date_from: $date_from, date_to: $date_to, key: $key, limit: $limit, query: $query, senders: $senders, tags: $tags} | compact
+  let body = {"api_keys": $api_keys, "date_from": $date_from, "date_to": $date_to, "key": $key, "limit": $limit, "query": $query, "senders": $senders, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1050,7 +1050,7 @@ export def "messages-send-rawjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/send-raw.json")
-  let body = {async: $async, from_email: $from_email, from_name: $from_name, ip_pool: $ip_pool, key: $key, raw_message: $raw_message, return_path_domain: $return_path_domain, send_at: $send_at, to: $body_to} | compact
+  let body = {"async": $async, "from_email": $from_email, "from_name": $from_name, "ip_pool": $ip_pool, "key": $key, "raw_message": $raw_message, "return_path_domain": $return_path_domain, "send_at": $send_at, "to": $body_to} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1083,7 +1083,7 @@ export def "messages-send-templatejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/send-template.json")
-  let body = {async: $async, ip_pool: $ip_pool, key: $key, message: $message, send_at: $send_at, template_content: $template_content, template_name: $template_name} | compact
+  let body = {"async": $async, "ip_pool": $ip_pool, "key": $key, "message": $message, "send_at": $send_at, "template_content": $template_content, "template_name": $template_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1113,7 +1113,7 @@ export def "messages-sendjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/send.json")
-  let body = {async: $async, ip_pool: $ip_pool, key: $key, message: $message, send_at: $send_at} | compact
+  let body = {"async": $async, "ip_pool": $ip_pool, "key": $key, "message": $message, "send_at": $send_at} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1140,7 +1140,7 @@ export def "metadata-addjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata/add.json")
-  let body = {key: $key, name: $name, view_template: $view_template} | compact
+  let body = {"key": $key, "name": $name, "view_template": $view_template} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1166,7 +1166,7 @@ export def "metadata-deletejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata/delete.json")
-  let body = {key: $key, name: $name} | compact
+  let body = {"key": $key, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1191,7 +1191,7 @@ export def "metadata-listjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata/list.json")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1218,7 +1218,7 @@ export def "metadata-updatejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata/update.json")
-  let body = {key: $key, name: $name, view_template: $view_template} | compact
+  let body = {"key": $key, "name": $name, "view_template": $view_template} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1246,7 +1246,7 @@ export def "rejects-addjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rejects/add.json")
-  let body = {comment: $comment, email: $email, key: $key, subaccount: $subaccount} | compact
+  let body = {"comment": $comment, "email": $email, "key": $key, "subaccount": $subaccount} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1273,7 +1273,7 @@ export def "rejects-deletejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rejects/delete.json")
-  let body = {email: $email, key: $key, subaccount: $subaccount} | compact
+  let body = {"email": $email, "key": $key, "subaccount": $subaccount} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1301,7 +1301,7 @@ export def "rejects-listjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rejects/list.json")
-  let body = {email: $email, include_expired: $include_expired, key: $key, subaccount: $subaccount} | compact
+  let body = {"email": $email, "include_expired": $include_expired, "key": $key, "subaccount": $subaccount} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1327,7 +1327,7 @@ export def "senders-add-domainjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/senders/add-domain.json")
-  let body = {domain: $domain, key: $key} | compact
+  let body = {"domain": $domain, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1353,7 +1353,7 @@ export def "senders-check-domainjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/senders/check-domain.json")
-  let body = {domain: $domain, key: $key} | compact
+  let body = {"domain": $domain, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1378,7 +1378,7 @@ export def "senders-domainsjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/senders/domains.json")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1404,7 +1404,7 @@ export def "senders-infojson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/senders/info.json")
-  let body = {address: $address, key: $key} | compact
+  let body = {"address": $address, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1429,7 +1429,7 @@ export def "senders-listjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/senders/list.json")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1455,7 +1455,7 @@ export def "senders-time-seriesjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/senders/time-series.json")
-  let body = {address: $address, key: $key} | compact
+  let body = {"address": $address, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1482,7 +1482,7 @@ export def "senders-verify-domainjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/senders/verify-domain.json")
-  let body = {domain: $domain, key: $key, mailbox: $mailbox} | compact
+  let body = {"domain": $domain, "key": $key, "mailbox": $mailbox} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1511,7 +1511,7 @@ export def "subaccounts-addjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccounts/add.json")
-  let body = {custom_quota: $custom_quota, id: $id, key: $key, name: $name, notes: $notes} | compact
+  let body = {"custom_quota": $custom_quota, "id": $id, "key": $key, "name": $name, "notes": $notes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1537,7 +1537,7 @@ export def "subaccounts-deletejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccounts/delete.json")
-  let body = {id: $id, key: $key} | compact
+  let body = {"id": $id, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1563,7 +1563,7 @@ export def "subaccounts-infojson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccounts/info.json")
-  let body = {id: $id, key: $key} | compact
+  let body = {"id": $id, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1589,7 +1589,7 @@ export def "subaccounts-listjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccounts/list.json")
-  let body = {key: $key, q: $q} | compact
+  let body = {"key": $key, "q": $q} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1615,7 +1615,7 @@ export def "subaccounts-pausejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccounts/pause.json")
-  let body = {id: $id, key: $key} | compact
+  let body = {"id": $id, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1641,7 +1641,7 @@ export def "subaccounts-resumejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccounts/resume.json")
-  let body = {id: $id, key: $key} | compact
+  let body = {"id": $id, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1670,7 +1670,7 @@ export def "subaccounts-updatejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccounts/update.json")
-  let body = {custom_quota: $custom_quota, id: $id, key: $key, name: $name, notes: $notes} | compact
+  let body = {"custom_quota": $custom_quota, "id": $id, "key": $key, "name": $name, "notes": $notes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1695,7 +1695,7 @@ export def "tags-all-time-seriesjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tags/all-time-series.json")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1721,7 +1721,7 @@ export def "tags-deletejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tags/delete.json")
-  let body = {key: $key, tag: $tag} | compact
+  let body = {"key": $key, "tag": $tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1747,7 +1747,7 @@ export def "tags-infojson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tags/info.json")
-  let body = {key: $key, tag: $tag} | compact
+  let body = {"key": $key, "tag": $tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1772,7 +1772,7 @@ export def "tags-listjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tags/list.json")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1798,7 +1798,7 @@ export def "tags-time-seriesjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tags/time-series.json")
-  let body = {key: $key, tag: $tag} | compact
+  let body = {"key": $key, "tag": $tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1831,7 +1831,7 @@ export def "templates-addjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/add.json")
-  let body = {code: $code, from_email: $from_email, from_name: $from_name, key: $key, labels: $labels, name: $name, publish: $publish, subject: $subject, text: $text} | compact
+  let body = {"code": $code, "from_email": $from_email, "from_name": $from_name, "key": $key, "labels": $labels, "name": $name, "publish": $publish, "subject": $subject, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1857,7 +1857,7 @@ export def "templates-deletejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/delete.json")
-  let body = {key: $key, name: $name} | compact
+  let body = {"key": $key, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1883,7 +1883,7 @@ export def "templates-infojson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/info.json")
-  let body = {key: $key, name: $name} | compact
+  let body = {"key": $key, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1909,7 +1909,7 @@ export def "templates-listjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/list.json")
-  let body = {key: $key, label: $label} | compact
+  let body = {"key": $key, "label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1935,7 +1935,7 @@ export def "templates-publishjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/publish.json")
-  let body = {key: $key, name: $name} | compact
+  let body = {"key": $key, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1965,7 +1965,7 @@ export def "templates-renderjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/render.json")
-  let body = {key: $key, merge_vars: $merge_vars, template_content: $template_content, template_name: $template_name} | compact
+  let body = {"key": $key, "merge_vars": $merge_vars, "template_content": $template_content, "template_name": $template_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1991,7 +1991,7 @@ export def "templates-time-seriesjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/time-series.json")
-  let body = {key: $key, name: $name} | compact
+  let body = {"key": $key, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2024,7 +2024,7 @@ export def "templates-updatejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/update.json")
-  let body = {code: $code, from_email: $from_email, from_name: $from_name, key: $key, labels: $labels, name: $name, publish: $publish, subject: $subject, text: $text} | compact
+  let body = {"code": $code, "from_email": $from_email, "from_name": $from_name, "key": $key, "labels": $labels, "name": $name, "publish": $publish, "subject": $subject, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2050,7 +2050,7 @@ export def "urls-add-tracking-domainjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/urls/add-tracking-domain.json")
-  let body = {domain: $domain, key: $key} | compact
+  let body = {"domain": $domain, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2076,7 +2076,7 @@ export def "urls-check-tracking-domainjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/urls/check-tracking-domain.json")
-  let body = {domain: $domain, key: $key} | compact
+  let body = {"domain": $domain, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2101,7 +2101,7 @@ export def "urls-listjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/urls/list.json")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2127,7 +2127,7 @@ export def "urls-searchjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/urls/search.json")
-  let body = {key: $key, q: $q} | compact
+  let body = {"key": $key, "q": $q} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2153,7 +2153,7 @@ export def "urls-time-seriesjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/urls/time-series.json")
-  let body = {key: $key, url: $body_url} | compact
+  let body = {"key": $key, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2178,7 +2178,7 @@ export def "urls-tracking-domainsjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/urls/tracking-domains.json")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2203,7 +2203,7 @@ export def "users-infojson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/info.json")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2228,7 +2228,7 @@ export def "users-pingjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/ping.json")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2253,7 +2253,7 @@ export def "users-ping2json post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/ping2.json")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2278,7 +2278,7 @@ export def "users-sendersjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/senders.json")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2306,7 +2306,7 @@ export def "webhooks-addjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/add.json")
-  let body = {description: $description, events: $events, key: $key, url: $body_url} | compact
+  let body = {"description": $description, "events": $events, "key": $key, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2332,7 +2332,7 @@ export def "webhooks-deletejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/delete.json")
-  let body = {id: $id, key: $key} | compact
+  let body = {"id": $id, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2358,7 +2358,7 @@ export def "webhooks-infojson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/info.json")
-  let body = {id: $id, key: $key} | compact
+  let body = {"id": $id, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2383,7 +2383,7 @@ export def "webhooks-listjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/list.json")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2412,7 +2412,7 @@ export def "webhooks-updatejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/update.json")
-  let body = {description: $description, events: $events, id: $id, key: $key, url: $body_url} | compact
+  let body = {"description": $description, "events": $events, "id": $id, "key": $key, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2438,7 +2438,7 @@ export def "whitelists-addjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/whitelists/add.json")
-  let body = {email: $email, key: $key} | compact
+  let body = {"email": $email, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2464,7 +2464,7 @@ export def "whitelists-deletejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/whitelists/delete.json")
-  let body = {email: $email, key: $key} | compact
+  let body = {"email": $email, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2490,7 +2490,7 @@ export def "whitelists-listjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/whitelists/list.json")
-  let body = {email: $email, key: $key} | compact
+  let body = {"email": $email, "key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

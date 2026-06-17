@@ -66,16 +66,16 @@ def base-url-completer [] { ["http://lakeformation.us-east-1.amazonaws.com" "htt
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def ResourceShareType-completer [] { ["ALL" "FOREIGN"] }
-def ResourceType-completer [] { ["CATALOG" "DATABASE" "DATA_LOCATION" "LF_TAG" "LF_TAG_POLICY" "LF_TAG_POLICY_DATABASE" "LF_TAG_POLICY_TABLE" "TABLE"] }
-def StorageOptimizerType-completer [] { ["ALL" "COMPACTION" "GARBAGE_COLLECTION"] }
-def StatusFilter-completer [] { ["ABORTED" "ACTIVE" "ALL" "COMMITTED" "COMPLETED"] }
-def TransactionType-completer [] { ["READ_AND_WRITE" "READ_ONLY"] }
+def resource-share-type-completer [] { ["ALL" "FOREIGN"] }
+def resource-type-completer [] { ["CATALOG" "DATABASE" "DATA_LOCATION" "LF_TAG" "LF_TAG_POLICY" "LF_TAG_POLICY_DATABASE" "LF_TAG_POLICY_TABLE" "TABLE"] }
+def storage-optimizer-type-completer [] { ["ALL" "COMPACTION" "GARBAGE_COLLECTION"] }
+def status-filter-completer [] { ["ABORTED" "ACTIVE" "ALL" "COMMITTED" "COMPLETED"] }
+def transaction-type-completer [] { ["READ_AND_WRITE" "READ_ONLY"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-lf-tags-to-resource AddLFTagsToResource" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-lf-tags-to-resource create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +101,7 @@ export def commands []: nothing -> table {
 # operationId: AddLFTagsToResource
 # --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
 # --LFTags item shape: {CatalogId?: any, TagKey: any, TagValues: any}
-export def "add-lf-tags-to-resource AddLFTagsToResource" [
+export def "add-lf-tags-to-resource create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,24 +110,24 @@ export def "add-lf-tags-to-resource AddLFTagsToResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  Resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-  LFTags: list # The LF-tags to attach to the resource. — item shape: {CatalogId?: any, TagKey: any, TagValues: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
+  lf_tags: list # The LF-tags to attach to the resource. — item shape: {CatalogId?: any, TagKey: any, TagValues: any}
 ]: any -> record<Failures: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/AddLFTagsToResource")
-  let body = {CatalogId: $CatalogId, Resource: $Resource, LFTags: $LFTags} | compact
+  let body = {"CatalogId": $catalog_id, "Resource": $resource, "LFTags": $lf_tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -138,7 +138,7 @@ export def "add-lf-tags-to-resource AddLFTagsToResource" [
 #
 # POST /AssumeDecoratedRoleWithSAML
 # operationId: AssumeDecoratedRoleWithSAML
-export def "assume-decorated-role-with-saml AssumeDecoratedRoleWithSAML" [
+export def "assume-decorated-role-with-saml post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,25 +147,25 @@ export def "assume-decorated-role-with-saml AssumeDecoratedRoleWithSAML" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  SAMLAssertion: string # A SAML assertion consisting of an assertion statement for the user who needs temporary credentials. This must match the SAML assertion that was issued to IAM. This must be Base64 encoded.
-  RoleArn: string # The role that represents an IAM principal whose scope down policy allows it to call credential vending APIs such as <code>GetTemporaryTableCredentials</code>. The caller must also have iam:PassRole permission on this role. 
-  PrincipalArn: string # The Amazon Resource Name (ARN) of the SAML provider in IAM that describes the IdP.
-  --DurationSeconds: int # The time period, between 900 and 43,200 seconds, for the timeout of the temporary credentials.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  saml_assertion: string # A SAML assertion consisting of an assertion statement for the user who needs temporary credentials. This must match the SAML assertion that was issued to IAM. This must be Base64 encoded.
+  role_arn: string # The role that represents an IAM principal whose scope down policy allows it to call credential vending APIs such as <code>GetTemporaryTableCredentials</code>. The caller must also have iam:PassRole permission on this role. 
+  principal_arn: string # The Amazon Resource Name (ARN) of the SAML provider in IAM that describes the IdP.
+  --duration-seconds: int # The time period, between 900 and 43,200 seconds, for the timeout of the temporary credentials.
 ]: any -> record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record, Expiration: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/AssumeDecoratedRoleWithSAML")
-  let body = {SAMLAssertion: $SAMLAssertion, RoleArn: $RoleArn, PrincipalArn: $PrincipalArn, DurationSeconds: $DurationSeconds} | compact
+  let body = {"SAMLAssertion": $saml_assertion, "RoleArn": $role_arn, "PrincipalArn": $principal_arn, "DurationSeconds": $duration_seconds} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -177,7 +177,7 @@ export def "assume-decorated-role-with-saml AssumeDecoratedRoleWithSAML" [
 # POST /BatchGrantPermissions
 # operationId: BatchGrantPermissions
 # --Entries item shape: {Id: any, Principal?: any, Resource?: any, Permissions?: any, PermissionsWithGrantOption?: any}
-export def "batch-grant-permissions BatchGrantPermissions" [
+export def "batch-grant-permissions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,23 +186,23 @@ export def "batch-grant-permissions BatchGrantPermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  Entries: list # A list of up to 20 entries for resource permissions to be granted by batch operation to the principal. — item shape: {Id: any, Principal?: any, Resource?: any, Permissions?: any, PermissionsWithGrantOption?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  entries: list # A list of up to 20 entries for resource permissions to be granted by batch operation to the principal. — item shape: {Id: any, Principal?: any, Resource?: any, Permissions?: any, PermissionsWithGrantOption?: any}
 ]: any -> record<Failures: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/BatchGrantPermissions")
-  let body = {CatalogId: $CatalogId, Entries: $Entries} | compact
+  let body = {"CatalogId": $catalog_id, "Entries": $entries} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -214,7 +214,7 @@ export def "batch-grant-permissions BatchGrantPermissions" [
 # POST /BatchRevokePermissions
 # operationId: BatchRevokePermissions
 # --Entries item shape: {Id: any, Principal?: any, Resource?: any, Permissions?: any, PermissionsWithGrantOption?: any}
-export def "batch-revoke-permissions BatchRevokePermissions" [
+export def "batch-revoke-permissions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,23 +223,23 @@ export def "batch-revoke-permissions BatchRevokePermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  Entries: list # A list of up to 20 entries for resource permissions to be revoked by batch operation to the principal. — item shape: {Id: any, Principal?: any, Resource?: any, Permissions?: any, PermissionsWithGrantOption?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  entries: list # A list of up to 20 entries for resource permissions to be revoked by batch operation to the principal. — item shape: {Id: any, Principal?: any, Resource?: any, Permissions?: any, PermissionsWithGrantOption?: any}
 ]: any -> record<Failures: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/BatchRevokePermissions")
-  let body = {CatalogId: $CatalogId, Entries: $Entries} | compact
+  let body = {"CatalogId": $catalog_id, "Entries": $entries} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -250,7 +250,7 @@ export def "batch-revoke-permissions BatchRevokePermissions" [
 #
 # POST /CancelTransaction
 # operationId: CancelTransaction
-export def "cancel-transaction CancelTransaction" [
+export def "cancel-transaction cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,22 +259,22 @@ export def "cancel-transaction CancelTransaction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  TransactionId: string # The transaction to cancel.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  transaction_id: string # The transaction to cancel.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CancelTransaction")
-  let body = {TransactionId: $TransactionId} | compact
+  let body = {"TransactionId": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -285,7 +285,7 @@ export def "cancel-transaction CancelTransaction" [
 #
 # POST /CommitTransaction
 # operationId: CommitTransaction
-export def "commit-transaction CommitTransaction" [
+export def "commit-transaction commit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,22 +294,22 @@ export def "commit-transaction CommitTransaction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  TransactionId: string # The transaction to commit.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  transaction_id: string # The transaction to commit.
 ]: any -> record<TransactionStatus: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CommitTransaction")
-  let body = {TransactionId: $TransactionId} | compact
+  let body = {"TransactionId": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -321,7 +321,7 @@ export def "commit-transaction CommitTransaction" [
 # POST /CreateDataCellsFilter
 # operationId: CreateDataCellsFilter
 # --TableData shape: {TableCatalogId?: any, DatabaseName?: any, TableName?: any, Name?: any, RowFilter?: any, ColumnNames?: any, ColumnWildcard?: any, VersionId?: any}
-export def "create-data-cells-filter CreateDataCellsFilter" [
+export def "create-data-cells-filter create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,22 +330,22 @@ export def "create-data-cells-filter CreateDataCellsFilter" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  TableData: record # A structure that describes certain columns on certain rows. — shape: {TableCatalogId?: any, DatabaseName?: any, TableName?: any, Name?: any, RowFilter?: any, ColumnNames?: any, ColumnWildcard?: any, VersionId?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  table_data: record # A structure that describes certain columns on certain rows. — shape: {TableCatalogId?: any, DatabaseName?: any, TableName?: any, Name?: any, RowFilter?: any, ColumnNames?: any, ColumnWildcard?: any, VersionId?: any}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CreateDataCellsFilter")
-  let body = {TableData: $TableData} | compact
+  let body = {"TableData": $table_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -356,7 +356,7 @@ export def "create-data-cells-filter CreateDataCellsFilter" [
 #
 # POST /CreateLFTag
 # operationId: CreateLFTag
-export def "create-lf-tag CreateLFTag" [
+export def "create-lf-tag create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,24 +365,24 @@ export def "create-lf-tag CreateLFTag" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  TagKey: string # The key-name for the LF-tag.
-  TagValues: list # A list of possible values an attribute can take.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  tag_key: string # The key-name for the LF-tag.
+  tag_values: list # A list of possible values an attribute can take.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CreateLFTag")
-  let body = {CatalogId: $CatalogId, TagKey: $TagKey, TagValues: $TagValues} | compact
+  let body = {"CatalogId": $catalog_id, "TagKey": $tag_key, "TagValues": $tag_values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -393,7 +393,7 @@ export def "create-lf-tag CreateLFTag" [
 #
 # POST /DeleteDataCellsFilter
 # operationId: DeleteDataCellsFilter
-export def "delete-data-cells-filter DeleteDataCellsFilter" [
+export def "delete-data-cells-filter delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,25 +402,25 @@ export def "delete-data-cells-filter DeleteDataCellsFilter" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --TableCatalogId: string # The ID of the catalog to which the table belongs.
-  --DatabaseName: string # A database in the Glue Data Catalog.
-  --TableName: string # A table in the database.
-  --Name: string # The name given by the user to the data filter cell.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --table-catalog-id: string # The ID of the catalog to which the table belongs.
+  --database-name: string # A database in the Glue Data Catalog.
+  --table-name: string # A table in the database.
+  --name: string # The name given by the user to the data filter cell.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DeleteDataCellsFilter")
-  let body = {TableCatalogId: $TableCatalogId, DatabaseName: $DatabaseName, TableName: $TableName, Name: $Name} | compact
+  let body = {"TableCatalogId": $table_catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -431,7 +431,7 @@ export def "delete-data-cells-filter DeleteDataCellsFilter" [
 #
 # POST /DeleteLFTag
 # operationId: DeleteLFTag
-export def "delete-lf-tag DeleteLFTag" [
+export def "delete-lf-tag delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,23 +440,23 @@ export def "delete-lf-tag DeleteLFTag" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  TagKey: string # The key-name for the LF-tag to delete.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  tag_key: string # The key-name for the LF-tag to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DeleteLFTag")
-  let body = {CatalogId: $CatalogId, TagKey: $TagKey} | compact
+  let body = {"CatalogId": $catalog_id, "TagKey": $tag_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -468,7 +468,7 @@ export def "delete-lf-tag DeleteLFTag" [
 # POST /DeleteObjectsOnCancel
 # operationId: DeleteObjectsOnCancel
 # --Objects item shape: {Uri: any, ETag?: any}
-export def "delete-objects-on-cancel DeleteObjectsOnCancel" [
+export def "delete-objects-on-cancel delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -477,26 +477,26 @@ export def "delete-objects-on-cancel DeleteObjectsOnCancel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The Glue data catalog that contains the governed table. Defaults to the current account ID.
-  DatabaseName: string # The database that contains the governed table.
-  TableName: string # The name of the governed table.
-  TransactionId: string # ID of the transaction that the writes occur in.
-  Objects: list # A list of VirtualObject structures, which indicates the Amazon S3 objects to be deleted if the transaction cancels. — item shape: {Uri: any, ETag?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The Glue data catalog that contains the governed table. Defaults to the current account ID.
+  database_name: string # The database that contains the governed table.
+  table_name: string # The name of the governed table.
+  transaction_id: string # ID of the transaction that the writes occur in.
+  objects: list # A list of VirtualObject structures, which indicates the Amazon S3 objects to be deleted if the transaction cancels. — item shape: {Uri: any, ETag?: any}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DeleteObjectsOnCancel")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, TransactionId: $TransactionId, Objects: $Objects} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "TransactionId": $transaction_id, "Objects": $objects} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -507,7 +507,7 @@ export def "delete-objects-on-cancel DeleteObjectsOnCancel" [
 #
 # POST /DeregisterResource
 # operationId: DeregisterResource
-export def "deregister-resource DeregisterResource" [
+export def "deregister-resource post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,22 +516,22 @@ export def "deregister-resource DeregisterResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ResourceArn: string # The Amazon Resource Name (ARN) of the resource that you want to deregister.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource that you want to deregister.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DeregisterResource")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -542,7 +542,7 @@ export def "deregister-resource DeregisterResource" [
 #
 # POST /DescribeResource
 # operationId: DescribeResource
-export def "describe-resource DescribeResource" [
+export def "describe-resource post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -551,22 +551,22 @@ export def "describe-resource DescribeResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ResourceArn: string # The resource ARN.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_arn: string # The resource ARN.
 ]: any -> record<ResourceInfo: record<ResourceArn: record, RoleArn: record, LastModified: record, WithFederation: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DescribeResource")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -577,7 +577,7 @@ export def "describe-resource DescribeResource" [
 #
 # POST /DescribeTransaction
 # operationId: DescribeTransaction
-export def "describe-transaction DescribeTransaction" [
+export def "describe-transaction post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -586,22 +586,22 @@ export def "describe-transaction DescribeTransaction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  TransactionId: string # The transaction for which to return status.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  transaction_id: string # The transaction for which to return status.
 ]: any -> record<TransactionDescription: record<TransactionId: record, TransactionStatus: record, TransactionStartTime: record, TransactionEndTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DescribeTransaction")
-  let body = {TransactionId: $TransactionId} | compact
+  let body = {"TransactionId": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -612,7 +612,7 @@ export def "describe-transaction DescribeTransaction" [
 #
 # POST /ExtendTransaction
 # operationId: ExtendTransaction
-export def "extend-transaction ExtendTransaction" [
+export def "extend-transaction post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,22 +621,22 @@ export def "extend-transaction ExtendTransaction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --TransactionId: string # The transaction to extend.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --transaction-id: string # The transaction to extend.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ExtendTransaction")
-  let body = {TransactionId: $TransactionId} | compact
+  let body = {"TransactionId": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -647,7 +647,7 @@ export def "extend-transaction ExtendTransaction" [
 #
 # POST /GetDataCellsFilter
 # operationId: GetDataCellsFilter
-export def "get-data-cells-filter GetDataCellsFilter" [
+export def "get-data-cells-filter get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,25 +656,25 @@ export def "get-data-cells-filter GetDataCellsFilter" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  TableCatalogId: string # The ID of the catalog to which the table belongs.
-  DatabaseName: string # A database in the Glue Data Catalog.
-  TableName: string # A table in the database.
-  Name: string # The name given by the user to the data filter cell.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  table_catalog_id: string # The ID of the catalog to which the table belongs.
+  database_name: string # A database in the Glue Data Catalog.
+  table_name: string # A table in the database.
+  name: string # The name given by the user to the data filter cell.
 ]: any -> record<DataCellsFilter: record<TableCatalogId: record, DatabaseName: record, TableName: record, Name: record, RowFilter: record<FilterExpression: record, AllRowsWildcard: record>, ColumnNames: record, ColumnWildcard: record<ExcludedColumnNames: record>, VersionId: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetDataCellsFilter")
-  let body = {TableCatalogId: $TableCatalogId, DatabaseName: $DatabaseName, TableName: $TableName, Name: $Name} | compact
+  let body = {"TableCatalogId": $table_catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -685,7 +685,7 @@ export def "get-data-cells-filter GetDataCellsFilter" [
 #
 # POST /GetDataLakeSettings
 # operationId: GetDataLakeSettings
-export def "get-data-lake-settings GetDataLakeSettings" [
+export def "get-data-lake-settings get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,22 +694,22 @@ export def "get-data-lake-settings GetDataLakeSettings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
 ]: any -> record<DataLakeSettings: record<DataLakeAdmins: record, CreateDatabaseDefaultPermissions: record, CreateTableDefaultPermissions: record, Parameters: record, TrustedResourceOwners: record, AllowExternalDataFiltering: record, ExternalDataFilteringAllowList: record, AuthorizedSessionTagValueList: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetDataLakeSettings")
-  let body = {CatalogId: $CatalogId} | compact
+  let body = {"CatalogId": $catalog_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -720,7 +720,7 @@ export def "get-data-lake-settings GetDataLakeSettings" [
 #
 # POST /GetEffectivePermissionsForPath
 # operationId: GetEffectivePermissionsForPath
-export def "get-effective-permissions-for-path GetEffectivePermissionsForPath" [
+export def "get-effective-permissions-for-path get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -729,28 +729,28 @@ export def "get-effective-permissions-for-path GetEffectivePermissionsForPath" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  ResourceArn: string # The Amazon Resource Name (ARN) of the resource for which you want to get permissions.
-  --NextToken: string # A continuation token, if this is not the first call to retrieve this list.
-  --MaxResults: int # The maximum number of results to return.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource for which you want to get permissions.
+  --next-token: string # A continuation token, if this is not the first call to retrieve this list.
+  --max-results: int # The maximum number of results to return.
 ]: any -> record<Permissions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetEffectivePermissionsForPath" $qp)
-  let body = {CatalogId: $CatalogId, ResourceArn: $ResourceArn, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"CatalogId": $catalog_id, "ResourceArn": $resource_arn, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -761,7 +761,7 @@ export def "get-effective-permissions-for-path GetEffectivePermissionsForPath" [
 #
 # POST /GetLFTag
 # operationId: GetLFTag
-export def "get-lf-tag GetLFTag" [
+export def "get-lf-tag get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -770,23 +770,23 @@ export def "get-lf-tag GetLFTag" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  TagKey: string # The key-name for the LF-tag.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  tag_key: string # The key-name for the LF-tag.
 ]: any -> record<CatalogId: record, TagKey: record, TagValues: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetLFTag")
-  let body = {CatalogId: $CatalogId, TagKey: $TagKey} | compact
+  let body = {"CatalogId": $catalog_id, "TagKey": $tag_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -797,7 +797,7 @@ export def "get-lf-tag GetLFTag" [
 #
 # POST /GetQueryState
 # operationId: GetQueryState
-export def "get-query-state GetQueryState" [
+export def "get-query-state get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -806,22 +806,22 @@ export def "get-query-state GetQueryState" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  QueryId: string # The ID of the plan query operation.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  query_id: string # The ID of the plan query operation.
 ]: any -> record<Error: record, State: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetQueryState")
-  let body = {QueryId: $QueryId} | compact
+  let body = {"QueryId": $query_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -832,7 +832,7 @@ export def "get-query-state GetQueryState" [
 #
 # POST /GetQueryStatistics
 # operationId: GetQueryStatistics
-export def "get-query-statistics GetQueryStatistics" [
+export def "get-query-statistics get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -841,22 +841,22 @@ export def "get-query-statistics GetQueryStatistics" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  QueryId: string # The ID of the plan query operation.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  query_id: string # The ID of the plan query operation.
 ]: any -> record<ExecutionStatistics: record<AverageExecutionTimeMillis: record, DataScannedBytes: record, WorkUnitsExecutedCount: record>, PlanningStatistics: record<EstimatedDataToScanBytes: record, PlanningTimeMillis: record, QueueTimeMillis: record, WorkUnitsGeneratedCount: record>, QuerySubmissionTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetQueryStatistics")
-  let body = {QueryId: $QueryId} | compact
+  let body = {"QueryId": $query_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -868,7 +868,7 @@ export def "get-query-statistics GetQueryStatistics" [
 # POST /GetResourceLFTags
 # operationId: GetResourceLFTags
 # --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-export def "get-resource-lf-tags GetResourceLFTags" [
+export def "get-resource-lf-tags get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -877,24 +877,24 @@ export def "get-resource-lf-tags GetResourceLFTags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  Resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-  --ShowAssignedLFTags: oneof<nothing, bool> # Indicates whether to show the assigned LF-tags.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
+  --show-assigned-lf-tags: oneof<nothing, bool> # Indicates whether to show the assigned LF-tags.
 ]: any -> record<LFTagOnDatabase: record, LFTagsOnTable: record, LFTagsOnColumns: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetResourceLFTags")
-  let body = {CatalogId: $CatalogId, Resource: $Resource, ShowAssignedLFTags: $ShowAssignedLFTags} | compact
+  let body = {"CatalogId": $catalog_id, "Resource": $resource, "ShowAssignedLFTags": $show_assigned_lf_tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -905,7 +905,7 @@ export def "get-resource-lf-tags GetResourceLFTags" [
 #
 # POST /GetTableObjects
 # operationId: GetTableObjects
-export def "get-table-objects GetTableObjects" [
+export def "get-table-objects get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -914,32 +914,32 @@ export def "get-table-objects GetTableObjects" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The catalog containing the governed table. Defaults to the caller’s account.
-  DatabaseName: string # The database containing the governed table.
-  TableName: string # The governed table for which to retrieve objects.
-  --TransactionId: string # The transaction ID at which to read the governed table contents. If this transaction has aborted, an error is returned. If not set, defaults to the most recent committed transaction. Cannot be specified along with <code>QueryAsOfTime</code>.
-  --QueryAsOfTime: string # The time as of when to read the governed table contents. If not set, the most recent transaction commit time is used. Cannot be specified along with <code>TransactionId</code>. (format: date-time)
-  --PartitionPredicate: string # <p>A predicate to filter the objects returned based on the partition keys defined in the governed table.</p> <ul> <li> <p>The comparison operators supported are: =, &gt;, &lt;, &gt;=, &lt;=</p> </li> <li> <p>The logical operators supported are: AND</p> </li> <li> <p>The data types supported are integer, long, date(yyyy-MM-dd), timestamp(yyyy-MM-dd HH:mm:ssXXX or yyyy-MM-dd HH:mm:ss"), string and decimal.</p> </li> </ul>
-  --MaxResults: int # Specifies how many values to return in a page.
-  --NextToken: string # A continuation token if this is not the first call to retrieve these objects.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The catalog containing the governed table. Defaults to the caller’s account.
+  database_name: string # The database containing the governed table.
+  table_name: string # The governed table for which to retrieve objects.
+  --transaction-id: string # The transaction ID at which to read the governed table contents. If this transaction has aborted, an error is returned. If not set, defaults to the most recent committed transaction. Cannot be specified along with <code>QueryAsOfTime</code>.
+  --query-as-of-time: string # The time as of when to read the governed table contents. If not set, the most recent transaction commit time is used. Cannot be specified along with <code>TransactionId</code>. (format: date-time)
+  --partition-predicate: string # <p>A predicate to filter the objects returned based on the partition keys defined in the governed table.</p> <ul> <li> <p>The comparison operators supported are: =, &gt;, &lt;, &gt;=, &lt;=</p> </li> <li> <p>The logical operators supported are: AND</p> </li> <li> <p>The data types supported are integer, long, date(yyyy-MM-dd), timestamp(yyyy-MM-dd HH:mm:ssXXX or yyyy-MM-dd HH:mm:ss"), string and decimal.</p> </li> </ul>
+  --max-results: int # Specifies how many values to return in a page.
+  --next-token: string # A continuation token if this is not the first call to retrieve these objects.
 ]: any -> record<Objects: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetTableObjects" $qp)
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, TransactionId: $TransactionId, QueryAsOfTime: $QueryAsOfTime, PartitionPredicate: $PartitionPredicate, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "TransactionId": $transaction_id, "QueryAsOfTime": $query_as_of_time, "PartitionPredicate": $partition_predicate, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -952,7 +952,7 @@ export def "get-table-objects GetTableObjects" [
 # operationId: GetTemporaryGluePartitionCredentials
 # --Partition shape: {Values?: any}
 # --AuditContext shape: {AdditionalAuditContext?: any}
-export def "get-temporary-glue-partition-credentials GetTemporaryGluePartitionCredentials" [
+export def "get-temporary-glue-partition-credentials get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -961,27 +961,27 @@ export def "get-temporary-glue-partition-credentials GetTemporaryGluePartitionCr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  TableArn: string # The ARN of the partitions' table.
-  Partition: record # Contains a list of values defining partitions. — shape: {Values?: any}
-  --Permissions: list # Filters the request based on the user having been granted a list of specified permissions on the requested resource(s).
-  --DurationSeconds: int # The time period, between 900 and 21,600 seconds, for the timeout of the temporary credentials.
-  --AuditContext: record # A structure used to include auditing information on the privileged API.  — shape: {AdditionalAuditContext?: any}
-  SupportedPermissionTypes: list # A list of supported permission types for the partition. Valid values are <code>COLUMN_PERMISSION</code> and <code>CELL_FILTER_PERMISSION</code>.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  table_arn: string # The ARN of the partitions' table.
+  partition: record # Contains a list of values defining partitions. — shape: {Values?: any}
+  --permissions: list # Filters the request based on the user having been granted a list of specified permissions on the requested resource(s).
+  --duration-seconds: int # The time period, between 900 and 21,600 seconds, for the timeout of the temporary credentials.
+  --audit-context: record # A structure used to include auditing information on the privileged API.  — shape: {AdditionalAuditContext?: any}
+  supported_permission_types: list # A list of supported permission types for the partition. Valid values are <code>COLUMN_PERMISSION</code> and <code>CELL_FILTER_PERMISSION</code>.
 ]: any -> record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record, Expiration: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetTemporaryGluePartitionCredentials")
-  let body = {TableArn: $TableArn, Partition: $Partition, Permissions: $Permissions, DurationSeconds: $DurationSeconds, AuditContext: $AuditContext, SupportedPermissionTypes: $SupportedPermissionTypes} | compact
+  let body = {"TableArn": $table_arn, "Partition": $partition, "Permissions": $permissions, "DurationSeconds": $duration_seconds, "AuditContext": $audit_context, "SupportedPermissionTypes": $supported_permission_types} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -993,7 +993,7 @@ export def "get-temporary-glue-partition-credentials GetTemporaryGluePartitionCr
 # POST /GetTemporaryGlueTableCredentials
 # operationId: GetTemporaryGlueTableCredentials
 # --AuditContext shape: {AdditionalAuditContext?: any}
-export def "get-temporary-glue-table-credentials GetTemporaryGlueTableCredentials" [
+export def "get-temporary-glue-table-credentials get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1002,26 +1002,26 @@ export def "get-temporary-glue-table-credentials GetTemporaryGlueTableCredential
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  TableArn: string # The ARN identifying a table in the Data Catalog for the temporary credentials request.
-  --Permissions: list # Filters the request based on the user having been granted a list of specified permissions on the requested resource(s).
-  --DurationSeconds: int # The time period, between 900 and 21,600 seconds, for the timeout of the temporary credentials.
-  --AuditContext: record # A structure used to include auditing information on the privileged API.  — shape: {AdditionalAuditContext?: any}
-  SupportedPermissionTypes: list # A list of supported permission types for the table. Valid values are <code>COLUMN_PERMISSION</code> and <code>CELL_FILTER_PERMISSION</code>.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  table_arn: string # The ARN identifying a table in the Data Catalog for the temporary credentials request.
+  --permissions: list # Filters the request based on the user having been granted a list of specified permissions on the requested resource(s).
+  --duration-seconds: int # The time period, between 900 and 21,600 seconds, for the timeout of the temporary credentials.
+  --audit-context: record # A structure used to include auditing information on the privileged API.  — shape: {AdditionalAuditContext?: any}
+  supported_permission_types: list # A list of supported permission types for the table. Valid values are <code>COLUMN_PERMISSION</code> and <code>CELL_FILTER_PERMISSION</code>.
 ]: any -> record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record, Expiration: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetTemporaryGlueTableCredentials")
-  let body = {TableArn: $TableArn, Permissions: $Permissions, DurationSeconds: $DurationSeconds, AuditContext: $AuditContext, SupportedPermissionTypes: $SupportedPermissionTypes} | compact
+  let body = {"TableArn": $table_arn, "Permissions": $permissions, "DurationSeconds": $duration_seconds, "AuditContext": $audit_context, "SupportedPermissionTypes": $supported_permission_types} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1032,7 +1032,7 @@ export def "get-temporary-glue-table-credentials GetTemporaryGlueTableCredential
 #
 # POST /GetWorkUnitResults
 # operationId: GetWorkUnitResults
-export def "get-work-unit-results GetWorkUnitResults" [
+export def "get-work-unit-results get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1041,24 +1041,24 @@ export def "get-work-unit-results GetWorkUnitResults" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  QueryId: string # The ID of the plan query operation for which to get results.
-  WorkUnitId: int # The work unit ID for which to get results. Value generated by enumerating <code>WorkUnitIdMin</code> to <code>WorkUnitIdMax</code> (inclusive) from the <code>WorkUnitRange</code> in the output of <code>GetWorkUnits</code>.
-  WorkUnitToken: string # A work token used to query the execution service. Token output from <code>GetWorkUnits</code>. (format: password)
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  query_id: string # The ID of the plan query operation for which to get results.
+  work_unit_id: int # The work unit ID for which to get results. Value generated by enumerating <code>WorkUnitIdMin</code> to <code>WorkUnitIdMax</code> (inclusive) from the <code>WorkUnitRange</code> in the output of <code>GetWorkUnits</code>.
+  work_unit_token: string # A work token used to query the execution service. Token output from <code>GetWorkUnits</code>. (format: password)
 ]: any -> record<ResultStream: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetWorkUnitResults")
-  let body = {QueryId: $QueryId, WorkUnitId: $WorkUnitId, WorkUnitToken: $WorkUnitToken} | compact
+  let body = {"QueryId": $query_id, "WorkUnitId": $work_unit_id, "WorkUnitToken": $work_unit_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1069,7 +1069,7 @@ export def "get-work-unit-results GetWorkUnitResults" [
 #
 # POST /GetWorkUnits
 # operationId: GetWorkUnits
-export def "get-work-units GetWorkUnits" [
+export def "get-work-units get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1078,27 +1078,27 @@ export def "get-work-units GetWorkUnits" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --NextToken: string # A continuation token, if this is a continuation call.
-  --PageSize: int # The size of each page to get in the Amazon Web Services service call. This does not affect the number of items returned in the command's output. Setting a smaller page size results in more calls to the Amazon Web Services service, retrieving fewer items in each call. This can help prevent the Amazon Web Services service calls from timing out.
-  QueryId: string # The ID of the plan query operation.
+  --page-size: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --next-token: string # A continuation token, if this is a continuation call.
+  --page-size: int # The size of each page to get in the Amazon Web Services service call. This does not affect the number of items returned in the command's output. Setting a smaller page size results in more calls to the Amazon Web Services service, retrieving fewer items in each call. This can help prevent the Amazon Web Services service calls from timing out.
+  query_id: string # The ID of the plan query operation.
 ]: any -> record<NextToken: record, QueryId: record, WorkUnitRanges: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetWorkUnits" $qp)
-  let body = {NextToken: $NextToken, PageSize: $PageSize, QueryId: $QueryId} | compact
+  let body = {"NextToken": $next_token, "PageSize": $page_size, "QueryId": $query_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1111,7 +1111,7 @@ export def "get-work-units GetWorkUnits" [
 # operationId: GrantPermissions
 # --Principal shape: {DataLakePrincipalIdentifier?: any}
 # --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-export def "grant-permissions GrantPermissions" [
+export def "grant-permissions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1120,26 +1120,26 @@ export def "grant-permissions GrantPermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  Principal: record # The Lake Formation principal. Supported principals are IAM users or IAM roles. — shape: {DataLakePrincipalIdentifier?: any}
-  Resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-  Permissions: list # The permissions granted to the principal on the resource. Lake Formation defines privileges to grant and revoke access to metadata in the Data Catalog and data organized in underlying data storage such as Amazon S3. Lake Formation requires that each principal be authorized to perform a specific task on Lake Formation resources. 
-  --PermissionsWithGrantOption: list # Indicates a list of the granted permissions that the principal may pass to other users. These permissions may only be a subset of the permissions granted in the <code>Privileges</code>.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  principal: record # The Lake Formation principal. Supported principals are IAM users or IAM roles. — shape: {DataLakePrincipalIdentifier?: any}
+  resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
+  permissions: list # The permissions granted to the principal on the resource. Lake Formation defines privileges to grant and revoke access to metadata in the Data Catalog and data organized in underlying data storage such as Amazon S3. Lake Formation requires that each principal be authorized to perform a specific task on Lake Formation resources. 
+  --permissions-with-grant-option: list # Indicates a list of the granted permissions that the principal may pass to other users. These permissions may only be a subset of the permissions granted in the <code>Privileges</code>.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GrantPermissions")
-  let body = {CatalogId: $CatalogId, Principal: $Principal, Resource: $Resource, Permissions: $Permissions, PermissionsWithGrantOption: $PermissionsWithGrantOption} | compact
+  let body = {"CatalogId": $catalog_id, "Principal": $principal, "Resource": $resource, "Permissions": $permissions, "PermissionsWithGrantOption": $permissions_with_grant_option} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1151,7 +1151,7 @@ export def "grant-permissions GrantPermissions" [
 # POST /ListDataCellsFilter
 # operationId: ListDataCellsFilter
 # --Table shape: {CatalogId?: any, DatabaseName?: any, Name?: any, TableWildcard?: any}
-export def "list-data-cells-filter ListDataCellsFilter" [
+export def "list-data-cells-filter list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1160,27 +1160,27 @@ export def "list-data-cells-filter ListDataCellsFilter" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --Table: record # A structure for the table object. A table is a metadata definition that represents your data. You can Grant and Revoke table privileges to a principal.  — shape: {CatalogId?: any, DatabaseName?: any, Name?: any, TableWildcard?: any}
-  --NextToken: string # A continuation token, if this is a continuation call.
-  --MaxResults: int # The maximum size of the response.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --table: record # A structure for the table object. A table is a metadata definition that represents your data. You can Grant and Revoke table privileges to a principal.  — shape: {CatalogId?: any, DatabaseName?: any, Name?: any, TableWildcard?: any}
+  --next-token: string # A continuation token, if this is a continuation call.
+  --max-results: int # The maximum size of the response.
 ]: any -> record<DataCellsFilters: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListDataCellsFilter" $qp)
-  let body = {Table: $Table, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Table": $table, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1191,7 +1191,7 @@ export def "list-data-cells-filter ListDataCellsFilter" [
 #
 # POST /ListLFTags
 # operationId: ListLFTags
-export def "list-lf-tags ListLFTags" [
+export def "list-lf-tags list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1200,28 +1200,28 @@ export def "list-lf-tags ListLFTags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  --ResourceShareType: string@ResourceShareType-completer # If resource share type is <code>ALL</code>, returns both in-account LF-tags and shared LF-tags that the requester has permission to view. If resource share type is <code>FOREIGN</code>, returns all share LF-tags that the requester can view. If no resource share type is passed, lists LF-tags in the given catalog ID that the requester has permission to view.
-  --MaxResults: int # The maximum number of results to return.
-  --NextToken: string # A continuation token, if this is not the first call to retrieve this list.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  --resource-share-type: string@resource-share-type-completer # If resource share type is <code>ALL</code>, returns both in-account LF-tags and shared LF-tags that the requester has permission to view. If resource share type is <code>FOREIGN</code>, returns all share LF-tags that the requester can view. If no resource share type is passed, lists LF-tags in the given catalog ID that the requester has permission to view.
+  --max-results: int # The maximum number of results to return.
+  --next-token: string # A continuation token, if this is not the first call to retrieve this list.
 ]: any -> record<LFTags: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListLFTags" $qp)
-  let body = {CatalogId: $CatalogId, ResourceShareType: $ResourceShareType, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"CatalogId": $catalog_id, "ResourceShareType": $resource_share_type, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1234,7 +1234,7 @@ export def "list-lf-tags ListLFTags" [
 # operationId: ListPermissions
 # --Principal shape: {DataLakePrincipalIdentifier?: any}
 # --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-export def "list-permissions ListPermissions" [
+export def "list-permissions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1243,31 +1243,31 @@ export def "list-permissions ListPermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  --Principal: record # The Lake Formation principal. Supported principals are IAM users or IAM roles. — shape: {DataLakePrincipalIdentifier?: any}
-  --ResourceType: string@ResourceType-completer # Specifies a resource type to filter the permissions returned.
-  --Resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-  --NextToken: string # A continuation token, if this is not the first call to retrieve this list.
-  --MaxResults: int # The maximum number of results to return.
-  --IncludeRelated: string # Indicates that related permissions should be included in the results.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  --principal: record # The Lake Formation principal. Supported principals are IAM users or IAM roles. — shape: {DataLakePrincipalIdentifier?: any}
+  --resource-type: string@resource-type-completer # Specifies a resource type to filter the permissions returned.
+  --resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
+  --next-token: string # A continuation token, if this is not the first call to retrieve this list.
+  --max-results: int # The maximum number of results to return.
+  --include-related: string # Indicates that related permissions should be included in the results.
 ]: any -> record<PrincipalResourcePermissions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListPermissions" $qp)
-  let body = {CatalogId: $CatalogId, Principal: $Principal, ResourceType: $ResourceType, Resource: $Resource, NextToken: $NextToken, MaxResults: $MaxResults, IncludeRelated: $IncludeRelated} | compact
+  let body = {"CatalogId": $catalog_id, "Principal": $principal, "ResourceType": $resource_type, "Resource": $resource, "NextToken": $next_token, "MaxResults": $max_results, "IncludeRelated": $include_related} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1279,7 +1279,7 @@ export def "list-permissions ListPermissions" [
 # POST /ListResources
 # operationId: ListResources
 # --FilterConditionList item shape: {Field?: any, ComparisonOperator?: any, StringValueList?: any}
-export def "list-resources ListResources" [
+export def "list-resources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1288,27 +1288,27 @@ export def "list-resources ListResources" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --FilterConditionList: list # Any applicable row-level and/or column-level filtering conditions for the resources. — item shape: {Field?: any, ComparisonOperator?: any, StringValueList?: any}
-  --MaxResults: int # The maximum number of resource results.
-  --NextToken: string # A continuation token, if this is not the first call to retrieve these resources.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --filter-condition-list: list # Any applicable row-level and/or column-level filtering conditions for the resources. — item shape: {Field?: any, ComparisonOperator?: any, StringValueList?: any}
+  --max-results: int # The maximum number of resource results.
+  --next-token: string # A continuation token, if this is not the first call to retrieve these resources.
 ]: any -> record<ResourceInfoList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListResources" $qp)
-  let body = {FilterConditionList: $FilterConditionList, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"FilterConditionList": $filter_condition_list, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1319,7 +1319,7 @@ export def "list-resources ListResources" [
 #
 # POST /ListTableStorageOptimizers
 # operationId: ListTableStorageOptimizers
-export def "list-table-storage-optimizers ListTableStorageOptimizers" [
+export def "list-table-storage-optimizers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1328,30 +1328,30 @@ export def "list-table-storage-optimizers ListTableStorageOptimizers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The Catalog ID of the table.
-  DatabaseName: string # Name of the database where the table is present.
-  TableName: string # Name of the table.
-  --StorageOptimizerType: string@StorageOptimizerType-completer # The specific type of storage optimizers to list. The supported value is <code>compaction</code>.
-  --MaxResults: int # The number of storage optimizers to return on each call.
-  --NextToken: string # A continuation token, if this is a continuation call.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The Catalog ID of the table.
+  database_name: string # Name of the database where the table is present.
+  table_name: string # Name of the table.
+  --storage-optimizer-type: string@storage-optimizer-type-completer # The specific type of storage optimizers to list. The supported value is <code>compaction</code>.
+  --max-results: int # The number of storage optimizers to return on each call.
+  --next-token: string # A continuation token, if this is a continuation call.
 ]: any -> record<StorageOptimizerList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListTableStorageOptimizers" $qp)
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, StorageOptimizerType: $StorageOptimizerType, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "StorageOptimizerType": $storage_optimizer_type, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1362,7 +1362,7 @@ export def "list-table-storage-optimizers ListTableStorageOptimizers" [
 #
 # POST /ListTransactions
 # operationId: ListTransactions
-export def "list-transactions ListTransactions" [
+export def "list-transactions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1371,28 +1371,28 @@ export def "list-transactions ListTransactions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The catalog for which to list transactions. Defaults to the account ID of the caller.
-  --StatusFilter: string@StatusFilter-completer #  A filter indicating the status of transactions to return. Options are ALL | COMPLETED | COMMITTED | ABORTED | ACTIVE. The default is <code>ALL</code>.
-  --MaxResults: int # The maximum number of transactions to return in a single call.
-  --NextToken: string # A continuation token if this is not the first call to retrieve transactions.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The catalog for which to list transactions. Defaults to the account ID of the caller.
+  --status-filter: string@status-filter-completer #  A filter indicating the status of transactions to return. Options are ALL | COMPLETED | COMMITTED | ABORTED | ACTIVE. The default is <code>ALL</code>.
+  --max-results: int # The maximum number of transactions to return in a single call.
+  --next-token: string # A continuation token if this is not the first call to retrieve transactions.
 ]: any -> record<Transactions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListTransactions" $qp)
-  let body = {CatalogId: $CatalogId, StatusFilter: $StatusFilter, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"CatalogId": $catalog_id, "StatusFilter": $status_filter, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1404,7 +1404,7 @@ export def "list-transactions ListTransactions" [
 # POST /PutDataLakeSettings
 # operationId: PutDataLakeSettings
 # --DataLakeSettings shape: {DataLakeAdmins?: any, CreateDatabaseDefaultPermissions?: any, CreateTableDefaultPermissions?: any, Parameters?: any, TrustedResourceOwners?: any, AllowExternalDataFiltering?: any, ExternalDataFilteringAllowList?: any, AuthorizedSessionTagValueList?: any}
-export def "put-data-lake-settings PutDataLakeSettings" [
+export def "put-data-lake-settings update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1413,23 +1413,23 @@ export def "put-data-lake-settings PutDataLakeSettings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  DataLakeSettings: record # A structure representing a list of Lake Formation principals designated as data lake administrators and lists of principal permission entries for default create database and default create table permissions. — shape: {DataLakeAdmins?: any, CreateDatabaseDefaultPermissions?: any, CreateTableDefaultPermissions?: any, Parameters?: any, TrustedResourceOwners?: any, AllowExternalDataFiltering?: any, ExternalDataFilteringAllowList?: any, AuthorizedSessionTagValueList?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  data_lake_settings: record # A structure representing a list of Lake Formation principals designated as data lake administrators and lists of principal permission entries for default create database and default create table permissions. — shape: {DataLakeAdmins?: any, CreateDatabaseDefaultPermissions?: any, CreateTableDefaultPermissions?: any, Parameters?: any, TrustedResourceOwners?: any, AllowExternalDataFiltering?: any, ExternalDataFilteringAllowList?: any, AuthorizedSessionTagValueList?: any}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/PutDataLakeSettings")
-  let body = {CatalogId: $CatalogId, DataLakeSettings: $DataLakeSettings} | compact
+  let body = {"CatalogId": $catalog_id, "DataLakeSettings": $data_lake_settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1440,7 +1440,7 @@ export def "put-data-lake-settings PutDataLakeSettings" [
 #
 # POST /RegisterResource
 # operationId: RegisterResource
-export def "register-resource RegisterResource" [
+export def "register-resource create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1449,25 +1449,25 @@ export def "register-resource RegisterResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ResourceArn: string # The Amazon Resource Name (ARN) of the resource that you want to register.
-  --UseServiceLinkedRole: oneof<nothing, bool> # <p>Designates an Identity and Access Management (IAM) service-linked role by registering this role with the Data Catalog. A service-linked role is a unique type of IAM role that is linked directly to Lake Formation.</p> <p>For more information, see <a href="https://docs.aws.amazon.com/lake-formation/latest/dg/service-linked-roles.html">Using Service-Linked Roles for Lake Formation</a>.</p>
-  --RoleArn: string # The identifier for the role that registers the resource.
-  --WithFederation: oneof<nothing, bool> # Whether or not the resource is a federated resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource that you want to register.
+  --use-service-linked-role: oneof<nothing, bool> # <p>Designates an Identity and Access Management (IAM) service-linked role by registering this role with the Data Catalog. A service-linked role is a unique type of IAM role that is linked directly to Lake Formation.</p> <p>For more information, see <a href="https://docs.aws.amazon.com/lake-formation/latest/dg/service-linked-roles.html">Using Service-Linked Roles for Lake Formation</a>.</p>
+  --role-arn: string # The identifier for the role that registers the resource.
+  --with-federation: oneof<nothing, bool> # Whether or not the resource is a federated resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/RegisterResource")
-  let body = {ResourceArn: $ResourceArn, UseServiceLinkedRole: $UseServiceLinkedRole, RoleArn: $RoleArn, WithFederation: $WithFederation} | compact
+  let body = {"ResourceArn": $resource_arn, "UseServiceLinkedRole": $use_service_linked_role, "RoleArn": $role_arn, "WithFederation": $with_federation} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1480,7 +1480,7 @@ export def "register-resource RegisterResource" [
 # operationId: RemoveLFTagsFromResource
 # --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
 # --LFTags item shape: {CatalogId?: any, TagKey: any, TagValues: any}
-export def "remove-lf-tags-from-resource RemoveLFTagsFromResource" [
+export def "remove-lf-tags-from-resource delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1489,24 +1489,24 @@ export def "remove-lf-tags-from-resource RemoveLFTagsFromResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  Resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-  LFTags: list # The LF-tags to be removed from the resource. — item shape: {CatalogId?: any, TagKey: any, TagValues: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
+  lf_tags: list # The LF-tags to be removed from the resource. — item shape: {CatalogId?: any, TagKey: any, TagValues: any}
 ]: any -> record<Failures: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/RemoveLFTagsFromResource")
-  let body = {CatalogId: $CatalogId, Resource: $Resource, LFTags: $LFTags} | compact
+  let body = {"CatalogId": $catalog_id, "Resource": $resource, "LFTags": $lf_tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1519,7 +1519,7 @@ export def "remove-lf-tags-from-resource RemoveLFTagsFromResource" [
 # operationId: RevokePermissions
 # --Principal shape: {DataLakePrincipalIdentifier?: any}
 # --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-export def "revoke-permissions RevokePermissions" [
+export def "revoke-permissions delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1528,26 +1528,26 @@ export def "revoke-permissions RevokePermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  Principal: record # The Lake Formation principal. Supported principals are IAM users or IAM roles. — shape: {DataLakePrincipalIdentifier?: any}
-  Resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-  Permissions: list # The permissions revoked to the principal on the resource. For information about permissions, see <a href="https://docs.aws.amazon.com/lake-formation/latest/dg/security-data-access.html">Security and Access Control to Metadata and Data</a>.
-  --PermissionsWithGrantOption: list # Indicates a list of permissions for which to revoke the grant option allowing the principal to pass permissions to other principals.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  principal: record # The Lake Formation principal. Supported principals are IAM users or IAM roles. — shape: {DataLakePrincipalIdentifier?: any}
+  resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
+  permissions: list # The permissions revoked to the principal on the resource. For information about permissions, see <a href="https://docs.aws.amazon.com/lake-formation/latest/dg/security-data-access.html">Security and Access Control to Metadata and Data</a>.
+  --permissions-with-grant-option: list # Indicates a list of permissions for which to revoke the grant option allowing the principal to pass permissions to other principals.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/RevokePermissions")
-  let body = {CatalogId: $CatalogId, Principal: $Principal, Resource: $Resource, Permissions: $Permissions, PermissionsWithGrantOption: $PermissionsWithGrantOption} | compact
+  let body = {"CatalogId": $catalog_id, "Principal": $principal, "Resource": $resource, "Permissions": $permissions, "PermissionsWithGrantOption": $permissions_with_grant_option} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1559,7 +1559,7 @@ export def "revoke-permissions RevokePermissions" [
 # POST /SearchDatabasesByLFTags
 # operationId: SearchDatabasesByLFTags
 # --Expression item shape: {TagKey: any, TagValues: any}
-export def "search-databases-by-lf-tags SearchDatabasesByLFTags" [
+export def "search-databases-by-lf-tags list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1568,28 +1568,28 @@ export def "search-databases-by-lf-tags SearchDatabasesByLFTags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --NextToken: string # A continuation token, if this is not the first call to retrieve this list.
-  --MaxResults: int # The maximum number of results to return.
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  Expression: list # A list of conditions (<code>LFTag</code> structures) to search for in database resources. — item shape: {TagKey: any, TagValues: any}
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --next-token: string # A continuation token, if this is not the first call to retrieve this list.
+  --max-results: int # The maximum number of results to return.
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  expression: list # A list of conditions (<code>LFTag</code> structures) to search for in database resources. — item shape: {TagKey: any, TagValues: any}
 ]: any -> record<NextToken: record, DatabaseList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/SearchDatabasesByLFTags" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, CatalogId: $CatalogId, Expression: $Expression} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "CatalogId": $catalog_id, "Expression": $expression} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1601,7 +1601,7 @@ export def "search-databases-by-lf-tags SearchDatabasesByLFTags" [
 # POST /SearchTablesByLFTags
 # operationId: SearchTablesByLFTags
 # --Expression item shape: {TagKey: any, TagValues: any}
-export def "search-tables-by-lf-tags SearchTablesByLFTags" [
+export def "search-tables-by-lf-tags list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1610,28 +1610,28 @@ export def "search-tables-by-lf-tags SearchTablesByLFTags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --NextToken: string # A continuation token, if this is not the first call to retrieve this list.
-  --MaxResults: int # The maximum number of results to return.
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  Expression: list # A list of conditions (<code>LFTag</code> structures) to search for in table resources. — item shape: {TagKey: any, TagValues: any}
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --next-token: string # A continuation token, if this is not the first call to retrieve this list.
+  --max-results: int # The maximum number of results to return.
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  expression: list # A list of conditions (<code>LFTag</code> structures) to search for in table resources. — item shape: {TagKey: any, TagValues: any}
 ]: any -> record<NextToken: record, TableList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/SearchTablesByLFTags" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, CatalogId: $CatalogId, Expression: $Expression} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "CatalogId": $catalog_id, "Expression": $expression} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1643,7 +1643,7 @@ export def "search-tables-by-lf-tags SearchTablesByLFTags" [
 # POST /StartQueryPlanning
 # operationId: StartQueryPlanning
 # --QueryPlanningContext shape: {CatalogId?: any, DatabaseName?: any, QueryAsOfTime?: any, QueryParameters?: any, TransactionId?: any}
-export def "start-query-planning StartQueryPlanning" [
+export def "start-query-planning start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1652,23 +1652,23 @@ export def "start-query-planning StartQueryPlanning" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  QueryPlanningContext: record # A structure containing information about the query plan. — shape: {CatalogId?: any, DatabaseName?: any, QueryAsOfTime?: any, QueryParameters?: any, TransactionId?: any}
-  QueryString: string # A PartiQL query statement used as an input to the planner service. (format: password)
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  query_planning_context: record # A structure containing information about the query plan. — shape: {CatalogId?: any, DatabaseName?: any, QueryAsOfTime?: any, QueryParameters?: any, TransactionId?: any}
+  query_string: string # A PartiQL query statement used as an input to the planner service. (format: password)
 ]: any -> record<QueryId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/StartQueryPlanning")
-  let body = {QueryPlanningContext: $QueryPlanningContext, QueryString: $QueryString} | compact
+  let body = {"QueryPlanningContext": $query_planning_context, "QueryString": $query_string} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1679,7 +1679,7 @@ export def "start-query-planning StartQueryPlanning" [
 #
 # POST /StartTransaction
 # operationId: StartTransaction
-export def "start-transaction StartTransaction" [
+export def "start-transaction start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1688,22 +1688,22 @@ export def "start-transaction StartTransaction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --TransactionType: string@TransactionType-completer # Indicates whether this transaction should be read only or read and write. Writes made using a read-only transaction ID will be rejected. Read-only transactions do not need to be committed. 
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --transaction-type: string@transaction-type-completer # Indicates whether this transaction should be read only or read and write. Writes made using a read-only transaction ID will be rejected. Read-only transactions do not need to be committed. 
 ]: any -> record<TransactionId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/StartTransaction")
-  let body = {TransactionType: $TransactionType} | compact
+  let body = {"TransactionType": $transaction_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1715,7 +1715,7 @@ export def "start-transaction StartTransaction" [
 # POST /UpdateDataCellsFilter
 # operationId: UpdateDataCellsFilter
 # --TableData shape: {TableCatalogId?: any, DatabaseName?: any, TableName?: any, Name?: any, RowFilter?: any, ColumnNames?: any, ColumnWildcard?: any, VersionId?: any}
-export def "update-data-cells-filter UpdateDataCellsFilter" [
+export def "update-data-cells-filter update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1724,22 +1724,22 @@ export def "update-data-cells-filter UpdateDataCellsFilter" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  TableData: record # A structure that describes certain columns on certain rows. — shape: {TableCatalogId?: any, DatabaseName?: any, TableName?: any, Name?: any, RowFilter?: any, ColumnNames?: any, ColumnWildcard?: any, VersionId?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  table_data: record # A structure that describes certain columns on certain rows. — shape: {TableCatalogId?: any, DatabaseName?: any, TableName?: any, Name?: any, RowFilter?: any, ColumnNames?: any, ColumnWildcard?: any, VersionId?: any}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/UpdateDataCellsFilter")
-  let body = {TableData: $TableData} | compact
+  let body = {"TableData": $table_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1750,7 +1750,7 @@ export def "update-data-cells-filter UpdateDataCellsFilter" [
 #
 # POST /UpdateLFTag
 # operationId: UpdateLFTag
-export def "update-lf-tag UpdateLFTag" [
+export def "update-lf-tag update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1759,25 +1759,25 @@ export def "update-lf-tag UpdateLFTag" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
-  TagKey: string # The key-name for the LF-tag for which to add or delete values.
-  --TagValuesToDelete: list # A list of LF-tag values to delete from the LF-tag.
-  --TagValuesToAdd: list # A list of LF-tag values to add from the LF-tag.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. 
+  tag_key: string # The key-name for the LF-tag for which to add or delete values.
+  --tag-values-to-delete: list # A list of LF-tag values to delete from the LF-tag.
+  --tag-values-to-add: list # A list of LF-tag values to add from the LF-tag.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/UpdateLFTag")
-  let body = {CatalogId: $CatalogId, TagKey: $TagKey, TagValuesToDelete: $TagValuesToDelete, TagValuesToAdd: $TagValuesToAdd} | compact
+  let body = {"CatalogId": $catalog_id, "TagKey": $tag_key, "TagValuesToDelete": $tag_values_to_delete, "TagValuesToAdd": $tag_values_to_add} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1788,7 +1788,7 @@ export def "update-lf-tag UpdateLFTag" [
 #
 # POST /UpdateResource
 # operationId: UpdateResource
-export def "update-resource UpdateResource" [
+export def "update-resource update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1797,24 +1797,24 @@ export def "update-resource UpdateResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  RoleArn: string # The new role to use for the given resource registered in Lake Formation.
-  ResourceArn: string # The resource ARN.
-  --WithFederation: oneof<nothing, bool> # Whether or not the resource is a federated resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  role_arn: string # The new role to use for the given resource registered in Lake Formation.
+  resource_arn: string # The resource ARN.
+  --with-federation: oneof<nothing, bool> # Whether or not the resource is a federated resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/UpdateResource")
-  let body = {RoleArn: $RoleArn, ResourceArn: $ResourceArn, WithFederation: $WithFederation} | compact
+  let body = {"RoleArn": $role_arn, "ResourceArn": $resource_arn, "WithFederation": $with_federation} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1826,7 +1826,7 @@ export def "update-resource UpdateResource" [
 # POST /UpdateTableObjects
 # operationId: UpdateTableObjects
 # --WriteOperations item shape: {AddObject?: any, DeleteObject?: any}
-export def "update-table-objects UpdateTableObjects" [
+export def "update-table-objects update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1835,26 +1835,26 @@ export def "update-table-objects UpdateTableObjects" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The catalog containing the governed table to update. Defaults to the caller’s account ID.
-  DatabaseName: string # The database containing the governed table to update.
-  TableName: string # The governed table to update.
-  --TransactionId: string # The transaction at which to do the write.
-  WriteOperations: list # A list of <code>WriteOperation</code> objects that define an object to add to or delete from the manifest for a governed table. — item shape: {AddObject?: any, DeleteObject?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The catalog containing the governed table to update. Defaults to the caller’s account ID.
+  database_name: string # The database containing the governed table to update.
+  table_name: string # The governed table to update.
+  --transaction-id: string # The transaction at which to do the write.
+  write_operations: list # A list of <code>WriteOperation</code> objects that define an object to add to or delete from the manifest for a governed table. — item shape: {AddObject?: any, DeleteObject?: any}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/UpdateTableObjects")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, TransactionId: $TransactionId, WriteOperations: $WriteOperations} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "TransactionId": $transaction_id, "WriteOperations": $write_operations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1865,7 +1865,7 @@ export def "update-table-objects UpdateTableObjects" [
 #
 # POST /UpdateTableStorageOptimizer
 # operationId: UpdateTableStorageOptimizer
-export def "update-table-storage-optimizer UpdateTableStorageOptimizer" [
+export def "update-table-storage-optimizer update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1874,25 +1874,25 @@ export def "update-table-storage-optimizer UpdateTableStorageOptimizer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CatalogId: string # The Catalog ID of the table.
-  DatabaseName: string # Name of the database where the table is present.
-  TableName: string # Name of the table for which to enable the storage optimizer.
-  StorageOptimizerConfig: record # Name of the table for which to enable the storage optimizer.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --catalog-id: string # The Catalog ID of the table.
+  database_name: string # Name of the database where the table is present.
+  table_name: string # Name of the table for which to enable the storage optimizer.
+  storage_optimizer_config: record # Name of the table for which to enable the storage optimizer.
 ]: any -> record<Result: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/UpdateTableStorageOptimizer")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, StorageOptimizerConfig: $StorageOptimizerConfig} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "StorageOptimizerConfig": $storage_optimizer_config} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

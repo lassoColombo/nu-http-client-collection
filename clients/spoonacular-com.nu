@@ -66,12 +66,12 @@ def base-url-completer [] { ["https://api.spoonacular.com"] }
 def auth-scheme-completer [] { ["x-api-key"] }
 
 # Completers for enum parameters
-def Content-Type-completer [] { ["application/json" "application/x-www-form-urlencoded" "multipart/form-data"] }
+def content-type-completer [] { ["application/json" "application/x-www-form-urlencoded" "multipart/form-data"] }
 def language-completer [] { ["de" "en"] }
-def addMenuItemInformation-completer [] { ["false" "true"] }
-def Accept-completer [] { ["application/json" "media/*" "text/html"] }
+def add-menu-item-information-completer [] { ["false" "true"] }
+def accept-completer [] { ["application/json" "media/*" "text/html"] }
 def locale-completer [] { ["en_GB" "en_US"] }
-def addProductInformation-completer [] { ["false" "true"] }
+def add-product-information-completer [] { ["false" "true"] }
 def measure-completer [] { ["metric" "us"] }
 def normalize-completer [] { ["false" "true"] }
 
@@ -113,11 +113,11 @@ export def "food-converse talkToChatbot" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --text: string # The request / question / answer from the user to the chatbot. (e.g. donut recipes)
-  --contextId: string # An arbitrary globally unique id for your conversation. The conversation can contain states so you should pass your context id if you want the bot to be able to remember the conversation. (e.g. 342938)
+  --context-id: string # An arbitrary globally unique id for your conversation. The conversation can contain states so you should pass your context id if you want the bot to be able to remember the conversation. (e.g. 342938)
 ]: nothing -> record<answerText: string, media: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "contextId" $contextId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "contextId" $context_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/converse" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -129,7 +129,7 @@ export def "food-converse talkToChatbot" [
 # GET /food/converse/suggest
 # Docs: https://spoonacular.com/food-api/docs#Conversation-Suggests — Read entire docs
 # operationId: getConversationSuggests
-export def "food-converse-suggest get" [
+export def "food-converse-suggest get-conversation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,7 +155,7 @@ export def "food-converse-suggest get" [
 # GET /food/customFoods/search
 # Docs: https://spoonacular.com/food-api/docs#Search-Custom-Foods — Read entire docs
 # operationId: searchCustomFoods
-export def "food-custom-foods-search searchCustomFoods" [
+export def "food-custom-foods-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "food-detect detectFoodInText" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string@Content-Type-completer # The content type. (e.g. application/json)
+  --content-type: string@content-type-completer # The content type. (e.g. application/json)
   --body: record
 ]: any -> record<annotations: table<annotation: string, image: string, tag: string>> {
   let input = $in
@@ -201,7 +201,7 @@ export def "food-detect detectFoodInText" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/food/detect")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -222,11 +222,11 @@ export def "food-images-analyze imageAnalysisByURL" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --imageUrl: string # The URL of the image to be analyzed. (e.g. https://spoonacular.com/recipeImages/635350-240x150.jpg)
+  --image-url: string # The URL of the image to be analyzed. (e.g. https://spoonacular.com/recipeImages/635350-240x150.jpg)
 ]: nothing -> record<category: record<name: string, probability: float>, nutrition: record<calories: record<confidenceRange95Percent: record, standardDeviation: float, unit: string, value: float>, carbs: record<confidenceRange95Percent: record, standardDeviation: float, unit: string, value: float>, fat: record<confidenceRange95Percent: record, standardDeviation: float, unit: string, value: float>, protein: record<confidenceRange95Percent: record, standardDeviation: float, unit: string, value: float>, recipesUsed: int>, recipes: table<id: int, imageType: string, title: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "imageUrl" $imageUrl "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "imageUrl" $image_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/images/analyze" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -247,11 +247,11 @@ export def "food-images-classify imageClassificationByURL" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --imageUrl: string # The URL of the image to be classified. (e.g. https://spoonacular.com/recipeImages/635350-240x150.jpg)
+  --image-url: string # The URL of the image to be classified. (e.g. https://spoonacular.com/recipeImages/635350-240x150.jpg)
 ]: nothing -> record<category: string, probability: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "imageUrl" $imageUrl "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "imageUrl" $image_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/images/classify" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -274,13 +274,13 @@ export def "food-ingredients-autocomplete autocompleteIngredientSearch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # The (natural language) search query. (e.g. burger)
   --number: int # The maximum number of items to return (between 1 and 100). Defaults to 10. (default: 10, e.g. 10)
-  --metaInformation: oneof<nothing, bool> # Whether to return more meta information about the ingredients. (e.g. false)
+  --meta-information: oneof<nothing, bool> # Whether to return more meta information about the ingredients. (e.g. false)
   --intolerances: string # A comma-separated list of intolerances. All recipes returned must not contain ingredients that are not suitable for people with the intolerances entered. See a full list of supported intolerances. (e.g. egg)
   --language: string@language-completer # The language of the input. Either 'en' or 'de'. (e.g. en)
 ]: nothing -> table<aisle: string, id: int, image: string, name: string, possibleUnits: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "metaInformation" $metaInformation "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "metaInformation" $meta_information "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/ingredients/autocomplete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -309,7 +309,7 @@ export def "food-ingredients-glycemic-load computeGlycemicLoad" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/ingredients/glycemicLoad" $qp)
-  let body = {ingredients: $ingredients} | compact
+  let body = {"ingredients": $ingredients} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -337,7 +337,7 @@ export def "food-ingredients-map mapIngredientsToGroceryProducts" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/food/ingredients/map")
-  let body = {ingredients: $ingredients, servings: $servings} | compact
+  let body = {"ingredients": $ingredients, "servings": $servings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -359,24 +359,24 @@ export def "food-ingredients-search ingredientSearch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # The (natural language) search query. (e.g. burger)
-  --addChildren: oneof<nothing, bool> # Whether to add children of found foods. (e.g. true)
-  --minProteinPercent: float # The minimum percentage of protein the food must have (between 0 and 100). (e.g. 10)
-  --maxProteinPercent: float # The maximum percentage of protein the food can have (between 0 and 100). (e.g. 90)
-  --minFatPercent: float # The minimum percentage of fat the food must have (between 0 and 100). (e.g. 10)
-  --maxFatPercent: float # The maximum percentage of fat the food can have (between 0 and 100). (e.g. 90)
-  --minCarbsPercent: float # The minimum percentage of carbs the food must have (between 0 and 100). (e.g. 10)
-  --maxCarbsPercent: float # The maximum percentage of carbs the food can have (between 0 and 100). (e.g. 90)
-  --metaInformation: oneof<nothing, bool> # Whether to return more meta information about the ingredients. (e.g. false)
+  --add-children: oneof<nothing, bool> # Whether to add children of found foods. (e.g. true)
+  --min-protein-percent: float # The minimum percentage of protein the food must have (between 0 and 100). (e.g. 10)
+  --max-protein-percent: float # The maximum percentage of protein the food can have (between 0 and 100). (e.g. 90)
+  --min-fat-percent: float # The minimum percentage of fat the food must have (between 0 and 100). (e.g. 10)
+  --max-fat-percent: float # The maximum percentage of fat the food can have (between 0 and 100). (e.g. 90)
+  --min-carbs-percent: float # The minimum percentage of carbs the food must have (between 0 and 100). (e.g. 10)
+  --max-carbs-percent: float # The maximum percentage of carbs the food can have (between 0 and 100). (e.g. 90)
+  --meta-information: oneof<nothing, bool> # Whether to return more meta information about the ingredients. (e.g. false)
   --intolerances: string # A comma-separated list of intolerances. All recipes returned must not contain ingredients that are not suitable for people with the intolerances entered. See a full list of supported intolerances. (e.g. egg)
   --qp-sort: string # The strategy to sort recipes by. See a full list of supported sorting options. (e.g. calories)
-  --sortDirection: string # The direction in which to sort. Must be either 'asc' (ascending) or 'desc' (descending). (e.g. asc)
+  --sort-direction: string # The direction in which to sort. Must be either 'asc' (ascending) or 'desc' (descending). (e.g. asc)
   --offset: int # The number of results to skip (between 0 and 900).
   --number: int # The maximum number of items to return (between 1 and 100). Defaults to 10. (default: 10, e.g. 10)
   --language: string@language-completer # The language of the input. Either 'en' or 'de'. (e.g. en)
 ]: nothing -> record<number: int, offset: int, results: table<id: int, image: string, name: string>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "addChildren" $addChildren "scalar") (serialize-qp "minProteinPercent" $minProteinPercent "scalar") (serialize-qp "maxProteinPercent" $maxProteinPercent "scalar") (serialize-qp "minFatPercent" $minFatPercent "scalar") (serialize-qp "maxFatPercent" $maxFatPercent "scalar") (serialize-qp "minCarbsPercent" $minCarbsPercent "scalar") (serialize-qp "maxCarbsPercent" $maxCarbsPercent "scalar") (serialize-qp "metaInformation" $metaInformation "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortDirection" $sortDirection "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "addChildren" $add_children "scalar") (serialize-qp "minProteinPercent" $min_protein_percent "scalar") (serialize-qp "maxProteinPercent" $max_protein_percent "scalar") (serialize-qp "minFatPercent" $min_fat_percent "scalar") (serialize-qp "maxFatPercent" $max_fat_percent "scalar") (serialize-qp "minCarbsPercent" $min_carbs_percent "scalar") (serialize-qp "maxCarbsPercent" $max_carbs_percent "scalar") (serialize-qp "metaInformation" $meta_information "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/ingredients/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -397,11 +397,11 @@ export def "food-ingredients-substitutes get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ingredientName: string # The name of the ingredient you want to replace. (e.g. butter)
+  --ingredient-name: string # The name of the ingredient you want to replace. (e.g. butter)
 ]: nothing -> record<ingredient: string, message: string, substitutes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ingredientName" $ingredientName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ingredientName" $ingredient_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/ingredients/substitutes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -430,7 +430,7 @@ export def "food-ingredients-amount computeIngredientAmount" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nutrient" $nutrient "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "unit" $unit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/food/ingredients/($id)/amount" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/food/ingredients/{id}/amount") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -458,7 +458,7 @@ export def "food-ingredients-information get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "unit" $unit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/food/ingredients/($id)/information" $qp)
+  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/food/ingredients/{id}/information") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -483,7 +483,7 @@ export def "food-ingredients-substitutes get-by-id-id" [
 ]: nothing -> record<ingredient: string, message: string, substitutes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/food/ingredients/($id)/substitutes")
+  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/food/ingredients/{id}/substitutes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -517,7 +517,7 @@ export def "food-jokes-random get" [
 # GET /food/menuItems/search
 # Docs: https://spoonacular.com/food-api/docs#Search-Menu-Items — Read entire docs
 # operationId: searchMenuItems
-export def "food-menu-items-search searchMenuItems" [
+export def "food-menu-items-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -527,21 +527,21 @@ export def "food-menu-items-search searchMenuItems" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # The (natural language) search query. (e.g. burger)
-  --minCalories: float # The minimum amount of calories the menu item must have. (e.g. 50)
-  --maxCalories: float # The maximum amount of calories the menu item can have. (e.g. 800)
-  --minCarbs: float # The minimum amount of carbohydrates in grams the menu item must have. (e.g. 10)
-  --maxCarbs: float # The maximum amount of carbohydrates in grams the menu item can have. (e.g. 100)
-  --minProtein: float # The minimum amount of protein in grams the menu item must have. (e.g. 10)
-  --maxProtein: float # The maximum amount of protein in grams the menu item can have. (e.g. 100)
-  --minFat: float # The minimum amount of fat in grams the menu item must have. (e.g. 1)
-  --maxFat: float # The maximum amount of fat in grams the menu item can have. (e.g. 100)
-  --addMenuItemInformation: oneof<nothing, bool> # If set to true, you get more information about the menu items returned. (e.g. true)
+  --min-calories: float # The minimum amount of calories the menu item must have. (e.g. 50)
+  --max-calories: float # The maximum amount of calories the menu item can have. (e.g. 800)
+  --min-carbs: float # The minimum amount of carbohydrates in grams the menu item must have. (e.g. 10)
+  --max-carbs: float # The maximum amount of carbohydrates in grams the menu item can have. (e.g. 100)
+  --min-protein: float # The minimum amount of protein in grams the menu item must have. (e.g. 10)
+  --max-protein: float # The maximum amount of protein in grams the menu item can have. (e.g. 100)
+  --min-fat: float # The minimum amount of fat in grams the menu item must have. (e.g. 1)
+  --max-fat: float # The maximum amount of fat in grams the menu item can have. (e.g. 100)
+  --add-menu-item-information: oneof<nothing, bool> # If set to true, you get more information about the menu items returned. (e.g. true)
   --offset: int # The number of results to skip (between 0 and 900).
   --number: int # The maximum number of items to return (between 1 and 100). Defaults to 10. (default: 10, e.g. 10)
 ]: nothing -> record<menuItems: table<id: int, image: string, imageType: string, restaurantChain: string, servings: record, title: string>, number: int, offset: int, totalMenuItems: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "minCalories" $minCalories "scalar") (serialize-qp "maxCalories" $maxCalories "scalar") (serialize-qp "minCarbs" $minCarbs "scalar") (serialize-qp "maxCarbs" $maxCarbs "scalar") (serialize-qp "minProtein" $minProtein "scalar") (serialize-qp "maxProtein" $maxProtein "scalar") (serialize-qp "minFat" $minFat "scalar") (serialize-qp "maxFat" $maxFat "scalar") (serialize-qp "addMenuItemInformation" $addMenuItemInformation "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "minCalories" $min_calories "scalar") (serialize-qp "maxCalories" $max_calories "scalar") (serialize-qp "minCarbs" $min_carbs "scalar") (serialize-qp "maxCarbs" $max_carbs "scalar") (serialize-qp "minProtein" $min_protein "scalar") (serialize-qp "maxProtein" $max_protein "scalar") (serialize-qp "minFat" $min_fat "scalar") (serialize-qp "maxFat" $max_fat "scalar") (serialize-qp "addMenuItemInformation" $add_menu_item_information "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/menuItems/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -579,7 +579,7 @@ export def "food-menu-items-suggest autocompleteMenuItemSearch" [
 # GET /food/menuItems/{id}
 # Docs: https://spoonacular.com/food-api/docs#Get-Menu-Item-Information — Read entire docs
 # operationId: getMenuItemInformation
-export def "food-menu-items get" [
+export def "food-menu-items get-menu-item-information" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -593,7 +593,7 @@ export def "food-menu-items get" [
 ]: nothing -> record<badges: list<string>, breadcrumbs: list<string>, generatedText: string, id: int, imageType: string, likes: float, nutrition: record<caloricBreakdown: record<percentCarbs: float, percentFat: float, percentProtein: float>, nutrients: list<record>>, price: float, restaurantChain: string, servings: record<number: float, size: float, unit: string>, spoonacularScore: float, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/food/menuItems/($id)")
+  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/food/menuItems/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -614,15 +614,15 @@ export def "food-menu-items-nutrition-label menuItemNutritionLabelWidget" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultCss: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
-  --showOptionalNutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
-  --showZeroValues: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
-  --showIngredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
+  --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
+  --show-optional-nutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
+  --show-zero-values: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
+  --show-ingredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "defaultCss" $defaultCss "scalar") (serialize-qp "showOptionalNutrients" $showOptionalNutrients "scalar") (serialize-qp "showZeroValues" $showZeroValues "scalar") (serialize-qp "showIngredients" $showIngredients "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/food/menuItems/($id)/nutritionLabel" $qp)
+  let qp = [(serialize-qp "defaultCss" $default_css "scalar") (serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/food/menuItems/{id}/nutritionLabel") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -643,14 +643,14 @@ export def "food-menu-items-nutrition-labelpng menuItemNutritionLabelImage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --showOptionalNutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
-  --showZeroValues: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
-  --showIngredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
+  --show-optional-nutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
+  --show-zero-values: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
+  --show-ingredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "showOptionalNutrients" $showOptionalNutrients "scalar") (serialize-qp "showZeroValues" $showZeroValues "scalar") (serialize-qp "showIngredients" $showIngredients "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/food/menuItems/($id)/nutritionLabel.png" $qp)
+  let qp = [(serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/food/menuItems/{id}/nutritionLabel.png") $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -671,14 +671,14 @@ export def "food-menu-items-nutrition-widget visualizeMenuItemNutritionByID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultCss: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
-  --Accept: string@Accept-completer # Accept header. (e.g. application/json)
+  --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
+  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "defaultCss" $defaultCss "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/food/menuItems/($id)/nutritionWidget" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let qp = [(serialize-qp "defaultCss" $default_css "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/food/menuItems/{id}/nutritionWidget") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -703,7 +703,7 @@ export def "food-menu-items-nutrition-widgetpng menuItemNutritionByIDImage" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/food/menuItems/($id)/nutritionWidget.png")
+  let full_url = (build-url $base ({id: $id} | format pattern "/food/menuItems/{id}/nutritionWidget.png"))
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -733,7 +733,7 @@ export def "food-products-classify classifyGroceryProduct" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/products/classify" $qp)
-  let body = {plu_code: $plu_code, title: $title, upc: $upc} | compact
+  let body = {"plu_code": $plu_code, "title": $title, "upc": $upc} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -773,7 +773,7 @@ export def "food-products-classify-batch classifyGroceryProductBulk" [
 # GET /food/products/search
 # Docs: https://spoonacular.com/food-api/docs#Search-Grocery-Products — Read entire docs
 # operationId: searchGroceryProducts
-export def "food-products-search searchGroceryProducts" [
+export def "food-products-search list-grocery" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -783,21 +783,21 @@ export def "food-products-search searchGroceryProducts" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # The (natural language) search query. (e.g. burger)
-  --minCalories: float # The minimum amount of calories the product must have. (e.g. 50)
-  --maxCalories: float # The maximum amount of calories the product can have. (e.g. 800)
-  --minCarbs: float # The minimum amount of carbohydrates in grams the product must have. (e.g. 10)
-  --maxCarbs: float # The maximum amount of carbohydrates in grams the product can have. (e.g. 100)
-  --minProtein: float # The minimum amount of protein in grams the product must have. (e.g. 10)
-  --maxProtein: float # The maximum amount of protein in grams the product can have. (e.g. 100)
-  --minFat: float # The minimum amount of fat in grams the product must have. (e.g. 1)
-  --maxFat: float # The maximum amount of fat in grams the product can have. (e.g. 100)
-  --addProductInformation: oneof<nothing, bool> # If set to true, you get more information about the products returned. (e.g. true)
+  --min-calories: float # The minimum amount of calories the product must have. (e.g. 50)
+  --max-calories: float # The maximum amount of calories the product can have. (e.g. 800)
+  --min-carbs: float # The minimum amount of carbohydrates in grams the product must have. (e.g. 10)
+  --max-carbs: float # The maximum amount of carbohydrates in grams the product can have. (e.g. 100)
+  --min-protein: float # The minimum amount of protein in grams the product must have. (e.g. 10)
+  --max-protein: float # The maximum amount of protein in grams the product can have. (e.g. 100)
+  --min-fat: float # The minimum amount of fat in grams the product must have. (e.g. 1)
+  --max-fat: float # The maximum amount of fat in grams the product can have. (e.g. 100)
+  --add-product-information: oneof<nothing, bool> # If set to true, you get more information about the products returned. (e.g. true)
   --offset: int # The number of results to skip (between 0 and 900).
   --number: int # The maximum number of items to return (between 1 and 100). Defaults to 10. (default: 10, e.g. 10)
 ]: nothing -> record<number: int, offset: int, products: table<id: int, imageType: string, title: string>, totalProducts: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "minCalories" $minCalories "scalar") (serialize-qp "maxCalories" $maxCalories "scalar") (serialize-qp "minCarbs" $minCarbs "scalar") (serialize-qp "maxCarbs" $maxCarbs "scalar") (serialize-qp "minProtein" $minProtein "scalar") (serialize-qp "maxProtein" $maxProtein "scalar") (serialize-qp "minFat" $minFat "scalar") (serialize-qp "maxFat" $maxFat "scalar") (serialize-qp "addProductInformation" $addProductInformation "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "minCalories" $min_calories "scalar") (serialize-qp "maxCalories" $max_calories "scalar") (serialize-qp "minCarbs" $min_carbs "scalar") (serialize-qp "maxCarbs" $max_carbs "scalar") (serialize-qp "minProtein" $min_protein "scalar") (serialize-qp "maxProtein" $max_protein "scalar") (serialize-qp "minFat" $min_fat "scalar") (serialize-qp "maxFat" $max_fat "scalar") (serialize-qp "addProductInformation" $add_product_information "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/products/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -835,7 +835,7 @@ export def "food-products-suggest autocompleteProductSearch" [
 # GET /food/products/upc/{upc}
 # Docs: https://spoonacular.com/food-api/docs#Search-Grocery-Products-by-UPC — Read entire docs
 # operationId: searchGroceryProductsByUPC
-export def "food-products-upc searchGroceryProductsByUPC" [
+export def "food-products-upc list-grocery" [
   upc: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -848,7 +848,7 @@ export def "food-products-upc searchGroceryProductsByUPC" [
 ]: nothing -> record<badges: list<string>, breadcrumbs: list<string>, generatedText: string, id: int, imageType: string, importantBadges: list<string>, ingredientCount: int, ingredientList: string, ingredients: table<description: any, name: string, safety_level: any>, likes: float, nutrition: record<caloricBreakdown: record<percentCarbs: float, percentFat: float, percentProtein: float>, nutrients: list<record>>, price: float, servings: record<number: float, size: float, unit: string>, spoonacularScore: float, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/food/products/upc/($upc)")
+  let full_url = (build-url $base ({upc: $upc} | format pattern "/food/products/upc/{upc}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -872,7 +872,7 @@ export def "food-products-upc-comparable get" [
 ]: nothing -> record<comparableProducts: record<calories: list<record>, likes: list<record>, price: list<record>, protein: list<record>, spoonacularScore: list<record>, sugar: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/food/products/upc/($upc)/comparable")
+  let full_url = (build-url $base ({upc: $upc} | format pattern "/food/products/upc/{upc}/comparable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -883,7 +883,7 @@ export def "food-products-upc-comparable get" [
 # GET /food/products/{id}
 # Docs: https://spoonacular.com/food-api/docs#Get-Product-Information — Read entire docs
 # operationId: getProductInformation
-export def "food-products get" [
+export def "food-products get-product-information" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -897,7 +897,7 @@ export def "food-products get" [
 ]: nothing -> record<aisle: string, badges: list<string>, breadcrumbs: list<string>, generatedText: any, id: int, imageType: string, importantBadges: list<string>, ingredientCount: int, ingredientList: string, ingredients: table<description: any, name: string, safety_level: any>, likes: float, nutrition: record<caloricBreakdown: record<percentCarbs: float, percentFat: float, percentProtein: float>, nutrients: list<record>>, price: float, servings: record<number: float, size: float, unit: string>, spoonacularScore: float, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/food/products/($id)")
+  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/food/products/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -918,15 +918,15 @@ export def "food-products-nutrition-label productNutritionLabelWidget" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultCss: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
-  --showOptionalNutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
-  --showZeroValues: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
-  --showIngredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
+  --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
+  --show-optional-nutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
+  --show-zero-values: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
+  --show-ingredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "defaultCss" $defaultCss "scalar") (serialize-qp "showOptionalNutrients" $showOptionalNutrients "scalar") (serialize-qp "showZeroValues" $showZeroValues "scalar") (serialize-qp "showIngredients" $showIngredients "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/food/products/($id)/nutritionLabel" $qp)
+  let qp = [(serialize-qp "defaultCss" $default_css "scalar") (serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/food/products/{id}/nutritionLabel") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -947,14 +947,14 @@ export def "food-products-nutrition-labelpng productNutritionLabelImage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --showOptionalNutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
-  --showZeroValues: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
-  --showIngredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
+  --show-optional-nutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
+  --show-zero-values: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
+  --show-ingredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "showOptionalNutrients" $showOptionalNutrients "scalar") (serialize-qp "showZeroValues" $showZeroValues "scalar") (serialize-qp "showIngredients" $showIngredients "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/food/products/($id)/nutritionLabel.png" $qp)
+  let qp = [(serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/food/products/{id}/nutritionLabel.png") $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -975,14 +975,14 @@ export def "food-products-nutrition-widget visualizeProductNutritionByID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultCss: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
-  --Accept: string@Accept-completer # Accept header. (e.g. application/json)
+  --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
+  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "defaultCss" $defaultCss "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/food/products/($id)/nutritionWidget" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let qp = [(serialize-qp "defaultCss" $default_css "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/food/products/{id}/nutritionWidget") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1007,7 +1007,7 @@ export def "food-products-nutrition-widgetpng productNutritionByIDImage" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/food/products/($id)/nutritionWidget.png")
+  let full_url = (build-url $base ({id: $id} | format pattern "/food/products/{id}/nutritionWidget.png"))
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1018,7 +1018,7 @@ export def "food-products-nutrition-widgetpng productNutritionByIDImage" [
 # GET /food/restaurants/search
 # Docs: https://spoonacular.com/food-api/docs#Search-Restaurants — Read entire docs
 # operationId: searchRestaurants
-export def "food-restaurants-search searchRestaurants" [
+export def "food-restaurants-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,7 +1052,7 @@ export def "food-restaurants-search searchRestaurants" [
 # GET /food/search
 # Docs: https://spoonacular.com/food-api/docs#Search-All-Food — Read entire docs
 # operationId: searchAllFood
-export def "food-search searchAllFood" [
+export def "food-search list-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1079,7 +1079,7 @@ export def "food-search searchAllFood" [
 # GET /food/site/search
 # Docs: https://spoonacular.com/food-api/docs#Search-Site-Content — Read entire docs
 # operationId: searchSiteContent
-export def "food-site-search searchSiteContent" [
+export def "food-site-search list-site-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1127,7 +1127,7 @@ export def "food-trivia-random get" [
 # GET /food/videos/search
 # Docs: https://spoonacular.com/food-api/docs#Search-Food-Videos — Read entire docs
 # operationId: searchFoodVideos
-export def "food-videos-search searchFoodVideos" [
+export def "food-videos-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1140,16 +1140,16 @@ export def "food-videos-search searchFoodVideos" [
   --type: string # The type of the recipes. See a full list of supported meal types. (e.g. main course)
   --cuisine: string # The cuisine(s) of the recipes. One or more, comma separated. See a full list of supported cuisines. (e.g. italian)
   --diet: string # The diet for which the recipes must be suitable. See a full list of supported diets. (e.g. vegetarian)
-  --includeIngredients: string # A comma-separated list of ingredients that the recipes should contain. (e.g. tomato,cheese)
-  --excludeIngredients: string # A comma-separated list of ingredients or ingredient types that the recipes must not contain. (e.g. eggs)
-  --minLength: float # Minimum video length in seconds. (e.g. 0)
-  --maxLength: float # Maximum video length in seconds. (e.g. 999)
+  --include-ingredients: string # A comma-separated list of ingredients that the recipes should contain. (e.g. tomato,cheese)
+  --exclude-ingredients: string # A comma-separated list of ingredients or ingredient types that the recipes must not contain. (e.g. eggs)
+  --min-length: float # Minimum video length in seconds. (e.g. 0)
+  --max-length: float # Maximum video length in seconds. (e.g. 999)
   --offset: int # The number of results to skip (between 0 and 900).
   --number: int # The maximum number of items to return (between 1 and 100). Defaults to 10. (default: 10, e.g. 10)
 ]: nothing -> record<totalResults: int, videos: table<length: int, rating: float, shortTitle: string, thumbnail: string, title: string, views: int, youTubeId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "diet" $diet "scalar") (serialize-qp "includeIngredients" $includeIngredients "scalar") (serialize-qp "excludeIngredients" $excludeIngredients "scalar") (serialize-qp "minLength" $minLength "scalar") (serialize-qp "maxLength" $maxLength "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "diet" $diet "scalar") (serialize-qp "includeIngredients" $include_ingredients "scalar") (serialize-qp "excludeIngredients" $exclude_ingredients "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/videos/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1186,7 +1186,7 @@ export def "food-wine-description get" [
 # GET /food/wine/dishes
 # Docs: https://spoonacular.com/food-api/docs#Dish-Pairing-for-Wine — Read entire docs
 # operationId: getDishPairingForWine
-export def "food-wine-dishes get" [
+export def "food-wine-dishes get-dish-pairing-for" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1221,11 +1221,11 @@ export def "food-wine-pairing get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --food: string # The food to get a pairing for. This can be a dish ("steak"), an ingredient ("salmon"), or a cuisine ("italian"). (e.g. steak)
-  --maxPrice: float # The maximum price for the specific wine recommendation in USD. (e.g. 50)
+  --max-price: float # The maximum price for the specific wine recommendation in USD. (e.g. 50)
 ]: nothing -> record<pairedWines: list<string>, pairingText: string, productMatches: table<averageRating: float, description: any, id: int, imageUrl: string, link: string, price: string, ratingCount: int, score: float, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "food" $food "scalar") (serialize-qp "maxPrice" $maxPrice "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "food" $food "scalar") (serialize-qp "maxPrice" $max_price "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/wine/pairing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1247,13 +1247,13 @@ export def "food-wine-recommendation get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --wine: string # The type of wine to get a specific product recommendation for. (e.g. merlot)
-  --maxPrice: float # The maximum price for the specific wine recommendation in USD. (e.g. 50)
-  --minRating: float # The minimum rating of the recommended wine between 0 and 1. For example, 0.8 equals 4 out of 5 stars. (e.g. 0.7)
+  --max-price: float # The maximum price for the specific wine recommendation in USD. (e.g. 50)
+  --min-rating: float # The minimum rating of the recommended wine between 0 and 1. For example, 0.8 equals 4 out of 5 stars. (e.g. 0.7)
   --number: float # The number of wine recommendations expected (between 1 and 100). (default: 10, e.g. 3)
 ]: nothing -> record<recommendedWines: table<averageRating: float, description: string, id: int, imageUrl: string, link: string, price: string, ratingCount: int, score: float, title: string>, totalFound: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "wine" $wine "scalar") (serialize-qp "maxPrice" $maxPrice "scalar") (serialize-qp "minRating" $minRating "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "wine" $wine "scalar") (serialize-qp "maxPrice" $max_price "scalar") (serialize-qp "minRating" $min_rating "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/wine/recommendation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1274,14 +1274,14 @@ export def "mealplanner-generate generateMealPlan" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --timeFrame: string # Either for one "day" or an entire "week". (e.g. day)
-  --targetCalories: float # What is the caloric target for one day? The meal plan generator will try to get as close as possible to that goal. (e.g. 2000)
+  --time-frame: string # Either for one "day" or an entire "week". (e.g. day)
+  --target-calories: float # What is the caloric target for one day? The meal plan generator will try to get as close as possible to that goal. (e.g. 2000)
   --diet: string # Enter a diet that the meal plan has to adhere to. See a full list of supported diets. (e.g. vegetarian)
   --exclude: string # A comma-separated list of allergens or ingredients that must be excluded. (e.g. shellfish, olives)
 ]: nothing -> record<meals: table<id: int, imageType: string, readyInMinutes: int, servings: float, sourceUrl: string, title: string>, nutrients: record<calories: float, carbohydrates: float, fat: float, protein: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "targetCalories" $targetCalories "scalar") (serialize-qp "diet" $diet "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "targetCalories" $target_calories "scalar") (serialize-qp "diet" $diet "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/mealplanner/generate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1311,7 +1311,7 @@ export def "mealplanner-day clearMealPlanDay" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mealplanner/($username)/day/($date)" $qp)
+  let full_url = (build-url $base ({username: $username, date: $date} | format pattern "/mealplanner/{username}/day/{date}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1324,7 +1324,7 @@ export def "mealplanner-day clearMealPlanDay" [
 # Docs: https://spoonacular.com/food-api/docs#Add-to-Meal-Plan — Read entire docs
 # operationId: addToMealPlan
 # --value shape: {ingredients: list}
-export def "mealplanner-items addToMealPlan" [
+export def "mealplanner-items create-to-meal-plan" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1345,8 +1345,8 @@ export def "mealplanner-items addToMealPlan" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mealplanner/($username)/items" $qp)
-  let body = {date: $date, position: $position, slot: $slot, type: $type, value: $value} | compact
+  let full_url = (build-url $base ({username: $username} | format pattern "/mealplanner/{username}/items") $qp)
+  let body = {"date": $date, "position": $position, "slot": $slot, "type": $type, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1358,7 +1358,7 @@ export def "mealplanner-items addToMealPlan" [
 # DELETE /mealplanner/{username}/items/{id}
 # Docs: https://spoonacular.com/food-api/docs#Delete-from-Meal-Plan — Read entire docs
 # operationId: deleteFromMealPlan
-export def "mealplanner-items delete" [
+export def "mealplanner-items delete-from-meal-plan" [
   username: string
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1376,7 +1376,7 @@ export def "mealplanner-items delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mealplanner/($username)/items/($id)" $qp)
+  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/mealplanner/{username}/items/{id}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1403,7 +1403,7 @@ export def "mealplanner-shopping-list get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mealplanner/($username)/shopping-list" $qp)
+  let full_url = (build-url $base ({username: $username} | format pattern "/mealplanner/{username}/shopping-list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1414,7 +1414,7 @@ export def "mealplanner-shopping-list get" [
 # POST /mealplanner/{username}/shopping-list/items
 # Docs: https://spoonacular.com/food-api/docs#Add-to-Shopping-List — Read entire docs
 # operationId: addToShoppingList
-export def "mealplanner-shopping-list-items addToShoppingList" [
+export def "mealplanner-shopping-list-items create-to" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1433,8 +1433,8 @@ export def "mealplanner-shopping-list-items addToShoppingList" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mealplanner/($username)/shopping-list/items" $qp)
-  let body = {aisle: $aisle, item: $item, parse: $parse} | compact
+  let full_url = (build-url $base ({username: $username} | format pattern "/mealplanner/{username}/shopping-list/items") $qp)
+  let body = {"aisle": $aisle, "item": $item, "parse": $parse} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1446,7 +1446,7 @@ export def "mealplanner-shopping-list-items addToShoppingList" [
 # DELETE /mealplanner/{username}/shopping-list/items/{id}
 # Docs: https://spoonacular.com/food-api/docs#Delete-from-Shopping-List — Read entire docs
 # operationId: deleteFromShoppingList
-export def "mealplanner-shopping-list-items delete" [
+export def "mealplanner-shopping-list-items delete-from" [
   username: string
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1464,7 +1464,7 @@ export def "mealplanner-shopping-list-items delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mealplanner/($username)/shopping-list/items/($id)" $qp)
+  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/mealplanner/{username}/shopping-list/items/{id}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1495,7 +1495,7 @@ export def "mealplanner-shopping-list generateShoppingList" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mealplanner/($username)/shopping-list/($start_date)/($end_date)" $qp)
+  let full_url = (build-url $base ({username: $username, start_date: $start_date, end_date: $end_date} | format pattern "/mealplanner/{username}/shopping-list/{start_date}/{end_date}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1522,7 +1522,7 @@ export def "mealplanner-templates list" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mealplanner/($username)/templates" $qp)
+  let full_url = (build-url $base ({username: $username} | format pattern "/mealplanner/{username}/templates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1533,7 +1533,7 @@ export def "mealplanner-templates list" [
 # POST /mealplanner/{username}/templates
 # Docs: https://spoonacular.com/food-api/docs#Add-Meal-Plan-Template — Read entire docs
 # operationId: addMealPlanTemplate
-export def "mealplanner-templates addMealPlanTemplate" [
+export def "mealplanner-templates create-meal-plan" [
   username: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1551,7 +1551,7 @@ export def "mealplanner-templates addMealPlanTemplate" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mealplanner/($username)/templates" $qp)
+  let full_url = (build-url $base ({username: $username, username: $username} | format pattern "/mealplanner/{username}/templates") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1563,10 +1563,10 @@ export def "mealplanner-templates addMealPlanTemplate" [
 # DELETE /mealplanner/{username}/templates/{id}
 # Docs: https://spoonacular.com/food-api/docs#Delete-Meal-Plan-Template — Read entire docs
 # operationId: deleteMealPlanTemplate
-export def "mealplanner-templates delete" [
+export def "mealplanner-templates delete-meal-plan" [
+  username: string
   username: string
   id: int
-  username: string
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1583,7 +1583,7 @@ export def "mealplanner-templates delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mealplanner/($username)/templates/($id)" $qp)
+  let full_url = (build-url $base ({username: $username, username: $username, id: $id, id: $id} | format pattern "/mealplanner/{username}/templates/{id}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1595,7 +1595,7 @@ export def "mealplanner-templates delete" [
 # GET /mealplanner/{username}/templates/{id}
 # Docs: https://spoonacular.com/food-api/docs#Get-Meal-Plan-Template — Read entire docs
 # operationId: getMealPlanTemplate
-export def "mealplanner-templates get" [
+export def "mealplanner-templates get-meal-plan" [
   username: string
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1611,7 +1611,7 @@ export def "mealplanner-templates get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mealplanner/($username)/templates/($id)" $qp)
+  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/mealplanner/{username}/templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1622,7 +1622,7 @@ export def "mealplanner-templates get" [
 # GET /mealplanner/{username}/week/{start-date}
 # Docs: https://spoonacular.com/food-api/docs#Get-Meal-Plan-Week — Read entire docs
 # operationId: getMealPlanWeek
-export def "mealplanner-week get" [
+export def "mealplanner-week get-meal-plan" [
   username: string
   start_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1638,7 +1638,7 @@ export def "mealplanner-week get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mealplanner/($username)/week/($start_date)" $qp)
+  let full_url = (build-url $base ({username: $username, start_date: $start_date} | format pattern "/mealplanner/{username}/week/{start_date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1659,8 +1659,8 @@ export def "recipes-analyze analyzeRecipe" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # The input language, either "en" or "de". (e.g. en)
-  --includeNutrition: oneof<nothing, bool> # Whether nutrition data should be added to correctly parsed ingredients. (e.g. false)
-  --includeTaste: oneof<nothing, bool> # Whether taste data should be added to correctly parsed ingredients. (e.g. false)
+  --include-nutrition: oneof<nothing, bool> # Whether nutrition data should be added to correctly parsed ingredients. (e.g. false)
+  --include-taste: oneof<nothing, bool> # Whether taste data should be added to correctly parsed ingredients. (e.g. false)
   --ingredients: list
   --instructions: string
   --servings: int
@@ -1669,9 +1669,9 @@ export def "recipes-analyze analyzeRecipe" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "includeNutrition" $includeNutrition "scalar") (serialize-qp "includeTaste" $includeTaste "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "includeNutrition" $include_nutrition "scalar") (serialize-qp "includeTaste" $include_taste "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/analyze" $qp)
-  let body = {ingredients: $ingredients, instructions: $instructions, servings: $servings, title: $title} | compact
+  let body = {"ingredients": $ingredients, "instructions": $instructions, "servings": $servings, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1692,7 +1692,7 @@ export def "recipes-analyze-instructions analyzeRecipeInstructions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string@Content-Type-completer # The content type. (e.g. application/json)
+  --content-type: string@content-type-completer # The content type. (e.g. application/json)
   --body: record
 ]: any -> record<equipment: table<id: float, name: string>, ingredients: table<id: float, name: string>, parsedInstructions: table<name: string, steps: list>> {
   let input = $in
@@ -1700,7 +1700,7 @@ export def "recipes-analyze-instructions analyzeRecipeInstructions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipes/analyzeInstructions")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1738,7 +1738,7 @@ export def "recipes-autocomplete autocompleteRecipeSearch" [
 # GET /recipes/complexSearch
 # Docs: https://spoonacular.com/food-api/docs#Search-Recipes — Read entire docs
 # operationId: searchRecipes
-export def "recipes-complex-search searchRecipes" [
+export def "recipes-complex-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1749,104 +1749,104 @@ export def "recipes-complex-search searchRecipes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # The (natural language) search query. (e.g. burger)
   --cuisine: string # The cuisine(s) of the recipes. One or more, comma separated (will be interpreted as 'OR'). See a full list of supported cuisines. (e.g. italian)
-  --excludeCuisine: string # The cuisine(s) the recipes must not match. One or more, comma separated (will be interpreted as 'AND'). See a full list of supported cuisines. (e.g. greek)
+  --exclude-cuisine: string # The cuisine(s) the recipes must not match. One or more, comma separated (will be interpreted as 'AND'). See a full list of supported cuisines. (e.g. greek)
   --diet: string # The diet for which the recipes must be suitable. See a full list of supported diets. (e.g. vegetarian)
   --intolerances: string # A comma-separated list of intolerances. All recipes returned must not contain ingredients that are not suitable for people with the intolerances entered. See a full list of supported intolerances. (e.g. gluten)
   --equipment: string # The equipment required. Multiple values will be interpreted as 'or'. For example, value could be "blender, frying pan, bowl". (e.g. pan)
-  --includeIngredients: string # A comma-separated list of ingredients that should/must be used in the recipes. (e.g. tomato,cheese)
-  --excludeIngredients: string # A comma-separated list of ingredients or ingredient types that the recipes must not contain. (e.g. eggs)
+  --include-ingredients: string # A comma-separated list of ingredients that should/must be used in the recipes. (e.g. tomato,cheese)
+  --exclude-ingredients: string # A comma-separated list of ingredients or ingredient types that the recipes must not contain. (e.g. eggs)
   --type: string # The type of recipe. See a full list of supported meal types. (e.g. main course)
-  --instructionsRequired: oneof<nothing, bool> # Whether the recipes must have instructions. (e.g. true)
-  --fillIngredients: oneof<nothing, bool> # Add information about the ingredients and whether they are used or missing in relation to the query. (e.g. false)
-  --addRecipeInformation: oneof<nothing, bool> # If set to true, you get more information about the recipes returned. (e.g. false)
-  --addRecipeNutrition: oneof<nothing, bool> # If set to true, you get nutritional information about each recipes returned. (e.g. false)
+  --instructions-required: oneof<nothing, bool> # Whether the recipes must have instructions. (e.g. true)
+  --fill-ingredients: oneof<nothing, bool> # Add information about the ingredients and whether they are used or missing in relation to the query. (e.g. false)
+  --add-recipe-information: oneof<nothing, bool> # If set to true, you get more information about the recipes returned. (e.g. false)
+  --add-recipe-nutrition: oneof<nothing, bool> # If set to true, you get nutritional information about each recipes returned. (e.g. false)
   --author: string # The username of the recipe author. (e.g. coffeebean)
   --tags: string # The tags (can be diets, meal types, cuisines, or intolerances) that the recipe must have.
-  --recipeBoxId: float # The id of the recipe box to which the search should be limited to. (e.g. 2468)
-  --titleMatch: string # Enter text that must be found in the title of the recipes. (e.g. Crock Pot)
-  --maxReadyTime: float # The maximum time in minutes it should take to prepare and cook the recipe. (e.g. 20)
-  --ignorePantry: oneof<nothing, bool> # Whether to ignore typical pantry items, such as water, salt, flour, etc. (default: false, e.g. false)
+  --recipe-box-id: float # The id of the recipe box to which the search should be limited to. (e.g. 2468)
+  --title-match: string # Enter text that must be found in the title of the recipes. (e.g. Crock Pot)
+  --max-ready-time: float # The maximum time in minutes it should take to prepare and cook the recipe. (e.g. 20)
+  --ignore-pantry: oneof<nothing, bool> # Whether to ignore typical pantry items, such as water, salt, flour, etc. (default: false, e.g. false)
   --qp-sort: string # The strategy to sort recipes by. See a full list of supported sorting options. (e.g. calories)
-  --sortDirection: string # The direction in which to sort. Must be either 'asc' (ascending) or 'desc' (descending). (e.g. asc)
-  --minCarbs: float # The minimum amount of carbohydrates in grams the recipe must have. (e.g. 10)
-  --maxCarbs: float # The maximum amount of carbohydrates in grams the recipe can have. (e.g. 100)
-  --minProtein: float # The minimum amount of protein in grams the recipe must have. (e.g. 10)
-  --maxProtein: float # The maximum amount of protein in grams the recipe can have. (e.g. 100)
-  --minCalories: float # The minimum amount of calories the recipe must have. (e.g. 50)
-  --maxCalories: float # The maximum amount of calories the recipe can have. (e.g. 800)
-  --minFat: float # The minimum amount of fat in grams the recipe must have. (e.g. 1)
-  --maxFat: float # The maximum amount of fat in grams the recipe can have. (e.g. 100)
-  --minAlcohol: float # The minimum amount of alcohol in grams the recipe must have. (e.g. 0)
-  --maxAlcohol: float # The maximum amount of alcohol in grams the recipe can have. (e.g. 100)
-  --minCaffeine: float # The minimum amount of caffeine in milligrams the recipe must have. (e.g. 0)
-  --maxCaffeine: float # The maximum amount of caffeine in milligrams the recipe can have. (e.g. 100)
-  --minCopper: float # The minimum amount of copper in milligrams the recipe must have. (e.g. 0)
-  --maxCopper: float # The maximum amount of copper in milligrams the recipe can have. (e.g. 100)
-  --minCalcium: float # The minimum amount of calcium in milligrams the recipe must have. (e.g. 0)
-  --maxCalcium: float # The maximum amount of calcium in milligrams the recipe can have. (e.g. 100)
-  --minCholine: float # The minimum amount of choline in milligrams the recipe must have. (e.g. 0)
-  --maxCholine: float # The maximum amount of choline in milligrams the recipe can have. (e.g. 100)
-  --minCholesterol: float # The minimum amount of cholesterol in milligrams the recipe must have. (e.g. 0)
-  --maxCholesterol: float # The maximum amount of cholesterol in milligrams the recipe can have. (e.g. 100)
-  --minFluoride: float # The minimum amount of fluoride in milligrams the recipe must have. (e.g. 0)
-  --maxFluoride: float # The maximum amount of fluoride in milligrams the recipe can have. (e.g. 100)
-  --minSaturatedFat: float # The minimum amount of saturated fat in grams the recipe must have. (e.g. 0)
-  --maxSaturatedFat: float # The maximum amount of saturated fat in grams the recipe can have. (e.g. 100)
-  --minVitaminA: float # The minimum amount of Vitamin A in IU the recipe must have. (e.g. 0)
-  --maxVitaminA: float # The maximum amount of Vitamin A in IU the recipe can have. (e.g. 100)
-  --minVitaminC: float # The minimum amount of Vitamin C milligrams the recipe must have. (e.g. 0)
-  --maxVitaminC: float # The maximum amount of Vitamin C in milligrams the recipe can have. (e.g. 100)
-  --minVitaminD: float # The minimum amount of Vitamin D in micrograms the recipe must have. (e.g. 0)
-  --maxVitaminD: float # The maximum amount of Vitamin D in micrograms the recipe can have. (e.g. 100)
-  --minVitaminE: float # The minimum amount of Vitamin E in milligrams the recipe must have. (e.g. 0)
-  --maxVitaminE: float # The maximum amount of Vitamin E in milligrams the recipe can have. (e.g. 100)
-  --minVitaminK: float # The minimum amount of Vitamin K in micrograms the recipe must have. (e.g. 0)
-  --maxVitaminK: float # The maximum amount of Vitamin K in micrograms the recipe can have. (e.g. 100)
-  --minVitaminB1: float # The minimum amount of Vitamin B1 in milligrams the recipe must have. (e.g. 0)
-  --maxVitaminB1: float # The maximum amount of Vitamin B1 in milligrams the recipe can have. (e.g. 100)
-  --minVitaminB2: float # The minimum amount of Vitamin B2 in milligrams the recipe must have. (e.g. 0)
-  --maxVitaminB2: float # The maximum amount of Vitamin B2 in milligrams the recipe can have. (e.g. 100)
-  --minVitaminB5: float # The minimum amount of Vitamin B5 in milligrams the recipe must have. (e.g. 0)
-  --maxVitaminB5: float # The maximum amount of Vitamin B5 in milligrams the recipe can have. (e.g. 100)
-  --minVitaminB3: float # The minimum amount of Vitamin B3 in milligrams the recipe must have. (e.g. 0)
-  --maxVitaminB3: float # The maximum amount of Vitamin B3 in milligrams the recipe can have. (e.g. 100)
-  --minVitaminB6: float # The minimum amount of Vitamin B6 in milligrams the recipe must have. (e.g. 0)
-  --maxVitaminB6: float # The maximum amount of Vitamin B6 in milligrams the recipe can have. (e.g. 100)
-  --minVitaminB12: float # The minimum amount of Vitamin B12 in micrograms the recipe must have. (e.g. 0)
-  --maxVitaminB12: float # The maximum amount of Vitamin B12 in micrograms the recipe can have. (e.g. 100)
-  --minFiber: float # The minimum amount of fiber in grams the recipe must have. (e.g. 0)
-  --maxFiber: float # The maximum amount of fiber in grams the recipe can have. (e.g. 100)
-  --minFolate: float # The minimum amount of folate in micrograms the recipe must have. (e.g. 0)
-  --maxFolate: float # The maximum amount of folate in micrograms the recipe can have. (e.g. 100)
-  --minFolicAcid: float # The minimum amount of folic acid in micrograms the recipe must have. (e.g. 0)
-  --maxFolicAcid: float # The maximum amount of folic acid in micrograms the recipe can have. (e.g. 100)
-  --minIodine: float # The minimum amount of iodine in micrograms the recipe must have. (e.g. 0)
-  --maxIodine: float # The maximum amount of iodine in micrograms the recipe can have. (e.g. 100)
-  --minIron: float # The minimum amount of iron in milligrams the recipe must have. (e.g. 0)
-  --maxIron: float # The maximum amount of iron in milligrams the recipe can have. (e.g. 100)
-  --minMagnesium: float # The minimum amount of magnesium in milligrams the recipe must have. (e.g. 0)
-  --maxMagnesium: float # The maximum amount of magnesium in milligrams the recipe can have. (e.g. 100)
-  --minManganese: float # The minimum amount of manganese in milligrams the recipe must have. (e.g. 0)
-  --maxManganese: float # The maximum amount of manganese in milligrams the recipe can have. (e.g. 100)
-  --minPhosphorus: float # The minimum amount of phosphorus in milligrams the recipe must have. (e.g. 0)
-  --maxPhosphorus: float # The maximum amount of phosphorus in milligrams the recipe can have. (e.g. 100)
-  --minPotassium: float # The minimum amount of potassium in milligrams the recipe must have. (e.g. 0)
-  --maxPotassium: float # The maximum amount of potassium in milligrams the recipe can have. (e.g. 100)
-  --minSelenium: float # The minimum amount of selenium in micrograms the recipe must have. (e.g. 0)
-  --maxSelenium: float # The maximum amount of selenium in micrograms the recipe can have. (e.g. 100)
-  --minSodium: float # The minimum amount of sodium in milligrams the recipe must have. (e.g. 0)
-  --maxSodium: float # The maximum amount of sodium in milligrams the recipe can have. (e.g. 100)
-  --minSugar: float # The minimum amount of sugar in grams the recipe must have. (e.g. 0)
-  --maxSugar: float # The maximum amount of sugar in grams the recipe can have. (e.g. 100)
-  --minZinc: float # The minimum amount of zinc in milligrams the recipe must have. (e.g. 0)
-  --maxZinc: float # The maximum amount of zinc in milligrams the recipe can have. (e.g. 100)
+  --sort-direction: string # The direction in which to sort. Must be either 'asc' (ascending) or 'desc' (descending). (e.g. asc)
+  --min-carbs: float # The minimum amount of carbohydrates in grams the recipe must have. (e.g. 10)
+  --max-carbs: float # The maximum amount of carbohydrates in grams the recipe can have. (e.g. 100)
+  --min-protein: float # The minimum amount of protein in grams the recipe must have. (e.g. 10)
+  --max-protein: float # The maximum amount of protein in grams the recipe can have. (e.g. 100)
+  --min-calories: float # The minimum amount of calories the recipe must have. (e.g. 50)
+  --max-calories: float # The maximum amount of calories the recipe can have. (e.g. 800)
+  --min-fat: float # The minimum amount of fat in grams the recipe must have. (e.g. 1)
+  --max-fat: float # The maximum amount of fat in grams the recipe can have. (e.g. 100)
+  --min-alcohol: float # The minimum amount of alcohol in grams the recipe must have. (e.g. 0)
+  --max-alcohol: float # The maximum amount of alcohol in grams the recipe can have. (e.g. 100)
+  --min-caffeine: float # The minimum amount of caffeine in milligrams the recipe must have. (e.g. 0)
+  --max-caffeine: float # The maximum amount of caffeine in milligrams the recipe can have. (e.g. 100)
+  --min-copper: float # The minimum amount of copper in milligrams the recipe must have. (e.g. 0)
+  --max-copper: float # The maximum amount of copper in milligrams the recipe can have. (e.g. 100)
+  --min-calcium: float # The minimum amount of calcium in milligrams the recipe must have. (e.g. 0)
+  --max-calcium: float # The maximum amount of calcium in milligrams the recipe can have. (e.g. 100)
+  --min-choline: float # The minimum amount of choline in milligrams the recipe must have. (e.g. 0)
+  --max-choline: float # The maximum amount of choline in milligrams the recipe can have. (e.g. 100)
+  --min-cholesterol: float # The minimum amount of cholesterol in milligrams the recipe must have. (e.g. 0)
+  --max-cholesterol: float # The maximum amount of cholesterol in milligrams the recipe can have. (e.g. 100)
+  --min-fluoride: float # The minimum amount of fluoride in milligrams the recipe must have. (e.g. 0)
+  --max-fluoride: float # The maximum amount of fluoride in milligrams the recipe can have. (e.g. 100)
+  --min-saturated-fat: float # The minimum amount of saturated fat in grams the recipe must have. (e.g. 0)
+  --max-saturated-fat: float # The maximum amount of saturated fat in grams the recipe can have. (e.g. 100)
+  --min-vitamin-a: float # The minimum amount of Vitamin A in IU the recipe must have. (e.g. 0)
+  --max-vitamin-a: float # The maximum amount of Vitamin A in IU the recipe can have. (e.g. 100)
+  --min-vitamin-c: float # The minimum amount of Vitamin C milligrams the recipe must have. (e.g. 0)
+  --max-vitamin-c: float # The maximum amount of Vitamin C in milligrams the recipe can have. (e.g. 100)
+  --min-vitamin-d: float # The minimum amount of Vitamin D in micrograms the recipe must have. (e.g. 0)
+  --max-vitamin-d: float # The maximum amount of Vitamin D in micrograms the recipe can have. (e.g. 100)
+  --min-vitamin-e: float # The minimum amount of Vitamin E in milligrams the recipe must have. (e.g. 0)
+  --max-vitamin-e: float # The maximum amount of Vitamin E in milligrams the recipe can have. (e.g. 100)
+  --min-vitamin-k: float # The minimum amount of Vitamin K in micrograms the recipe must have. (e.g. 0)
+  --max-vitamin-k: float # The maximum amount of Vitamin K in micrograms the recipe can have. (e.g. 100)
+  --min-vitamin-b1: float # The minimum amount of Vitamin B1 in milligrams the recipe must have. (e.g. 0)
+  --max-vitamin-b1: float # The maximum amount of Vitamin B1 in milligrams the recipe can have. (e.g. 100)
+  --min-vitamin-b2: float # The minimum amount of Vitamin B2 in milligrams the recipe must have. (e.g. 0)
+  --max-vitamin-b2: float # The maximum amount of Vitamin B2 in milligrams the recipe can have. (e.g. 100)
+  --min-vitamin-b5: float # The minimum amount of Vitamin B5 in milligrams the recipe must have. (e.g. 0)
+  --max-vitamin-b5: float # The maximum amount of Vitamin B5 in milligrams the recipe can have. (e.g. 100)
+  --min-vitamin-b3: float # The minimum amount of Vitamin B3 in milligrams the recipe must have. (e.g. 0)
+  --max-vitamin-b3: float # The maximum amount of Vitamin B3 in milligrams the recipe can have. (e.g. 100)
+  --min-vitamin-b6: float # The minimum amount of Vitamin B6 in milligrams the recipe must have. (e.g. 0)
+  --max-vitamin-b6: float # The maximum amount of Vitamin B6 in milligrams the recipe can have. (e.g. 100)
+  --min-vitamin-b12: float # The minimum amount of Vitamin B12 in micrograms the recipe must have. (e.g. 0)
+  --max-vitamin-b12: float # The maximum amount of Vitamin B12 in micrograms the recipe can have. (e.g. 100)
+  --min-fiber: float # The minimum amount of fiber in grams the recipe must have. (e.g. 0)
+  --max-fiber: float # The maximum amount of fiber in grams the recipe can have. (e.g. 100)
+  --min-folate: float # The minimum amount of folate in micrograms the recipe must have. (e.g. 0)
+  --max-folate: float # The maximum amount of folate in micrograms the recipe can have. (e.g. 100)
+  --min-folic-acid: float # The minimum amount of folic acid in micrograms the recipe must have. (e.g. 0)
+  --max-folic-acid: float # The maximum amount of folic acid in micrograms the recipe can have. (e.g. 100)
+  --min-iodine: float # The minimum amount of iodine in micrograms the recipe must have. (e.g. 0)
+  --max-iodine: float # The maximum amount of iodine in micrograms the recipe can have. (e.g. 100)
+  --min-iron: float # The minimum amount of iron in milligrams the recipe must have. (e.g. 0)
+  --max-iron: float # The maximum amount of iron in milligrams the recipe can have. (e.g. 100)
+  --min-magnesium: float # The minimum amount of magnesium in milligrams the recipe must have. (e.g. 0)
+  --max-magnesium: float # The maximum amount of magnesium in milligrams the recipe can have. (e.g. 100)
+  --min-manganese: float # The minimum amount of manganese in milligrams the recipe must have. (e.g. 0)
+  --max-manganese: float # The maximum amount of manganese in milligrams the recipe can have. (e.g. 100)
+  --min-phosphorus: float # The minimum amount of phosphorus in milligrams the recipe must have. (e.g. 0)
+  --max-phosphorus: float # The maximum amount of phosphorus in milligrams the recipe can have. (e.g. 100)
+  --min-potassium: float # The minimum amount of potassium in milligrams the recipe must have. (e.g. 0)
+  --max-potassium: float # The maximum amount of potassium in milligrams the recipe can have. (e.g. 100)
+  --min-selenium: float # The minimum amount of selenium in micrograms the recipe must have. (e.g. 0)
+  --max-selenium: float # The maximum amount of selenium in micrograms the recipe can have. (e.g. 100)
+  --min-sodium: float # The minimum amount of sodium in milligrams the recipe must have. (e.g. 0)
+  --max-sodium: float # The maximum amount of sodium in milligrams the recipe can have. (e.g. 100)
+  --min-sugar: float # The minimum amount of sugar in grams the recipe must have. (e.g. 0)
+  --max-sugar: float # The maximum amount of sugar in grams the recipe can have. (e.g. 100)
+  --min-zinc: float # The minimum amount of zinc in milligrams the recipe must have. (e.g. 0)
+  --max-zinc: float # The maximum amount of zinc in milligrams the recipe can have. (e.g. 100)
   --offset: int # The number of results to skip (between 0 and 900).
   --number: int # The maximum number of items to return (between 1 and 100). Defaults to 10. (default: 10, e.g. 10)
-  --limitLicense: oneof<nothing, bool> # Whether the recipes should have an open license that allows display with proper attribution. (default: true, e.g. true)
+  --limit-license: oneof<nothing, bool> # Whether the recipes should have an open license that allows display with proper attribution. (default: true, e.g. true)
 ]: nothing -> record<number: int, offset: int, results: table<calories: float, carbs: string, fat: string, id: int, image: string, imageType: string, protein: string, title: string>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "excludeCuisine" $excludeCuisine "scalar") (serialize-qp "diet" $diet "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "equipment" $equipment "scalar") (serialize-qp "includeIngredients" $includeIngredients "scalar") (serialize-qp "excludeIngredients" $excludeIngredients "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "instructionsRequired" $instructionsRequired "scalar") (serialize-qp "fillIngredients" $fillIngredients "scalar") (serialize-qp "addRecipeInformation" $addRecipeInformation "scalar") (serialize-qp "addRecipeNutrition" $addRecipeNutrition "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "recipeBoxId" $recipeBoxId "scalar") (serialize-qp "titleMatch" $titleMatch "scalar") (serialize-qp "maxReadyTime" $maxReadyTime "scalar") (serialize-qp "ignorePantry" $ignorePantry "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortDirection" $sortDirection "scalar") (serialize-qp "minCarbs" $minCarbs "scalar") (serialize-qp "maxCarbs" $maxCarbs "scalar") (serialize-qp "minProtein" $minProtein "scalar") (serialize-qp "maxProtein" $maxProtein "scalar") (serialize-qp "minCalories" $minCalories "scalar") (serialize-qp "maxCalories" $maxCalories "scalar") (serialize-qp "minFat" $minFat "scalar") (serialize-qp "maxFat" $maxFat "scalar") (serialize-qp "minAlcohol" $minAlcohol "scalar") (serialize-qp "maxAlcohol" $maxAlcohol "scalar") (serialize-qp "minCaffeine" $minCaffeine "scalar") (serialize-qp "maxCaffeine" $maxCaffeine "scalar") (serialize-qp "minCopper" $minCopper "scalar") (serialize-qp "maxCopper" $maxCopper "scalar") (serialize-qp "minCalcium" $minCalcium "scalar") (serialize-qp "maxCalcium" $maxCalcium "scalar") (serialize-qp "minCholine" $minCholine "scalar") (serialize-qp "maxCholine" $maxCholine "scalar") (serialize-qp "minCholesterol" $minCholesterol "scalar") (serialize-qp "maxCholesterol" $maxCholesterol "scalar") (serialize-qp "minFluoride" $minFluoride "scalar") (serialize-qp "maxFluoride" $maxFluoride "scalar") (serialize-qp "minSaturatedFat" $minSaturatedFat "scalar") (serialize-qp "maxSaturatedFat" $maxSaturatedFat "scalar") (serialize-qp "minVitaminA" $minVitaminA "scalar") (serialize-qp "maxVitaminA" $maxVitaminA "scalar") (serialize-qp "minVitaminC" $minVitaminC "scalar") (serialize-qp "maxVitaminC" $maxVitaminC "scalar") (serialize-qp "minVitaminD" $minVitaminD "scalar") (serialize-qp "maxVitaminD" $maxVitaminD "scalar") (serialize-qp "minVitaminE" $minVitaminE "scalar") (serialize-qp "maxVitaminE" $maxVitaminE "scalar") (serialize-qp "minVitaminK" $minVitaminK "scalar") (serialize-qp "maxVitaminK" $maxVitaminK "scalar") (serialize-qp "minVitaminB1" $minVitaminB1 "scalar") (serialize-qp "maxVitaminB1" $maxVitaminB1 "scalar") (serialize-qp "minVitaminB2" $minVitaminB2 "scalar") (serialize-qp "maxVitaminB2" $maxVitaminB2 "scalar") (serialize-qp "minVitaminB5" $minVitaminB5 "scalar") (serialize-qp "maxVitaminB5" $maxVitaminB5 "scalar") (serialize-qp "minVitaminB3" $minVitaminB3 "scalar") (serialize-qp "maxVitaminB3" $maxVitaminB3 "scalar") (serialize-qp "minVitaminB6" $minVitaminB6 "scalar") (serialize-qp "maxVitaminB6" $maxVitaminB6 "scalar") (serialize-qp "minVitaminB12" $minVitaminB12 "scalar") (serialize-qp "maxVitaminB12" $maxVitaminB12 "scalar") (serialize-qp "minFiber" $minFiber "scalar") (serialize-qp "maxFiber" $maxFiber "scalar") (serialize-qp "minFolate" $minFolate "scalar") (serialize-qp "maxFolate" $maxFolate "scalar") (serialize-qp "minFolicAcid" $minFolicAcid "scalar") (serialize-qp "maxFolicAcid" $maxFolicAcid "scalar") (serialize-qp "minIodine" $minIodine "scalar") (serialize-qp "maxIodine" $maxIodine "scalar") (serialize-qp "minIron" $minIron "scalar") (serialize-qp "maxIron" $maxIron "scalar") (serialize-qp "minMagnesium" $minMagnesium "scalar") (serialize-qp "maxMagnesium" $maxMagnesium "scalar") (serialize-qp "minManganese" $minManganese "scalar") (serialize-qp "maxManganese" $maxManganese "scalar") (serialize-qp "minPhosphorus" $minPhosphorus "scalar") (serialize-qp "maxPhosphorus" $maxPhosphorus "scalar") (serialize-qp "minPotassium" $minPotassium "scalar") (serialize-qp "maxPotassium" $maxPotassium "scalar") (serialize-qp "minSelenium" $minSelenium "scalar") (serialize-qp "maxSelenium" $maxSelenium "scalar") (serialize-qp "minSodium" $minSodium "scalar") (serialize-qp "maxSodium" $maxSodium "scalar") (serialize-qp "minSugar" $minSugar "scalar") (serialize-qp "maxSugar" $maxSugar "scalar") (serialize-qp "minZinc" $minZinc "scalar") (serialize-qp "maxZinc" $maxZinc "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "limitLicense" $limitLicense "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "excludeCuisine" $exclude_cuisine "scalar") (serialize-qp "diet" $diet "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "equipment" $equipment "scalar") (serialize-qp "includeIngredients" $include_ingredients "scalar") (serialize-qp "excludeIngredients" $exclude_ingredients "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "instructionsRequired" $instructions_required "scalar") (serialize-qp "fillIngredients" $fill_ingredients "scalar") (serialize-qp "addRecipeInformation" $add_recipe_information "scalar") (serialize-qp "addRecipeNutrition" $add_recipe_nutrition "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "recipeBoxId" $recipe_box_id "scalar") (serialize-qp "titleMatch" $title_match "scalar") (serialize-qp "maxReadyTime" $max_ready_time "scalar") (serialize-qp "ignorePantry" $ignore_pantry "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "minCarbs" $min_carbs "scalar") (serialize-qp "maxCarbs" $max_carbs "scalar") (serialize-qp "minProtein" $min_protein "scalar") (serialize-qp "maxProtein" $max_protein "scalar") (serialize-qp "minCalories" $min_calories "scalar") (serialize-qp "maxCalories" $max_calories "scalar") (serialize-qp "minFat" $min_fat "scalar") (serialize-qp "maxFat" $max_fat "scalar") (serialize-qp "minAlcohol" $min_alcohol "scalar") (serialize-qp "maxAlcohol" $max_alcohol "scalar") (serialize-qp "minCaffeine" $min_caffeine "scalar") (serialize-qp "maxCaffeine" $max_caffeine "scalar") (serialize-qp "minCopper" $min_copper "scalar") (serialize-qp "maxCopper" $max_copper "scalar") (serialize-qp "minCalcium" $min_calcium "scalar") (serialize-qp "maxCalcium" $max_calcium "scalar") (serialize-qp "minCholine" $min_choline "scalar") (serialize-qp "maxCholine" $max_choline "scalar") (serialize-qp "minCholesterol" $min_cholesterol "scalar") (serialize-qp "maxCholesterol" $max_cholesterol "scalar") (serialize-qp "minFluoride" $min_fluoride "scalar") (serialize-qp "maxFluoride" $max_fluoride "scalar") (serialize-qp "minSaturatedFat" $min_saturated_fat "scalar") (serialize-qp "maxSaturatedFat" $max_saturated_fat "scalar") (serialize-qp "minVitaminA" $min_vitamin_a "scalar") (serialize-qp "maxVitaminA" $max_vitamin_a "scalar") (serialize-qp "minVitaminC" $min_vitamin_c "scalar") (serialize-qp "maxVitaminC" $max_vitamin_c "scalar") (serialize-qp "minVitaminD" $min_vitamin_d "scalar") (serialize-qp "maxVitaminD" $max_vitamin_d "scalar") (serialize-qp "minVitaminE" $min_vitamin_e "scalar") (serialize-qp "maxVitaminE" $max_vitamin_e "scalar") (serialize-qp "minVitaminK" $min_vitamin_k "scalar") (serialize-qp "maxVitaminK" $max_vitamin_k "scalar") (serialize-qp "minVitaminB1" $min_vitamin_b1 "scalar") (serialize-qp "maxVitaminB1" $max_vitamin_b1 "scalar") (serialize-qp "minVitaminB2" $min_vitamin_b2 "scalar") (serialize-qp "maxVitaminB2" $max_vitamin_b2 "scalar") (serialize-qp "minVitaminB5" $min_vitamin_b5 "scalar") (serialize-qp "maxVitaminB5" $max_vitamin_b5 "scalar") (serialize-qp "minVitaminB3" $min_vitamin_b3 "scalar") (serialize-qp "maxVitaminB3" $max_vitamin_b3 "scalar") (serialize-qp "minVitaminB6" $min_vitamin_b6 "scalar") (serialize-qp "maxVitaminB6" $max_vitamin_b6 "scalar") (serialize-qp "minVitaminB12" $min_vitamin_b12 "scalar") (serialize-qp "maxVitaminB12" $max_vitamin_b12 "scalar") (serialize-qp "minFiber" $min_fiber "scalar") (serialize-qp "maxFiber" $max_fiber "scalar") (serialize-qp "minFolate" $min_folate "scalar") (serialize-qp "maxFolate" $max_folate "scalar") (serialize-qp "minFolicAcid" $min_folic_acid "scalar") (serialize-qp "maxFolicAcid" $max_folic_acid "scalar") (serialize-qp "minIodine" $min_iodine "scalar") (serialize-qp "maxIodine" $max_iodine "scalar") (serialize-qp "minIron" $min_iron "scalar") (serialize-qp "maxIron" $max_iron "scalar") (serialize-qp "minMagnesium" $min_magnesium "scalar") (serialize-qp "maxMagnesium" $max_magnesium "scalar") (serialize-qp "minManganese" $min_manganese "scalar") (serialize-qp "maxManganese" $max_manganese "scalar") (serialize-qp "minPhosphorus" $min_phosphorus "scalar") (serialize-qp "maxPhosphorus" $max_phosphorus "scalar") (serialize-qp "minPotassium" $min_potassium "scalar") (serialize-qp "maxPotassium" $max_potassium "scalar") (serialize-qp "minSelenium" $min_selenium "scalar") (serialize-qp "maxSelenium" $max_selenium "scalar") (serialize-qp "minSodium" $min_sodium "scalar") (serialize-qp "maxSodium" $max_sodium "scalar") (serialize-qp "minSugar" $min_sugar "scalar") (serialize-qp "maxSugar" $max_sugar "scalar") (serialize-qp "minZinc" $min_zinc "scalar") (serialize-qp "maxZinc" $max_zinc "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "limitLicense" $limit_license "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/complexSearch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1867,14 +1867,14 @@ export def "recipes-convert convertAmounts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ingredientName: string # The ingredient which you want to convert. (e.g. flour)
-  --sourceAmount: float # The amount from which you want to convert, e.g. the 2.5 in "2.5 cups of flour to grams". (e.g. 2.5)
-  --sourceUnit: string # The unit from which you want to convert, e.g. the grams in "2.5 cups of flour to grams". You can also use "piece", e.g. "3.4 oz tomatoes to piece" (e.g. cups)
-  --targetUnit: string # The unit to which you want to convert, e.g. the grams in "2.5 cups of flour to grams". You can also use "piece", e.g. "3.4 oz tomatoes to piece" (e.g. grams)
+  --ingredient-name: string # The ingredient which you want to convert. (e.g. flour)
+  --source-amount: float # The amount from which you want to convert, e.g. the 2.5 in "2.5 cups of flour to grams". (e.g. 2.5)
+  --source-unit: string # The unit from which you want to convert, e.g. the grams in "2.5 cups of flour to grams". You can also use "piece", e.g. "3.4 oz tomatoes to piece" (e.g. cups)
+  --target-unit: string # The unit to which you want to convert, e.g. the grams in "2.5 cups of flour to grams". You can also use "piece", e.g. "3.4 oz tomatoes to piece" (e.g. grams)
 ]: nothing -> record<answer: string, sourceAmount: float, sourceUnit: string, targetAmount: float, targetUnit: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ingredientName" $ingredientName "scalar") (serialize-qp "sourceAmount" $sourceAmount "scalar") (serialize-qp "sourceUnit" $sourceUnit "scalar") (serialize-qp "targetUnit" $targetUnit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ingredientName" $ingredient_name "scalar") (serialize-qp "sourceAmount" $source_amount "scalar") (serialize-qp "sourceUnit" $source_unit "scalar") (serialize-qp "targetUnit" $target_unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/convert" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1895,7 +1895,7 @@ export def "recipes-cuisine classifyCuisine" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string@Content-Type-completer # The content type. (e.g. application/json)
+  --content-type: string@content-type-completer # The content type. (e.g. application/json)
   --body: record
 ]: any -> record<confidence: float, cuisine: string, cuisines: list<string>> {
   let input = $in
@@ -1903,7 +1903,7 @@ export def "recipes-cuisine classifyCuisine" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipes/cuisine")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1925,14 +1925,14 @@ export def "recipes-extract extractRecipeFromWebsite" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-url: string # The URL of the recipe page. (e.g. https://foodista.com/recipe/ZHK4KPB6/chocolate-crinkle-cookies)
-  --forceExtraction: oneof<nothing, bool> # If true, the extraction will be triggered whether we already know the recipe or not. Use this only if information is missing as this operation is slower. (e.g. true)
+  --force-extraction: oneof<nothing, bool> # If true, the extraction will be triggered whether we already know the recipe or not. Use this only if information is missing as this operation is slower. (e.g. true)
   --analyze: oneof<nothing, bool> # If true, the recipe will be analyzed and classified resolving in more data such as cuisines, dish types, and more. (e.g. false)
-  --includeNutrition: oneof<nothing, bool> # Include nutrition data in the recipe information. Nutrition data is per serving. If you want the nutrition data for the entire recipe, just multiply by the number of servings. (default: false)
-  --includeTaste: oneof<nothing, bool> # Whether taste data should be added to correctly parsed ingredients. (default: false, e.g. false)
+  --include-nutrition: oneof<nothing, bool> # Include nutrition data in the recipe information. Nutrition data is per serving. If you want the nutrition data for the entire recipe, just multiply by the number of servings. (default: false)
+  --include-taste: oneof<nothing, bool> # Whether taste data should be added to correctly parsed ingredients. (default: false, e.g. false)
 ]: nothing -> record<aggregateLikes: int, analyzedInstructions: list<record>, cheap: bool, creditsText: string, cuisines: list<string>, dairyFree: bool, diets: list<string>, dishTypes: list<string>, extendedIngredients: table<aisle: string, amount: float, consitency: string, id: int, image: string, measures: record, meta: list, name: string, original: string, originalName: string, unit: string>, gaps: string, glutenFree: bool, healthScore: float, id: int, image: string, imageType: string, instructions: string, ketogenic: bool, license: string, lowFodmap: bool, occasions: list<string>, pricePerServing: float, readyInMinutes: int, servings: float, sourceName: string, sourceUrl: string, spoonacularScore: float, spoonacularSourceUrl: string, summary: string, sustainable: bool, title: string, vegan: bool, vegetarian: bool, veryHealthy: bool, veryPopular: bool, weightWatcherSmartPoints: float, whole30: bool, winePairing: record<pairedWines: list<string>, pairingText: string, productMatches: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "forceExtraction" $forceExtraction "scalar") (serialize-qp "analyze" $analyze "scalar") (serialize-qp "includeNutrition" $includeNutrition "scalar") (serialize-qp "includeTaste" $includeTaste "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "forceExtraction" $force_extraction "scalar") (serialize-qp "analyze" $analyze "scalar") (serialize-qp "includeNutrition" $include_nutrition "scalar") (serialize-qp "includeTaste" $include_taste "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/extract" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1944,7 +1944,7 @@ export def "recipes-extract extractRecipeFromWebsite" [
 # GET /recipes/findByIngredients
 # Docs: https://spoonacular.com/food-api/docs#Search-Recipes-by-Ingredients — Read entire docs
 # operationId: searchRecipesByIngredients
-export def "recipes-find-by-ingredients searchRecipesByIngredients" [
+export def "recipes-find-by-ingredients list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1955,13 +1955,13 @@ export def "recipes-find-by-ingredients searchRecipesByIngredients" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ingredients: string # A comma-separated list of ingredients that the recipes should contain. (e.g. carrots,tomatoes)
   --number: int # The maximum number of items to return (between 1 and 100). Defaults to 10. (default: 10, e.g. 10)
-  --limitLicense: oneof<nothing, bool> # Whether the recipes should have an open license that allows display with proper attribution. (default: true, e.g. true)
+  --limit-license: oneof<nothing, bool> # Whether the recipes should have an open license that allows display with proper attribution. (default: true, e.g. true)
   --ranking: float # Whether to maximize used ingredients (1) or minimize missing ingredients (2) first. (e.g. 1)
-  --ignorePantry: oneof<nothing, bool> # Whether to ignore typical pantry items, such as water, salt, flour, etc. (default: false, e.g. false)
+  --ignore-pantry: oneof<nothing, bool> # Whether to ignore typical pantry items, such as water, salt, flour, etc. (default: false, e.g. false)
 ]: nothing -> table<id: int, image: string, imageType: string, likes: int, missedIngredientCount: int, missedIngredients: list<record>, title: string, unusedIngredients: list<record>, usedIngredientCount: float, usedIngredients: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ingredients" $ingredients "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "limitLicense" $limitLicense "scalar") (serialize-qp "ranking" $ranking "scalar") (serialize-qp "ignorePantry" $ignorePantry "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ingredients" $ingredients "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "limitLicense" $limit_license "scalar") (serialize-qp "ranking" $ranking "scalar") (serialize-qp "ignorePantry" $ignore_pantry "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/findByIngredients" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1973,7 +1973,7 @@ export def "recipes-find-by-ingredients searchRecipesByIngredients" [
 # GET /recipes/findByNutrients
 # Docs: https://spoonacular.com/food-api/docs#Search-Recipes-by-Nutrients — Read entire docs
 # operationId: searchRecipesByNutrients
-export def "recipes-find-by-nutrients searchRecipesByNutrients" [
+export def "recipes-find-by-nutrients list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1982,86 +1982,86 @@ export def "recipes-find-by-nutrients searchRecipesByNutrients" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --minCarbs: float # The minimum amount of carbohydrates in grams the recipe must have. (e.g. 10)
-  --maxCarbs: float # The maximum amount of carbohydrates in grams the recipe can have. (e.g. 100)
-  --minProtein: float # The minimum amount of protein in grams the recipe must have. (e.g. 10)
-  --maxProtein: float # The maximum amount of protein in grams the recipe can have. (e.g. 100)
-  --minCalories: float # The minimum amount of calories the recipe must have. (e.g. 50)
-  --maxCalories: float # The maximum amount of calories the recipe can have. (e.g. 800)
-  --minFat: float # The minimum amount of fat in grams the recipe must have. (e.g. 1)
-  --maxFat: float # The maximum amount of fat in grams the recipe can have. (e.g. 100)
-  --minAlcohol: float # The minimum amount of alcohol in grams the recipe must have. (e.g. 0)
-  --maxAlcohol: float # The maximum amount of alcohol in grams the recipe can have. (e.g. 100)
-  --minCaffeine: float # The minimum amount of caffeine in milligrams the recipe must have. (e.g. 0)
-  --maxCaffeine: float # The maximum amount of caffeine in milligrams the recipe can have. (e.g. 100)
-  --minCopper: float # The minimum amount of copper in milligrams the recipe must have. (e.g. 0)
-  --maxCopper: float # The maximum amount of copper in milligrams the recipe can have. (e.g. 100)
-  --minCalcium: float # The minimum amount of calcium in milligrams the recipe must have. (e.g. 0)
-  --maxCalcium: float # The maximum amount of calcium in milligrams the recipe can have. (e.g. 100)
-  --minCholine: float # The minimum amount of choline in milligrams the recipe must have. (e.g. 0)
-  --maxCholine: float # The maximum amount of choline in milligrams the recipe can have. (e.g. 100)
-  --minCholesterol: float # The minimum amount of cholesterol in milligrams the recipe must have. (e.g. 0)
-  --maxCholesterol: float # The maximum amount of cholesterol in milligrams the recipe can have. (e.g. 100)
-  --minFluoride: float # The minimum amount of fluoride in milligrams the recipe must have. (e.g. 0)
-  --maxFluoride: float # The maximum amount of fluoride in milligrams the recipe can have. (e.g. 100)
-  --minSaturatedFat: float # The minimum amount of saturated fat in grams the recipe must have. (e.g. 0)
-  --maxSaturatedFat: float # The maximum amount of saturated fat in grams the recipe can have. (e.g. 100)
-  --minVitaminA: float # The minimum amount of Vitamin A in IU the recipe must have. (e.g. 0)
-  --maxVitaminA: float # The maximum amount of Vitamin A in IU the recipe can have. (e.g. 100)
-  --minVitaminC: float # The minimum amount of Vitamin C in milligrams the recipe must have. (e.g. 0)
-  --maxVitaminC: float # The maximum amount of Vitamin C in milligrams the recipe can have. (e.g. 100)
-  --minVitaminD: float # The minimum amount of Vitamin D in micrograms the recipe must have. (e.g. 0)
-  --maxVitaminD: float # The maximum amount of Vitamin D in micrograms the recipe can have. (e.g. 100)
-  --minVitaminE: float # The minimum amount of Vitamin E in milligrams the recipe must have. (e.g. 0)
-  --maxVitaminE: float # The maximum amount of Vitamin E in milligrams the recipe can have. (e.g. 100)
-  --minVitaminK: float # The minimum amount of Vitamin K in micrograms the recipe must have. (e.g. 0)
-  --maxVitaminK: float # The maximum amount of Vitamin K in micrograms the recipe can have. (e.g. 100)
-  --minVitaminB1: float # The minimum amount of Vitamin B1 in milligrams the recipe must have. (e.g. 0)
-  --maxVitaminB1: float # The maximum amount of Vitamin B1 in milligrams the recipe can have. (e.g. 100)
-  --minVitaminB2: float # The minimum amount of Vitamin B2 in milligrams the recipe must have. (e.g. 0)
-  --maxVitaminB2: float # The maximum amount of Vitamin B2 in milligrams the recipe can have. (e.g. 100)
-  --minVitaminB5: float # The minimum amount of Vitamin B5 in milligrams the recipe must have. (e.g. 0)
-  --maxVitaminB5: float # The maximum amount of Vitamin B5 in milligrams the recipe can have. (e.g. 100)
-  --minVitaminB3: float # The minimum amount of Vitamin B3 in milligrams the recipe must have. (e.g. 0)
-  --maxVitaminB3: float # The maximum amount of Vitamin B3 in milligrams the recipe can have. (e.g. 100)
-  --minVitaminB6: float # The minimum amount of Vitamin B6 in milligrams the recipe must have. (e.g. 0)
-  --maxVitaminB6: float # The maximum amount of Vitamin B6 in milligrams the recipe can have. (e.g. 100)
-  --minVitaminB12: float # The minimum amount of Vitamin B12 in micrograms the recipe must have. (e.g. 0)
-  --maxVitaminB12: float # The maximum amount of Vitamin B12 in micrograms the recipe can have. (e.g. 100)
-  --minFiber: float # The minimum amount of fiber in grams the recipe must have. (e.g. 0)
-  --maxFiber: float # The maximum amount of fiber in grams the recipe can have. (e.g. 100)
-  --minFolate: float # The minimum amount of folate in micrograms the recipe must have. (e.g. 0)
-  --maxFolate: float # The maximum amount of folate in micrograms the recipe can have. (e.g. 100)
-  --minFolicAcid: float # The minimum amount of folic acid in micrograms the recipe must have. (e.g. 0)
-  --maxFolicAcid: float # The maximum amount of folic acid in micrograms the recipe can have. (e.g. 100)
-  --minIodine: float # The minimum amount of iodine in micrograms the recipe must have. (e.g. 0)
-  --maxIodine: float # The maximum amount of iodine in micrograms the recipe can have. (e.g. 100)
-  --minIron: float # The minimum amount of iron in milligrams the recipe must have. (e.g. 0)
-  --maxIron: float # The maximum amount of iron in milligrams the recipe can have. (e.g. 100)
-  --minMagnesium: float # The minimum amount of magnesium in milligrams the recipe must have. (e.g. 0)
-  --maxMagnesium: float # The maximum amount of magnesium in milligrams the recipe can have. (e.g. 100)
-  --minManganese: float # The minimum amount of manganese in milligrams the recipe must have. (e.g. 0)
-  --maxManganese: float # The maximum amount of manganese in milligrams the recipe can have. (e.g. 100)
-  --minPhosphorus: float # The minimum amount of phosphorus in milligrams the recipe must have. (e.g. 0)
-  --maxPhosphorus: float # The maximum amount of phosphorus in milligrams the recipe can have. (e.g. 100)
-  --minPotassium: float # The minimum amount of potassium in milligrams the recipe must have. (e.g. 0)
-  --maxPotassium: float # The maximum amount of potassium in milligrams the recipe can have. (e.g. 100)
-  --minSelenium: float # The minimum amount of selenium in micrograms the recipe must have. (e.g. 0)
-  --maxSelenium: float # The maximum amount of selenium in micrograms the recipe can have. (e.g. 100)
-  --minSodium: float # The minimum amount of sodium in milligrams the recipe must have. (e.g. 0)
-  --maxSodium: float # The maximum amount of sodium in milligrams the recipe can have. (e.g. 100)
-  --minSugar: float # The minimum amount of sugar in grams the recipe must have. (e.g. 0)
-  --maxSugar: float # The maximum amount of sugar in grams the recipe can have. (e.g. 100)
-  --minZinc: float # The minimum amount of zinc in milligrams the recipe must have. (e.g. 0)
-  --maxZinc: float # The maximum amount of zinc in milligrams the recipe can have. (e.g. 100)
+  --min-carbs: float # The minimum amount of carbohydrates in grams the recipe must have. (e.g. 10)
+  --max-carbs: float # The maximum amount of carbohydrates in grams the recipe can have. (e.g. 100)
+  --min-protein: float # The minimum amount of protein in grams the recipe must have. (e.g. 10)
+  --max-protein: float # The maximum amount of protein in grams the recipe can have. (e.g. 100)
+  --min-calories: float # The minimum amount of calories the recipe must have. (e.g. 50)
+  --max-calories: float # The maximum amount of calories the recipe can have. (e.g. 800)
+  --min-fat: float # The minimum amount of fat in grams the recipe must have. (e.g. 1)
+  --max-fat: float # The maximum amount of fat in grams the recipe can have. (e.g. 100)
+  --min-alcohol: float # The minimum amount of alcohol in grams the recipe must have. (e.g. 0)
+  --max-alcohol: float # The maximum amount of alcohol in grams the recipe can have. (e.g. 100)
+  --min-caffeine: float # The minimum amount of caffeine in milligrams the recipe must have. (e.g. 0)
+  --max-caffeine: float # The maximum amount of caffeine in milligrams the recipe can have. (e.g. 100)
+  --min-copper: float # The minimum amount of copper in milligrams the recipe must have. (e.g. 0)
+  --max-copper: float # The maximum amount of copper in milligrams the recipe can have. (e.g. 100)
+  --min-calcium: float # The minimum amount of calcium in milligrams the recipe must have. (e.g. 0)
+  --max-calcium: float # The maximum amount of calcium in milligrams the recipe can have. (e.g. 100)
+  --min-choline: float # The minimum amount of choline in milligrams the recipe must have. (e.g. 0)
+  --max-choline: float # The maximum amount of choline in milligrams the recipe can have. (e.g. 100)
+  --min-cholesterol: float # The minimum amount of cholesterol in milligrams the recipe must have. (e.g. 0)
+  --max-cholesterol: float # The maximum amount of cholesterol in milligrams the recipe can have. (e.g. 100)
+  --min-fluoride: float # The minimum amount of fluoride in milligrams the recipe must have. (e.g. 0)
+  --max-fluoride: float # The maximum amount of fluoride in milligrams the recipe can have. (e.g. 100)
+  --min-saturated-fat: float # The minimum amount of saturated fat in grams the recipe must have. (e.g. 0)
+  --max-saturated-fat: float # The maximum amount of saturated fat in grams the recipe can have. (e.g. 100)
+  --min-vitamin-a: float # The minimum amount of Vitamin A in IU the recipe must have. (e.g. 0)
+  --max-vitamin-a: float # The maximum amount of Vitamin A in IU the recipe can have. (e.g. 100)
+  --min-vitamin-c: float # The minimum amount of Vitamin C in milligrams the recipe must have. (e.g. 0)
+  --max-vitamin-c: float # The maximum amount of Vitamin C in milligrams the recipe can have. (e.g. 100)
+  --min-vitamin-d: float # The minimum amount of Vitamin D in micrograms the recipe must have. (e.g. 0)
+  --max-vitamin-d: float # The maximum amount of Vitamin D in micrograms the recipe can have. (e.g. 100)
+  --min-vitamin-e: float # The minimum amount of Vitamin E in milligrams the recipe must have. (e.g. 0)
+  --max-vitamin-e: float # The maximum amount of Vitamin E in milligrams the recipe can have. (e.g. 100)
+  --min-vitamin-k: float # The minimum amount of Vitamin K in micrograms the recipe must have. (e.g. 0)
+  --max-vitamin-k: float # The maximum amount of Vitamin K in micrograms the recipe can have. (e.g. 100)
+  --min-vitamin-b1: float # The minimum amount of Vitamin B1 in milligrams the recipe must have. (e.g. 0)
+  --max-vitamin-b1: float # The maximum amount of Vitamin B1 in milligrams the recipe can have. (e.g. 100)
+  --min-vitamin-b2: float # The minimum amount of Vitamin B2 in milligrams the recipe must have. (e.g. 0)
+  --max-vitamin-b2: float # The maximum amount of Vitamin B2 in milligrams the recipe can have. (e.g. 100)
+  --min-vitamin-b5: float # The minimum amount of Vitamin B5 in milligrams the recipe must have. (e.g. 0)
+  --max-vitamin-b5: float # The maximum amount of Vitamin B5 in milligrams the recipe can have. (e.g. 100)
+  --min-vitamin-b3: float # The minimum amount of Vitamin B3 in milligrams the recipe must have. (e.g. 0)
+  --max-vitamin-b3: float # The maximum amount of Vitamin B3 in milligrams the recipe can have. (e.g. 100)
+  --min-vitamin-b6: float # The minimum amount of Vitamin B6 in milligrams the recipe must have. (e.g. 0)
+  --max-vitamin-b6: float # The maximum amount of Vitamin B6 in milligrams the recipe can have. (e.g. 100)
+  --min-vitamin-b12: float # The minimum amount of Vitamin B12 in micrograms the recipe must have. (e.g. 0)
+  --max-vitamin-b12: float # The maximum amount of Vitamin B12 in micrograms the recipe can have. (e.g. 100)
+  --min-fiber: float # The minimum amount of fiber in grams the recipe must have. (e.g. 0)
+  --max-fiber: float # The maximum amount of fiber in grams the recipe can have. (e.g. 100)
+  --min-folate: float # The minimum amount of folate in micrograms the recipe must have. (e.g. 0)
+  --max-folate: float # The maximum amount of folate in micrograms the recipe can have. (e.g. 100)
+  --min-folic-acid: float # The minimum amount of folic acid in micrograms the recipe must have. (e.g. 0)
+  --max-folic-acid: float # The maximum amount of folic acid in micrograms the recipe can have. (e.g. 100)
+  --min-iodine: float # The minimum amount of iodine in micrograms the recipe must have. (e.g. 0)
+  --max-iodine: float # The maximum amount of iodine in micrograms the recipe can have. (e.g. 100)
+  --min-iron: float # The minimum amount of iron in milligrams the recipe must have. (e.g. 0)
+  --max-iron: float # The maximum amount of iron in milligrams the recipe can have. (e.g. 100)
+  --min-magnesium: float # The minimum amount of magnesium in milligrams the recipe must have. (e.g. 0)
+  --max-magnesium: float # The maximum amount of magnesium in milligrams the recipe can have. (e.g. 100)
+  --min-manganese: float # The minimum amount of manganese in milligrams the recipe must have. (e.g. 0)
+  --max-manganese: float # The maximum amount of manganese in milligrams the recipe can have. (e.g. 100)
+  --min-phosphorus: float # The minimum amount of phosphorus in milligrams the recipe must have. (e.g. 0)
+  --max-phosphorus: float # The maximum amount of phosphorus in milligrams the recipe can have. (e.g. 100)
+  --min-potassium: float # The minimum amount of potassium in milligrams the recipe must have. (e.g. 0)
+  --max-potassium: float # The maximum amount of potassium in milligrams the recipe can have. (e.g. 100)
+  --min-selenium: float # The minimum amount of selenium in micrograms the recipe must have. (e.g. 0)
+  --max-selenium: float # The maximum amount of selenium in micrograms the recipe can have. (e.g. 100)
+  --min-sodium: float # The minimum amount of sodium in milligrams the recipe must have. (e.g. 0)
+  --max-sodium: float # The maximum amount of sodium in milligrams the recipe can have. (e.g. 100)
+  --min-sugar: float # The minimum amount of sugar in grams the recipe must have. (e.g. 0)
+  --max-sugar: float # The maximum amount of sugar in grams the recipe can have. (e.g. 100)
+  --min-zinc: float # The minimum amount of zinc in milligrams the recipe must have. (e.g. 0)
+  --max-zinc: float # The maximum amount of zinc in milligrams the recipe can have. (e.g. 100)
   --offset: int # The number of results to skip (between 0 and 900).
   --number: int # The maximum number of items to return (between 1 and 100). Defaults to 10. (default: 10, e.g. 10)
   --random: oneof<nothing, bool> # If true, every request will give you a random set of recipes within the requested limits. (e.g. false)
-  --limitLicense: oneof<nothing, bool> # Whether the recipes should have an open license that allows display with proper attribution. (default: true, e.g. true)
+  --limit-license: oneof<nothing, bool> # Whether the recipes should have an open license that allows display with proper attribution. (default: true, e.g. true)
 ]: nothing -> table<calories: float, carbs: string, fat: string, id: int, image: string, imageType: string, protein: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "minCarbs" $minCarbs "scalar") (serialize-qp "maxCarbs" $maxCarbs "scalar") (serialize-qp "minProtein" $minProtein "scalar") (serialize-qp "maxProtein" $maxProtein "scalar") (serialize-qp "minCalories" $minCalories "scalar") (serialize-qp "maxCalories" $maxCalories "scalar") (serialize-qp "minFat" $minFat "scalar") (serialize-qp "maxFat" $maxFat "scalar") (serialize-qp "minAlcohol" $minAlcohol "scalar") (serialize-qp "maxAlcohol" $maxAlcohol "scalar") (serialize-qp "minCaffeine" $minCaffeine "scalar") (serialize-qp "maxCaffeine" $maxCaffeine "scalar") (serialize-qp "minCopper" $minCopper "scalar") (serialize-qp "maxCopper" $maxCopper "scalar") (serialize-qp "minCalcium" $minCalcium "scalar") (serialize-qp "maxCalcium" $maxCalcium "scalar") (serialize-qp "minCholine" $minCholine "scalar") (serialize-qp "maxCholine" $maxCholine "scalar") (serialize-qp "minCholesterol" $minCholesterol "scalar") (serialize-qp "maxCholesterol" $maxCholesterol "scalar") (serialize-qp "minFluoride" $minFluoride "scalar") (serialize-qp "maxFluoride" $maxFluoride "scalar") (serialize-qp "minSaturatedFat" $minSaturatedFat "scalar") (serialize-qp "maxSaturatedFat" $maxSaturatedFat "scalar") (serialize-qp "minVitaminA" $minVitaminA "scalar") (serialize-qp "maxVitaminA" $maxVitaminA "scalar") (serialize-qp "minVitaminC" $minVitaminC "scalar") (serialize-qp "maxVitaminC" $maxVitaminC "scalar") (serialize-qp "minVitaminD" $minVitaminD "scalar") (serialize-qp "maxVitaminD" $maxVitaminD "scalar") (serialize-qp "minVitaminE" $minVitaminE "scalar") (serialize-qp "maxVitaminE" $maxVitaminE "scalar") (serialize-qp "minVitaminK" $minVitaminK "scalar") (serialize-qp "maxVitaminK" $maxVitaminK "scalar") (serialize-qp "minVitaminB1" $minVitaminB1 "scalar") (serialize-qp "maxVitaminB1" $maxVitaminB1 "scalar") (serialize-qp "minVitaminB2" $minVitaminB2 "scalar") (serialize-qp "maxVitaminB2" $maxVitaminB2 "scalar") (serialize-qp "minVitaminB5" $minVitaminB5 "scalar") (serialize-qp "maxVitaminB5" $maxVitaminB5 "scalar") (serialize-qp "minVitaminB3" $minVitaminB3 "scalar") (serialize-qp "maxVitaminB3" $maxVitaminB3 "scalar") (serialize-qp "minVitaminB6" $minVitaminB6 "scalar") (serialize-qp "maxVitaminB6" $maxVitaminB6 "scalar") (serialize-qp "minVitaminB12" $minVitaminB12 "scalar") (serialize-qp "maxVitaminB12" $maxVitaminB12 "scalar") (serialize-qp "minFiber" $minFiber "scalar") (serialize-qp "maxFiber" $maxFiber "scalar") (serialize-qp "minFolate" $minFolate "scalar") (serialize-qp "maxFolate" $maxFolate "scalar") (serialize-qp "minFolicAcid" $minFolicAcid "scalar") (serialize-qp "maxFolicAcid" $maxFolicAcid "scalar") (serialize-qp "minIodine" $minIodine "scalar") (serialize-qp "maxIodine" $maxIodine "scalar") (serialize-qp "minIron" $minIron "scalar") (serialize-qp "maxIron" $maxIron "scalar") (serialize-qp "minMagnesium" $minMagnesium "scalar") (serialize-qp "maxMagnesium" $maxMagnesium "scalar") (serialize-qp "minManganese" $minManganese "scalar") (serialize-qp "maxManganese" $maxManganese "scalar") (serialize-qp "minPhosphorus" $minPhosphorus "scalar") (serialize-qp "maxPhosphorus" $maxPhosphorus "scalar") (serialize-qp "minPotassium" $minPotassium "scalar") (serialize-qp "maxPotassium" $maxPotassium "scalar") (serialize-qp "minSelenium" $minSelenium "scalar") (serialize-qp "maxSelenium" $maxSelenium "scalar") (serialize-qp "minSodium" $minSodium "scalar") (serialize-qp "maxSodium" $maxSodium "scalar") (serialize-qp "minSugar" $minSugar "scalar") (serialize-qp "maxSugar" $maxSugar "scalar") (serialize-qp "minZinc" $minZinc "scalar") (serialize-qp "maxZinc" $maxZinc "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "random" $random "scalar") (serialize-qp "limitLicense" $limitLicense "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "minCarbs" $min_carbs "scalar") (serialize-qp "maxCarbs" $max_carbs "scalar") (serialize-qp "minProtein" $min_protein "scalar") (serialize-qp "maxProtein" $max_protein "scalar") (serialize-qp "minCalories" $min_calories "scalar") (serialize-qp "maxCalories" $max_calories "scalar") (serialize-qp "minFat" $min_fat "scalar") (serialize-qp "maxFat" $max_fat "scalar") (serialize-qp "minAlcohol" $min_alcohol "scalar") (serialize-qp "maxAlcohol" $max_alcohol "scalar") (serialize-qp "minCaffeine" $min_caffeine "scalar") (serialize-qp "maxCaffeine" $max_caffeine "scalar") (serialize-qp "minCopper" $min_copper "scalar") (serialize-qp "maxCopper" $max_copper "scalar") (serialize-qp "minCalcium" $min_calcium "scalar") (serialize-qp "maxCalcium" $max_calcium "scalar") (serialize-qp "minCholine" $min_choline "scalar") (serialize-qp "maxCholine" $max_choline "scalar") (serialize-qp "minCholesterol" $min_cholesterol "scalar") (serialize-qp "maxCholesterol" $max_cholesterol "scalar") (serialize-qp "minFluoride" $min_fluoride "scalar") (serialize-qp "maxFluoride" $max_fluoride "scalar") (serialize-qp "minSaturatedFat" $min_saturated_fat "scalar") (serialize-qp "maxSaturatedFat" $max_saturated_fat "scalar") (serialize-qp "minVitaminA" $min_vitamin_a "scalar") (serialize-qp "maxVitaminA" $max_vitamin_a "scalar") (serialize-qp "minVitaminC" $min_vitamin_c "scalar") (serialize-qp "maxVitaminC" $max_vitamin_c "scalar") (serialize-qp "minVitaminD" $min_vitamin_d "scalar") (serialize-qp "maxVitaminD" $max_vitamin_d "scalar") (serialize-qp "minVitaminE" $min_vitamin_e "scalar") (serialize-qp "maxVitaminE" $max_vitamin_e "scalar") (serialize-qp "minVitaminK" $min_vitamin_k "scalar") (serialize-qp "maxVitaminK" $max_vitamin_k "scalar") (serialize-qp "minVitaminB1" $min_vitamin_b1 "scalar") (serialize-qp "maxVitaminB1" $max_vitamin_b1 "scalar") (serialize-qp "minVitaminB2" $min_vitamin_b2 "scalar") (serialize-qp "maxVitaminB2" $max_vitamin_b2 "scalar") (serialize-qp "minVitaminB5" $min_vitamin_b5 "scalar") (serialize-qp "maxVitaminB5" $max_vitamin_b5 "scalar") (serialize-qp "minVitaminB3" $min_vitamin_b3 "scalar") (serialize-qp "maxVitaminB3" $max_vitamin_b3 "scalar") (serialize-qp "minVitaminB6" $min_vitamin_b6 "scalar") (serialize-qp "maxVitaminB6" $max_vitamin_b6 "scalar") (serialize-qp "minVitaminB12" $min_vitamin_b12 "scalar") (serialize-qp "maxVitaminB12" $max_vitamin_b12 "scalar") (serialize-qp "minFiber" $min_fiber "scalar") (serialize-qp "maxFiber" $max_fiber "scalar") (serialize-qp "minFolate" $min_folate "scalar") (serialize-qp "maxFolate" $max_folate "scalar") (serialize-qp "minFolicAcid" $min_folic_acid "scalar") (serialize-qp "maxFolicAcid" $max_folic_acid "scalar") (serialize-qp "minIodine" $min_iodine "scalar") (serialize-qp "maxIodine" $max_iodine "scalar") (serialize-qp "minIron" $min_iron "scalar") (serialize-qp "maxIron" $max_iron "scalar") (serialize-qp "minMagnesium" $min_magnesium "scalar") (serialize-qp "maxMagnesium" $max_magnesium "scalar") (serialize-qp "minManganese" $min_manganese "scalar") (serialize-qp "maxManganese" $max_manganese "scalar") (serialize-qp "minPhosphorus" $min_phosphorus "scalar") (serialize-qp "maxPhosphorus" $max_phosphorus "scalar") (serialize-qp "minPotassium" $min_potassium "scalar") (serialize-qp "maxPotassium" $max_potassium "scalar") (serialize-qp "minSelenium" $min_selenium "scalar") (serialize-qp "maxSelenium" $max_selenium "scalar") (serialize-qp "minSodium" $min_sodium "scalar") (serialize-qp "maxSodium" $max_sodium "scalar") (serialize-qp "minSugar" $min_sugar "scalar") (serialize-qp "maxSugar" $max_sugar "scalar") (serialize-qp "minZinc" $min_zinc "scalar") (serialize-qp "maxZinc" $max_zinc "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "random" $random "scalar") (serialize-qp "limitLicense" $limit_license "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/findByNutrients" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2108,11 +2108,11 @@ export def "recipes-information-bulk get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # A comma-separated list of recipe ids. (e.g. 715538,716429)
-  --includeNutrition: oneof<nothing, bool> # Include nutrition data in the recipe information. Nutrition data is per serving. If you want the nutrition data for the entire recipe, just multiply by the number of servings. (default: false)
+  --include-nutrition: oneof<nothing, bool> # Include nutrition data in the recipe information. Nutrition data is per serving. If you want the nutrition data for the entire recipe, just multiply by the number of servings. (default: false)
 ]: nothing -> table<aggregateLikes: int, analyzedInstructions: list<string>, cheap: bool, creditsText: string, cuisines: list<string>, dairyFree: bool, diets: list<string>, dishTypes: list<string>, extendedIngredients: list<record>, gaps: string, glutenFree: bool, healthScore: float, id: int, image: string, imageType: string, instructions: string, ketogenic: bool, license: string, lowFodmap: bool, occasions: list<string>, pricePerServing: float, readyInMinutes: int, servings: float, sourceName: string, sourceUrl: string, spoonacularScore: float, spoonacularSourceUrl: string, summary: string, sustainable: bool, title: string, vegan: bool, vegetarian: bool, veryHealthy: bool, veryPopular: bool, weightWatcherSmartPoints: float, whole30: bool, winePairing: record<pairedWines: list, pairingText: string, productMatches: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "includeNutrition" $includeNutrition "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "includeNutrition" $include_nutrition "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/informationBulk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2134,7 +2134,7 @@ export def "recipes-parse-ingredients parseIngredients" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # The language of the input. Either 'en' or 'de'. (e.g. en)
-  --Content-Type: string@Content-Type-completer # The content type. (e.g. application/json)
+  --content-type: string@content-type-completer # The content type. (e.g. application/json)
   --body: record
 ]: any -> table<aisle: string, amount: float, consistency: string, estimatedCost: record<unit: string, value: float>, id: int, image: string, meta: list<string>, name: string, nameClean: string, nutrition: record<caloricBreakdown: record, flavonoids: list, nutrients: list, properties: list, weightPerServing: record>, original: string, originalName: string, possibleUnits: list<string>, unit: string, unitLong: string, unitShort: string> {
   let input = $in
@@ -2143,7 +2143,7 @@ export def "recipes-parse-ingredients parseIngredients" [
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/parseIngredients" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2214,13 +2214,13 @@ export def "recipes-random get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --limitLicense: oneof<nothing, bool> # Whether the recipes should have an open license that allows display with proper attribution. (default: true, e.g. true)
+  --limit-license: oneof<nothing, bool> # Whether the recipes should have an open license that allows display with proper attribution. (default: true, e.g. true)
   --tags: string # The tags (can be diets, meal types, cuisines, or intolerances) that the recipe must have.
   --number: int # The maximum number of items to return (between 1 and 100). Defaults to 10. (default: 10, e.g. 10)
 ]: nothing -> record<recipes: table<aggregateLikes: float, analyzedInstructions: list, cheap: bool, creditsText: string, cuisines: list, dairyFree: bool, diets: list, dishTypes: list, extendedIngredients: list, gaps: string, glutenFree: bool, healthScore: float, id: int, image: string, imageType: string, instructions: string, ketogenic: bool, license: string, lowFodmap: bool, occasions: list, pricePerServing: float, readyInMinutes: int, servings: float, sourceName: string, sourceUrl: string, spoonacularScore: float, spoonacularSourceUrl: string, summary: string, sustainable: bool, title: string, vegan: bool, vegetarian: bool, veryHealthy: bool, veryPopular: bool, weightWatcherSmartPoints: float, whole30: bool, winePairing: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limitLicense" $limitLicense "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limitLicense" $limit_license "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/random" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2241,8 +2241,8 @@ export def "recipes-visualize-equipment visualizeEquipment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string@Content-Type-completer # The content type. (e.g. application/json)
-  --Accept: string@Accept-completer # Accept header. (e.g. application/json)
+  --content-type: string@content-type-completer # The content type. (e.g. application/json)
+  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
   --body: record
 ]: any -> any {
   let input = $in
@@ -2250,7 +2250,7 @@ export def "recipes-visualize-equipment visualizeEquipment" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipes/visualizeEquipment")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2272,8 +2272,8 @@ export def "recipes-visualize-ingredients visualizeIngredients" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # The language of the input. Either 'en' or 'de'. (e.g. en)
-  --Content-Type: string@Content-Type-completer # The content type. (e.g. application/json)
-  --Accept: string@Accept-completer # Accept header. (e.g. application/json)
+  --content-type: string@content-type-completer # The content type. (e.g. application/json)
+  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
   --body: record
 ]: any -> any {
   let input = $in
@@ -2282,7 +2282,7 @@ export def "recipes-visualize-ingredients visualizeIngredients" [
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/visualizeIngredients" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2304,8 +2304,8 @@ export def "recipes-visualize-nutrition visualizeRecipeNutrition" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # The language of the input. Either 'en' or 'de'. (e.g. en)
-  --Content-Type: string@Content-Type-completer # The content type. (e.g. application/json)
-  --Accept: string@Accept-completer # Accept header. (e.g. application/json)
+  --content-type: string@content-type-completer # The content type. (e.g. application/json)
+  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
   --body: record
 ]: any -> any {
   let input = $in
@@ -2314,7 +2314,7 @@ export def "recipes-visualize-nutrition visualizeRecipeNutrition" [
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/visualizeNutrition" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2336,8 +2336,8 @@ export def "recipes-visualize-price-estimator visualizePriceBreakdown" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # The language of the input. Either 'en' or 'de'. (e.g. en)
-  --Content-Type: string@Content-Type-completer # The content type. (e.g. application/json)
-  --Accept: string@Accept-completer # Accept header. (e.g. application/json)
+  --content-type: string@content-type-completer # The content type. (e.g. application/json)
+  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
   --body: record
 ]: any -> any {
   let input = $in
@@ -2346,7 +2346,7 @@ export def "recipes-visualize-price-estimator visualizePriceBreakdown" [
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/visualizePriceEstimator" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2358,7 +2358,7 @@ export def "recipes-visualize-price-estimator visualizePriceBreakdown" [
 # POST /recipes/visualizeRecipe
 # Docs: https://spoonacular.com/food-api/docs#Create-Recipe-Card — Read entire docs
 # operationId: createRecipeCard
-export def "recipes-visualize-recipe createRecipeCard" [
+export def "recipes-visualize-recipe create-recipe-card" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2367,7 +2367,7 @@ export def "recipes-visualize-recipe createRecipeCard" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string@Content-Type-completer # The content type. (e.g. application/json)
+  --content-type: string@content-type-completer # The content type. (e.g. application/json)
   --body: record
 ]: any -> record<url: string> {
   let input = $in
@@ -2375,7 +2375,7 @@ export def "recipes-visualize-recipe createRecipeCard" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipes/visualizeRecipe")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2399,8 +2399,8 @@ export def "recipes-visualize-taste visualizeRecipeTaste" [
   --language: string@language-completer # The language of the input. Either 'en' or 'de'. (e.g. en)
   --normalize: oneof<nothing, bool> # Whether to normalize to the strongest taste.
   --rgb: string # Red, green, blue values for the chart color. (e.g. 75,192,192)
-  --Content-Type: string@Content-Type-completer # The content type. (e.g. application/json)
-  --Accept: string@Accept-completer # Accept header. (e.g. application/json)
+  --content-type: string@content-type-completer # The content type. (e.g. application/json)
+  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
   --body: record
 ]: any -> any {
   let input = $in
@@ -2409,7 +2409,7 @@ export def "recipes-visualize-taste visualizeRecipeTaste" [
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "normalize" $normalize "scalar") (serialize-qp "rgb" $rgb "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/visualizeTaste" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2432,12 +2432,12 @@ export def "recipes-analyzed-instructions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stepBreakdown: oneof<nothing, bool> # Whether to break down the recipe steps even more. (e.g. true)
+  --step-breakdown: oneof<nothing, bool> # Whether to break down the recipe steps even more. (e.g. true)
 ]: nothing -> record<equipment: table<id: int, name: string>, ingredients: table<id: int, name: string>, parsedInstructions: table<name: string, steps: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "stepBreakdown" $stepBreakdown "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipes/($id)/analyzedInstructions" $qp)
+  let qp = [(serialize-qp "stepBreakdown" $step_breakdown "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/recipes/{id}/analyzedInstructions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2448,7 +2448,7 @@ export def "recipes-analyzed-instructions get" [
 # GET /recipes/{id}/card
 # Docs: https://spoonacular.com/food-api/docs#Create-Recipe-Card — Read entire docs
 # operationId: createRecipeCardGet
-export def "recipes-card createRecipeCardGet" [
+export def "recipes-card create-recipe-card-get" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2459,14 +2459,14 @@ export def "recipes-card createRecipeCardGet" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --mask: string # The mask to put over the recipe image ("ellipseMask", "diamondMask", "starMask", "heartMask", "potMask", "fishMask"). (e.g. ellipseMask)
-  --backgroundImage: string # The background image ("none","background1", or "background2"). (e.g. background1)
-  --backgroundColor: string # The background color for the recipe card as a hex-string. (e.g. ffffff)
-  --fontColor: string # The font color for the recipe card as a hex-string. (e.g. 333333)
+  --background-image: string # The background image ("none","background1", or "background2"). (e.g. background1)
+  --background-color: string # The background color for the recipe card as a hex-string. (e.g. ffffff)
+  --font-color: string # The font color for the recipe card as a hex-string. (e.g. 333333)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "mask" $mask "scalar") (serialize-qp "backgroundImage" $backgroundImage "scalar") (serialize-qp "backgroundColor" $backgroundColor "scalar") (serialize-qp "fontColor" $fontColor "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipes/($id)/card" $qp)
+  let qp = [(serialize-qp "mask" $mask "scalar") (serialize-qp "backgroundImage" $background_image "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "fontColor" $font_color "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/card") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2487,12 +2487,12 @@ export def "recipes-equipment-widget visualizeRecipeEquipmentByID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultCss: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
+  --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "defaultCss" $defaultCss "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipes/($id)/equipmentWidget" $qp)
+  let qp = [(serialize-qp "defaultCss" $default_css "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/equipmentWidget") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2517,7 +2517,7 @@ export def "recipes-equipment-widgetjson get" [
 ]: nothing -> record<equipment: table<image: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipes/($id)/equipmentWidget.json")
+  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/recipes/{id}/equipmentWidget.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2541,7 +2541,7 @@ export def "recipes-equipment-widgetpng equipmentByIDImage" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipes/($id)/equipmentWidget.png")
+  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/equipmentWidget.png"))
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2562,12 +2562,12 @@ export def "recipes-information get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --includeNutrition: oneof<nothing, bool> # Include nutrition data in the recipe information. Nutrition data is per serving. If you want the nutrition data for the entire recipe, just multiply by the number of servings. (default: false)
+  --include-nutrition: oneof<nothing, bool> # Include nutrition data in the recipe information. Nutrition data is per serving. If you want the nutrition data for the entire recipe, just multiply by the number of servings. (default: false)
 ]: nothing -> record<aggregateLikes: int, analyzedInstructions: list<record>, cheap: bool, creditsText: string, cuisines: list<string>, dairyFree: bool, diets: list<string>, dishTypes: list<string>, extendedIngredients: table<aisle: string, amount: float, consitency: string, id: int, image: string, measures: record, meta: list, name: string, original: string, originalName: string, unit: string>, gaps: string, glutenFree: bool, healthScore: float, id: int, image: string, imageType: string, instructions: string, ketogenic: bool, license: string, lowFodmap: bool, occasions: list<string>, pricePerServing: float, readyInMinutes: int, servings: float, sourceName: string, sourceUrl: string, spoonacularScore: float, spoonacularSourceUrl: string, summary: string, sustainable: bool, title: string, vegan: bool, vegetarian: bool, veryHealthy: bool, veryPopular: bool, weightWatcherSmartPoints: float, whole30: bool, winePairing: record<pairedWines: list<string>, pairingText: string, productMatches: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includeNutrition" $includeNutrition "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipes/($id)/information" $qp)
+  let qp = [(serialize-qp "includeNutrition" $include_nutrition "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/information") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2588,13 +2588,13 @@ export def "recipes-ingredient-widget visualizeRecipeIngredientsByID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultCss: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
+  --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
   --measure: string@measure-completer # Whether the the measures should be 'us' or 'metric'. (e.g. metric)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "defaultCss" $defaultCss "scalar") (serialize-qp "measure" $measure "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipes/($id)/ingredientWidget" $qp)
+  let qp = [(serialize-qp "defaultCss" $default_css "scalar") (serialize-qp "measure" $measure "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/ingredientWidget") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2619,7 +2619,7 @@ export def "recipes-ingredient-widgetjson get" [
 ]: nothing -> record<ingredients: table<amount: record, image: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipes/($id)/ingredientWidget.json")
+  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/recipes/{id}/ingredientWidget.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2645,7 +2645,7 @@ export def "recipes-ingredient-widgetpng ingredientsByIDImage" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "measure" $measure "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipes/($id)/ingredientWidget.png" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/ingredientWidget.png") $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2666,15 +2666,15 @@ export def "recipes-nutrition-label recipeNutritionLabelWidget" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultCss: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
-  --showOptionalNutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
-  --showZeroValues: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
-  --showIngredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
+  --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
+  --show-optional-nutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
+  --show-zero-values: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
+  --show-ingredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "defaultCss" $defaultCss "scalar") (serialize-qp "showOptionalNutrients" $showOptionalNutrients "scalar") (serialize-qp "showZeroValues" $showZeroValues "scalar") (serialize-qp "showIngredients" $showIngredients "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipes/($id)/nutritionLabel" $qp)
+  let qp = [(serialize-qp "defaultCss" $default_css "scalar") (serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/nutritionLabel") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2695,14 +2695,14 @@ export def "recipes-nutrition-labelpng recipeNutritionLabelImage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --showOptionalNutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
-  --showZeroValues: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
-  --showIngredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
+  --show-optional-nutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
+  --show-zero-values: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
+  --show-ingredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "showOptionalNutrients" $showOptionalNutrients "scalar") (serialize-qp "showZeroValues" $showZeroValues "scalar") (serialize-qp "showIngredients" $showIngredients "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipes/($id)/nutritionLabel.png" $qp)
+  let qp = [(serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/nutritionLabel.png") $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2723,14 +2723,14 @@ export def "recipes-nutrition-widget visualizeRecipeNutritionByID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultCss: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
-  --Accept: string@Accept-completer # Accept header. (e.g. application/json)
+  --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
+  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "defaultCss" $defaultCss "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipes/($id)/nutritionWidget" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let qp = [(serialize-qp "defaultCss" $default_css "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/nutritionWidget") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2742,7 +2742,7 @@ export def "recipes-nutrition-widget visualizeRecipeNutritionByID" [
 # GET /recipes/{id}/nutritionWidget.json
 # Docs: https://spoonacular.com/food-api/docs#Nutrition-by-ID — Read entire docs
 # operationId: getRecipeNutritionWidgetByID
-export def "recipes-nutrition-widgetjson get" [
+export def "recipes-nutrition-widgetjson get-recipe-nutrition-widget" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2756,7 +2756,7 @@ export def "recipes-nutrition-widgetjson get" [
 ]: nothing -> record<bad: table<amount: string, indented: bool, name: string, percentOfDailyNeeds: float>, calories: string, carbs: string, fat: string, good: table<amount: string, indented: bool, name: string, percentOfDailyNeeds: float>, protein: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipes/($id)/nutritionWidget.json")
+  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/recipes/{id}/nutritionWidget.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2780,7 +2780,7 @@ export def "recipes-nutrition-widgetpng recipeNutritionByIDImage" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipes/($id)/nutritionWidget.png")
+  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/nutritionWidget.png"))
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2801,12 +2801,12 @@ export def "recipes-price-breakdown-widget visualizeRecipePriceBreakdownByID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultCss: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
+  --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "defaultCss" $defaultCss "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipes/($id)/priceBreakdownWidget" $qp)
+  let qp = [(serialize-qp "defaultCss" $default_css "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/priceBreakdownWidget") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2831,7 +2831,7 @@ export def "recipes-price-breakdown-widgetjson get" [
 ]: nothing -> record<ingredients: table<amount: record, image: string, name: string, price: float>, totalCost: float, totalCostPerServing: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipes/($id)/priceBreakdownWidget.json")
+  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/recipes/{id}/priceBreakdownWidget.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2855,7 +2855,7 @@ export def "recipes-price-breakdown-widgetpng priceBreakdownByIDImage" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipes/($id)/priceBreakdownWidget.png")
+  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/priceBreakdownWidget.png"))
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2877,12 +2877,12 @@ export def "recipes-similar get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --number: int # The maximum number of items to return (between 1 and 100). Defaults to 10. (default: 10, e.g. 10)
-  --limitLicense: oneof<nothing, bool> # Whether the recipes should have an open license that allows display with proper attribution. (default: true, e.g. true)
+  --limit-license: oneof<nothing, bool> # Whether the recipes should have an open license that allows display with proper attribution. (default: true, e.g. true)
 ]: nothing -> table<id: int, imageType: string, readyInMinutes: int, servings: float, sourceUrl: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "limitLicense" $limitLicense "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipes/($id)/similar" $qp)
+  let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "limitLicense" $limit_license "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/similar") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2907,7 +2907,7 @@ export def "recipes-summary summarizeRecipe" [
 ]: nothing -> record<id: int, summary: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recipes/($id)/summary")
+  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/recipes/{id}/summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2934,7 +2934,7 @@ export def "recipes-taste-widget visualizeRecipeTasteByID" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "normalize" $normalize "scalar") (serialize-qp "rgb" $rgb "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipes/($id)/tasteWidget" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/tasteWidget") $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2961,7 +2961,7 @@ export def "recipes-taste-widgetjson get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "normalize" $normalize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipes/($id)/tasteWidget.json" $qp)
+  let full_url = (build-url $base ({id: $id, id: $id} | format pattern "/recipes/{id}/tasteWidget.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2988,7 +2988,7 @@ export def "recipes-taste-widgetpng recipeTasteByIDImage" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "normalize" $normalize "scalar") (serialize-qp "rgb" $rgb "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recipes/($id)/tasteWidget.png" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/recipes/{id}/tasteWidget.png") $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3009,15 +3009,15 @@ export def "users-connect connectUser" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string
-  firstName: string
-  lastName: string
+  first_name: string
+  last_name: string
   username: string
 ]: any -> record<hash: string, username: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/connect")
-  let body = {email: $email, firstName: $firstName, lastName: $lastName, username: $username} | compact
+  let body = {"email": $email, "firstName": $first_name, "lastName": $last_name, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

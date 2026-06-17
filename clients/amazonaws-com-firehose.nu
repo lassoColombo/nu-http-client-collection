@@ -66,23 +66,23 @@ def base-url-completer [] { ["http://firehose.us-east-1.amazonaws.com" "http://f
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["Firehose_20150804.CreateDeliveryStream"] }
-def X-Amz-Target-completer-1 [] { ["Firehose_20150804.DeleteDeliveryStream"] }
-def X-Amz-Target-completer-2 [] { ["Firehose_20150804.DescribeDeliveryStream"] }
-def X-Amz-Target-completer-3 [] { ["Firehose_20150804.ListDeliveryStreams"] }
-def X-Amz-Target-completer-4 [] { ["Firehose_20150804.ListTagsForDeliveryStream"] }
-def X-Amz-Target-completer-5 [] { ["Firehose_20150804.PutRecord"] }
-def X-Amz-Target-completer-6 [] { ["Firehose_20150804.PutRecordBatch"] }
-def X-Amz-Target-completer-7 [] { ["Firehose_20150804.StartDeliveryStreamEncryption"] }
-def X-Amz-Target-completer-8 [] { ["Firehose_20150804.StopDeliveryStreamEncryption"] }
-def X-Amz-Target-completer-9 [] { ["Firehose_20150804.TagDeliveryStream"] }
-def X-Amz-Target-completer-10 [] { ["Firehose_20150804.UntagDeliveryStream"] }
-def X-Amz-Target-completer-11 [] { ["Firehose_20150804.UpdateDestination"] }
+def x-amz-target-completer [] { ["Firehose_20150804.CreateDeliveryStream"] }
+def x-amz-target-completer-1 [] { ["Firehose_20150804.DeleteDeliveryStream"] }
+def x-amz-target-completer-2 [] { ["Firehose_20150804.DescribeDeliveryStream"] }
+def x-amz-target-completer-3 [] { ["Firehose_20150804.ListDeliveryStreams"] }
+def x-amz-target-completer-4 [] { ["Firehose_20150804.ListTagsForDeliveryStream"] }
+def x-amz-target-completer-5 [] { ["Firehose_20150804.PutRecord"] }
+def x-amz-target-completer-6 [] { ["Firehose_20150804.PutRecordBatch"] }
+def x-amz-target-completer-7 [] { ["Firehose_20150804.StartDeliveryStreamEncryption"] }
+def x-amz-target-completer-8 [] { ["Firehose_20150804.StopDeliveryStreamEncryption"] }
+def x-amz-target-completer-9 [] { ["Firehose_20150804.TagDeliveryStream"] }
+def x-amz-target-completer-10 [] { ["Firehose_20150804.UntagDeliveryStream"] }
+def x-amz-target-completer-11 [] { ["Firehose_20150804.UpdateDestination"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-firehose-20150804create-delivery-stream CreateDeliveryStream" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-firehose-20150804create-delivery-stream create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -106,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=Firehose_20150804.CreateDeliveryStream
 # operationId: CreateDeliveryStream
-export def "x-amz-target-firehose-20150804create-delivery-stream CreateDeliveryStream" [
+export def "x-amz-target-firehose-20150804create-delivery-stream create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,35 +115,35 @@ export def "x-amz-target-firehose-20150804create-delivery-stream CreateDeliveryS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  DeliveryStreamName: any
-  --DeliveryStreamType: any
-  --KinesisStreamSourceConfiguration: any
-  --DeliveryStreamEncryptionConfigurationInput: any
-  --S3DestinationConfiguration: any
-  --ExtendedS3DestinationConfiguration: any
-  --RedshiftDestinationConfiguration: any
-  --ElasticsearchDestinationConfiguration: any
-  --AmazonopensearchserviceDestinationConfiguration: any
-  --SplunkDestinationConfiguration: any
-  --HttpEndpointDestinationConfiguration: any
-  --Tags: any
-  --AmazonOpenSearchServerlessDestinationConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  delivery_stream_name: any
+  --delivery-stream-type: any
+  --kinesis-stream-source-configuration: any
+  --delivery-stream-encryption-configuration-input: any
+  --s3-destination-configuration: any
+  --extended-s3-destination-configuration: any
+  --redshift-destination-configuration: any
+  --elasticsearch-destination-configuration: any
+  --amazonopensearchservice-destination-configuration: any
+  --splunk-destination-configuration: any
+  --http-endpoint-destination-configuration: any
+  --tags: any
+  --amazon-open-search-serverless-destination-configuration: any
 ]: any -> record<DeliveryStreamARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Firehose_20150804.CreateDeliveryStream")
-  let body = {DeliveryStreamName: $DeliveryStreamName, DeliveryStreamType: $DeliveryStreamType, KinesisStreamSourceConfiguration: $KinesisStreamSourceConfiguration, DeliveryStreamEncryptionConfigurationInput: $DeliveryStreamEncryptionConfigurationInput, S3DestinationConfiguration: $S3DestinationConfiguration, ExtendedS3DestinationConfiguration: $ExtendedS3DestinationConfiguration, RedshiftDestinationConfiguration: $RedshiftDestinationConfiguration, ElasticsearchDestinationConfiguration: $ElasticsearchDestinationConfiguration, AmazonopensearchserviceDestinationConfiguration: $AmazonopensearchserviceDestinationConfiguration, SplunkDestinationConfiguration: $SplunkDestinationConfiguration, HttpEndpointDestinationConfiguration: $HttpEndpointDestinationConfiguration, Tags: $Tags, AmazonOpenSearchServerlessDestinationConfiguration: $AmazonOpenSearchServerlessDestinationConfiguration} | compact
+  let body = {"DeliveryStreamName": $delivery_stream_name, "DeliveryStreamType": $delivery_stream_type, "KinesisStreamSourceConfiguration": $kinesis_stream_source_configuration, "DeliveryStreamEncryptionConfigurationInput": $delivery_stream_encryption_configuration_input, "S3DestinationConfiguration": $s3_destination_configuration, "ExtendedS3DestinationConfiguration": $extended_s3_destination_configuration, "RedshiftDestinationConfiguration": $redshift_destination_configuration, "ElasticsearchDestinationConfiguration": $elasticsearch_destination_configuration, "AmazonopensearchserviceDestinationConfiguration": $amazonopensearchservice_destination_configuration, "SplunkDestinationConfiguration": $splunk_destination_configuration, "HttpEndpointDestinationConfiguration": $http_endpoint_destination_configuration, "Tags": $tags, "AmazonOpenSearchServerlessDestinationConfiguration": $amazon_open_search_serverless_destination_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -154,7 +154,7 @@ export def "x-amz-target-firehose-20150804create-delivery-stream CreateDeliveryS
 #
 # POST /#X-Amz-Target=Firehose_20150804.DeleteDeliveryStream
 # operationId: DeleteDeliveryStream
-export def "x-amz-target-firehose-20150804delete-delivery-stream DeleteDeliveryStream" [
+export def "x-amz-target-firehose-20150804delete-delivery-stream delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,24 +163,24 @@ export def "x-amz-target-firehose-20150804delete-delivery-stream DeleteDeliveryS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  DeliveryStreamName: any
-  --AllowForceDelete: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  delivery_stream_name: any
+  --allow-force-delete: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Firehose_20150804.DeleteDeliveryStream")
-  let body = {DeliveryStreamName: $DeliveryStreamName, AllowForceDelete: $AllowForceDelete} | compact
+  let body = {"DeliveryStreamName": $delivery_stream_name, "AllowForceDelete": $allow_force_delete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -191,7 +191,7 @@ export def "x-amz-target-firehose-20150804delete-delivery-stream DeleteDeliveryS
 #
 # POST /#X-Amz-Target=Firehose_20150804.DescribeDeliveryStream
 # operationId: DescribeDeliveryStream
-export def "x-amz-target-firehose-20150804describe-delivery-stream DescribeDeliveryStream" [
+export def "x-amz-target-firehose-20150804describe-delivery-stream post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,25 +200,25 @@ export def "x-amz-target-firehose-20150804describe-delivery-stream DescribeDeliv
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  DeliveryStreamName: any
-  --Limit: any
-  --ExclusiveStartDestinationId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  delivery_stream_name: any
+  --limit: any
+  --exclusive-start-destination-id: any
 ]: any -> record<DeliveryStreamDescription: record<DeliveryStreamName: record, DeliveryStreamARN: record, DeliveryStreamStatus: record, FailureDescription: record<Type: record, Details: record>, DeliveryStreamEncryptionConfiguration: record<KeyARN: record, KeyType: record, Status: record, FailureDescription: record>, DeliveryStreamType: record, VersionId: record, CreateTimestamp: record, LastUpdateTimestamp: record, Source: record<KinesisStreamSourceDescription: record>, Destinations: record, HasMoreDestinations: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Firehose_20150804.DescribeDeliveryStream")
-  let body = {DeliveryStreamName: $DeliveryStreamName, Limit: $Limit, ExclusiveStartDestinationId: $ExclusiveStartDestinationId} | compact
+  let body = {"DeliveryStreamName": $delivery_stream_name, "Limit": $limit, "ExclusiveStartDestinationId": $exclusive_start_destination_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -229,7 +229,7 @@ export def "x-amz-target-firehose-20150804describe-delivery-stream DescribeDeliv
 #
 # POST /#X-Amz-Target=Firehose_20150804.ListDeliveryStreams
 # operationId: ListDeliveryStreams
-export def "x-amz-target-firehose-20150804list-delivery-streams ListDeliveryStreams" [
+export def "x-amz-target-firehose-20150804list-delivery-streams list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,25 +238,25 @@ export def "x-amz-target-firehose-20150804list-delivery-streams ListDeliveryStre
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  --Limit: any
-  --DeliveryStreamType: any
-  --ExclusiveStartDeliveryStreamName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  --limit: any
+  --delivery-stream-type: any
+  --exclusive-start-delivery-stream-name: any
 ]: any -> record<DeliveryStreamNames: record, HasMoreDeliveryStreams: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Firehose_20150804.ListDeliveryStreams")
-  let body = {Limit: $Limit, DeliveryStreamType: $DeliveryStreamType, ExclusiveStartDeliveryStreamName: $ExclusiveStartDeliveryStreamName} | compact
+  let body = {"Limit": $limit, "DeliveryStreamType": $delivery_stream_type, "ExclusiveStartDeliveryStreamName": $exclusive_start_delivery_stream_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -267,7 +267,7 @@ export def "x-amz-target-firehose-20150804list-delivery-streams ListDeliveryStre
 #
 # POST /#X-Amz-Target=Firehose_20150804.ListTagsForDeliveryStream
 # operationId: ListTagsForDeliveryStream
-export def "x-amz-target-firehose-20150804list-tags-for-delivery-stream ListTagsForDeliveryStream" [
+export def "x-amz-target-firehose-20150804list-tags-for-delivery-stream list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,25 +276,25 @@ export def "x-amz-target-firehose-20150804list-tags-for-delivery-stream ListTags
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  DeliveryStreamName: any
-  --ExclusiveStartTagKey: any
-  --Limit: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  delivery_stream_name: any
+  --exclusive-start-tag-key: any
+  --limit: any
 ]: any -> record<Tags: record, HasMoreTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Firehose_20150804.ListTagsForDeliveryStream")
-  let body = {DeliveryStreamName: $DeliveryStreamName, ExclusiveStartTagKey: $ExclusiveStartTagKey, Limit: $Limit} | compact
+  let body = {"DeliveryStreamName": $delivery_stream_name, "ExclusiveStartTagKey": $exclusive_start_tag_key, "Limit": $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -305,7 +305,7 @@ export def "x-amz-target-firehose-20150804list-tags-for-delivery-stream ListTags
 #
 # POST /#X-Amz-Target=Firehose_20150804.PutRecord
 # operationId: PutRecord
-export def "x-amz-target-firehose-20150804put-record PutRecord" [
+export def "x-amz-target-firehose-20150804put-record update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,24 +314,24 @@ export def "x-amz-target-firehose-20150804put-record PutRecord" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  DeliveryStreamName: any
-  Record: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  delivery_stream_name: any
+  record: any
 ]: any -> record<RecordId: record, Encrypted: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Firehose_20150804.PutRecord")
-  let body = {DeliveryStreamName: $DeliveryStreamName, Record: $Record} | compact
+  let body = {"DeliveryStreamName": $delivery_stream_name, "Record": $record} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -342,7 +342,7 @@ export def "x-amz-target-firehose-20150804put-record PutRecord" [
 #
 # POST /#X-Amz-Target=Firehose_20150804.PutRecordBatch
 # operationId: PutRecordBatch
-export def "x-amz-target-firehose-20150804put-record-batch PutRecordBatch" [
+export def "x-amz-target-firehose-20150804put-record-batch update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -351,24 +351,24 @@ export def "x-amz-target-firehose-20150804put-record-batch PutRecordBatch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  DeliveryStreamName: any
-  Records: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  delivery_stream_name: any
+  records: any
 ]: any -> record<FailedPutCount: record, Encrypted: record, RequestResponses: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Firehose_20150804.PutRecordBatch")
-  let body = {DeliveryStreamName: $DeliveryStreamName, Records: $Records} | compact
+  let body = {"DeliveryStreamName": $delivery_stream_name, "Records": $records} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -379,7 +379,7 @@ export def "x-amz-target-firehose-20150804put-record-batch PutRecordBatch" [
 #
 # POST /#X-Amz-Target=Firehose_20150804.StartDeliveryStreamEncryption
 # operationId: StartDeliveryStreamEncryption
-export def "x-amz-target-firehose-20150804start-delivery-stream-encryption StartDeliveryStreamEncryption" [
+export def "x-amz-target-firehose-20150804start-delivery-stream-encryption start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,24 +388,24 @@ export def "x-amz-target-firehose-20150804start-delivery-stream-encryption Start
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  DeliveryStreamName: any
-  --DeliveryStreamEncryptionConfigurationInput: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  delivery_stream_name: any
+  --delivery-stream-encryption-configuration-input: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Firehose_20150804.StartDeliveryStreamEncryption")
-  let body = {DeliveryStreamName: $DeliveryStreamName, DeliveryStreamEncryptionConfigurationInput: $DeliveryStreamEncryptionConfigurationInput} | compact
+  let body = {"DeliveryStreamName": $delivery_stream_name, "DeliveryStreamEncryptionConfigurationInput": $delivery_stream_encryption_configuration_input} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -416,7 +416,7 @@ export def "x-amz-target-firehose-20150804start-delivery-stream-encryption Start
 #
 # POST /#X-Amz-Target=Firehose_20150804.StopDeliveryStreamEncryption
 # operationId: StopDeliveryStreamEncryption
-export def "x-amz-target-firehose-20150804stop-delivery-stream-encryption StopDeliveryStreamEncryption" [
+export def "x-amz-target-firehose-20150804stop-delivery-stream-encryption stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,23 +425,23 @@ export def "x-amz-target-firehose-20150804stop-delivery-stream-encryption StopDe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  DeliveryStreamName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  delivery_stream_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Firehose_20150804.StopDeliveryStreamEncryption")
-  let body = {DeliveryStreamName: $DeliveryStreamName} | compact
+  let body = {"DeliveryStreamName": $delivery_stream_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -452,7 +452,7 @@ export def "x-amz-target-firehose-20150804stop-delivery-stream-encryption StopDe
 #
 # POST /#X-Amz-Target=Firehose_20150804.TagDeliveryStream
 # operationId: TagDeliveryStream
-export def "x-amz-target-firehose-20150804tag-delivery-stream TagDeliveryStream" [
+export def "x-amz-target-firehose-20150804tag-delivery-stream tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,24 +461,24 @@ export def "x-amz-target-firehose-20150804tag-delivery-stream TagDeliveryStream"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  DeliveryStreamName: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  delivery_stream_name: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Firehose_20150804.TagDeliveryStream")
-  let body = {DeliveryStreamName: $DeliveryStreamName, Tags: $Tags} | compact
+  let body = {"DeliveryStreamName": $delivery_stream_name, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -489,7 +489,7 @@ export def "x-amz-target-firehose-20150804tag-delivery-stream TagDeliveryStream"
 #
 # POST /#X-Amz-Target=Firehose_20150804.UntagDeliveryStream
 # operationId: UntagDeliveryStream
-export def "x-amz-target-firehose-20150804untag-delivery-stream UntagDeliveryStream" [
+export def "x-amz-target-firehose-20150804untag-delivery-stream untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -498,24 +498,24 @@ export def "x-amz-target-firehose-20150804untag-delivery-stream UntagDeliveryStr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  DeliveryStreamName: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  delivery_stream_name: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Firehose_20150804.UntagDeliveryStream")
-  let body = {DeliveryStreamName: $DeliveryStreamName, TagKeys: $TagKeys} | compact
+  let body = {"DeliveryStreamName": $delivery_stream_name, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -526,7 +526,7 @@ export def "x-amz-target-firehose-20150804untag-delivery-stream UntagDeliveryStr
 #
 # POST /#X-Amz-Target=Firehose_20150804.UpdateDestination
 # operationId: UpdateDestination
-export def "x-amz-target-firehose-20150804update-destination UpdateDestination" [
+export def "x-amz-target-firehose-20150804update-destination update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -535,33 +535,33 @@ export def "x-amz-target-firehose-20150804update-destination UpdateDestination" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  DeliveryStreamName: any
-  CurrentDeliveryStreamVersionId: any
-  DestinationId: any
-  --S3DestinationUpdate: any
-  --ExtendedS3DestinationUpdate: any
-  --RedshiftDestinationUpdate: any
-  --ElasticsearchDestinationUpdate: any
-  --AmazonopensearchserviceDestinationUpdate: any
-  --SplunkDestinationUpdate: any
-  --HttpEndpointDestinationUpdate: any
-  --AmazonOpenSearchServerlessDestinationUpdate: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  delivery_stream_name: any
+  current_delivery_stream_version_id: any
+  destination_id: any
+  --s3-destination-update: any
+  --extended-s3-destination-update: any
+  --redshift-destination-update: any
+  --elasticsearch-destination-update: any
+  --amazonopensearchservice-destination-update: any
+  --splunk-destination-update: any
+  --http-endpoint-destination-update: any
+  --amazon-open-search-serverless-destination-update: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Firehose_20150804.UpdateDestination")
-  let body = {DeliveryStreamName: $DeliveryStreamName, CurrentDeliveryStreamVersionId: $CurrentDeliveryStreamVersionId, DestinationId: $DestinationId, S3DestinationUpdate: $S3DestinationUpdate, ExtendedS3DestinationUpdate: $ExtendedS3DestinationUpdate, RedshiftDestinationUpdate: $RedshiftDestinationUpdate, ElasticsearchDestinationUpdate: $ElasticsearchDestinationUpdate, AmazonopensearchserviceDestinationUpdate: $AmazonopensearchserviceDestinationUpdate, SplunkDestinationUpdate: $SplunkDestinationUpdate, HttpEndpointDestinationUpdate: $HttpEndpointDestinationUpdate, AmazonOpenSearchServerlessDestinationUpdate: $AmazonOpenSearchServerlessDestinationUpdate} | compact
+  let body = {"DeliveryStreamName": $delivery_stream_name, "CurrentDeliveryStreamVersionId": $current_delivery_stream_version_id, "DestinationId": $destination_id, "S3DestinationUpdate": $s3_destination_update, "ExtendedS3DestinationUpdate": $extended_s3_destination_update, "RedshiftDestinationUpdate": $redshift_destination_update, "ElasticsearchDestinationUpdate": $elasticsearch_destination_update, "AmazonopensearchserviceDestinationUpdate": $amazonopensearchservice_destination_update, "SplunkDestinationUpdate": $splunk_destination_update, "HttpEndpointDestinationUpdate": $http_endpoint_destination_update, "AmazonOpenSearchServerlessDestinationUpdate": $amazon_open_search_serverless_destination_update} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

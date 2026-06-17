@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "exports-jobs DeleteJob" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "exports-jobs delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,8 +92,8 @@ export def commands []: nothing -> table {
 # DELETE /v1/Exports/Jobs/{JobSid}
 #
 # operationId: DeleteJob
-export def "exports-jobs DeleteJob" [
-  JobSid: string
+export def "exports-jobs delete" [
+  job_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,7 +105,7 @@ export def "exports-jobs DeleteJob" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
-  let full_url = (build-url $base $"/v1/Exports/Jobs/($JobSid)")
+  let full_url = (build-url $base ({job_sid: $job_sid} | format pattern "/v1/Exports/Jobs/{job_sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -114,8 +114,8 @@ export def "exports-jobs DeleteJob" [
 # GET /v1/Exports/Jobs/{JobSid}
 #
 # operationId: FetchJob
-export def "exports-jobs FetchJob" [
-  JobSid: string
+export def "exports-jobs get" [
+  job_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,7 +127,7 @@ export def "exports-jobs FetchJob" [
 ]: nothing -> record<details: any, email: string, end_day: string, estimated_completion_time: string, friendly_name: string, job_queue_position: string, job_sid: string, resource_type: string, start_day: string, url: string, webhook_method: string, webhook_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
-  let full_url = (build-url $base $"/v1/Exports/Jobs/($JobSid)")
+  let full_url = (build-url $base ({job_sid: $job_sid} | format pattern "/v1/Exports/Jobs/{job_sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -137,8 +137,8 @@ export def "exports-jobs FetchJob" [
 #
 # GET /v1/Exports/{ResourceType}
 # operationId: FetchExport
-export def "exports FetchExport" [
-  ResourceType: string
+export def "exports get" [
+  resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,7 +150,7 @@ export def "exports FetchExport" [
 ]: nothing -> record<links: record, resource_type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
-  let full_url = (build-url $base $"/v1/Exports/($ResourceType)")
+  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/Exports/{resource_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -160,8 +160,8 @@ export def "exports FetchExport" [
 #
 # GET /v1/Exports/{ResourceType}/Configuration
 # operationId: FetchExportConfiguration
-export def "exports-configuration FetchExportConfiguration" [
-  ResourceType: string
+export def "exports-configuration get" [
+  resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "exports-configuration FetchExportConfiguration" [
 ]: nothing -> record<enabled: bool, resource_type: string, url: string, webhook_method: string, webhook_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
-  let full_url = (build-url $base $"/v1/Exports/($ResourceType)/Configuration")
+  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/Exports/{resource_type}/Configuration"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,8 +183,8 @@ export def "exports-configuration FetchExportConfiguration" [
 #
 # POST /v1/Exports/{ResourceType}/Configuration
 # operationId: UpdateExportConfiguration
-export def "exports-configuration UpdateExportConfiguration" [
-  ResourceType: string
+export def "exports-configuration update" [
+  resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,15 +193,15 @@ export def "exports-configuration UpdateExportConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Enabled: oneof<nothing, bool> # If true, Twilio will automatically generate every day's file when the day is over.
-  --WebhookMethod: string # Sets whether Twilio should call a webhook URL when the automatic generation is complete, using GET or POST. The actual destination is set in the webhook_url
-  --WebhookUrl: string # Stores the URL destination for the method specified in webhook_method. (format: uri)
+  --enabled: oneof<nothing, bool> # If true, Twilio will automatically generate every day's file when the day is over.
+  --webhook-method: string # Sets whether Twilio should call a webhook URL when the automatic generation is complete, using GET or POST. The actual destination is set in the webhook_url
+  --webhook-url: string # Stores the URL destination for the method specified in webhook_method. (format: uri)
 ]: any -> record<enabled: bool, resource_type: string, url: string, webhook_method: string, webhook_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
-  let full_url = (build-url $base $"/v1/Exports/($ResourceType)/Configuration")
-  let body = {Enabled: $Enabled, WebhookMethod: $WebhookMethod, WebhookUrl: $WebhookUrl} | compact
+  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/Exports/{resource_type}/Configuration"))
+  let body = {"Enabled": $enabled, "WebhookMethod": $webhook_method, "WebhookUrl": $webhook_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,8 +212,8 @@ export def "exports-configuration UpdateExportConfiguration" [
 #
 # GET /v1/Exports/{ResourceType}/Days
 # operationId: ListDay
-export def "exports-days ListDay" [
-  ResourceType: string
+export def "exports-days list" [
+  resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,14 +222,14 @@ export def "exports-days ListDay" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<days: table<create_date: string, day: string, friendly_name: string, resource_type: string, size: int>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Exports/($ResourceType)/Days" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/Exports/{resource_type}/Days") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -239,9 +239,9 @@ export def "exports-days ListDay" [
 #
 # GET /v1/Exports/{ResourceType}/Days/{Day}
 # operationId: FetchDay
-export def "exports-days FetchDay" [
-  ResourceType: string
-  Day: string
+export def "exports-days get" [
+  resource_type: string
+  day: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "exports-days FetchDay" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
-  let full_url = (build-url $base $"/v1/Exports/($ResourceType)/Days/($Day)")
+  let full_url = (build-url $base ({resource_type: $resource_type, day: $day} | format pattern "/v1/Exports/{resource_type}/Days/{day}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,8 +262,8 @@ export def "exports-days FetchDay" [
 # GET /v1/Exports/{ResourceType}/Jobs
 #
 # operationId: ListExportCustomJob
-export def "exports-jobs ListExportCustomJob" [
-  ResourceType: string
+export def "exports-jobs list-export-custom" [
+  resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,14 +272,14 @@ export def "exports-jobs ListExportCustomJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<jobs: table<details: any, email: string, end_day: string, estimated_completion_time: string, friendly_name: string, job_queue_position: string, job_sid: string, resource_type: string, start_day: string, webhook_method: string, webhook_url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Exports/($ResourceType)/Jobs" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/Exports/{resource_type}/Jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -288,8 +288,8 @@ export def "exports-jobs ListExportCustomJob" [
 # POST /v1/Exports/{ResourceType}/Jobs
 #
 # operationId: CreateExportCustomJob
-export def "exports-jobs CreateExportCustomJob" [
-  ResourceType: string
+export def "exports-jobs create-export-custom" [
+  resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,18 +298,18 @@ export def "exports-jobs CreateExportCustomJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Email: string # The optional email to send the completion notification to. You can set both webhook, and email, or one or the other. If you set neither, the job will run but you will have to query to determine your job's status.
-  EndDay: string # The end day for the custom export specified as a string in the format of yyyy-mm-dd. End day is inclusive and must be 2 days earlier than the current UTC day.
-  FriendlyName: string # The friendly name specified when creating the job
-  StartDay: string # The start day for the custom export specified as a string in the format of yyyy-mm-dd
-  --WebhookMethod: string # This is the method used to call the webhook on completion of the job. If this is supplied, `WebhookUrl` must also be supplied.
-  --WebhookUrl: string # The optional webhook url called on completion of the job. If this is supplied, `WebhookMethod` must also be supplied. If you set neither webhook nor email, you will have to check your job's status manually.
+  --email: string # The optional email to send the completion notification to. You can set both webhook, and email, or one or the other. If you set neither, the job will run but you will have to query to determine your job's status.
+  end_day: string # The end day for the custom export specified as a string in the format of yyyy-mm-dd. End day is inclusive and must be 2 days earlier than the current UTC day.
+  friendly_name: string # The friendly name specified when creating the job
+  start_day: string # The start day for the custom export specified as a string in the format of yyyy-mm-dd
+  --webhook-method: string # This is the method used to call the webhook on completion of the job. If this is supplied, `WebhookUrl` must also be supplied.
+  --webhook-url: string # The optional webhook url called on completion of the job. If this is supplied, `WebhookMethod` must also be supplied. If you set neither webhook nor email, you will have to check your job's status manually.
 ]: any -> record<details: any, email: string, end_day: string, estimated_completion_time: string, friendly_name: string, job_queue_position: string, job_sid: string, resource_type: string, start_day: string, webhook_method: string, webhook_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
-  let full_url = (build-url $base $"/v1/Exports/($ResourceType)/Jobs")
-  let body = {Email: $Email, EndDay: $EndDay, FriendlyName: $FriendlyName, StartDay: $StartDay, WebhookMethod: $WebhookMethod, WebhookUrl: $WebhookUrl} | compact
+  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/Exports/{resource_type}/Jobs"))
+  let body = {"Email": $email, "EndDay": $end_day, "FriendlyName": $friendly_name, "StartDay": $start_day, "WebhookMethod": $webhook_method, "WebhookUrl": $webhook_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

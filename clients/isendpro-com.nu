@@ -65,25 +65,25 @@ def base-url-completer [] { ["https://apirest.isendpro.com/cgi-bin" "http://apir
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def rapportCampagne-completer [] { ["1"] }
+def rapport-campagne-completer [] { ["1"] }
 def accept-completer [] { ["application/json" "file"] }
 def comptage-completer [] { ["1"] }
 def gmt-zone-completer [] { ["Africa/Abidjan" "Africa/Addis_Ababa" "Africa/Algiers" "Africa/Blantyre" "Africa/Cairo" "Africa/Windhoek" "America/Adak" "America/Anchorage" "America/Araguaina" "America/Argentina/Buenos_Aires" "America/Belize" "America/Bogota" "America/Campo_Grande" "America/Cancun" "America/Caracas" "America/Chicago" "America/Chihuahua" "America/Dawson_Creek" "America/Denver" "America/Ensenada" "America/Glace_Bay" "America/Godthab" "America/Goose_Bay" "America/Havana" "America/La_Paz" "America/Los_Angeles" "America/Miquelon" "America/Montevideo" "America/New_York" "America/Noronha" "America/Santiago" "America/Sao_Paulo" "America/St_Johns" "Asia/Anadyr" "Asia/Bangkok" "Asia/Beirut" "Asia/Damascus" "Asia/Dhaka" "Asia/Dubai" "Asia/Gaza" "Asia/Hong_Kong" "Asia/Irkutsk" "Asia/Jerusalem" "Asia/Kabul" "Asia/Katmandu" "Asia/Kolkata" "Asia/Krasnoyarsk" "Asia/Magadan" "Asia/Novosibirsk" "Asia/Rangoon" "Asia/Seoul" "Asia/Tashkent" "Asia/Tehran" "Asia/Tokyo" "Asia/Vladivostok" "Asia/Yakutsk" "Asia/Yekaterinburg" "Asia/Yerevan" "Atlantic/Azores" "Atlantic/Cape_Verde" "Atlantic/Stanley" "Australia/Adelaide" "Australia/Brisbane" "Australia/Darwin" "Australia/Eucla" "Australia/Hobart" "Australia/Lord_Howe" "Australia/Perth" "Chile/EasterIsland" "Etc/GMT+10" "Etc/GMT+8" "Etc/GMT-11" "Etc/GMT-12" "Europe/Amsterdam" "Europe/Belfast" "Europe/Belgrade" "Europe/Brussels" "Europe/Dublin" "Europe/Lisbon" "Europe/London" "Europe/Minsk" "Europe/Moscow" "Pacific/Auckland" "Pacific/Chatham" "Pacific/Gambier" "Pacific/Kiritimati" "Pacific/Marquesas" "Pacific/Midway" "Pacific/Norfolk" "Pacific/Tongatapu"] }
-def numAzur-completer [] { ["1"] }
+def num-azur-completer [] { ["1"] }
 def smslong-completer [] { ["999"] }
 def accept-completer-1 [] { ["application/json" "etat"] }
 def credit-completer [] { ["1" "2"] }
-def delListeNoire-completer [] { ["1"] }
-def getListeNoire-completer [] { ["1"] }
-def getHLR-completer [] { ["1"] }
-def repertoireEdit-completer [] { ["create"] }
-def repertoireEdit-completer-1 [] { ["add" "del"] }
-def setlisteNoire-completer [] { ["1"] }
+def del-liste-noire-completer [] { ["1"] }
+def get-liste-noire-completer [] { ["1"] }
+def get-hlr-completer [] { ["1"] }
+def repertoire-edit-completer [] { ["create"] }
+def repertoire-edit-completer-1 [] { ["add" "del"] }
+def setliste-noire-completer [] { ["1"] }
 def accept-completer-2 [] { ["application/json" "exemple1"] }
-def subAccountEdit-completer [] { ["addAccount"] }
-def subAccountEdit-completer-1 [] { ["addCredit" "setPrice" "setRestriction"] }
-def subAccountRestrictionStop-completer [] { ["0" "1"] }
-def subAccountRestrictionTime-completer [] { ["0" "1"] }
+def sub-account-edit-completer [] { ["addAccount"] }
+def sub-account-edit-completer-1 [] { ["addCredit" "setPrice" "setRestriction"] }
+def sub-account-restriction-stop-completer [] { ["0" "1"] }
+def sub-account-restriction-time-completer [] { ["0" "1"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -123,13 +123,13 @@ export def "campagne get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --keyid: string # Clé API
-  --rapportCampagne: string@rapportCampagne-completer # Doit valoir "1"
+  --rapport-campagne: string@rapport-campagne-completer # Doit valoir "1"
   --date-deb: string # date de debut au format YYYY-MM-DD hh:mm
   --date-fin: string # date de fin au format YYYY-MM-DD hh:mm
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "rapportCampagne" $rapportCampagne "scalar") (serialize-qp "date_deb" $date_deb "scalar") (serialize-qp "date_fin" $date_fin "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "rapportCampagne" $rapport_campagne "scalar") (serialize-qp "date_deb" $date_deb "scalar") (serialize-qp "date_fin" $date_fin "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/campagne" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -140,7 +140,7 @@ export def "campagne get" [
 #
 # POST /comptage
 # operationId: comptage
-export def "comptage comptage" [
+export def "comptage post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,7 +157,7 @@ export def "comptage comptage" [
   keyid: string # Clé API
   --nostop: string # Si le message n’est pas à but commercial, vous pouvez faire une demande pour retirer l’obligation du STOP. Une fois votre demande validée par nos services, vous pourrez supprimer la mention STOP SMS en ajoutant nostop = "1"
   num: string # Numero de téléphone au format national (exemple 0680010203) ou international (example 33680010203)
-  --numAzur: string@numAzur-completer
+  --num-azur: string@num-azur-completer
   sms: string # Message à envoyer aux destinataires. Le message doit être encodé au format utf-8 et ne contenir que des caractères existant dans l'alphabet GSM. Il est également possible d'envoyer (à l'étranger uniquement) des SMS en UCS-2, cf paramètre ucs2 pour plus de détails.
   --smslong: string@smslong-completer # Le SMS long permet de dépasser la limite de 160 caractères en envoyant un message constitué de plusieurs SMS. Il est possible d’envoyer jusqu’à 6 SMS concaténés pour une longueur totale maximale de 918 caractères par message. Pour des raisons technique, la limite par SMS concaténé étant de 153 caractères. En cas de modification de l’émetteur, il faut considérer l’ajout automatique de 12 caractères du « STOP SMS ». Pour envoyer un smslong, il faut ajouter le paramètre smslong aux appels. La valeur de SMS doit être le nombre maximum de sms concaténé autorisé.   Pour ne pas avoir ce message d’erreur et obtenir un calcul dynamique du nombre de SMS alors il faut renseigner smslong = "999"  (default: 999)
   --tracker: string # Le tracker doit être une chaine alphanumérique de moins de 50 caractères. Ce tracker sera ensuite renvoyé en paramètre des urls pour les retours des accusés de réception. 
@@ -167,7 +167,7 @@ export def "comptage comptage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/comptage")
-  let body = {comptage: $comptage, date_envoi: $date_envoi, emetteur: $emetteur, gmt_zone: $gmt_zone, keyid: $keyid, nostop: $nostop, num: $num, numAzur: $numAzur, sms: $sms, smslong: $smslong, tracker: $tracker, ucs2: $ucs2} | compact
+  let body = {"comptage": $comptage, "date_envoi": $date_envoi, "emetteur": $emetteur, "gmt_zone": $gmt_zone, "keyid": $keyid, "nostop": $nostop, "num": $num, "numAzur": $num_azur, "sms": $sms, "smslong": $smslong, "tracker": $tracker, "ucs2": $ucs2} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -203,7 +203,7 @@ export def "credit get" [
 #
 # POST /dellistenoire
 # operationId: delListeNoire
-export def "dellistenoire delListeNoire" [
+export def "dellistenoire post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,12 +213,12 @@ export def "dellistenoire delListeNoire" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --keyid: string # Clé API (format: string)
-  --delListeNoire: string@delListeNoire-completer # Doit valoir "1"
+  --del-liste-noire: string@del-liste-noire-completer # Doit valoir "1"
   --num: string # numéro de mobile à supprimer (format: string)
 ]: nothing -> record<etat: record<etat: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "delListeNoire" $delListeNoire "scalar") (serialize-qp "num" $num "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "delListeNoire" $del_liste_noire "scalar") (serialize-qp "num" $num "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dellistenoire" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -229,7 +229,7 @@ export def "dellistenoire delListeNoire" [
 #
 # POST /getlistenoire
 # operationId: getListeNoire
-export def "getlistenoire post" [
+export def "getlistenoire get-liste-noire" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,11 +239,11 @@ export def "getlistenoire post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --keyid: string # Clé API (format: string)
-  --getListeNoire: string@getListeNoire-completer # Doit valoir "1"
+  --get-liste-noire: string@get-liste-noire-completer # Doit valoir "1"
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "getListeNoire" $getListeNoire "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "getListeNoire" $get_liste_noire "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getlistenoire" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -254,7 +254,7 @@ export def "getlistenoire post" [
 #
 # POST /hlr
 # operationId: getHlr
-export def "hlr post" [
+export def "hlr get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "hlr post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  getHLR: string@getHLR-completer # Doit valoir "1" (default: 1)
+  get_hlr: string@get-hlr-completer # Doit valoir "1" (default: 1)
   keyid: string # Clé API
   num: list # liste de numéros de téléphone
 ]: any -> record<etat: record<etat: list<record>>> {
@@ -271,7 +271,7 @@ export def "hlr post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hlr")
-  let body = {getHLR: $getHLR, keyid: $keyid, num: $num} | compact
+  let body = {"getHLR": $get_hlr, "keyid": $keyid, "num": $num} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -292,14 +292,14 @@ export def "repertoire repertoireCrea" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   keyid: string # Clé API
-  repertoireEdit: string@repertoireEdit-completer # Action à réaliser doit valoir "create" ici. (default: create)
-  repertoireNom: string # Nom du répertoire (libellé) à créer
+  repertoire_edit: string@repertoire-edit-completer # Action à réaliser doit valoir "create" ici. (default: create)
+  repertoire_nom: string # Nom du répertoire (libellé) à créer
 ]: any -> record<etat: record<etat: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/repertoire")
-  let body = {keyid: $keyid, repertoireEdit: $repertoireEdit, repertoireNom: $repertoireNom} | compact
+  let body = {"keyid": $keyid, "repertoireEdit": $repertoire_edit, "repertoireNom": $repertoire_nom} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -310,7 +310,7 @@ export def "repertoire repertoireCrea" [
 #
 # PUT /repertoire
 # operationId: repertoire
-export def "repertoire repertoire" [
+export def "repertoire put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,14 +348,14 @@ export def "repertoire repertoire" [
   --champ9: list # Champs H des contacts
   keyid: string # Clé API
   num: list # liste des numéros des téléphone à ajouter ou supprimer
-  repertoireEdit: string@repertoireEdit-completer-1 # action à réaliser, "add" pour l'ajout de numéros, "del" pour la suppression de numéros
-  repertoireId: string # repertoireId du répertoire cible
+  repertoire_edit: string@repertoire-edit-completer-1 # action à réaliser, "add" pour l'ajout de numéros, "del" pour la suppression de numéros
+  repertoire_id: string # repertoireId du répertoire cible
 ]: any -> record<etat: record<etat: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/repertoire")
-  let body = {champ1: $champ1, champ10: $champ10, champ11: $champ11, champ12: $champ12, champ13: $champ13, champ14: $champ14, champ15: $champ15, champ16: $champ16, champ17: $champ17, champ18: $champ18, champ19: $champ19, champ2: $champ2, champ20: $champ20, champ21: $champ21, champ22: $champ22, champ23: $champ23, champ24: $champ24, champ25: $champ25, champ26: $champ26, champ27: $champ27, champ3: $champ3, champ4: $champ4, champ5: $champ5, champ6: $champ6, champ7: $champ7, champ8: $champ8, champ9: $champ9, keyid: $keyid, num: $num, repertoireEdit: $repertoireEdit, repertoireId: $repertoireId} | compact
+  let body = {"champ1": $champ1, "champ10": $champ10, "champ11": $champ11, "champ12": $champ12, "champ13": $champ13, "champ14": $champ14, "champ15": $champ15, "champ16": $champ16, "champ17": $champ17, "champ18": $champ18, "champ19": $champ19, "champ2": $champ2, "champ20": $champ20, "champ21": $champ21, "champ22": $champ22, "champ23": $champ23, "champ24": $champ24, "champ25": $champ25, "champ26": $champ26, "champ27": $champ27, "champ3": $champ3, "champ4": $champ4, "champ5": $champ5, "champ6": $champ6, "champ7": $champ7, "champ8": $champ8, "champ9": $champ9, "keyid": $keyid, "num": $num, "repertoireEdit": $repertoire_edit, "repertoireId": $repertoire_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -366,7 +366,7 @@ export def "repertoire repertoire" [
 #
 # POST /setlistenoire
 # operationId: setListeNoire
-export def "setlistenoire setListeNoire" [
+export def "setlistenoire post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,12 +376,12 @@ export def "setlistenoire setListeNoire" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --keyid: string # Clé API (format: string)
-  --setlisteNoire: string@setlisteNoire-completer # Doit valoir "1"
+  --setliste-noire: string@setliste-noire-completer # Doit valoir "1"
   --num: string # numéro de mobile à insérer en liste noire (format: string)
 ]: nothing -> record<etat: record<etat: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "setlisteNoire" $setlisteNoire "scalar") (serialize-qp "num" $num "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "setlisteNoire" $setliste_noire "scalar") (serialize-qp "num" $num "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setlistenoire" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -392,7 +392,7 @@ export def "setlistenoire setListeNoire" [
 #
 # POST /shortlink
 # operationId: addShortlink
-export def "shortlink addShortlink" [
+export def "shortlink create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -409,7 +409,7 @@ export def "shortlink addShortlink" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shortlink")
-  let body = {keyid: $keyid, shortlink: $shortlink} | compact
+  let body = {"keyid": $keyid, "shortlink": $shortlink} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -420,7 +420,7 @@ export def "shortlink addShortlink" [
 #
 # POST /sms
 # operationId: sendSms
-export def "sms sendSms" [
+export def "sms send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,7 +436,7 @@ export def "sms sendSms" [
   keyid: string # Clé API
   --nostop: string # Si le message n’est pas à but commercial, vous pouvez faire une demande pour retirer l’obligation du STOP. Une fois votre demande validée par nos services, vous pourrez supprimer la mention STOP SMS en ajoutant nostop = "1"
   num: string # Numero de téléphone au format national (exemple 0680010203) ou international (example 33680010203)
-  --numAzur: string@numAzur-completer
+  --num-azur: string@num-azur-completer
   sms: string # Message à envoyer aux destinataires. Le message doit être encodé au format utf-8 et ne contenir que des caractères existant dans l'alphabet GSM. Il est également possible d'envoyer (à l'étranger uniquement) des SMS en UCS-2, cf paramètre ucs2 pour plus de détails.
   --smslong: string # Le SMS long permet de dépasser la limite de 160 caractères en envoyant un message constitué de plusieurs SMS. Il est possible d’envoyer jusqu’à 6 SMS concaténés pour une longueur totale maximale de 918 caractères par message. Pour des raisons technique, la limite par SMS concaténé étant de 153 caractères. En cas de modification de l’émetteur, il faut considérer l’ajout automatique de 12 caractères du « STOP SMS ». Pour envoyer un smslong, il faut ajouter le paramètre smslong aux appels. La valeur de SMS doit être le nombre maximum de sms concaténé autorisé.   Pour ne pas avoir ce message d’erreur et obtenir un calcul dynamique du nombre de SMS alors il faut renseigner smslong = "999"
   --tracker: string # Le tracker doit être une chaine alphanumérique de moins de 50 caractères. Ce tracker sera ensuite renvoyé en paramètre des urls pour les retours des accusés de réception. 
@@ -446,7 +446,7 @@ export def "sms sendSms" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms")
-  let body = {date_envoi: $date_envoi, emetteur: $emetteur, gmt_zone: $gmt_zone, keyid: $keyid, nostop: $nostop, num: $num, numAzur: $numAzur, sms: $sms, smslong: $smslong, tracker: $tracker, ucs2: $ucs2} | compact
+  let body = {"date_envoi": $date_envoi, "emetteur": $emetteur, "gmt_zone": $gmt_zone, "keyid": $keyid, "nostop": $nostop, "num": $num, "numAzur": $num_azur, "sms": $sms, "smslong": $smslong, "tracker": $tracker, "ucs2": $ucs2} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -457,7 +457,7 @@ export def "sms sendSms" [
 #
 # POST /smsmulti
 # operationId: sendSmsMulti
-export def "smsmulti sendSmsMulti" [
+export def "smsmulti send-sms-multi" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -473,8 +473,8 @@ export def "smsmulti sendSmsMulti" [
   keyid: string # Clé API
   --nostop: string # Si le message n’est pas à but commercial, vous pouvez faire une demande pour retirer l’obligation du STOP. Une fois votre demande validée par nos services, vous pourrez supprimer la mention STOP SMS en ajoutant nostop = "1"
   num: list
-  --numAzur: string@numAzur-completer
-  --repertoireId: string # Id du repertoire
+  --num-azur: string@num-azur-completer
+  --repertoire-id: string # Id du repertoire
   sms: list
   --smslong: string # Le SMS long permet de dépasser la limite de 160 caractères en envoyant un message constitué de plusieurs SMS. Il est possible d’envoyer jusqu’à 6 SMS concaténés pour une longueur totale maximale de 918 caractères par message. Pour des raisons technique, la limite par SMS concaténé étant de 153 caractères. En cas de modification de l’émetteur, il faut considérer l’ajout automatique de 12 caractères du « STOP SMS ». Pour envoyer un smslong, il faut ajouter le paramètre smslong aux appels. La valeur de SMS doit être le nombre maximum de sms concaténé autorisé.   Pour ne pas avoir ce message d’erreur et obtenir un calcul dynamique du nombre de SMS alors il faut renseigner smslong = "999" 
   --tracker: list
@@ -484,7 +484,7 @@ export def "smsmulti sendSmsMulti" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/smsmulti")
-  let body = {date_envoi: $date_envoi, emetteur: $emetteur, gmt_zone: $gmt_zone, keyid: $keyid, nostop: $nostop, num: $num, numAzur: $numAzur, repertoireId: $repertoireId, sms: $sms, smslong: $smslong, tracker: $tracker, ucs2: $ucs2} | compact
+  let body = {"date_envoi": $date_envoi, "emetteur": $emetteur, "gmt_zone": $gmt_zone, "keyid": $keyid, "nostop": $nostop, "num": $num, "numAzur": $num_azur, "repertoireId": $repertoire_id, "sms": $sms, "smslong": $smslong, "tracker": $tracker, "ucs2": $ucs2} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -506,15 +506,15 @@ export def "subaccount subaccountAdd" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   keyid: string
-  subAccountEdit: string@subAccountEdit-completer
-  subAccountLogin: string
-  subAccountPassword: string
+  sub_account_edit: string@sub-account-edit-completer
+  sub_account_login: string
+  sub_account_password: string
 ]: any -> record<etat: record<etat: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccount")
-  let body = {keyid: $keyid, subAccountEdit: $subAccountEdit, subAccountLogin: $subAccountLogin, subAccountPassword: $subAccountPassword} | compact
+  let body = {"keyid": $keyid, "subAccountEdit": $sub_account_edit, "subAccountLogin": $sub_account_login, "subAccountPassword": $sub_account_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -535,19 +535,19 @@ export def "subaccount subaccountEdit" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   keyid: string # Clé API
-  --subAccountAddCredit: string # montant du crédit à ajouter
-  --subAccountCountryCode: string
-  subAccountEdit: string@subAccountEdit-completer-1 # action à réaliser soit setPrice pour définir un prix ou addCredit pour ajouter du credit ou setRestriction modifier la restriction stop /
-  --subAccountKeyId: string # keyid du sous-compte
-  --subAccountPrice: string
-  --subAccountRestrictionStop: string@subAccountRestrictionStop-completer
-  --subAccountRestrictionTime: string@subAccountRestrictionTime-completer
+  --sub-account-add-credit: string # montant du crédit à ajouter
+  --sub-account-country-code: string
+  sub_account_edit: string@sub-account-edit-completer-1 # action à réaliser soit setPrice pour définir un prix ou addCredit pour ajouter du credit ou setRestriction modifier la restriction stop /
+  --sub-account-key-id: string # keyid du sous-compte
+  --sub-account-price: string
+  --sub-account-restriction-stop: string@sub-account-restriction-stop-completer
+  --sub-account-restriction-time: string@sub-account-restriction-time-completer
 ]: any -> record<etat: record<etat: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccount")
-  let body = {keyid: $keyid, subAccountAddCredit: $subAccountAddCredit, subAccountCountryCode: $subAccountCountryCode, subAccountEdit: $subAccountEdit, subAccountKeyId: $subAccountKeyId, subAccountPrice: $subAccountPrice, subAccountRestrictionStop: $subAccountRestrictionStop, subAccountRestrictionTime: $subAccountRestrictionTime} | compact
+  let body = {"keyid": $keyid, "subAccountAddCredit": $sub_account_add_credit, "subAccountCountryCode": $sub_account_country_code, "subAccountEdit": $sub_account_edit, "subAccountKeyId": $sub_account_key_id, "subAccountPrice": $sub_account_price, "subAccountRestrictionStop": $sub_account_restriction_stop, "subAccountRestrictionTime": $sub_account_restriction_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

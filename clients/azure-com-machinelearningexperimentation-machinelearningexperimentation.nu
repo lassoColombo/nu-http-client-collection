@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-machine-learning-experimentation-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-machine-learning-experimentation-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.MachineLearningExperimentation/operations
 # operationId: Operations_List
-export def "providers-microsoft-machine-learning-experimentation-operations List" [
+export def "providers-microsoft-machine-learning-experimentation-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-machine-learning-experimentation-operations List
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MachineLearningExperimentation/accounts
 # operationId: Accounts_List
-export def "subscriptions-providers-microsoft-machine-learning-experimentation-accounts List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-machine-learning-experimentation-accounts list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "subscriptions-providers-microsoft-machine-learning-experimentation-a
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.MachineLearningExperimentation/accounts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MachineLearningExperimentation/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,9 +142,9 @@ export def "subscriptions-providers-microsoft-machine-learning-experimentation-a
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts
 # operationId: Accounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningExperimentation/accounts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningExperimentation/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -168,10 +168,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}
 # operationId: Accounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningExperimentation/accounts/($accountName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningExperimentation/accounts/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,10 +195,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}
 # operationId: Accounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningExperimentation/accounts/($accountName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningExperimentation/accounts/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -223,10 +223,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}
 # operationId: Accounts_Update
 # --properties shape: {description?: string, friendlyName?: string, seats?: string, storageAccountKey?: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,8 +243,8 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningExperimentation/accounts/($accountName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningExperimentation/accounts/{account_name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -256,10 +256,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}
 # operationId: Accounts_CreateOrUpdate
 # --properties shape: {description?: string, friendlyName?: string, keyVaultId: string, seats?: string, storageAccount: any, vsoAccountId: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,8 +277,8 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningExperimentation/accounts/($accountName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningExperimentation/accounts/{account_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -289,10 +289,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces
 # operationId: Workspaces_ListByAccounts
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces ListByAccounts" [
-  subscriptionId: string
-  accountName: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces list-by" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningExperimentation/accounts/($accountName)/workspaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningExperimentation/accounts/{account_name}/workspaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -316,11 +316,11 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces/{workspaceName}
 # operationId: Workspaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  workspaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningExperimentation/accounts/($accountName)/workspaces/($workspaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningExperimentation/accounts/{account_name}/workspaces/{workspace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,11 +344,11 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces/{workspaceName}
 # operationId: Workspaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  workspaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +362,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningExperimentation/accounts/($accountName)/workspaces/($workspaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningExperimentation/accounts/{account_name}/workspaces/{workspace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -373,11 +373,11 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces/{workspaceName}
 # operationId: Workspaces_Update
 # --properties shape: {description?: string, friendlyName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  workspaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,8 +394,8 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningExperimentation/accounts/($accountName)/workspaces/($workspaceName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningExperimentation/accounts/{account_name}/workspaces/{workspace_name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -407,11 +407,11 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces/{workspaceName}
 # operationId: Workspaces_CreateOrUpdate
 # --properties shape: {description?: string, friendlyName: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  workspaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,8 +429,8 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningExperimentation/accounts/($accountName)/workspaces/($workspaceName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningExperimentation/accounts/{account_name}/workspaces/{workspace_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -441,12 +441,12 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces/{workspaceName}/projects/{projectName}
 # operationId: Projects_Delete
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces-projects Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  workspaceName: string
-  projectName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces-projects delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  workspace_name: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,7 +460,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningExperimentation/accounts/($accountName)/workspaces/($workspaceName)/projects/($projectName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, workspace_name: $workspace_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningExperimentation/accounts/{account_name}/workspaces/{workspace_name}/projects/{project_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -470,12 +470,12 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces/{workspaceName}/projects/{projectName}
 # operationId: Projects_Get
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces-projects Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  workspaceName: string
-  projectName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces-projects get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  workspace_name: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -489,7 +489,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningExperimentation/accounts/($accountName)/workspaces/($workspaceName)/projects/($projectName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, workspace_name: $workspace_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningExperimentation/accounts/{account_name}/workspaces/{workspace_name}/projects/{project_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -500,12 +500,12 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces/{workspaceName}/projects/{projectName}
 # operationId: Projects_Update
 # --properties shape: {description?: string, friendlyName?: string, gitrepo?: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces-projects Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  workspaceName: string
-  projectName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces-projects update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  workspace_name: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,8 +522,8 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningExperimentation/accounts/($accountName)/workspaces/($workspaceName)/projects/($projectName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, workspace_name: $workspace_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningExperimentation/accounts/{account_name}/workspaces/{workspace_name}/projects/{project_name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -535,12 +535,12 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces/{workspaceName}/projects/{projectName}
 # operationId: Projects_CreateOrUpdate
 # --properties shape: {description?: string, friendlyName: string, gitrepo?: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces-projects CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  workspaceName: string
-  projectName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces-projects create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  workspace_name: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -558,8 +558,8 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningExperimentation/accounts/($accountName)/workspaces/($workspaceName)/projects/($projectName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, workspace_name: $workspace_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningExperimentation/accounts/{account_name}/workspaces/{workspace_name}/projects/{project_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -570,11 +570,11 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces{workspaceName}/projects
 # operationId: Projects_ListByWorkspace
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces-workspace-name-projects ListByWorkspace" [
-  subscriptionId: string
-  accountName: string
-  workspaceName: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces-workspace-name-projects list-by" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,7 +588,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningExperimentation/accounts/($accountName)/workspaces($workspaceName)/projects" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningExperimentation/accounts/{account_name}/workspaces{workspace_name}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

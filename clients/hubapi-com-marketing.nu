@@ -97,8 +97,8 @@ export def commands []: nothing -> table {
 # operationId: post-/marketing/v3/marketing-events/attendance/{externalEventId}/{subscriberState}/create_create
 # --inputs item shape: {interactionDateTime: int, properties?: record, vid?: int}
 export def "marketing-marketing-events-attendance-create create" [
-  externalEventId: string
-  subscriberState: string
+  external_event_id: string
+  subscriber_state: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,15 +107,15 @@ export def "marketing-marketing-events-attendance-create create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --externalAccountId: string # The account id associated with the marketing event
+  --external-account-id: string # The account id associated with the marketing event
   inputs: list # List of HubSpot contacts to subscribe to the marketing event — item shape: {interactionDateTime: int, properties?: record, vid?: int}
 ]: any -> record<completedAt: string, errors: table<category: record, context: record, errors: list, id: string, links: record, message: string, status: string, subCategory: record>, links: record, numErrors: int, requestedAt: string, results: table<vid: int>, startedAt: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "externalAccountId" $externalAccountId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/marketing/v3/marketing-events/attendance/($externalEventId)/($subscriberState)/create" $qp)
-  let body = {inputs: $inputs} | compact
+  let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({external_event_id: $external_event_id, subscriber_state: $subscriber_state} | format pattern "/marketing/v3/marketing-events/attendance/{external_event_id}/{subscriber_state}/create") $qp)
+  let body = {"inputs": $inputs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -127,9 +127,9 @@ export def "marketing-marketing-events-attendance-create create" [
 # POST /marketing/v3/marketing-events/attendance/{externalEventId}/{subscriberState}/email-create
 # operationId: post-/marketing/v3/marketing-events/attendance/{externalEventId}/{subscriberState}/email-create_createByEmail
 # --inputs item shape: {contactProperties?: record, email: string, interactionDateTime: int, properties?: record}
-export def "marketing-marketing-events-attendance-email-create createByEmail" [
-  externalEventId: string
-  subscriberState: string
+export def "marketing-marketing-events-attendance-email-create create-by" [
+  external_event_id: string
+  subscriber_state: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,15 +138,15 @@ export def "marketing-marketing-events-attendance-email-create createByEmail" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --externalAccountId: string # The account id associated with the marketing event
+  --external-account-id: string # The account id associated with the marketing event
   inputs: list # List of marketing event details to create or update — item shape: {contactProperties?: record, email: string, interactionDateTime: int, properties?: record}
 ]: any -> record<completedAt: string, errors: table<category: record, context: record, errors: list, id: string, links: record, message: string, status: string, subCategory: record>, links: record, numErrors: int, requestedAt: string, results: table<email: string, vid: int>, startedAt: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "externalAccountId" $externalAccountId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/marketing/v3/marketing-events/attendance/($externalEventId)/($subscriberState)/email-create" $qp)
-  let body = {inputs: $inputs} | compact
+  let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({external_event_id: $external_event_id, subscriber_state: $subscriber_state} | format pattern "/marketing/v3/marketing-events/attendance/{external_event_id}/{subscriber_state}/email-create") $qp)
+  let body = {"inputs": $inputs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -166,23 +166,23 @@ export def "marketing-marketing-events-events create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customProperties: list # A list of PropertyValues. These can be whatever kind of property names and values you want. However, they must already exist on the HubSpot account's definition of the MarketingEvent Object. If they don't they will be filtered out and not set. In order to do this you'll need to create a new PropertyGroup on the HubSpot account's MarketingEvent object for your specific app and create the Custom Property you want to track on that HubSpot account. Do not create any new default properties on the MarketingEvent object as that will apply to all HubSpot accounts. — item shape: {name: string, persistenceTimestamp?: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: "IMPORT"|"API"|"FORM"|"ANALYTICS"|"MIGRATION"|"SALESFORCE"|"INTEGRATION"|"CONTACTS_WEB"|"WAL_INCREMENTAL"|"TASK"|"EMAIL"|"WORKFLOWS"|"CALCULATED"|"SOCIAL"|"BATCH_UPDATE"|"SIGNALS"|"BIDEN"|"DEFAULT"|"COMPANIES"|"DEALS"|"ASSISTS"|"PRESENTATIONS"|"TALLY"|"SIDEKICK"|"CRM_UI"|"MERGE_CONTACTS"|"PORTAL_USER_ASSOCIATOR"|"INTEGRATIONS_PLATFORM"|"BCC_TO_CRM"|"FORWARD_TO_CRM"|"ENGAGEMENTS"|"SALES"|"HEISENBERG"|"LEADIN"|"GMAIL_INTEGRATION"|"ACADEMY"|"SALES_MESSAGES"|"AVATARS_SERVICE"|"MERGE_COMPANIES"|"SEQUENCES"|"COMPANY_FAMILIES"|"MOBILE_IOS"|"MOBILE_ANDROID"|"CONTACTS"|"ASSOCIATIONS"|"EXTENSION"|"SUCCESS"|"BOT"|"INTEGRATIONS_SYNC"|"AUTOMATION_PLATFORM"|"CONVERSATIONS"|"EMAIL_INTEGRATION"|"CONTENT_MEMBERSHIP"|"QUOTES"|"BET_ASSIGNMENT"|"QUOTAS"|"BET_CRM_CONNECTOR"|"MEETINGS"|"MERGE_OBJECTS"|"RECYCLING_BIN"|"ADS"|"AI_GROUP"|"COMMUNICATOR"|"SETTINGS"|"PROPERTY_SETTINGS"|"PIPELINE_SETTINGS"|"COMPANY_INSIGHTS"|"BEHAVIORAL_EVENTS"|"PAYMENTS"|"GOALS"|"PORTAL_OBJECT_SYNC"|"APPROVALS"|"FILE_MANAGER"|"MARKETPLACE"|"INTERNAL_PROCESSING"|"FORECASTING"|"SLACK_INTEGRATION"|"CRM_UI_BULK_ACTION"|"WORKFLOW_CONTACT_DELETE_ACTION", sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId?: int, useTimestampAsPersistenceTimestamp?: bool, value: string}
-  --endDateTime: string # The end date and time of the marketing event. (format: date-time)
-  --eventCancelled: oneof<nothing, bool> # Indicates if the marketing event has been cancelled.  Defaults to `false`
-  --eventDescription: string # The description of the marketing event.
-  eventName: string # The name of the marketing event.
-  eventOrganizer: string # The name of the organizer of the marketing event.
-  --eventType: string # Describes what type of event this is.  For example: `WEBINAR`, `CONFERENCE`, `WORKSHOP`
-  --eventUrl: string # A URL in the external event application where the marketing event can be managed.
-  externalAccountId: string # The accountId that is associated with this marketing event in the external event application.
-  externalEventId: string # The id of the marketing event in the external event application.
-  --startDateTime: string # The start date and time of the marketing event. (format: date-time)
+  --custom-properties: list # A list of PropertyValues. These can be whatever kind of property names and values you want. However, they must already exist on the HubSpot account's definition of the MarketingEvent Object. If they don't they will be filtered out and not set. In order to do this you'll need to create a new PropertyGroup on the HubSpot account's MarketingEvent object for your specific app and create the Custom Property you want to track on that HubSpot account. Do not create any new default properties on the MarketingEvent object as that will apply to all HubSpot accounts. — item shape: {name: string, persistenceTimestamp?: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: "IMPORT"|"API"|"FORM"|"ANALYTICS"|"MIGRATION"|"SALESFORCE"|"INTEGRATION"|"CONTACTS_WEB"|"WAL_INCREMENTAL"|"TASK"|"EMAIL"|"WORKFLOWS"|"CALCULATED"|"SOCIAL"|"BATCH_UPDATE"|"SIGNALS"|"BIDEN"|"DEFAULT"|"COMPANIES"|"DEALS"|"ASSISTS"|"PRESENTATIONS"|"TALLY"|"SIDEKICK"|"CRM_UI"|"MERGE_CONTACTS"|"PORTAL_USER_ASSOCIATOR"|"INTEGRATIONS_PLATFORM"|"BCC_TO_CRM"|"FORWARD_TO_CRM"|"ENGAGEMENTS"|"SALES"|"HEISENBERG"|"LEADIN"|"GMAIL_INTEGRATION"|"ACADEMY"|"SALES_MESSAGES"|"AVATARS_SERVICE"|"MERGE_COMPANIES"|"SEQUENCES"|"COMPANY_FAMILIES"|"MOBILE_IOS"|"MOBILE_ANDROID"|"CONTACTS"|"ASSOCIATIONS"|"EXTENSION"|"SUCCESS"|"BOT"|"INTEGRATIONS_SYNC"|"AUTOMATION_PLATFORM"|"CONVERSATIONS"|"EMAIL_INTEGRATION"|"CONTENT_MEMBERSHIP"|"QUOTES"|"BET_ASSIGNMENT"|"QUOTAS"|"BET_CRM_CONNECTOR"|"MEETINGS"|"MERGE_OBJECTS"|"RECYCLING_BIN"|"ADS"|"AI_GROUP"|"COMMUNICATOR"|"SETTINGS"|"PROPERTY_SETTINGS"|"PIPELINE_SETTINGS"|"COMPANY_INSIGHTS"|"BEHAVIORAL_EVENTS"|"PAYMENTS"|"GOALS"|"PORTAL_OBJECT_SYNC"|"APPROVALS"|"FILE_MANAGER"|"MARKETPLACE"|"INTERNAL_PROCESSING"|"FORECASTING"|"SLACK_INTEGRATION"|"CRM_UI_BULK_ACTION"|"WORKFLOW_CONTACT_DELETE_ACTION", sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId?: int, useTimestampAsPersistenceTimestamp?: bool, value: string}
+  --end-date-time: string # The end date and time of the marketing event. (format: date-time)
+  --event-cancelled: oneof<nothing, bool> # Indicates if the marketing event has been cancelled.  Defaults to `false`
+  --event-description: string # The description of the marketing event.
+  event_name: string # The name of the marketing event.
+  event_organizer: string # The name of the organizer of the marketing event.
+  --event-type: string # Describes what type of event this is.  For example: `WEBINAR`, `CONFERENCE`, `WORKSHOP`
+  --event-url: string # A URL in the external event application where the marketing event can be managed.
+  external_account_id: string # The accountId that is associated with this marketing event in the external event application.
+  external_event_id: string # The id of the marketing event in the external event application.
+  --start-date-time: string # The start date and time of the marketing event. (format: date-time)
 ]: any -> record<customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, startDateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketing/v3/marketing-events/events")
-  let body = {customProperties: $customProperties, endDateTime: $endDateTime, eventCancelled: $eventCancelled, eventDescription: $eventDescription, eventName: $eventName, eventOrganizer: $eventOrganizer, eventType: $eventType, eventUrl: $eventUrl, externalAccountId: $externalAccountId, externalEventId: $externalEventId, startDateTime: $startDateTime} | compact
+  let body = {"customProperties": $custom_properties, "endDateTime": $end_date_time, "eventCancelled": $event_cancelled, "eventDescription": $event_description, "eventName": $event_name, "eventOrganizer": $event_organizer, "eventType": $event_type, "eventUrl": $event_url, "externalAccountId": $external_account_id, "externalEventId": $external_event_id, "startDateTime": $start_date_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -193,7 +193,7 @@ export def "marketing-marketing-events-events create" [
 #
 # operationId: post-/marketing/v3/marketing-events/events/delete_archiveBatch
 # --inputs item shape: {appId: int, externalAccountId: string, externalEventId: string}
-export def "marketing-marketing-events-events-delete archiveBatch" [
+export def "marketing-marketing-events-events-delete archive-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "marketing-marketing-events-events-delete archiveBatch" [
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketing/v3/marketing-events/events/delete")
-  let body = {inputs: $inputs} | compact
+  let body = {"inputs": $inputs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -258,7 +258,7 @@ export def "marketing-marketing-events-events-upsert doUpsert" [
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketing/v3/marketing-events/events/upsert")
-  let body = {inputs: $inputs} | compact
+  let body = {"inputs": $inputs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -269,7 +269,7 @@ export def "marketing-marketing-events-events-upsert doUpsert" [
 #
 # operationId: delete-/marketing/v3/marketing-events/events/{externalEventId}_archive
 export def "marketing-marketing-events-events archive" [
-  externalEventId: string
+  external_event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,12 +278,12 @@ export def "marketing-marketing-events-events archive" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --externalAccountId: string
+  --external-account-id: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "externalAccountId" $externalAccountId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/marketing/v3/marketing-events/events/($externalEventId)" $qp)
+  let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({external_event_id: $external_event_id} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -292,8 +292,8 @@ export def "marketing-marketing-events-events archive" [
 # GET /marketing/v3/marketing-events/events/{externalEventId}
 #
 # operationId: get-/marketing/v3/marketing-events/events/{externalEventId}_getById
-export def "marketing-marketing-events-events get" [
-  externalEventId: string
+export def "marketing-marketing-events-events get-by" [
+  external_event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,12 +302,12 @@ export def "marketing-marketing-events-events get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --externalAccountId: string
+  --external-account-id: string
 ]: nothing -> record<attendees: int, cancellations: int, createdAt: string, customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, externalEventId: string, id: string, noShows: int, registrants: int, startDateTime: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "externalAccountId" $externalAccountId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/marketing/v3/marketing-events/events/($externalEventId)" $qp)
+  let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({external_event_id: $external_event_id} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,7 +318,7 @@ export def "marketing-marketing-events-events get" [
 # operationId: patch-/marketing/v3/marketing-events/events/{externalEventId}_update
 # --customProperties item shape: {name: string, persistenceTimestamp?: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: "IMPORT"|"API"|"FORM"|"ANALYTICS"|"MIGRATION"|"SALESFORCE"|"INTEGRATION"|"CONTACTS_WEB"|"WAL_INCREMENTAL"|"TASK"|"EMAIL"|"WORKFLOWS"|"CALCULATED"|"SOCIAL"|"BATCH_UPDATE"|"SIGNALS"|"BIDEN"|"DEFAULT"|"COMPANIES"|"DEALS"|"ASSISTS"|"PRESENTATIONS"|"TALLY"|"SIDEKICK"|"CRM_UI"|"MERGE_CONTACTS"|"PORTAL_USER_ASSOCIATOR"|"INTEGRATIONS_PLATFORM"|"BCC_TO_CRM"|"FORWARD_TO_CRM"|"ENGAGEMENTS"|"SALES"|"HEISENBERG"|"LEADIN"|"GMAIL_INTEGRATION"|"ACADEMY"|"SALES_MESSAGES"|"AVATARS_SERVICE"|"MERGE_COMPANIES"|"SEQUENCES"|"COMPANY_FAMILIES"|"MOBILE_IOS"|"MOBILE_ANDROID"|"CONTACTS"|"ASSOCIATIONS"|"EXTENSION"|"SUCCESS"|"BOT"|"INTEGRATIONS_SYNC"|"AUTOMATION_PLATFORM"|"CONVERSATIONS"|"EMAIL_INTEGRATION"|"CONTENT_MEMBERSHIP"|"QUOTES"|"BET_ASSIGNMENT"|"QUOTAS"|"BET_CRM_CONNECTOR"|"MEETINGS"|"MERGE_OBJECTS"|"RECYCLING_BIN"|"ADS"|"AI_GROUP"|"COMMUNICATOR"|"SETTINGS"|"PROPERTY_SETTINGS"|"PIPELINE_SETTINGS"|"COMPANY_INSIGHTS"|"BEHAVIORAL_EVENTS"|"PAYMENTS"|"GOALS"|"PORTAL_OBJECT_SYNC"|"APPROVALS"|"FILE_MANAGER"|"MARKETPLACE"|"INTERNAL_PROCESSING"|"FORECASTING"|"SLACK_INTEGRATION"|"CRM_UI_BULK_ACTION"|"WORKFLOW_CONTACT_DELETE_ACTION", sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId?: int, useTimestampAsPersistenceTimestamp?: bool, value: string}
 export def "marketing-marketing-events-events update" [
-  externalEventId: string
+  external_event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,23 +327,23 @@ export def "marketing-marketing-events-events update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --externalAccountId: string
-  --customProperties: list # A list of PropertyValues. These can be whatever kind of property names and values you want. However, they must already exist on the HubSpot account's definition of the MarketingEvent Object. If they don't they will be filtered out and not set. In order to do this you'll need to create a new PropertyGroup on the HubSpot account's MarketingEvent object for your specific app and create the Custom Property you want to track on that HubSpot account. Do not create any new default properties on the MarketingEvent object as that will apply to all HubSpot accounts. — item shape: {name: string, persistenceTimestamp?: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: "IMPORT"|"API"|"FORM"|"ANALYTICS"|"MIGRATION"|"SALESFORCE"|"INTEGRATION"|"CONTACTS_WEB"|"WAL_INCREMENTAL"|"TASK"|"EMAIL"|"WORKFLOWS"|"CALCULATED"|"SOCIAL"|"BATCH_UPDATE"|"SIGNALS"|"BIDEN"|"DEFAULT"|"COMPANIES"|"DEALS"|"ASSISTS"|"PRESENTATIONS"|"TALLY"|"SIDEKICK"|"CRM_UI"|"MERGE_CONTACTS"|"PORTAL_USER_ASSOCIATOR"|"INTEGRATIONS_PLATFORM"|"BCC_TO_CRM"|"FORWARD_TO_CRM"|"ENGAGEMENTS"|"SALES"|"HEISENBERG"|"LEADIN"|"GMAIL_INTEGRATION"|"ACADEMY"|"SALES_MESSAGES"|"AVATARS_SERVICE"|"MERGE_COMPANIES"|"SEQUENCES"|"COMPANY_FAMILIES"|"MOBILE_IOS"|"MOBILE_ANDROID"|"CONTACTS"|"ASSOCIATIONS"|"EXTENSION"|"SUCCESS"|"BOT"|"INTEGRATIONS_SYNC"|"AUTOMATION_PLATFORM"|"CONVERSATIONS"|"EMAIL_INTEGRATION"|"CONTENT_MEMBERSHIP"|"QUOTES"|"BET_ASSIGNMENT"|"QUOTAS"|"BET_CRM_CONNECTOR"|"MEETINGS"|"MERGE_OBJECTS"|"RECYCLING_BIN"|"ADS"|"AI_GROUP"|"COMMUNICATOR"|"SETTINGS"|"PROPERTY_SETTINGS"|"PIPELINE_SETTINGS"|"COMPANY_INSIGHTS"|"BEHAVIORAL_EVENTS"|"PAYMENTS"|"GOALS"|"PORTAL_OBJECT_SYNC"|"APPROVALS"|"FILE_MANAGER"|"MARKETPLACE"|"INTERNAL_PROCESSING"|"FORECASTING"|"SLACK_INTEGRATION"|"CRM_UI_BULK_ACTION"|"WORKFLOW_CONTACT_DELETE_ACTION", sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId?: int, useTimestampAsPersistenceTimestamp?: bool, value: string}
-  --endDateTime: string # The end date and time of the marketing event. (format: date-time)
-  --eventCancelled: oneof<nothing, bool> # Indicates if the marketing event has been cancelled. Defaults to `false`
-  --eventDescription: string # The description of the marketing event.
-  --eventName: string # The name of the marketing event.
-  --eventOrganizer: string # The name of the organizer of the marketing event.
-  --eventType: string # Describes what type of event this is.  For example: `WEBINAR`, `CONFERENCE`, `WORKSHOP`
-  --eventUrl: string # A URL in the external event application where the marketing event can be managed.
-  --startDateTime: string # The start date and time of the marketing event. (format: date-time)
+  --external-account-id: string
+  --custom-properties: list # A list of PropertyValues. These can be whatever kind of property names and values you want. However, they must already exist on the HubSpot account's definition of the MarketingEvent Object. If they don't they will be filtered out and not set. In order to do this you'll need to create a new PropertyGroup on the HubSpot account's MarketingEvent object for your specific app and create the Custom Property you want to track on that HubSpot account. Do not create any new default properties on the MarketingEvent object as that will apply to all HubSpot accounts. — item shape: {name: string, persistenceTimestamp?: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: "IMPORT"|"API"|"FORM"|"ANALYTICS"|"MIGRATION"|"SALESFORCE"|"INTEGRATION"|"CONTACTS_WEB"|"WAL_INCREMENTAL"|"TASK"|"EMAIL"|"WORKFLOWS"|"CALCULATED"|"SOCIAL"|"BATCH_UPDATE"|"SIGNALS"|"BIDEN"|"DEFAULT"|"COMPANIES"|"DEALS"|"ASSISTS"|"PRESENTATIONS"|"TALLY"|"SIDEKICK"|"CRM_UI"|"MERGE_CONTACTS"|"PORTAL_USER_ASSOCIATOR"|"INTEGRATIONS_PLATFORM"|"BCC_TO_CRM"|"FORWARD_TO_CRM"|"ENGAGEMENTS"|"SALES"|"HEISENBERG"|"LEADIN"|"GMAIL_INTEGRATION"|"ACADEMY"|"SALES_MESSAGES"|"AVATARS_SERVICE"|"MERGE_COMPANIES"|"SEQUENCES"|"COMPANY_FAMILIES"|"MOBILE_IOS"|"MOBILE_ANDROID"|"CONTACTS"|"ASSOCIATIONS"|"EXTENSION"|"SUCCESS"|"BOT"|"INTEGRATIONS_SYNC"|"AUTOMATION_PLATFORM"|"CONVERSATIONS"|"EMAIL_INTEGRATION"|"CONTENT_MEMBERSHIP"|"QUOTES"|"BET_ASSIGNMENT"|"QUOTAS"|"BET_CRM_CONNECTOR"|"MEETINGS"|"MERGE_OBJECTS"|"RECYCLING_BIN"|"ADS"|"AI_GROUP"|"COMMUNICATOR"|"SETTINGS"|"PROPERTY_SETTINGS"|"PIPELINE_SETTINGS"|"COMPANY_INSIGHTS"|"BEHAVIORAL_EVENTS"|"PAYMENTS"|"GOALS"|"PORTAL_OBJECT_SYNC"|"APPROVALS"|"FILE_MANAGER"|"MARKETPLACE"|"INTERNAL_PROCESSING"|"FORECASTING"|"SLACK_INTEGRATION"|"CRM_UI_BULK_ACTION"|"WORKFLOW_CONTACT_DELETE_ACTION", sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId?: int, useTimestampAsPersistenceTimestamp?: bool, value: string}
+  --end-date-time: string # The end date and time of the marketing event. (format: date-time)
+  --event-cancelled: oneof<nothing, bool> # Indicates if the marketing event has been cancelled. Defaults to `false`
+  --event-description: string # The description of the marketing event.
+  --event-name: string # The name of the marketing event.
+  --event-organizer: string # The name of the organizer of the marketing event.
+  --event-type: string # Describes what type of event this is.  For example: `WEBINAR`, `CONFERENCE`, `WORKSHOP`
+  --event-url: string # A URL in the external event application where the marketing event can be managed.
+  --start-date-time: string # The start date and time of the marketing event. (format: date-time)
 ]: any -> record<createdAt: string, customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, id: string, startDateTime: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "externalAccountId" $externalAccountId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/marketing/v3/marketing-events/events/($externalEventId)" $qp)
-  let body = {customProperties: $customProperties, endDateTime: $endDateTime, eventCancelled: $eventCancelled, eventDescription: $eventDescription, eventName: $eventName, eventOrganizer: $eventOrganizer, eventType: $eventType, eventUrl: $eventUrl, startDateTime: $startDateTime} | compact
+  let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({external_event_id: $external_event_id} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}") $qp)
+  let body = {"customProperties": $custom_properties, "endDateTime": $end_date_time, "eventCancelled": $event_cancelled, "eventDescription": $event_description, "eventName": $event_name, "eventOrganizer": $event_organizer, "eventType": $event_type, "eventUrl": $event_url, "startDateTime": $start_date_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -355,7 +355,7 @@ export def "marketing-marketing-events-events update" [
 # operationId: put-/marketing/v3/marketing-events/events/{externalEventId}_replace
 # --customProperties item shape: {name: string, persistenceTimestamp?: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: "IMPORT"|"API"|"FORM"|"ANALYTICS"|"MIGRATION"|"SALESFORCE"|"INTEGRATION"|"CONTACTS_WEB"|"WAL_INCREMENTAL"|"TASK"|"EMAIL"|"WORKFLOWS"|"CALCULATED"|"SOCIAL"|"BATCH_UPDATE"|"SIGNALS"|"BIDEN"|"DEFAULT"|"COMPANIES"|"DEALS"|"ASSISTS"|"PRESENTATIONS"|"TALLY"|"SIDEKICK"|"CRM_UI"|"MERGE_CONTACTS"|"PORTAL_USER_ASSOCIATOR"|"INTEGRATIONS_PLATFORM"|"BCC_TO_CRM"|"FORWARD_TO_CRM"|"ENGAGEMENTS"|"SALES"|"HEISENBERG"|"LEADIN"|"GMAIL_INTEGRATION"|"ACADEMY"|"SALES_MESSAGES"|"AVATARS_SERVICE"|"MERGE_COMPANIES"|"SEQUENCES"|"COMPANY_FAMILIES"|"MOBILE_IOS"|"MOBILE_ANDROID"|"CONTACTS"|"ASSOCIATIONS"|"EXTENSION"|"SUCCESS"|"BOT"|"INTEGRATIONS_SYNC"|"AUTOMATION_PLATFORM"|"CONVERSATIONS"|"EMAIL_INTEGRATION"|"CONTENT_MEMBERSHIP"|"QUOTES"|"BET_ASSIGNMENT"|"QUOTAS"|"BET_CRM_CONNECTOR"|"MEETINGS"|"MERGE_OBJECTS"|"RECYCLING_BIN"|"ADS"|"AI_GROUP"|"COMMUNICATOR"|"SETTINGS"|"PROPERTY_SETTINGS"|"PIPELINE_SETTINGS"|"COMPANY_INSIGHTS"|"BEHAVIORAL_EVENTS"|"PAYMENTS"|"GOALS"|"PORTAL_OBJECT_SYNC"|"APPROVALS"|"FILE_MANAGER"|"MARKETPLACE"|"INTERNAL_PROCESSING"|"FORECASTING"|"SLACK_INTEGRATION"|"CRM_UI_BULK_ACTION"|"WORKFLOW_CONTACT_DELETE_ACTION", sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId?: int, useTimestampAsPersistenceTimestamp?: bool, value: string}
 export def "marketing-marketing-events-events replace" [
-  externalEventId: string
+  external_event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,23 +364,23 @@ export def "marketing-marketing-events-events replace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customProperties: list # A list of PropertyValues. These can be whatever kind of property names and values you want. However, they must already exist on the HubSpot account's definition of the MarketingEvent Object. If they don't they will be filtered out and not set. In order to do this you'll need to create a new PropertyGroup on the HubSpot account's MarketingEvent object for your specific app and create the Custom Property you want to track on that HubSpot account. Do not create any new default properties on the MarketingEvent object as that will apply to all HubSpot accounts. — item shape: {name: string, persistenceTimestamp?: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: "IMPORT"|"API"|"FORM"|"ANALYTICS"|"MIGRATION"|"SALESFORCE"|"INTEGRATION"|"CONTACTS_WEB"|"WAL_INCREMENTAL"|"TASK"|"EMAIL"|"WORKFLOWS"|"CALCULATED"|"SOCIAL"|"BATCH_UPDATE"|"SIGNALS"|"BIDEN"|"DEFAULT"|"COMPANIES"|"DEALS"|"ASSISTS"|"PRESENTATIONS"|"TALLY"|"SIDEKICK"|"CRM_UI"|"MERGE_CONTACTS"|"PORTAL_USER_ASSOCIATOR"|"INTEGRATIONS_PLATFORM"|"BCC_TO_CRM"|"FORWARD_TO_CRM"|"ENGAGEMENTS"|"SALES"|"HEISENBERG"|"LEADIN"|"GMAIL_INTEGRATION"|"ACADEMY"|"SALES_MESSAGES"|"AVATARS_SERVICE"|"MERGE_COMPANIES"|"SEQUENCES"|"COMPANY_FAMILIES"|"MOBILE_IOS"|"MOBILE_ANDROID"|"CONTACTS"|"ASSOCIATIONS"|"EXTENSION"|"SUCCESS"|"BOT"|"INTEGRATIONS_SYNC"|"AUTOMATION_PLATFORM"|"CONVERSATIONS"|"EMAIL_INTEGRATION"|"CONTENT_MEMBERSHIP"|"QUOTES"|"BET_ASSIGNMENT"|"QUOTAS"|"BET_CRM_CONNECTOR"|"MEETINGS"|"MERGE_OBJECTS"|"RECYCLING_BIN"|"ADS"|"AI_GROUP"|"COMMUNICATOR"|"SETTINGS"|"PROPERTY_SETTINGS"|"PIPELINE_SETTINGS"|"COMPANY_INSIGHTS"|"BEHAVIORAL_EVENTS"|"PAYMENTS"|"GOALS"|"PORTAL_OBJECT_SYNC"|"APPROVALS"|"FILE_MANAGER"|"MARKETPLACE"|"INTERNAL_PROCESSING"|"FORECASTING"|"SLACK_INTEGRATION"|"CRM_UI_BULK_ACTION"|"WORKFLOW_CONTACT_DELETE_ACTION", sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId?: int, useTimestampAsPersistenceTimestamp?: bool, value: string}
-  --endDateTime: string # The end date and time of the marketing event. (format: date-time)
-  --eventCancelled: oneof<nothing, bool> # Indicates if the marketing event has been cancelled.  Defaults to `false`
-  --eventDescription: string # The description of the marketing event.
-  eventName: string # The name of the marketing event.
-  eventOrganizer: string # The name of the organizer of the marketing event.
-  --eventType: string # Describes what type of event this is.  For example: `WEBINAR`, `CONFERENCE`, `WORKSHOP`
-  --eventUrl: string # A URL in the external event application where the marketing event can be managed.
-  externalAccountId: string # The accountId that is associated with this marketing event in the external event application.
-  --body-externalEventId: string # The id of the marketing event in the external event application.
-  --startDateTime: string # The start date and time of the marketing event. (format: date-time)
+  --custom-properties: list # A list of PropertyValues. These can be whatever kind of property names and values you want. However, they must already exist on the HubSpot account's definition of the MarketingEvent Object. If they don't they will be filtered out and not set. In order to do this you'll need to create a new PropertyGroup on the HubSpot account's MarketingEvent object for your specific app and create the Custom Property you want to track on that HubSpot account. Do not create any new default properties on the MarketingEvent object as that will apply to all HubSpot accounts. — item shape: {name: string, persistenceTimestamp?: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: "IMPORT"|"API"|"FORM"|"ANALYTICS"|"MIGRATION"|"SALESFORCE"|"INTEGRATION"|"CONTACTS_WEB"|"WAL_INCREMENTAL"|"TASK"|"EMAIL"|"WORKFLOWS"|"CALCULATED"|"SOCIAL"|"BATCH_UPDATE"|"SIGNALS"|"BIDEN"|"DEFAULT"|"COMPANIES"|"DEALS"|"ASSISTS"|"PRESENTATIONS"|"TALLY"|"SIDEKICK"|"CRM_UI"|"MERGE_CONTACTS"|"PORTAL_USER_ASSOCIATOR"|"INTEGRATIONS_PLATFORM"|"BCC_TO_CRM"|"FORWARD_TO_CRM"|"ENGAGEMENTS"|"SALES"|"HEISENBERG"|"LEADIN"|"GMAIL_INTEGRATION"|"ACADEMY"|"SALES_MESSAGES"|"AVATARS_SERVICE"|"MERGE_COMPANIES"|"SEQUENCES"|"COMPANY_FAMILIES"|"MOBILE_IOS"|"MOBILE_ANDROID"|"CONTACTS"|"ASSOCIATIONS"|"EXTENSION"|"SUCCESS"|"BOT"|"INTEGRATIONS_SYNC"|"AUTOMATION_PLATFORM"|"CONVERSATIONS"|"EMAIL_INTEGRATION"|"CONTENT_MEMBERSHIP"|"QUOTES"|"BET_ASSIGNMENT"|"QUOTAS"|"BET_CRM_CONNECTOR"|"MEETINGS"|"MERGE_OBJECTS"|"RECYCLING_BIN"|"ADS"|"AI_GROUP"|"COMMUNICATOR"|"SETTINGS"|"PROPERTY_SETTINGS"|"PIPELINE_SETTINGS"|"COMPANY_INSIGHTS"|"BEHAVIORAL_EVENTS"|"PAYMENTS"|"GOALS"|"PORTAL_OBJECT_SYNC"|"APPROVALS"|"FILE_MANAGER"|"MARKETPLACE"|"INTERNAL_PROCESSING"|"FORECASTING"|"SLACK_INTEGRATION"|"CRM_UI_BULK_ACTION"|"WORKFLOW_CONTACT_DELETE_ACTION", sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId?: int, useTimestampAsPersistenceTimestamp?: bool, value: string}
+  --end-date-time: string # The end date and time of the marketing event. (format: date-time)
+  --event-cancelled: oneof<nothing, bool> # Indicates if the marketing event has been cancelled.  Defaults to `false`
+  --event-description: string # The description of the marketing event.
+  event_name: string # The name of the marketing event.
+  event_organizer: string # The name of the organizer of the marketing event.
+  --event-type: string # Describes what type of event this is.  For example: `WEBINAR`, `CONFERENCE`, `WORKSHOP`
+  --event-url: string # A URL in the external event application where the marketing event can be managed.
+  external_account_id: string # The accountId that is associated with this marketing event in the external event application.
+  --body-external-event-id: string # The id of the marketing event in the external event application.
+  --start-date-time: string # The start date and time of the marketing event. (format: date-time)
 ]: any -> record<createdAt: string, customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, id: string, startDateTime: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/marketing/v3/marketing-events/events/($externalEventId)")
-  let body = {customProperties: $customProperties, endDateTime: $endDateTime, eventCancelled: $eventCancelled, eventDescription: $eventDescription, eventName: $eventName, eventOrganizer: $eventOrganizer, eventType: $eventType, eventUrl: $eventUrl, externalAccountId: $externalAccountId, externalEventId: $body_externalEventId, startDateTime: $startDateTime} | compact
+  let full_url = (build-url $base ({external_event_id: $external_event_id} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}"))
+  let body = {"customProperties": $custom_properties, "endDateTime": $end_date_time, "eventCancelled": $event_cancelled, "eventDescription": $event_description, "eventName": $event_name, "eventOrganizer": $event_organizer, "eventType": $event_type, "eventUrl": $event_url, "externalAccountId": $external_account_id, "externalEventId": $body_external_event_id, "startDateTime": $start_date_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -391,7 +391,7 @@ export def "marketing-marketing-events-events replace" [
 #
 # operationId: post-/marketing/v3/marketing-events/events/{externalEventId}/cancel_doCancel
 export def "marketing-marketing-events-events-cancel doCancel" [
-  externalEventId: string
+  external_event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,12 +400,12 @@ export def "marketing-marketing-events-events-cancel doCancel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --externalAccountId: string
+  --external-account-id: string
 ]: nothing -> record<customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, startDateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "externalAccountId" $externalAccountId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/marketing/v3/marketing-events/events/($externalEventId)/cancel" $qp)
+  let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({external_event_id: $external_event_id} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}/cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -415,7 +415,7 @@ export def "marketing-marketing-events-events-cancel doCancel" [
 #
 # operationId: post-/marketing/v3/marketing-events/events/{externalEventId}/complete_complete
 export def "marketing-marketing-events-events-complete complete" [
-  externalEventId: string
+  external_event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,16 +424,16 @@ export def "marketing-marketing-events-events-complete complete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --externalAccountId: string
-  endDateTime: string # format: date-time
-  startDateTime: string # format: date-time
+  --external-account-id: string
+  end_date_time: string # format: date-time
+  start_date_time: string # format: date-time
 ]: any -> record<customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, startDateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "externalAccountId" $externalAccountId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/marketing/v3/marketing-events/events/($externalEventId)/complete" $qp)
-  let body = {endDateTime: $endDateTime, startDateTime: $startDateTime} | compact
+  let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({external_event_id: $external_event_id} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}/complete") $qp)
+  let body = {"endDateTime": $end_date_time, "startDateTime": $start_date_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -445,8 +445,8 @@ export def "marketing-marketing-events-events-complete complete" [
 # operationId: post-/marketing/v3/marketing-events/events/{externalEventId}/{subscriberState}/email-upsert_doEmailUpsertById
 # --inputs item shape: {contactProperties?: record, email: string, interactionDateTime: int, properties?: record}
 export def "marketing-marketing-events-events-email-upsert doEmailUpsertById" [
-  externalEventId: string
-  subscriberState: string
+  external_event_id: string
+  subscriber_state: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,15 +455,15 @@ export def "marketing-marketing-events-events-email-upsert doEmailUpsertById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --externalAccountId: string
+  --external-account-id: string
   inputs: list # List of marketing event details to create or update — item shape: {contactProperties?: record, email: string, interactionDateTime: int, properties?: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "externalAccountId" $externalAccountId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/marketing/v3/marketing-events/events/($externalEventId)/($subscriberState)/email-upsert" $qp)
-  let body = {inputs: $inputs} | compact
+  let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({external_event_id: $external_event_id, subscriber_state: $subscriber_state} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}/{subscriber_state}/email-upsert") $qp)
+  let body = {"inputs": $inputs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -475,8 +475,8 @@ export def "marketing-marketing-events-events-email-upsert doEmailUpsertById" [
 # operationId: post-/marketing/v3/marketing-events/events/{externalEventId}/{subscriberState}/upsert_doUpsertById
 # --inputs item shape: {interactionDateTime: int, properties?: record, vid?: int}
 export def "marketing-marketing-events-events-upsert doUpsertById" [
-  externalEventId: string
-  subscriberState: string
+  external_event_id: string
+  subscriber_state: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,15 +485,15 @@ export def "marketing-marketing-events-events-upsert doUpsertById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --externalAccountId: string
+  --external-account-id: string
   inputs: list # List of HubSpot contacts to subscribe to the marketing event — item shape: {interactionDateTime: int, properties?: record, vid?: int}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "externalAccountId" $externalAccountId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/marketing/v3/marketing-events/events/($externalEventId)/($subscriberState)/upsert" $qp)
-  let body = {inputs: $inputs} | compact
+  let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({external_event_id: $external_event_id, subscriber_state: $subscriber_state} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}/{subscriber_state}/upsert") $qp)
+  let body = {"inputs": $inputs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -503,8 +503,8 @@ export def "marketing-marketing-events-events-upsert doUpsertById" [
 # GET /marketing/v3/marketing-events/{appId}/settings
 #
 # operationId: get-/marketing/v3/marketing-events/{appId}/settings_getAll
-export def "marketing-marketing-events-settings get" [
-  appId: int
+export def "marketing-marketing-events-settings get-all" [
+  app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,7 +516,7 @@ export def "marketing-marketing-events-settings get" [
 ]: nothing -> record<appId: int, eventDetailsUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/marketing/v3/marketing-events/($appId)/settings")
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/marketing/v3/marketing-events/{app_id}/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -526,7 +526,7 @@ export def "marketing-marketing-events-settings get" [
 #
 # operationId: post-/marketing/v3/marketing-events/{appId}/settings_create
 export def "marketing-marketing-events-settings create" [
-  appId: int
+  app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -535,13 +535,13 @@ export def "marketing-marketing-events-settings create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  eventDetailsUrl: string # The url that will be used to fetch marketing event details by id. Must contain a `%s` character sequence that will be substituted with the event id. For example: `https://my.event.app/events/%s`
+  event_details_url: string # The url that will be used to fetch marketing event details by id. Must contain a `%s` character sequence that will be substituted with the event id. For example: `https://my.event.app/events/%s`
 ]: any -> record<appId: int, eventDetailsUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/marketing/v3/marketing-events/($appId)/settings")
-  let body = {eventDetailsUrl: $eventDetailsUrl} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/marketing/v3/marketing-events/{app_id}/settings"))
+  let body = {"eventDetailsUrl": $event_details_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

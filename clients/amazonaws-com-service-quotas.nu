@@ -66,30 +66,30 @@ def base-url-completer [] { ["http://servicequotas.us-east-1.amazonaws.com" "htt
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["ServiceQuotasV20190624.AssociateServiceQuotaTemplate"] }
-def X-Amz-Target-completer-1 [] { ["ServiceQuotasV20190624.DeleteServiceQuotaIncreaseRequestFromTemplate"] }
-def X-Amz-Target-completer-2 [] { ["ServiceQuotasV20190624.DisassociateServiceQuotaTemplate"] }
-def X-Amz-Target-completer-3 [] { ["ServiceQuotasV20190624.GetAWSDefaultServiceQuota"] }
-def X-Amz-Target-completer-4 [] { ["ServiceQuotasV20190624.GetAssociationForServiceQuotaTemplate"] }
-def X-Amz-Target-completer-5 [] { ["ServiceQuotasV20190624.GetRequestedServiceQuotaChange"] }
-def X-Amz-Target-completer-6 [] { ["ServiceQuotasV20190624.GetServiceQuota"] }
-def X-Amz-Target-completer-7 [] { ["ServiceQuotasV20190624.GetServiceQuotaIncreaseRequestFromTemplate"] }
-def X-Amz-Target-completer-8 [] { ["ServiceQuotasV20190624.ListAWSDefaultServiceQuotas"] }
-def X-Amz-Target-completer-9 [] { ["ServiceQuotasV20190624.ListRequestedServiceQuotaChangeHistory"] }
-def X-Amz-Target-completer-10 [] { ["ServiceQuotasV20190624.ListRequestedServiceQuotaChangeHistoryByQuota"] }
-def X-Amz-Target-completer-11 [] { ["ServiceQuotasV20190624.ListServiceQuotaIncreaseRequestsInTemplate"] }
-def X-Amz-Target-completer-12 [] { ["ServiceQuotasV20190624.ListServiceQuotas"] }
-def X-Amz-Target-completer-13 [] { ["ServiceQuotasV20190624.ListServices"] }
-def X-Amz-Target-completer-14 [] { ["ServiceQuotasV20190624.ListTagsForResource"] }
-def X-Amz-Target-completer-15 [] { ["ServiceQuotasV20190624.PutServiceQuotaIncreaseRequestIntoTemplate"] }
-def X-Amz-Target-completer-16 [] { ["ServiceQuotasV20190624.RequestServiceQuotaIncrease"] }
-def X-Amz-Target-completer-17 [] { ["ServiceQuotasV20190624.TagResource"] }
-def X-Amz-Target-completer-18 [] { ["ServiceQuotasV20190624.UntagResource"] }
+def x-amz-target-completer [] { ["ServiceQuotasV20190624.AssociateServiceQuotaTemplate"] }
+def x-amz-target-completer-1 [] { ["ServiceQuotasV20190624.DeleteServiceQuotaIncreaseRequestFromTemplate"] }
+def x-amz-target-completer-2 [] { ["ServiceQuotasV20190624.DisassociateServiceQuotaTemplate"] }
+def x-amz-target-completer-3 [] { ["ServiceQuotasV20190624.GetAWSDefaultServiceQuota"] }
+def x-amz-target-completer-4 [] { ["ServiceQuotasV20190624.GetAssociationForServiceQuotaTemplate"] }
+def x-amz-target-completer-5 [] { ["ServiceQuotasV20190624.GetRequestedServiceQuotaChange"] }
+def x-amz-target-completer-6 [] { ["ServiceQuotasV20190624.GetServiceQuota"] }
+def x-amz-target-completer-7 [] { ["ServiceQuotasV20190624.GetServiceQuotaIncreaseRequestFromTemplate"] }
+def x-amz-target-completer-8 [] { ["ServiceQuotasV20190624.ListAWSDefaultServiceQuotas"] }
+def x-amz-target-completer-9 [] { ["ServiceQuotasV20190624.ListRequestedServiceQuotaChangeHistory"] }
+def x-amz-target-completer-10 [] { ["ServiceQuotasV20190624.ListRequestedServiceQuotaChangeHistoryByQuota"] }
+def x-amz-target-completer-11 [] { ["ServiceQuotasV20190624.ListServiceQuotaIncreaseRequestsInTemplate"] }
+def x-amz-target-completer-12 [] { ["ServiceQuotasV20190624.ListServiceQuotas"] }
+def x-amz-target-completer-13 [] { ["ServiceQuotasV20190624.ListServices"] }
+def x-amz-target-completer-14 [] { ["ServiceQuotasV20190624.ListTagsForResource"] }
+def x-amz-target-completer-15 [] { ["ServiceQuotasV20190624.PutServiceQuotaIncreaseRequestIntoTemplate"] }
+def x-amz-target-completer-16 [] { ["ServiceQuotasV20190624.RequestServiceQuotaIncrease"] }
+def x-amz-target-completer-17 [] { ["ServiceQuotasV20190624.TagResource"] }
+def x-amz-target-completer-18 [] { ["ServiceQuotasV20190624.UntagResource"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-service-quotas-v20190624-associate-service-quota-template AssociateServiceQuotaTemplate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-service-quotas-v20190624-associate-service-quota-template post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -113,7 +113,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.AssociateServiceQuotaTemplate
 # operationId: AssociateServiceQuotaTemplate
-export def "x-amz-target-service-quotas-v20190624-associate-service-quota-template AssociateServiceQuotaTemplate" [
+export def "x-amz-target-service-quotas-v20190624-associate-service-quota-template post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,14 +122,14 @@ export def "x-amz-target-service-quotas-v20190624-associate-service-quota-templa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
   --body: record
 ]: any -> record {
   let input = $in
@@ -137,7 +137,7 @@ export def "x-amz-target-service-quotas-v20190624-associate-service-quota-templa
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.AssociateServiceQuotaTemplate")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -148,7 +148,7 @@ export def "x-amz-target-service-quotas-v20190624-associate-service-quota-templa
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.DeleteServiceQuotaIncreaseRequestFromTemplate
 # operationId: DeleteServiceQuotaIncreaseRequestFromTemplate
-export def "x-amz-target-service-quotas-v20190624-delete-service-quota-increase-request-from-template DeleteServiceQuotaIncreaseRequestFromTemplate" [
+export def "x-amz-target-service-quotas-v20190624-delete-service-quota-increase-request-from-template delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,25 +157,25 @@ export def "x-amz-target-service-quotas-v20190624-delete-service-quota-increase-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  ServiceCode: any
-  QuotaCode: any
-  AwsRegion: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  service_code: any
+  quota_code: any
+  aws_region: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.DeleteServiceQuotaIncreaseRequestFromTemplate")
-  let body = {ServiceCode: $ServiceCode, QuotaCode: $QuotaCode, AwsRegion: $AwsRegion} | compact
+  let body = {"ServiceCode": $service_code, "QuotaCode": $quota_code, "AwsRegion": $aws_region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -186,7 +186,7 @@ export def "x-amz-target-service-quotas-v20190624-delete-service-quota-increase-
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.DisassociateServiceQuotaTemplate
 # operationId: DisassociateServiceQuotaTemplate
-export def "x-amz-target-service-quotas-v20190624-disassociate-service-quota-template DisassociateServiceQuotaTemplate" [
+export def "x-amz-target-service-quotas-v20190624-disassociate-service-quota-template post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,14 +195,14 @@ export def "x-amz-target-service-quotas-v20190624-disassociate-service-quota-tem
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
   --body: record
 ]: any -> record {
   let input = $in
@@ -210,7 +210,7 @@ export def "x-amz-target-service-quotas-v20190624-disassociate-service-quota-tem
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.DisassociateServiceQuotaTemplate")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -221,7 +221,7 @@ export def "x-amz-target-service-quotas-v20190624-disassociate-service-quota-tem
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.GetAWSDefaultServiceQuota
 # operationId: GetAWSDefaultServiceQuota
-export def "x-amz-target-service-quotas-v20190624-get-aws-default-service-quota GetAWSDefaultServiceQuota" [
+export def "x-amz-target-service-quotas-v20190624-get-aws-default-service-quota get-ws" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,24 +230,24 @@ export def "x-amz-target-service-quotas-v20190624-get-aws-default-service-quota 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  ServiceCode: any
-  QuotaCode: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  service_code: any
+  quota_code: any
 ]: any -> record<Quota: record<ServiceCode: record, ServiceName: record, QuotaArn: record, QuotaCode: record, QuotaName: record, Value: record, Unit: record, Adjustable: record, GlobalQuota: record, UsageMetric: record<MetricNamespace: record, MetricName: record, MetricDimensions: record, MetricStatisticRecommendation: record>, Period: record<PeriodValue: record, PeriodUnit: record>, ErrorReason: record<ErrorCode: record, ErrorMessage: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.GetAWSDefaultServiceQuota")
-  let body = {ServiceCode: $ServiceCode, QuotaCode: $QuotaCode} | compact
+  let body = {"ServiceCode": $service_code, "QuotaCode": $quota_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -258,7 +258,7 @@ export def "x-amz-target-service-quotas-v20190624-get-aws-default-service-quota 
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.GetAssociationForServiceQuotaTemplate
 # operationId: GetAssociationForServiceQuotaTemplate
-export def "x-amz-target-service-quotas-v20190624-get-association-for-service-quota-template GetAssociationForServiceQuotaTemplate" [
+export def "x-amz-target-service-quotas-v20190624-get-association-for-service-quota-template get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,14 +267,14 @@ export def "x-amz-target-service-quotas-v20190624-get-association-for-service-qu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
   --body: record
 ]: any -> record<ServiceQuotaTemplateAssociationStatus: record> {
   let input = $in
@@ -282,7 +282,7 @@ export def "x-amz-target-service-quotas-v20190624-get-association-for-service-qu
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.GetAssociationForServiceQuotaTemplate")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -293,7 +293,7 @@ export def "x-amz-target-service-quotas-v20190624-get-association-for-service-qu
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.GetRequestedServiceQuotaChange
 # operationId: GetRequestedServiceQuotaChange
-export def "x-amz-target-service-quotas-v20190624-get-requested-service-quota-change GetRequestedServiceQuotaChange" [
+export def "x-amz-target-service-quotas-v20190624-get-requested-service-quota-change get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,23 +302,23 @@ export def "x-amz-target-service-quotas-v20190624-get-requested-service-quota-ch
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  RequestId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  request_id: any
 ]: any -> record<RequestedQuota: record<Id: record, CaseId: record, ServiceCode: record, ServiceName: record, QuotaCode: record, QuotaName: record, DesiredValue: record, Status: record, Created: record, LastUpdated: record, Requester: record, QuotaArn: record, GlobalQuota: record, Unit: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.GetRequestedServiceQuotaChange")
-  let body = {RequestId: $RequestId} | compact
+  let body = {"RequestId": $request_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -329,7 +329,7 @@ export def "x-amz-target-service-quotas-v20190624-get-requested-service-quota-ch
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.GetServiceQuota
 # operationId: GetServiceQuota
-export def "x-amz-target-service-quotas-v20190624-get-service-quota GetServiceQuota" [
+export def "x-amz-target-service-quotas-v20190624-get-service-quota get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,24 +338,24 @@ export def "x-amz-target-service-quotas-v20190624-get-service-quota GetServiceQu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  ServiceCode: any
-  QuotaCode: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  service_code: any
+  quota_code: any
 ]: any -> record<Quota: record<ServiceCode: record, ServiceName: record, QuotaArn: record, QuotaCode: record, QuotaName: record, Value: record, Unit: record, Adjustable: record, GlobalQuota: record, UsageMetric: record<MetricNamespace: record, MetricName: record, MetricDimensions: record, MetricStatisticRecommendation: record>, Period: record<PeriodValue: record, PeriodUnit: record>, ErrorReason: record<ErrorCode: record, ErrorMessage: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.GetServiceQuota")
-  let body = {ServiceCode: $ServiceCode, QuotaCode: $QuotaCode} | compact
+  let body = {"ServiceCode": $service_code, "QuotaCode": $quota_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -366,7 +366,7 @@ export def "x-amz-target-service-quotas-v20190624-get-service-quota GetServiceQu
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.GetServiceQuotaIncreaseRequestFromTemplate
 # operationId: GetServiceQuotaIncreaseRequestFromTemplate
-export def "x-amz-target-service-quotas-v20190624-get-service-quota-increase-request-from-template GetServiceQuotaIncreaseRequestFromTemplate" [
+export def "x-amz-target-service-quotas-v20190624-get-service-quota-increase-request-from-template get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,25 +375,25 @@ export def "x-amz-target-service-quotas-v20190624-get-service-quota-increase-req
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  ServiceCode: any
-  QuotaCode: any
-  AwsRegion: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  service_code: any
+  quota_code: any
+  aws_region: any
 ]: any -> record<ServiceQuotaIncreaseRequestInTemplate: record<ServiceCode: record, ServiceName: record, QuotaCode: record, QuotaName: record, DesiredValue: record, AwsRegion: record, Unit: record, GlobalQuota: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.GetServiceQuotaIncreaseRequestFromTemplate")
-  let body = {ServiceCode: $ServiceCode, QuotaCode: $QuotaCode, AwsRegion: $AwsRegion} | compact
+  let body = {"ServiceCode": $service_code, "QuotaCode": $quota_code, "AwsRegion": $aws_region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -404,7 +404,7 @@ export def "x-amz-target-service-quotas-v20190624-get-service-quota-increase-req
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.ListAWSDefaultServiceQuotas
 # operationId: ListAWSDefaultServiceQuotas
-export def "x-amz-target-service-quotas-v20190624-list-aws-default-service-quotas ListAWSDefaultServiceQuotas" [
+export def "x-amz-target-service-quotas-v20190624-list-aws-default-service-quotas list-ws" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,28 +413,28 @@ export def "x-amz-target-service-quotas-v20190624-list-aws-default-service-quota
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  ServiceCode: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  service_code: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: record, Quotas: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.ListAWSDefaultServiceQuotas" $qp)
-  let body = {ServiceCode: $ServiceCode, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ServiceCode": $service_code, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -445,7 +445,7 @@ export def "x-amz-target-service-quotas-v20190624-list-aws-default-service-quota
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.ListRequestedServiceQuotaChangeHistory
 # operationId: ListRequestedServiceQuotaChangeHistory
-export def "x-amz-target-service-quotas-v20190624-list-requested-service-quota-change-history ListRequestedServiceQuotaChangeHistory" [
+export def "x-amz-target-service-quotas-v20190624-list-requested-service-quota-change-history list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,29 +454,29 @@ export def "x-amz-target-service-quotas-v20190624-list-requested-service-quota-c
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  --ServiceCode: any
-  --Status: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  --service-code: any
+  --status: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: record, RequestedQuotas: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.ListRequestedServiceQuotaChangeHistory" $qp)
-  let body = {ServiceCode: $ServiceCode, Status: $Status, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ServiceCode": $service_code, "Status": $status, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -487,7 +487,7 @@ export def "x-amz-target-service-quotas-v20190624-list-requested-service-quota-c
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.ListRequestedServiceQuotaChangeHistoryByQuota
 # operationId: ListRequestedServiceQuotaChangeHistoryByQuota
-export def "x-amz-target-service-quotas-v20190624-list-requested-service-quota-change-history-by-quota ListRequestedServiceQuotaChangeHistoryByQuota" [
+export def "x-amz-target-service-quotas-v20190624-list-requested-service-quota-change-history-by-quota list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,30 +496,30 @@ export def "x-amz-target-service-quotas-v20190624-list-requested-service-quota-c
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  ServiceCode: any
-  QuotaCode: any
-  --Status: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  service_code: any
+  quota_code: any
+  --status: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: record, RequestedQuotas: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.ListRequestedServiceQuotaChangeHistoryByQuota" $qp)
-  let body = {ServiceCode: $ServiceCode, QuotaCode: $QuotaCode, Status: $Status, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ServiceCode": $service_code, "QuotaCode": $quota_code, "Status": $status, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -530,7 +530,7 @@ export def "x-amz-target-service-quotas-v20190624-list-requested-service-quota-c
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.ListServiceQuotaIncreaseRequestsInTemplate
 # operationId: ListServiceQuotaIncreaseRequestsInTemplate
-export def "x-amz-target-service-quotas-v20190624-list-service-quota-increase-requests-in-template ListServiceQuotaIncreaseRequestsInTemplate" [
+export def "x-amz-target-service-quotas-v20190624-list-service-quota-increase-requests-in-template list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,29 +539,29 @@ export def "x-amz-target-service-quotas-v20190624-list-service-quota-increase-re
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  --ServiceCode: any
-  --AwsRegion: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  --service-code: any
+  --aws-region: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<ServiceQuotaIncreaseRequestInTemplateList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.ListServiceQuotaIncreaseRequestsInTemplate" $qp)
-  let body = {ServiceCode: $ServiceCode, AwsRegion: $AwsRegion, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ServiceCode": $service_code, "AwsRegion": $aws_region, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -572,7 +572,7 @@ export def "x-amz-target-service-quotas-v20190624-list-service-quota-increase-re
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.ListServiceQuotas
 # operationId: ListServiceQuotas
-export def "x-amz-target-service-quotas-v20190624-list-service-quotas ListServiceQuotas" [
+export def "x-amz-target-service-quotas-v20190624-list-service-quotas list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,28 +581,28 @@ export def "x-amz-target-service-quotas-v20190624-list-service-quotas ListServic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  ServiceCode: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  service_code: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: record, Quotas: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.ListServiceQuotas" $qp)
-  let body = {ServiceCode: $ServiceCode, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ServiceCode": $service_code, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -613,7 +613,7 @@ export def "x-amz-target-service-quotas-v20190624-list-service-quotas ListServic
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.ListServices
 # operationId: ListServices
-export def "x-amz-target-service-quotas-v20190624-list-services ListServices" [
+export def "x-amz-target-service-quotas-v20190624-list-services list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,27 +622,27 @@ export def "x-amz-target-service-quotas-v20190624-list-services ListServices" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: record, Services: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.ListServices" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -653,7 +653,7 @@ export def "x-amz-target-service-quotas-v20190624-list-services ListServices" [
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-service-quotas-v20190624-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-service-quotas-v20190624-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -662,23 +662,23 @@ export def "x-amz-target-service-quotas-v20190624-list-tags-for-resource ListTag
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  ResourceARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  resource_arn: any
 ]: any -> record<Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.ListTagsForResource")
-  let body = {ResourceARN: $ResourceARN} | compact
+  let body = {"ResourceARN": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -689,7 +689,7 @@ export def "x-amz-target-service-quotas-v20190624-list-tags-for-resource ListTag
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.PutServiceQuotaIncreaseRequestIntoTemplate
 # operationId: PutServiceQuotaIncreaseRequestIntoTemplate
-export def "x-amz-target-service-quotas-v20190624-put-service-quota-increase-request-into-template PutServiceQuotaIncreaseRequestIntoTemplate" [
+export def "x-amz-target-service-quotas-v20190624-put-service-quota-increase-request-into-template update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -698,26 +698,26 @@ export def "x-amz-target-service-quotas-v20190624-put-service-quota-increase-req
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  QuotaCode: any
-  ServiceCode: any
-  AwsRegion: any
-  DesiredValue: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  quota_code: any
+  service_code: any
+  aws_region: any
+  desired_value: any
 ]: any -> record<ServiceQuotaIncreaseRequestInTemplate: record<ServiceCode: record, ServiceName: record, QuotaCode: record, QuotaName: record, DesiredValue: record, AwsRegion: record, Unit: record, GlobalQuota: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.PutServiceQuotaIncreaseRequestIntoTemplate")
-  let body = {QuotaCode: $QuotaCode, ServiceCode: $ServiceCode, AwsRegion: $AwsRegion, DesiredValue: $DesiredValue} | compact
+  let body = {"QuotaCode": $quota_code, "ServiceCode": $service_code, "AwsRegion": $aws_region, "DesiredValue": $desired_value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -728,7 +728,7 @@ export def "x-amz-target-service-quotas-v20190624-put-service-quota-increase-req
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.RequestServiceQuotaIncrease
 # operationId: RequestServiceQuotaIncrease
-export def "x-amz-target-service-quotas-v20190624-request-service-quota-increase RequestServiceQuotaIncrease" [
+export def "x-amz-target-service-quotas-v20190624-request-service-quota-increase request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,25 +737,25 @@ export def "x-amz-target-service-quotas-v20190624-request-service-quota-increase
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  ServiceCode: any
-  QuotaCode: any
-  DesiredValue: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  service_code: any
+  quota_code: any
+  desired_value: any
 ]: any -> record<RequestedQuota: record<Id: record, CaseId: record, ServiceCode: record, ServiceName: record, QuotaCode: record, QuotaName: record, DesiredValue: record, Status: record, Created: record, LastUpdated: record, Requester: record, QuotaArn: record, GlobalQuota: record, Unit: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.RequestServiceQuotaIncrease")
-  let body = {ServiceCode: $ServiceCode, QuotaCode: $QuotaCode, DesiredValue: $DesiredValue} | compact
+  let body = {"ServiceCode": $service_code, "QuotaCode": $quota_code, "DesiredValue": $desired_value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -766,7 +766,7 @@ export def "x-amz-target-service-quotas-v20190624-request-service-quota-increase
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.TagResource
 # operationId: TagResource
-export def "x-amz-target-service-quotas-v20190624-tag-resource TagResource" [
+export def "x-amz-target-service-quotas-v20190624-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -775,24 +775,24 @@ export def "x-amz-target-service-quotas-v20190624-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  ResourceARN: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.TagResource")
-  let body = {ResourceARN: $ResourceARN, Tags: $Tags} | compact
+  let body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -803,7 +803,7 @@ export def "x-amz-target-service-quotas-v20190624-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=ServiceQuotasV20190624.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-service-quotas-v20190624-untag-resource UntagResource" [
+export def "x-amz-target-service-quotas-v20190624-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -812,24 +812,24 @@ export def "x-amz-target-service-quotas-v20190624-untag-resource UntagResource" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  ResourceARN: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ServiceQuotasV20190624.UntagResource")
-  let body = {ResourceARN: $ResourceARN, TagKeys: $TagKeys} | compact
+  let body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-service-tier-advisors ListByDatabase" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-service-tier-advisors list-by" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,11 +93,11 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/serviceTierAdvisors
 # operationId: ServiceTierAdvisors_ListByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-service-tier-advisors ListByDatabase" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-service-tier-advisors list-by" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,7 +111,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/serviceTierAdvisors" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/serviceTierAdvisors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -121,12 +121,12 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/serviceTierAdvisors/{serviceTierAdvisorName}
 # operationId: ServiceTierAdvisors_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-service-tier-advisors Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
-  serviceTierAdvisorName: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-service-tier-advisors get" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
+  service_tier_advisor_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +140,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/serviceTierAdvisors/($serviceTierAdvisorName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name, service_tier_advisor_name: $service_tier_advisor_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/serviceTierAdvisors/{service_tier_advisor_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,12 +150,12 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/transparentDataEncryption/{transparentDataEncryptionName}
 # operationId: TransparentDataEncryptions_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-transparent-data-encryption Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
-  transparentDataEncryptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-transparent-data-encryption get" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
+  transparent_data_encryption_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/transparentDataEncryption/($transparentDataEncryptionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name, transparent_data_encryption_name: $transparent_data_encryption_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/transparentDataEncryption/{transparent_data_encryption_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -180,12 +180,12 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/transparentDataEncryption/{transparentDataEncryptionName}
 # operationId: TransparentDataEncryptions_CreateOrUpdate
 # --properties shape: {status?: "Enabled"|"Disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-transparent-data-encryption CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
-  transparentDataEncryptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-transparent-data-encryption create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
+  transparent_data_encryption_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,8 +201,8 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/transparentDataEncryption/($transparentDataEncryptionName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name, transparent_data_encryption_name: $transparent_data_encryption_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/transparentDataEncryption/{transparent_data_encryption_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -213,12 +213,12 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/transparentDataEncryption/{transparentDataEncryptionName}/operationResults
 # operationId: TransparentDataEncryptionActivities_ListByConfiguration
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-transparent-data-encryption-operation-results ListByConfiguration" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
-  transparentDataEncryptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-transparent-data-encryption-operation-results list-by-configuration" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
+  transparent_data_encryption_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/transparentDataEncryption/($transparentDataEncryptionName)/operationResults" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name, transparent_data_encryption_name: $transparent_data_encryption_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/transparentDataEncryption/{transparent_data_encryption_name}/operationResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -242,11 +242,11 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/elasticPools/{elasticPoolName}/elasticPoolActivity
 # operationId: ElasticPoolActivities_ListByElasticPool
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools-elastic-pool-activity ListByElasticPool" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  elasticPoolName: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools-elastic-pool-activity list-by" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  elastic_pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elasti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/elasticPools/($elasticPoolName)/elasticPoolActivity" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, elastic_pool_name: $elastic_pool_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/elasticPools/{elastic_pool_name}/elasticPoolActivity") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -270,11 +270,11 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elasti
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/elasticPools/{elasticPoolName}/elasticPoolDatabaseActivity
 # operationId: ElasticPoolDatabaseActivities_ListByElasticPool
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools-elastic-pool-database-activity ListByElasticPool" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  elasticPoolName: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools-elastic-pool-database-activity list-by" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  elastic_pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,7 +288,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elasti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/elasticPools/($elasticPoolName)/elasticPoolDatabaseActivity" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, elastic_pool_name: $elastic_pool_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/elasticPools/{elastic_pool_name}/elasticPoolDatabaseActivity") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

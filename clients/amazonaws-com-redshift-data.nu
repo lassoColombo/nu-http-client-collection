@@ -66,21 +66,21 @@ def base-url-completer [] { ["http://redshift-data.us-east-1.amazonaws.com" "htt
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["RedshiftData.BatchExecuteStatement"] }
-def X-Amz-Target-completer-1 [] { ["RedshiftData.CancelStatement"] }
-def X-Amz-Target-completer-2 [] { ["RedshiftData.DescribeStatement"] }
-def X-Amz-Target-completer-3 [] { ["RedshiftData.DescribeTable"] }
-def X-Amz-Target-completer-4 [] { ["RedshiftData.ExecuteStatement"] }
-def X-Amz-Target-completer-5 [] { ["RedshiftData.GetStatementResult"] }
-def X-Amz-Target-completer-6 [] { ["RedshiftData.ListDatabases"] }
-def X-Amz-Target-completer-7 [] { ["RedshiftData.ListSchemas"] }
-def X-Amz-Target-completer-8 [] { ["RedshiftData.ListStatements"] }
-def X-Amz-Target-completer-9 [] { ["RedshiftData.ListTables"] }
+def x-amz-target-completer [] { ["RedshiftData.BatchExecuteStatement"] }
+def x-amz-target-completer-1 [] { ["RedshiftData.CancelStatement"] }
+def x-amz-target-completer-2 [] { ["RedshiftData.DescribeStatement"] }
+def x-amz-target-completer-3 [] { ["RedshiftData.DescribeTable"] }
+def x-amz-target-completer-4 [] { ["RedshiftData.ExecuteStatement"] }
+def x-amz-target-completer-5 [] { ["RedshiftData.GetStatementResult"] }
+def x-amz-target-completer-6 [] { ["RedshiftData.ListDatabases"] }
+def x-amz-target-completer-7 [] { ["RedshiftData.ListSchemas"] }
+def x-amz-target-completer-8 [] { ["RedshiftData.ListStatements"] }
+def x-amz-target-completer-9 [] { ["RedshiftData.ListTables"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-redshift-data-batch-execute-statement BatchExecuteStatement" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-redshift-data-batch-execute-statement post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -104,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=RedshiftData.BatchExecuteStatement
 # operationId: BatchExecuteStatement
-export def "x-amz-target-redshift-data-batch-execute-statement BatchExecuteStatement" [
+export def "x-amz-target-redshift-data-batch-execute-statement post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -113,31 +113,31 @@ export def "x-amz-target-redshift-data-batch-execute-statement BatchExecuteState
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  --ClientToken: any
-  --ClusterIdentifier: any
-  Database: any
-  --DbUser: any
-  --SecretArn: any
-  Sqls: any
-  --StatementName: any
-  --WithEvent: any
-  --WorkgroupName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  --client-token: any
+  --cluster-identifier: any
+  database: any
+  --db-user: any
+  --secret-arn: any
+  sqls: any
+  --statement-name: any
+  --with-event: any
+  --workgroup-name: any
 ]: any -> record<ClusterIdentifier: record, CreatedAt: record, Database: record, DbUser: record, Id: record, SecretArn: record, WorkgroupName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.BatchExecuteStatement")
-  let body = {ClientToken: $ClientToken, ClusterIdentifier: $ClusterIdentifier, Database: $Database, DbUser: $DbUser, SecretArn: $SecretArn, Sqls: $Sqls, StatementName: $StatementName, WithEvent: $WithEvent, WorkgroupName: $WorkgroupName} | compact
+  let body = {"ClientToken": $client_token, "ClusterIdentifier": $cluster_identifier, "Database": $database, "DbUser": $db_user, "SecretArn": $secret_arn, "Sqls": $sqls, "StatementName": $statement_name, "WithEvent": $with_event, "WorkgroupName": $workgroup_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -148,7 +148,7 @@ export def "x-amz-target-redshift-data-batch-execute-statement BatchExecuteState
 #
 # POST /#X-Amz-Target=RedshiftData.CancelStatement
 # operationId: CancelStatement
-export def "x-amz-target-redshift-data-cancel-statement CancelStatement" [
+export def "x-amz-target-redshift-data-cancel-statement cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,23 +157,23 @@ export def "x-amz-target-redshift-data-cancel-statement CancelStatement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  Id: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  id: any
 ]: any -> record<Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.CancelStatement")
-  let body = {Id: $Id} | compact
+  let body = {"Id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -184,7 +184,7 @@ export def "x-amz-target-redshift-data-cancel-statement CancelStatement" [
 #
 # POST /#X-Amz-Target=RedshiftData.DescribeStatement
 # operationId: DescribeStatement
-export def "x-amz-target-redshift-data-describe-statement DescribeStatement" [
+export def "x-amz-target-redshift-data-describe-statement post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,23 +193,23 @@ export def "x-amz-target-redshift-data-describe-statement DescribeStatement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  Id: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  id: any
 ]: any -> record<ClusterIdentifier: record, CreatedAt: record, Database: record, DbUser: record, Duration: record, Error: record, HasResultSet: record, Id: record, QueryParameters: record, QueryString: record, RedshiftPid: record, RedshiftQueryId: record, ResultRows: record, ResultSize: record, SecretArn: record, Status: record, SubStatements: record, UpdatedAt: record, WorkgroupName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.DescribeStatement")
-  let body = {Id: $Id} | compact
+  let body = {"Id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -220,7 +220,7 @@ export def "x-amz-target-redshift-data-describe-statement DescribeStatement" [
 #
 # POST /#X-Amz-Target=RedshiftData.DescribeTable
 # operationId: DescribeTable
-export def "x-amz-target-redshift-data-describe-table DescribeTable" [
+export def "x-amz-target-redshift-data-describe-table post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,35 +229,35 @@ export def "x-amz-target-redshift-data-describe-table DescribeTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  --ClusterIdentifier: any
-  --ConnectedDatabase: any
-  Database: any
-  --DbUser: any
-  --MaxResults: any
-  --NextToken: any
-  --Schema: any
-  --SecretArn: any
-  --Table: any
-  --WorkgroupName: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  --cluster-identifier: any
+  --connected-database: any
+  database: any
+  --db-user: any
+  --max-results: any
+  --next-token: any
+  --schema: any
+  --secret-arn: any
+  --table: any
+  --workgroup-name: any
 ]: any -> record<ColumnList: record, NextToken: record, TableName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.DescribeTable" $qp)
-  let body = {ClusterIdentifier: $ClusterIdentifier, ConnectedDatabase: $ConnectedDatabase, Database: $Database, DbUser: $DbUser, MaxResults: $MaxResults, NextToken: $NextToken, Schema: $Schema, SecretArn: $SecretArn, Table: $Table, WorkgroupName: $WorkgroupName} | compact
+  let body = {"ClusterIdentifier": $cluster_identifier, "ConnectedDatabase": $connected_database, "Database": $database, "DbUser": $db_user, "MaxResults": $max_results, "NextToken": $next_token, "Schema": $schema, "SecretArn": $secret_arn, "Table": $table, "WorkgroupName": $workgroup_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -268,7 +268,7 @@ export def "x-amz-target-redshift-data-describe-table DescribeTable" [
 #
 # POST /#X-Amz-Target=RedshiftData.ExecuteStatement
 # operationId: ExecuteStatement
-export def "x-amz-target-redshift-data-execute-statement ExecuteStatement" [
+export def "x-amz-target-redshift-data-execute-statement exec-ute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,32 +277,32 @@ export def "x-amz-target-redshift-data-execute-statement ExecuteStatement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  --ClientToken: any
-  --ClusterIdentifier: any
-  Database: any
-  --DbUser: any
-  --Parameters: any
-  --SecretArn: any
-  Sql: any
-  --StatementName: any
-  --WithEvent: any
-  --WorkgroupName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  --client-token: any
+  --cluster-identifier: any
+  database: any
+  --db-user: any
+  --parameters: any
+  --secret-arn: any
+  sql: any
+  --statement-name: any
+  --with-event: any
+  --workgroup-name: any
 ]: any -> record<ClusterIdentifier: record, CreatedAt: record, Database: record, DbUser: record, Id: record, SecretArn: record, WorkgroupName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.ExecuteStatement")
-  let body = {ClientToken: $ClientToken, ClusterIdentifier: $ClusterIdentifier, Database: $Database, DbUser: $DbUser, Parameters: $Parameters, SecretArn: $SecretArn, Sql: $Sql, StatementName: $StatementName, WithEvent: $WithEvent, WorkgroupName: $WorkgroupName} | compact
+  let body = {"ClientToken": $client_token, "ClusterIdentifier": $cluster_identifier, "Database": $database, "DbUser": $db_user, "Parameters": $parameters, "SecretArn": $secret_arn, "Sql": $sql, "StatementName": $statement_name, "WithEvent": $with_event, "WorkgroupName": $workgroup_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -313,7 +313,7 @@ export def "x-amz-target-redshift-data-execute-statement ExecuteStatement" [
 #
 # POST /#X-Amz-Target=RedshiftData.GetStatementResult
 # operationId: GetStatementResult
-export def "x-amz-target-redshift-data-get-statement-result GetStatementResult" [
+export def "x-amz-target-redshift-data-get-statement-result get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,26 +322,26 @@ export def "x-amz-target-redshift-data-get-statement-result GetStatementResult" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  Id: any
-  --NextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  id: any
+  --next-token: any
 ]: any -> record<ColumnMetadata: record, NextToken: record, Records: record, TotalNumRows: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.GetStatementResult" $qp)
-  let body = {Id: $Id, NextToken: $NextToken} | compact
+  let body = {"Id": $id, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -352,7 +352,7 @@ export def "x-amz-target-redshift-data-get-statement-result GetStatementResult" 
 #
 # POST /#X-Amz-Target=RedshiftData.ListDatabases
 # operationId: ListDatabases
-export def "x-amz-target-redshift-data-list-databases ListDatabases" [
+export def "x-amz-target-redshift-data-list-databases list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,32 +361,32 @@ export def "x-amz-target-redshift-data-list-databases ListDatabases" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  --ClusterIdentifier: any
-  Database: any
-  --DbUser: any
-  --MaxResults: any
-  --NextToken: any
-  --SecretArn: any
-  --WorkgroupName: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  --cluster-identifier: any
+  database: any
+  --db-user: any
+  --max-results: any
+  --next-token: any
+  --secret-arn: any
+  --workgroup-name: any
 ]: any -> record<Databases: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.ListDatabases" $qp)
-  let body = {ClusterIdentifier: $ClusterIdentifier, Database: $Database, DbUser: $DbUser, MaxResults: $MaxResults, NextToken: $NextToken, SecretArn: $SecretArn, WorkgroupName: $WorkgroupName} | compact
+  let body = {"ClusterIdentifier": $cluster_identifier, "Database": $database, "DbUser": $db_user, "MaxResults": $max_results, "NextToken": $next_token, "SecretArn": $secret_arn, "WorkgroupName": $workgroup_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -397,7 +397,7 @@ export def "x-amz-target-redshift-data-list-databases ListDatabases" [
 #
 # POST /#X-Amz-Target=RedshiftData.ListSchemas
 # operationId: ListSchemas
-export def "x-amz-target-redshift-data-list-schemas ListSchemas" [
+export def "x-amz-target-redshift-data-list-schemas list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -406,34 +406,34 @@ export def "x-amz-target-redshift-data-list-schemas ListSchemas" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  --ClusterIdentifier: any
-  --ConnectedDatabase: any
-  Database: any
-  --DbUser: any
-  --MaxResults: any
-  --NextToken: any
-  --SchemaPattern: any
-  --SecretArn: any
-  --WorkgroupName: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  --cluster-identifier: any
+  --connected-database: any
+  database: any
+  --db-user: any
+  --max-results: any
+  --next-token: any
+  --schema-pattern: any
+  --secret-arn: any
+  --workgroup-name: any
 ]: any -> record<NextToken: record, Schemas: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.ListSchemas" $qp)
-  let body = {ClusterIdentifier: $ClusterIdentifier, ConnectedDatabase: $ConnectedDatabase, Database: $Database, DbUser: $DbUser, MaxResults: $MaxResults, NextToken: $NextToken, SchemaPattern: $SchemaPattern, SecretArn: $SecretArn, WorkgroupName: $WorkgroupName} | compact
+  let body = {"ClusterIdentifier": $cluster_identifier, "ConnectedDatabase": $connected_database, "Database": $database, "DbUser": $db_user, "MaxResults": $max_results, "NextToken": $next_token, "SchemaPattern": $schema_pattern, "SecretArn": $secret_arn, "WorkgroupName": $workgroup_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -444,7 +444,7 @@ export def "x-amz-target-redshift-data-list-schemas ListSchemas" [
 #
 # POST /#X-Amz-Target=RedshiftData.ListStatements
 # operationId: ListStatements
-export def "x-amz-target-redshift-data-list-statements ListStatements" [
+export def "x-amz-target-redshift-data-list-statements list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,30 +453,30 @@ export def "x-amz-target-redshift-data-list-statements ListStatements" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  --MaxResults: any
-  --NextToken: any
-  --RoleLevel: any
-  --StatementName: any
-  --Status: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  --max-results: any
+  --next-token: any
+  --role-level: any
+  --statement-name: any
+  --status: any
 ]: any -> record<NextToken: record, Statements: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.ListStatements" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken, RoleLevel: $RoleLevel, StatementName: $StatementName, Status: $Status} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token, "RoleLevel": $role_level, "StatementName": $statement_name, "Status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -487,7 +487,7 @@ export def "x-amz-target-redshift-data-list-statements ListStatements" [
 #
 # POST /#X-Amz-Target=RedshiftData.ListTables
 # operationId: ListTables
-export def "x-amz-target-redshift-data-list-tables ListTables" [
+export def "x-amz-target-redshift-data-list-tables list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,35 +496,35 @@ export def "x-amz-target-redshift-data-list-tables ListTables" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  --ClusterIdentifier: any
-  --ConnectedDatabase: any
-  Database: any
-  --DbUser: any
-  --MaxResults: any
-  --NextToken: any
-  --SchemaPattern: any
-  --SecretArn: any
-  --TablePattern: any
-  --WorkgroupName: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  --cluster-identifier: any
+  --connected-database: any
+  database: any
+  --db-user: any
+  --max-results: any
+  --next-token: any
+  --schema-pattern: any
+  --secret-arn: any
+  --table-pattern: any
+  --workgroup-name: any
 ]: any -> record<NextToken: record, Tables: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=RedshiftData.ListTables" $qp)
-  let body = {ClusterIdentifier: $ClusterIdentifier, ConnectedDatabase: $ConnectedDatabase, Database: $Database, DbUser: $DbUser, MaxResults: $MaxResults, NextToken: $NextToken, SchemaPattern: $SchemaPattern, SecretArn: $SecretArn, TablePattern: $TablePattern, WorkgroupName: $WorkgroupName} | compact
+  let body = {"ClusterIdentifier": $cluster_identifier, "ConnectedDatabase": $connected_database, "Database": $database, "DbUser": $db_user, "MaxResults": $max_results, "NextToken": $next_token, "SchemaPattern": $schema_pattern, "SecretArn": $secret_arn, "TablePattern": $table_pattern, "WorkgroupName": $workgroup_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

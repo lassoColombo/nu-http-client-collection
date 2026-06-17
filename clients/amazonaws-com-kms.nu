@@ -66,61 +66,61 @@ def base-url-completer [] { ["http://kms.us-east-1.amazonaws.com" "http://kms.us
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["TrentService.CancelKeyDeletion"] }
-def X-Amz-Target-completer-1 [] { ["TrentService.ConnectCustomKeyStore"] }
-def X-Amz-Target-completer-2 [] { ["TrentService.CreateAlias"] }
-def X-Amz-Target-completer-3 [] { ["TrentService.CreateCustomKeyStore"] }
-def X-Amz-Target-completer-4 [] { ["TrentService.CreateGrant"] }
-def X-Amz-Target-completer-5 [] { ["TrentService.CreateKey"] }
-def X-Amz-Target-completer-6 [] { ["TrentService.Decrypt"] }
-def X-Amz-Target-completer-7 [] { ["TrentService.DeleteAlias"] }
-def X-Amz-Target-completer-8 [] { ["TrentService.DeleteCustomKeyStore"] }
-def X-Amz-Target-completer-9 [] { ["TrentService.DeleteImportedKeyMaterial"] }
-def X-Amz-Target-completer-10 [] { ["TrentService.DescribeCustomKeyStores"] }
-def X-Amz-Target-completer-11 [] { ["TrentService.DescribeKey"] }
-def X-Amz-Target-completer-12 [] { ["TrentService.DisableKey"] }
-def X-Amz-Target-completer-13 [] { ["TrentService.DisableKeyRotation"] }
-def X-Amz-Target-completer-14 [] { ["TrentService.DisconnectCustomKeyStore"] }
-def X-Amz-Target-completer-15 [] { ["TrentService.EnableKey"] }
-def X-Amz-Target-completer-16 [] { ["TrentService.EnableKeyRotation"] }
-def X-Amz-Target-completer-17 [] { ["TrentService.Encrypt"] }
-def X-Amz-Target-completer-18 [] { ["TrentService.GenerateDataKey"] }
-def X-Amz-Target-completer-19 [] { ["TrentService.GenerateDataKeyPair"] }
-def X-Amz-Target-completer-20 [] { ["TrentService.GenerateDataKeyPairWithoutPlaintext"] }
-def X-Amz-Target-completer-21 [] { ["TrentService.GenerateDataKeyWithoutPlaintext"] }
-def X-Amz-Target-completer-22 [] { ["TrentService.GenerateMac"] }
-def X-Amz-Target-completer-23 [] { ["TrentService.GenerateRandom"] }
-def X-Amz-Target-completer-24 [] { ["TrentService.GetKeyPolicy"] }
-def X-Amz-Target-completer-25 [] { ["TrentService.GetKeyRotationStatus"] }
-def X-Amz-Target-completer-26 [] { ["TrentService.GetParametersForImport"] }
-def X-Amz-Target-completer-27 [] { ["TrentService.GetPublicKey"] }
-def X-Amz-Target-completer-28 [] { ["TrentService.ImportKeyMaterial"] }
-def X-Amz-Target-completer-29 [] { ["TrentService.ListAliases"] }
-def X-Amz-Target-completer-30 [] { ["TrentService.ListGrants"] }
-def X-Amz-Target-completer-31 [] { ["TrentService.ListKeyPolicies"] }
-def X-Amz-Target-completer-32 [] { ["TrentService.ListKeys"] }
-def X-Amz-Target-completer-33 [] { ["TrentService.ListResourceTags"] }
-def X-Amz-Target-completer-34 [] { ["TrentService.ListRetirableGrants"] }
-def X-Amz-Target-completer-35 [] { ["TrentService.PutKeyPolicy"] }
-def X-Amz-Target-completer-36 [] { ["TrentService.ReEncrypt"] }
-def X-Amz-Target-completer-37 [] { ["TrentService.ReplicateKey"] }
-def X-Amz-Target-completer-38 [] { ["TrentService.RetireGrant"] }
-def X-Amz-Target-completer-39 [] { ["TrentService.RevokeGrant"] }
-def X-Amz-Target-completer-40 [] { ["TrentService.ScheduleKeyDeletion"] }
-def X-Amz-Target-completer-41 [] { ["TrentService.Sign"] }
-def X-Amz-Target-completer-42 [] { ["TrentService.TagResource"] }
-def X-Amz-Target-completer-43 [] { ["TrentService.UntagResource"] }
-def X-Amz-Target-completer-44 [] { ["TrentService.UpdateAlias"] }
-def X-Amz-Target-completer-45 [] { ["TrentService.UpdateCustomKeyStore"] }
-def X-Amz-Target-completer-46 [] { ["TrentService.UpdateKeyDescription"] }
-def X-Amz-Target-completer-47 [] { ["TrentService.UpdatePrimaryRegion"] }
-def X-Amz-Target-completer-48 [] { ["TrentService.Verify"] }
-def X-Amz-Target-completer-49 [] { ["TrentService.VerifyMac"] }
+def x-amz-target-completer [] { ["TrentService.CancelKeyDeletion"] }
+def x-amz-target-completer-1 [] { ["TrentService.ConnectCustomKeyStore"] }
+def x-amz-target-completer-2 [] { ["TrentService.CreateAlias"] }
+def x-amz-target-completer-3 [] { ["TrentService.CreateCustomKeyStore"] }
+def x-amz-target-completer-4 [] { ["TrentService.CreateGrant"] }
+def x-amz-target-completer-5 [] { ["TrentService.CreateKey"] }
+def x-amz-target-completer-6 [] { ["TrentService.Decrypt"] }
+def x-amz-target-completer-7 [] { ["TrentService.DeleteAlias"] }
+def x-amz-target-completer-8 [] { ["TrentService.DeleteCustomKeyStore"] }
+def x-amz-target-completer-9 [] { ["TrentService.DeleteImportedKeyMaterial"] }
+def x-amz-target-completer-10 [] { ["TrentService.DescribeCustomKeyStores"] }
+def x-amz-target-completer-11 [] { ["TrentService.DescribeKey"] }
+def x-amz-target-completer-12 [] { ["TrentService.DisableKey"] }
+def x-amz-target-completer-13 [] { ["TrentService.DisableKeyRotation"] }
+def x-amz-target-completer-14 [] { ["TrentService.DisconnectCustomKeyStore"] }
+def x-amz-target-completer-15 [] { ["TrentService.EnableKey"] }
+def x-amz-target-completer-16 [] { ["TrentService.EnableKeyRotation"] }
+def x-amz-target-completer-17 [] { ["TrentService.Encrypt"] }
+def x-amz-target-completer-18 [] { ["TrentService.GenerateDataKey"] }
+def x-amz-target-completer-19 [] { ["TrentService.GenerateDataKeyPair"] }
+def x-amz-target-completer-20 [] { ["TrentService.GenerateDataKeyPairWithoutPlaintext"] }
+def x-amz-target-completer-21 [] { ["TrentService.GenerateDataKeyWithoutPlaintext"] }
+def x-amz-target-completer-22 [] { ["TrentService.GenerateMac"] }
+def x-amz-target-completer-23 [] { ["TrentService.GenerateRandom"] }
+def x-amz-target-completer-24 [] { ["TrentService.GetKeyPolicy"] }
+def x-amz-target-completer-25 [] { ["TrentService.GetKeyRotationStatus"] }
+def x-amz-target-completer-26 [] { ["TrentService.GetParametersForImport"] }
+def x-amz-target-completer-27 [] { ["TrentService.GetPublicKey"] }
+def x-amz-target-completer-28 [] { ["TrentService.ImportKeyMaterial"] }
+def x-amz-target-completer-29 [] { ["TrentService.ListAliases"] }
+def x-amz-target-completer-30 [] { ["TrentService.ListGrants"] }
+def x-amz-target-completer-31 [] { ["TrentService.ListKeyPolicies"] }
+def x-amz-target-completer-32 [] { ["TrentService.ListKeys"] }
+def x-amz-target-completer-33 [] { ["TrentService.ListResourceTags"] }
+def x-amz-target-completer-34 [] { ["TrentService.ListRetirableGrants"] }
+def x-amz-target-completer-35 [] { ["TrentService.PutKeyPolicy"] }
+def x-amz-target-completer-36 [] { ["TrentService.ReEncrypt"] }
+def x-amz-target-completer-37 [] { ["TrentService.ReplicateKey"] }
+def x-amz-target-completer-38 [] { ["TrentService.RetireGrant"] }
+def x-amz-target-completer-39 [] { ["TrentService.RevokeGrant"] }
+def x-amz-target-completer-40 [] { ["TrentService.ScheduleKeyDeletion"] }
+def x-amz-target-completer-41 [] { ["TrentService.Sign"] }
+def x-amz-target-completer-42 [] { ["TrentService.TagResource"] }
+def x-amz-target-completer-43 [] { ["TrentService.UntagResource"] }
+def x-amz-target-completer-44 [] { ["TrentService.UpdateAlias"] }
+def x-amz-target-completer-45 [] { ["TrentService.UpdateCustomKeyStore"] }
+def x-amz-target-completer-46 [] { ["TrentService.UpdateKeyDescription"] }
+def x-amz-target-completer-47 [] { ["TrentService.UpdatePrimaryRegion"] }
+def x-amz-target-completer-48 [] { ["TrentService.Verify"] }
+def x-amz-target-completer-49 [] { ["TrentService.VerifyMac"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-trent-service-cancel-key-deletion CancelKeyDeletion" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-trent-service-cancel-key-deletion cancel" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=TrentService.CancelKeyDeletion
 # operationId: CancelKeyDeletion
-export def "x-amz-target-trent-service-cancel-key-deletion CancelKeyDeletion" [
+export def "x-amz-target-trent-service-cancel-key-deletion cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,23 +153,23 @@ export def "x-amz-target-trent-service-cancel-key-deletion CancelKeyDeletion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  KeyId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  key_id: any
 ]: any -> record<KeyId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.CancelKeyDeletion")
-  let body = {KeyId: $KeyId} | compact
+  let body = {"KeyId": $key_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -180,7 +180,7 @@ export def "x-amz-target-trent-service-cancel-key-deletion CancelKeyDeletion" [
 #
 # POST /#X-Amz-Target=TrentService.ConnectCustomKeyStore
 # operationId: ConnectCustomKeyStore
-export def "x-amz-target-trent-service-connect-custom-key-store ConnectCustomKeyStore" [
+export def "x-amz-target-trent-service-connect-custom-key-store post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,23 +189,23 @@ export def "x-amz-target-trent-service-connect-custom-key-store ConnectCustomKey
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  CustomKeyStoreId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  custom_key_store_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.ConnectCustomKeyStore")
-  let body = {CustomKeyStoreId: $CustomKeyStoreId} | compact
+  let body = {"CustomKeyStoreId": $custom_key_store_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -216,7 +216,7 @@ export def "x-amz-target-trent-service-connect-custom-key-store ConnectCustomKey
 #
 # POST /#X-Amz-Target=TrentService.CreateAlias
 # operationId: CreateAlias
-export def "x-amz-target-trent-service-create-alias CreateAlias" [
+export def "x-amz-target-trent-service-create-alias create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,24 +225,24 @@ export def "x-amz-target-trent-service-create-alias CreateAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  AliasName: any
-  TargetKeyId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  alias_name: any
+  target_key_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.CreateAlias")
-  let body = {AliasName: $AliasName, TargetKeyId: $TargetKeyId} | compact
+  let body = {"AliasName": $alias_name, "TargetKeyId": $target_key_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,7 +253,7 @@ export def "x-amz-target-trent-service-create-alias CreateAlias" [
 #
 # POST /#X-Amz-Target=TrentService.CreateCustomKeyStore
 # operationId: CreateCustomKeyStore
-export def "x-amz-target-trent-service-create-custom-key-store CreateCustomKeyStore" [
+export def "x-amz-target-trent-service-create-custom-key-store create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,32 +262,32 @@ export def "x-amz-target-trent-service-create-custom-key-store CreateCustomKeySt
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  CustomKeyStoreName: any
-  --CloudHsmClusterId: any
-  --TrustAnchorCertificate: any
-  --KeyStorePassword: any
-  --CustomKeyStoreType: any
-  --XksProxyUriEndpoint: any
-  --XksProxyUriPath: any
-  --XksProxyVpcEndpointServiceName: any
-  --XksProxyAuthenticationCredential: any
-  --XksProxyConnectivity: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  custom_key_store_name: any
+  --cloud-hsm-cluster-id: any
+  --trust-anchor-certificate: any
+  --key-store-password: any
+  --custom-key-store-type: any
+  --xks-proxy-uri-endpoint: any
+  --xks-proxy-uri-path: any
+  --xks-proxy-vpc-endpoint-service-name: any
+  --xks-proxy-authentication-credential: any
+  --xks-proxy-connectivity: any
 ]: any -> record<CustomKeyStoreId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.CreateCustomKeyStore")
-  let body = {CustomKeyStoreName: $CustomKeyStoreName, CloudHsmClusterId: $CloudHsmClusterId, TrustAnchorCertificate: $TrustAnchorCertificate, KeyStorePassword: $KeyStorePassword, CustomKeyStoreType: $CustomKeyStoreType, XksProxyUriEndpoint: $XksProxyUriEndpoint, XksProxyUriPath: $XksProxyUriPath, XksProxyVpcEndpointServiceName: $XksProxyVpcEndpointServiceName, XksProxyAuthenticationCredential: $XksProxyAuthenticationCredential, XksProxyConnectivity: $XksProxyConnectivity} | compact
+  let body = {"CustomKeyStoreName": $custom_key_store_name, "CloudHsmClusterId": $cloud_hsm_cluster_id, "TrustAnchorCertificate": $trust_anchor_certificate, "KeyStorePassword": $key_store_password, "CustomKeyStoreType": $custom_key_store_type, "XksProxyUriEndpoint": $xks_proxy_uri_endpoint, "XksProxyUriPath": $xks_proxy_uri_path, "XksProxyVpcEndpointServiceName": $xks_proxy_vpc_endpoint_service_name, "XksProxyAuthenticationCredential": $xks_proxy_authentication_credential, "XksProxyConnectivity": $xks_proxy_connectivity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -298,7 +298,7 @@ export def "x-amz-target-trent-service-create-custom-key-store CreateCustomKeySt
 #
 # POST /#X-Amz-Target=TrentService.CreateGrant
 # operationId: CreateGrant
-export def "x-amz-target-trent-service-create-grant CreateGrant" [
+export def "x-amz-target-trent-service-create-grant create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,29 +307,29 @@ export def "x-amz-target-trent-service-create-grant CreateGrant" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  KeyId: any
-  GranteePrincipal: any
-  --RetiringPrincipal: any
-  Operations: any
-  --Constraints: any
-  --GrantTokens: any
-  --Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  key_id: any
+  grantee_principal: any
+  --retiring-principal: any
+  operations: any
+  --constraints: any
+  --grant-tokens: any
+  --name: any
 ]: any -> record<GrantToken: record, GrantId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.CreateGrant")
-  let body = {KeyId: $KeyId, GranteePrincipal: $GranteePrincipal, RetiringPrincipal: $RetiringPrincipal, Operations: $Operations, Constraints: $Constraints, GrantTokens: $GrantTokens, Name: $Name} | compact
+  let body = {"KeyId": $key_id, "GranteePrincipal": $grantee_principal, "RetiringPrincipal": $retiring_principal, "Operations": $operations, "Constraints": $constraints, "GrantTokens": $grant_tokens, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -340,7 +340,7 @@ export def "x-amz-target-trent-service-create-grant CreateGrant" [
 #
 # POST /#X-Amz-Target=TrentService.CreateKey
 # operationId: CreateKey
-export def "x-amz-target-trent-service-create-key CreateKey" [
+export def "x-amz-target-trent-service-create-key create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,33 +349,33 @@ export def "x-amz-target-trent-service-create-key CreateKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  --Policy: any
-  --Description: any
-  --KeyUsage: any
-  --CustomerMasterKeySpec: any
-  --KeySpec: any
-  --Origin: any
-  --CustomKeyStoreId: any
-  --BypassPolicyLockoutSafetyCheck: any
-  --Tags: any
-  --MultiRegion: any
-  --XksKeyId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  --policy: any
+  --description: any
+  --key-usage: any
+  --customer-master-key-spec: any
+  --key-spec: any
+  --origin: any
+  --custom-key-store-id: any
+  --bypass-policy-lockout-safety-check: any
+  --tags: any
+  --multi-region: any
+  --xks-key-id: any
 ]: any -> record<KeyMetadata: record<AWSAccountId: record, KeyId: record, Arn: record, CreationDate: record, Enabled: record, Description: record, KeyUsage: record, KeyState: record, DeletionDate: record, ValidTo: record, Origin: record, CustomKeyStoreId: record, CloudHsmClusterId: record, ExpirationModel: record, KeyManager: record, CustomerMasterKeySpec: record, KeySpec: record, EncryptionAlgorithms: record, SigningAlgorithms: record, MultiRegion: record, MultiRegionConfiguration: record<MultiRegionKeyType: record, PrimaryKey: record, ReplicaKeys: record>, PendingDeletionWindowInDays: record, MacAlgorithms: record, XksKeyConfiguration: record<Id: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.CreateKey")
-  let body = {Policy: $Policy, Description: $Description, KeyUsage: $KeyUsage, CustomerMasterKeySpec: $CustomerMasterKeySpec, KeySpec: $KeySpec, Origin: $Origin, CustomKeyStoreId: $CustomKeyStoreId, BypassPolicyLockoutSafetyCheck: $BypassPolicyLockoutSafetyCheck, Tags: $Tags, MultiRegion: $MultiRegion, XksKeyId: $XksKeyId} | compact
+  let body = {"Policy": $policy, "Description": $description, "KeyUsage": $key_usage, "CustomerMasterKeySpec": $customer_master_key_spec, "KeySpec": $key_spec, "Origin": $origin, "CustomKeyStoreId": $custom_key_store_id, "BypassPolicyLockoutSafetyCheck": $bypass_policy_lockout_safety_check, "Tags": $tags, "MultiRegion": $multi_region, "XksKeyId": $xks_key_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -386,7 +386,7 @@ export def "x-amz-target-trent-service-create-key CreateKey" [
 #
 # POST /#X-Amz-Target=TrentService.Decrypt
 # operationId: Decrypt
-export def "x-amz-target-trent-service-decrypt Decrypt" [
+export def "x-amz-target-trent-service-decrypt post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,27 +395,27 @@ export def "x-amz-target-trent-service-decrypt Decrypt" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  CiphertextBlob: any
-  --EncryptionContext: any
-  --GrantTokens: any
-  --KeyId: any
-  --EncryptionAlgorithm: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  ciphertext_blob: any
+  --encryption-context: any
+  --grant-tokens: any
+  --key-id: any
+  --encryption-algorithm: any
 ]: any -> record<KeyId: record, Plaintext: record, EncryptionAlgorithm: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.Decrypt")
-  let body = {CiphertextBlob: $CiphertextBlob, EncryptionContext: $EncryptionContext, GrantTokens: $GrantTokens, KeyId: $KeyId, EncryptionAlgorithm: $EncryptionAlgorithm} | compact
+  let body = {"CiphertextBlob": $ciphertext_blob, "EncryptionContext": $encryption_context, "GrantTokens": $grant_tokens, "KeyId": $key_id, "EncryptionAlgorithm": $encryption_algorithm} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -426,7 +426,7 @@ export def "x-amz-target-trent-service-decrypt Decrypt" [
 #
 # POST /#X-Amz-Target=TrentService.DeleteAlias
 # operationId: DeleteAlias
-export def "x-amz-target-trent-service-delete-alias DeleteAlias" [
+export def "x-amz-target-trent-service-delete-alias delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -435,23 +435,23 @@ export def "x-amz-target-trent-service-delete-alias DeleteAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  AliasName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  alias_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.DeleteAlias")
-  let body = {AliasName: $AliasName} | compact
+  let body = {"AliasName": $alias_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -462,7 +462,7 @@ export def "x-amz-target-trent-service-delete-alias DeleteAlias" [
 #
 # POST /#X-Amz-Target=TrentService.DeleteCustomKeyStore
 # operationId: DeleteCustomKeyStore
-export def "x-amz-target-trent-service-delete-custom-key-store DeleteCustomKeyStore" [
+export def "x-amz-target-trent-service-delete-custom-key-store delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,23 +471,23 @@ export def "x-amz-target-trent-service-delete-custom-key-store DeleteCustomKeySt
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  CustomKeyStoreId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  custom_key_store_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.DeleteCustomKeyStore")
-  let body = {CustomKeyStoreId: $CustomKeyStoreId} | compact
+  let body = {"CustomKeyStoreId": $custom_key_store_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -498,7 +498,7 @@ export def "x-amz-target-trent-service-delete-custom-key-store DeleteCustomKeySt
 #
 # POST /#X-Amz-Target=TrentService.DeleteImportedKeyMaterial
 # operationId: DeleteImportedKeyMaterial
-export def "x-amz-target-trent-service-delete-imported-key-material DeleteImportedKeyMaterial" [
+export def "x-amz-target-trent-service-delete-imported-key-material delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,23 +507,23 @@ export def "x-amz-target-trent-service-delete-imported-key-material DeleteImport
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  KeyId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  key_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.DeleteImportedKeyMaterial")
-  let body = {KeyId: $KeyId} | compact
+  let body = {"KeyId": $key_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -534,7 +534,7 @@ export def "x-amz-target-trent-service-delete-imported-key-material DeleteImport
 #
 # POST /#X-Amz-Target=TrentService.DescribeCustomKeyStores
 # operationId: DescribeCustomKeyStores
-export def "x-amz-target-trent-service-describe-custom-key-stores DescribeCustomKeyStores" [
+export def "x-amz-target-trent-service-describe-custom-key-stores post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,29 +543,29 @@ export def "x-amz-target-trent-service-describe-custom-key-stores DescribeCustom
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  --CustomKeyStoreId: any
-  --CustomKeyStoreName: any
-  --Limit: any
-  --Marker: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  --custom-key-store-id: any
+  --custom-key-store-name: any
+  --limit: any
+  --marker: any
 ]: any -> record<CustomKeyStores: record, NextMarker: record, Truncated: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.DescribeCustomKeyStores" $qp)
-  let body = {CustomKeyStoreId: $CustomKeyStoreId, CustomKeyStoreName: $CustomKeyStoreName, Limit: $Limit, Marker: $Marker} | compact
+  let body = {"CustomKeyStoreId": $custom_key_store_id, "CustomKeyStoreName": $custom_key_store_name, "Limit": $limit, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -576,7 +576,7 @@ export def "x-amz-target-trent-service-describe-custom-key-stores DescribeCustom
 #
 # POST /#X-Amz-Target=TrentService.DescribeKey
 # operationId: DescribeKey
-export def "x-amz-target-trent-service-describe-key DescribeKey" [
+export def "x-amz-target-trent-service-describe-key post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -585,24 +585,24 @@ export def "x-amz-target-trent-service-describe-key DescribeKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  KeyId: any
-  --GrantTokens: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  key_id: any
+  --grant-tokens: any
 ]: any -> record<KeyMetadata: record<AWSAccountId: record, KeyId: record, Arn: record, CreationDate: record, Enabled: record, Description: record, KeyUsage: record, KeyState: record, DeletionDate: record, ValidTo: record, Origin: record, CustomKeyStoreId: record, CloudHsmClusterId: record, ExpirationModel: record, KeyManager: record, CustomerMasterKeySpec: record, KeySpec: record, EncryptionAlgorithms: record, SigningAlgorithms: record, MultiRegion: record, MultiRegionConfiguration: record<MultiRegionKeyType: record, PrimaryKey: record, ReplicaKeys: record>, PendingDeletionWindowInDays: record, MacAlgorithms: record, XksKeyConfiguration: record<Id: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.DescribeKey")
-  let body = {KeyId: $KeyId, GrantTokens: $GrantTokens} | compact
+  let body = {"KeyId": $key_id, "GrantTokens": $grant_tokens} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -613,7 +613,7 @@ export def "x-amz-target-trent-service-describe-key DescribeKey" [
 #
 # POST /#X-Amz-Target=TrentService.DisableKey
 # operationId: DisableKey
-export def "x-amz-target-trent-service-disable-key DisableKey" [
+export def "x-amz-target-trent-service-disable-key disable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,23 +622,23 @@ export def "x-amz-target-trent-service-disable-key DisableKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  KeyId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  key_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.DisableKey")
-  let body = {KeyId: $KeyId} | compact
+  let body = {"KeyId": $key_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -649,7 +649,7 @@ export def "x-amz-target-trent-service-disable-key DisableKey" [
 #
 # POST /#X-Amz-Target=TrentService.DisableKeyRotation
 # operationId: DisableKeyRotation
-export def "x-amz-target-trent-service-disable-key-rotation DisableKeyRotation" [
+export def "x-amz-target-trent-service-disable-key-rotation disable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,23 +658,23 @@ export def "x-amz-target-trent-service-disable-key-rotation DisableKeyRotation" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  KeyId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  key_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.DisableKeyRotation")
-  let body = {KeyId: $KeyId} | compact
+  let body = {"KeyId": $key_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -685,7 +685,7 @@ export def "x-amz-target-trent-service-disable-key-rotation DisableKeyRotation" 
 #
 # POST /#X-Amz-Target=TrentService.DisconnectCustomKeyStore
 # operationId: DisconnectCustomKeyStore
-export def "x-amz-target-trent-service-disconnect-custom-key-store DisconnectCustomKeyStore" [
+export def "x-amz-target-trent-service-disconnect-custom-key-store post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,23 +694,23 @@ export def "x-amz-target-trent-service-disconnect-custom-key-store DisconnectCus
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  CustomKeyStoreId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  custom_key_store_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.DisconnectCustomKeyStore")
-  let body = {CustomKeyStoreId: $CustomKeyStoreId} | compact
+  let body = {"CustomKeyStoreId": $custom_key_store_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -721,7 +721,7 @@ export def "x-amz-target-trent-service-disconnect-custom-key-store DisconnectCus
 #
 # POST /#X-Amz-Target=TrentService.EnableKey
 # operationId: EnableKey
-export def "x-amz-target-trent-service-enable-key EnableKey" [
+export def "x-amz-target-trent-service-enable-key enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -730,23 +730,23 @@ export def "x-amz-target-trent-service-enable-key EnableKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  KeyId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  key_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.EnableKey")
-  let body = {KeyId: $KeyId} | compact
+  let body = {"KeyId": $key_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -757,7 +757,7 @@ export def "x-amz-target-trent-service-enable-key EnableKey" [
 #
 # POST /#X-Amz-Target=TrentService.EnableKeyRotation
 # operationId: EnableKeyRotation
-export def "x-amz-target-trent-service-enable-key-rotation EnableKeyRotation" [
+export def "x-amz-target-trent-service-enable-key-rotation enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -766,23 +766,23 @@ export def "x-amz-target-trent-service-enable-key-rotation EnableKeyRotation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  KeyId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  key_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.EnableKeyRotation")
-  let body = {KeyId: $KeyId} | compact
+  let body = {"KeyId": $key_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -793,7 +793,7 @@ export def "x-amz-target-trent-service-enable-key-rotation EnableKeyRotation" [
 #
 # POST /#X-Amz-Target=TrentService.Encrypt
 # operationId: Encrypt
-export def "x-amz-target-trent-service-encrypt Encrypt" [
+export def "x-amz-target-trent-service-encrypt post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,27 +802,27 @@ export def "x-amz-target-trent-service-encrypt Encrypt" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  KeyId: any
-  Plaintext: any
-  --EncryptionContext: any
-  --GrantTokens: any
-  --EncryptionAlgorithm: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  key_id: any
+  plaintext: any
+  --encryption-context: any
+  --grant-tokens: any
+  --encryption-algorithm: any
 ]: any -> record<CiphertextBlob: record, KeyId: record, EncryptionAlgorithm: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.Encrypt")
-  let body = {KeyId: $KeyId, Plaintext: $Plaintext, EncryptionContext: $EncryptionContext, GrantTokens: $GrantTokens, EncryptionAlgorithm: $EncryptionAlgorithm} | compact
+  let body = {"KeyId": $key_id, "Plaintext": $plaintext, "EncryptionContext": $encryption_context, "GrantTokens": $grant_tokens, "EncryptionAlgorithm": $encryption_algorithm} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -833,7 +833,7 @@ export def "x-amz-target-trent-service-encrypt Encrypt" [
 #
 # POST /#X-Amz-Target=TrentService.GenerateDataKey
 # operationId: GenerateDataKey
-export def "x-amz-target-trent-service-generate-data-key GenerateDataKey" [
+export def "x-amz-target-trent-service-generate-data-key post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,27 +842,27 @@ export def "x-amz-target-trent-service-generate-data-key GenerateDataKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  KeyId: any
-  --EncryptionContext: any
-  --NumberOfBytes: any
-  --KeySpec: any
-  --GrantTokens: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  key_id: any
+  --encryption-context: any
+  --number-of-bytes: any
+  --key-spec: any
+  --grant-tokens: any
 ]: any -> record<CiphertextBlob: record, Plaintext: record, KeyId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.GenerateDataKey")
-  let body = {KeyId: $KeyId, EncryptionContext: $EncryptionContext, NumberOfBytes: $NumberOfBytes, KeySpec: $KeySpec, GrantTokens: $GrantTokens} | compact
+  let body = {"KeyId": $key_id, "EncryptionContext": $encryption_context, "NumberOfBytes": $number_of_bytes, "KeySpec": $key_spec, "GrantTokens": $grant_tokens} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -873,7 +873,7 @@ export def "x-amz-target-trent-service-generate-data-key GenerateDataKey" [
 #
 # POST /#X-Amz-Target=TrentService.GenerateDataKeyPair
 # operationId: GenerateDataKeyPair
-export def "x-amz-target-trent-service-generate-data-key-pair GenerateDataKeyPair" [
+export def "x-amz-target-trent-service-generate-data-key-pair post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -882,26 +882,26 @@ export def "x-amz-target-trent-service-generate-data-key-pair GenerateDataKeyPai
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  --EncryptionContext: any
-  KeyId: any
-  KeyPairSpec: any
-  --GrantTokens: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  --encryption-context: any
+  key_id: any
+  key_pair_spec: any
+  --grant-tokens: any
 ]: any -> record<PrivateKeyCiphertextBlob: record, PrivateKeyPlaintext: record, PublicKey: record, KeyId: record, KeyPairSpec: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.GenerateDataKeyPair")
-  let body = {EncryptionContext: $EncryptionContext, KeyId: $KeyId, KeyPairSpec: $KeyPairSpec, GrantTokens: $GrantTokens} | compact
+  let body = {"EncryptionContext": $encryption_context, "KeyId": $key_id, "KeyPairSpec": $key_pair_spec, "GrantTokens": $grant_tokens} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -912,7 +912,7 @@ export def "x-amz-target-trent-service-generate-data-key-pair GenerateDataKeyPai
 #
 # POST /#X-Amz-Target=TrentService.GenerateDataKeyPairWithoutPlaintext
 # operationId: GenerateDataKeyPairWithoutPlaintext
-export def "x-amz-target-trent-service-generate-data-key-pair-without-plaintext GenerateDataKeyPairWithoutPlaintext" [
+export def "x-amz-target-trent-service-generate-data-key-pair-without-plaintext post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -921,26 +921,26 @@ export def "x-amz-target-trent-service-generate-data-key-pair-without-plaintext 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  --EncryptionContext: any
-  KeyId: any
-  KeyPairSpec: any
-  --GrantTokens: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  --encryption-context: any
+  key_id: any
+  key_pair_spec: any
+  --grant-tokens: any
 ]: any -> record<PrivateKeyCiphertextBlob: record, PublicKey: record, KeyId: record, KeyPairSpec: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.GenerateDataKeyPairWithoutPlaintext")
-  let body = {EncryptionContext: $EncryptionContext, KeyId: $KeyId, KeyPairSpec: $KeyPairSpec, GrantTokens: $GrantTokens} | compact
+  let body = {"EncryptionContext": $encryption_context, "KeyId": $key_id, "KeyPairSpec": $key_pair_spec, "GrantTokens": $grant_tokens} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -951,7 +951,7 @@ export def "x-amz-target-trent-service-generate-data-key-pair-without-plaintext 
 #
 # POST /#X-Amz-Target=TrentService.GenerateDataKeyWithoutPlaintext
 # operationId: GenerateDataKeyWithoutPlaintext
-export def "x-amz-target-trent-service-generate-data-key-without-plaintext GenerateDataKeyWithoutPlaintext" [
+export def "x-amz-target-trent-service-generate-data-key-without-plaintext post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -960,27 +960,27 @@ export def "x-amz-target-trent-service-generate-data-key-without-plaintext Gener
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  KeyId: any
-  --EncryptionContext: any
-  --KeySpec: any
-  --NumberOfBytes: any
-  --GrantTokens: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  key_id: any
+  --encryption-context: any
+  --key-spec: any
+  --number-of-bytes: any
+  --grant-tokens: any
 ]: any -> record<CiphertextBlob: record, KeyId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.GenerateDataKeyWithoutPlaintext")
-  let body = {KeyId: $KeyId, EncryptionContext: $EncryptionContext, KeySpec: $KeySpec, NumberOfBytes: $NumberOfBytes, GrantTokens: $GrantTokens} | compact
+  let body = {"KeyId": $key_id, "EncryptionContext": $encryption_context, "KeySpec": $key_spec, "NumberOfBytes": $number_of_bytes, "GrantTokens": $grant_tokens} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -991,7 +991,7 @@ export def "x-amz-target-trent-service-generate-data-key-without-plaintext Gener
 #
 # POST /#X-Amz-Target=TrentService.GenerateMac
 # operationId: GenerateMac
-export def "x-amz-target-trent-service-generate-mac GenerateMac" [
+export def "x-amz-target-trent-service-generate-mac post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,26 +1000,26 @@ export def "x-amz-target-trent-service-generate-mac GenerateMac" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  Message: any
-  KeyId: any
-  MacAlgorithm: any
-  --GrantTokens: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  message: any
+  key_id: any
+  mac_algorithm: any
+  --grant-tokens: any
 ]: any -> record<Mac: record, MacAlgorithm: record, KeyId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.GenerateMac")
-  let body = {Message: $Message, KeyId: $KeyId, MacAlgorithm: $MacAlgorithm, GrantTokens: $GrantTokens} | compact
+  let body = {"Message": $message, "KeyId": $key_id, "MacAlgorithm": $mac_algorithm, "GrantTokens": $grant_tokens} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1030,7 +1030,7 @@ export def "x-amz-target-trent-service-generate-mac GenerateMac" [
 #
 # POST /#X-Amz-Target=TrentService.GenerateRandom
 # operationId: GenerateRandom
-export def "x-amz-target-trent-service-generate-random GenerateRandom" [
+export def "x-amz-target-trent-service-generate-random post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1039,24 +1039,24 @@ export def "x-amz-target-trent-service-generate-random GenerateRandom" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  --NumberOfBytes: any
-  --CustomKeyStoreId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  --number-of-bytes: any
+  --custom-key-store-id: any
 ]: any -> record<Plaintext: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.GenerateRandom")
-  let body = {NumberOfBytes: $NumberOfBytes, CustomKeyStoreId: $CustomKeyStoreId} | compact
+  let body = {"NumberOfBytes": $number_of_bytes, "CustomKeyStoreId": $custom_key_store_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1067,7 +1067,7 @@ export def "x-amz-target-trent-service-generate-random GenerateRandom" [
 #
 # POST /#X-Amz-Target=TrentService.GetKeyPolicy
 # operationId: GetKeyPolicy
-export def "x-amz-target-trent-service-get-key-policy GetKeyPolicy" [
+export def "x-amz-target-trent-service-get-key-policy get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,24 +1076,24 @@ export def "x-amz-target-trent-service-get-key-policy GetKeyPolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  KeyId: any
-  PolicyName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  key_id: any
+  policy_name: any
 ]: any -> record<Policy: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.GetKeyPolicy")
-  let body = {KeyId: $KeyId, PolicyName: $PolicyName} | compact
+  let body = {"KeyId": $key_id, "PolicyName": $policy_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1104,7 +1104,7 @@ export def "x-amz-target-trent-service-get-key-policy GetKeyPolicy" [
 #
 # POST /#X-Amz-Target=TrentService.GetKeyRotationStatus
 # operationId: GetKeyRotationStatus
-export def "x-amz-target-trent-service-get-key-rotation-status GetKeyRotationStatus" [
+export def "x-amz-target-trent-service-get-key-rotation-status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1113,23 +1113,23 @@ export def "x-amz-target-trent-service-get-key-rotation-status GetKeyRotationSta
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  KeyId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  key_id: any
 ]: any -> record<KeyRotationEnabled: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.GetKeyRotationStatus")
-  let body = {KeyId: $KeyId} | compact
+  let body = {"KeyId": $key_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1140,7 +1140,7 @@ export def "x-amz-target-trent-service-get-key-rotation-status GetKeyRotationSta
 #
 # POST /#X-Amz-Target=TrentService.GetParametersForImport
 # operationId: GetParametersForImport
-export def "x-amz-target-trent-service-get-parameters-for-import GetParametersForImport" [
+export def "x-amz-target-trent-service-get-parameters-for-import get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1149,25 +1149,25 @@ export def "x-amz-target-trent-service-get-parameters-for-import GetParametersFo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  KeyId: any
-  WrappingAlgorithm: any
-  WrappingKeySpec: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  key_id: any
+  wrapping_algorithm: any
+  wrapping_key_spec: any
 ]: any -> record<KeyId: record, ImportToken: record, PublicKey: record, ParametersValidTo: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.GetParametersForImport")
-  let body = {KeyId: $KeyId, WrappingAlgorithm: $WrappingAlgorithm, WrappingKeySpec: $WrappingKeySpec} | compact
+  let body = {"KeyId": $key_id, "WrappingAlgorithm": $wrapping_algorithm, "WrappingKeySpec": $wrapping_key_spec} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1178,7 +1178,7 @@ export def "x-amz-target-trent-service-get-parameters-for-import GetParametersFo
 #
 # POST /#X-Amz-Target=TrentService.GetPublicKey
 # operationId: GetPublicKey
-export def "x-amz-target-trent-service-get-public-key GetPublicKey" [
+export def "x-amz-target-trent-service-get-public-key get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1187,24 +1187,24 @@ export def "x-amz-target-trent-service-get-public-key GetPublicKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  KeyId: any
-  --GrantTokens: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  key_id: any
+  --grant-tokens: any
 ]: any -> record<KeyId: record, PublicKey: record, CustomerMasterKeySpec: record, KeySpec: record, KeyUsage: record, EncryptionAlgorithms: record, SigningAlgorithms: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.GetPublicKey")
-  let body = {KeyId: $KeyId, GrantTokens: $GrantTokens} | compact
+  let body = {"KeyId": $key_id, "GrantTokens": $grant_tokens} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1215,7 +1215,7 @@ export def "x-amz-target-trent-service-get-public-key GetPublicKey" [
 #
 # POST /#X-Amz-Target=TrentService.ImportKeyMaterial
 # operationId: ImportKeyMaterial
-export def "x-amz-target-trent-service-import-key-material ImportKeyMaterial" [
+export def "x-amz-target-trent-service-import-key-material import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1224,27 +1224,27 @@ export def "x-amz-target-trent-service-import-key-material ImportKeyMaterial" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  KeyId: any
-  ImportToken: any
-  EncryptedKeyMaterial: any
-  --ValidTo: any
-  --ExpirationModel: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  key_id: any
+  import_token: any
+  encrypted_key_material: any
+  --valid-to: any
+  --expiration-model: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.ImportKeyMaterial")
-  let body = {KeyId: $KeyId, ImportToken: $ImportToken, EncryptedKeyMaterial: $EncryptedKeyMaterial, ValidTo: $ValidTo, ExpirationModel: $ExpirationModel} | compact
+  let body = {"KeyId": $key_id, "ImportToken": $import_token, "EncryptedKeyMaterial": $encrypted_key_material, "ValidTo": $valid_to, "ExpirationModel": $expiration_model} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1255,7 +1255,7 @@ export def "x-amz-target-trent-service-import-key-material ImportKeyMaterial" [
 #
 # POST /#X-Amz-Target=TrentService.ListAliases
 # operationId: ListAliases
-export def "x-amz-target-trent-service-list-aliases ListAliases" [
+export def "x-amz-target-trent-service-list-aliases list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1264,28 +1264,28 @@ export def "x-amz-target-trent-service-list-aliases ListAliases" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  --KeyId: any
-  --Limit: any
-  --Marker: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  --key-id: any
+  --limit: any
+  --marker: any
 ]: any -> record<Aliases: record, NextMarker: record, Truncated: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.ListAliases" $qp)
-  let body = {KeyId: $KeyId, Limit: $Limit, Marker: $Marker} | compact
+  let body = {"KeyId": $key_id, "Limit": $limit, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1296,7 +1296,7 @@ export def "x-amz-target-trent-service-list-aliases ListAliases" [
 #
 # POST /#X-Amz-Target=TrentService.ListGrants
 # operationId: ListGrants
-export def "x-amz-target-trent-service-list-grants ListGrants" [
+export def "x-amz-target-trent-service-list-grants list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1305,30 +1305,30 @@ export def "x-amz-target-trent-service-list-grants ListGrants" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  --Limit: any
-  --Marker: any
-  KeyId: any
-  --GrantId: any
-  --GranteePrincipal: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  --limit: any
+  --marker: any
+  key_id: any
+  --grant-id: any
+  --grantee-principal: any
 ]: any -> record<Grants: record, NextMarker: record, Truncated: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.ListGrants" $qp)
-  let body = {Limit: $Limit, Marker: $Marker, KeyId: $KeyId, GrantId: $GrantId, GranteePrincipal: $GranteePrincipal} | compact
+  let body = {"Limit": $limit, "Marker": $marker, "KeyId": $key_id, "GrantId": $grant_id, "GranteePrincipal": $grantee_principal} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1339,7 +1339,7 @@ export def "x-amz-target-trent-service-list-grants ListGrants" [
 #
 # POST /#X-Amz-Target=TrentService.ListKeyPolicies
 # operationId: ListKeyPolicies
-export def "x-amz-target-trent-service-list-key-policies ListKeyPolicies" [
+export def "x-amz-target-trent-service-list-key-policies list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1348,28 +1348,28 @@ export def "x-amz-target-trent-service-list-key-policies ListKeyPolicies" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  KeyId: any
-  --Limit: any
-  --Marker: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  key_id: any
+  --limit: any
+  --marker: any
 ]: any -> record<PolicyNames: record, NextMarker: record, Truncated: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.ListKeyPolicies" $qp)
-  let body = {KeyId: $KeyId, Limit: $Limit, Marker: $Marker} | compact
+  let body = {"KeyId": $key_id, "Limit": $limit, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1380,7 +1380,7 @@ export def "x-amz-target-trent-service-list-key-policies ListKeyPolicies" [
 #
 # POST /#X-Amz-Target=TrentService.ListKeys
 # operationId: ListKeys
-export def "x-amz-target-trent-service-list-keys ListKeys" [
+export def "x-amz-target-trent-service-list-keys list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1389,27 +1389,27 @@ export def "x-amz-target-trent-service-list-keys ListKeys" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  --Limit: any
-  --Marker: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  --limit: any
+  --marker: any
 ]: any -> record<Keys: record, NextMarker: record, Truncated: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.ListKeys" $qp)
-  let body = {Limit: $Limit, Marker: $Marker} | compact
+  let body = {"Limit": $limit, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1420,7 +1420,7 @@ export def "x-amz-target-trent-service-list-keys ListKeys" [
 #
 # POST /#X-Amz-Target=TrentService.ListResourceTags
 # operationId: ListResourceTags
-export def "x-amz-target-trent-service-list-resource-tags ListResourceTags" [
+export def "x-amz-target-trent-service-list-resource-tags list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1429,28 +1429,28 @@ export def "x-amz-target-trent-service-list-resource-tags ListResourceTags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  KeyId: any
-  --Limit: any
-  --Marker: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  key_id: any
+  --limit: any
+  --marker: any
 ]: any -> record<Tags: record, NextMarker: record, Truncated: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.ListResourceTags" $qp)
-  let body = {KeyId: $KeyId, Limit: $Limit, Marker: $Marker} | compact
+  let body = {"KeyId": $key_id, "Limit": $limit, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1461,7 +1461,7 @@ export def "x-amz-target-trent-service-list-resource-tags ListResourceTags" [
 #
 # POST /#X-Amz-Target=TrentService.ListRetirableGrants
 # operationId: ListRetirableGrants
-export def "x-amz-target-trent-service-list-retirable-grants ListRetirableGrants" [
+export def "x-amz-target-trent-service-list-retirable-grants list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1470,28 +1470,28 @@ export def "x-amz-target-trent-service-list-retirable-grants ListRetirableGrants
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  --Limit: any
-  --Marker: any
-  RetiringPrincipal: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  --limit: any
+  --marker: any
+  retiring_principal: any
 ]: any -> record<Grants: record, NextMarker: record, Truncated: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.ListRetirableGrants" $qp)
-  let body = {Limit: $Limit, Marker: $Marker, RetiringPrincipal: $RetiringPrincipal} | compact
+  let body = {"Limit": $limit, "Marker": $marker, "RetiringPrincipal": $retiring_principal} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1502,7 +1502,7 @@ export def "x-amz-target-trent-service-list-retirable-grants ListRetirableGrants
 #
 # POST /#X-Amz-Target=TrentService.PutKeyPolicy
 # operationId: PutKeyPolicy
-export def "x-amz-target-trent-service-put-key-policy PutKeyPolicy" [
+export def "x-amz-target-trent-service-put-key-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1511,26 +1511,26 @@ export def "x-amz-target-trent-service-put-key-policy PutKeyPolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  KeyId: any
-  PolicyName: any
-  Policy: any
-  --BypassPolicyLockoutSafetyCheck: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  key_id: any
+  policy_name: any
+  policy: any
+  --bypass-policy-lockout-safety-check: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.PutKeyPolicy")
-  let body = {KeyId: $KeyId, PolicyName: $PolicyName, Policy: $Policy, BypassPolicyLockoutSafetyCheck: $BypassPolicyLockoutSafetyCheck} | compact
+  let body = {"KeyId": $key_id, "PolicyName": $policy_name, "Policy": $policy, "BypassPolicyLockoutSafetyCheck": $bypass_policy_lockout_safety_check} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1541,7 +1541,7 @@ export def "x-amz-target-trent-service-put-key-policy PutKeyPolicy" [
 #
 # POST /#X-Amz-Target=TrentService.ReEncrypt
 # operationId: ReEncrypt
-export def "x-amz-target-trent-service-re-encrypt ReEncrypt" [
+export def "x-amz-target-trent-service-re-encrypt post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1550,30 +1550,30 @@ export def "x-amz-target-trent-service-re-encrypt ReEncrypt" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  CiphertextBlob: any
-  --SourceEncryptionContext: any
-  --SourceKeyId: any
-  DestinationKeyId: any
-  --DestinationEncryptionContext: any
-  --SourceEncryptionAlgorithm: any
-  --DestinationEncryptionAlgorithm: any
-  --GrantTokens: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  ciphertext_blob: any
+  --source-encryption-context: any
+  --source-key-id: any
+  destination_key_id: any
+  --destination-encryption-context: any
+  --source-encryption-algorithm: any
+  --destination-encryption-algorithm: any
+  --grant-tokens: any
 ]: any -> record<CiphertextBlob: record, SourceKeyId: record, KeyId: record, SourceEncryptionAlgorithm: record, DestinationEncryptionAlgorithm: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.ReEncrypt")
-  let body = {CiphertextBlob: $CiphertextBlob, SourceEncryptionContext: $SourceEncryptionContext, SourceKeyId: $SourceKeyId, DestinationKeyId: $DestinationKeyId, DestinationEncryptionContext: $DestinationEncryptionContext, SourceEncryptionAlgorithm: $SourceEncryptionAlgorithm, DestinationEncryptionAlgorithm: $DestinationEncryptionAlgorithm, GrantTokens: $GrantTokens} | compact
+  let body = {"CiphertextBlob": $ciphertext_blob, "SourceEncryptionContext": $source_encryption_context, "SourceKeyId": $source_key_id, "DestinationKeyId": $destination_key_id, "DestinationEncryptionContext": $destination_encryption_context, "SourceEncryptionAlgorithm": $source_encryption_algorithm, "DestinationEncryptionAlgorithm": $destination_encryption_algorithm, "GrantTokens": $grant_tokens} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1584,7 +1584,7 @@ export def "x-amz-target-trent-service-re-encrypt ReEncrypt" [
 #
 # POST /#X-Amz-Target=TrentService.ReplicateKey
 # operationId: ReplicateKey
-export def "x-amz-target-trent-service-replicate-key ReplicateKey" [
+export def "x-amz-target-trent-service-replicate-key post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1593,28 +1593,28 @@ export def "x-amz-target-trent-service-replicate-key ReplicateKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  KeyId: any
-  ReplicaRegion: any
-  --Policy: any
-  --BypassPolicyLockoutSafetyCheck: any
-  --Description: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  key_id: any
+  replica_region: any
+  --policy: any
+  --bypass-policy-lockout-safety-check: any
+  --description: any
+  --tags: any
 ]: any -> record<ReplicaKeyMetadata: record<AWSAccountId: record, KeyId: record, Arn: record, CreationDate: record, Enabled: record, Description: record, KeyUsage: record, KeyState: record, DeletionDate: record, ValidTo: record, Origin: record, CustomKeyStoreId: record, CloudHsmClusterId: record, ExpirationModel: record, KeyManager: record, CustomerMasterKeySpec: record, KeySpec: record, EncryptionAlgorithms: record, SigningAlgorithms: record, MultiRegion: record, MultiRegionConfiguration: record<MultiRegionKeyType: record, PrimaryKey: record, ReplicaKeys: record>, PendingDeletionWindowInDays: record, MacAlgorithms: record, XksKeyConfiguration: record<Id: record>>, ReplicaPolicy: record, ReplicaTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.ReplicateKey")
-  let body = {KeyId: $KeyId, ReplicaRegion: $ReplicaRegion, Policy: $Policy, BypassPolicyLockoutSafetyCheck: $BypassPolicyLockoutSafetyCheck, Description: $Description, Tags: $Tags} | compact
+  let body = {"KeyId": $key_id, "ReplicaRegion": $replica_region, "Policy": $policy, "BypassPolicyLockoutSafetyCheck": $bypass_policy_lockout_safety_check, "Description": $description, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1625,7 +1625,7 @@ export def "x-amz-target-trent-service-replicate-key ReplicateKey" [
 #
 # POST /#X-Amz-Target=TrentService.RetireGrant
 # operationId: RetireGrant
-export def "x-amz-target-trent-service-retire-grant RetireGrant" [
+export def "x-amz-target-trent-service-retire-grant post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1634,25 +1634,25 @@ export def "x-amz-target-trent-service-retire-grant RetireGrant" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  --GrantToken: any
-  --KeyId: any
-  --GrantId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  --grant-token: any
+  --key-id: any
+  --grant-id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.RetireGrant")
-  let body = {GrantToken: $GrantToken, KeyId: $KeyId, GrantId: $GrantId} | compact
+  let body = {"GrantToken": $grant_token, "KeyId": $key_id, "GrantId": $grant_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1663,7 +1663,7 @@ export def "x-amz-target-trent-service-retire-grant RetireGrant" [
 #
 # POST /#X-Amz-Target=TrentService.RevokeGrant
 # operationId: RevokeGrant
-export def "x-amz-target-trent-service-revoke-grant RevokeGrant" [
+export def "x-amz-target-trent-service-revoke-grant delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1672,24 +1672,24 @@ export def "x-amz-target-trent-service-revoke-grant RevokeGrant" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  KeyId: any
-  GrantId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  key_id: any
+  grant_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.RevokeGrant")
-  let body = {KeyId: $KeyId, GrantId: $GrantId} | compact
+  let body = {"KeyId": $key_id, "GrantId": $grant_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1700,7 +1700,7 @@ export def "x-amz-target-trent-service-revoke-grant RevokeGrant" [
 #
 # POST /#X-Amz-Target=TrentService.ScheduleKeyDeletion
 # operationId: ScheduleKeyDeletion
-export def "x-amz-target-trent-service-schedule-key-deletion ScheduleKeyDeletion" [
+export def "x-amz-target-trent-service-schedule-key-deletion post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1709,24 +1709,24 @@ export def "x-amz-target-trent-service-schedule-key-deletion ScheduleKeyDeletion
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  KeyId: any
-  --PendingWindowInDays: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  key_id: any
+  --pending-window-in-days: any
 ]: any -> record<KeyId: record, DeletionDate: record, KeyState: record, PendingWindowInDays: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.ScheduleKeyDeletion")
-  let body = {KeyId: $KeyId, PendingWindowInDays: $PendingWindowInDays} | compact
+  let body = {"KeyId": $key_id, "PendingWindowInDays": $pending_window_in_days} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1737,7 +1737,7 @@ export def "x-amz-target-trent-service-schedule-key-deletion ScheduleKeyDeletion
 #
 # POST /#X-Amz-Target=TrentService.Sign
 # operationId: Sign
-export def "x-amz-target-trent-service-sign Sign" [
+export def "x-amz-target-trent-service-sign post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1746,27 +1746,27 @@ export def "x-amz-target-trent-service-sign Sign" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  KeyId: any
-  Message: any
-  --MessageType: any
-  --GrantTokens: any
-  SigningAlgorithm: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  key_id: any
+  message: any
+  --message-type: any
+  --grant-tokens: any
+  signing_algorithm: any
 ]: any -> record<KeyId: record, Signature: record, SigningAlgorithm: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.Sign")
-  let body = {KeyId: $KeyId, Message: $Message, MessageType: $MessageType, GrantTokens: $GrantTokens, SigningAlgorithm: $SigningAlgorithm} | compact
+  let body = {"KeyId": $key_id, "Message": $message, "MessageType": $message_type, "GrantTokens": $grant_tokens, "SigningAlgorithm": $signing_algorithm} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1777,7 +1777,7 @@ export def "x-amz-target-trent-service-sign Sign" [
 #
 # POST /#X-Amz-Target=TrentService.TagResource
 # operationId: TagResource
-export def "x-amz-target-trent-service-tag-resource TagResource" [
+export def "x-amz-target-trent-service-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1786,24 +1786,24 @@ export def "x-amz-target-trent-service-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  KeyId: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  key_id: any
+  tags: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.TagResource")
-  let body = {KeyId: $KeyId, Tags: $Tags} | compact
+  let body = {"KeyId": $key_id, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1814,7 +1814,7 @@ export def "x-amz-target-trent-service-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=TrentService.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-trent-service-untag-resource UntagResource" [
+export def "x-amz-target-trent-service-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1823,24 +1823,24 @@ export def "x-amz-target-trent-service-untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  KeyId: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  key_id: any
+  tag_keys: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.UntagResource")
-  let body = {KeyId: $KeyId, TagKeys: $TagKeys} | compact
+  let body = {"KeyId": $key_id, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1851,7 +1851,7 @@ export def "x-amz-target-trent-service-untag-resource UntagResource" [
 #
 # POST /#X-Amz-Target=TrentService.UpdateAlias
 # operationId: UpdateAlias
-export def "x-amz-target-trent-service-update-alias UpdateAlias" [
+export def "x-amz-target-trent-service-update-alias update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1860,24 +1860,24 @@ export def "x-amz-target-trent-service-update-alias UpdateAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  AliasName: any
-  TargetKeyId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  alias_name: any
+  target_key_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.UpdateAlias")
-  let body = {AliasName: $AliasName, TargetKeyId: $TargetKeyId} | compact
+  let body = {"AliasName": $alias_name, "TargetKeyId": $target_key_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1888,7 +1888,7 @@ export def "x-amz-target-trent-service-update-alias UpdateAlias" [
 #
 # POST /#X-Amz-Target=TrentService.UpdateCustomKeyStore
 # operationId: UpdateCustomKeyStore
-export def "x-amz-target-trent-service-update-custom-key-store UpdateCustomKeyStore" [
+export def "x-amz-target-trent-service-update-custom-key-store update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1897,31 +1897,31 @@ export def "x-amz-target-trent-service-update-custom-key-store UpdateCustomKeySt
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  CustomKeyStoreId: any
-  --NewCustomKeyStoreName: any
-  --KeyStorePassword: any
-  --CloudHsmClusterId: any
-  --XksProxyUriEndpoint: any
-  --XksProxyUriPath: any
-  --XksProxyVpcEndpointServiceName: any
-  --XksProxyAuthenticationCredential: any
-  --XksProxyConnectivity: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  custom_key_store_id: any
+  --new-custom-key-store-name: any
+  --key-store-password: any
+  --cloud-hsm-cluster-id: any
+  --xks-proxy-uri-endpoint: any
+  --xks-proxy-uri-path: any
+  --xks-proxy-vpc-endpoint-service-name: any
+  --xks-proxy-authentication-credential: any
+  --xks-proxy-connectivity: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.UpdateCustomKeyStore")
-  let body = {CustomKeyStoreId: $CustomKeyStoreId, NewCustomKeyStoreName: $NewCustomKeyStoreName, KeyStorePassword: $KeyStorePassword, CloudHsmClusterId: $CloudHsmClusterId, XksProxyUriEndpoint: $XksProxyUriEndpoint, XksProxyUriPath: $XksProxyUriPath, XksProxyVpcEndpointServiceName: $XksProxyVpcEndpointServiceName, XksProxyAuthenticationCredential: $XksProxyAuthenticationCredential, XksProxyConnectivity: $XksProxyConnectivity} | compact
+  let body = {"CustomKeyStoreId": $custom_key_store_id, "NewCustomKeyStoreName": $new_custom_key_store_name, "KeyStorePassword": $key_store_password, "CloudHsmClusterId": $cloud_hsm_cluster_id, "XksProxyUriEndpoint": $xks_proxy_uri_endpoint, "XksProxyUriPath": $xks_proxy_uri_path, "XksProxyVpcEndpointServiceName": $xks_proxy_vpc_endpoint_service_name, "XksProxyAuthenticationCredential": $xks_proxy_authentication_credential, "XksProxyConnectivity": $xks_proxy_connectivity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1932,7 +1932,7 @@ export def "x-amz-target-trent-service-update-custom-key-store UpdateCustomKeySt
 #
 # POST /#X-Amz-Target=TrentService.UpdateKeyDescription
 # operationId: UpdateKeyDescription
-export def "x-amz-target-trent-service-update-key-description UpdateKeyDescription" [
+export def "x-amz-target-trent-service-update-key-description update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1941,24 +1941,24 @@ export def "x-amz-target-trent-service-update-key-description UpdateKeyDescripti
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  KeyId: any
-  Description: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  key_id: any
+  description: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.UpdateKeyDescription")
-  let body = {KeyId: $KeyId, Description: $Description} | compact
+  let body = {"KeyId": $key_id, "Description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1969,7 +1969,7 @@ export def "x-amz-target-trent-service-update-key-description UpdateKeyDescripti
 #
 # POST /#X-Amz-Target=TrentService.UpdatePrimaryRegion
 # operationId: UpdatePrimaryRegion
-export def "x-amz-target-trent-service-update-primary-region UpdatePrimaryRegion" [
+export def "x-amz-target-trent-service-update-primary-region update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1978,24 +1978,24 @@ export def "x-amz-target-trent-service-update-primary-region UpdatePrimaryRegion
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
-  KeyId: any
-  PrimaryRegion: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
+  key_id: any
+  primary_region: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.UpdatePrimaryRegion")
-  let body = {KeyId: $KeyId, PrimaryRegion: $PrimaryRegion} | compact
+  let body = {"KeyId": $key_id, "PrimaryRegion": $primary_region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2006,7 +2006,7 @@ export def "x-amz-target-trent-service-update-primary-region UpdatePrimaryRegion
 #
 # POST /#X-Amz-Target=TrentService.Verify
 # operationId: Verify
-export def "x-amz-target-trent-service-verify Verify" [
+export def "x-amz-target-trent-service-verify verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2015,28 +2015,28 @@ export def "x-amz-target-trent-service-verify Verify" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
-  KeyId: any
-  Message: any
-  --MessageType: any
-  Signature: any
-  SigningAlgorithm: any
-  --GrantTokens: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
+  key_id: any
+  message: any
+  --message-type: any
+  signature: any
+  signing_algorithm: any
+  --grant-tokens: any
 ]: any -> record<KeyId: record, SignatureValid: record, SigningAlgorithm: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.Verify")
-  let body = {KeyId: $KeyId, Message: $Message, MessageType: $MessageType, Signature: $Signature, SigningAlgorithm: $SigningAlgorithm, GrantTokens: $GrantTokens} | compact
+  let body = {"KeyId": $key_id, "Message": $message, "MessageType": $message_type, "Signature": $signature, "SigningAlgorithm": $signing_algorithm, "GrantTokens": $grant_tokens} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2047,7 +2047,7 @@ export def "x-amz-target-trent-service-verify Verify" [
 #
 # POST /#X-Amz-Target=TrentService.VerifyMac
 # operationId: VerifyMac
-export def "x-amz-target-trent-service-verify-mac VerifyMac" [
+export def "x-amz-target-trent-service-verify-mac verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2056,27 +2056,27 @@ export def "x-amz-target-trent-service-verify-mac VerifyMac" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-49
-  Message: any
-  KeyId: any
-  MacAlgorithm: any
-  Mac: any
-  --GrantTokens: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-49
+  message: any
+  key_id: any
+  mac_algorithm: any
+  mac: any
+  --grant-tokens: any
 ]: any -> record<KeyId: record, MacValid: record, MacAlgorithm: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=TrentService.VerifyMac")
-  let body = {Message: $Message, KeyId: $KeyId, MacAlgorithm: $MacAlgorithm, Mac: $Mac, GrantTokens: $GrantTokens} | compact
+  let body = {"Message": $message, "KeyId": $key_id, "MacAlgorithm": $mac_algorithm, "Mac": $mac, "GrantTokens": $grant_tokens} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

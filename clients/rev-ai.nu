@@ -66,15 +66,13 @@ def base-url-completer [] { ["https://api.rev.ai/speechtotext/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def Accept-completer [] { ["application/x-subrip" "text/vtt"] }
 def accept-completer [] { ["application/x-subrip" "text/vtt"] }
-def Accept-completer-1 [] { ["application/vnd.rev.transcript.v1.0+json" "text/plain"] }
 def accept-completer-1 [] { ["application/vnd.rev.transcript.v1.0+json" "text/plain"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account GetAccount" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /account
 # operationId: GetAccount
-export def "account GetAccount" [
+export def "account get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,7 +118,7 @@ export def "account GetAccount" [
 #
 # GET /jobs
 # operationId: GetListOfJobs
-export def "jobs GetListOfJobs" [
+export def "jobs get-list-of" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,7 +143,7 @@ export def "jobs GetListOfJobs" [
 #
 # POST /jobs
 # operationId: SubmitTranscriptionJob
-export def "jobs SubmitTranscriptionJob" [
+export def "jobs submit-transcription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +158,7 @@ export def "jobs SubmitTranscriptionJob" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/jobs")
-  let body = {media_url: $media_url} | compact
+  let body = {"media_url": $media_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -171,7 +169,7 @@ export def "jobs SubmitTranscriptionJob" [
 #
 # DELETE /jobs/{id}
 # operationId: DeleteJobById
-export def "jobs DeleteJobById" [
+export def "jobs delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -184,7 +182,7 @@ export def "jobs DeleteJobById" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/jobs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -194,7 +192,7 @@ export def "jobs DeleteJobById" [
 #
 # GET /jobs/{id}
 # operationId: GetJobById
-export def "jobs GetJobById" [
+export def "jobs get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -207,7 +205,7 @@ export def "jobs GetJobById" [
 ]: nothing -> record<callback_url: any, completed_on: string, created_on: string, custom_vocabulary_id: any, delete_after_seconds: any, duration_seconds: float, failure: string, failure_detail: string, filter_profanity: any, id: string, language: any, media_url: any, metadata: any, name: string, remove_disfluencies: any, skip_diarization: any, skip_punctuation: any, speaker_channels_count: any, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/jobs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -217,7 +215,7 @@ export def "jobs GetJobById" [
 #
 # GET /jobs/{id}/captions
 # operationId: GetCaptions
-export def "jobs-captions GetCaptions" [
+export def "jobs-captions get" [
   id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -229,13 +227,13 @@ export def "jobs-captions GetCaptions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --speaker-channel: int # Identifies which channel of the job output to caption. Default is `null` which works only for jobs with no `speaker_channels_count` provided during job submission.
-  --Accept: string@Accept-completer # MIME type specifying the caption output format
+  --hdr-accept: string@accept-completer # MIME type specifying the caption output format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "speaker_channel" $speaker_channel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/jobs/($id)/captions" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}/captions") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/x-subrip")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -246,7 +244,7 @@ export def "jobs-captions GetCaptions" [
 #
 # GET /jobs/{id}/transcript
 # operationId: GetTranscriptById
-export def "jobs-transcript GetTranscriptById" [
+export def "jobs-transcript get" [
   id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -257,12 +255,12 @@ export def "jobs-transcript GetTranscriptById" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --Accept: string@Accept-completer-1 # MIME type specifying the transcription output format
+  --hdr-accept: string@accept-completer-1 # MIME type specifying the transcription output format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/jobs/($id)/transcript")
-  let extra_headers = {"Accept": $Accept} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}/transcript"))
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/vnd.rev.transcript.v1.0+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

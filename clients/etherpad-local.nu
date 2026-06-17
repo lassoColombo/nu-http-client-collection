@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["query-apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "append-chat-message appendChatMessageUsingGET" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "append-chat-message create-chat-message-using-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /appendChatMessage
 # operationId: appendChatMessageUsingGET
-export def "append-chat-message appendChatMessageUsingGET" [
+export def "append-chat-message create-chat-message-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,14 +102,14 @@ export def "append-chat-message appendChatMessageUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --text: string
-  --authorID: string
+  --author-id: string
   --time: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "authorID" $authorID "scalar") (serialize-qp "time" $time "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "authorID" $author_id "scalar") (serialize-qp "time" $time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appendChatMessage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,7 +120,7 @@ export def "append-chat-message appendChatMessageUsingGET" [
 #
 # POST /appendChatMessage
 # operationId: appendChatMessageUsingPOST
-export def "append-chat-message appendChatMessageUsingPOST" [
+export def "append-chat-message create-chat-message-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,14 +129,14 @@ export def "append-chat-message appendChatMessageUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --text: string
-  --authorID: string
+  --author-id: string
   --time: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "authorID" $authorID "scalar") (serialize-qp "time" $time "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "authorID" $author_id "scalar") (serialize-qp "time" $time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appendChatMessage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -146,7 +146,7 @@ export def "append-chat-message appendChatMessageUsingPOST" [
 # GET /appendText
 #
 # operationId: appendTextUsingGET
-export def "append-text appendTextUsingGET" [
+export def "append-text create-text-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,12 +155,12 @@ export def "append-text appendTextUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --text: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appendText" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -170,7 +170,7 @@ export def "append-text appendTextUsingGET" [
 # POST /appendText
 #
 # operationId: appendTextUsingPOST
-export def "append-text appendTextUsingPOST" [
+export def "append-text create-text-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,12 +179,12 @@ export def "append-text appendTextUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --text: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appendText" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -195,7 +195,7 @@ export def "append-text appendTextUsingPOST" [
 #
 # GET /checkToken
 # operationId: checkTokenUsingGET
-export def "check-token checkTokenUsingGET" [
+export def "check-token check-token-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "check-token checkTokenUsingGET" [
 #
 # POST /checkToken
 # operationId: checkTokenUsingPOST
-export def "check-token checkTokenUsingPOST" [
+export def "check-token check-token-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "check-token checkTokenUsingPOST" [
 # GET /copyPad
 #
 # operationId: copyPadUsingGET
-export def "copy-pad copyPadUsingGET" [
+export def "copy-pad copy-pad-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,13 +247,13 @@ export def "copy-pad copyPadUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sourceID: string
-  --destinationID: string
+  --source-id: string
+  --destination-id: string
   --force: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sourceID" $sourceID "scalar") (serialize-qp "destinationID" $destinationID "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/copyPad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -263,7 +263,7 @@ export def "copy-pad copyPadUsingGET" [
 # POST /copyPad
 #
 # operationId: copyPadUsingPOST
-export def "copy-pad copyPadUsingPOST" [
+export def "copy-pad copy-pad-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,13 +272,13 @@ export def "copy-pad copyPadUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sourceID: string
-  --destinationID: string
+  --source-id: string
+  --destination-id: string
   --force: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sourceID" $sourceID "scalar") (serialize-qp "destinationID" $destinationID "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/copyPad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -288,7 +288,7 @@ export def "copy-pad copyPadUsingPOST" [
 # GET /copyPadWithoutHistory
 #
 # operationId: copyPadWithoutHistoryUsingGET
-export def "copy-pad-without-history copyPadWithoutHistoryUsingGET" [
+export def "copy-pad-without-history copy-pad-without-history-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -297,13 +297,13 @@ export def "copy-pad-without-history copyPadWithoutHistoryUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sourceID: string
-  --destinationID: string
+  --source-id: string
+  --destination-id: string
   --force: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sourceID" $sourceID "scalar") (serialize-qp "destinationID" $destinationID "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/copyPadWithoutHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -313,7 +313,7 @@ export def "copy-pad-without-history copyPadWithoutHistoryUsingGET" [
 # POST /copyPadWithoutHistory
 #
 # operationId: copyPadWithoutHistoryUsingPOST
-export def "copy-pad-without-history copyPadWithoutHistoryUsingPOST" [
+export def "copy-pad-without-history copy-pad-without-history-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,13 +322,13 @@ export def "copy-pad-without-history copyPadWithoutHistoryUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sourceID: string
-  --destinationID: string
+  --source-id: string
+  --destination-id: string
   --force: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sourceID" $sourceID "scalar") (serialize-qp "destinationID" $destinationID "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/copyPadWithoutHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -339,7 +339,7 @@ export def "copy-pad-without-history copyPadWithoutHistoryUsingPOST" [
 #
 # GET /createAuthor
 # operationId: createAuthorUsingGET
-export def "create-author createAuthorUsingGET" [
+export def "create-author create-author-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "create-author createAuthorUsingGET" [
 #
 # POST /createAuthor
 # operationId: createAuthorUsingPOST
-export def "create-author createAuthorUsingPOST" [
+export def "create-author create-author-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -387,7 +387,7 @@ export def "create-author createAuthorUsingPOST" [
 #
 # GET /createAuthorIfNotExistsFor
 # operationId: createAuthorIfNotExistsForUsingGET
-export def "create-author-if-not-exists-for createAuthorIfNotExistsForUsingGET" [
+export def "create-author-if-not-exists-for create-author-if-not-exists-for-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,12 +396,12 @@ export def "create-author-if-not-exists-for createAuthorIfNotExistsForUsingGET" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorMapper: string
+  --author-mapper: string
   --name: string
 ]: nothing -> record<code: int, data: record<authorID: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "authorMapper" $authorMapper "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "authorMapper" $author_mapper "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createAuthorIfNotExistsFor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -412,7 +412,7 @@ export def "create-author-if-not-exists-for createAuthorIfNotExistsForUsingGET" 
 #
 # POST /createAuthorIfNotExistsFor
 # operationId: createAuthorIfNotExistsForUsingPOST
-export def "create-author-if-not-exists-for createAuthorIfNotExistsForUsingPOST" [
+export def "create-author-if-not-exists-for create-author-if-not-exists-for-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,12 +421,12 @@ export def "create-author-if-not-exists-for createAuthorIfNotExistsForUsingPOST"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorMapper: string
+  --author-mapper: string
   --name: string
 ]: nothing -> record<code: int, data: record<authorID: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "authorMapper" $authorMapper "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "authorMapper" $author_mapper "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createAuthorIfNotExistsFor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -436,7 +436,7 @@ export def "create-author-if-not-exists-for createAuthorIfNotExistsForUsingPOST"
 # GET /createDiffHTML
 #
 # operationId: createDiffHTMLUsingGET
-export def "create-diff-html createDiffHTMLUsingGET" [
+export def "create-diff-html create-diff-html-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -445,13 +445,13 @@ export def "create-diff-html createDiffHTMLUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
-  --startRev: string
-  --endRev: string
+  --pad-id: string
+  --start-rev: string
+  --end-rev: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "startRev" $startRev "scalar") (serialize-qp "endRev" $endRev "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "startRev" $start_rev "scalar") (serialize-qp "endRev" $end_rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createDiffHTML" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -461,7 +461,7 @@ export def "create-diff-html createDiffHTMLUsingGET" [
 # POST /createDiffHTML
 #
 # operationId: createDiffHTMLUsingPOST
-export def "create-diff-html createDiffHTMLUsingPOST" [
+export def "create-diff-html create-diff-html-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,13 +470,13 @@ export def "create-diff-html createDiffHTMLUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
-  --startRev: string
-  --endRev: string
+  --pad-id: string
+  --start-rev: string
+  --end-rev: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "startRev" $startRev "scalar") (serialize-qp "endRev" $endRev "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "startRev" $start_rev "scalar") (serialize-qp "endRev" $end_rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createDiffHTML" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -487,7 +487,7 @@ export def "create-diff-html createDiffHTMLUsingPOST" [
 #
 # GET /createGroup
 # operationId: createGroupUsingGET
-export def "create-group createGroupUsingGET" [
+export def "create-group create-group-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,7 +509,7 @@ export def "create-group createGroupUsingGET" [
 #
 # POST /createGroup
 # operationId: createGroupUsingPOST
-export def "create-group createGroupUsingPOST" [
+export def "create-group create-group-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -531,7 +531,7 @@ export def "create-group createGroupUsingPOST" [
 #
 # GET /createGroupIfNotExistsFor
 # operationId: createGroupIfNotExistsForUsingGET
-export def "create-group-if-not-exists-for createGroupIfNotExistsForUsingGET" [
+export def "create-group-if-not-exists-for create-group-if-not-exists-for-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,11 +540,11 @@ export def "create-group-if-not-exists-for createGroupIfNotExistsForUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groupMapper: string
+  --group-mapper: string
 ]: nothing -> record<code: int, data: record<groupID: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupMapper" $groupMapper "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupMapper" $group_mapper "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createGroupIfNotExistsFor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -555,7 +555,7 @@ export def "create-group-if-not-exists-for createGroupIfNotExistsForUsingGET" [
 #
 # POST /createGroupIfNotExistsFor
 # operationId: createGroupIfNotExistsForUsingPOST
-export def "create-group-if-not-exists-for createGroupIfNotExistsForUsingPOST" [
+export def "create-group-if-not-exists-for create-group-if-not-exists-for-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,11 +564,11 @@ export def "create-group-if-not-exists-for createGroupIfNotExistsForUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groupMapper: string
+  --group-mapper: string
 ]: nothing -> record<code: int, data: record<groupID: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupMapper" $groupMapper "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupMapper" $group_mapper "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createGroupIfNotExistsFor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -579,7 +579,7 @@ export def "create-group-if-not-exists-for createGroupIfNotExistsForUsingPOST" [
 #
 # GET /createGroupPad
 # operationId: createGroupPadUsingGET
-export def "create-group-pad createGroupPadUsingGET" [
+export def "create-group-pad create-group-pad-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,13 +588,13 @@ export def "create-group-pad createGroupPadUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groupID: string
-  --padName: string
+  --group-id: string
+  --pad-name: string
   --text: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupID" $groupID "scalar") (serialize-qp "padName" $padName "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupID" $group_id "scalar") (serialize-qp "padName" $pad_name "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createGroupPad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -605,7 +605,7 @@ export def "create-group-pad createGroupPadUsingGET" [
 #
 # POST /createGroupPad
 # operationId: createGroupPadUsingPOST
-export def "create-group-pad createGroupPadUsingPOST" [
+export def "create-group-pad create-group-pad-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -614,13 +614,13 @@ export def "create-group-pad createGroupPadUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groupID: string
-  --padName: string
+  --group-id: string
+  --pad-name: string
   --text: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupID" $groupID "scalar") (serialize-qp "padName" $padName "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupID" $group_id "scalar") (serialize-qp "padName" $pad_name "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createGroupPad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -631,7 +631,7 @@ export def "create-group-pad createGroupPadUsingPOST" [
 #
 # GET /createPad
 # operationId: createPadUsingGET
-export def "create-pad createPadUsingGET" [
+export def "create-pad create-pad-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,12 +640,12 @@ export def "create-pad createPadUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --text: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createPad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -656,7 +656,7 @@ export def "create-pad createPadUsingGET" [
 #
 # POST /createPad
 # operationId: createPadUsingPOST
-export def "create-pad createPadUsingPOST" [
+export def "create-pad create-pad-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,12 +665,12 @@ export def "create-pad createPadUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --text: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createPad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -681,7 +681,7 @@ export def "create-pad createPadUsingPOST" [
 #
 # GET /createSession
 # operationId: createSessionUsingGET
-export def "create-session createSessionUsingGET" [
+export def "create-session create-session-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,13 +690,13 @@ export def "create-session createSessionUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groupID: string
-  --authorID: string
-  --validUntil: string
+  --group-id: string
+  --author-id: string
+  --valid-until: string
 ]: nothing -> record<code: int, data: record<sessionID: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupID" $groupID "scalar") (serialize-qp "authorID" $authorID "scalar") (serialize-qp "validUntil" $validUntil "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupID" $group_id "scalar") (serialize-qp "authorID" $author_id "scalar") (serialize-qp "validUntil" $valid_until "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createSession" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -707,7 +707,7 @@ export def "create-session createSessionUsingGET" [
 #
 # POST /createSession
 # operationId: createSessionUsingPOST
-export def "create-session createSessionUsingPOST" [
+export def "create-session create-session-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,13 +716,13 @@ export def "create-session createSessionUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groupID: string
-  --authorID: string
-  --validUntil: string
+  --group-id: string
+  --author-id: string
+  --valid-until: string
 ]: nothing -> record<code: int, data: record<sessionID: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupID" $groupID "scalar") (serialize-qp "authorID" $authorID "scalar") (serialize-qp "validUntil" $validUntil "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupID" $group_id "scalar") (serialize-qp "authorID" $author_id "scalar") (serialize-qp "validUntil" $valid_until "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createSession" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -733,7 +733,7 @@ export def "create-session createSessionUsingPOST" [
 #
 # GET /deleteGroup
 # operationId: deleteGroupUsingGET
-export def "delete-group get" [
+export def "delete-group delete-group-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,11 +742,11 @@ export def "delete-group get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groupID: string
+  --group-id: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupID" $groupID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deleteGroup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -757,7 +757,7 @@ export def "delete-group get" [
 #
 # POST /deleteGroup
 # operationId: deleteGroupUsingPOST
-export def "delete-group post" [
+export def "delete-group delete-group-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -766,11 +766,11 @@ export def "delete-group post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groupID: string
+  --group-id: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupID" $groupID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deleteGroup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -781,7 +781,7 @@ export def "delete-group post" [
 #
 # GET /deletePad
 # operationId: deletePadUsingGET
-export def "delete-pad get" [
+export def "delete-pad delete-pad-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -790,11 +790,11 @@ export def "delete-pad get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deletePad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -805,7 +805,7 @@ export def "delete-pad get" [
 #
 # POST /deletePad
 # operationId: deletePadUsingPOST
-export def "delete-pad post" [
+export def "delete-pad delete-pad-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -814,11 +814,11 @@ export def "delete-pad post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deletePad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -829,7 +829,7 @@ export def "delete-pad post" [
 #
 # GET /deleteSession
 # operationId: deleteSessionUsingGET
-export def "delete-session get" [
+export def "delete-session delete-session-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -838,11 +838,11 @@ export def "delete-session get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sessionID: string
+  --session-id: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sessionID" $sessionID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sessionID" $session_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deleteSession" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -853,7 +853,7 @@ export def "delete-session get" [
 #
 # POST /deleteSession
 # operationId: deleteSessionUsingPOST
-export def "delete-session post" [
+export def "delete-session delete-session-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -862,11 +862,11 @@ export def "delete-session post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sessionID: string
+  --session-id: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sessionID" $sessionID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sessionID" $session_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deleteSession" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -876,7 +876,7 @@ export def "delete-session post" [
 # GET /getAttributePool
 #
 # operationId: getAttributePoolUsingGET
-export def "get-attribute-pool get" [
+export def "get-attribute-pool get-attribute-pool-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -885,11 +885,11 @@ export def "get-attribute-pool get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getAttributePool" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -899,7 +899,7 @@ export def "get-attribute-pool get" [
 # POST /getAttributePool
 #
 # operationId: getAttributePoolUsingPOST
-export def "get-attribute-pool post" [
+export def "get-attribute-pool get-attribute-pool-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -908,11 +908,11 @@ export def "get-attribute-pool post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getAttributePool" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -923,7 +923,7 @@ export def "get-attribute-pool post" [
 #
 # GET /getAuthorName
 # operationId: getAuthorNameUsingGET
-export def "get-author-name get" [
+export def "get-author-name get-author-name-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,11 +932,11 @@ export def "get-author-name get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorID: string
+  --author-id: string
 ]: nothing -> record<code: int, data: record<info: record<colorId: string, id: string, name: string, timestamp: int>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "authorID" $authorID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getAuthorName" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -947,7 +947,7 @@ export def "get-author-name get" [
 #
 # POST /getAuthorName
 # operationId: getAuthorNameUsingPOST
-export def "get-author-name post" [
+export def "get-author-name get-author-name-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -956,11 +956,11 @@ export def "get-author-name post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorID: string
+  --author-id: string
 ]: nothing -> record<code: int, data: record<info: record<colorId: string, id: string, name: string, timestamp: int>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "authorID" $authorID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getAuthorName" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -971,7 +971,7 @@ export def "get-author-name post" [
 #
 # GET /getChatHead
 # operationId: getChatHeadUsingGET
-export def "get-chat-head get" [
+export def "get-chat-head get-chat-head-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -980,11 +980,11 @@ export def "get-chat-head get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record<chatHead: record<text: string, time: int, userId: string, userName: string>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getChatHead" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -995,7 +995,7 @@ export def "get-chat-head get" [
 #
 # POST /getChatHead
 # operationId: getChatHeadUsingPOST
-export def "get-chat-head post" [
+export def "get-chat-head get-chat-head-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1004,11 +1004,11 @@ export def "get-chat-head post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record<chatHead: record<text: string, time: int, userId: string, userName: string>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getChatHead" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1019,7 +1019,7 @@ export def "get-chat-head post" [
 #
 # GET /getChatHistory
 # operationId: getChatHistoryUsingGET
-export def "get-chat-history get" [
+export def "get-chat-history get-chat-history-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1028,13 +1028,13 @@ export def "get-chat-history get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --start: string
   --end: string
 ]: nothing -> record<code: int, data: record<messages: list<record>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getChatHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1045,7 +1045,7 @@ export def "get-chat-history get" [
 #
 # POST /getChatHistory
 # operationId: getChatHistoryUsingPOST
-export def "get-chat-history post" [
+export def "get-chat-history get-chat-history-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1054,13 +1054,13 @@ export def "get-chat-history post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --start: string
   --end: string
 ]: nothing -> record<code: int, data: record<messages: list<record>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getChatHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1071,7 +1071,7 @@ export def "get-chat-history post" [
 #
 # GET /getHTML
 # operationId: getHTMLUsingGET
-export def "get-html get" [
+export def "get-html get-html-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1080,12 +1080,12 @@ export def "get-html get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --rev: string
 ]: nothing -> record<code: int, data: record<html: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getHTML" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1096,7 +1096,7 @@ export def "get-html get" [
 #
 # POST /getHTML
 # operationId: getHTMLUsingPOST
-export def "get-html post" [
+export def "get-html get-html-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1105,12 +1105,12 @@ export def "get-html post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --rev: string
 ]: nothing -> record<code: int, data: record<html: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getHTML" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1121,7 +1121,7 @@ export def "get-html post" [
 #
 # GET /getLastEdited
 # operationId: getLastEditedUsingGET
-export def "get-last-edited get" [
+export def "get-last-edited get-last-edited-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1130,11 +1130,11 @@ export def "get-last-edited get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record<lastEdited: int>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getLastEdited" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1145,7 +1145,7 @@ export def "get-last-edited get" [
 #
 # POST /getLastEdited
 # operationId: getLastEditedUsingPOST
-export def "get-last-edited post" [
+export def "get-last-edited get-last-edited-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1154,11 +1154,11 @@ export def "get-last-edited post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record<lastEdited: int>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getLastEdited" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1168,7 +1168,7 @@ export def "get-last-edited post" [
 # GET /getPadID
 #
 # operationId: getPadIDUsingGET
-export def "get-pad-id get" [
+export def "get-pad-id get-pad-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1177,11 +1177,11 @@ export def "get-pad-id get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --roID: string
+  --ro-id: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "roID" $roID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "roID" $ro_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPadID" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1191,7 +1191,7 @@ export def "get-pad-id get" [
 # POST /getPadID
 #
 # operationId: getPadIDUsingPOST
-export def "get-pad-id post" [
+export def "get-pad-id get-pad-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1200,11 +1200,11 @@ export def "get-pad-id post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --roID: string
+  --ro-id: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "roID" $roID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "roID" $ro_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPadID" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1215,7 +1215,7 @@ export def "get-pad-id post" [
 #
 # GET /getPublicStatus
 # operationId: getPublicStatusUsingGET
-export def "get-public-status get" [
+export def "get-public-status get-public-status-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1224,11 +1224,11 @@ export def "get-public-status get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record<publicStatus: bool>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPublicStatus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1239,7 +1239,7 @@ export def "get-public-status get" [
 #
 # POST /getPublicStatus
 # operationId: getPublicStatusUsingPOST
-export def "get-public-status post" [
+export def "get-public-status get-public-status-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1248,11 +1248,11 @@ export def "get-public-status post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record<publicStatus: bool>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPublicStatus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1263,7 +1263,7 @@ export def "get-public-status post" [
 #
 # GET /getReadOnlyID
 # operationId: getReadOnlyIDUsingGET
-export def "get-read-only-id get" [
+export def "get-read-only-id get-read-only-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1272,11 +1272,11 @@ export def "get-read-only-id get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record<readOnlyID: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getReadOnlyID" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1287,7 +1287,7 @@ export def "get-read-only-id get" [
 #
 # POST /getReadOnlyID
 # operationId: getReadOnlyIDUsingPOST
-export def "get-read-only-id post" [
+export def "get-read-only-id get-read-only-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1296,11 +1296,11 @@ export def "get-read-only-id post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record<readOnlyID: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getReadOnlyID" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1310,7 +1310,7 @@ export def "get-read-only-id post" [
 # GET /getRevisionChangeset
 #
 # operationId: getRevisionChangesetUsingGET
-export def "get-revision-changeset get" [
+export def "get-revision-changeset get-revision-changeset-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1319,12 +1319,12 @@ export def "get-revision-changeset get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --rev: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRevisionChangeset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1334,7 +1334,7 @@ export def "get-revision-changeset get" [
 # POST /getRevisionChangeset
 #
 # operationId: getRevisionChangesetUsingPOST
-export def "get-revision-changeset post" [
+export def "get-revision-changeset get-revision-changeset-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1343,12 +1343,12 @@ export def "get-revision-changeset post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --rev: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRevisionChangeset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1359,7 +1359,7 @@ export def "get-revision-changeset post" [
 #
 # GET /getRevisionsCount
 # operationId: getRevisionsCountUsingGET
-export def "get-revisions-count get" [
+export def "get-revisions-count get-revisions-count-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1368,11 +1368,11 @@ export def "get-revisions-count get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record<revisions: int>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRevisionsCount" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1383,7 +1383,7 @@ export def "get-revisions-count get" [
 #
 # POST /getRevisionsCount
 # operationId: getRevisionsCountUsingPOST
-export def "get-revisions-count post" [
+export def "get-revisions-count get-revisions-count-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1392,11 +1392,11 @@ export def "get-revisions-count post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record<revisions: int>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRevisionsCount" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1406,7 +1406,7 @@ export def "get-revisions-count post" [
 # GET /getSavedRevisionsCount
 #
 # operationId: getSavedRevisionsCountUsingGET
-export def "get-saved-revisions-count get" [
+export def "get-saved-revisions-count get-saved-revisions-count-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1415,11 +1415,11 @@ export def "get-saved-revisions-count get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getSavedRevisionsCount" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1429,7 +1429,7 @@ export def "get-saved-revisions-count get" [
 # POST /getSavedRevisionsCount
 #
 # operationId: getSavedRevisionsCountUsingPOST
-export def "get-saved-revisions-count post" [
+export def "get-saved-revisions-count get-saved-revisions-count-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1438,11 +1438,11 @@ export def "get-saved-revisions-count post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getSavedRevisionsCount" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1453,7 +1453,7 @@ export def "get-saved-revisions-count post" [
 #
 # GET /getSessionInfo
 # operationId: getSessionInfoUsingGET
-export def "get-session-info get" [
+export def "get-session-info get-session-info-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1462,11 +1462,11 @@ export def "get-session-info get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sessionID: string
+  --session-id: string
 ]: nothing -> record<code: int, data: record<info: record<authorID: string, groupID: string, id: string, validUntil: int>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sessionID" $sessionID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sessionID" $session_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getSessionInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1477,7 +1477,7 @@ export def "get-session-info get" [
 #
 # POST /getSessionInfo
 # operationId: getSessionInfoUsingPOST
-export def "get-session-info post" [
+export def "get-session-info get-session-info-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1486,11 +1486,11 @@ export def "get-session-info post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sessionID: string
+  --session-id: string
 ]: nothing -> record<code: int, data: record<info: record<authorID: string, groupID: string, id: string, validUntil: int>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sessionID" $sessionID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sessionID" $session_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getSessionInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1500,7 +1500,7 @@ export def "get-session-info post" [
 # GET /getStats
 #
 # operationId: getStatsUsingGET
-export def "get-stats get" [
+export def "get-stats get-stats-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1521,7 +1521,7 @@ export def "get-stats get" [
 # POST /getStats
 #
 # operationId: getStatsUsingPOST
-export def "get-stats post" [
+export def "get-stats get-stats-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1543,7 +1543,7 @@ export def "get-stats post" [
 #
 # GET /getText
 # operationId: getTextUsingGET
-export def "get-text get" [
+export def "get-text get-text-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1552,12 +1552,12 @@ export def "get-text get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --rev: string
 ]: nothing -> record<code: int, data: record<text: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getText" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1568,7 +1568,7 @@ export def "get-text get" [
 #
 # POST /getText
 # operationId: getTextUsingPOST
-export def "get-text post" [
+export def "get-text get-text-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1577,12 +1577,12 @@ export def "get-text post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --rev: string
 ]: nothing -> record<code: int, data: record<text: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getText" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1592,7 +1592,7 @@ export def "get-text post" [
 # GET /listAllGroups
 #
 # operationId: listAllGroupsUsingGET
-export def "list-all-groups listAllGroupsUsingGET" [
+export def "list-all-groups list-all-groups-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1613,7 +1613,7 @@ export def "list-all-groups listAllGroupsUsingGET" [
 # POST /listAllGroups
 #
 # operationId: listAllGroupsUsingPOST
-export def "list-all-groups listAllGroupsUsingPOST" [
+export def "list-all-groups list-all-groups-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1635,7 +1635,7 @@ export def "list-all-groups listAllGroupsUsingPOST" [
 #
 # GET /listAllPads
 # operationId: listAllPadsUsingGET
-export def "list-all-pads listAllPadsUsingGET" [
+export def "list-all-pads list-all-pads-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1657,7 +1657,7 @@ export def "list-all-pads listAllPadsUsingGET" [
 #
 # POST /listAllPads
 # operationId: listAllPadsUsingPOST
-export def "list-all-pads listAllPadsUsingPOST" [
+export def "list-all-pads list-all-pads-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1679,7 +1679,7 @@ export def "list-all-pads listAllPadsUsingPOST" [
 #
 # GET /listAuthorsOfPad
 # operationId: listAuthorsOfPadUsingGET
-export def "list-authors-of-pad listAuthorsOfPadUsingGET" [
+export def "list-authors-of-pad list-authors-of-pad-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1688,11 +1688,11 @@ export def "list-authors-of-pad listAuthorsOfPadUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record<authorIDs: list<string>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listAuthorsOfPad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1703,7 +1703,7 @@ export def "list-authors-of-pad listAuthorsOfPadUsingGET" [
 #
 # POST /listAuthorsOfPad
 # operationId: listAuthorsOfPadUsingPOST
-export def "list-authors-of-pad listAuthorsOfPadUsingPOST" [
+export def "list-authors-of-pad list-authors-of-pad-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1712,11 +1712,11 @@ export def "list-authors-of-pad listAuthorsOfPadUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record<authorIDs: list<string>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listAuthorsOfPad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1727,7 +1727,7 @@ export def "list-authors-of-pad listAuthorsOfPadUsingPOST" [
 #
 # GET /listPads
 # operationId: listPadsUsingGET
-export def "list-pads listPadsUsingGET" [
+export def "list-pads list-pads-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1736,11 +1736,11 @@ export def "list-pads listPadsUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groupID: string
+  --group-id: string
 ]: nothing -> record<code: int, data: record<padIDs: list<string>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupID" $groupID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listPads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1751,7 +1751,7 @@ export def "list-pads listPadsUsingGET" [
 #
 # POST /listPads
 # operationId: listPadsUsingPOST
-export def "list-pads listPadsUsingPOST" [
+export def "list-pads list-pads-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1760,11 +1760,11 @@ export def "list-pads listPadsUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groupID: string
+  --group-id: string
 ]: nothing -> record<code: int, data: record<padIDs: list<string>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupID" $groupID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listPads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1775,7 +1775,7 @@ export def "list-pads listPadsUsingPOST" [
 #
 # GET /listPadsOfAuthor
 # operationId: listPadsOfAuthorUsingGET
-export def "list-pads-of-author listPadsOfAuthorUsingGET" [
+export def "list-pads-of-author list-pads-of-author-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1784,11 +1784,11 @@ export def "list-pads-of-author listPadsOfAuthorUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorID: string
+  --author-id: string
 ]: nothing -> record<code: int, data: record<padIDs: list<string>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "authorID" $authorID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listPadsOfAuthor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1799,7 +1799,7 @@ export def "list-pads-of-author listPadsOfAuthorUsingGET" [
 #
 # POST /listPadsOfAuthor
 # operationId: listPadsOfAuthorUsingPOST
-export def "list-pads-of-author listPadsOfAuthorUsingPOST" [
+export def "list-pads-of-author list-pads-of-author-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1808,11 +1808,11 @@ export def "list-pads-of-author listPadsOfAuthorUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorID: string
+  --author-id: string
 ]: nothing -> record<code: int, data: record<padIDs: list<string>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "authorID" $authorID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listPadsOfAuthor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1822,7 +1822,7 @@ export def "list-pads-of-author listPadsOfAuthorUsingPOST" [
 # GET /listSavedRevisions
 #
 # operationId: listSavedRevisionsUsingGET
-export def "list-saved-revisions listSavedRevisionsUsingGET" [
+export def "list-saved-revisions list-saved-revisions-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1831,11 +1831,11 @@ export def "list-saved-revisions listSavedRevisionsUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listSavedRevisions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1845,7 +1845,7 @@ export def "list-saved-revisions listSavedRevisionsUsingGET" [
 # POST /listSavedRevisions
 #
 # operationId: listSavedRevisionsUsingPOST
-export def "list-saved-revisions listSavedRevisionsUsingPOST" [
+export def "list-saved-revisions list-saved-revisions-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1854,11 +1854,11 @@ export def "list-saved-revisions listSavedRevisionsUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listSavedRevisions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1869,7 +1869,7 @@ export def "list-saved-revisions listSavedRevisionsUsingPOST" [
 #
 # GET /listSessionsOfAuthor
 # operationId: listSessionsOfAuthorUsingGET
-export def "list-sessions-of-author listSessionsOfAuthorUsingGET" [
+export def "list-sessions-of-author list-sessions-of-author-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1878,11 +1878,11 @@ export def "list-sessions-of-author listSessionsOfAuthorUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorID: string
+  --author-id: string
 ]: nothing -> record<code: int, data: record<sessions: list<record>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "authorID" $authorID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listSessionsOfAuthor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1893,7 +1893,7 @@ export def "list-sessions-of-author listSessionsOfAuthorUsingGET" [
 #
 # POST /listSessionsOfAuthor
 # operationId: listSessionsOfAuthorUsingPOST
-export def "list-sessions-of-author listSessionsOfAuthorUsingPOST" [
+export def "list-sessions-of-author list-sessions-of-author-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1902,11 +1902,11 @@ export def "list-sessions-of-author listSessionsOfAuthorUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorID: string
+  --author-id: string
 ]: nothing -> record<code: int, data: record<sessions: list<record>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "authorID" $authorID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listSessionsOfAuthor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1916,7 +1916,7 @@ export def "list-sessions-of-author listSessionsOfAuthorUsingPOST" [
 # GET /listSessionsOfGroup
 #
 # operationId: listSessionsOfGroupUsingGET
-export def "list-sessions-of-group listSessionsOfGroupUsingGET" [
+export def "list-sessions-of-group list-sessions-of-group-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1925,11 +1925,11 @@ export def "list-sessions-of-group listSessionsOfGroupUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groupID: string
+  --group-id: string
 ]: nothing -> record<code: int, data: record<sessions: list<record>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupID" $groupID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listSessionsOfGroup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1939,7 +1939,7 @@ export def "list-sessions-of-group listSessionsOfGroupUsingGET" [
 # POST /listSessionsOfGroup
 #
 # operationId: listSessionsOfGroupUsingPOST
-export def "list-sessions-of-group listSessionsOfGroupUsingPOST" [
+export def "list-sessions-of-group list-sessions-of-group-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1948,11 +1948,11 @@ export def "list-sessions-of-group listSessionsOfGroupUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groupID: string
+  --group-id: string
 ]: nothing -> record<code: int, data: record<sessions: list<record>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupID" $groupID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listSessionsOfGroup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1962,7 +1962,7 @@ export def "list-sessions-of-group listSessionsOfGroupUsingPOST" [
 # GET /movePad
 #
 # operationId: movePadUsingGET
-export def "move-pad movePadUsingGET" [
+export def "move-pad move-pad-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1971,13 +1971,13 @@ export def "move-pad movePadUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sourceID: string
-  --destinationID: string
+  --source-id: string
+  --destination-id: string
   --force: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sourceID" $sourceID "scalar") (serialize-qp "destinationID" $destinationID "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/movePad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1987,7 +1987,7 @@ export def "move-pad movePadUsingGET" [
 # POST /movePad
 #
 # operationId: movePadUsingPOST
-export def "move-pad movePadUsingPOST" [
+export def "move-pad move-pad-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1996,13 +1996,13 @@ export def "move-pad movePadUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sourceID: string
-  --destinationID: string
+  --source-id: string
+  --destination-id: string
   --force: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sourceID" $sourceID "scalar") (serialize-qp "destinationID" $destinationID "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/movePad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2022,11 +2022,11 @@ export def "pad-users padUsersUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record<padUsers: list<record>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/padUsers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2046,11 +2046,11 @@ export def "pad-users padUsersUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record<padUsers: list<record>>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/padUsers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2070,11 +2070,11 @@ export def "pad-users-count padUsersCountUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record<padUsersCount: int>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/padUsersCount" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2094,11 +2094,11 @@ export def "pad-users-count padUsersCountUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
 ]: nothing -> record<code: int, data: record<padUsersCount: int>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/padUsersCount" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2117,12 +2117,12 @@ export def "restore-revision restoreRevisionUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --rev: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/restoreRevision" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2141,12 +2141,12 @@ export def "restore-revision restoreRevisionUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --rev: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/restoreRevision" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2165,12 +2165,12 @@ export def "save-revision saveRevisionUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --rev: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/saveRevision" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2189,12 +2189,12 @@ export def "save-revision saveRevisionUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --rev: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/saveRevision" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2205,7 +2205,7 @@ export def "save-revision saveRevisionUsingPOST" [
 #
 # GET /sendClientsMessage
 # operationId: sendClientsMessageUsingGET
-export def "send-clients-message sendClientsMessageUsingGET" [
+export def "send-clients-message send-clients-message-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2214,12 +2214,12 @@ export def "send-clients-message sendClientsMessageUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --msg: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "msg" $msg "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "msg" $msg "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sendClientsMessage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2230,7 +2230,7 @@ export def "send-clients-message sendClientsMessageUsingGET" [
 #
 # POST /sendClientsMessage
 # operationId: sendClientsMessageUsingPOST
-export def "send-clients-message sendClientsMessageUsingPOST" [
+export def "send-clients-message send-clients-message-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2239,12 +2239,12 @@ export def "send-clients-message sendClientsMessageUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --msg: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "msg" $msg "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "msg" $msg "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sendClientsMessage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2264,12 +2264,12 @@ export def "set-html setHTMLUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --html: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "html" $html "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "html" $html "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setHTML" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2289,12 +2289,12 @@ export def "set-html setHTMLUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --html: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "html" $html "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "html" $html "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setHTML" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2314,12 +2314,12 @@ export def "set-public-status setPublicStatusUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
-  --publicStatus: string
+  --pad-id: string
+  --public-status: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "publicStatus" $publicStatus "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "publicStatus" $public_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setPublicStatus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2339,12 +2339,12 @@ export def "set-public-status setPublicStatusUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
-  --publicStatus: string
+  --pad-id: string
+  --public-status: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "publicStatus" $publicStatus "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "publicStatus" $public_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setPublicStatus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2364,12 +2364,12 @@ export def "set-text setTextUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --text: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setText" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2389,12 +2389,12 @@ export def "set-text setTextUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --padID: string
+  --pad-id: string
   --text: string
 ]: nothing -> record<code: int, data: record, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "padID" $padID "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setText" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

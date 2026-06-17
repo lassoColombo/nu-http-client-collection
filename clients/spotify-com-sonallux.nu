@@ -137,7 +137,7 @@ export def "albums get-an-album" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/albums/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/albums/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -164,7 +164,7 @@ export def "albums-tracks get-an-albums-tracks" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/albums/($id)/tracks" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/albums/{id}/tracks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -211,7 +211,7 @@ export def "artists get-an-artist" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/artists/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/artists/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -239,7 +239,7 @@ export def "artists-albums get-an-artists-albums" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_groups" $include_groups "scalar") (serialize-qp "market" $market "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/artists/($id)/albums" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/artists/{id}/albums") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,7 +262,7 @@ export def "artists-related-artists get-an-artists-related-artists" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/artists/($id)/related-artists")
+  let full_url = (build-url $base ({id: $id} | format pattern "/artists/{id}/related-artists"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -287,7 +287,7 @@ export def "artists-top-tracks get-an-artists-top-tracks" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/artists/($id)/top-tracks" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/artists/{id}/top-tracks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -310,7 +310,7 @@ export def "audio-analysis get-audio-analysis" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/audio-analysis/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/audio-analysis/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -357,7 +357,7 @@ export def "audio-features get-audio-features" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/audio-features/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/audio-features/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -407,7 +407,7 @@ export def "audiobooks get-an-audiobook" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/audiobooks/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/audiobooks/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -434,7 +434,7 @@ export def "audiobooks-chapters get-audiobook-chapters" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/audiobooks/($id)/chapters" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/audiobooks/{id}/chapters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -487,7 +487,7 @@ export def "browse-categories get-a-category" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/browse/categories/($category_id)" $qp)
+  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/browse/categories/{category_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -514,7 +514,7 @@ export def "browse-categories-playlists get-a-categories-playlists" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/browse/categories/($category_id)/playlists" $qp)
+  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/browse/categories/{category_id}/playlists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -618,7 +618,7 @@ export def "chapters get-a-chapter" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/chapters/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/chapters/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -668,7 +668,7 @@ export def "episodes get-an-episode" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/episodes/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/episodes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -739,7 +739,7 @@ export def "me-albums remove-albums-user" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/albums" $qp)
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -793,7 +793,7 @@ export def "me-albums save-albums-user" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/albums" $qp)
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -942,7 +942,7 @@ export def "me-episodes remove-episodes-user" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/episodes" $qp)
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -996,7 +996,7 @@ export def "me-episodes save-episodes-user" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/episodes" $qp)
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1049,7 +1049,7 @@ export def "me-following unfollow-artists-users" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/following" $qp)
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1104,7 +1104,7 @@ export def "me-following follow-artists-users" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/following" $qp)
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1181,7 +1181,7 @@ export def "me-player transfer-a-users-playback" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/player")
-  let body = {device_ids: $device_ids, play: $play} | compact
+  let body = {"device_ids": $device_ids, "play": $play} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1307,7 +1307,7 @@ export def "me-player-play start-a-users-playback" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_id" $device_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/player/play" $qp)
-  let body = {context_uri: $context_uri, offset: $offset, position_ms: $position_ms, uris: $uris} | compact
+  let body = {"context_uri": $context_uri, "offset": $offset, "position_ms": $position_ms, "uris": $uris} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1558,7 +1558,7 @@ export def "me-shows remove-shows-user" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "market" $market "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/shows" $qp)
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1611,7 +1611,7 @@ export def "me-shows save-shows-user" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/shows" $qp)
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1715,7 +1715,7 @@ export def "me-tracks remove-tracks-user" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/tracks" $qp)
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1769,7 +1769,7 @@ export def "me-tracks save-tracks-user" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/tracks" $qp)
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1821,7 +1821,7 @@ export def "playlists get-playlist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "additional_types" $additional_types "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/playlists/($playlist_id)" $qp)
+  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/playlists/{playlist_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1849,8 +1849,8 @@ export def "playlists change-playlist-details" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/playlists/($playlist_id)")
-  let body = {collaborative: $collaborative, description: $description, name: $name, public: $public} | compact
+  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/playlists/{playlist_id}"))
+  let body = {"collaborative": $collaborative, "description": $description, "name": $name, "public": $public} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1874,7 +1874,7 @@ export def "playlists-followers unfollow-playlist" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/playlists/($playlist_id)/followers")
+  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/playlists/{playlist_id}/followers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1899,8 +1899,8 @@ export def "playlists-followers follow-playlist" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/playlists/($playlist_id)/followers")
-  let body = {public: $public} | compact
+  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/playlists/{playlist_id}/followers"))
+  let body = {"public": $public} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1926,7 +1926,7 @@ export def "playlists-followers-contains check-if-user-follows-playlist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/playlists/($playlist_id)/followers/contains" $qp)
+  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/playlists/{playlist_id}/followers/contains") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1949,7 +1949,7 @@ export def "playlists-images get-playlist-cover" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/playlists/($playlist_id)/images")
+  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/playlists/{playlist_id}/images"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1974,7 +1974,7 @@ export def "playlists-images upload-custom-playlist-cover" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/playlists/($playlist_id)/images")
+  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/playlists/{playlist_id}/images"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2002,8 +2002,8 @@ export def "playlists-tracks remove-tracks-playlist" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/playlists/($playlist_id)/tracks")
-  let body = {snapshot_id: $snapshot_id, tracks: $tracks} | compact
+  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/playlists/{playlist_id}/tracks"))
+  let body = {"snapshot_id": $snapshot_id, "tracks": $tracks} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2033,7 +2033,7 @@ export def "playlists-tracks get-playlists-tracks" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "additional_types" $additional_types "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/playlists/($playlist_id)/tracks" $qp)
+  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/playlists/{playlist_id}/tracks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2062,8 +2062,8 @@ export def "playlists-tracks add-tracks-to-playlist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "uris" $uris "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/playlists/($playlist_id)/tracks" $qp)
-  let body = {position: $position, uris: $uris} | compact
+  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/playlists/{playlist_id}/tracks") $qp)
+  let body = {"position": $position, "uris": $uris} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2095,8 +2095,8 @@ export def "playlists-tracks reorder-or-replace-playlists-tracks" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "uris" $uris "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/playlists/($playlist_id)/tracks" $qp)
-  let body = {insert_before: $insert_before, range_length: $range_length, range_start: $range_start, snapshot_id: $snapshot_id, uris: $uris} | compact
+  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/playlists/{playlist_id}/tracks") $qp)
+  let body = {"insert_before": $insert_before, "range_length": $range_length, "range_start": $range_start, "snapshot_id": $snapshot_id, "uris": $uris} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2199,7 +2199,7 @@ export def "recommendations-available-genre-seeds get-recommendation-genres" [
 #
 # GET /search
 # operationId: search
-export def "search search" [
+export def "search get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2268,7 +2268,7 @@ export def "shows get-a-show" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/shows/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2295,7 +2295,7 @@ export def "shows-episodes get-a-shows-episodes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/shows/($id)/episodes" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}/episodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2345,7 +2345,7 @@ export def "tracks get-track" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tracks/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/tracks/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2368,7 +2368,7 @@ export def "users get-users-profile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2394,7 +2394,7 @@ export def "users-playlists get-list-users-playlists" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_id)/playlists" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/playlists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2422,8 +2422,8 @@ export def "users-playlists create-playlist" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/playlists")
-  let body = {collaborative: $collaborative, description: $description, name: $name, public: $public} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/playlists"))
+  let body = {"collaborative": $collaborative, "description": $description, "name": $name, "public": $public} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -774,7 +774,7 @@ export def "quote-image-background post" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/quote/image/background")
-  let body = {image: $image, tags: $tags} | compact
+  let body = {"image": $image, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -917,7 +917,7 @@ export def "quote-image-font post" [
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/quote/image/font")
-  let body = {font: $font, tags: $tags} | compact
+  let body = {"font": $font, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

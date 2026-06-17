@@ -129,8 +129,8 @@ export def "api send-an-sms" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)")
-  let body = {account-ref: $account_ref, api_key: $api_key, api_secret: $api_secret, body: $body_body, callback: $callback, client-ref: $client_ref, content-id: $content_id, entity-id: $entity_id, from: $body_from, message-class: $message_class, protocol-id: $protocol_id, sig: $sig, status-report-req: $status_report_req, text: $text, to: $body_to, ttl: $ttl, type: $type, udh: $udh} | compact
+  let full_url = (build-url $base ({format: $format} | format pattern "/{format}"))
+  let body = {"account-ref": $account_ref, "api_key": $api_key, "api_secret": $api_secret, "body": $body_body, "callback": $callback, "client-ref": $client_ref, "content-id": $content_id, "entity-id": $entity_id, "from": $body_from, "message-class": $message_class, "protocol-id": $protocol_id, "sig": $sig, "status-report-req": $status_report_req, "text": $text, "to": $body_to, "ttl": $ttl, "type": $type, "udh": $udh} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

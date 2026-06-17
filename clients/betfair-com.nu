@@ -65,7 +65,7 @@ def base-url-completer [] { ["http://stream-api.betfair.com:443/api"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def opTypes-completer [] { ["authentication" "heartbeat" "marketSubscription" "orderSubscription"] }
+def op-types-completer [] { ["authentication" "heartbeat" "marketSubscription" "orderSubscription"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -104,15 +104,15 @@ export def "request post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authentication: any
   --heartbeat: any
-  --marketSubscription: any
-  --opTypes: string@opTypes-completer
-  --orderSubscriptionMessage: any
+  --market-subscription: any
+  --op-types: string@op-types-completer
+  --order-subscription-message: any
 ]: any -> record<connection: record<id: int, op: string, connectionId: string>, marketChangeMessage: record<id: int, op: string, clk: string, conflateMs: int, ct: string, heartbeatMs: int, initialClk: string, mc: list<record>, pt: int, segmentType: string, status: int>, opTypes: string, orderChangeMessage: record<id: int, op: string, clk: string, conflateMs: int, ct: string, heartbeatMs: int, initialClk: string, oc: list<record>, pt: int, segmentType: string, status: int>, status: record<id: int, op: string, connectionClosed: bool, connectionId: string, connectionsAvailable: int, errorCode: string, errorMessage: string, statusCode: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/request")
-  let body = {authentication: $authentication, heartbeat: $heartbeat, marketSubscription: $marketSubscription, opTypes: $opTypes, orderSubscriptionMessage: $orderSubscriptionMessage} | compact
+  let body = {"authentication": $authentication, "heartbeat": $heartbeat, "marketSubscription": $market_subscription, "opTypes": $op_types, "orderSubscriptionMessage": $order_subscription_message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

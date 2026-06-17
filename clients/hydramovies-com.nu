@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "current-movie-datacsvimdb-id-imd-bid CurrentMovieDataCsvGet" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "current-movie-datacsvimdb-id-imd-bid get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,8 +92,8 @@ export def commands []: nothing -> table {
 #
 # GET /current-Movie-Data.csv&imdb_id={IMDBid}
 # operationId: CurrentMovieDataCsvGet
-export def "current-movie-datacsvimdb-id-imd-bid CurrentMovieDataCsvGet" [
-  IMDBid: string
+export def "current-movie-datacsvimdb-id-imd-bid get" [
+  imd_bid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,7 +105,7 @@ export def "current-movie-datacsvimdb-id-imd-bid CurrentMovieDataCsvGet" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/current-Movie-Data.csv&imdb_id=($IMDBid)")
+  let full_url = (build-url $base ({imd_bid: $imd_bid} | format pattern "/current-Movie-Data.csv&imdb_id={imd_bid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -115,8 +115,8 @@ export def "current-movie-datacsvimdb-id-imd-bid CurrentMovieDataCsvGet" [
 #
 # GET /current-Movie-Data.csv&movie_year={MovieYear}
 # operationId: CurrentMovieDataCsvGet2
-export def "current-movie-datacsvmovie-year-movie-year CurrentMovieDataCsvGet2" [
-  MovieYear: string
+export def "current-movie-datacsvmovie-year-movie-year get" [
+  movie_year: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,7 +128,7 @@ export def "current-movie-datacsvmovie-year-movie-year CurrentMovieDataCsvGet2" 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/current-Movie-Data.csv&movie_year=($MovieYear)")
+  let full_url = (build-url $base ({movie_year: $movie_year} | format pattern "/current-Movie-Data.csv&movie_year={movie_year}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

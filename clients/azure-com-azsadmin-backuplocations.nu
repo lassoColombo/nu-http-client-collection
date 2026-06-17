@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup-locations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup-locations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,9 +93,9 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Backup.Admin/backupLocations
 # operationId: BackupLocations_List
-export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup-locations List" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup-locations list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,7 +109,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Backup.Admin/backupLocations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Backup.Admin/backupLocations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,9 +119,9 @@ export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Backup.Admin/backupLocations/{location}
 # operationId: BackupLocations_Get
-export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup-locations Get" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup-locations get" [
+  subscription_id: string
+  resource_group_name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -136,7 +136,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Backup.Admin/backupLocations/($location)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location: $location} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Backup.Admin/backupLocations/{location}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -146,9 +146,9 @@ export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup
 #
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Backup.Admin/backupLocations/{location}
 # operationId: BackupLocations_Update
-export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup-locations Update" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup-locations update" [
+  subscription_id: string
+  resource_group_name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -163,7 +163,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Backup.Admin/backupLocations/($location)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location: $location} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Backup.Admin/backupLocations/{location}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,9 +173,9 @@ export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Backup.Admin/backupLocations/{location}/createBackup
 # operationId: BackupLocations_CreateBackup
-export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup-locations-create-backup CreateBackup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup-locations-create-backup create" [
+  subscription_id: string
+  resource_group_name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -190,7 +190,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Backup.Admin/backupLocations/($location)/createBackup" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location: $location} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Backup.Admin/backupLocations/{location}/createBackup") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

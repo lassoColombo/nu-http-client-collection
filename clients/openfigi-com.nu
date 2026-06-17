@@ -129,7 +129,7 @@ export def "mapping-values get" [
 ]: nothing -> record<values: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-openfigi-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mapping/values/($key)")
+  let full_url = (build-url $base ({key: $key} | format pattern "/mapping/values/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

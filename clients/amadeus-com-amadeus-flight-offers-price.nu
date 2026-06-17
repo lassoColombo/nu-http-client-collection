@@ -103,18 +103,18 @@ export def "shopping-flight-offers-pricing quoteAirOffers" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Sub-resources to be included:  * **credit-card-fees** to get the credit card fee applied on the booking  * **bags** to get extra bag options  * **other-services** to get services options  * **detailed-fare-rules** to get detailed fare rules options
-  --forceClass: oneof<nothing, bool> # parameter to force the usage of booking class for pricing - **true**, to for pricing with the specified booking class - **false**, to get the best available price  (default: false)
-  --X-HTTP-Method-Override: string # the HTTP method to apply
+  --force-class: oneof<nothing, bool> # parameter to force the usage of booking class for pricing - **true**, to for pricing with the specified booking class - **false**, to get the best available price  (default: false)
+  --x-http-method-override: string # the HTTP method to apply
   data: record # input parameter to price flight offers element — shape: {flightOffers: list, payments?: list, travelers?: list, type: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "include" $include "csv") (serialize-qp "forceClass" $forceClass "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "include" $include "csv") (serialize-qp "forceClass" $force_class "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shopping/flight-offers/pricing" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-HTTP-Method-Override": $X_HTTP_Method_Override} | compact
+  let extra_headers = {"X-HTTP-Method-Override": $x_http_method_override} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -109,14 +109,14 @@ export def "nh-art list" [
   --hasfake: string # When set to `true`, only artwork that has a fake will be returned. When set to `false`, only artwork without fakes will be returned.
   --excludedetails: string # When set to `true`, only artwork names are returned. Instead of an array of objects with all details, the return will be an array of strings.
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL. Note that requesting specific image sizes for long lists may result in a very long response time.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> table<art_name: string, art_style: string, authenticity: string, author: string, availability: string, buy: int, description: string, fake_image_url: string, has_fake: bool, image_url: string, length: float, name: string, sell: int, url: string, width: float, year: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hasfake" $hasfake "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/art" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -137,14 +137,14 @@ export def "nh-art get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> record<art_name: string, art_style: string, authenticity: string, author: string, availability: string, buy: int, description: string, fake_image_url: string, has_fake: bool, image_url: string, length: float, name: string, sell: int, url: string, width: float, year: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nh/art/($artwork)" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let full_url = (build-url $base ({artwork: $artwork} | format pattern "/nh/art/{artwork}") $qp)
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -166,14 +166,14 @@ export def "nh-bugs list" [
   --month: string # Retrive only the bug that are available in a specific month. Value may be the month's name (`jan`, `january`), the integer representing the month (`01`, `1`), or `current` for the current month. When `current` is specified, the return body will be an object with two arrays inside, one called `north` and the other `south` containing the bug available in each respective hemisphere. Note that the current month is calculated based off the API server's time, so it may be slightly off for you at the beginning or end of the month.
   --excludedetails: string # When set to `true`, only bug names are returned. Instead of an array of objects with all details, the return will be an array of strings. This is particularly useful when used with the `month` filter, for users who want just a list of bugs in a given month but not all their respective details.
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL. Note that requesting specific image sizes for long lists may result in a very long response time.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> table<catchphrases: list<string>, image_url: string, location: string, name: string, north: record<availability_array: list, months: string, months_array: list, times_by_month: record>, number: int, rarity: string, render_url: string, sell_flick: int, sell_nook: int, south: record<availability_array: list, months: string, months_array: list, times_by_month: record>, tank_length: float, tank_width: float, total_catch: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "month" $month "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/bugs" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -194,14 +194,14 @@ export def "nh-bugs get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> record<catchphrases: list<string>, image_url: string, location: string, name: string, north: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<1: string, 2: string, 3: string, 4: string, 5: string, 6: string, 7: string, 8: string, 9: string, 10: string, 11: string, 12: string>>, number: int, rarity: string, render_url: string, sell_flick: int, sell_nook: int, south: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<1: string, 2: string, 3: string, 4: string, 5: string, 6: string, 7: string, 8: string, 9: string, 10: string, 11: string, 12: string>>, tank_length: float, tank_width: float, total_catch: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nh/bugs/($bug)" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let full_url = (build-url $base ({bug: $bug} | format pattern "/nh/bugs/{bug}") $qp)
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -225,14 +225,14 @@ export def "nh-clothing list" [
   --style: list # Return clothing that matches the provided styles (may specify one or two styles). Styles are used for gifting villagers.
   --labeltheme: string@labeltheme-completer # Return clothing that have the specified Label theme. This is used for completing the requested outfit theme for [Label](https://nookipedia.com/wiki/Label) when she visits the player's island.
   --excludedetails: string # When set to `true`, only clothing names are returned. Instead of an array of objects with all details, the return will be an array of strings.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> table<availability: list<record>, buy: list<record>, category: string, label_themes: list<string>, name: string, notes: string, seasonality: string, sell: int, styles: list<string>, unlocked: bool, url: string, variation_total: int, variations: list<record>, version_added: string, vill_equip: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "color" $color "multi") (serialize-qp "style" $style "multi") (serialize-qp "labeltheme" $labeltheme "scalar") (serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/clothing" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,14 +253,14 @@ export def "nh-clothing get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, category: string, label_themes: list<string>, name: string, notes: string, seasonality: string, sell: int, styles: list<string>, unlocked: bool, url: string, variation_total: int, variations: table<colors: list, image_url: string, variation: string>, version_added: string, vill_equip: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nh/clothing/($clothing)" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let full_url = (build-url $base ({clothing: $clothing} | format pattern "/nh/clothing/{clothing}") $qp)
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -283,14 +283,14 @@ export def "nh-events get" [
   --year: string # Specify the year to retrieve events for. Must be the current or next year.
   --month: string # Specify the month to retrieve events for (accepts multiple formats, such as `Oct`, `October`, or `10`). Most likely want to use alongside `year`, otherwise events in both the current and next year are returned.
   --day: int # Specify the day of the month to retrieve events for.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> table<date: string, event: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/events" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -312,14 +312,14 @@ export def "nh-fish list" [
   --month: string # Retrive only the fish that are available in a specific month. Value may be the month's name (`jan`, `january`), the integer representing the month (`01`, `1`), or `current` for the current month. When `current` is specified, the return body will be an object with two arrays inside, one called `north` and the other `south` containing the fish available in each respective hemisphere. Note that the current month is calculated based off the API server's time, so it may be slightly off for you at the beginning or end of the month.
   --excludedetails: string # When set to `true`, only fish names are returned. Instead of an array of objects with all details, the return will be an array of strings. This is particularly useful when used with the `month` filter, for users who want just a list of fish in a given month but not all their respective details.
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL. Note that requesting specific image sizes for long lists may result in a very long response time.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> table<catchphrases: list<string>, image_url: string, location: string, name: string, north: record<availability_array: list, months: string, months_array: list, times_by_month: record>, number: int, rarity: string, render_url: string, sell_cj: int, sell_nook: int, shadow_size: string, south: record<availability_array: list, months: string, months_array: list, times_by_month: record>, tank_length: float, tank_width: float, total_catch: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "month" $month "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/fish" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -340,14 +340,14 @@ export def "nh-fish get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> record<catchphrases: list<string>, image_url: string, location: string, name: string, north: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<1: string, 2: string, 3: string, 4: string, 5: string, 6: string, 7: string, 8: string, 9: string, 10: string, 11: string, 12: string>>, number: int, rarity: string, render_url: string, sell_cj: int, sell_nook: int, shadow_size: string, south: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<1: string, 4: string, 5: string, 6: string, 7: string, 8: string, 9: string, 10: string, 11: string, 12: string, 2_: string, 3_: string>>, tank_length: float, tank_width: float, total_catch: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nh/fish/($fish)" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let full_url = (build-url $base ({fish: $fish} | format pattern "/nh/fish/{fish}") $qp)
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -367,14 +367,14 @@ export def "nh-fossils-all list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> table<description: string, fossils: list<record>, name: string, room: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/fossils/all" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -395,14 +395,14 @@ export def "nh-fossils-all get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> record<description: string, fossils: table<colors: list, fossil_group: string, hha_base: int, image_url: string, interactable: bool, length: int, name: string, sell: int, url: string, width: int>, matched: record<name: string, type: string>, name: string, room: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nh/fossils/all/($fossil)" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let full_url = (build-url $base ({fossil: $fossil} | format pattern "/nh/fossils/all/{fossil}") $qp)
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -422,14 +422,14 @@ export def "nh-fossils-groups list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> table<description: string, name: string, room: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/fossils/groups" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -450,14 +450,14 @@ export def "nh-fossils-groups get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> record<description: string, name: string, room: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nh/fossils/groups/($fossil_group)" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let full_url = (build-url $base ({fossil_group: $fossil_group} | format pattern "/nh/fossils/groups/{fossil_group}") $qp)
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -477,14 +477,14 @@ export def "nh-fossils-individuals list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> table<colors: list<string>, fossil_group: string, hha_base: int, image_url: string, interactable: bool, length: int, name: string, sell: int, url: string, width: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/fossils/individuals" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -505,14 +505,14 @@ export def "nh-fossils-individuals get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> record<colors: list<string>, fossil_group: string, hha_base: int, image_url: string, interactable: bool, length: int, name: string, sell: int, url: string, width: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nh/fossils/individuals/($fossil)" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let full_url = (build-url $base ({fossil: $fossil} | format pattern "/nh/fossils/individuals/{fossil}") $qp)
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -534,14 +534,14 @@ export def "nh-furniture list" [
   --category: string@category-completer-1 # Specify the category of furniture to return (houswares, miscellaneous, or wall-mounted).
   --color: list # Return furniture that matches the provided colors (may specify one or two colors).
   --excludedetails: string # When set to `true`, only furniture names are returned. Instead of an array of objects with all details, the return will be an array of strings.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> table<availability: list<record>, buy: list<record>, category: string, custom_body_part: string, custom_kit_type: string, custom_kits: int, custom_pattern_part: string, customizable: bool, door_decor: bool, functions: list<string>, grid_length: float, grid_width: float, height: float, hha_base: int, hha_category: string, item_series: string, item_set: string, lucky: bool, lucky_season: string, name: string, notes: string, pattern_total: int, sell: int, tag: string, themes: list<string>, unlocked: bool, url: string, variation_total: int, variations: list<record>, version_added: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "color" $color "multi") (serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/furniture" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -562,14 +562,14 @@ export def "nh-furniture get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, category: string, custom_body_part: string, custom_kit_type: string, custom_kits: int, custom_pattern_part: string, customizable: bool, door_decor: bool, functions: list<string>, grid_length: float, grid_width: float, height: float, hha_base: int, hha_category: string, item_series: string, item_set: string, lucky: bool, lucky_season: string, name: string, notes: string, pattern_total: int, sell: int, tag: string, themes: list<string>, unlocked: bool, url: string, variation_total: int, variations: table<colors: list, image_url: string, pattern: string, variation: string>, version_added: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nh/furniture/($furniture)" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let full_url = (build-url $base ({furniture: $furniture} | format pattern "/nh/furniture/{furniture}") $qp)
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -590,14 +590,14 @@ export def "nh-interior list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --color: list # Return furniture that matches the provided colors (may specify one or two colors).
   --excludedetails: string # When set to `true`, only interior item names are returned. Instead of an array of objects with all details, the return will be an array of strings.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> table<availability: list<record>, buy: list<record>, category: string, colors: string, grid_length: float, grid_width: float, hha_base: int, hha_category: string, image_url: string, item_series: string, item_set: string, name: string, notes: string, sell: int, tag: string, themes: list<string>, unlocked: bool, url: string, version_added: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "color" $color "multi") (serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/interior" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -619,14 +619,14 @@ export def "nh-interior get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --color: list # Return furniture that matches the provided colors (may specify one or two colors).
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, category: string, colors: string, grid_length: float, grid_width: float, hha_base: int, hha_category: string, image_url: string, item_series: string, item_set: string, name: string, notes: string, sell: int, tag: string, themes: list<string>, unlocked: bool, url: string, version_added: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "color" $color "multi") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nh/interior/($item)" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let full_url = (build-url $base ({item: $item} | format pattern "/nh/interior/{item}") $qp)
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -646,14 +646,14 @@ export def "nh-items list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --excludedetails: string # When set to `true`, only item names are returned. Instead of an array of objects with all details, the return will be an array of strings.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> table<availability: list<record>, buy: list<record>, edible: bool, hha_base: int, image_url: string, is_fence: bool, material_name_sort: int, material_seasonality: string, material_seasonality_sort: int, material_sort: int, material_type: string, name: string, notes: string, plant_type: string, sell: int, stack: int, unlocked: bool, url: string, version_added: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/items" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -674,14 +674,14 @@ export def "nh-items get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, edible: bool, hha_base: int, image_url: string, is_fence: bool, material_name_sort: int, material_seasonality: string, material_seasonality_sort: int, material_sort: int, material_type: string, name: string, notes: string, plant_type: string, sell: int, stack: int, unlocked: bool, url: string, version_added: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nh/items/($item)" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let full_url = (build-url $base ({item: $item} | format pattern "/nh/items/{item}") $qp)
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -701,14 +701,14 @@ export def "nh-photos list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --excludedetails: string # When set to `true`, only item names are returned. Instead of an array of objects with all details, the return will be an array of strings.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> table<availability: list<record>, buy: list<record>, category: string, custom_body_part: string, custom_kits: int, customizable: bool, grid_length: float, grid_width: float, interactable: bool, name: string, sell: int, unlocked: bool, url: string, variations: list<record>, version_added: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/photos" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -729,14 +729,14 @@ export def "nh-photos get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, category: string, custom_body_part: string, custom_kits: int, customizable: bool, grid_length: float, grid_width: float, interactable: bool, name: string, sell: int, unlocked: bool, url: string, variations: table<colors: list, image_url: string, variation: string>, version_added: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nh/photos/($item)" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let full_url = (build-url $base ({item: $item} | format pattern "/nh/photos/{item}") $qp)
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -758,14 +758,14 @@ export def "nh-recipes list" [
   --material: string # Specify a material to only get recipes that use that material. You can specify `material` up to six times (no recipe uses more than six materials).
   --excludedetails: string # When set to `true`, only recipe names are returned. Instead of an array of objects with all details, the return will be an array of strings.
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL. Note that requesting specific image sizes for long lists may result in a very long response time.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> table<availability: list<record>, buy: list<record>, image_url: string, materials: list<record>, name: string, recipes_to_unlock: int, sell: int, serial_id: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "material" $material "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/recipes" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -786,14 +786,14 @@ export def "nh-recipes get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, image_url: string, materials: table<count: int, name: string>, name: string, recipes_to_unlock: int, sell: int, serial_id: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nh/recipes/($item)" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let full_url = (build-url $base ({item: $item} | format pattern "/nh/recipes/{item}") $qp)
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -815,14 +815,14 @@ export def "nh-sea list" [
   --month: string # Retrive only the sea creature that are available in a specific month. Value may be the month's name (`jan`, `january`), the integer representing the month (`01`, `1`), or `current` for the current month. When `current` is specified, the return body will be an object with two arrays inside, one called `north` and the other `south` containing the sea creature available in each respective hemisphere. Note that the current month is calculated based off the API server's time, so it may be slightly off for you at the beginning or end of the month.
   --excludedetails: string # When set to `true`, only sea creature names are returned. Instead of an array of objects with all details, the return will be an array of strings. This is particularly useful when used with the `month` filter, for users who want just a list of sea creatures in a given month but not all their respective details.
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL. Note that requesting specific image sizes for long lists may result in a very long response time.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> table<catchphrases: list<string>, image_url: string, name: string, north: record<availability_array: list, months: string, months_array: list, times_by_month: record>, number: int, rarity: string, render_url: string, sell_nook: int, shadow_movement: string, shadow_size: string, south: record<availability_array: list, months: string, months_array: list, times_by_month: record>, tank_length: float, tank_width: float, total_catch: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "month" $month "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/sea" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -843,14 +843,14 @@ export def "nh-sea get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> record<catchphrases: list<string>, image_url: string, name: string, north: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<1: string, 2: string, 3: string, 4: string, 5: string, 6: string, 7: string, 8: string, 9: string, 10: string, 11: string, 12: string>>, number: int, rarity: string, render_url: string, sell_nook: int, shadow_movement: string, shadow_size: string, south: record<availability_array: list<record>, months: string, months_array: list<int>, times_by_month: record<1: string, 2: string, 3: string, 4: string, 5: string, 6: string, 7: string, 8: string, 9: string, 10: string, 11: string, 12: string>>, tank_length: float, tank_width: float, total_catch: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nh/sea/($sea_creature)" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let full_url = (build-url $base ({sea_creature: $sea_creature} | format pattern "/nh/sea/{sea_creature}") $qp)
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -870,14 +870,14 @@ export def "nh-tools list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --excludedetails: string # When set to `true`, only tool names are returned. Instead of an array of objects with all details, the return will be an array of strings.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> table<availability: list<record>, buy: list<record>, custom_body_part: string, custom_kits: int, customizable: bool, hha_base: int, name: string, notes: string, sell: int, unlocked: bool, url: string, uses: int, variations: list<record>, version_added: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/tools" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -898,14 +898,14 @@ export def "nh-tools get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> record<availability: table<from: string, note: string>, buy: table<currency: string, price: int>, custom_body_part: string, custom_kits: int, customizable: bool, hha_base: int, name: string, notes: string, sell: int, unlocked: bool, url: string, uses: int, variations: table<image_url: string, variation: string>, version_added: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nh/tools/($tool)" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let full_url = (build-url $base ({tool: $tool} | format pattern "/nh/tools/{tool}") $qp)
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -933,14 +933,14 @@ export def "villagers get" [
   --nhdetails: string # When set to `true`, an `nh_details` object will be included that contains *New Horizons* details about the villager. If the villager does not appear in *New Horizons*, the returned `nh_details` field will be set to null.
   --excludedetails: string # When set to `true`, only villager names are returned. Instead of an array of objects with all details, the return will be an array of strings.
   --thumbsize: int # Specify the desired width of returned image URLs. When unspecified, the linked image(s) returned by the API will be full-resolution. Note that images can only be reduced in size; specifying a width greater than than the maximum size will return the default full-size image URL. Note that requesting specific image sizes for long lists may result in a very long response time.
-  --X-API-KEY: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
-  --Accept-Version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
+  --x-api-key: string # Your UUID secret key, granted to you by the Nookipedia team. Required for accessing the API.
+  --accept-version: string # The version of the API you are calling, written as `1.0.0`. This is specified as required as good practice, but it is not actually enforced by the API. If you do not specify a version, you will be served the latest version, which may eventually result in breaking changes.
 ]: nothing -> table<alt_name: string, appearances: list<string>, birthday_day: string, birthday_month: string, clothing: string, debut: string, gender: string, id: string, image_url: string, islander: bool, name: string, nh_details: record<catchphrase: string, clothing: string, clothing_variation: string, fav_colors: list, fav_styles: list, hobby: string, house_exterior_url: string, house_flooring: string, house_interior_url: string, house_music: string, house_music_note: string, house_wallpaper: string, icon_url: string, image_url: string, photo_url: string, quote: string, sub_personality: string>, personality: string, phrase: string, prev_phrases: list<string>, quote: string, sign: string, species: string, text_color: string, title_color: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "species" $species "scalar") (serialize-qp "personality" $personality "scalar") (serialize-qp "game" $game "multi") (serialize-qp "birthmonth" $birthmonth "scalar") (serialize-qp "birthday" $birthday "scalar") (serialize-qp "nhdetails" $nhdetails "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/villagers" $qp)
-  let extra_headers = {"X-API-KEY": $X_API_KEY, "Accept-Version": $Accept_Version} | compact
+  let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -73,7 +73,7 @@ def unitofmeasure-completer [] { ["ct" "dwt" "g" "gr" "kg" "mg" "oz" "toz"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "currencies-history GET" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "currencies-history get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +97,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/Currencies/history
 # operationId: Currencies_History_GET
-export def "currencies-history GET" [
+export def "currencies-history get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,7 +126,7 @@ export def "currencies-history GET" [
 #
 # GET /api/v1/Currencies/history/supported
 # operationId: Currencies_SupportedCurrencies_History_GET
-export def "currencies-history-supported GET" [
+export def "currencies-history-supported get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,7 +151,7 @@ export def "currencies-history-supported GET" [
 #
 # GET /api/v1/Currencies/rate
 # operationId: Currencies_Rate_GET
-export def "currencies-rate GET" [
+export def "currencies-rate get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "currencies-rate GET" [
 #
 # GET /api/v1/Currencies/rate/supported
 # operationId: Currencies_SupportedCurrencies_Rate_GET
-export def "currencies-rate-supported GET" [
+export def "currencies-rate-supported get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "currencies-rate-supported GET" [
 #
 # GET /api/v1/Currencies/summary
 # operationId: Currencies_Summary_GET
-export def "currencies-summary GET" [
+export def "currencies-summary get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "currencies-summary GET" [
 #
 # GET /api/v1/Currencies/summary/supported
 # operationId: Currencies_SupportedCurrencies_Summary_GET
-export def "currencies-summary-supported GET" [
+export def "currencies-summary-supported get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "currencies-summary-supported GET" [
 #
 # GET /api/v1/Metals/benchmark/history
 # operationId: Metals_BenchmarkHistory_GET
-export def "metals-benchmark-history GET" [
+export def "metals-benchmark-history get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +285,7 @@ export def "metals-benchmark-history GET" [
 #
 # GET /api/v1/Metals/benchmark/summary
 # operationId: Metals_BenchmarkSummary_GET
-export def "metals-benchmark-summary GET" [
+export def "metals-benchmark-summary get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "metals-benchmark-summary GET" [
 #
 # GET /api/v1/Metals/benchmark/supported
 # operationId: Metals_BenchmarkSupportedMetals_GET
-export def "metals-benchmark-supported GET" [
+export def "metals-benchmark-supported get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "metals-benchmark-supported GET" [
 #
 # GET /api/v1/Metals/spot/history
 # operationId: Metals_SpotHistory_GET
-export def "metals-spot-history GET" [
+export def "metals-spot-history get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "metals-spot-history GET" [
 #
 # GET /api/v1/Metals/spot/performance
 # operationId: Metals_SpotHistoricalPerformance_GET
-export def "metals-spot-performance GET" [
+export def "metals-spot-performance get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "metals-spot-performance GET" [
 #
 # GET /api/v1/Metals/spot/performance/annual
 # operationId: Metals_SpotAnnualHistoricalPerformance_GET
-export def "metals-spot-performance-annual GET" [
+export def "metals-spot-performance-annual get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "metals-spot-performance-annual GET" [
 #
 # GET /api/v1/Metals/spot/ratio/history
 # operationId: Metals_SpotRatioHistory_GET
-export def "metals-spot-ratio-history GET" [
+export def "metals-spot-ratio-history get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "metals-spot-ratio-history GET" [
 #
 # GET /api/v1/Metals/spot/ratio/summary
 # operationId: Metals_SpotRatioSummary_GET
-export def "metals-spot-ratio-summary GET" [
+export def "metals-spot-ratio-summary get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,7 +482,7 @@ export def "metals-spot-ratio-summary GET" [
 #
 # GET /api/v1/Metals/spot/summary
 # operationId: Metals_SpotSummary_GET
-export def "metals-spot-summary GET" [
+export def "metals-spot-summary get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,7 +510,7 @@ export def "metals-spot-summary GET" [
 #
 # GET /api/v1/Metals/spot/supported
 # operationId: Metals_SpotSupportedMetals_GET
-export def "metals-spot-supported GET" [
+export def "metals-spot-supported get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -535,7 +535,7 @@ export def "metals-spot-supported GET" [
 #
 # GET /api/v1/Metals/supported/currency
 # operationId: Metals_SupportedCurrencies_Metals_GET
-export def "metals-supported-currency GET" [
+export def "metals-supported-currency get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "autocomplete autoComplete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "autocomplete get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /autocomplete
 # operationId: autoComplete
-export def "autocomplete autoComplete" [
+export def "autocomplete get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,12 +104,12 @@ export def "autocomplete autoComplete" [
   --text: string
   --sources: string
   --layers: string
-  --countryCode: string
+  --country-code: string
   --size: int # format: int32
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "sources" $sources "scalar") (serialize-qp "layers" $layers "scalar") (serialize-qp "countryCode" $countryCode "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "sources" $sources "scalar") (serialize-qp "layers" $layers "scalar") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/autocomplete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,7 +120,7 @@ export def "autocomplete autoComplete" [
 #
 # GET /coordinates
 # operationId: searchCoordinates
-export def "coordinates searchCoordinates" [
+export def "coordinates list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -144,7 +144,7 @@ export def "coordinates searchCoordinates" [
 #
 # GET /reverse
 # operationId: getReverseGeoCode
-export def "reverse get" [
+export def "reverse get-reverse-geo-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "reverse get" [
 #
 # GET /search
 # operationId: search
-export def "search search" [
+export def "search get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,12 +181,12 @@ export def "search search" [
   --text: string
   --sources: string
   --layers: string
-  --countryCode: string
+  --country-code: string
   --size: int # format: int32
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "sources" $sources "scalar") (serialize-qp "layers" $layers "scalar") (serialize-qp "countryCode" $countryCode "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "sources" $sources "scalar") (serialize-qp "layers" $layers "scalar") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -198,7 +198,7 @@ export def "search search" [
 # POST /upload
 # operationId: uploadFile
 # --parts item shape: {bodyAsString?: string, contentTypeFromMessage?: bool, headers?: record, mediaType?: record}
-export def "upload uploadFile" [
+export def "upload upload-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,8 +208,8 @@ export def "upload uploadFile" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string
-  --formData: record
-  --formDataMap: record
+  --form-data: record
+  --form-data-map: record
   --parts: list # item shape: {bodyAsString?: string, contentTypeFromMessage?: bool, headers?: record, mediaType?: record}
   --preamble: string
 ]: any -> any {
@@ -218,7 +218,7 @@ export def "upload uploadFile" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/upload" $qp)
-  let body = {formData: $formData, formDataMap: $formDataMap, parts: $parts, preamble: $preamble} | compact
+  let body = {"formData": $form_data, "formDataMap": $form_data_map, "parts": $parts, "preamble": $preamble} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

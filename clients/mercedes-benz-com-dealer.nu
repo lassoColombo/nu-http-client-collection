@@ -65,9 +65,9 @@ def base-url-completer [] { ["https://api.mercedes-benz.com/dealer_tryout/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def radiusUnit-completer [] { ["KM" "M" "MILE"] }
+def radius-unit-completer [] { ["KM" "M" "MILE"] }
 def brand-completer [] { ["MB" "SMT"] }
-def productGroup-completer [] { ["PASSENGER-CAR" "VAN"] }
+def product-group-completer [] { ["PASSENGER-CAR" "VAN"] }
 def activity-completer [] { ["PARTS" "SALES" "SERVICE" "USED-VEHICLES-TRADE"] }
 
 # List all available API commands with their parameters
@@ -107,11 +107,11 @@ export def "countries countriesGET" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The index of the page to be returned. If this parameter is omitted, the first page will be returned.  (format: int32)
-  --pageSize: int # The index of the page to be returned. If this parameter is omitted, the first page will be returned.  (format: int32)
+  --page-size: int # The index of the page to be returned. If this parameter is omitted, the first page will be returned.  (format: int32)
 ]: nothing -> record<_links: record<next: record<href: string>, previous: record<href: string>, self: record<href: string>>, countries: table<countryId: string, isoCode: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/countries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -131,24 +131,24 @@ export def "dealers dealersGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --dealerIds: list # Array of dealer ids. The dealer id is dealer’s business key, also known as GS Id. e.g. GS0000857,GS0017621
+  --dealer-ids: list # Array of dealer ids. The dealer id is dealer’s business key, also known as GS Id. e.g. GS0000857,GS0017621
   --latitude: float # The latitude geo coordinate.
   --longitude: float # The longitude geo coordinate.
-  --radiusValue: int # The radius value of the search area. The center of the search area is defined by geo coordinates. (latitude, longitude properties) If radiusValue and radiusUnit parameters are missing, then the default radius is 10 km. (default: 10)
-  --radiusUnit: string@radiusUnit-completer # The radius unit of the search area. The center of the search area is defined by geo coordinates. (latitude, longitude properties) If radiusValue and radiusUnit parameters are missing, then the default radius is 10 km. (default: KM)
-  --countryIsoCode: string # The country of the dealer address defined as ISO two letter ID (e.g. DE, CH, CN, etc.)
+  --radius-value: int # The radius value of the search area. The center of the search area is defined by geo coordinates. (latitude, longitude properties) If radiusValue and radiusUnit parameters are missing, then the default radius is 10 km. (default: 10)
+  --radius-unit: string@radius-unit-completer # The radius unit of the search area. The center of the search area is defined by geo coordinates. (latitude, longitude properties) If radiusValue and radiusUnit parameters are missing, then the default radius is 10 km. (default: KM)
+  --country-iso-code: string # The country of the dealer address defined as ISO two letter ID (e.g. DE, CH, CN, etc.)
   --city: string # The city of the dealer address.
   --name: string # A name of the dealer, the name filter will be applied to all Dealer names (e.g. legalName, nameAddition). You can also search for parts of Dealer names, e.g. the search term 'Niederlassung' will also match 'Niederlassung Stuttgart'.
   --brand: string@brand-completer # Filter by brand, valid values are:   * MB: Mercedes-Benz   * SMT: Smart
-  --productGroup: string@productGroup-completer # Filter by a product group
+  --product-group: string@product-group-completer # Filter by a product group
   --activity: string@activity-completer # Filter by activity, valid actitvity values are:   * PARTS: Spare Parts Sales   * SALES: Sales of new vehicles   * SERVICE: Maintaining and repair   * USED-VEHICLES-TRADE: Sales of used vehicles
   --fields: string # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned. e.g. fields=dealers(dealerId,address(street,city))
   --page: int # The index of the page to be returned. If this parameter is omitted, the first page will be returned.  (format: int32)
-  --pageSize: int # The index of the page to be returned. If this parameter is omitted, the first page will be returned.  (format: int32)
+  --page-size: int # The index of the page to be returned. If this parameter is omitted, the first page will be returned.  (format: int32)
 ]: nothing -> record<_links: record<next: record<href: string>, previous: record<href: string>, self: record<href: string>>, dealers: table<_links: record, address: record, brandCodes: list, communication: record, dealerId: string, distance: record, functions: list, geoCoordinates: record, legalName: string, nameAddition: string, openingHours: list, region: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dealerIds" $dealerIds "csv") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radiusValue" $radiusValue "scalar") (serialize-qp "radiusUnit" $radiusUnit "scalar") (serialize-qp "countryIsoCode" $countryIsoCode "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "brand" $brand "scalar") (serialize-qp "productGroup" $productGroup "scalar") (serialize-qp "activity" $activity "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dealerIds" $dealer_ids "csv") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radiusValue" $radius_value "scalar") (serialize-qp "radiusUnit" $radius_unit "scalar") (serialize-qp "countryIsoCode" $country_iso_code "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "brand" $brand "scalar") (serialize-qp "productGroup" $product_group "scalar") (serialize-qp "activity" $activity "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dealers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -160,7 +160,7 @@ export def "dealers dealersGET" [
 # GET /dealers/{dealerId}
 # operationId: dealerGET
 export def "dealers dealerGET" [
-  dealerId: string
+  dealer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +174,7 @@ export def "dealers dealerGET" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dealers/($dealerId)" $qp)
+  let full_url = (build-url $base ({dealer_id: $dealer_id} | format pattern "/dealers/{dealer_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

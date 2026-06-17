@@ -110,7 +110,7 @@ export def "change-password post" [
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/changePassword")
-  let body = {old_password: $old_password, password: $password} | compact
+  let body = {"old_password": $old_password, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -137,7 +137,7 @@ export def "login post" [
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/login")
-  let body = {email: $email, password: $password, source: $body_source} | compact
+  let body = {"email": $email, "password": $password, "source": $body_source} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -183,7 +183,7 @@ export def "request-password-reset post" [
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/requestPasswordReset")
-  let body = {email: $email} | compact
+  let body = {"email": $email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,7 +212,7 @@ export def "signin post" [
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signin")
-  let body = {dt: $dt, email: $email, id: $id, name: $name, phone: $phone} | compact
+  let body = {"dt": $dt, "email": $email, "id": $id, "name": $name, "phone": $phone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -223,7 +223,7 @@ export def "signin post" [
 #
 # DELETE /signin/{signinId}
 export def "signin delete" [
-  signinId: int
+  signin_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "signin delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/signin/($signinId)")
+  let full_url = (build-url $base ({signin_id: $signin_id} | format pattern "/signin/{signin_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -245,7 +245,7 @@ export def "signin delete" [
 #
 # GET /signin/{signinId}
 export def "signin get" [
-  signinId: int
+  signin_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,7 +257,7 @@ export def "signin get" [
 ]: nothing -> record<dt: float, email: string, id: int, name: string, phone: string> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/signin/($signinId)")
+  let full_url = (build-url $base ({signin_id: $signin_id} | format pattern "/signin/{signin_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -267,7 +267,7 @@ export def "signin get" [
 #
 # PUT /signin/{signinId}
 export def "signin put" [
-  signinId: int
+  signin_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,8 +285,8 @@ export def "signin put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/signin/($signinId)")
-  let body = {dt: $dt, email: $email, id: $id, name: $name, phone: $phone} | compact
+  let full_url = (build-url $base ({signin_id: $signin_id} | format pattern "/signin/{signin_id}"))
+  let body = {"dt": $dt, "email": $email, "id": $id, "name": $name, "phone": $phone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -338,7 +338,7 @@ export def "user post" [
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user")
-  let body = {admin: $admin, email: $email, name: $name, read_only: $read_only} | compact
+  let body = {"admin": $admin, "email": $email, "name": $name, "read_only": $read_only} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -349,7 +349,7 @@ export def "user post" [
 #
 # DELETE /user/{userId}
 export def "user delete" [
-  userId: int
+  user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,7 +361,7 @@ export def "user delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/($userId)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/user/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -371,7 +371,7 @@ export def "user delete" [
 #
 # GET /user/{userId}
 export def "user get" [
-  userId: int
+  user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -383,7 +383,7 @@ export def "user get" [
 ]: nothing -> record<admin: bool, email: string, id: int, name: string, read_only: bool> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/($userId)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/user/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -429,7 +429,7 @@ export def "verify-password-change post" [
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/verifyPasswordChange")
-  let body = {guid: $guid, password: $password} | compact
+  let body = {"guid": $guid, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

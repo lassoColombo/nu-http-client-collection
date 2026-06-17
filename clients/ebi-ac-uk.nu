@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activities get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activities get-activities-using-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /activities
 # operationId: getActivitiesUsingGET
-export def "activities get" [
+export def "activities get-activities-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,16 +101,16 @@ export def "activities get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assayChemblId: list # assayChemblId
+  --assay-chembl-id: list # assayChemblId
   --limit: int # limit (format: int32, default: 10)
-  --moleculeChemblId: list # moleculeChemblId
+  --molecule-chembl-id: list # moleculeChemblId
   --page: int # page (format: int32, default: 0)
-  --pchemblValue: float # pchemblValue (format: double)
-  --targetChemblId: list # targetChemblId
+  --pchembl-value: float # pchemblValue (format: double)
+  --target-chembl-id: list # targetChemblId
 ]: nothing -> record<activities: table<assay_chembl_id: string, data_validity_comment: string, molecule_chembl_id: string, pchembl_value: float, standard_flag: bool, standard_relation: string, standard_units: string, standard_value: float, target_chembl_id: string>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "assayChemblId" $assayChemblId "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "moleculeChemblId" $moleculeChemblId "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pchemblValue" $pchemblValue "scalar") (serialize-qp "targetChemblId" $targetChemblId "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "assayChemblId" $assay_chembl_id "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "moleculeChemblId" $molecule_chembl_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pchemblValue" $pchembl_value "scalar") (serialize-qp "targetChemblId" $target_chembl_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/activities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -121,7 +121,7 @@ export def "activities get" [
 #
 # GET /assays
 # operationId: getAssaysUsingGET
-export def "assays get" [
+export def "assays get-assays-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,16 +130,16 @@ export def "assays get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assayChemblId: list # assayChemblId
-  --assayOrg: list # assayOrg
-  --assayType: list # assayType
+  --assay-chembl-id: list # assayChemblId
+  --assay-org: list # assayOrg
+  --assay-type: list # assayType
   --limit: int # limit (format: int32, default: 10)
   --page: int # page (format: int32, default: 0)
-  --targetChemblId: list # targetChemblId
+  --target-chembl-id: list # targetChemblId
 ]: nothing -> record<assays: table<assay_chembl_id: string, assay_id: string, assay_organism: string, assay_type: string, confidence_score: float, target_chembl_id: string>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "assayChemblId" $assayChemblId "multi") (serialize-qp "assayOrg" $assayOrg "multi") (serialize-qp "assayType" $assayType "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "targetChemblId" $targetChemblId "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "assayChemblId" $assay_chembl_id "multi") (serialize-qp "assayOrg" $assay_org "multi") (serialize-qp "assayType" $assay_type "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "targetChemblId" $target_chembl_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/assays" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -150,7 +150,7 @@ export def "assays get" [
 #
 # GET /drugs
 # operationId: getDrugsUsingGET
-export def "drugs get" [
+export def "drugs get-drugs-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,16 +160,16 @@ export def "drugs get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accession: list # accession
-  --chemblId: list # chemblId
+  --chembl-id: list # chemblId
   --identifier: list # identifier
   --limit: int # limit (format: int32, default: 10)
   --name: list # name
   --page: int # page (format: int32, default: 0)
-  --pubchemCid: list # pubchemCid
+  --pubchem-cid: list # pubchemCid
 ]: nothing -> record<drugs: table<alogp: float, canonical_smiles: string, chembl_id: string, full_mwt: float, identifier: string, inchi_key: string, kegg_cid: string, molecule_type: string, name: string, pathway: list, pb_structures: list, polar_surface_area: float, pubchem_cid: string, pubchem_sid: string, standard_inchi: string, targets: list, uniprot_accession: string>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "chemblId" $chemblId "multi") (serialize-qp "identifier" $identifier "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "name" $name "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pubchemCid" $pubchemCid "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "chemblId" $chembl_id "multi") (serialize-qp "identifier" $identifier "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "name" $name "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pubchemCid" $pubchem_cid "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/drugs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -180,7 +180,7 @@ export def "drugs get" [
 #
 # GET /efo
 # operationId: getEFOUsingGET
-export def "efo get" [
+export def "efo get-efo-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,14 +193,14 @@ export def "efo get" [
   --label: list # label
   --limit: int # limit (format: int32, default: 10)
   --mesh: list # mesh
-  --oboId: list # oboId
-  --omimId: list # omimId
+  --obo-id: list # oboId
+  --omim-id: list # omimId
   --page: int # page (format: int32, default: 0)
   --synonym: list # synonym
 ]: nothing -> record<diseases: table<description: list, doid: list, icd9: list, label: string, mesh: list, ncit: list, obo_id: string, omim: list, short_form: string, snowmed: list, synonyms: list, umls: list>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "doid" $doid "multi") (serialize-qp "label" $label "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "mesh" $mesh "multi") (serialize-qp "oboId" $oboId "multi") (serialize-qp "omimId" $omimId "multi") (serialize-qp "page" $page "scalar") (serialize-qp "synonym" $synonym "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "doid" $doid "multi") (serialize-qp "label" $label "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "mesh" $mesh "multi") (serialize-qp "oboId" $obo_id "multi") (serialize-qp "omimId" $omim_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "synonym" $synonym "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/efo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -211,7 +211,7 @@ export def "efo get" [
 #
 # GET /hpo
 # operationId: getHpoUsingGET
-export def "hpo get" [
+export def "hpo get-hpo-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "hpo get" [
 #
 # GET /intact
 # operationId: getIntactUsingGET
-export def "intact get" [
+export def "intact get-intact-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "intact get" [
 #
 # GET /molecules
 # operationId: getMoleculesUsingGET
-export def "molecules get" [
+export def "molecules get-molecules-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,15 +276,15 @@ export def "molecules get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --canonicalSmiles: list # canonicalSmiles
-  --inchiKey: list # inchiKey
+  --canonical-smiles: list # canonicalSmiles
+  --inchi-key: list # inchiKey
   --limit: int # limit (format: int32, default: 10)
-  --moleculeChemblId: list # moleculeChemblId
+  --molecule-chembl-id: list # moleculeChemblId
   --page: int # page (format: int32, default: 0)
 ]: nothing -> record<molecules: table<alogp: float, canonical_smiles: string, chirality: float, full_mwt: float, heavy_atoms_count: int, inchi_key: string, max_phase: int, molecular_species: string, molecular_type: string, molecule_chembl_id: string, parent_chembl_id: string, pref_name: string, prodrug: float, standard_inchi: string, xrefs: list>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "canonicalSmiles" $canonicalSmiles "multi") (serialize-qp "inchiKey" $inchiKey "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "moleculeChemblId" $moleculeChemblId "multi") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "canonicalSmiles" $canonical_smiles "multi") (serialize-qp "inchiKey" $inchi_key "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "moleculeChemblId" $molecule_chembl_id "multi") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/molecules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -295,7 +295,7 @@ export def "molecules get" [
 #
 # GET /proteins
 # operationId: getProteinsUsingGET
-export def "proteins get" [
+export def "proteins get-proteins-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "proteins get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accession: list # accession
   --ec: list # ec
-  --fullName: list # fullName
+  --full-name: list # fullName
   --gene: list # gene
   --go: list # go
   --interpro: list # interpro
@@ -316,11 +316,11 @@ export def "proteins get" [
   --page: int # page (format: int32, default: 0)
   --pfam: list # pfam
   --reactome: list # reactome
-  --taxId: list # taxId
+  --tax-id: list # taxId
 ]: nothing -> record<pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>, proteins: table<accession: string, chromosome: string, crossreferences: record, ec_numbers: list, features: record, full_name: string, genes: list, interactions: list, length: float, mass: float, tax_id: int, variations: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "ec" $ec "multi") (serialize-qp "fullName" $fullName "multi") (serialize-qp "gene" $gene "multi") (serialize-qp "go" $go "multi") (serialize-qp "interpro" $interpro "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "omim" $omim "multi") (serialize-qp "orphanet" $orphanet "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pfam" $pfam "multi") (serialize-qp "reactome" $reactome "multi") (serialize-qp "taxId" $taxId "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "ec" $ec "multi") (serialize-qp "fullName" $full_name "multi") (serialize-qp "gene" $gene "multi") (serialize-qp "go" $go "multi") (serialize-qp "interpro" $interpro "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "omim" $omim "multi") (serialize-qp "orphanet" $orphanet "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pfam" $pfam "multi") (serialize-qp "reactome" $reactome "multi") (serialize-qp "taxId" $tax_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/proteins" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -331,7 +331,7 @@ export def "proteins get" [
 #
 # GET /pubchem/bioassays
 # operationId: getBioassaysUsingGET
-export def "pubchem-bioassays get" [
+export def "pubchem-bioassays get-bioassays-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,14 +341,14 @@ export def "pubchem-bioassays get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accession: list # accession
-  --assayPubchemId: list # assayPubchemId
+  --assay-pubchem-id: list # assayPubchemId
   --limit: int # limit (format: int32, default: 1)
-  --ncbiProteinId: list # ncbiProteinId
+  --ncbi-protein-id: list # ncbiProteinId
   --page: int # page (format: int32, default: 0)
 ]: nothing -> record<bioassays: table<bioAssay: record, sidRelatedData: list>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "assayPubchemId" $assayPubchemId "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "ncbiProteinId" $ncbiProteinId "multi") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "assayPubchemId" $assay_pubchem_id "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "ncbiProteinId" $ncbi_protein_id "multi") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pubchem/bioassays" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -359,7 +359,7 @@ export def "pubchem-bioassays get" [
 #
 # GET /pubchem/bioassays/sids
 # operationId: getBioassaysUsingGET_1
-export def "pubchem-bioassays-sids get-by-" [
+export def "pubchem-bioassays-sids get-bioassays-using-get-by-" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "pubchem-bioassays-sids get-by-" [
 #
 # GET /pubchem/compounds
 # operationId: getCompoundsUsingGET
-export def "pubchem-compounds get" [
+export def "pubchem-compounds get-compounds-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,15 +395,15 @@ export def "pubchem-compounds get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --canonicalSmiles: list # canonicalSmiles
+  --canonical-smiles: list # canonicalSmiles
   --cid: list # cid
-  --inchiKey: list # inchiKey
+  --inchi-key: list # inchiKey
   --limit: int # limit (format: int32, default: 10)
   --page: int # page (format: int32, default: 0)
 ]: nothing -> record<compounds: table<alogp: float, atom_chiral_count: int, atom_chiral_def_count: int, bond_chiral_count: int, bond_chiral_def_count: int, bond_chiral_undef_count: int, canonical_smiles: string, cid: int, covalent_unit_count: int, finger_print: string, full_mwt: float, heavy_atoms_count: int, inchi_key: string, isotope_atom_count: int, polar_surface_area: float, standard_inchi: string, tautomers_count: int>, pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "canonicalSmiles" $canonicalSmiles "multi") (serialize-qp "cid" $cid "multi") (serialize-qp "inchiKey" $inchiKey "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "canonicalSmiles" $canonical_smiles "multi") (serialize-qp "cid" $cid "multi") (serialize-qp "inchiKey" $inchi_key "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pubchem/compounds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -414,7 +414,7 @@ export def "pubchem-compounds get" [
 #
 # GET /pubchem/substances
 # operationId: getSubstancesUsingGET
-export def "pubchem-substances get" [
+export def "pubchem-substances get-substances-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,7 +441,7 @@ export def "pubchem-substances get" [
 #
 # GET /targets
 # operationId: getTargetsUsingGET
-export def "targets get" [
+export def "targets get-targets-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,11 +453,11 @@ export def "targets get" [
   --accession: list # accession
   --limit: int # limit (format: int32, default: 10)
   --page: int # page (format: int32, default: 0)
-  --targetIds: list # targetIds
+  --target-ids: list # targetIds
 ]: nothing -> record<pageMeta: record<currentElements: int, currentPage: int, limit: int, totalElements: int, totalPages: int>, targets: table<accession: string, target_chembl_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "targetIds" $targetIds "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "targetIds" $target_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/targets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -67,7 +67,7 @@ def auth-scheme-completer [] { ["query-api_key"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["applicaiton/xml" "application/json"] }
-def countsOnly-completer [] { ["0" "1"] }
+def counts-only-completer [] { ["0" "1"] }
 def encoded-completer [] { ["0" "1"] }
 def dct-completer [] { ["FR" "N" "O" "PR" "PS" "SR"] }
 def dkt-completer [] { ["N" "R"] }
@@ -117,12 +117,12 @@ export def "docket-response-format docket" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --docketId: string # Docket ID (default: EPA-HQ-OAR-2011-0028)
+  --docket-id: string # Docket ID (default: EPA-HQ-OAR-2011-0028)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "docketId" $docketId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/docket.($response_format)" $qp)
+  let qp = [(serialize-qp "docketId" $docket_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({response_format: $response_format} | format pattern "/docket.{response_format}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,13 +142,13 @@ export def "document-response-format document" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --documentId: string # FDMS Document ID (default: EPA-HQ-OAR-2011-0028-0108)
-  --federalRegisterNumber: string # Federal Register Document Number
+  --document-id: string # FDMS Document ID (default: EPA-HQ-OAR-2011-0028-0108)
+  --federal-register-number: string # Federal Register Document Number
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "documentId" $documentId "scalar") (serialize-qp "federalRegisterNumber" $federalRegisterNumber "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/document.($response_format)" $qp)
+  let qp = [(serialize-qp "documentId" $document_id "scalar") (serialize-qp "federalRegisterNumber" $federal_register_number "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({response_format: $response_format} | format pattern "/document.{response_format}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -168,7 +168,7 @@ export def "documents-response-format documents" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --countsOnly: int@countsOnly-completer # Counts Only: <ul><li>1 (will return only the document count for a search query)</li><li>0 (will return documents as well)</li></ul>
+  --counts-only: int@counts-only-completer # Counts Only: <ul><li>1 (will return only the document count for a search query)</li><li>0 (will return documents as well)</li></ul>
   --encoded: int@encoded-completer # Encoded: <ul><li>1 (will accept Regulations.gov style encoded parameters)</li><li>0 (will not accept such encoded parameters)</li></ul>
   --s: string # Keyword(s)
   --dct: string@dct-completer # Document Type: <ul><li>N: Notice</li><li>PR: Proposed Rule</li><li>FR: Rule</li><li>O: Other</li><li>SR: Supporting & Related Material</li><li>PS: Public Submission</li></ul>
@@ -194,8 +194,8 @@ export def "documents-response-format documents" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "countsOnly" $countsOnly "scalar") (serialize-qp "encoded" $encoded "scalar") (serialize-qp "s" $s "scalar") (serialize-qp "dct" $dct "scalar") (serialize-qp "dktid" $dktid "scalar") (serialize-qp "dkt" $dkt "scalar") (serialize-qp "cp" $cp "scalar") (serialize-qp "a" $a "scalar") (serialize-qp "rpp" $rpp "scalar") (serialize-qp "po" $po "scalar") (serialize-qp "cs" $cs "scalar") (serialize-qp "np" $np "scalar") (serialize-qp "cmsd" $cmsd "scalar") (serialize-qp "cmd" $cmd "scalar") (serialize-qp "crd" $crd "scalar") (serialize-qp "rd" $rd "scalar") (serialize-qp "pd" $pd "scalar") (serialize-qp "cat" $cat "scalar") (serialize-qp "sb" $sb "scalar") (serialize-qp "so" $so "scalar") (serialize-qp "dktst" $dktst "scalar") (serialize-qp "dktst2" $dktst2 "scalar") (serialize-qp "docst" $docst "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/documents.($response_format)" $qp)
+  let qp = [(serialize-qp "countsOnly" $counts_only "scalar") (serialize-qp "encoded" $encoded "scalar") (serialize-qp "s" $s "scalar") (serialize-qp "dct" $dct "scalar") (serialize-qp "dktid" $dktid "scalar") (serialize-qp "dkt" $dkt "scalar") (serialize-qp "cp" $cp "scalar") (serialize-qp "a" $a "scalar") (serialize-qp "rpp" $rpp "scalar") (serialize-qp "po" $po "scalar") (serialize-qp "cs" $cs "scalar") (serialize-qp "np" $np "scalar") (serialize-qp "cmsd" $cmsd "scalar") (serialize-qp "cmd" $cmd "scalar") (serialize-qp "crd" $crd "scalar") (serialize-qp "rd" $rd "scalar") (serialize-qp "pd" $pd "scalar") (serialize-qp "cat" $cat "scalar") (serialize-qp "sb" $sb "scalar") (serialize-qp "so" $so "scalar") (serialize-qp "dktst" $dktst "scalar") (serialize-qp "dktst2" $dktst2 "scalar") (serialize-qp "docst" $docst "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({response_format: $response_format} | format pattern "/documents.{response_format}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

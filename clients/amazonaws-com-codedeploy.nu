@@ -66,58 +66,58 @@ def base-url-completer [] { ["http://codedeploy.us-east-1.amazonaws.com" "http:/
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["CodeDeploy_20141006.AddTagsToOnPremisesInstances"] }
-def X-Amz-Target-completer-1 [] { ["CodeDeploy_20141006.BatchGetApplicationRevisions"] }
-def X-Amz-Target-completer-2 [] { ["CodeDeploy_20141006.BatchGetApplications"] }
-def X-Amz-Target-completer-3 [] { ["CodeDeploy_20141006.BatchGetDeploymentGroups"] }
-def X-Amz-Target-completer-4 [] { ["CodeDeploy_20141006.BatchGetDeploymentInstances"] }
-def X-Amz-Target-completer-5 [] { ["CodeDeploy_20141006.BatchGetDeploymentTargets"] }
-def X-Amz-Target-completer-6 [] { ["CodeDeploy_20141006.BatchGetDeployments"] }
-def X-Amz-Target-completer-7 [] { ["CodeDeploy_20141006.BatchGetOnPremisesInstances"] }
-def X-Amz-Target-completer-8 [] { ["CodeDeploy_20141006.ContinueDeployment"] }
-def X-Amz-Target-completer-9 [] { ["CodeDeploy_20141006.CreateApplication"] }
-def X-Amz-Target-completer-10 [] { ["CodeDeploy_20141006.CreateDeployment"] }
-def X-Amz-Target-completer-11 [] { ["CodeDeploy_20141006.CreateDeploymentConfig"] }
-def X-Amz-Target-completer-12 [] { ["CodeDeploy_20141006.CreateDeploymentGroup"] }
-def X-Amz-Target-completer-13 [] { ["CodeDeploy_20141006.DeleteApplication"] }
-def X-Amz-Target-completer-14 [] { ["CodeDeploy_20141006.DeleteDeploymentConfig"] }
-def X-Amz-Target-completer-15 [] { ["CodeDeploy_20141006.DeleteDeploymentGroup"] }
-def X-Amz-Target-completer-16 [] { ["CodeDeploy_20141006.DeleteGitHubAccountToken"] }
-def X-Amz-Target-completer-17 [] { ["CodeDeploy_20141006.DeleteResourcesByExternalId"] }
-def X-Amz-Target-completer-18 [] { ["CodeDeploy_20141006.DeregisterOnPremisesInstance"] }
-def X-Amz-Target-completer-19 [] { ["CodeDeploy_20141006.GetApplication"] }
-def X-Amz-Target-completer-20 [] { ["CodeDeploy_20141006.GetApplicationRevision"] }
-def X-Amz-Target-completer-21 [] { ["CodeDeploy_20141006.GetDeployment"] }
-def X-Amz-Target-completer-22 [] { ["CodeDeploy_20141006.GetDeploymentConfig"] }
-def X-Amz-Target-completer-23 [] { ["CodeDeploy_20141006.GetDeploymentGroup"] }
-def X-Amz-Target-completer-24 [] { ["CodeDeploy_20141006.GetDeploymentInstance"] }
-def X-Amz-Target-completer-25 [] { ["CodeDeploy_20141006.GetDeploymentTarget"] }
-def X-Amz-Target-completer-26 [] { ["CodeDeploy_20141006.GetOnPremisesInstance"] }
-def X-Amz-Target-completer-27 [] { ["CodeDeploy_20141006.ListApplicationRevisions"] }
-def X-Amz-Target-completer-28 [] { ["CodeDeploy_20141006.ListApplications"] }
-def X-Amz-Target-completer-29 [] { ["CodeDeploy_20141006.ListDeploymentConfigs"] }
-def X-Amz-Target-completer-30 [] { ["CodeDeploy_20141006.ListDeploymentGroups"] }
-def X-Amz-Target-completer-31 [] { ["CodeDeploy_20141006.ListDeploymentInstances"] }
-def X-Amz-Target-completer-32 [] { ["CodeDeploy_20141006.ListDeploymentTargets"] }
-def X-Amz-Target-completer-33 [] { ["CodeDeploy_20141006.ListDeployments"] }
-def X-Amz-Target-completer-34 [] { ["CodeDeploy_20141006.ListGitHubAccountTokenNames"] }
-def X-Amz-Target-completer-35 [] { ["CodeDeploy_20141006.ListOnPremisesInstances"] }
-def X-Amz-Target-completer-36 [] { ["CodeDeploy_20141006.ListTagsForResource"] }
-def X-Amz-Target-completer-37 [] { ["CodeDeploy_20141006.PutLifecycleEventHookExecutionStatus"] }
-def X-Amz-Target-completer-38 [] { ["CodeDeploy_20141006.RegisterApplicationRevision"] }
-def X-Amz-Target-completer-39 [] { ["CodeDeploy_20141006.RegisterOnPremisesInstance"] }
-def X-Amz-Target-completer-40 [] { ["CodeDeploy_20141006.RemoveTagsFromOnPremisesInstances"] }
-def X-Amz-Target-completer-41 [] { ["CodeDeploy_20141006.SkipWaitTimeForInstanceTermination"] }
-def X-Amz-Target-completer-42 [] { ["CodeDeploy_20141006.StopDeployment"] }
-def X-Amz-Target-completer-43 [] { ["CodeDeploy_20141006.TagResource"] }
-def X-Amz-Target-completer-44 [] { ["CodeDeploy_20141006.UntagResource"] }
-def X-Amz-Target-completer-45 [] { ["CodeDeploy_20141006.UpdateApplication"] }
-def X-Amz-Target-completer-46 [] { ["CodeDeploy_20141006.UpdateDeploymentGroup"] }
+def x-amz-target-completer [] { ["CodeDeploy_20141006.AddTagsToOnPremisesInstances"] }
+def x-amz-target-completer-1 [] { ["CodeDeploy_20141006.BatchGetApplicationRevisions"] }
+def x-amz-target-completer-2 [] { ["CodeDeploy_20141006.BatchGetApplications"] }
+def x-amz-target-completer-3 [] { ["CodeDeploy_20141006.BatchGetDeploymentGroups"] }
+def x-amz-target-completer-4 [] { ["CodeDeploy_20141006.BatchGetDeploymentInstances"] }
+def x-amz-target-completer-5 [] { ["CodeDeploy_20141006.BatchGetDeploymentTargets"] }
+def x-amz-target-completer-6 [] { ["CodeDeploy_20141006.BatchGetDeployments"] }
+def x-amz-target-completer-7 [] { ["CodeDeploy_20141006.BatchGetOnPremisesInstances"] }
+def x-amz-target-completer-8 [] { ["CodeDeploy_20141006.ContinueDeployment"] }
+def x-amz-target-completer-9 [] { ["CodeDeploy_20141006.CreateApplication"] }
+def x-amz-target-completer-10 [] { ["CodeDeploy_20141006.CreateDeployment"] }
+def x-amz-target-completer-11 [] { ["CodeDeploy_20141006.CreateDeploymentConfig"] }
+def x-amz-target-completer-12 [] { ["CodeDeploy_20141006.CreateDeploymentGroup"] }
+def x-amz-target-completer-13 [] { ["CodeDeploy_20141006.DeleteApplication"] }
+def x-amz-target-completer-14 [] { ["CodeDeploy_20141006.DeleteDeploymentConfig"] }
+def x-amz-target-completer-15 [] { ["CodeDeploy_20141006.DeleteDeploymentGroup"] }
+def x-amz-target-completer-16 [] { ["CodeDeploy_20141006.DeleteGitHubAccountToken"] }
+def x-amz-target-completer-17 [] { ["CodeDeploy_20141006.DeleteResourcesByExternalId"] }
+def x-amz-target-completer-18 [] { ["CodeDeploy_20141006.DeregisterOnPremisesInstance"] }
+def x-amz-target-completer-19 [] { ["CodeDeploy_20141006.GetApplication"] }
+def x-amz-target-completer-20 [] { ["CodeDeploy_20141006.GetApplicationRevision"] }
+def x-amz-target-completer-21 [] { ["CodeDeploy_20141006.GetDeployment"] }
+def x-amz-target-completer-22 [] { ["CodeDeploy_20141006.GetDeploymentConfig"] }
+def x-amz-target-completer-23 [] { ["CodeDeploy_20141006.GetDeploymentGroup"] }
+def x-amz-target-completer-24 [] { ["CodeDeploy_20141006.GetDeploymentInstance"] }
+def x-amz-target-completer-25 [] { ["CodeDeploy_20141006.GetDeploymentTarget"] }
+def x-amz-target-completer-26 [] { ["CodeDeploy_20141006.GetOnPremisesInstance"] }
+def x-amz-target-completer-27 [] { ["CodeDeploy_20141006.ListApplicationRevisions"] }
+def x-amz-target-completer-28 [] { ["CodeDeploy_20141006.ListApplications"] }
+def x-amz-target-completer-29 [] { ["CodeDeploy_20141006.ListDeploymentConfigs"] }
+def x-amz-target-completer-30 [] { ["CodeDeploy_20141006.ListDeploymentGroups"] }
+def x-amz-target-completer-31 [] { ["CodeDeploy_20141006.ListDeploymentInstances"] }
+def x-amz-target-completer-32 [] { ["CodeDeploy_20141006.ListDeploymentTargets"] }
+def x-amz-target-completer-33 [] { ["CodeDeploy_20141006.ListDeployments"] }
+def x-amz-target-completer-34 [] { ["CodeDeploy_20141006.ListGitHubAccountTokenNames"] }
+def x-amz-target-completer-35 [] { ["CodeDeploy_20141006.ListOnPremisesInstances"] }
+def x-amz-target-completer-36 [] { ["CodeDeploy_20141006.ListTagsForResource"] }
+def x-amz-target-completer-37 [] { ["CodeDeploy_20141006.PutLifecycleEventHookExecutionStatus"] }
+def x-amz-target-completer-38 [] { ["CodeDeploy_20141006.RegisterApplicationRevision"] }
+def x-amz-target-completer-39 [] { ["CodeDeploy_20141006.RegisterOnPremisesInstance"] }
+def x-amz-target-completer-40 [] { ["CodeDeploy_20141006.RemoveTagsFromOnPremisesInstances"] }
+def x-amz-target-completer-41 [] { ["CodeDeploy_20141006.SkipWaitTimeForInstanceTermination"] }
+def x-amz-target-completer-42 [] { ["CodeDeploy_20141006.StopDeployment"] }
+def x-amz-target-completer-43 [] { ["CodeDeploy_20141006.TagResource"] }
+def x-amz-target-completer-44 [] { ["CodeDeploy_20141006.UntagResource"] }
+def x-amz-target-completer-45 [] { ["CodeDeploy_20141006.UpdateApplication"] }
+def x-amz-target-completer-46 [] { ["CodeDeploy_20141006.UpdateDeploymentGroup"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-code-deploy-20141006add-tags-to-on-premises-instances AddTagsToOnPremisesInstances" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-code-deploy-20141006add-tags-to-on-premises-instances create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.AddTagsToOnPremisesInstances
 # operationId: AddTagsToOnPremisesInstances
-export def "x-amz-target-code-deploy-20141006add-tags-to-on-premises-instances AddTagsToOnPremisesInstances" [
+export def "x-amz-target-code-deploy-20141006add-tags-to-on-premises-instances create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,24 +150,24 @@ export def "x-amz-target-code-deploy-20141006add-tags-to-on-premises-instances A
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
   tags: any
-  instanceNames: any
+  instance_names: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.AddTagsToOnPremisesInstances")
-  let body = {tags: $tags, instanceNames: $instanceNames} | compact
+  let body = {"tags": $tags, "instanceNames": $instance_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -178,7 +178,7 @@ export def "x-amz-target-code-deploy-20141006add-tags-to-on-premises-instances A
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.BatchGetApplicationRevisions
 # operationId: BatchGetApplicationRevisions
-export def "x-amz-target-code-deploy-20141006batch-get-application-revisions BatchGetApplicationRevisions" [
+export def "x-amz-target-code-deploy-20141006batch-get-application-revisions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,24 +187,24 @@ export def "x-amz-target-code-deploy-20141006batch-get-application-revisions Bat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  applicationName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  application_name: any
   revisions: any
 ]: any -> record<applicationName: record, errorMessage: record, revisions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.BatchGetApplicationRevisions")
-  let body = {applicationName: $applicationName, revisions: $revisions} | compact
+  let body = {"applicationName": $application_name, "revisions": $revisions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -215,7 +215,7 @@ export def "x-amz-target-code-deploy-20141006batch-get-application-revisions Bat
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.BatchGetApplications
 # operationId: BatchGetApplications
-export def "x-amz-target-code-deploy-20141006batch-get-applications BatchGetApplications" [
+export def "x-amz-target-code-deploy-20141006batch-get-applications post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,23 +224,23 @@ export def "x-amz-target-code-deploy-20141006batch-get-applications BatchGetAppl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  applicationNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  application_names: any
 ]: any -> record<applicationsInfo: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.BatchGetApplications")
-  let body = {applicationNames: $applicationNames} | compact
+  let body = {"applicationNames": $application_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -251,7 +251,7 @@ export def "x-amz-target-code-deploy-20141006batch-get-applications BatchGetAppl
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.BatchGetDeploymentGroups
 # operationId: BatchGetDeploymentGroups
-export def "x-amz-target-code-deploy-20141006batch-get-deployment-groups BatchGetDeploymentGroups" [
+export def "x-amz-target-code-deploy-20141006batch-get-deployment-groups post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,24 +260,24 @@ export def "x-amz-target-code-deploy-20141006batch-get-deployment-groups BatchGe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  applicationName: any
-  deploymentGroupNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  application_name: any
+  deployment_group_names: any
 ]: any -> record<deploymentGroupsInfo: record, errorMessage: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.BatchGetDeploymentGroups")
-  let body = {applicationName: $applicationName, deploymentGroupNames: $deploymentGroupNames} | compact
+  let body = {"applicationName": $application_name, "deploymentGroupNames": $deployment_group_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -290,7 +290,7 @@ export def "x-amz-target-code-deploy-20141006batch-get-deployment-groups BatchGe
 # DEPRECATED
 # operationId: BatchGetDeploymentInstances
 @deprecated
-export def "x-amz-target-code-deploy-20141006batch-get-deployment-instances BatchGetDeploymentInstances" [
+export def "x-amz-target-code-deploy-20141006batch-get-deployment-instances post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,24 +299,24 @@ export def "x-amz-target-code-deploy-20141006batch-get-deployment-instances Batc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  deploymentId: any
-  instanceIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  deployment_id: any
+  instance_ids: any
 ]: any -> record<instancesSummary: record, errorMessage: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.BatchGetDeploymentInstances")
-  let body = {deploymentId: $deploymentId, instanceIds: $instanceIds} | compact
+  let body = {"deploymentId": $deployment_id, "instanceIds": $instance_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -327,7 +327,7 @@ export def "x-amz-target-code-deploy-20141006batch-get-deployment-instances Batc
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.BatchGetDeploymentTargets
 # operationId: BatchGetDeploymentTargets
-export def "x-amz-target-code-deploy-20141006batch-get-deployment-targets BatchGetDeploymentTargets" [
+export def "x-amz-target-code-deploy-20141006batch-get-deployment-targets post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,24 +336,24 @@ export def "x-amz-target-code-deploy-20141006batch-get-deployment-targets BatchG
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  --deploymentId: any
-  --targetIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  --deployment-id: any
+  --target-ids: any
 ]: any -> record<deploymentTargets: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.BatchGetDeploymentTargets")
-  let body = {deploymentId: $deploymentId, targetIds: $targetIds} | compact
+  let body = {"deploymentId": $deployment_id, "targetIds": $target_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -364,7 +364,7 @@ export def "x-amz-target-code-deploy-20141006batch-get-deployment-targets BatchG
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.BatchGetDeployments
 # operationId: BatchGetDeployments
-export def "x-amz-target-code-deploy-20141006batch-get-deployments BatchGetDeployments" [
+export def "x-amz-target-code-deploy-20141006batch-get-deployments post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,23 +373,23 @@ export def "x-amz-target-code-deploy-20141006batch-get-deployments BatchGetDeplo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  deploymentIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  deployment_ids: any
 ]: any -> record<deploymentsInfo: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.BatchGetDeployments")
-  let body = {deploymentIds: $deploymentIds} | compact
+  let body = {"deploymentIds": $deployment_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -400,7 +400,7 @@ export def "x-amz-target-code-deploy-20141006batch-get-deployments BatchGetDeplo
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.BatchGetOnPremisesInstances
 # operationId: BatchGetOnPremisesInstances
-export def "x-amz-target-code-deploy-20141006batch-get-on-premises-instances BatchGetOnPremisesInstances" [
+export def "x-amz-target-code-deploy-20141006batch-get-on-premises-instances post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -409,23 +409,23 @@ export def "x-amz-target-code-deploy-20141006batch-get-on-premises-instances Bat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  instanceNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  instance_names: any
 ]: any -> record<instanceInfos: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.BatchGetOnPremisesInstances")
-  let body = {instanceNames: $instanceNames} | compact
+  let body = {"instanceNames": $instance_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -436,7 +436,7 @@ export def "x-amz-target-code-deploy-20141006batch-get-on-premises-instances Bat
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.ContinueDeployment
 # operationId: ContinueDeployment
-export def "x-amz-target-code-deploy-20141006continue-deployment ContinueDeployment" [
+export def "x-amz-target-code-deploy-20141006continue-deployment post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -445,24 +445,24 @@ export def "x-amz-target-code-deploy-20141006continue-deployment ContinueDeploym
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  --deploymentId: any
-  --deploymentWaitType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  --deployment-id: any
+  --deployment-wait-type: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.ContinueDeployment")
-  let body = {deploymentId: $deploymentId, deploymentWaitType: $deploymentWaitType} | compact
+  let body = {"deploymentId": $deployment_id, "deploymentWaitType": $deployment_wait_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -473,7 +473,7 @@ export def "x-amz-target-code-deploy-20141006continue-deployment ContinueDeploym
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.CreateApplication
 # operationId: CreateApplication
-export def "x-amz-target-code-deploy-20141006create-application CreateApplication" [
+export def "x-amz-target-code-deploy-20141006create-application create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,25 +482,25 @@ export def "x-amz-target-code-deploy-20141006create-application CreateApplicatio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  applicationName: any
-  --computePlatform: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  application_name: any
+  --compute-platform: any
   --tags: any
 ]: any -> record<applicationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.CreateApplication")
-  let body = {applicationName: $applicationName, computePlatform: $computePlatform, tags: $tags} | compact
+  let body = {"applicationName": $application_name, "computePlatform": $compute_platform, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -511,7 +511,7 @@ export def "x-amz-target-code-deploy-20141006create-application CreateApplicatio
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.CreateDeployment
 # operationId: CreateDeployment
-export def "x-amz-target-code-deploy-20141006create-deployment CreateDeployment" [
+export def "x-amz-target-code-deploy-20141006create-deployment create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -520,33 +520,33 @@ export def "x-amz-target-code-deploy-20141006create-deployment CreateDeployment"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  applicationName: any
-  --deploymentGroupName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  application_name: any
+  --deployment-group-name: any
   --revision: any
-  --deploymentConfigName: any
+  --deployment-config-name: any
   --description: any
-  --ignoreApplicationStopFailures: any
-  --targetInstances: any
-  --autoRollbackConfiguration: any
-  --updateOutdatedInstancesOnly: any
-  --fileExistsBehavior: any
-  --overrideAlarmConfiguration: any
+  --ignore-application-stop-failures: any
+  --target-instances: any
+  --auto-rollback-configuration: any
+  --update-outdated-instances-only: any
+  --file-exists-behavior: any
+  --override-alarm-configuration: any
 ]: any -> record<deploymentId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.CreateDeployment")
-  let body = {applicationName: $applicationName, deploymentGroupName: $deploymentGroupName, revision: $revision, deploymentConfigName: $deploymentConfigName, description: $description, ignoreApplicationStopFailures: $ignoreApplicationStopFailures, targetInstances: $targetInstances, autoRollbackConfiguration: $autoRollbackConfiguration, updateOutdatedInstancesOnly: $updateOutdatedInstancesOnly, fileExistsBehavior: $fileExistsBehavior, overrideAlarmConfiguration: $overrideAlarmConfiguration} | compact
+  let body = {"applicationName": $application_name, "deploymentGroupName": $deployment_group_name, "revision": $revision, "deploymentConfigName": $deployment_config_name, "description": $description, "ignoreApplicationStopFailures": $ignore_application_stop_failures, "targetInstances": $target_instances, "autoRollbackConfiguration": $auto_rollback_configuration, "updateOutdatedInstancesOnly": $update_outdated_instances_only, "fileExistsBehavior": $file_exists_behavior, "overrideAlarmConfiguration": $override_alarm_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -557,7 +557,7 @@ export def "x-amz-target-code-deploy-20141006create-deployment CreateDeployment"
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.CreateDeploymentConfig
 # operationId: CreateDeploymentConfig
-export def "x-amz-target-code-deploy-20141006create-deployment-config CreateDeploymentConfig" [
+export def "x-amz-target-code-deploy-20141006create-deployment-config create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,26 +566,26 @@ export def "x-amz-target-code-deploy-20141006create-deployment-config CreateDepl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  deploymentConfigName: any
-  --minimumHealthyHosts: any
-  --trafficRoutingConfig: any
-  --computePlatform: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  deployment_config_name: any
+  --minimum-healthy-hosts: any
+  --traffic-routing-config: any
+  --compute-platform: any
 ]: any -> record<deploymentConfigId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.CreateDeploymentConfig")
-  let body = {deploymentConfigName: $deploymentConfigName, minimumHealthyHosts: $minimumHealthyHosts, trafficRoutingConfig: $trafficRoutingConfig, computePlatform: $computePlatform} | compact
+  let body = {"deploymentConfigName": $deployment_config_name, "minimumHealthyHosts": $minimum_healthy_hosts, "trafficRoutingConfig": $traffic_routing_config, "computePlatform": $compute_platform} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -596,7 +596,7 @@ export def "x-amz-target-code-deploy-20141006create-deployment-config CreateDepl
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.CreateDeploymentGroup
 # operationId: CreateDeploymentGroup
-export def "x-amz-target-code-deploy-20141006create-deployment-group CreateDeploymentGroup" [
+export def "x-amz-target-code-deploy-20141006create-deployment-group create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -605,40 +605,40 @@ export def "x-amz-target-code-deploy-20141006create-deployment-group CreateDeplo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  applicationName: any
-  deploymentGroupName: any
-  --deploymentConfigName: any
-  --ec2TagFilters: any
-  --onPremisesInstanceTagFilters: any
-  --autoScalingGroups: any
-  serviceRoleArn: any
-  --triggerConfigurations: any
-  --alarmConfiguration: any
-  --autoRollbackConfiguration: any
-  --outdatedInstancesStrategy: any
-  --deploymentStyle: any
-  --blueGreenDeploymentConfiguration: any
-  --loadBalancerInfo: any
-  --ec2TagSet: any
-  --ecsServices: any
-  --onPremisesTagSet: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  application_name: any
+  deployment_group_name: any
+  --deployment-config-name: any
+  --ec2-tag-filters: any
+  --on-premises-instance-tag-filters: any
+  --auto-scaling-groups: any
+  service_role_arn: any
+  --trigger-configurations: any
+  --alarm-configuration: any
+  --auto-rollback-configuration: any
+  --outdated-instances-strategy: any
+  --deployment-style: any
+  --blue-green-deployment-configuration: any
+  --load-balancer-info: any
+  --ec2-tag-set: any
+  --ecs-services: any
+  --on-premises-tag-set: any
   --tags: any
 ]: any -> record<deploymentGroupId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.CreateDeploymentGroup")
-  let body = {applicationName: $applicationName, deploymentGroupName: $deploymentGroupName, deploymentConfigName: $deploymentConfigName, ec2TagFilters: $ec2TagFilters, onPremisesInstanceTagFilters: $onPremisesInstanceTagFilters, autoScalingGroups: $autoScalingGroups, serviceRoleArn: $serviceRoleArn, triggerConfigurations: $triggerConfigurations, alarmConfiguration: $alarmConfiguration, autoRollbackConfiguration: $autoRollbackConfiguration, outdatedInstancesStrategy: $outdatedInstancesStrategy, deploymentStyle: $deploymentStyle, blueGreenDeploymentConfiguration: $blueGreenDeploymentConfiguration, loadBalancerInfo: $loadBalancerInfo, ec2TagSet: $ec2TagSet, ecsServices: $ecsServices, onPremisesTagSet: $onPremisesTagSet, tags: $tags} | compact
+  let body = {"applicationName": $application_name, "deploymentGroupName": $deployment_group_name, "deploymentConfigName": $deployment_config_name, "ec2TagFilters": $ec2_tag_filters, "onPremisesInstanceTagFilters": $on_premises_instance_tag_filters, "autoScalingGroups": $auto_scaling_groups, "serviceRoleArn": $service_role_arn, "triggerConfigurations": $trigger_configurations, "alarmConfiguration": $alarm_configuration, "autoRollbackConfiguration": $auto_rollback_configuration, "outdatedInstancesStrategy": $outdated_instances_strategy, "deploymentStyle": $deployment_style, "blueGreenDeploymentConfiguration": $blue_green_deployment_configuration, "loadBalancerInfo": $load_balancer_info, "ec2TagSet": $ec2_tag_set, "ecsServices": $ecs_services, "onPremisesTagSet": $on_premises_tag_set, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -649,7 +649,7 @@ export def "x-amz-target-code-deploy-20141006create-deployment-group CreateDeplo
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.DeleteApplication
 # operationId: DeleteApplication
-export def "x-amz-target-code-deploy-20141006delete-application DeleteApplication" [
+export def "x-amz-target-code-deploy-20141006delete-application delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,23 +658,23 @@ export def "x-amz-target-code-deploy-20141006delete-application DeleteApplicatio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  applicationName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  application_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.DeleteApplication")
-  let body = {applicationName: $applicationName} | compact
+  let body = {"applicationName": $application_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -685,7 +685,7 @@ export def "x-amz-target-code-deploy-20141006delete-application DeleteApplicatio
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.DeleteDeploymentConfig
 # operationId: DeleteDeploymentConfig
-export def "x-amz-target-code-deploy-20141006delete-deployment-config DeleteDeploymentConfig" [
+export def "x-amz-target-code-deploy-20141006delete-deployment-config delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,23 +694,23 @@ export def "x-amz-target-code-deploy-20141006delete-deployment-config DeleteDepl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  deploymentConfigName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  deployment_config_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.DeleteDeploymentConfig")
-  let body = {deploymentConfigName: $deploymentConfigName} | compact
+  let body = {"deploymentConfigName": $deployment_config_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -721,7 +721,7 @@ export def "x-amz-target-code-deploy-20141006delete-deployment-config DeleteDepl
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.DeleteDeploymentGroup
 # operationId: DeleteDeploymentGroup
-export def "x-amz-target-code-deploy-20141006delete-deployment-group DeleteDeploymentGroup" [
+export def "x-amz-target-code-deploy-20141006delete-deployment-group delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -730,24 +730,24 @@ export def "x-amz-target-code-deploy-20141006delete-deployment-group DeleteDeplo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  applicationName: any
-  deploymentGroupName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  application_name: any
+  deployment_group_name: any
 ]: any -> record<hooksNotCleanedUp: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.DeleteDeploymentGroup")
-  let body = {applicationName: $applicationName, deploymentGroupName: $deploymentGroupName} | compact
+  let body = {"applicationName": $application_name, "deploymentGroupName": $deployment_group_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -758,7 +758,7 @@ export def "x-amz-target-code-deploy-20141006delete-deployment-group DeleteDeplo
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.DeleteGitHubAccountToken
 # operationId: DeleteGitHubAccountToken
-export def "x-amz-target-code-deploy-20141006delete-git-hub-account-token DeleteGitHubAccountToken" [
+export def "x-amz-target-code-deploy-20141006delete-git-hub-account-token delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,23 +767,23 @@ export def "x-amz-target-code-deploy-20141006delete-git-hub-account-token Delete
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  --tokenName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  --token-name: any
 ]: any -> record<tokenName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.DeleteGitHubAccountToken")
-  let body = {tokenName: $tokenName} | compact
+  let body = {"tokenName": $token_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -794,7 +794,7 @@ export def "x-amz-target-code-deploy-20141006delete-git-hub-account-token Delete
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.DeleteResourcesByExternalId
 # operationId: DeleteResourcesByExternalId
-export def "x-amz-target-code-deploy-20141006delete-resources-by-external-id DeleteResourcesByExternalId" [
+export def "x-amz-target-code-deploy-20141006delete-resources-by-external-id delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -803,23 +803,23 @@ export def "x-amz-target-code-deploy-20141006delete-resources-by-external-id Del
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  --externalId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  --external-id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.DeleteResourcesByExternalId")
-  let body = {externalId: $externalId} | compact
+  let body = {"externalId": $external_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -830,7 +830,7 @@ export def "x-amz-target-code-deploy-20141006delete-resources-by-external-id Del
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.DeregisterOnPremisesInstance
 # operationId: DeregisterOnPremisesInstance
-export def "x-amz-target-code-deploy-20141006deregister-on-premises-instance DeregisterOnPremisesInstance" [
+export def "x-amz-target-code-deploy-20141006deregister-on-premises-instance post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -839,23 +839,23 @@ export def "x-amz-target-code-deploy-20141006deregister-on-premises-instance Der
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  instanceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  instance_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.DeregisterOnPremisesInstance")
-  let body = {instanceName: $instanceName} | compact
+  let body = {"instanceName": $instance_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -866,7 +866,7 @@ export def "x-amz-target-code-deploy-20141006deregister-on-premises-instance Der
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.GetApplication
 # operationId: GetApplication
-export def "x-amz-target-code-deploy-20141006get-application GetApplication" [
+export def "x-amz-target-code-deploy-20141006get-application get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -875,23 +875,23 @@ export def "x-amz-target-code-deploy-20141006get-application GetApplication" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  applicationName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  application_name: any
 ]: any -> record<application: record<applicationId: record, applicationName: record, createTime: record, linkedToGitHub: record, gitHubAccountName: record, computePlatform: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.GetApplication")
-  let body = {applicationName: $applicationName} | compact
+  let body = {"applicationName": $application_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -902,7 +902,7 @@ export def "x-amz-target-code-deploy-20141006get-application GetApplication" [
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.GetApplicationRevision
 # operationId: GetApplicationRevision
-export def "x-amz-target-code-deploy-20141006get-application-revision GetApplicationRevision" [
+export def "x-amz-target-code-deploy-20141006get-application-revision get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -911,24 +911,24 @@ export def "x-amz-target-code-deploy-20141006get-application-revision GetApplica
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  applicationName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  application_name: any
   revision: any
 ]: any -> record<applicationName: record, revision: record<revisionType: record, s3Location: record<bucket: record, key: record, bundleType: record, version: record, eTag: record>, gitHubLocation: record<repository: record, commitId: record>, string: record<content: record, sha256: record>, appSpecContent: record<content: record, sha256: record>>, revisionInfo: record<description: record, deploymentGroups: record, firstUsedTime: record, lastUsedTime: record, registerTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.GetApplicationRevision")
-  let body = {applicationName: $applicationName, revision: $revision} | compact
+  let body = {"applicationName": $application_name, "revision": $revision} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -939,7 +939,7 @@ export def "x-amz-target-code-deploy-20141006get-application-revision GetApplica
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.GetDeployment
 # operationId: GetDeployment
-export def "x-amz-target-code-deploy-20141006get-deployment GetDeployment" [
+export def "x-amz-target-code-deploy-20141006get-deployment get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -948,23 +948,23 @@ export def "x-amz-target-code-deploy-20141006get-deployment GetDeployment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  deploymentId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  deployment_id: any
 ]: any -> record<deploymentInfo: record<applicationName: record, deploymentGroupName: record, deploymentConfigName: record, deploymentId: record, previousRevision: record<revisionType: record, s3Location: record, gitHubLocation: record, string: record, appSpecContent: record>, revision: record<revisionType: record, s3Location: record, gitHubLocation: record, string: record, appSpecContent: record>, status: record, errorInformation: record<code: record, message: record>, createTime: record, startTime: record, completeTime: record, deploymentOverview: record<Pending: record, InProgress: record, Succeeded: record, Failed: record, Skipped: record, Ready: record>, description: record, creator: record, ignoreApplicationStopFailures: record, autoRollbackConfiguration: record<enabled: record, events: record>, updateOutdatedInstancesOnly: record, rollbackInfo: record<rollbackDeploymentId: record, rollbackTriggeringDeploymentId: record, rollbackMessage: record>, deploymentStyle: record<deploymentType: record, deploymentOption: record>, targetInstances: record<tagFilters: record, autoScalingGroups: record, ec2TagSet: record>, instanceTerminationWaitTimeStarted: record, blueGreenDeploymentConfiguration: record<terminateBlueInstancesOnDeploymentSuccess: record, deploymentReadyOption: record, greenFleetProvisioningOption: record>, loadBalancerInfo: record<elbInfoList: record, targetGroupInfoList: record, targetGroupPairInfoList: record>, additionalDeploymentStatusInfo: record, fileExistsBehavior: record, deploymentStatusMessages: record, computePlatform: record, externalId: record, relatedDeployments: record<autoUpdateOutdatedInstancesRootDeploymentId: record, autoUpdateOutdatedInstancesDeploymentIds: record>, overrideAlarmConfiguration: record<enabled: record, ignorePollAlarmFailure: record, alarms: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.GetDeployment")
-  let body = {deploymentId: $deploymentId} | compact
+  let body = {"deploymentId": $deployment_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -975,7 +975,7 @@ export def "x-amz-target-code-deploy-20141006get-deployment GetDeployment" [
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.GetDeploymentConfig
 # operationId: GetDeploymentConfig
-export def "x-amz-target-code-deploy-20141006get-deployment-config GetDeploymentConfig" [
+export def "x-amz-target-code-deploy-20141006get-deployment-config get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -984,23 +984,23 @@ export def "x-amz-target-code-deploy-20141006get-deployment-config GetDeployment
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  deploymentConfigName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  deployment_config_name: any
 ]: any -> record<deploymentConfigInfo: record<deploymentConfigId: record, deploymentConfigName: record, minimumHealthyHosts: record<type: record, value: record>, createTime: record, computePlatform: record, trafficRoutingConfig: record<type: record, timeBasedCanary: record, timeBasedLinear: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.GetDeploymentConfig")
-  let body = {deploymentConfigName: $deploymentConfigName} | compact
+  let body = {"deploymentConfigName": $deployment_config_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1011,7 +1011,7 @@ export def "x-amz-target-code-deploy-20141006get-deployment-config GetDeployment
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.GetDeploymentGroup
 # operationId: GetDeploymentGroup
-export def "x-amz-target-code-deploy-20141006get-deployment-group GetDeploymentGroup" [
+export def "x-amz-target-code-deploy-20141006get-deployment-group get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1020,24 +1020,24 @@ export def "x-amz-target-code-deploy-20141006get-deployment-group GetDeploymentG
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  applicationName: any
-  deploymentGroupName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  application_name: any
+  deployment_group_name: any
 ]: any -> record<deploymentGroupInfo: record<applicationName: record, deploymentGroupId: record, deploymentGroupName: record, deploymentConfigName: record, ec2TagFilters: record, onPremisesInstanceTagFilters: record, autoScalingGroups: record, serviceRoleArn: record, targetRevision: record<revisionType: record, s3Location: record, gitHubLocation: record, string: record, appSpecContent: record>, triggerConfigurations: record, alarmConfiguration: record<enabled: record, ignorePollAlarmFailure: record, alarms: record>, autoRollbackConfiguration: record<enabled: record, events: record>, deploymentStyle: record<deploymentType: record, deploymentOption: record>, outdatedInstancesStrategy: record, blueGreenDeploymentConfiguration: record<terminateBlueInstancesOnDeploymentSuccess: record, deploymentReadyOption: record, greenFleetProvisioningOption: record>, loadBalancerInfo: record<elbInfoList: record, targetGroupInfoList: record, targetGroupPairInfoList: record>, lastSuccessfulDeployment: record<deploymentId: record, status: record, endTime: record, createTime: record>, lastAttemptedDeployment: record<deploymentId: record, status: record, endTime: record, createTime: record>, ec2TagSet: record<ec2TagSetList: record>, onPremisesTagSet: record<onPremisesTagSetList: record>, computePlatform: record, ecsServices: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.GetDeploymentGroup")
-  let body = {applicationName: $applicationName, deploymentGroupName: $deploymentGroupName} | compact
+  let body = {"applicationName": $application_name, "deploymentGroupName": $deployment_group_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1050,7 +1050,7 @@ export def "x-amz-target-code-deploy-20141006get-deployment-group GetDeploymentG
 # DEPRECATED
 # operationId: GetDeploymentInstance
 @deprecated
-export def "x-amz-target-code-deploy-20141006get-deployment-instance GetDeploymentInstance" [
+export def "x-amz-target-code-deploy-20141006get-deployment-instance get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1059,24 +1059,24 @@ export def "x-amz-target-code-deploy-20141006get-deployment-instance GetDeployme
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  deploymentId: any
-  instanceId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  deployment_id: any
+  instance_id: any
 ]: any -> record<instanceSummary: record<deploymentId: record, instanceId: record, status: record, lastUpdatedAt: record, lifecycleEvents: record, instanceType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.GetDeploymentInstance")
-  let body = {deploymentId: $deploymentId, instanceId: $instanceId} | compact
+  let body = {"deploymentId": $deployment_id, "instanceId": $instance_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1087,7 +1087,7 @@ export def "x-amz-target-code-deploy-20141006get-deployment-instance GetDeployme
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.GetDeploymentTarget
 # operationId: GetDeploymentTarget
-export def "x-amz-target-code-deploy-20141006get-deployment-target GetDeploymentTarget" [
+export def "x-amz-target-code-deploy-20141006get-deployment-target get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1096,24 +1096,24 @@ export def "x-amz-target-code-deploy-20141006get-deployment-target GetDeployment
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  --deploymentId: any
-  --targetId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  --deployment-id: any
+  --target-id: any
 ]: any -> record<deploymentTarget: record<deploymentTargetType: record, instanceTarget: record<deploymentId: record, targetId: record, targetArn: record, status: record, lastUpdatedAt: record, lifecycleEvents: record, instanceLabel: record>, lambdaTarget: record<deploymentId: record, targetId: record, targetArn: record, status: record, lastUpdatedAt: record, lifecycleEvents: record, lambdaFunctionInfo: record>, ecsTarget: record<deploymentId: record, targetId: record, targetArn: record, lastUpdatedAt: record, lifecycleEvents: record, status: record, taskSetsInfo: record>, cloudFormationTarget: record<deploymentId: record, targetId: record, lastUpdatedAt: record, lifecycleEvents: record, status: record, resourceType: record, targetVersionWeight: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.GetDeploymentTarget")
-  let body = {deploymentId: $deploymentId, targetId: $targetId} | compact
+  let body = {"deploymentId": $deployment_id, "targetId": $target_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1124,7 +1124,7 @@ export def "x-amz-target-code-deploy-20141006get-deployment-target GetDeployment
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.GetOnPremisesInstance
 # operationId: GetOnPremisesInstance
-export def "x-amz-target-code-deploy-20141006get-on-premises-instance GetOnPremisesInstance" [
+export def "x-amz-target-code-deploy-20141006get-on-premises-instance get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1133,23 +1133,23 @@ export def "x-amz-target-code-deploy-20141006get-on-premises-instance GetOnPremi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  instanceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  instance_name: any
 ]: any -> record<instanceInfo: record<instanceName: record, iamSessionArn: record, iamUserArn: record, instanceArn: record, registerTime: record, deregisterTime: record, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.GetOnPremisesInstance")
-  let body = {instanceName: $instanceName} | compact
+  let body = {"instanceName": $instance_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1160,7 +1160,7 @@ export def "x-amz-target-code-deploy-20141006get-on-premises-instance GetOnPremi
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.ListApplicationRevisions
 # operationId: ListApplicationRevisions
-export def "x-amz-target-code-deploy-20141006list-application-revisions ListApplicationRevisions" [
+export def "x-amz-target-code-deploy-20141006list-application-revisions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1169,31 +1169,31 @@ export def "x-amz-target-code-deploy-20141006list-application-revisions ListAppl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  applicationName: any
-  --sortBy: any
-  --sortOrder: any
-  --s3Bucket: any
-  --s3KeyPrefix: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  application_name: any
+  --sort-by: any
+  --sort-order: any
+  --s3-bucket: any
+  --s3-key-prefix: any
   --deployed: any
-  --nextToken: any
+  --next-token: any
 ]: any -> record<revisions: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.ListApplicationRevisions" $qp)
-  let body = {applicationName: $applicationName, sortBy: $sortBy, sortOrder: $sortOrder, s3Bucket: $s3Bucket, s3KeyPrefix: $s3KeyPrefix, deployed: $deployed, nextToken: $nextToken} | compact
+  let body = {"applicationName": $application_name, "sortBy": $sort_by, "sortOrder": $sort_order, "s3Bucket": $s3_bucket, "s3KeyPrefix": $s3_key_prefix, "deployed": $deployed, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1204,7 +1204,7 @@ export def "x-amz-target-code-deploy-20141006list-application-revisions ListAppl
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.ListApplications
 # operationId: ListApplications
-export def "x-amz-target-code-deploy-20141006list-applications ListApplications" [
+export def "x-amz-target-code-deploy-20141006list-applications list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1213,25 +1213,25 @@ export def "x-amz-target-code-deploy-20141006list-applications ListApplications"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  --nextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  --next-token: any
 ]: any -> record<applications: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.ListApplications" $qp)
-  let body = {nextToken: $nextToken} | compact
+  let body = {"nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1242,7 +1242,7 @@ export def "x-amz-target-code-deploy-20141006list-applications ListApplications"
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.ListDeploymentConfigs
 # operationId: ListDeploymentConfigs
-export def "x-amz-target-code-deploy-20141006list-deployment-configs ListDeploymentConfigs" [
+export def "x-amz-target-code-deploy-20141006list-deployment-configs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1251,25 +1251,25 @@ export def "x-amz-target-code-deploy-20141006list-deployment-configs ListDeploym
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  --nextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  --next-token: any
 ]: any -> record<deploymentConfigsList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.ListDeploymentConfigs" $qp)
-  let body = {nextToken: $nextToken} | compact
+  let body = {"nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1280,7 +1280,7 @@ export def "x-amz-target-code-deploy-20141006list-deployment-configs ListDeploym
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.ListDeploymentGroups
 # operationId: ListDeploymentGroups
-export def "x-amz-target-code-deploy-20141006list-deployment-groups ListDeploymentGroups" [
+export def "x-amz-target-code-deploy-20141006list-deployment-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1289,26 +1289,26 @@ export def "x-amz-target-code-deploy-20141006list-deployment-groups ListDeployme
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  applicationName: any
-  --nextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  application_name: any
+  --next-token: any
 ]: any -> record<applicationName: record, deploymentGroups: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.ListDeploymentGroups" $qp)
-  let body = {applicationName: $applicationName, nextToken: $nextToken} | compact
+  let body = {"applicationName": $application_name, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1321,7 +1321,7 @@ export def "x-amz-target-code-deploy-20141006list-deployment-groups ListDeployme
 # DEPRECATED
 # operationId: ListDeploymentInstances
 @deprecated
-export def "x-amz-target-code-deploy-20141006list-deployment-instances ListDeploymentInstances" [
+export def "x-amz-target-code-deploy-20141006list-deployment-instances list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1330,28 +1330,28 @@ export def "x-amz-target-code-deploy-20141006list-deployment-instances ListDeplo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  deploymentId: any
-  --nextToken: any
-  --instanceStatusFilter: any
-  --instanceTypeFilter: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  deployment_id: any
+  --next-token: any
+  --instance-status-filter: any
+  --instance-type-filter: any
 ]: any -> record<instancesList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.ListDeploymentInstances" $qp)
-  let body = {deploymentId: $deploymentId, nextToken: $nextToken, instanceStatusFilter: $instanceStatusFilter, instanceTypeFilter: $instanceTypeFilter} | compact
+  let body = {"deploymentId": $deployment_id, "nextToken": $next_token, "instanceStatusFilter": $instance_status_filter, "instanceTypeFilter": $instance_type_filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1362,7 +1362,7 @@ export def "x-amz-target-code-deploy-20141006list-deployment-instances ListDeplo
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.ListDeploymentTargets
 # operationId: ListDeploymentTargets
-export def "x-amz-target-code-deploy-20141006list-deployment-targets ListDeploymentTargets" [
+export def "x-amz-target-code-deploy-20141006list-deployment-targets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1371,25 +1371,25 @@ export def "x-amz-target-code-deploy-20141006list-deployment-targets ListDeploym
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  --deploymentId: any
-  --nextToken: any
-  --targetFilters: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  --deployment-id: any
+  --next-token: any
+  --target-filters: any
 ]: any -> record<targetIds: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.ListDeploymentTargets")
-  let body = {deploymentId: $deploymentId, nextToken: $nextToken, targetFilters: $targetFilters} | compact
+  let body = {"deploymentId": $deployment_id, "nextToken": $next_token, "targetFilters": $target_filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1400,7 +1400,7 @@ export def "x-amz-target-code-deploy-20141006list-deployment-targets ListDeploym
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.ListDeployments
 # operationId: ListDeployments
-export def "x-amz-target-code-deploy-20141006list-deployments ListDeployments" [
+export def "x-amz-target-code-deploy-20141006list-deployments list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1409,30 +1409,30 @@ export def "x-amz-target-code-deploy-20141006list-deployments ListDeployments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  --applicationName: any
-  --deploymentGroupName: any
-  --externalId: any
-  --includeOnlyStatuses: any
-  --createTimeRange: any
-  --nextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  --application-name: any
+  --deployment-group-name: any
+  --external-id: any
+  --include-only-statuses: any
+  --create-time-range: any
+  --next-token: any
 ]: any -> record<deployments: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.ListDeployments" $qp)
-  let body = {applicationName: $applicationName, deploymentGroupName: $deploymentGroupName, externalId: $externalId, includeOnlyStatuses: $includeOnlyStatuses, createTimeRange: $createTimeRange, nextToken: $nextToken} | compact
+  let body = {"applicationName": $application_name, "deploymentGroupName": $deployment_group_name, "externalId": $external_id, "includeOnlyStatuses": $include_only_statuses, "createTimeRange": $create_time_range, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1443,7 +1443,7 @@ export def "x-amz-target-code-deploy-20141006list-deployments ListDeployments" [
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.ListGitHubAccountTokenNames
 # operationId: ListGitHubAccountTokenNames
-export def "x-amz-target-code-deploy-20141006list-git-hub-account-token-names ListGitHubAccountTokenNames" [
+export def "x-amz-target-code-deploy-20141006list-git-hub-account-token-names list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1452,23 +1452,23 @@ export def "x-amz-target-code-deploy-20141006list-git-hub-account-token-names Li
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  --nextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  --next-token: any
 ]: any -> record<tokenNameList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.ListGitHubAccountTokenNames")
-  let body = {nextToken: $nextToken} | compact
+  let body = {"nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1479,7 +1479,7 @@ export def "x-amz-target-code-deploy-20141006list-git-hub-account-token-names Li
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.ListOnPremisesInstances
 # operationId: ListOnPremisesInstances
-export def "x-amz-target-code-deploy-20141006list-on-premises-instances ListOnPremisesInstances" [
+export def "x-amz-target-code-deploy-20141006list-on-premises-instances list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1488,25 +1488,25 @@ export def "x-amz-target-code-deploy-20141006list-on-premises-instances ListOnPr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  --registrationStatus: any
-  --tagFilters: any
-  --nextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  --registration-status: any
+  --tag-filters: any
+  --next-token: any
 ]: any -> record<instanceNames: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.ListOnPremisesInstances")
-  let body = {registrationStatus: $registrationStatus, tagFilters: $tagFilters, nextToken: $nextToken} | compact
+  let body = {"registrationStatus": $registration_status, "tagFilters": $tag_filters, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1517,7 +1517,7 @@ export def "x-amz-target-code-deploy-20141006list-on-premises-instances ListOnPr
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-code-deploy-20141006list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-code-deploy-20141006list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1526,24 +1526,24 @@ export def "x-amz-target-code-deploy-20141006list-tags-for-resource ListTagsForR
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  ResourceArn: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  resource_arn: any
+  --next-token: any
 ]: any -> record<Tags: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.ListTagsForResource")
-  let body = {ResourceArn: $ResourceArn, NextToken: $NextToken} | compact
+  let body = {"ResourceArn": $resource_arn, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1554,7 +1554,7 @@ export def "x-amz-target-code-deploy-20141006list-tags-for-resource ListTagsForR
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.PutLifecycleEventHookExecutionStatus
 # operationId: PutLifecycleEventHookExecutionStatus
-export def "x-amz-target-code-deploy-20141006put-lifecycle-event-hook-execution-status PutLifecycleEventHookExecutionStatus" [
+export def "x-amz-target-code-deploy-20141006put-lifecycle-event-hook-execution-status update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1563,25 +1563,25 @@ export def "x-amz-target-code-deploy-20141006put-lifecycle-event-hook-execution-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  --deploymentId: any
-  --lifecycleEventHookExecutionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  --deployment-id: any
+  --lifecycle-event-hook-execution-id: any
   --status: any
 ]: any -> record<lifecycleEventHookExecutionId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.PutLifecycleEventHookExecutionStatus")
-  let body = {deploymentId: $deploymentId, lifecycleEventHookExecutionId: $lifecycleEventHookExecutionId, status: $status} | compact
+  let body = {"deploymentId": $deployment_id, "lifecycleEventHookExecutionId": $lifecycle_event_hook_execution_id, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1592,7 +1592,7 @@ export def "x-amz-target-code-deploy-20141006put-lifecycle-event-hook-execution-
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.RegisterApplicationRevision
 # operationId: RegisterApplicationRevision
-export def "x-amz-target-code-deploy-20141006register-application-revision RegisterApplicationRevision" [
+export def "x-amz-target-code-deploy-20141006register-application-revision create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1601,15 +1601,15 @@ export def "x-amz-target-code-deploy-20141006register-application-revision Regis
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  applicationName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  application_name: any
   --description: any
   revision: any
 ]: any -> any {
@@ -1617,9 +1617,9 @@ export def "x-amz-target-code-deploy-20141006register-application-revision Regis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.RegisterApplicationRevision")
-  let body = {applicationName: $applicationName, description: $description, revision: $revision} | compact
+  let body = {"applicationName": $application_name, "description": $description, "revision": $revision} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1630,7 +1630,7 @@ export def "x-amz-target-code-deploy-20141006register-application-revision Regis
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.RegisterOnPremisesInstance
 # operationId: RegisterOnPremisesInstance
-export def "x-amz-target-code-deploy-20141006register-on-premises-instance RegisterOnPremisesInstance" [
+export def "x-amz-target-code-deploy-20141006register-on-premises-instance create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1639,25 +1639,25 @@ export def "x-amz-target-code-deploy-20141006register-on-premises-instance Regis
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  instanceName: any
-  --iamSessionArn: any
-  --iamUserArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  instance_name: any
+  --iam-session-arn: any
+  --iam-user-arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.RegisterOnPremisesInstance")
-  let body = {instanceName: $instanceName, iamSessionArn: $iamSessionArn, iamUserArn: $iamUserArn} | compact
+  let body = {"instanceName": $instance_name, "iamSessionArn": $iam_session_arn, "iamUserArn": $iam_user_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1668,7 +1668,7 @@ export def "x-amz-target-code-deploy-20141006register-on-premises-instance Regis
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.RemoveTagsFromOnPremisesInstances
 # operationId: RemoveTagsFromOnPremisesInstances
-export def "x-amz-target-code-deploy-20141006remove-tags-from-on-premises-instances RemoveTagsFromOnPremisesInstances" [
+export def "x-amz-target-code-deploy-20141006remove-tags-from-on-premises-instances delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1677,24 +1677,24 @@ export def "x-amz-target-code-deploy-20141006remove-tags-from-on-premises-instan
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
   tags: any
-  instanceNames: any
+  instance_names: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.RemoveTagsFromOnPremisesInstances")
-  let body = {tags: $tags, instanceNames: $instanceNames} | compact
+  let body = {"tags": $tags, "instanceNames": $instance_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1707,7 +1707,7 @@ export def "x-amz-target-code-deploy-20141006remove-tags-from-on-premises-instan
 # DEPRECATED
 # operationId: SkipWaitTimeForInstanceTermination
 @deprecated
-export def "x-amz-target-code-deploy-20141006skip-wait-time-for-instance-termination SkipWaitTimeForInstanceTermination" [
+export def "x-amz-target-code-deploy-20141006skip-wait-time-for-instance-termination post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1716,23 +1716,23 @@ export def "x-amz-target-code-deploy-20141006skip-wait-time-for-instance-termina
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  --deploymentId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  --deployment-id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.SkipWaitTimeForInstanceTermination")
-  let body = {deploymentId: $deploymentId} | compact
+  let body = {"deploymentId": $deployment_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1743,7 +1743,7 @@ export def "x-amz-target-code-deploy-20141006skip-wait-time-for-instance-termina
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.StopDeployment
 # operationId: StopDeployment
-export def "x-amz-target-code-deploy-20141006stop-deployment StopDeployment" [
+export def "x-amz-target-code-deploy-20141006stop-deployment stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1752,24 +1752,24 @@ export def "x-amz-target-code-deploy-20141006stop-deployment StopDeployment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  deploymentId: any
-  --autoRollbackEnabled: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  deployment_id: any
+  --auto-rollback-enabled: any
 ]: any -> record<status: record, statusMessage: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.StopDeployment")
-  let body = {deploymentId: $deploymentId, autoRollbackEnabled: $autoRollbackEnabled} | compact
+  let body = {"deploymentId": $deployment_id, "autoRollbackEnabled": $auto_rollback_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1780,7 +1780,7 @@ export def "x-amz-target-code-deploy-20141006stop-deployment StopDeployment" [
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.TagResource
 # operationId: TagResource
-export def "x-amz-target-code-deploy-20141006tag-resource TagResource" [
+export def "x-amz-target-code-deploy-20141006tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1789,24 +1789,24 @@ export def "x-amz-target-code-deploy-20141006tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  ResourceArn: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.TagResource")
-  let body = {ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1817,7 +1817,7 @@ export def "x-amz-target-code-deploy-20141006tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-code-deploy-20141006untag-resource UntagResource" [
+export def "x-amz-target-code-deploy-20141006untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1826,24 +1826,24 @@ export def "x-amz-target-code-deploy-20141006untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  ResourceArn: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.UntagResource")
-  let body = {ResourceArn: $ResourceArn, TagKeys: $TagKeys} | compact
+  let body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1854,7 +1854,7 @@ export def "x-amz-target-code-deploy-20141006untag-resource UntagResource" [
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.UpdateApplication
 # operationId: UpdateApplication
-export def "x-amz-target-code-deploy-20141006update-application UpdateApplication" [
+export def "x-amz-target-code-deploy-20141006update-application update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1863,24 +1863,24 @@ export def "x-amz-target-code-deploy-20141006update-application UpdateApplicatio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  --applicationName: any
-  --newApplicationName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  --application-name: any
+  --new-application-name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.UpdateApplication")
-  let body = {applicationName: $applicationName, newApplicationName: $newApplicationName} | compact
+  let body = {"applicationName": $application_name, "newApplicationName": $new_application_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1891,7 +1891,7 @@ export def "x-amz-target-code-deploy-20141006update-application UpdateApplicatio
 #
 # POST /#X-Amz-Target=CodeDeploy_20141006.UpdateDeploymentGroup
 # operationId: UpdateDeploymentGroup
-export def "x-amz-target-code-deploy-20141006update-deployment-group UpdateDeploymentGroup" [
+export def "x-amz-target-code-deploy-20141006update-deployment-group update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1900,40 +1900,40 @@ export def "x-amz-target-code-deploy-20141006update-deployment-group UpdateDeplo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  applicationName: any
-  currentDeploymentGroupName: any
-  --newDeploymentGroupName: any
-  --deploymentConfigName: any
-  --ec2TagFilters: any
-  --onPremisesInstanceTagFilters: any
-  --autoScalingGroups: any
-  --serviceRoleArn: any
-  --triggerConfigurations: any
-  --alarmConfiguration: any
-  --autoRollbackConfiguration: any
-  --outdatedInstancesStrategy: any
-  --deploymentStyle: any
-  --blueGreenDeploymentConfiguration: any
-  --loadBalancerInfo: any
-  --ec2TagSet: any
-  --ecsServices: any
-  --onPremisesTagSet: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  application_name: any
+  current_deployment_group_name: any
+  --new-deployment-group-name: any
+  --deployment-config-name: any
+  --ec2-tag-filters: any
+  --on-premises-instance-tag-filters: any
+  --auto-scaling-groups: any
+  --service-role-arn: any
+  --trigger-configurations: any
+  --alarm-configuration: any
+  --auto-rollback-configuration: any
+  --outdated-instances-strategy: any
+  --deployment-style: any
+  --blue-green-deployment-configuration: any
+  --load-balancer-info: any
+  --ec2-tag-set: any
+  --ecs-services: any
+  --on-premises-tag-set: any
 ]: any -> record<hooksNotCleanedUp: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeDeploy_20141006.UpdateDeploymentGroup")
-  let body = {applicationName: $applicationName, currentDeploymentGroupName: $currentDeploymentGroupName, newDeploymentGroupName: $newDeploymentGroupName, deploymentConfigName: $deploymentConfigName, ec2TagFilters: $ec2TagFilters, onPremisesInstanceTagFilters: $onPremisesInstanceTagFilters, autoScalingGroups: $autoScalingGroups, serviceRoleArn: $serviceRoleArn, triggerConfigurations: $triggerConfigurations, alarmConfiguration: $alarmConfiguration, autoRollbackConfiguration: $autoRollbackConfiguration, outdatedInstancesStrategy: $outdatedInstancesStrategy, deploymentStyle: $deploymentStyle, blueGreenDeploymentConfiguration: $blueGreenDeploymentConfiguration, loadBalancerInfo: $loadBalancerInfo, ec2TagSet: $ec2TagSet, ecsServices: $ecsServices, onPremisesTagSet: $onPremisesTagSet} | compact
+  let body = {"applicationName": $application_name, "currentDeploymentGroupName": $current_deployment_group_name, "newDeploymentGroupName": $new_deployment_group_name, "deploymentConfigName": $deployment_config_name, "ec2TagFilters": $ec2_tag_filters, "onPremisesInstanceTagFilters": $on_premises_instance_tag_filters, "autoScalingGroups": $auto_scaling_groups, "serviceRoleArn": $service_role_arn, "triggerConfigurations": $trigger_configurations, "alarmConfiguration": $alarm_configuration, "autoRollbackConfiguration": $auto_rollback_configuration, "outdatedInstancesStrategy": $outdated_instances_strategy, "deploymentStyle": $deployment_style, "blueGreenDeploymentConfiguration": $blue_green_deployment_configuration, "loadBalancerInfo": $load_balancer_info, "ec2TagSet": $ec2_tag_set, "ecsServices": $ecs_services, "onPremisesTagSet": $on_premises_tag_set} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

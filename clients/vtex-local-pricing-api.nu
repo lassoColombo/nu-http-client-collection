@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pricing-config GetPricingConfig" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pricing-config get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /pricing/config
 # operationId: GetPricingConfig
-export def "pricing-config GetPricingConfig" [
+export def "pricing-config get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,13 +103,13 @@ export def "pricing-config GetPricingConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://api.vtex.com/{account}/pricing")
   let full_url = (build-url $base "/pricing/config")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,7 +120,7 @@ export def "pricing-config GetPricingConfig" [
 #
 # GET /pricing/migration
 # operationId: GetPricingv2Status
-export def "pricing-migration GetPricingv2Status" [
+export def "pricing-migration get-pricingv2-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,13 +129,13 @@ export def "pricing-migration GetPricingv2Status" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://api.vtex.com/{account}/pricing")
   let full_url = (build-url $base "/pricing/migration")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -146,7 +146,7 @@ export def "pricing-migration GetPricingv2Status" [
 #
 # GET /pricing/pipeline/catalog
 # operationId: getallpricetablesandrules
-export def "pricing-pipeline-catalog getallpricetablesandrules" [
+export def "pricing-pipeline-catalog get-allpricetablesandrules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,13 +155,13 @@ export def "pricing-pipeline-catalog getallpricetablesandrules" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> table<percentualModifier: int, rules: list<record>, tradePolicyId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://api.vtex.com/{account}/pricing")
   let full_url = (build-url $base "/pricing/pipeline/catalog")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -172,8 +172,8 @@ export def "pricing-pipeline-catalog getallpricetablesandrules" [
 #
 # GET /pricing/pipeline/catalog/{priceTableId}
 # operationId: Getrulesforapricetable
-export def "pricing-pipeline-catalog Getrulesforapricetable" [
-  priceTableId: string
+export def "pricing-pipeline-catalog get-rulesforapricetable" [
+  price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,13 +182,13 @@ export def "pricing-pipeline-catalog Getrulesforapricetable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> record<percentualModifier: int, rules: table<context: record, id: float>, tradePolicyId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://api.vtex.com/{account}/pricing")
-  let full_url = (build-url $base $"/pricing/pipeline/catalog/($priceTableId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({price_table_id: $price_table_id} | format pattern "/pricing/pipeline/catalog/{price_table_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,7 +200,7 @@ export def "pricing-pipeline-catalog Getrulesforapricetable" [
 # PUT /pricing/pipeline/catalog/{priceTableId}
 # --rules item shape: {context: record, id: int, percentualModifier: float}
 export def "pricing-pipeline-catalog put" [
-  priceTableId: string
+  price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,17 +209,17 @@ export def "pricing-pipeline-catalog put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
   rules: list # Array of rules for the price table. — item shape: {context: record, id: int, percentualModifier: float}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pricing/pipeline/catalog/($priceTableId)")
-  let body = {rules: $rules} | compact
+  let full_url = (build-url $base ({price_table_id: $price_table_id} | format pattern "/pricing/pipeline/catalog/{price_table_id}"))
+  let body = {"rules": $rules} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -230,8 +230,8 @@ export def "pricing-pipeline-catalog put" [
 #
 # DELETE /pricing/prices/{itemId}
 # operationId: DeletePrice
-export def "pricing-prices DeletePrice" [
-  itemId: int
+export def "pricing-prices delete" [
+  item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,13 +240,13 @@ export def "pricing-prices DeletePrice" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pricing/prices/($itemId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/pricing/prices/{item_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -257,8 +257,8 @@ export def "pricing-prices DeletePrice" [
 #
 # GET /pricing/prices/{itemId}
 # operationId: GetPrice
-export def "pricing-prices GetPrice" [
-  itemId: int
+export def "pricing-prices get" [
+  item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,13 +267,13 @@ export def "pricing-prices GetPrice" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> record<basePrice: int, costPrice: int, fixedPrices: table<dateRange: record, listPrice: float, minQuantity: int, tradePolicyId: string, value: float>, itemId: string, listPrice: int, markup: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pricing/prices/($itemId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/pricing/prices/{item_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -285,8 +285,8 @@ export def "pricing-prices GetPrice" [
 # PUT /pricing/prices/{itemId}
 # operationId: CreateUpdatePriceOrFixedPrice
 # --fixedPrices item shape: {dateRange?: record, listPrice?: float, minQuantity: int, tradePolicyId: string, value: float}
-export def "pricing-prices CreateUpdatePriceOrFixedPrice" [
-  itemId: int
+export def "pricing-prices create-update-price-or-fixed" [
+  item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,21 +295,21 @@ export def "pricing-prices CreateUpdatePriceOrFixedPrice" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --Content-Type: string # Describes the type of the content being sent.
-  basePrice: float # SKU selling base price. If you decide to fill only the `basePrice` item, the `markup` and `costPrice` will be automatically generated to adapt to the number inserted in `basePrice`. (default: 100)
-  --costPrice: float # SKU selling cost price. If you decide to fill the `costPrice` item, you must also fill the `markup` and `basePrice` will be automatically generated based on both values. (default: 35)
-  --fixedPrices: list # item shape: {dateRange?: record, listPrice?: float, minQuantity: int, tradePolicyId: string, value: float}
-  listPrice: float # SKU's suggested selling price. (default: 50)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent.
+  base_price: float # SKU selling base price. If you decide to fill only the `basePrice` item, the `markup` and `costPrice` will be automatically generated to adapt to the number inserted in `basePrice`. (default: 100)
+  --cost-price: float # SKU selling cost price. If you decide to fill the `costPrice` item, you must also fill the `markup` and `basePrice` will be automatically generated based on both values. (default: 35)
+  --fixed-prices: list # item shape: {dateRange?: record, listPrice?: float, minQuantity: int, tradePolicyId: string, value: float}
+  list_price: float # SKU's suggested selling price. (default: 50)
   markup: int # The profit percentage that is to be obtained from the sale of that SKU. If you decide to fill the `markup` item, you must also fill the `costPrice`. The `basePrice` will be automatically generated based on both values. (default: 30)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pricing/prices/($itemId)")
-  let body = {basePrice: $basePrice, costPrice: $costPrice, fixedPrices: $fixedPrices, listPrice: $listPrice, markup: $markup} | compact
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/pricing/prices/{item_id}"))
+  let body = {"basePrice": $base_price, "costPrice": $cost_price, "fixedPrices": $fixed_prices, "listPrice": $list_price, "markup": $markup} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -320,9 +320,9 @@ export def "pricing-prices CreateUpdatePriceOrFixedPrice" [
 #
 # GET /pricing/prices/{itemId}/computed/{priceTableId}
 # operationId: GetComputedPricebypricetable
-export def "pricing-prices-computed GetComputedPricebypricetable" [
-  itemId: int
-  priceTableId: string
+export def "pricing-prices-computed get-computed-pricebypricetable" [
+  item_id: int
+  price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,17 +331,17 @@ export def "pricing-prices-computed GetComputedPricebypricetable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --categoryIds: int # Category ID. (e.g. 1)
-  --brandId: int # Brand ID. (e.g. 3)
+  --category-ids: int # Category ID. (e.g. 1)
+  --brand-id: int # Brand ID. (e.g. 3)
   --quantity: int # SKU quantity. (e.g. 2)
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://api.vtex.com/{account}/pricing")
-  let qp = [(serialize-qp "categoryIds" $categoryIds "scalar") (serialize-qp "brandId" $brandId "scalar") (serialize-qp "quantity" $quantity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pricing/prices/($itemId)/computed/($priceTableId)" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let qp = [(serialize-qp "categoryIds" $category_ids "scalar") (serialize-qp "brandId" $brand_id "scalar") (serialize-qp "quantity" $quantity "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({item_id: $item_id, price_table_id: $price_table_id} | format pattern "/pricing/prices/{item_id}/computed/{price_table_id}") $qp)
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -352,8 +352,8 @@ export def "pricing-prices-computed GetComputedPricebypricetable" [
 #
 # GET /pricing/prices/{itemId}/fixed
 # operationId: GetFixedPrices
-export def "pricing-prices-fixed GetFixedPrices" [
-  itemId: int
+export def "pricing-prices-fixed get" [
+  item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,13 +362,13 @@ export def "pricing-prices-fixed GetFixedPrices" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --Content-Type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pricing/prices/($itemId)/fixed")
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/pricing/prices/{item_id}/fixed"))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -379,9 +379,9 @@ export def "pricing-prices-fixed GetFixedPrices" [
 #
 # DELETE /pricing/prices/{itemId}/fixed/{priceTableId}
 # operationId: Deletefixedpricesonapricetableortradepolicy
-export def "pricing-prices-fixed Deletefixedpricesonapricetableortradepolicy" [
-  itemId: int
-  priceTableId: string
+export def "pricing-prices-fixed delete-fixedpricesonapricetableortradepolicy" [
+  item_id: int
+  price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,13 +390,13 @@ export def "pricing-prices-fixed Deletefixedpricesonapricetableortradepolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pricing/prices/($itemId)/fixed/($priceTableId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({item_id: $item_id, price_table_id: $price_table_id} | format pattern "/pricing/prices/{item_id}/fixed/{price_table_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -407,9 +407,9 @@ export def "pricing-prices-fixed Deletefixedpricesonapricetableortradepolicy" [
 #
 # GET /pricing/prices/{itemId}/fixed/{priceTableId}
 # operationId: GetFixedPricesonapricetable
-export def "pricing-prices-fixed GetFixedPricesonapricetable" [
-  itemId: int
-  priceTableId: string
+export def "pricing-prices-fixed get-fixed-pricesonapricetable" [
+  item_id: int
+  price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,13 +418,13 @@ export def "pricing-prices-fixed GetFixedPricesonapricetable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # e.g. application/json
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # e.g. application/json
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pricing/prices/($itemId)/fixed/($priceTableId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({item_id: $item_id, price_table_id: $price_table_id} | format pattern "/pricing/prices/{item_id}/fixed/{price_table_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -435,9 +435,9 @@ export def "pricing-prices-fixed GetFixedPricesonapricetable" [
 #
 # POST /pricing/prices/{itemId}/fixed/{priceTableId}
 # operationId: createorupdatefixedpricesonpricetableortradepolicy
-export def "pricing-prices-fixed createorupdatefixedpricesonpricetableortradepolicy" [
-  itemId: int
-  priceTableId: string
+export def "pricing-prices-fixed create-orupdatefixedpricesonpricetableortradepolicy" [
+  item_id: int
+  price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,16 +446,16 @@ export def "pricing-prices-fixed createorupdatefixedpricesonpricetableortradepol
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pricing/prices/($itemId)/fixed/($priceTableId)")
+  let full_url = (build-url $base ({item_id: $item_id, price_table_id: $price_table_id} | format pattern "/pricing/prices/{item_id}/fixed/{price_table_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -466,7 +466,7 @@ export def "pricing-prices-fixed createorupdatefixedpricesonpricetableortradepol
 #
 # GET /pricing/tables
 # operationId: Listpricetables
-export def "pricing-tables Listpricetables" [
+export def "pricing-tables list-pricetables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,13 +475,13 @@ export def "pricing-tables Listpricetables" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default "https://api.vtex.com/{account}/pricing")
   let full_url = (build-url $base "/pricing/tables")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

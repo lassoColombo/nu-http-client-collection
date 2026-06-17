@@ -71,7 +71,7 @@ def disruption-status-completer [] { ["current" "planned"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "departures-route-type-stop GetForStop" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "departures-route-type-stop get-for" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/departures/route_type/{route_type}/stop/{stop_id}
 # operationId: Departures_GetForStop
-export def "departures-route-type-stop GetForStop" [
+export def "departures-route-type-stop get-for" [
   route_type: int
   stop_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -123,7 +123,7 @@ export def "departures-route-type-stop GetForStop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform_numbers" $platform_numbers "multi") (serialize-qp "direction_id" $direction_id "scalar") (serialize-qp "gtfs" $gtfs "scalar") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "include_cancelled" $include_cancelled "scalar") (serialize-qp "look_backwards" $look_backwards "scalar") (serialize-qp "expand" $expand "multi") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/departures/route_type/($route_type)/stop/($stop_id)" $qp)
+  let full_url = (build-url $base ({route_type: $route_type, stop_id: $stop_id} | format pattern "/v3/departures/route_type/{route_type}/stop/{stop_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -133,7 +133,7 @@ export def "departures-route-type-stop GetForStop" [
 #
 # GET /v3/departures/route_type/{route_type}/stop/{stop_id}/route/{route_id}
 # operationId: Departures_GetForStopAndRoute
-export def "departures-route-type-stop-route GetForStopAndRoute" [
+export def "departures-route-type-stop-route get-for-stop-and" [
   route_type: int
   stop_id: int
   route_id: string
@@ -161,7 +161,7 @@ export def "departures-route-type-stop-route GetForStopAndRoute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction_id" $direction_id "scalar") (serialize-qp "gtfs" $gtfs "scalar") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "include_cancelled" $include_cancelled "scalar") (serialize-qp "look_backwards" $look_backwards "scalar") (serialize-qp "expand" $expand "multi") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/departures/route_type/($route_type)/stop/($stop_id)/route/($route_id)" $qp)
+  let full_url = (build-url $base ({route_type: $route_type, stop_id: $stop_id, route_id: $route_id} | format pattern "/v3/departures/route_type/{route_type}/stop/{stop_id}/route/{route_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,7 +171,7 @@ export def "departures-route-type-stop-route GetForStopAndRoute" [
 #
 # GET /v3/directions/route/{route_id}
 # operationId: Directions_ForRoute
-export def "directions-route ForRoute" [
+export def "directions-route get" [
   route_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -189,7 +189,7 @@ export def "directions-route ForRoute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/directions/route/($route_id)" $qp)
+  let full_url = (build-url $base ({route_id: $route_id} | format pattern "/v3/directions/route/{route_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -199,7 +199,7 @@ export def "directions-route ForRoute" [
 #
 # GET /v3/directions/{direction_id}
 # operationId: Directions_ForDirection
-export def "directions ForDirection" [
+export def "directions get" [
   direction_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,7 +217,7 @@ export def "directions ForDirection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/directions/($direction_id)" $qp)
+  let full_url = (build-url $base ({direction_id: $direction_id} | format pattern "/v3/directions/{direction_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -227,7 +227,7 @@ export def "directions ForDirection" [
 #
 # GET /v3/directions/{direction_id}/route_type/{route_type}
 # operationId: Directions_ForDirectionAndType
-export def "directions-route-type ForDirectionAndType" [
+export def "directions-route-type get" [
   direction_id: int
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -246,7 +246,7 @@ export def "directions-route-type ForDirectionAndType" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/directions/($direction_id)/route_type/($route_type)" $qp)
+  let full_url = (build-url $base ({direction_id: $direction_id, route_type: $route_type} | format pattern "/v3/directions/{direction_id}/route_type/{route_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,7 +256,7 @@ export def "directions-route-type ForDirectionAndType" [
 #
 # GET /v3/disruptions
 # operationId: Disruptions_GetAllDisruptions
-export def "disruptions GetAllDisruptions" [
+export def "disruptions get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "disruptions GetAllDisruptions" [
 #
 # GET /v3/disruptions/modes
 # operationId: Disruptions_GetDisruptionModes
-export def "disruptions-modes GetDisruptionModes" [
+export def "disruptions-modes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "disruptions-modes GetDisruptionModes" [
 #
 # GET /v3/disruptions/route/{route_id}
 # operationId: Disruptions_GetDisruptionsByRoute
-export def "disruptions-route GetDisruptionsByRoute" [
+export def "disruptions-route get" [
   route_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -332,7 +332,7 @@ export def "disruptions-route GetDisruptionsByRoute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "disruption_status" $disruption_status "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/disruptions/route/($route_id)" $qp)
+  let full_url = (build-url $base ({route_id: $route_id} | format pattern "/v3/disruptions/route/{route_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -342,7 +342,7 @@ export def "disruptions-route GetDisruptionsByRoute" [
 #
 # GET /v3/disruptions/route/{route_id}/stop/{stop_id}
 # operationId: Disruptions_GetDisruptionsByRouteAndStop
-export def "disruptions-route-stop GetDisruptionsByRouteAndStop" [
+export def "disruptions-route-stop get" [
   route_id: int
   stop_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -362,7 +362,7 @@ export def "disruptions-route-stop GetDisruptionsByRouteAndStop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "disruption_status" $disruption_status "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/disruptions/route/($route_id)/stop/($stop_id)" $qp)
+  let full_url = (build-url $base ({route_id: $route_id, stop_id: $stop_id} | format pattern "/v3/disruptions/route/{route_id}/stop/{stop_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -372,7 +372,7 @@ export def "disruptions-route-stop GetDisruptionsByRouteAndStop" [
 #
 # GET /v3/disruptions/stop/{stop_id}
 # operationId: Disruptions_GetDisruptionsByStop
-export def "disruptions-stop GetDisruptionsByStop" [
+export def "disruptions-stop get" [
   stop_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -391,7 +391,7 @@ export def "disruptions-stop GetDisruptionsByStop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "disruption_status" $disruption_status "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/disruptions/stop/($stop_id)" $qp)
+  let full_url = (build-url $base ({stop_id: $stop_id} | format pattern "/v3/disruptions/stop/{stop_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -401,7 +401,7 @@ export def "disruptions-stop GetDisruptionsByStop" [
 #
 # GET /v3/disruptions/{disruption_id}
 # operationId: Disruptions_GetDisruptionById
-export def "disruptions GetDisruptionById" [
+export def "disruptions get" [
   disruption_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -419,7 +419,7 @@ export def "disruptions GetDisruptionById" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/disruptions/($disruption_id)" $qp)
+  let full_url = (build-url $base ({disruption_id: $disruption_id} | format pattern "/v3/disruptions/{disruption_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -429,9 +429,9 @@ export def "disruptions GetDisruptionById" [
 #
 # GET /v3/fare_estimate/min_zone/{minZone}/max_zone/{maxZone}
 # operationId: FareEstimate_GetFareEstimateByZone
-export def "fare-estimate-min-zone-max-zone GetFareEstimateByZone" [
-  minZone: int
-  maxZone: int
+export def "fare-estimate-min-zone-max-zone get" [
+  min_zone: int
+  max_zone: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "fare-estimate-min-zone-max-zone GetFareEstimateByZone" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "journey_touch_on_utc" $journey_touch_on_utc "scalar") (serialize-qp "journey_touch_off_utc" $journey_touch_off_utc "scalar") (serialize-qp "is_journey_in_free_tram_zone" $is_journey_in_free_tram_zone "scalar") (serialize-qp "travelled_route_types" $travelled_route_types "multi") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/fare_estimate/min_zone/($minZone)/max_zone/($maxZone)" $qp)
+  let full_url = (build-url $base ({min_zone: $min_zone, max_zone: $max_zone} | format pattern "/v3/fare_estimate/min_zone/{min_zone}/max_zone/{max_zone}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -462,7 +462,7 @@ export def "fare-estimate-min-zone-max-zone GetFareEstimateByZone" [
 #
 # GET /v3/outlets
 # operationId: Outlets_GetAllOutlets
-export def "outlets GetAllOutlets" [
+export def "outlets get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,7 +490,7 @@ export def "outlets GetAllOutlets" [
 #
 # GET /v3/outlets/location/{latitude},{longitude}
 # operationId: Outlets_GetOutletsByGeolocation
-export def "outlets-location GetOutletsByGeolocation" [
+export def "outlets-location get" [
   latitude: float
   longitude: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -511,7 +511,7 @@ export def "outlets-location GetOutletsByGeolocation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_distance" $max_distance "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/outlets/location/($latitude),($longitude)" $qp)
+  let full_url = (build-url $base ({latitude: $latitude, longitude: $longitude} | format pattern "/v3/outlets/location/{latitude},{longitude}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -521,7 +521,7 @@ export def "outlets-location GetOutletsByGeolocation" [
 #
 # GET /v3/pattern/run/{run_ref}/route_type/{route_type}
 # operationId: Patterns_GetPatternByRun
-export def "pattern-run-route-type GetPatternByRun" [
+export def "pattern-run-route-type get" [
   run_ref: string
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -545,7 +545,7 @@ export def "pattern-run-route-type GetPatternByRun" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "stop_id" $stop_id "scalar") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "include_skipped_stops" $include_skipped_stops "scalar") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/pattern/run/($run_ref)/route_type/($route_type)" $qp)
+  let full_url = (build-url $base ({run_ref: $run_ref, route_type: $route_type} | format pattern "/v3/pattern/run/{run_ref}/route_type/{route_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -555,7 +555,7 @@ export def "pattern-run-route-type GetPatternByRun" [
 #
 # GET /v3/route_types
 # operationId: RouteTypes_GetRouteTypes
-export def "route-types GetRouteTypes" [
+export def "route-types get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -582,7 +582,7 @@ export def "route-types GetRouteTypes" [
 #
 # GET /v3/routes
 # operationId: Routes_OneOrMoreRoutes
-export def "routes OneOrMoreRoutes" [
+export def "routes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -611,7 +611,7 @@ export def "routes OneOrMoreRoutes" [
 #
 # GET /v3/routes/{route_id}
 # operationId: Routes_RouteFromId
-export def "routes RouteFromId" [
+export def "routes get" [
   route_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -631,7 +631,7 @@ export def "routes RouteFromId" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "geopath_utc" $geopath_utc "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/routes/($route_id)" $qp)
+  let full_url = (build-url $base ({route_id: $route_id} | format pattern "/v3/routes/{route_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -641,7 +641,7 @@ export def "routes RouteFromId" [
 #
 # GET /v3/runs/route/{route_id}
 # operationId: Runs_ForRoute
-export def "runs-route ForRoute" [
+export def "runs-route get" [
   route_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -661,7 +661,7 @@ export def "runs-route ForRoute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/runs/route/($route_id)" $qp)
+  let full_url = (build-url $base ({route_id: $route_id} | format pattern "/v3/runs/route/{route_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -671,7 +671,7 @@ export def "runs-route ForRoute" [
 #
 # GET /v3/runs/route/{route_id}/route_type/{route_type}
 # operationId: Runs_ForRouteAndRouteType
-export def "runs-route-route-type ForRouteAndRouteType" [
+export def "runs-route-route-type get" [
   route_id: int
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -692,7 +692,7 @@ export def "runs-route-route-type ForRouteAndRouteType" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/runs/route/($route_id)/route_type/($route_type)" $qp)
+  let full_url = (build-url $base ({route_id: $route_id, route_type: $route_type} | format pattern "/v3/runs/route/{route_id}/route_type/{route_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -702,7 +702,7 @@ export def "runs-route-route-type ForRouteAndRouteType" [
 #
 # GET /v3/runs/{run_ref}
 # operationId: Runs_ForRun
-export def "runs ForRun" [
+export def "runs get" [
   run_ref: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -723,7 +723,7 @@ export def "runs ForRun" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/runs/($run_ref)" $qp)
+  let full_url = (build-url $base ({run_ref: $run_ref} | format pattern "/v3/runs/{run_ref}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -733,7 +733,7 @@ export def "runs ForRun" [
 #
 # GET /v3/runs/{run_ref}/route_type/{route_type}
 # operationId: Runs_ForRunAndRouteType
-export def "runs-route-type ForRunAndRouteType" [
+export def "runs-route-type get" [
   run_ref: string
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -755,7 +755,7 @@ export def "runs-route-type ForRunAndRouteType" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/runs/($run_ref)/route_type/($route_type)" $qp)
+  let full_url = (build-url $base ({run_ref: $run_ref, route_type: $route_type} | format pattern "/v3/runs/{run_ref}/route_type/{route_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -765,7 +765,7 @@ export def "runs-route-type ForRunAndRouteType" [
 #
 # GET /v3/search/{search_term}
 # operationId: Search_Search
-export def "search Search" [
+export def "search list" [
   search_term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -792,7 +792,7 @@ export def "search Search" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "route_types" $route_types "multi") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "max_distance" $max_distance "scalar") (serialize-qp "include_addresses" $include_addresses "scalar") (serialize-qp "include_outlets" $include_outlets "scalar") (serialize-qp "match_stop_by_suburb" $match_stop_by_suburb "scalar") (serialize-qp "match_route_by_suburb" $match_route_by_suburb "scalar") (serialize-qp "match_stop_by_gtfs_stop_id" $match_stop_by_gtfs_stop_id "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/search/($search_term)" $qp)
+  let full_url = (build-url $base ({search_term: $search_term} | format pattern "/v3/search/{search_term}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -802,7 +802,7 @@ export def "search Search" [
 #
 # GET /v3/stops/location/{latitude},{longitude}
 # operationId: Stops_StopsByGeolocation
-export def "stops-location StopsByGeolocation" [
+export def "stops-location stop-s" [
   latitude: float
   longitude: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -825,7 +825,7 @@ export def "stops-location StopsByGeolocation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "route_types" $route_types "multi") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "max_distance" $max_distance "scalar") (serialize-qp "stop_disruptions" $stop_disruptions "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/stops/location/($latitude),($longitude)" $qp)
+  let full_url = (build-url $base ({latitude: $latitude, longitude: $longitude} | format pattern "/v3/stops/location/{latitude},{longitude}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -835,7 +835,7 @@ export def "stops-location StopsByGeolocation" [
 #
 # GET /v3/stops/route/{route_id}/route_type/{route_type}
 # operationId: Stops_StopsForRoute
-export def "stops-route-route-type StopsForRoute" [
+export def "stops-route-route-type stop-s-for" [
   route_id: int
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -858,7 +858,7 @@ export def "stops-route-route-type StopsForRoute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction_id" $direction_id "scalar") (serialize-qp "stop_disruptions" $stop_disruptions "scalar") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "geopath_utc" $geopath_utc "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/stops/route/($route_id)/route_type/($route_type)" $qp)
+  let full_url = (build-url $base ({route_id: $route_id, route_type: $route_type} | format pattern "/v3/stops/route/{route_id}/route_type/{route_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -868,7 +868,7 @@ export def "stops-route-route-type StopsForRoute" [
 #
 # GET /v3/stops/{stop_id}/route_type/{route_type}
 # operationId: Stops_StopDetails
-export def "stops-route-type StopDetails" [
+export def "stops-route-type stop-details" [
   stop_id: int
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -895,7 +895,7 @@ export def "stops-route-type StopDetails" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stop_location" $stop_location "scalar") (serialize-qp "stop_amenities" $stop_amenities "scalar") (serialize-qp "stop_accessibility" $stop_accessibility "scalar") (serialize-qp "stop_contact" $stop_contact "scalar") (serialize-qp "stop_ticket" $stop_ticket "scalar") (serialize-qp "gtfs" $gtfs "scalar") (serialize-qp "stop_staffing" $stop_staffing "scalar") (serialize-qp "stop_disruptions" $stop_disruptions "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/stops/($stop_id)/route_type/($route_type)" $qp)
+  let full_url = (build-url $base ({stop_id: $stop_id, route_type: $route_type} | format pattern "/v3/stops/{stop_id}/route_type/{route_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks ListByAutomationAccount" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks list-by" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,10 +94,10 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/webhooks
 # Docs: http://aka.ms/azureautomationsdk/webhookoperations
 # operationId: Webhook_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks ListByAutomationAccount" [
-  resourceGroupName: string
-  automationAccountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks list-by" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,7 +112,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/webhooks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/webhooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -123,10 +123,10 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/webhooks/generateUri
 # Docs: http://aka.ms/azureautomationsdk/webhookoperations
 # operationId: Webhook_GenerateUri
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks-generate-uri GenerateUri" [
-  resourceGroupName: string
-  automationAccountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks-generate-uri post" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +140,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/webhooks/generateUri" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/webhooks/generateUri") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -151,11 +151,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/webhooks/{webhookName}
 # Docs: http://aka.ms/azureautomationsdk/webhookoperations
 # operationId: Webhook_Delete
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks Delete" [
-  resourceGroupName: string
-  automationAccountName: string
-  webhookName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks delete" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  webhook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/webhooks/($webhookName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, webhook_name: $webhook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/webhooks/{webhook_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -180,11 +180,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/webhooks/{webhookName}
 # Docs: http://aka.ms/azureautomationsdk/webhookoperations
 # operationId: Webhook_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks Get" [
-  resourceGroupName: string
-  automationAccountName: string
-  webhookName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks get" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  webhook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/webhooks/($webhookName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, webhook_name: $webhook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/webhooks/{webhook_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -210,11 +210,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/webhookoperations
 # operationId: Webhook_Update
 # --properties shape: {description?: string, isEnabled?: bool, parameters?: record, runOn?: string}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks Update" [
-  resourceGroupName: string
-  automationAccountName: string
-  webhookName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks update" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  webhook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,8 +231,8 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/webhooks/($webhookName)" $qp)
-  let body = {name: $name, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, webhook_name: $webhook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/webhooks/{webhook_name}") $qp)
+  let body = {"name": $name, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -245,11 +245,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/webhookoperations
 # operationId: Webhook_CreateOrUpdate
 # --properties shape: {expiryTime?: string, isEnabled?: bool, parameters?: record, runOn?: string, runbook?: any, uri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks CreateOrUpdate" [
-  resourceGroupName: string
-  automationAccountName: string
-  webhookName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  webhook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,8 +266,8 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/webhooks/($webhookName)" $qp)
-  let body = {name: $name, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, webhook_name: $webhook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/webhooks/{webhook_name}") $qp)
+  let body = {"name": $name, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

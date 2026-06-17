@@ -132,7 +132,7 @@ export def "baskets delete-by-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/baskets/($name)")
+  let full_url = (build-url $base ({name: $name} | format pattern "/api/baskets/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -154,7 +154,7 @@ export def "baskets get-by-name" [
 ]: nothing -> record<capacity: int, expand_path: bool, forward_url: string, insecure_tls: bool, proxy_response: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/baskets/($name)")
+  let full_url = (build-url $base ({name: $name} | format pattern "/api/baskets/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -182,8 +182,8 @@ export def "baskets post-by-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/baskets/($name)")
-  let body = {capacity: $capacity, expand_path: $expand_path, forward_url: $forward_url, insecure_tls: $insecure_tls, proxy_response: $proxy_response} | compact
+  let full_url = (build-url $base ({name: $name} | format pattern "/api/baskets/{name}"))
+  let body = {"capacity": $capacity, "expand_path": $expand_path, "forward_url": $forward_url, "insecure_tls": $insecure_tls, "proxy_response": $proxy_response} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,8 +212,8 @@ export def "baskets put-by-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/baskets/($name)")
-  let body = {capacity: $capacity, expand_path: $expand_path, forward_url: $forward_url, insecure_tls: $insecure_tls, proxy_response: $proxy_response} | compact
+  let full_url = (build-url $base ({name: $name} | format pattern "/api/baskets/{name}"))
+  let body = {"capacity": $capacity, "expand_path": $expand_path, "forward_url": $forward_url, "insecure_tls": $insecure_tls, "proxy_response": $proxy_response} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -236,7 +236,7 @@ export def "baskets-requests delete-by-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/baskets/($name)/requests")
+  let full_url = (build-url $base ({name: $name} | format pattern "/api/baskets/{name}/requests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -263,7 +263,7 @@ export def "baskets-requests get-by-name" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "in" $in_param "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/baskets/($name)/requests" $qp)
+  let full_url = (build-url $base ({name: $name} | format pattern "/api/baskets/{name}/requests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -286,7 +286,7 @@ export def "baskets-responses get-by-name-method" [
 ]: nothing -> record<body: string, headers: record, is_template: bool, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/baskets/($name)/responses/($method)")
+  let full_url = (build-url $base ({name: $name, method: $method} | format pattern "/api/baskets/{name}/responses/{method}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -314,8 +314,8 @@ export def "baskets-responses put-by-name-method" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/baskets/($name)/responses/($method)")
-  let body = {body: $body_body, headers: $headers, is_template: $is_template, status: $status} | compact
+  let full_url = (build-url $base ({name: $name, method: $method} | format pattern "/api/baskets/{name}/responses/{method}"))
+  let body = {"body": $body_body, "headers": $headers, "is_template": $is_template, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -411,7 +411,7 @@ export def "baskets delete-by-name-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/baskets/($name)")
+  let full_url = (build-url $base ({name: $name} | format pattern "/baskets/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -435,7 +435,7 @@ export def "baskets get-by-name-1" [
 ]: nothing -> record<capacity: int, expand_path: bool, forward_url: string, insecure_tls: bool, proxy_response: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/baskets/($name)")
+  let full_url = (build-url $base ({name: $name} | format pattern "/baskets/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -465,8 +465,8 @@ export def "baskets post-by-name-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/baskets/($name)")
-  let body = {capacity: $capacity, expand_path: $expand_path, forward_url: $forward_url, insecure_tls: $insecure_tls, proxy_response: $proxy_response} | compact
+  let full_url = (build-url $base ({name: $name} | format pattern "/baskets/{name}"))
+  let body = {"capacity": $capacity, "expand_path": $expand_path, "forward_url": $forward_url, "insecure_tls": $insecure_tls, "proxy_response": $proxy_response} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -497,8 +497,8 @@ export def "baskets put-by-name-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/baskets/($name)")
-  let body = {capacity: $capacity, expand_path: $expand_path, forward_url: $forward_url, insecure_tls: $insecure_tls, proxy_response: $proxy_response} | compact
+  let full_url = (build-url $base ({name: $name} | format pattern "/baskets/{name}"))
+  let body = {"capacity": $capacity, "expand_path": $expand_path, "forward_url": $forward_url, "insecure_tls": $insecure_tls, "proxy_response": $proxy_response} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -523,7 +523,7 @@ export def "baskets-requests delete-by-name-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/baskets/($name)/requests")
+  let full_url = (build-url $base ({name: $name} | format pattern "/baskets/{name}/requests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -552,7 +552,7 @@ export def "baskets-requests get-by-name-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "in" $in_param "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/baskets/($name)/requests" $qp)
+  let full_url = (build-url $base ({name: $name} | format pattern "/baskets/{name}/requests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -577,7 +577,7 @@ export def "baskets-responses get-by-name-method-1" [
 ]: nothing -> record<body: string, headers: record, is_template: bool, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/baskets/($name)/responses/($method)")
+  let full_url = (build-url $base ({name: $name, method: $method} | format pattern "/baskets/{name}/responses/{method}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -607,8 +607,8 @@ export def "baskets-responses put-by-name-method-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/baskets/($name)/responses/($method)")
-  let body = {body: $body_body, headers: $headers, is_template: $is_template, status: $status} | compact
+  let full_url = (build-url $base ({name: $name, method: $method} | format pattern "/baskets/{name}/responses/{method}"))
+  let body = {"body": $body_body, "headers": $headers, "is_template": $is_template, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

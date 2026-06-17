@@ -65,8 +65,8 @@ def base-url-completer [] { ["https://od-api-demo.oxforddictionaries.com:443/api
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def sourceLanguage-completer [] { ["de" "en" "es" "gu" "hi" "id" "lv" "ms" "nso" "pt" "ro" "sw" "ta" "tn" "ur" "zu"] }
-def targetLanguage-completer [] { ["en" "es" "hi" "id" "lv" "ms" "nso" "ro" "sw" "tn" "ur" "zu"] }
+def source-language-completer [] { ["de" "en" "es" "gu" "hi" "id" "lv" "ms" "nso" "pt" "ro" "sw" "ta" "tn" "ur" "zu"] }
+def target-language-completer [] { ["en" "es" "hi" "id" "lv" "ms" "nso" "ro" "sw" "tn" "ur" "zu"] }
 def prefix-completer [] { ["false" "true"] }
 def accept-completer [] { ["application/json" "text/csv"] }
 def exact-completer [] { ["false" "true"] }
@@ -113,7 +113,7 @@ export def "domains get" [
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($source_domains_language)/($target_domains_language)")
+  let full_url = (build-url $base ({source_domains_language: $source_domains_language, target_domains_language: $target_domains_language} | format pattern "/domains/{source_domains_language}/{target_domains_language}"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -139,7 +139,7 @@ export def "domains list" [
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($source_language)")
+  let full_url = (build-url $base ({source_language: $source_language} | format pattern "/domains/{source_language}"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -167,7 +167,7 @@ export def "entries-sentences get" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entries/($source_language)/($word_id)/sentences")
+  let full_url = (build-url $base ({source_language: $source_language, word_id: $word_id} | format pattern "/entries/{source_language}/{word_id}/sentences"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -195,7 +195,7 @@ export def "entries list" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, pronunciations: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entries/($source_lang)/($word_id)")
+  let full_url = (build-url $base ({source_lang: $source_lang, word_id: $word_id} | format pattern "/entries/{source_lang}/{word_id}"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -223,7 +223,7 @@ export def "entries-antonyms get" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entries/($source_lang)/($word_id)/antonyms")
+  let full_url = (build-url $base ({source_lang: $source_lang, word_id: $word_id} | format pattern "/entries/{source_lang}/{word_id}/antonyms"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -252,7 +252,7 @@ export def "entries-regions-region get" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, pronunciations: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entries/($source_lang)/($word_id)/regions=($region)")
+  let full_url = (build-url $base ({source_lang: $source_lang, word_id: $word_id, region: $region} | format pattern "/entries/{source_lang}/{word_id}/regions={region}"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -280,7 +280,7 @@ export def "entries-synonyms get" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entries/($source_lang)/($word_id)/synonyms")
+  let full_url = (build-url $base ({source_lang: $source_lang, word_id: $word_id} | format pattern "/entries/{source_lang}/{word_id}/synonyms"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -308,7 +308,7 @@ export def "entries-synonyms-antonyms get" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entries/($source_lang)/($word_id)/synonyms;antonyms")
+  let full_url = (build-url $base ({source_lang: $source_lang, word_id: $word_id} | format pattern "/entries/{source_lang}/{word_id}/synonyms;antonyms"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -336,7 +336,7 @@ export def "entries get" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, pronunciations: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entries/($source_lang)/($word_id)/($filters)")
+  let full_url = (build-url $base ({source_lang: $source_lang, word_id: $word_id, filters: $filters} | format pattern "/entries/{source_lang}/{word_id}/{filters}"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -364,7 +364,7 @@ export def "entries-translations-target-translation-language get" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, pronunciations: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entries/($source_translation_language)/($word_id)/translations=($target_translation_language)")
+  let full_url = (build-url $base ({source_translation_language: $source_translation_language, word_id: $word_id, target_translation_language: $target_translation_language} | format pattern "/entries/{source_translation_language}/{word_id}/translations={target_translation_language}"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -415,7 +415,7 @@ export def "filters get" [
 ]: nothing -> record<metadata: record, results: record<entries: list<string>, inflections: list<string>, translations: list<string>, wordlist: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/filters/($endpoint)")
+  let full_url = (build-url $base ({endpoint: $endpoint} | format pattern "/filters/{endpoint}"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -441,7 +441,7 @@ export def "grammatical-features get" [
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/grammaticalFeatures/($source_language)")
+  let full_url = (build-url $base ({source_language: $source_language} | format pattern "/grammaticalFeatures/{source_language}"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -454,8 +454,8 @@ export def "grammatical-features get" [
 # GET /inflections/{source_lang}/{word_id}/{filters}
 export def "inflections get" [
   source_lang: string
-  filters: string
   word_id: string
+  filters: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,7 +469,7 @@ export def "inflections get" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/inflections/($source_lang)/($word_id)/($filters)")
+  let full_url = (build-url $base ({source_lang: $source_lang, word_id: $word_id, filters: $filters} | format pattern "/inflections/{source_lang}/{word_id}/{filters}"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -489,14 +489,14 @@ export def "languages get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sourceLanguage: string@sourceLanguage-completer # IANA language code. If provided output will be filtered by sourceLanguage.
-  --targetLanguage: string@targetLanguage-completer # IANA language code. If provided output will be filtered by sourceLanguage.
+  --source-language: string@source-language-completer # IANA language code. If provided output will be filtered by sourceLanguage.
+  --target-language: string@target-language-completer # IANA language code. If provided output will be filtered by sourceLanguage.
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, results: table<region: string, source: string, sourceLanguage: record, targetLanguage: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sourceLanguage" $sourceLanguage "scalar") (serialize-qp "targetLanguage" $targetLanguage "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sourceLanguage" $source_language "scalar") (serialize-qp "targetLanguage" $target_language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/languages" $qp)
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -523,7 +523,7 @@ export def "lexicalcategories get" [
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lexicalcategories/($language)")
+  let full_url = (build-url $base ({language: $language} | format pattern "/lexicalcategories/{language}"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -549,7 +549,7 @@ export def "regions get" [
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/regions/($source_language)")
+  let full_url = (build-url $base ({source_language: $source_language} | format pattern "/regions/{source_language}"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -575,7 +575,7 @@ export def "registers list" [
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/registers/($source_language)")
+  let full_url = (build-url $base ({source_language: $source_language} | format pattern "/registers/{source_language}"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -602,7 +602,7 @@ export def "registers get" [
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/registers/($source_register_language)/($target_register_language)")
+  let full_url = (build-url $base ({source_register_language: $source_register_language, target_register_language: $target_register_language} | format pattern "/registers/{source_register_language}/{target_register_language}"))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -635,7 +635,7 @@ export def "search get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "regions" $regions "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/($source_lang)" $qp)
+  let full_url = (build-url $base ({source_lang: $source_lang} | format pattern "/search/{source_lang}") $qp)
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -669,7 +669,7 @@ export def "search-translations-target-search-language get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "regions" $regions "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/($source_search_language)/translations=($target_search_language)" $qp)
+  let full_url = (build-url $base ({source_search_language: $source_search_language, target_search_language: $target_search_language} | format pattern "/search/{source_search_language}/translations={target_search_language}") $qp)
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -697,10 +697,10 @@ export def "stats-frequency-ngrams get" [
   --contains: string # Find ngrams containing the given token(s). Use comma or space as token separators; the order of tokens is irrelevant.
   --punctuation: string # Flag specifying whether to lookup ngrams that include punctuation or not (possible values are "true" and "false"; default is "false")
   --format: string # Option specifying whether tokens should be returned as a single string (option "google") or as a list of strings (option "oup") (default: oup)
-  --minFrequency: int # Restrict the query to entries with frequency of at least `minFrequency` (format: int64)
-  --maxFrequency: int # Restrict the query to entries with frequency of at most `maxFrequency` (format: int64)
-  --minDocumentFrequency: int # Restrict the query to entries that appear in at least `minDocumentFrequency` documents (format: int64)
-  --maxDocumentFrequency: int # Restrict the query to entries that appera in at most `maxDocumentFrequency` documents (format: int64)
+  --min-frequency: int # Restrict the query to entries with frequency of at least `minFrequency` (format: int64)
+  --max-frequency: int # Restrict the query to entries with frequency of at most `maxFrequency` (format: int64)
+  --min-document-frequency: int # Restrict the query to entries that appear in at least `minDocumentFrequency` documents (format: int64)
+  --max-document-frequency: int # Restrict the query to entries that appera in at most `maxDocumentFrequency` documents (format: int64)
   --collate: string # collate the results by wordform, trueCase, lemma, lexicalCategory. Multiple values can be separated by commas (e.g., collate=trueCase,lemma,lexicalCategory).
   --qp-sort: string # sort the resulting list by wordform, trueCase, lemma, lexicalCategory, frequency, normalizedFrequency. Descending order is achieved by prepending the value with the minus sign ('-'). Multiple values can be separated by commas (e.g., sort=lexicalCategory,-frequency)
   --offset: int # pagination - results offset (format: int64, default: 0)
@@ -710,8 +710,8 @@ export def "stats-frequency-ngrams get" [
 ]: nothing -> record<metadata: record, results: table<frequency: int, tokens: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "contains" $contains "scalar") (serialize-qp "punctuation" $punctuation "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "minFrequency" $minFrequency "scalar") (serialize-qp "maxFrequency" $maxFrequency "scalar") (serialize-qp "minDocumentFrequency" $minDocumentFrequency "scalar") (serialize-qp "maxDocumentFrequency" $maxDocumentFrequency "scalar") (serialize-qp "collate" $collate "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/stats/frequency/ngrams/($source_lang)/($corpus)/($ngram_size)/" $qp)
+  let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "contains" $contains "scalar") (serialize-qp "punctuation" $punctuation "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "minFrequency" $min_frequency "scalar") (serialize-qp "maxFrequency" $max_frequency "scalar") (serialize-qp "minDocumentFrequency" $min_document_frequency "scalar") (serialize-qp "maxDocumentFrequency" $max_document_frequency "scalar") (serialize-qp "collate" $collate "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({source_lang: $source_lang, corpus: $corpus, ngram_size: $ngram_size} | format pattern "/stats/frequency/ngrams/{source_lang}/{corpus}/{ngram_size}/") $qp)
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
@@ -735,16 +735,16 @@ export def "stats-frequency-word get" [
   --accept: string@accept-completer # Response content type
   --corpus: string # For corpora other than 'nmc' (New Monitor Corpus) please contact api@oxforddictionaries.com (default: nmc)
   --wordform: string # The written form of the word to look up (preserving case e.g., Books vs books)
-  --trueCase: string # The written form of the word to look up with normalised case (Books --> books)
+  --true-case: string # The written form of the word to look up with normalised case (Books --> books)
   --lemma: string # The lemma of the word to look up (e.g., Book, booked, books all have the lemma "book") (default: test)
-  --lexicalCategory: string # The lexical category of the word(s) to look up (e.g., noun or verb)
+  --lexical-category: string # The lexical category of the word(s) to look up (e.g., noun or verb)
   --app-id: string # App ID Authentication Parameter
   --app-key: string # App Key Authentication Parameter
 ]: nothing -> record<metadata: record, result: record<frequency: int, lemma: string, lexicalCategory: string, matchCount: int, normalizedFrequency: int, trueCase: string, wordform: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "corpus" $corpus "scalar") (serialize-qp "wordform" $wordform "scalar") (serialize-qp "trueCase" $trueCase "scalar") (serialize-qp "lemma" $lemma "scalar") (serialize-qp "lexicalCategory" $lexicalCategory "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/stats/frequency/word/($source_lang)/" $qp)
+  let qp = [(serialize-qp "corpus" $corpus "scalar") (serialize-qp "wordform" $wordform "scalar") (serialize-qp "trueCase" $true_case "scalar") (serialize-qp "lemma" $lemma "scalar") (serialize-qp "lexicalCategory" $lexical_category "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({source_lang: $source_lang} | format pattern "/stats/frequency/word/{source_lang}/") $qp)
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
@@ -768,16 +768,16 @@ export def "stats-frequency-words get" [
   --accept: string@accept-completer # Response content type
   --corpus: string # For corpora other than 'nmc' (New Monitor Corpus) please contact api@oxforddictionaries.com (default: nmc)
   --wordform: string # The written form of the word to look up (preserving case e.g., Book vs book)
-  --trueCase: string # The written form of the word to look up with normalised case (Books --> books)
+  --true-case: string # The written form of the word to look up with normalised case (Books --> books)
   --lemma: string # The lemma of the word to look up (e.g., Book, booked, books all have the lemma "book") (default: test)
-  --lexicalCategory: string # The lexical category of the word(s) to look up (e.g., adjective or noun)
-  --grammaticalFeatures: string # The grammatical features of the word(s) to look up entered as a list of k:v (e.g., degree_type:comparative)
+  --lexical-category: string # The lexical category of the word(s) to look up (e.g., adjective or noun)
+  --grammatical-features: string # The grammatical features of the word(s) to look up entered as a list of k:v (e.g., degree_type:comparative)
   --qp-sort: string # sort the resulting list by wordform, trueCase, lemma, lexicalCategory, frequency, normalizedFrequency. Descending order is achieved by prepending the value with the minus sign ('-'). Multiple values can be separated by commas (e.g., sort=lexicalCategory,-frequency)
   --collate: string # collate the results by wordform, trueCase, lemma, lexicalCategory. Multiple values can be separated by commas (e.g., collate=trueCase,lemma,lexicalCategory).
-  --minFrequency: int # Restrict the query to entries with frequency of at least `minFrequency` (format: int64)
-  --maxFrequency: int # Restrict the query to entries with frequency of at most `maxFrequency` (format: int64)
-  --minNormalizedFrequency: float # Restrict the query to entries with frequency of at least `minNormalizedFrequency` (format: float)
-  --maxNormalizedFrequency: float # Restrict the query to entries with frequency of at most `maxNormalizedFrequency` (format: float)
+  --min-frequency: int # Restrict the query to entries with frequency of at least `minFrequency` (format: int64)
+  --max-frequency: int # Restrict the query to entries with frequency of at most `maxFrequency` (format: int64)
+  --min-normalized-frequency: float # Restrict the query to entries with frequency of at least `minNormalizedFrequency` (format: float)
+  --max-normalized-frequency: float # Restrict the query to entries with frequency of at most `maxNormalizedFrequency` (format: float)
   --offset: int # pagination - results offset (format: int64, default: 0)
   --limit: int # pagination - results limit (format: int64, default: 100)
   --app-id: string # App ID Authentication Parameter
@@ -785,8 +785,8 @@ export def "stats-frequency-words get" [
 ]: nothing -> record<metadata: record, results: table<frequency: int, lemma: string, lexicalCategory: string, normalizedFrequency: int, trueCase: string, wordform: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "corpus" $corpus "scalar") (serialize-qp "wordform" $wordform "scalar") (serialize-qp "trueCase" $trueCase "scalar") (serialize-qp "lemma" $lemma "scalar") (serialize-qp "lexicalCategory" $lexicalCategory "scalar") (serialize-qp "grammaticalFeatures" $grammaticalFeatures "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "collate" $collate "scalar") (serialize-qp "minFrequency" $minFrequency "scalar") (serialize-qp "maxFrequency" $maxFrequency "scalar") (serialize-qp "minNormalizedFrequency" $minNormalizedFrequency "scalar") (serialize-qp "maxNormalizedFrequency" $maxNormalizedFrequency "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/stats/frequency/words/($source_lang)/" $qp)
+  let qp = [(serialize-qp "corpus" $corpus "scalar") (serialize-qp "wordform" $wordform "scalar") (serialize-qp "trueCase" $true_case "scalar") (serialize-qp "lemma" $lemma "scalar") (serialize-qp "lexicalCategory" $lexical_category "scalar") (serialize-qp "grammaticalFeatures" $grammatical_features "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "collate" $collate "scalar") (serialize-qp "minFrequency" $min_frequency "scalar") (serialize-qp "maxFrequency" $max_frequency "scalar") (serialize-qp "minNormalizedFrequency" $min_normalized_frequency "scalar") (serialize-qp "maxNormalizedFrequency" $max_normalized_frequency "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({source_lang: $source_lang} | format pattern "/stats/frequency/words/{source_lang}/") $qp)
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
@@ -822,7 +822,7 @@ export def "wordlist get-by-source_lang-filters_advanced" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "exclude" $exclude "scalar") (serialize-qp "exclude_senses" $exclude_senses "scalar") (serialize-qp "exclude_prime_senses" $exclude_prime_senses "scalar") (serialize-qp "word_length" $word_length "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "exact" $exact "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/wordlist/($source_lang)/($filters_advanced)" $qp)
+  let full_url = (build-url $base ({source_lang: $source_lang, filters_advanced: $filters_advanced} | format pattern "/wordlist/{source_lang}/{filters_advanced}") $qp)
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -852,7 +852,7 @@ export def "wordlist get-by-source_lang-filters_basic" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/wordlist/($source_lang)/($filters_basic)" $qp)
+  let full_url = (build-url $base ({source_lang: $source_lang, filters_basic: $filters_basic} | format pattern "/wordlist/{source_lang}/{filters_basic}") $qp)
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"

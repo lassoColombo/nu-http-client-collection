@@ -156,7 +156,7 @@ export def "historic-agg get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/historic/agg/($size)/($symbol)/($date)" $qp)
+  let full_url = (build-url $base ({size: $size, symbol: $symbol, date: $date} | format pattern "/v1/historic/agg/{size}/{symbol}/{date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,7 +183,7 @@ export def "historic-forex get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/historic/forex/($from)/($to)/($date)" $qp)
+  let full_url = (build-url $base ({from: $from, to: $to, date: $date} | format pattern "/v1/historic/forex/{from}/{to}/{date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -209,7 +209,7 @@ export def "historic-quotes get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/historic/quotes/($symbol)/($date)" $qp)
+  let full_url = (build-url $base ({symbol: $symbol, date: $date} | format pattern "/v1/historic/quotes/{symbol}/{date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -235,7 +235,7 @@ export def "historic-trades get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/historic/trades/($symbol)/($date)" $qp)
+  let full_url = (build-url $base ({symbol: $symbol, date: $date} | format pattern "/v1/historic/trades/{symbol}/{date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,7 +258,7 @@ export def "last-currencies get" [
 ]: nothing -> record<last: record<exchange: int, price: float, timestamp: int>, status: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/last/currencies/($from)/($to)")
+  let full_url = (build-url $base ({from: $from, to: $to} | format pattern "/v1/last/currencies/{from}/{to}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -280,7 +280,7 @@ export def "last-stocks get" [
 ]: nothing -> record<last: record<cond1: int, cond2: int, cond3: int, cond4: int, exchange: int, price: float, size: int, timestamp: int>, status: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/last/stocks/($symbol)")
+  let full_url = (build-url $base ({symbol: $symbol} | format pattern "/v1/last/stocks/{symbol}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -303,7 +303,7 @@ export def "last-quote-currencies get" [
 ]: nothing -> record<last: record<askprice: float, bidprice: float, timestamp: int>, status: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/last_quote/currencies/($from)/($to)")
+  let full_url = (build-url $base ({from: $from, to: $to} | format pattern "/v1/last_quote/currencies/{from}/{to}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -325,7 +325,7 @@ export def "last-quote-stocks get" [
 ]: nothing -> record<last: record<askexchange: int, askprice: float, asksize: int, bidexchange: int, bidprice: float, bidsize: int, cond: int, timestamp: int>, status: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/last_quote/stocks/($symbol)")
+  let full_url = (build-url $base ({symbol: $symbol} | format pattern "/v1/last_quote/stocks/{symbol}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

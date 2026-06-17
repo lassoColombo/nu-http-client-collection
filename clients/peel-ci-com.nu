@@ -101,12 +101,12 @@ export def "hashtag-related get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --showID: string # Unique ID for a show
-  --timeWindow: string # Time window in seconds (default is 2 hours)
+  --show-id: string # Unique ID for a show
+  --time-window: string # Time window in seconds (default is 2 hours)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "showID" $showID "scalar") (serialize-qp "timeWindow" $timeWindow "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "showID" $show_id "scalar") (serialize-qp "timeWindow" $time_window "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hashtag/related" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -127,11 +127,11 @@ export def "hashtag-trending-shows get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Number of trending shows (default is 20)
-  --timeWindow: string # Time window in seconds (default is 2 hours)
+  --time-window: string # Time window in seconds (default is 2 hours)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "timeWindow" $timeWindow "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "timeWindow" $time_window "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hashtag/trendingShows" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -153,11 +153,11 @@ export def "hashtag-tuneinlinks get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --tweet: string # Text from a social networking conversation
   --hashtags: string # Comma separated list of hashtags and @mentions
-  --showID: string # Unique ID for a show
+  --show-id: string # Unique ID for a show
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tweet" $tweet "scalar") (serialize-qp "hashtags" $hashtags "scalar") (serialize-qp "showID" $showID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "tweet" $tweet "scalar") (serialize-qp "hashtags" $hashtags "scalar") (serialize-qp "showID" $show_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hashtag/tuneinlinks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -190,8 +190,8 @@ export def "health get" [
 #
 # GET /status/{showID}
 # operationId: getStatuses
-export def "status get" [
-  showID: string
+export def "status get-statuses" [
+  show_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/status/($showID)")
+  let full_url = (build-url $base ({show_id: $show_id} | format pattern "/status/{show_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

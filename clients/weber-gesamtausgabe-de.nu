@@ -100,11 +100,11 @@ export def "application-new-id get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --docType: list # The WeGA document type
+  --doc-type: list # The WeGA document type
 ]: nothing -> record<docID: string, docType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "docType" $docType "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "docType" $doc_type "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/application/newID" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -146,14 +146,14 @@ export def "code-find-by-element get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --namespace: string # The element namespace. Defaults to the TEI namespace (default: http://www.tei-c.org/ns/1.0)
-  --docType: list # The WeGA document type
+  --doc-type: list # The WeGA document type
   --offset: int # Position of first item to retrieve (starting from 1) (format: int32, default: 1)
   --limit: int # Number of items to retrieve (200 max) (format: int32, default: 10)
 ]: nothing -> table<codeSample: string, docID: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "namespace" $namespace "scalar") (serialize-qp "docType" $docType "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/code/findByElement/($element)" $qp)
+  let qp = [(serialize-qp "namespace" $namespace "scalar") (serialize-qp "docType" $doc_type "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({element: $element} | format pattern "/code/findByElement/{element}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,13 +171,13 @@ export def "documents list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --docType: list # The WeGA document type
+  --doc-type: list # The WeGA document type
   --offset: int # Position of first item to retrieve (starting from 1) (format: int32, default: 1)
   --limit: int # Number of items to retrieve (200 max) (format: int32, default: 10)
 ]: nothing -> table<docID: string, docType: string, title: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "docType" $docType "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "docType" $doc_type "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/documents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -188,7 +188,7 @@ export def "documents list" [
 #
 # GET /documents/findByAuthor/{authorID}
 export def "documents-find-by-author get" [
-  authorID: string
+  author_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,14 +197,14 @@ export def "documents-find-by-author get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --docType: list # The WeGA document type
+  --doc-type: list # The WeGA document type
   --offset: int # Position of first item to retrieve (starting from 1) (format: int32, default: 1)
   --limit: int # Number of items to retrieve (200 max) (format: int32, default: 10)
 ]: nothing -> table<docID: string, docType: string, title: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "docType" $docType "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/documents/findByAuthor/($authorID)" $qp)
+  let qp = [(serialize-qp "docType" $doc_type "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({author_id: $author_id} | format pattern "/documents/findByAuthor/{author_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -222,15 +222,15 @@ export def "documents-find-by-date get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fromDate: string # The min date to search for (format: date, default: 1786-11-18)
-  --toDate: string # The max date to search for (format: date)
-  --docType: list # The WeGA document type
+  --from-date: string # The min date to search for (format: date, default: 1786-11-18)
+  --to-date: string # The max date to search for (format: date)
+  --doc-type: list # The WeGA document type
   --offset: int # Position of first item to retrieve (starting from 1) (format: int32, default: 1)
   --limit: int # Number of items to retrieve (200 max) (format: int32, default: 10)
 ]: nothing -> table<docID: string, docType: string, title: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fromDate" $fromDate "scalar") (serialize-qp "toDate" $toDate "scalar") (serialize-qp "docType" $docType "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "docType" $doc_type "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/documents/findByDate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -241,7 +241,7 @@ export def "documents-find-by-date get" [
 #
 # GET /documents/findByMention/{docID}
 export def "documents-find-by-mention get" [
-  docID: string
+  doc_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,14 +250,14 @@ export def "documents-find-by-mention get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --docType: list # The WeGA document type
+  --doc-type: list # The WeGA document type
   --offset: int # Position of first item to retrieve (starting from 1) (format: int32, default: 1)
   --limit: int # Number of items to retrieve (200 max) (format: int32, default: 10)
 ]: nothing -> table<docID: string, docType: string, title: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "docType" $docType "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/documents/findByMention/($docID)" $qp)
+  let qp = [(serialize-qp "docType" $doc_type "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({doc_id: $doc_id} | format pattern "/documents/findByMention/{doc_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -267,7 +267,7 @@ export def "documents-find-by-mention get" [
 #
 # GET /documents/{docID}
 export def "documents get" [
-  docID: string
+  doc_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +279,7 @@ export def "documents get" [
 ]: nothing -> table<docID: string, docType: string, title: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($docID)")
+  let full_url = (build-url $base ({doc_id: $doc_id} | format pattern "/documents/{doc_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -300,14 +300,14 @@ export def "facets get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --scope: string # The scope of the result set, i.e. 'indices' or a WeGA ID
   --term: string # The search term to be looked for in the facet's label
-  --docType: list # The WeGA document type
+  --doc-type: list # The WeGA document type
   --offset: int # Position of first item to retrieve (starting from 1) (format: int32, default: 1)
   --limit: int # Number of items to retrieve (200 max) (format: int32, default: 10)
 ]: nothing -> table<frequency: int, label: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "term" $term "scalar") (serialize-qp "docType" $docType "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/facets/($facet)" $qp)
+  let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "term" $term "scalar") (serialize-qp "docType" $doc_type "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({facet: $facet} | format pattern "/facets/{facet}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -325,14 +325,14 @@ export def "search-entity get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --docType: list # The WeGA document type
+  --doc-type: list # The WeGA document type
   --q: string # The query string
   --offset: int # Position of first item to retrieve (starting from 1) (format: int32, default: 1)
   --limit: int # Number of items to retrieve (200 max) (format: int32, default: 10)
 ]: nothing -> table<docID: string, docType: string, title: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "docType" $docType "csv") (serialize-qp "q" $q "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "docType" $doc_type "csv") (serialize-qp "q" $q "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/entity" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

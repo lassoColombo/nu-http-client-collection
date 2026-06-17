@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-update-runs ListTopLevel" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-update-runs list-top-level" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Update.Admin/updateLocations/{updateLocation}/updateRuns
 # operationId: UpdateRuns_ListTopLevel
-export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-update-runs ListTopLevel" [
-  subscriptionId: string
-  resourceGroupName: string
-  updateLocation: string
+export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-update-runs list-top-level" [
+  subscription_id: string
+  resource_group_name: string
+  update_location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Update.Admin/updateLocations/($updateLocation)/updateRuns" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, update_location: $update_location} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Update.Admin/updateLocations/{update_location}/updateRuns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,11 +120,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Update.Admin/updateLocations/{updateLocation}/updateRuns/{runName}
 # operationId: UpdateRuns_GetTopLevel
-export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-update-runs GetTopLevel" [
-  subscriptionId: string
-  resourceGroupName: string
-  updateLocation: string
-  runName: string
+export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-update-runs get-top-level" [
+  subscription_id: string
+  resource_group_name: string
+  update_location: string
+  run_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,7 +138,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Update.Admin/updateLocations/($updateLocation)/updateRuns/($runName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, update_location: $update_location, run_name: $run_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Update.Admin/updateLocations/{update_location}/updateRuns/{run_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,11 +148,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Update.Admin/updateLocations/{updateLocation}/updates/{updateName}/updateRuns
 # operationId: UpdateRuns_List
-export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-updates-update-runs List" [
-  subscriptionId: string
-  resourceGroupName: string
-  updateLocation: string
-  updateName: string
+export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-updates-update-runs list" [
+  subscription_id: string
+  resource_group_name: string
+  update_location: string
+  update_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Update.Admin/updateLocations/($updateLocation)/updates/($updateName)/updateRuns" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, update_location: $update_location, update_name: $update_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Update.Admin/updateLocations/{update_location}/updates/{update_name}/updateRuns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,12 +176,12 @@ export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Update.Admin/updateLocations/{updateLocation}/updates/{updateName}/updateRuns/{runName}
 # operationId: UpdateRuns_Get
-export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-updates-update-runs Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  updateLocation: string
-  updateName: string
-  runName: string
+export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-updates-update-runs get" [
+  subscription_id: string
+  resource_group_name: string
+  update_location: string
+  update_name: string
+  run_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Update.Admin/updateLocations/($updateLocation)/updates/($updateName)/updateRuns/($runName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, update_location: $update_location, update_name: $update_name, run_name: $run_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Update.Admin/updateLocations/{update_location}/updates/{update_name}/updateRuns/{run_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -205,12 +205,12 @@ export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Update.Admin/updateLocations/{updateLocation}/updates/{updateName}/updateRuns/{runName}/rerun
 # operationId: UpdateRuns_Rerun
-export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-updates-update-runs-rerun Rerun" [
-  subscriptionId: string
-  resourceGroupName: string
-  updateLocation: string
-  updateName: string
-  runName: string
+export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-updates-update-runs-rerun post" [
+  subscription_id: string
+  resource_group_name: string
+  update_location: string
+  update_name: string
+  run_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +224,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Update.Admin/updateLocations/($updateLocation)/updates/($updateName)/updateRuns/($runName)/rerun" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, update_location: $update_location, update_name: $update_name, run_name: $run_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Update.Admin/updateLocations/{update_location}/updates/{update_name}/updateRuns/{run_name}/rerun") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

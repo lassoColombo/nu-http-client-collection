@@ -115,8 +115,8 @@ export def "crm-extensions-cards-sample-response get" [
 #
 # GET /crm/v3/extensions/cards/{appId}
 # operationId: get-/crm/v3/extensions/cards/{appId}_getAll
-export def "crm-extensions-cards list" [
-  appId: int
+export def "crm-extensions-cards get-all" [
+  app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,7 +128,7 @@ export def "crm-extensions-cards list" [
 ]: nothing -> record<results: table<actions: record, createdAt: string, display: record, fetch: record, id: string, title: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/crm/v3/extensions/cards/($appId)")
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/crm/v3/extensions/cards/{app_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,7 +142,7 @@ export def "crm-extensions-cards list" [
 # --display shape: {properties: list}
 # --fetch shape: {objectTypes: list, targetUrl: string}
 export def "crm-extensions-cards create" [
-  appId: int
+  app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,8 +159,8 @@ export def "crm-extensions-cards create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/crm/v3/extensions/cards/($appId)")
-  let body = {actions: $actions, display: $display, fetch: $fetch, title: $title} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/crm/v3/extensions/cards/{app_id}"))
+  let body = {"actions": $actions, "display": $display, "fetch": $fetch, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -172,8 +172,8 @@ export def "crm-extensions-cards create" [
 # DELETE /crm/v3/extensions/cards/{appId}/{cardId}
 # operationId: delete-/crm/v3/extensions/cards/{appId}/{cardId}_archive
 export def "crm-extensions-cards archive" [
-  appId: int
-  cardId: string
+  app_id: int
+  card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "crm-extensions-cards archive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/crm/v3/extensions/cards/($appId)/($cardId)")
+  let full_url = (build-url $base ({app_id: $app_id, card_id: $card_id} | format pattern "/crm/v3/extensions/cards/{app_id}/{card_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,9 +195,9 @@ export def "crm-extensions-cards archive" [
 #
 # GET /crm/v3/extensions/cards/{appId}/{cardId}
 # operationId: get-/crm/v3/extensions/cards/{appId}/{cardId}_getById
-export def "crm-extensions-cards get" [
-  appId: int
-  cardId: string
+export def "crm-extensions-cards get-by" [
+  app_id: int
+  card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "crm-extensions-cards get" [
 ]: nothing -> record<actions: record<baseUrls: list<string>>, createdAt: string, display: record<properties: list<record>>, fetch: record<objectTypes: list<record>, targetUrl: string>, id: string, title: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/crm/v3/extensions/cards/($appId)/($cardId)")
+  let full_url = (build-url $base ({app_id: $app_id, card_id: $card_id} | format pattern "/crm/v3/extensions/cards/{app_id}/{card_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -223,8 +223,8 @@ export def "crm-extensions-cards get" [
 # --display shape: {properties: list}
 # --fetch shape: {objectTypes: list, targetUrl?: string}
 export def "crm-extensions-cards update" [
-  appId: int
-  cardId: string
+  app_id: int
+  card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,8 +241,8 @@ export def "crm-extensions-cards update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/crm/v3/extensions/cards/($appId)/($cardId)")
-  let body = {actions: $actions, display: $display, fetch: $fetch, title: $title} | compact
+  let full_url = (build-url $base ({app_id: $app_id, card_id: $card_id} | format pattern "/crm/v3/extensions/cards/{app_id}/{card_id}"))
+  let body = {"actions": $actions, "display": $display, "fetch": $fetch, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

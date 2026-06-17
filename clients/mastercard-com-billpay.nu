@@ -101,13 +101,13 @@ export def "is-routing-valid post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --BillPayAccountValidation: any # shape: {AccountNumber?: string, BillerId?: string, CustomerIdentifier1?: string, CustomerIdentifier2?: string, CustomerIdentifier3?: string, CustomerIdentifier4?: string, ResponseString?: string, RppsId?: string, TransactionAmount?: string}
+  --bill-pay-account-validation: any # shape: {AccountNumber?: string, BillerId?: string, CustomerIdentifier1?: string, CustomerIdentifier2?: string, CustomerIdentifier3?: string, CustomerIdentifier4?: string, ResponseString?: string, RppsId?: string, TransactionAmount?: string}
 ]: any -> record<BillPayAccountValidation: record<AccountNumber: string, BillerId: string, CustomerIdentifier1: string, CustomerIdentifier2: string, CustomerIdentifier3: string, CustomerIdentifier4: string, ResponseString: string, RppsId: string, TransactionAmount: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/isRoutingValid")
-  let body = {BillPayAccountValidation: $BillPayAccountValidation} | compact
+  let body = {"BillPayAccountValidation": $bill_pay_account_validation} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/JSON"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

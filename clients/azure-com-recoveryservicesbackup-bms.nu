@@ -66,12 +66,12 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def resourceType-completer [] { ["AzureFileShare" "AzureSqlDb" "Client" "Exchange" "FileFolder" "GenericDataSource" "Invalid" "SAPAseDatabase" "SAPHanaDatabase" "SQLDB" "SQLDataBase" "Sharepoint" "SystemState" "VM" "VMwareVM"] }
+def resource-type-completer [] { ["AzureFileShare" "AzureSqlDb" "Client" "Exchange" "FileFolder" "GenericDataSource" "Invalid" "SAPAseDatabase" "SAPHanaDatabase" "SQLDB" "SQLDataBase" "Sharepoint" "SystemState" "VM" "VMwareVM"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-recovery-services-locations-backup-pre-validate-protection Validate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-recovery-services-locations-backup-pre-validate-protection validate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,9 +95,9 @@ export def commands []: nothing -> table {
 #
 # POST /Subscriptions/{subscriptionId}/providers/Microsoft.RecoveryServices/locations/{azureRegion}/backupPreValidateProtection
 # operationId: ProtectionIntent_Validate
-export def "subscriptions-providers-microsoft-recovery-services-locations-backup-pre-validate-protection Validate" [
-  azureRegion: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-recovery-services-locations-backup-pre-validate-protection validate" [
+  subscription_id: string
+  azure_region: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,16 +108,16 @@ export def "subscriptions-providers-microsoft-recovery-services-locations-backup
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --properties: string # Configuration of VM if any needs to be validated like OS type etc
-  --resourceId: string # ARM Virtual Machine Id
-  --resourceType: string@resourceType-completer # ProtectedItem Type- VM, SqlDataBase, AzureFileShare etc
-  --vaultId: string # ARM id of the Recovery Services Vault
+  --resource-id: string # ARM Virtual Machine Id
+  --resource-type: string@resource-type-completer # ProtectedItem Type- VM, SqlDataBase, AzureFileShare etc
+  --vault-id: string # ARM id of the Recovery Services Vault
 ]: any -> record<containerName: string, errorCode: string, errorMessage: string, protectedItemName: string, recommendation: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/providers/Microsoft.RecoveryServices/locations/($azureRegion)/backupPreValidateProtection" $qp)
-  let body = {properties: $properties, resourceId: $resourceId, resourceType: $resourceType, vaultId: $vaultId} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, azure_region: $azure_region} | format pattern "/Subscriptions/{subscription_id}/providers/Microsoft.RecoveryServices/locations/{azure_region}/backupPreValidateProtection") $qp)
+  let body = {"properties": $properties, "resourceId": $resource_id, "resourceType": $resource_type, "vaultId": $vault_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -128,9 +128,9 @@ export def "subscriptions-providers-microsoft-recovery-services-locations-backup
 #
 # POST /Subscriptions/{subscriptionId}/providers/Microsoft.RecoveryServices/locations/{azureRegion}/backupStatus
 # operationId: BackupStatus_Get
-export def "subscriptions-providers-microsoft-recovery-services-locations-backup-status Get" [
-  azureRegion: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-recovery-services-locations-backup-status get" [
+  subscription_id: string
+  azure_region: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,16 +140,16 @@ export def "subscriptions-providers-microsoft-recovery-services-locations-backup
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --poLogicalName: string # Protectable Item Logical Name
-  --resourceId: string # Entire ARM resource id of the resource
-  --resourceType: string@resourceType-completer # Container Type - VM, SQLPaaS, DPM, AzureFileShare...
+  --po-logical-name: string # Protectable Item Logical Name
+  --resource-id: string # Entire ARM resource id of the resource
+  --resource-type: string@resource-type-completer # Container Type - VM, SQLPaaS, DPM, AzureFileShare...
 ]: any -> record<containerName: string, errorCode: string, errorMessage: string, fabricName: string, policyName: string, protectedItemName: string, protectionStatus: string, registrationStatus: string, vaultId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/providers/Microsoft.RecoveryServices/locations/($azureRegion)/backupStatus" $qp)
-  let body = {poLogicalName: $poLogicalName, resourceId: $resourceId, resourceType: $resourceType} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, azure_region: $azure_region} | format pattern "/Subscriptions/{subscription_id}/providers/Microsoft.RecoveryServices/locations/{azure_region}/backupStatus") $qp)
+  let body = {"poLogicalName": $po_logical_name, "resourceId": $resource_id, "resourceType": $resource_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -161,9 +161,9 @@ export def "subscriptions-providers-microsoft-recovery-services-locations-backup
 # POST /Subscriptions/{subscriptionId}/providers/Microsoft.RecoveryServices/locations/{azureRegion}/backupValidateFeatures
 # Discriminator (request): featureType
 # operationId: FeatureSupport_Validate
-export def "subscriptions-providers-microsoft-recovery-services-locations-backup-validate-features Validate" [
-  azureRegion: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-recovery-services-locations-backup-validate-features validate" [
+  subscription_id: string
+  azure_region: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,14 +173,14 @@ export def "subscriptions-providers-microsoft-recovery-services-locations-backup
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  featureType: string # backup support feature type.
+  feature_type: string # backup support feature type.
 ]: any -> record<supportStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/providers/Microsoft.RecoveryServices/locations/($azureRegion)/backupValidateFeatures" $qp)
-  let body = {featureType: $featureType} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, azure_region: $azure_region} | format pattern "/Subscriptions/{subscription_id}/providers/Microsoft.RecoveryServices/locations/{azure_region}/backupValidateFeatures") $qp)
+  let body = {"featureType": $feature_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -191,12 +191,12 @@ export def "subscriptions-providers-microsoft-recovery-services-locations-backup
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/backupProtectionIntent/{intentObjectName}
 # operationId: ProtectionIntent_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-backup-protection-intent Delete" [
-  vaultName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  intentObjectName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-backup-protection-intent delete" [
+  subscription_id: string
+  resource_group_name: string
+  vault_name: string
+  fabric_name: string
+  intent_object_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($vaultName)/backupFabrics/($fabricName)/backupProtectionIntent/($intentObjectName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vault_name: $vault_name, fabric_name: $fabric_name, intent_object_name: $intent_object_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{vault_name}/backupFabrics/{fabric_name}/backupProtectionIntent/{intent_object_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -220,12 +220,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/backupProtectionIntent/{intentObjectName}
 # operationId: ProtectionIntent_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-backup-protection-intent Get" [
-  vaultName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  intentObjectName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-backup-protection-intent get" [
+  subscription_id: string
+  resource_group_name: string
+  vault_name: string
+  fabric_name: string
+  intent_object_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($vaultName)/backupFabrics/($fabricName)/backupProtectionIntent/($intentObjectName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vault_name: $vault_name, fabric_name: $fabric_name, intent_object_name: $intent_object_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{vault_name}/backupFabrics/{fabric_name}/backupProtectionIntent/{intent_object_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,12 +250,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/backupProtectionIntent/{intentObjectName}
 # operationId: ProtectionIntent_CreateOrUpdate
 # --properties shape: {backupManagementType?: "Invalid"|"AzureIaasVM"|"MAB"|"DPM"|"AzureBackupServer"|"AzureSql"|"AzureStorage"|"AzureWorkload"|"DefaultBackup", itemId?: string, policyId?: string, protectionIntentItemType: string, protectionState?: "Invalid"|"NotProtected"|"Protecting"|"Protected"|"ProtectionFailed", sourceResourceId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-backup-protection-intent CreateOrUpdate" [
-  vaultName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  intentObjectName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-backup-protection-intent create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  vault_name: string
+  fabric_name: string
+  intent_object_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --properties: record # Base class for backup ProtectionIntent. — shape: {backupManagementType?: "Invalid"|"AzureIaasVM"|"MAB"|"DPM"|"AzureBackupServer"|"AzureSql"|"AzureStorage"|"AzureWorkload"|"DefaultBackup", itemId?: string, policyId?: string, protectionIntentItemType: string, protectionState?: "Invalid"|"NotProtected"|"Protecting"|"Protected"|"ProtectionFailed", sourceResourceId?: string}
-  --eTag: string # Optional ETag.
+  --e-tag: string # Optional ETag.
   --location: string # Resource location.
   --tags: record # Resource tags.
 ]: any -> record<properties: record<backupManagementType: string, itemId: string, policyId: string, protectionIntentItemType: string, protectionState: string, sourceResourceId: string>, eTag: string, id: string, location: string, name: string, tags: record, type: string> {
@@ -274,8 +274,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($vaultName)/backupFabrics/($fabricName)/backupProtectionIntent/($intentObjectName)" $qp)
-  let body = {properties: $properties, eTag: $eTag, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vault_name: $vault_name, fabric_name: $fabric_name, intent_object_name: $intent_object_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{vault_name}/backupFabrics/{fabric_name}/backupProtectionIntent/{intent_object_name}") $qp)
+  let body = {"properties": $properties, "eTag": $e_tag, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -286,10 +286,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupProtectionIntents
 # operationId: BackupProtectionIntent_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-protection-intents List" [
-  vaultName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-protection-intents list" [
+  subscription_id: string
+  resource_group_name: string
+  vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,12 +300,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --filter: string # OData filter options.
-  --skipToken: string # skipToken Filter.
+  --skip-token: string # skipToken Filter.
 ]: nothing -> record<value: table<properties: record, eTag: string, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($vaultName)/backupProtectionIntents" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vault_name: $vault_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{vault_name}/backupProtectionIntents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -315,10 +315,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupUsageSummaries
 # operationId: BackupUsageSummaries_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-usage-summaries List" [
-  vaultName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-usage-summaries list" [
+  subscription_id: string
+  resource_group_name: string
+  vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,12 +329,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --filter: string # OData filter options.
-  --skipToken: string # skipToken Filter.
+  --skip-token: string # skipToken Filter.
 ]: nothing -> record<value: table<currentValue: int, limit: int, name: record, nextResetTime: string, quotaPeriod: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($vaultName)/backupUsageSummaries" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vault_name: $vault_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{vault_name}/backupUsageSummaries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -65,12 +65,12 @@ def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def nameType-completer [] { ["firstname" "fullname" "surname"] }
-def idType-completer [] { ["SSN" "VAT"] }
-def loremType-completer [] { ["business" "normal"] }
+def name-type-completer [] { ["firstname" "fullname" "surname"] }
+def id-type-completer [] { ["SSN" "VAT"] }
+def lorem-type-completer [] { ["business" "normal"] }
 def type-completer [] { ["paragraphs" "words"] }
-def textActionType-completer [] { ["Replace" "Transform"] }
-def caseType-completer [] { ["LowerCase" "SentenceCase" "TitleCase" "UpperCase"] }
+def text-action-type-completer [] { ["Replace" "Transform"] }
+def case-type-completer [] { ["LowerCase" "SentenceCase" "TitleCase" "UpperCase"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -108,13 +108,13 @@ export def "card get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string
-  --X-Api-Key: string # Enter your key
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Card" $qp)
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -133,12 +133,12 @@ export def "card-types get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Api-Key: string # Enter your key
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Card/Types")
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -157,12 +157,12 @@ export def "finance-countries get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Api-Key: string # Enter your key
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Finance/Countries")
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -181,14 +181,14 @@ export def "finance-crypto-address get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cryptoType: string
-  --X-Api-Key: string # Enter your key
+  --crypto-type: string
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cryptoType" $cryptoType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cryptoType" $crypto_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Finance/CryptoAddress" $qp)
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -207,12 +207,12 @@ export def "finance-crypto-address-types get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Api-Key: string # Enter your key
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Finance/CryptoAddress/Types")
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -223,7 +223,7 @@ export def "finance-crypto-address-types get" [
 #
 # GET /api/Finance/Iban/{countryCode}
 export def "finance-iban get" [
-  countryCode: string
+  country_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,12 +232,12 @@ export def "finance-iban get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Api-Key: string # Enter your key
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/Finance/Iban/($countryCode)")
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let full_url = (build-url $base ({country_code: $country_code} | format pattern "/api/Finance/Iban/{country_code}"))
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -256,13 +256,13 @@ export def "finance-vat-validator post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string
   --vat: string
-  --X-Api-Key: string # Enter your key
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "vat" $vat "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Finance/Vat/Validator" $qp)
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -279,12 +279,12 @@ export def "misc-cultures get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Api-Key: string # Enter your key
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Misc/Cultures")
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -303,13 +303,13 @@ export def "misc-random-address get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --number: int # format: int32
   --culture: string # default: en
-  --X-Api-Key: string # Enter your key
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Misc/Random-Address" $qp)
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -328,15 +328,15 @@ export def "name get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nameType: string@nameType-completer
+  --name-type: string@name-type-completer
   --quantity: int # format: int32
-  --X-Api-Key: string # Enter your key
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nameType" $nameType "scalar") (serialize-qp "quantity" $quantity "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nameType" $name_type "scalar") (serialize-qp "quantity" $quantity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Name" $qp)
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -355,14 +355,14 @@ export def "name-brand-name post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startingWords: string
-  --X-Api-Key: string # Enter your key
+  --starting-words: string
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startingWords" $startingWords "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startingWords" $starting_words "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Name/BrandName" $qp)
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -382,14 +382,14 @@ export def "name-business-name post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --number: int # format: int32
-  --cultureCode: string # default: en_US
-  --X-Api-Key: string # Enter your key
+  --culture-code: string # default: en_US
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "cultureCode" $cultureCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "cultureCode" $culture_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Name/BusinessName" $qp)
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -408,12 +408,12 @@ export def "name-cultures get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Api-Key: string # Enter your key
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Name/Cultures")
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -432,14 +432,14 @@ export def "name-suggestions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startingWords: string
-  --X-Api-Key: string # Enter your key
+  --starting-words: string
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startingWords" $startingWords "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startingWords" $starting_words "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Name/Suggestions" $qp)
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -458,12 +458,12 @@ export def "phone-countries get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Api-Key: string # Enter your key
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Phone/Countries")
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -482,15 +482,15 @@ export def "phone-generate get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CountryCode: string
-  --Quantity: int # format: int32
-  --X-Api-Key: string # Enter your key
+  --country-code: string
+  --quantity: int # format: int32
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "CountryCode" $CountryCode "scalar") (serialize-qp "Quantity" $Quantity "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "CountryCode" $country_code "scalar") (serialize-qp "Quantity" $quantity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Phone/Generate" $qp)
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -509,14 +509,14 @@ export def "phone-imei get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Quantity: int # format: int32
-  --X-Api-Key: string # Enter your key
+  --quantity: int # format: int32
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Quantity" $Quantity "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Quantity" $quantity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Phone/IMEI" $qp)
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -536,14 +536,14 @@ export def "phone-validate get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --telephone: string
-  --CountryCode: string
-  --X-Api-Key: string # Enter your key
+  --country-code: string
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "telephone" $telephone "scalar") (serialize-qp "CountryCode" $CountryCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "telephone" $telephone "scalar") (serialize-qp "CountryCode" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Phone/Validate" $qp)
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -562,12 +562,12 @@ export def "social-number get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Api-Key: string # Enter your key
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/SocialNumber")
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -586,19 +586,19 @@ export def "social-number post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idType: string@idType-completer
-  --X-Api-Key: string # Enter your key
+  --id-type: string@id-type-completer
+  --x-api-key: string # Enter your key
   country: string
   number: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "idType" $idType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "idType" $id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/SocialNumber" $qp)
-  let body = {country: $country, number: $number} | compact
+  let body = {"country": $country, "number": $number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -617,16 +617,16 @@ export def "text-humanize post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Api-Key: string # Enter your key
+  --x-api-key: string # Enter your key
   --text: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Text/Humanize")
-  let body = {text: $text} | compact
+  let body = {"text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -645,16 +645,16 @@ export def "text-lorem-ipsum get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --loremType: string@loremType-completer
+  --lorem-type: string@lorem-type-completer
   --type: string@type-completer
   --number: int # format: int32
-  --X-Api-Key: string # Enter your key
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "loremType" $loremType "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "loremType" $lorem_type "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Text/LoremIpsum" $qp)
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -674,16 +674,16 @@ export def "text-password get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --length: int # format: int32
-  --hasDigits: oneof<nothing, bool>
-  --hasUppercase: oneof<nothing, bool>
-  --hasSpecial: oneof<nothing, bool>
-  --X-Api-Key: string # Enter your key
+  --has-digits: oneof<nothing, bool>
+  --has-uppercase: oneof<nothing, bool>
+  --has-special: oneof<nothing, bool>
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "length" $length "scalar") (serialize-qp "hasDigits" $hasDigits "scalar") (serialize-qp "hasUppercase" $hasUppercase "scalar") (serialize-qp "hasSpecial" $hasSpecial "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "length" $length "scalar") (serialize-qp "hasDigits" $has_digits "scalar") (serialize-qp "hasUppercase" $has_uppercase "scalar") (serialize-qp "hasSpecial" $has_special "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Text/Password" $qp)
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -704,13 +704,13 @@ export def "text-review post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --product: string
   --quantity: int # format: int32
-  --X-Api-Key: string # Enter your key
+  --x-api-key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product" $product "scalar") (serialize-qp "quantity" $quantity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Text/Review" $qp)
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -729,21 +729,21 @@ export def "text-transform post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --textActionType: string@textActionType-completer
-  --caseType: string@caseType-completer
+  --text-action-type: string@text-action-type-completer
+  --case-type: string@case-type-completer
   --find: string
   --replace: string
-  --X-Api-Key: string # Enter your key
+  --x-api-key: string # Enter your key
   --text: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "textActionType" $textActionType "scalar") (serialize-qp "caseType" $caseType "scalar") (serialize-qp "find" $find "scalar") (serialize-qp "replace" $replace "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "textActionType" $text_action_type "scalar") (serialize-qp "caseType" $case_type "scalar") (serialize-qp "find" $find "scalar") (serialize-qp "replace" $replace "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Text/Transform" $qp)
-  let body = {text: $text} | compact
+  let body = {"text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

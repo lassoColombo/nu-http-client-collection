@@ -66,44 +66,44 @@ def base-url-completer [] { ["http://lookoutequipment.us-east-1.amazonaws.com" "
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AWSLookoutEquipmentFrontendService.CreateDataset"] }
-def X-Amz-Target-completer-1 [] { ["AWSLookoutEquipmentFrontendService.CreateInferenceScheduler"] }
-def X-Amz-Target-completer-2 [] { ["AWSLookoutEquipmentFrontendService.CreateLabel"] }
-def X-Amz-Target-completer-3 [] { ["AWSLookoutEquipmentFrontendService.CreateLabelGroup"] }
-def X-Amz-Target-completer-4 [] { ["AWSLookoutEquipmentFrontendService.CreateModel"] }
-def X-Amz-Target-completer-5 [] { ["AWSLookoutEquipmentFrontendService.DeleteDataset"] }
-def X-Amz-Target-completer-6 [] { ["AWSLookoutEquipmentFrontendService.DeleteInferenceScheduler"] }
-def X-Amz-Target-completer-7 [] { ["AWSLookoutEquipmentFrontendService.DeleteLabel"] }
-def X-Amz-Target-completer-8 [] { ["AWSLookoutEquipmentFrontendService.DeleteLabelGroup"] }
-def X-Amz-Target-completer-9 [] { ["AWSLookoutEquipmentFrontendService.DeleteModel"] }
-def X-Amz-Target-completer-10 [] { ["AWSLookoutEquipmentFrontendService.DescribeDataIngestionJob"] }
-def X-Amz-Target-completer-11 [] { ["AWSLookoutEquipmentFrontendService.DescribeDataset"] }
-def X-Amz-Target-completer-12 [] { ["AWSLookoutEquipmentFrontendService.DescribeInferenceScheduler"] }
-def X-Amz-Target-completer-13 [] { ["AWSLookoutEquipmentFrontendService.DescribeLabel"] }
-def X-Amz-Target-completer-14 [] { ["AWSLookoutEquipmentFrontendService.DescribeLabelGroup"] }
-def X-Amz-Target-completer-15 [] { ["AWSLookoutEquipmentFrontendService.DescribeModel"] }
-def X-Amz-Target-completer-16 [] { ["AWSLookoutEquipmentFrontendService.ListDataIngestionJobs"] }
-def X-Amz-Target-completer-17 [] { ["AWSLookoutEquipmentFrontendService.ListDatasets"] }
-def X-Amz-Target-completer-18 [] { ["AWSLookoutEquipmentFrontendService.ListInferenceEvents"] }
-def X-Amz-Target-completer-19 [] { ["AWSLookoutEquipmentFrontendService.ListInferenceExecutions"] }
-def X-Amz-Target-completer-20 [] { ["AWSLookoutEquipmentFrontendService.ListInferenceSchedulers"] }
-def X-Amz-Target-completer-21 [] { ["AWSLookoutEquipmentFrontendService.ListLabelGroups"] }
-def X-Amz-Target-completer-22 [] { ["AWSLookoutEquipmentFrontendService.ListLabels"] }
-def X-Amz-Target-completer-23 [] { ["AWSLookoutEquipmentFrontendService.ListModels"] }
-def X-Amz-Target-completer-24 [] { ["AWSLookoutEquipmentFrontendService.ListSensorStatistics"] }
-def X-Amz-Target-completer-25 [] { ["AWSLookoutEquipmentFrontendService.ListTagsForResource"] }
-def X-Amz-Target-completer-26 [] { ["AWSLookoutEquipmentFrontendService.StartDataIngestionJob"] }
-def X-Amz-Target-completer-27 [] { ["AWSLookoutEquipmentFrontendService.StartInferenceScheduler"] }
-def X-Amz-Target-completer-28 [] { ["AWSLookoutEquipmentFrontendService.StopInferenceScheduler"] }
-def X-Amz-Target-completer-29 [] { ["AWSLookoutEquipmentFrontendService.TagResource"] }
-def X-Amz-Target-completer-30 [] { ["AWSLookoutEquipmentFrontendService.UntagResource"] }
-def X-Amz-Target-completer-31 [] { ["AWSLookoutEquipmentFrontendService.UpdateInferenceScheduler"] }
-def X-Amz-Target-completer-32 [] { ["AWSLookoutEquipmentFrontendService.UpdateLabelGroup"] }
+def x-amz-target-completer [] { ["AWSLookoutEquipmentFrontendService.CreateDataset"] }
+def x-amz-target-completer-1 [] { ["AWSLookoutEquipmentFrontendService.CreateInferenceScheduler"] }
+def x-amz-target-completer-2 [] { ["AWSLookoutEquipmentFrontendService.CreateLabel"] }
+def x-amz-target-completer-3 [] { ["AWSLookoutEquipmentFrontendService.CreateLabelGroup"] }
+def x-amz-target-completer-4 [] { ["AWSLookoutEquipmentFrontendService.CreateModel"] }
+def x-amz-target-completer-5 [] { ["AWSLookoutEquipmentFrontendService.DeleteDataset"] }
+def x-amz-target-completer-6 [] { ["AWSLookoutEquipmentFrontendService.DeleteInferenceScheduler"] }
+def x-amz-target-completer-7 [] { ["AWSLookoutEquipmentFrontendService.DeleteLabel"] }
+def x-amz-target-completer-8 [] { ["AWSLookoutEquipmentFrontendService.DeleteLabelGroup"] }
+def x-amz-target-completer-9 [] { ["AWSLookoutEquipmentFrontendService.DeleteModel"] }
+def x-amz-target-completer-10 [] { ["AWSLookoutEquipmentFrontendService.DescribeDataIngestionJob"] }
+def x-amz-target-completer-11 [] { ["AWSLookoutEquipmentFrontendService.DescribeDataset"] }
+def x-amz-target-completer-12 [] { ["AWSLookoutEquipmentFrontendService.DescribeInferenceScheduler"] }
+def x-amz-target-completer-13 [] { ["AWSLookoutEquipmentFrontendService.DescribeLabel"] }
+def x-amz-target-completer-14 [] { ["AWSLookoutEquipmentFrontendService.DescribeLabelGroup"] }
+def x-amz-target-completer-15 [] { ["AWSLookoutEquipmentFrontendService.DescribeModel"] }
+def x-amz-target-completer-16 [] { ["AWSLookoutEquipmentFrontendService.ListDataIngestionJobs"] }
+def x-amz-target-completer-17 [] { ["AWSLookoutEquipmentFrontendService.ListDatasets"] }
+def x-amz-target-completer-18 [] { ["AWSLookoutEquipmentFrontendService.ListInferenceEvents"] }
+def x-amz-target-completer-19 [] { ["AWSLookoutEquipmentFrontendService.ListInferenceExecutions"] }
+def x-amz-target-completer-20 [] { ["AWSLookoutEquipmentFrontendService.ListInferenceSchedulers"] }
+def x-amz-target-completer-21 [] { ["AWSLookoutEquipmentFrontendService.ListLabelGroups"] }
+def x-amz-target-completer-22 [] { ["AWSLookoutEquipmentFrontendService.ListLabels"] }
+def x-amz-target-completer-23 [] { ["AWSLookoutEquipmentFrontendService.ListModels"] }
+def x-amz-target-completer-24 [] { ["AWSLookoutEquipmentFrontendService.ListSensorStatistics"] }
+def x-amz-target-completer-25 [] { ["AWSLookoutEquipmentFrontendService.ListTagsForResource"] }
+def x-amz-target-completer-26 [] { ["AWSLookoutEquipmentFrontendService.StartDataIngestionJob"] }
+def x-amz-target-completer-27 [] { ["AWSLookoutEquipmentFrontendService.StartInferenceScheduler"] }
+def x-amz-target-completer-28 [] { ["AWSLookoutEquipmentFrontendService.StopInferenceScheduler"] }
+def x-amz-target-completer-29 [] { ["AWSLookoutEquipmentFrontendService.TagResource"] }
+def x-amz-target-completer-30 [] { ["AWSLookoutEquipmentFrontendService.UntagResource"] }
+def x-amz-target-completer-31 [] { ["AWSLookoutEquipmentFrontendService.UpdateInferenceScheduler"] }
+def x-amz-target-completer-32 [] { ["AWSLookoutEquipmentFrontendService.UpdateLabelGroup"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-lookout-equipment-frontend-service-create-dataset CreateDataset" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-lookout-equipment-frontend-service-create-dataset create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.CreateDataset
 # operationId: CreateDataset
-export def "x-amz-target-aws-lookout-equipment-frontend-service-create-dataset CreateDataset" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-create-dataset create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,27 +136,27 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-create-dataset C
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  DatasetName: any
-  --DatasetSchema: any
-  --ServerSideKmsKeyId: any
-  ClientToken: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  dataset_name: any
+  --dataset-schema: any
+  --server-side-kms-key-id: any
+  client_token: any
+  --tags: any
 ]: any -> record<DatasetName: record, DatasetArn: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.CreateDataset")
-  let body = {DatasetName: $DatasetName, DatasetSchema: $DatasetSchema, ServerSideKmsKeyId: $ServerSideKmsKeyId, ClientToken: $ClientToken, Tags: $Tags} | compact
+  let body = {"DatasetName": $dataset_name, "DatasetSchema": $dataset_schema, "ServerSideKmsKeyId": $server_side_kms_key_id, "ClientToken": $client_token, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -167,7 +167,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-create-dataset C
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.CreateInferenceScheduler
 # operationId: CreateInferenceScheduler
-export def "x-amz-target-aws-lookout-equipment-frontend-service-create-inference-scheduler CreateInferenceScheduler" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-create-inference-scheduler create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,32 +176,32 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-create-inference
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  ModelName: any
-  InferenceSchedulerName: any
-  --DataDelayOffsetInMinutes: any
-  DataUploadFrequency: any
-  DataInputConfiguration: any
-  DataOutputConfiguration: any
-  RoleArn: any
-  --ServerSideKmsKeyId: any
-  ClientToken: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  model_name: any
+  inference_scheduler_name: any
+  --data-delay-offset-in-minutes: any
+  data_upload_frequency: any
+  data_input_configuration: any
+  data_output_configuration: any
+  role_arn: any
+  --server-side-kms-key-id: any
+  client_token: any
+  --tags: any
 ]: any -> record<InferenceSchedulerArn: record, InferenceSchedulerName: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.CreateInferenceScheduler")
-  let body = {ModelName: $ModelName, InferenceSchedulerName: $InferenceSchedulerName, DataDelayOffsetInMinutes: $DataDelayOffsetInMinutes, DataUploadFrequency: $DataUploadFrequency, DataInputConfiguration: $DataInputConfiguration, DataOutputConfiguration: $DataOutputConfiguration, RoleArn: $RoleArn, ServerSideKmsKeyId: $ServerSideKmsKeyId, ClientToken: $ClientToken, Tags: $Tags} | compact
+  let body = {"ModelName": $model_name, "InferenceSchedulerName": $inference_scheduler_name, "DataDelayOffsetInMinutes": $data_delay_offset_in_minutes, "DataUploadFrequency": $data_upload_frequency, "DataInputConfiguration": $data_input_configuration, "DataOutputConfiguration": $data_output_configuration, "RoleArn": $role_arn, "ServerSideKmsKeyId": $server_side_kms_key_id, "ClientToken": $client_token, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,7 +212,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-create-inference
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.CreateLabel
 # operationId: CreateLabel
-export def "x-amz-target-aws-lookout-equipment-frontend-service-create-label CreateLabel" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-create-label create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,30 +221,30 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-create-label Cre
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  LabelGroupName: any
-  StartTime: any
-  EndTime: any
-  Rating: any
-  --FaultCode: any
-  --Notes: any
-  --Equipment: any
-  ClientToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  label_group_name: any
+  start_time: any
+  end_time: any
+  rating: any
+  --fault-code: any
+  --notes: any
+  --equipment: any
+  client_token: any
 ]: any -> record<LabelId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.CreateLabel")
-  let body = {LabelGroupName: $LabelGroupName, StartTime: $StartTime, EndTime: $EndTime, Rating: $Rating, FaultCode: $FaultCode, Notes: $Notes, Equipment: $Equipment, ClientToken: $ClientToken} | compact
+  let body = {"LabelGroupName": $label_group_name, "StartTime": $start_time, "EndTime": $end_time, "Rating": $rating, "FaultCode": $fault_code, "Notes": $notes, "Equipment": $equipment, "ClientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -255,7 +255,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-create-label Cre
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.CreateLabelGroup
 # operationId: CreateLabelGroup
-export def "x-amz-target-aws-lookout-equipment-frontend-service-create-label-group CreateLabelGroup" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-create-label-group create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,26 +264,26 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-create-label-gro
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  LabelGroupName: any
-  --FaultCodes: any
-  ClientToken: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  label_group_name: any
+  --fault-codes: any
+  client_token: any
+  --tags: any
 ]: any -> record<LabelGroupName: record, LabelGroupArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.CreateLabelGroup")
-  let body = {LabelGroupName: $LabelGroupName, FaultCodes: $FaultCodes, ClientToken: $ClientToken, Tags: $Tags} | compact
+  let body = {"LabelGroupName": $label_group_name, "FaultCodes": $fault_codes, "ClientToken": $client_token, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -294,7 +294,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-create-label-gro
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.CreateModel
 # operationId: CreateModel
-export def "x-amz-target-aws-lookout-equipment-frontend-service-create-model CreateModel" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-create-model create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,36 +303,36 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-create-model Cre
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  ModelName: any
-  DatasetName: any
-  --DatasetSchema: any
-  --LabelsInputConfiguration: any
-  ClientToken: any
-  --TrainingDataStartTime: any
-  --TrainingDataEndTime: any
-  --EvaluationDataStartTime: any
-  --EvaluationDataEndTime: any
-  --RoleArn: any
-  --DataPreProcessingConfiguration: any
-  --ServerSideKmsKeyId: any
-  --Tags: any
-  --OffCondition: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  model_name: any
+  dataset_name: any
+  --dataset-schema: any
+  --labels-input-configuration: any
+  client_token: any
+  --training-data-start-time: any
+  --training-data-end-time: any
+  --evaluation-data-start-time: any
+  --evaluation-data-end-time: any
+  --role-arn: any
+  --data-pre-processing-configuration: any
+  --server-side-kms-key-id: any
+  --tags: any
+  --off-condition: any
 ]: any -> record<ModelArn: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.CreateModel")
-  let body = {ModelName: $ModelName, DatasetName: $DatasetName, DatasetSchema: $DatasetSchema, LabelsInputConfiguration: $LabelsInputConfiguration, ClientToken: $ClientToken, TrainingDataStartTime: $TrainingDataStartTime, TrainingDataEndTime: $TrainingDataEndTime, EvaluationDataStartTime: $EvaluationDataStartTime, EvaluationDataEndTime: $EvaluationDataEndTime, RoleArn: $RoleArn, DataPreProcessingConfiguration: $DataPreProcessingConfiguration, ServerSideKmsKeyId: $ServerSideKmsKeyId, Tags: $Tags, OffCondition: $OffCondition} | compact
+  let body = {"ModelName": $model_name, "DatasetName": $dataset_name, "DatasetSchema": $dataset_schema, "LabelsInputConfiguration": $labels_input_configuration, "ClientToken": $client_token, "TrainingDataStartTime": $training_data_start_time, "TrainingDataEndTime": $training_data_end_time, "EvaluationDataStartTime": $evaluation_data_start_time, "EvaluationDataEndTime": $evaluation_data_end_time, "RoleArn": $role_arn, "DataPreProcessingConfiguration": $data_pre_processing_configuration, "ServerSideKmsKeyId": $server_side_kms_key_id, "Tags": $tags, "OffCondition": $off_condition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -343,7 +343,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-create-model Cre
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.DeleteDataset
 # operationId: DeleteDataset
-export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-dataset DeleteDataset" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-dataset delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,23 +352,23 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-dataset D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  DatasetName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  dataset_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.DeleteDataset")
-  let body = {DatasetName: $DatasetName} | compact
+  let body = {"DatasetName": $dataset_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -379,7 +379,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-dataset D
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.DeleteInferenceScheduler
 # operationId: DeleteInferenceScheduler
-export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-inference-scheduler DeleteInferenceScheduler" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-inference-scheduler delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,23 +388,23 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-inference
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  InferenceSchedulerName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  inference_scheduler_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.DeleteInferenceScheduler")
-  let body = {InferenceSchedulerName: $InferenceSchedulerName} | compact
+  let body = {"InferenceSchedulerName": $inference_scheduler_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -415,7 +415,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-inference
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.DeleteLabel
 # operationId: DeleteLabel
-export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-label DeleteLabel" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-label delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,24 +424,24 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-label Del
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  LabelGroupName: any
-  LabelId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  label_group_name: any
+  label_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.DeleteLabel")
-  let body = {LabelGroupName: $LabelGroupName, LabelId: $LabelId} | compact
+  let body = {"LabelGroupName": $label_group_name, "LabelId": $label_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -452,7 +452,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-label Del
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.DeleteLabelGroup
 # operationId: DeleteLabelGroup
-export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-label-group DeleteLabelGroup" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-label-group delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,23 +461,23 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-label-gro
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  LabelGroupName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  label_group_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.DeleteLabelGroup")
-  let body = {LabelGroupName: $LabelGroupName} | compact
+  let body = {"LabelGroupName": $label_group_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -488,7 +488,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-label-gro
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.DeleteModel
 # operationId: DeleteModel
-export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-model DeleteModel" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-model delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,23 +497,23 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-model Del
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  ModelName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  model_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.DeleteModel")
-  let body = {ModelName: $ModelName} | compact
+  let body = {"ModelName": $model_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -524,7 +524,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-delete-model Del
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.DescribeDataIngestionJob
 # operationId: DescribeDataIngestionJob
-export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-data-ingestion-job DescribeDataIngestionJob" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-data-ingestion-job post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -533,23 +533,23 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-data-in
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  JobId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  job_id: any
 ]: any -> record<JobId: record, DatasetArn: record, IngestionInputConfiguration: record<S3InputConfiguration: record<Bucket: record, Prefix: record, KeyPattern: record>>, RoleArn: record, CreatedAt: record, Status: record, FailedReason: record, DataQualitySummary: record<InsufficientSensorData: record<MissingCompleteSensorData: record, SensorsWithShortDateRange: record>, MissingSensorData: record<AffectedSensorCount: record, TotalNumberOfMissingValues: record>, InvalidSensorData: record<AffectedSensorCount: record, TotalNumberOfInvalidValues: record>, UnsupportedTimestamps: record<TotalNumberOfUnsupportedTimestamps: record>, DuplicateTimestamps: record<TotalNumberOfDuplicateTimestamps: record>>, IngestedFilesSummary: record<TotalNumberOfFiles: record, IngestedNumberOfFiles: record, DiscardedFiles: record>, StatusDetail: record, IngestedDataSize: record, DataStartTime: record, DataEndTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.DescribeDataIngestionJob")
-  let body = {JobId: $JobId} | compact
+  let body = {"JobId": $job_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -560,7 +560,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-data-in
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.DescribeDataset
 # operationId: DescribeDataset
-export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-dataset DescribeDataset" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-dataset post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,23 +569,23 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-dataset
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  DatasetName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  dataset_name: any
 ]: any -> record<DatasetName: record, DatasetArn: record, CreatedAt: record, LastUpdatedAt: record, Status: record, Schema: record, ServerSideKmsKeyId: record, IngestionInputConfiguration: record<S3InputConfiguration: record<Bucket: record, Prefix: record, KeyPattern: record>>, DataQualitySummary: record<InsufficientSensorData: record<MissingCompleteSensorData: record, SensorsWithShortDateRange: record>, MissingSensorData: record<AffectedSensorCount: record, TotalNumberOfMissingValues: record>, InvalidSensorData: record<AffectedSensorCount: record, TotalNumberOfInvalidValues: record>, UnsupportedTimestamps: record<TotalNumberOfUnsupportedTimestamps: record>, DuplicateTimestamps: record<TotalNumberOfDuplicateTimestamps: record>>, IngestedFilesSummary: record<TotalNumberOfFiles: record, IngestedNumberOfFiles: record, DiscardedFiles: record>, RoleArn: record, DataStartTime: record, DataEndTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.DescribeDataset")
-  let body = {DatasetName: $DatasetName} | compact
+  let body = {"DatasetName": $dataset_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -596,7 +596,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-dataset
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.DescribeInferenceScheduler
 # operationId: DescribeInferenceScheduler
-export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-inference-scheduler DescribeInferenceScheduler" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-inference-scheduler post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -605,23 +605,23 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-inferen
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  InferenceSchedulerName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  inference_scheduler_name: any
 ]: any -> record<ModelArn: record, ModelName: record, InferenceSchedulerName: record, InferenceSchedulerArn: record, Status: record, DataDelayOffsetInMinutes: record, DataUploadFrequency: record, CreatedAt: record, UpdatedAt: record, DataInputConfiguration: record<S3InputConfiguration: record<Bucket: record, Prefix: record>, InputTimeZoneOffset: record, InferenceInputNameConfiguration: record<TimestampFormat: record, ComponentTimestampDelimiter: record>>, DataOutputConfiguration: record<S3OutputConfiguration: record<Bucket: record, Prefix: record>, KmsKeyId: record>, RoleArn: record, ServerSideKmsKeyId: record, LatestInferenceResult: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.DescribeInferenceScheduler")
-  let body = {InferenceSchedulerName: $InferenceSchedulerName} | compact
+  let body = {"InferenceSchedulerName": $inference_scheduler_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -632,7 +632,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-inferen
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.DescribeLabel
 # operationId: DescribeLabel
-export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-label DescribeLabel" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-label post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,24 +641,24 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-label D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  LabelGroupName: any
-  LabelId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  label_group_name: any
+  label_id: any
 ]: any -> record<LabelGroupName: record, LabelGroupArn: record, LabelId: record, StartTime: record, EndTime: record, Rating: record, FaultCode: record, Notes: record, Equipment: record, CreatedAt: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.DescribeLabel")
-  let body = {LabelGroupName: $LabelGroupName, LabelId: $LabelId} | compact
+  let body = {"LabelGroupName": $label_group_name, "LabelId": $label_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -669,7 +669,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-label D
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.DescribeLabelGroup
 # operationId: DescribeLabelGroup
-export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-label-group DescribeLabelGroup" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-label-group post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -678,23 +678,23 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-label-g
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  LabelGroupName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  label_group_name: any
 ]: any -> record<LabelGroupName: record, LabelGroupArn: record, FaultCodes: record, CreatedAt: record, UpdatedAt: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.DescribeLabelGroup")
-  let body = {LabelGroupName: $LabelGroupName} | compact
+  let body = {"LabelGroupName": $label_group_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -705,7 +705,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-label-g
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.DescribeModel
 # operationId: DescribeModel
-export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-model DescribeModel" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-model post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -714,23 +714,23 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-model D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  ModelName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  model_name: any
 ]: any -> record<ModelName: record, ModelArn: record, DatasetName: record, DatasetArn: record, Schema: record, LabelsInputConfiguration: record<S3InputConfiguration: record<Bucket: record, Prefix: record>, LabelGroupName: record>, TrainingDataStartTime: record, TrainingDataEndTime: record, EvaluationDataStartTime: record, EvaluationDataEndTime: record, RoleArn: record, DataPreProcessingConfiguration: record<TargetSamplingRate: record>, Status: record, TrainingExecutionStartTime: record, TrainingExecutionEndTime: record, FailedReason: record, ModelMetrics: record, LastUpdatedTime: record, CreatedAt: record, ServerSideKmsKeyId: record, OffCondition: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.DescribeModel")
-  let body = {ModelName: $ModelName} | compact
+  let body = {"ModelName": $model_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -741,7 +741,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-describe-model D
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListDataIngestionJobs
 # operationId: ListDataIngestionJobs
-export def "x-amz-target-aws-lookout-equipment-frontend-service-list-data-ingestion-jobs ListDataIngestionJobs" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-list-data-ingestion-jobs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,29 +750,29 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-data-ingest
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  --DatasetName: any
-  --NextToken: any
-  --MaxResults: any
-  --Status: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  --dataset-name: any
+  --next-token: any
+  --max-results: any
+  --status: any
 ]: any -> record<NextToken: record, DataIngestionJobSummaries: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListDataIngestionJobs" $qp)
-  let body = {DatasetName: $DatasetName, NextToken: $NextToken, MaxResults: $MaxResults, Status: $Status} | compact
+  let body = {"DatasetName": $dataset_name, "NextToken": $next_token, "MaxResults": $max_results, "Status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -783,7 +783,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-data-ingest
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListDatasets
 # operationId: ListDatasets
-export def "x-amz-target-aws-lookout-equipment-frontend-service-list-datasets ListDatasets" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-list-datasets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -792,28 +792,28 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-datasets Li
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  --NextToken: any
-  --MaxResults: any
-  --DatasetNameBeginsWith: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  --next-token: any
+  --max-results: any
+  --dataset-name-begins-with: any
 ]: any -> record<NextToken: record, DatasetSummaries: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListDatasets" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, DatasetNameBeginsWith: $DatasetNameBeginsWith} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "DatasetNameBeginsWith": $dataset_name_begins_with} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -824,7 +824,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-datasets Li
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListInferenceEvents
 # operationId: ListInferenceEvents
-export def "x-amz-target-aws-lookout-equipment-frontend-service-list-inference-events ListInferenceEvents" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-list-inference-events list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -833,30 +833,30 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-inference-e
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  --NextToken: any
-  --MaxResults: any
-  InferenceSchedulerName: any
-  IntervalStartTime: any
-  IntervalEndTime: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  --next-token: any
+  --max-results: any
+  inference_scheduler_name: any
+  interval_start_time: any
+  interval_end_time: any
 ]: any -> record<NextToken: record, InferenceEventSummaries: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListInferenceEvents" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, InferenceSchedulerName: $InferenceSchedulerName, IntervalStartTime: $IntervalStartTime, IntervalEndTime: $IntervalEndTime} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "InferenceSchedulerName": $inference_scheduler_name, "IntervalStartTime": $interval_start_time, "IntervalEndTime": $interval_end_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -867,7 +867,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-inference-e
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListInferenceExecutions
 # operationId: ListInferenceExecutions
-export def "x-amz-target-aws-lookout-equipment-frontend-service-list-inference-executions ListInferenceExecutions" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-list-inference-executions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -876,31 +876,31 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-inference-e
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  --NextToken: any
-  --MaxResults: any
-  InferenceSchedulerName: any
-  --DataStartTimeAfter: any
-  --DataEndTimeBefore: any
-  --Status: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  --next-token: any
+  --max-results: any
+  inference_scheduler_name: any
+  --data-start-time-after: any
+  --data-end-time-before: any
+  --status: any
 ]: any -> record<NextToken: record, InferenceExecutionSummaries: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListInferenceExecutions" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, InferenceSchedulerName: $InferenceSchedulerName, DataStartTimeAfter: $DataStartTimeAfter, DataEndTimeBefore: $DataEndTimeBefore, Status: $Status} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "InferenceSchedulerName": $inference_scheduler_name, "DataStartTimeAfter": $data_start_time_after, "DataEndTimeBefore": $data_end_time_before, "Status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -911,7 +911,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-inference-e
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListInferenceSchedulers
 # operationId: ListInferenceSchedulers
-export def "x-amz-target-aws-lookout-equipment-frontend-service-list-inference-schedulers ListInferenceSchedulers" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-list-inference-schedulers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -920,30 +920,30 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-inference-s
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  --NextToken: any
-  --MaxResults: any
-  --InferenceSchedulerNameBeginsWith: any
-  --ModelName: any
-  --Status: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  --next-token: any
+  --max-results: any
+  --inference-scheduler-name-begins-with: any
+  --model-name: any
+  --status: any
 ]: any -> record<NextToken: record, InferenceSchedulerSummaries: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListInferenceSchedulers" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, InferenceSchedulerNameBeginsWith: $InferenceSchedulerNameBeginsWith, ModelName: $ModelName, Status: $Status} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "InferenceSchedulerNameBeginsWith": $inference_scheduler_name_begins_with, "ModelName": $model_name, "Status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -954,7 +954,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-inference-s
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListLabelGroups
 # operationId: ListLabelGroups
-export def "x-amz-target-aws-lookout-equipment-frontend-service-list-label-groups ListLabelGroups" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-list-label-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -963,28 +963,28 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-label-group
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  --LabelGroupNameBeginsWith: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  --label-group-name-begins-with: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: record, LabelGroupSummaries: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListLabelGroups" $qp)
-  let body = {LabelGroupNameBeginsWith: $LabelGroupNameBeginsWith, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"LabelGroupNameBeginsWith": $label_group_name_begins_with, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -995,7 +995,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-label-group
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListLabels
 # operationId: ListLabels
-export def "x-amz-target-aws-lookout-equipment-frontend-service-list-labels ListLabels" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-list-labels list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1004,32 +1004,32 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-labels List
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  LabelGroupName: any
-  --IntervalStartTime: any
-  --IntervalEndTime: any
-  --FaultCode: any
-  --Equipment: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  label_group_name: any
+  --interval-start-time: any
+  --interval-end-time: any
+  --fault-code: any
+  --equipment: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: record, LabelSummaries: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListLabels" $qp)
-  let body = {LabelGroupName: $LabelGroupName, IntervalStartTime: $IntervalStartTime, IntervalEndTime: $IntervalEndTime, FaultCode: $FaultCode, Equipment: $Equipment, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"LabelGroupName": $label_group_name, "IntervalStartTime": $interval_start_time, "IntervalEndTime": $interval_end_time, "FaultCode": $fault_code, "Equipment": $equipment, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1040,7 +1040,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-labels List
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListModels
 # operationId: ListModels
-export def "x-amz-target-aws-lookout-equipment-frontend-service-list-models ListModels" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-list-models list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1049,30 +1049,30 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-models List
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  --NextToken: any
-  --MaxResults: any
-  --Status: any
-  --ModelNameBeginsWith: any
-  --DatasetNameBeginsWith: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  --next-token: any
+  --max-results: any
+  --status: any
+  --model-name-begins-with: any
+  --dataset-name-begins-with: any
 ]: any -> record<NextToken: record, ModelSummaries: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListModels" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Status: $Status, ModelNameBeginsWith: $ModelNameBeginsWith, DatasetNameBeginsWith: $DatasetNameBeginsWith} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Status": $status, "ModelNameBeginsWith": $model_name_begins_with, "DatasetNameBeginsWith": $dataset_name_begins_with} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1083,7 +1083,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-models List
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListSensorStatistics
 # operationId: ListSensorStatistics
-export def "x-amz-target-aws-lookout-equipment-frontend-service-list-sensor-statistics ListSensorStatistics" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-list-sensor-statistics list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1092,29 +1092,29 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-sensor-stat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  DatasetName: any
-  --IngestionJobId: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  dataset_name: any
+  --ingestion-job-id: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<SensorStatisticsSummaries: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListSensorStatistics" $qp)
-  let body = {DatasetName: $DatasetName, IngestionJobId: $IngestionJobId, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"DatasetName": $dataset_name, "IngestionJobId": $ingestion_job_id, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1125,7 +1125,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-sensor-stat
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-aws-lookout-equipment-frontend-service-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1134,23 +1134,23 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-tags-for-re
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  resource_arn: any
 ]: any -> record<Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.ListTagsForResource")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1161,7 +1161,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-list-tags-for-re
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.StartDataIngestionJob
 # operationId: StartDataIngestionJob
-export def "x-amz-target-aws-lookout-equipment-frontend-service-start-data-ingestion-job StartDataIngestionJob" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-start-data-ingestion-job start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1170,26 +1170,26 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-start-data-inges
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  DatasetName: any
-  IngestionInputConfiguration: any
-  RoleArn: any
-  ClientToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  dataset_name: any
+  ingestion_input_configuration: any
+  role_arn: any
+  client_token: any
 ]: any -> record<JobId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.StartDataIngestionJob")
-  let body = {DatasetName: $DatasetName, IngestionInputConfiguration: $IngestionInputConfiguration, RoleArn: $RoleArn, ClientToken: $ClientToken} | compact
+  let body = {"DatasetName": $dataset_name, "IngestionInputConfiguration": $ingestion_input_configuration, "RoleArn": $role_arn, "ClientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1200,7 +1200,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-start-data-inges
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.StartInferenceScheduler
 # operationId: StartInferenceScheduler
-export def "x-amz-target-aws-lookout-equipment-frontend-service-start-inference-scheduler StartInferenceScheduler" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-start-inference-scheduler start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1209,23 +1209,23 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-start-inference-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  InferenceSchedulerName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  inference_scheduler_name: any
 ]: any -> record<ModelArn: record, ModelName: record, InferenceSchedulerName: record, InferenceSchedulerArn: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.StartInferenceScheduler")
-  let body = {InferenceSchedulerName: $InferenceSchedulerName} | compact
+  let body = {"InferenceSchedulerName": $inference_scheduler_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1236,7 +1236,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-start-inference-
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.StopInferenceScheduler
 # operationId: StopInferenceScheduler
-export def "x-amz-target-aws-lookout-equipment-frontend-service-stop-inference-scheduler StopInferenceScheduler" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-stop-inference-scheduler stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1245,23 +1245,23 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-stop-inference-s
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  InferenceSchedulerName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  inference_scheduler_name: any
 ]: any -> record<ModelArn: record, ModelName: record, InferenceSchedulerName: record, InferenceSchedulerArn: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.StopInferenceScheduler")
-  let body = {InferenceSchedulerName: $InferenceSchedulerName} | compact
+  let body = {"InferenceSchedulerName": $inference_scheduler_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1272,7 +1272,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-stop-inference-s
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.TagResource
 # operationId: TagResource
-export def "x-amz-target-aws-lookout-equipment-frontend-service-tag-resource TagResource" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1281,24 +1281,24 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-tag-resource Tag
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  ResourceArn: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.TagResource")
-  let body = {ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1309,7 +1309,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-tag-resource Tag
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-aws-lookout-equipment-frontend-service-untag-resource UntagResource" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1318,24 +1318,24 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-untag-resource U
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  ResourceArn: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.UntagResource")
-  let body = {ResourceArn: $ResourceArn, TagKeys: $TagKeys} | compact
+  let body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1346,7 +1346,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-untag-resource U
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.UpdateInferenceScheduler
 # operationId: UpdateInferenceScheduler
-export def "x-amz-target-aws-lookout-equipment-frontend-service-update-inference-scheduler UpdateInferenceScheduler" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-update-inference-scheduler update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1355,28 +1355,28 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-update-inference
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  InferenceSchedulerName: any
-  --DataDelayOffsetInMinutes: any
-  --DataUploadFrequency: any
-  --DataInputConfiguration: any
-  --DataOutputConfiguration: any
-  --RoleArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  inference_scheduler_name: any
+  --data-delay-offset-in-minutes: any
+  --data-upload-frequency: any
+  --data-input-configuration: any
+  --data-output-configuration: any
+  --role-arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.UpdateInferenceScheduler")
-  let body = {InferenceSchedulerName: $InferenceSchedulerName, DataDelayOffsetInMinutes: $DataDelayOffsetInMinutes, DataUploadFrequency: $DataUploadFrequency, DataInputConfiguration: $DataInputConfiguration, DataOutputConfiguration: $DataOutputConfiguration, RoleArn: $RoleArn} | compact
+  let body = {"InferenceSchedulerName": $inference_scheduler_name, "DataDelayOffsetInMinutes": $data_delay_offset_in_minutes, "DataUploadFrequency": $data_upload_frequency, "DataInputConfiguration": $data_input_configuration, "DataOutputConfiguration": $data_output_configuration, "RoleArn": $role_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1387,7 +1387,7 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-update-inference
 #
 # POST /#X-Amz-Target=AWSLookoutEquipmentFrontendService.UpdateLabelGroup
 # operationId: UpdateLabelGroup
-export def "x-amz-target-aws-lookout-equipment-frontend-service-update-label-group UpdateLabelGroup" [
+export def "x-amz-target-aws-lookout-equipment-frontend-service-update-label-group update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1396,24 +1396,24 @@ export def "x-amz-target-aws-lookout-equipment-frontend-service-update-label-gro
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  LabelGroupName: any
-  --FaultCodes: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  label_group_name: any
+  --fault-codes: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSLookoutEquipmentFrontendService.UpdateLabelGroup")
-  let body = {LabelGroupName: $LabelGroupName, FaultCodes: $FaultCodes} | compact
+  let body = {"LabelGroupName": $label_group_name, "FaultCodes": $fault_codes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

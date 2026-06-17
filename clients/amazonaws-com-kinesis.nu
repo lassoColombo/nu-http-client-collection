@@ -66,39 +66,39 @@ def base-url-completer [] { ["http://kinesis.us-east-1.amazonaws.com" "http://ki
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["Kinesis_20131202.AddTagsToStream"] }
-def X-Amz-Target-completer-1 [] { ["Kinesis_20131202.CreateStream"] }
-def X-Amz-Target-completer-2 [] { ["Kinesis_20131202.DecreaseStreamRetentionPeriod"] }
-def X-Amz-Target-completer-3 [] { ["Kinesis_20131202.DeleteStream"] }
-def X-Amz-Target-completer-4 [] { ["Kinesis_20131202.DeregisterStreamConsumer"] }
-def X-Amz-Target-completer-5 [] { ["Kinesis_20131202.DescribeLimits"] }
-def X-Amz-Target-completer-6 [] { ["Kinesis_20131202.DescribeStream"] }
-def X-Amz-Target-completer-7 [] { ["Kinesis_20131202.DescribeStreamConsumer"] }
-def X-Amz-Target-completer-8 [] { ["Kinesis_20131202.DescribeStreamSummary"] }
-def X-Amz-Target-completer-9 [] { ["Kinesis_20131202.DisableEnhancedMonitoring"] }
-def X-Amz-Target-completer-10 [] { ["Kinesis_20131202.EnableEnhancedMonitoring"] }
-def X-Amz-Target-completer-11 [] { ["Kinesis_20131202.GetRecords"] }
-def X-Amz-Target-completer-12 [] { ["Kinesis_20131202.GetShardIterator"] }
-def X-Amz-Target-completer-13 [] { ["Kinesis_20131202.IncreaseStreamRetentionPeriod"] }
-def X-Amz-Target-completer-14 [] { ["Kinesis_20131202.ListShards"] }
-def X-Amz-Target-completer-15 [] { ["Kinesis_20131202.ListStreamConsumers"] }
-def X-Amz-Target-completer-16 [] { ["Kinesis_20131202.ListStreams"] }
-def X-Amz-Target-completer-17 [] { ["Kinesis_20131202.ListTagsForStream"] }
-def X-Amz-Target-completer-18 [] { ["Kinesis_20131202.MergeShards"] }
-def X-Amz-Target-completer-19 [] { ["Kinesis_20131202.PutRecord"] }
-def X-Amz-Target-completer-20 [] { ["Kinesis_20131202.PutRecords"] }
-def X-Amz-Target-completer-21 [] { ["Kinesis_20131202.RegisterStreamConsumer"] }
-def X-Amz-Target-completer-22 [] { ["Kinesis_20131202.RemoveTagsFromStream"] }
-def X-Amz-Target-completer-23 [] { ["Kinesis_20131202.SplitShard"] }
-def X-Amz-Target-completer-24 [] { ["Kinesis_20131202.StartStreamEncryption"] }
-def X-Amz-Target-completer-25 [] { ["Kinesis_20131202.StopStreamEncryption"] }
-def X-Amz-Target-completer-26 [] { ["Kinesis_20131202.UpdateShardCount"] }
-def X-Amz-Target-completer-27 [] { ["Kinesis_20131202.UpdateStreamMode"] }
+def x-amz-target-completer [] { ["Kinesis_20131202.AddTagsToStream"] }
+def x-amz-target-completer-1 [] { ["Kinesis_20131202.CreateStream"] }
+def x-amz-target-completer-2 [] { ["Kinesis_20131202.DecreaseStreamRetentionPeriod"] }
+def x-amz-target-completer-3 [] { ["Kinesis_20131202.DeleteStream"] }
+def x-amz-target-completer-4 [] { ["Kinesis_20131202.DeregisterStreamConsumer"] }
+def x-amz-target-completer-5 [] { ["Kinesis_20131202.DescribeLimits"] }
+def x-amz-target-completer-6 [] { ["Kinesis_20131202.DescribeStream"] }
+def x-amz-target-completer-7 [] { ["Kinesis_20131202.DescribeStreamConsumer"] }
+def x-amz-target-completer-8 [] { ["Kinesis_20131202.DescribeStreamSummary"] }
+def x-amz-target-completer-9 [] { ["Kinesis_20131202.DisableEnhancedMonitoring"] }
+def x-amz-target-completer-10 [] { ["Kinesis_20131202.EnableEnhancedMonitoring"] }
+def x-amz-target-completer-11 [] { ["Kinesis_20131202.GetRecords"] }
+def x-amz-target-completer-12 [] { ["Kinesis_20131202.GetShardIterator"] }
+def x-amz-target-completer-13 [] { ["Kinesis_20131202.IncreaseStreamRetentionPeriod"] }
+def x-amz-target-completer-14 [] { ["Kinesis_20131202.ListShards"] }
+def x-amz-target-completer-15 [] { ["Kinesis_20131202.ListStreamConsumers"] }
+def x-amz-target-completer-16 [] { ["Kinesis_20131202.ListStreams"] }
+def x-amz-target-completer-17 [] { ["Kinesis_20131202.ListTagsForStream"] }
+def x-amz-target-completer-18 [] { ["Kinesis_20131202.MergeShards"] }
+def x-amz-target-completer-19 [] { ["Kinesis_20131202.PutRecord"] }
+def x-amz-target-completer-20 [] { ["Kinesis_20131202.PutRecords"] }
+def x-amz-target-completer-21 [] { ["Kinesis_20131202.RegisterStreamConsumer"] }
+def x-amz-target-completer-22 [] { ["Kinesis_20131202.RemoveTagsFromStream"] }
+def x-amz-target-completer-23 [] { ["Kinesis_20131202.SplitShard"] }
+def x-amz-target-completer-24 [] { ["Kinesis_20131202.StartStreamEncryption"] }
+def x-amz-target-completer-25 [] { ["Kinesis_20131202.StopStreamEncryption"] }
+def x-amz-target-completer-26 [] { ["Kinesis_20131202.UpdateShardCount"] }
+def x-amz-target-completer-27 [] { ["Kinesis_20131202.UpdateStreamMode"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-kinesis-20131202add-tags-to-stream AddTagsToStream" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-kinesis-20131202add-tags-to-stream create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=Kinesis_20131202.AddTagsToStream
 # operationId: AddTagsToStream
-export def "x-amz-target-kinesis-20131202add-tags-to-stream AddTagsToStream" [
+export def "x-amz-target-kinesis-20131202add-tags-to-stream create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,25 +131,25 @@ export def "x-amz-target-kinesis-20131202add-tags-to-stream AddTagsToStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  --StreamName: any
-  Tags: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  --stream-name: any
+  tags: any
+  --stream-arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.AddTagsToStream")
-  let body = {StreamName: $StreamName, Tags: $Tags, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "Tags": $tags, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -160,7 +160,7 @@ export def "x-amz-target-kinesis-20131202add-tags-to-stream AddTagsToStream" [
 #
 # POST /#X-Amz-Target=Kinesis_20131202.CreateStream
 # operationId: CreateStream
-export def "x-amz-target-kinesis-20131202create-stream CreateStream" [
+export def "x-amz-target-kinesis-20131202create-stream create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,25 +169,25 @@ export def "x-amz-target-kinesis-20131202create-stream CreateStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  StreamName: any
-  --ShardCount: any
-  --StreamModeDetails: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  stream_name: any
+  --shard-count: any
+  --stream-mode-details: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.CreateStream")
-  let body = {StreamName: $StreamName, ShardCount: $ShardCount, StreamModeDetails: $StreamModeDetails} | compact
+  let body = {"StreamName": $stream_name, "ShardCount": $shard_count, "StreamModeDetails": $stream_mode_details} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -198,7 +198,7 @@ export def "x-amz-target-kinesis-20131202create-stream CreateStream" [
 #
 # POST /#X-Amz-Target=Kinesis_20131202.DecreaseStreamRetentionPeriod
 # operationId: DecreaseStreamRetentionPeriod
-export def "x-amz-target-kinesis-20131202decrease-stream-retention-period DecreaseStreamRetentionPeriod" [
+export def "x-amz-target-kinesis-20131202decrease-stream-retention-period post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,25 +207,25 @@ export def "x-amz-target-kinesis-20131202decrease-stream-retention-period Decrea
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  --StreamName: any
-  RetentionPeriodHours: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  --stream-name: any
+  retention_period_hours: any
+  --stream-arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.DecreaseStreamRetentionPeriod")
-  let body = {StreamName: $StreamName, RetentionPeriodHours: $RetentionPeriodHours, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "RetentionPeriodHours": $retention_period_hours, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -236,7 +236,7 @@ export def "x-amz-target-kinesis-20131202decrease-stream-retention-period Decrea
 #
 # POST /#X-Amz-Target=Kinesis_20131202.DeleteStream
 # operationId: DeleteStream
-export def "x-amz-target-kinesis-20131202delete-stream DeleteStream" [
+export def "x-amz-target-kinesis-20131202delete-stream delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,25 +245,25 @@ export def "x-amz-target-kinesis-20131202delete-stream DeleteStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  --StreamName: any
-  --EnforceConsumerDeletion: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  --stream-name: any
+  --enforce-consumer-deletion: any
+  --stream-arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.DeleteStream")
-  let body = {StreamName: $StreamName, EnforceConsumerDeletion: $EnforceConsumerDeletion, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "EnforceConsumerDeletion": $enforce_consumer_deletion, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -274,7 +274,7 @@ export def "x-amz-target-kinesis-20131202delete-stream DeleteStream" [
 #
 # POST /#X-Amz-Target=Kinesis_20131202.DeregisterStreamConsumer
 # operationId: DeregisterStreamConsumer
-export def "x-amz-target-kinesis-20131202deregister-stream-consumer DeregisterStreamConsumer" [
+export def "x-amz-target-kinesis-20131202deregister-stream-consumer post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,25 +283,25 @@ export def "x-amz-target-kinesis-20131202deregister-stream-consumer DeregisterSt
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  --StreamARN: any
-  --ConsumerName: any
-  --ConsumerARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  --stream-arn: any
+  --consumer-name: any
+  --consumer-arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.DeregisterStreamConsumer")
-  let body = {StreamARN: $StreamARN, ConsumerName: $ConsumerName, ConsumerARN: $ConsumerARN} | compact
+  let body = {"StreamARN": $stream_arn, "ConsumerName": $consumer_name, "ConsumerARN": $consumer_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -312,7 +312,7 @@ export def "x-amz-target-kinesis-20131202deregister-stream-consumer DeregisterSt
 #
 # POST /#X-Amz-Target=Kinesis_20131202.DescribeLimits
 # operationId: DescribeLimits
-export def "x-amz-target-kinesis-20131202describe-limits DescribeLimits" [
+export def "x-amz-target-kinesis-20131202describe-limits post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,14 +321,14 @@ export def "x-amz-target-kinesis-20131202describe-limits DescribeLimits" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
   --body: record
 ]: any -> record<ShardLimit: record, OpenShardCount: record, OnDemandStreamCount: record, OnDemandStreamCountLimit: record> {
   let input = $in
@@ -336,7 +336,7 @@ export def "x-amz-target-kinesis-20131202describe-limits DescribeLimits" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.DescribeLimits")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -347,7 +347,7 @@ export def "x-amz-target-kinesis-20131202describe-limits DescribeLimits" [
 #
 # POST /#X-Amz-Target=Kinesis_20131202.DescribeStream
 # operationId: DescribeStream
-export def "x-amz-target-kinesis-20131202describe-stream DescribeStream" [
+export def "x-amz-target-kinesis-20131202describe-stream post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,29 +356,29 @@ export def "x-amz-target-kinesis-20131202describe-stream DescribeStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --ExclusiveStartShardId: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  --StreamName: any
-  --Limit: any
-  --ExclusiveStartShardId: any
-  --StreamARN: any
+  --limit: string # Pagination limit
+  --exclusive-start-shard-id: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  --stream-name: any
+  --limit: any
+  --exclusive-start-shard-id: any
+  --stream-arn: any
 ]: any -> record<StreamDescription: record<StreamName: record, StreamARN: record, StreamStatus: record, StreamModeDetails: record<StreamMode: record>, Shards: record, HasMoreShards: record, RetentionPeriodHours: record, StreamCreationTimestamp: record, EnhancedMonitoring: record, EncryptionType: record, KeyId: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "ExclusiveStartShardId" $ExclusiveStartShardId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "ExclusiveStartShardId" $exclusive_start_shard_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.DescribeStream" $qp)
-  let body = {StreamName: $StreamName, Limit: $Limit, ExclusiveStartShardId: $ExclusiveStartShardId, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "Limit": $limit, "ExclusiveStartShardId": $exclusive_start_shard_id, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -389,7 +389,7 @@ export def "x-amz-target-kinesis-20131202describe-stream DescribeStream" [
 #
 # POST /#X-Amz-Target=Kinesis_20131202.DescribeStreamConsumer
 # operationId: DescribeStreamConsumer
-export def "x-amz-target-kinesis-20131202describe-stream-consumer DescribeStreamConsumer" [
+export def "x-amz-target-kinesis-20131202describe-stream-consumer post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,25 +398,25 @@ export def "x-amz-target-kinesis-20131202describe-stream-consumer DescribeStream
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  --StreamARN: any
-  --ConsumerName: any
-  --ConsumerARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  --stream-arn: any
+  --consumer-name: any
+  --consumer-arn: any
 ]: any -> record<ConsumerDescription: record<ConsumerName: record, ConsumerARN: record, ConsumerStatus: record, ConsumerCreationTimestamp: record, StreamARN: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.DescribeStreamConsumer")
-  let body = {StreamARN: $StreamARN, ConsumerName: $ConsumerName, ConsumerARN: $ConsumerARN} | compact
+  let body = {"StreamARN": $stream_arn, "ConsumerName": $consumer_name, "ConsumerARN": $consumer_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -427,7 +427,7 @@ export def "x-amz-target-kinesis-20131202describe-stream-consumer DescribeStream
 #
 # POST /#X-Amz-Target=Kinesis_20131202.DescribeStreamSummary
 # operationId: DescribeStreamSummary
-export def "x-amz-target-kinesis-20131202describe-stream-summary DescribeStreamSummary" [
+export def "x-amz-target-kinesis-20131202describe-stream-summary post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,24 +436,24 @@ export def "x-amz-target-kinesis-20131202describe-stream-summary DescribeStreamS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  --StreamName: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  --stream-name: any
+  --stream-arn: any
 ]: any -> record<StreamDescriptionSummary: record<StreamName: record, StreamARN: record, StreamStatus: record, StreamModeDetails: record<StreamMode: record>, RetentionPeriodHours: record, StreamCreationTimestamp: record, EnhancedMonitoring: record, EncryptionType: record, KeyId: record, OpenShardCount: record, ConsumerCount: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.DescribeStreamSummary")
-  let body = {StreamName: $StreamName, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -464,7 +464,7 @@ export def "x-amz-target-kinesis-20131202describe-stream-summary DescribeStreamS
 #
 # POST /#X-Amz-Target=Kinesis_20131202.DisableEnhancedMonitoring
 # operationId: DisableEnhancedMonitoring
-export def "x-amz-target-kinesis-20131202disable-enhanced-monitoring DisableEnhancedMonitoring" [
+export def "x-amz-target-kinesis-20131202disable-enhanced-monitoring disable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -473,25 +473,25 @@ export def "x-amz-target-kinesis-20131202disable-enhanced-monitoring DisableEnha
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  --StreamName: any
-  ShardLevelMetrics: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  --stream-name: any
+  shard_level_metrics: any
+  --stream-arn: any
 ]: any -> record<StreamName: record, CurrentShardLevelMetrics: record, DesiredShardLevelMetrics: record, StreamARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.DisableEnhancedMonitoring")
-  let body = {StreamName: $StreamName, ShardLevelMetrics: $ShardLevelMetrics, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "ShardLevelMetrics": $shard_level_metrics, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -502,7 +502,7 @@ export def "x-amz-target-kinesis-20131202disable-enhanced-monitoring DisableEnha
 #
 # POST /#X-Amz-Target=Kinesis_20131202.EnableEnhancedMonitoring
 # operationId: EnableEnhancedMonitoring
-export def "x-amz-target-kinesis-20131202enable-enhanced-monitoring EnableEnhancedMonitoring" [
+export def "x-amz-target-kinesis-20131202enable-enhanced-monitoring enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -511,25 +511,25 @@ export def "x-amz-target-kinesis-20131202enable-enhanced-monitoring EnableEnhanc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  --StreamName: any
-  ShardLevelMetrics: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  --stream-name: any
+  shard_level_metrics: any
+  --stream-arn: any
 ]: any -> record<StreamName: record, CurrentShardLevelMetrics: record, DesiredShardLevelMetrics: record, StreamARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.EnableEnhancedMonitoring")
-  let body = {StreamName: $StreamName, ShardLevelMetrics: $ShardLevelMetrics, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "ShardLevelMetrics": $shard_level_metrics, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -540,7 +540,7 @@ export def "x-amz-target-kinesis-20131202enable-enhanced-monitoring EnableEnhanc
 #
 # POST /#X-Amz-Target=Kinesis_20131202.GetRecords
 # operationId: GetRecords
-export def "x-amz-target-kinesis-20131202get-records GetRecords" [
+export def "x-amz-target-kinesis-20131202get-records get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -549,25 +549,25 @@ export def "x-amz-target-kinesis-20131202get-records GetRecords" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  ShardIterator: any
-  --Limit: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  shard_iterator: any
+  --limit: any
+  --stream-arn: any
 ]: any -> record<Records: record, NextShardIterator: record, MillisBehindLatest: record, ChildShards: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.GetRecords")
-  let body = {ShardIterator: $ShardIterator, Limit: $Limit, StreamARN: $StreamARN} | compact
+  let body = {"ShardIterator": $shard_iterator, "Limit": $limit, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -578,7 +578,7 @@ export def "x-amz-target-kinesis-20131202get-records GetRecords" [
 #
 # POST /#X-Amz-Target=Kinesis_20131202.GetShardIterator
 # operationId: GetShardIterator
-export def "x-amz-target-kinesis-20131202get-shard-iterator GetShardIterator" [
+export def "x-amz-target-kinesis-20131202get-shard-iterator get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,28 +587,28 @@ export def "x-amz-target-kinesis-20131202get-shard-iterator GetShardIterator" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  --StreamName: any
-  ShardId: any
-  ShardIteratorType: any
-  --StartingSequenceNumber: any
-  --Timestamp: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  --stream-name: any
+  shard_id: any
+  shard_iterator_type: any
+  --starting-sequence-number: any
+  --timestamp: any
+  --stream-arn: any
 ]: any -> record<ShardIterator: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.GetShardIterator")
-  let body = {StreamName: $StreamName, ShardId: $ShardId, ShardIteratorType: $ShardIteratorType, StartingSequenceNumber: $StartingSequenceNumber, Timestamp: $Timestamp, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "ShardId": $shard_id, "ShardIteratorType": $shard_iterator_type, "StartingSequenceNumber": $starting_sequence_number, "Timestamp": $timestamp, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -619,7 +619,7 @@ export def "x-amz-target-kinesis-20131202get-shard-iterator GetShardIterator" [
 #
 # POST /#X-Amz-Target=Kinesis_20131202.IncreaseStreamRetentionPeriod
 # operationId: IncreaseStreamRetentionPeriod
-export def "x-amz-target-kinesis-20131202increase-stream-retention-period IncreaseStreamRetentionPeriod" [
+export def "x-amz-target-kinesis-20131202increase-stream-retention-period post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -628,25 +628,25 @@ export def "x-amz-target-kinesis-20131202increase-stream-retention-period Increa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  --StreamName: any
-  RetentionPeriodHours: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  --stream-name: any
+  retention_period_hours: any
+  --stream-arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.IncreaseStreamRetentionPeriod")
-  let body = {StreamName: $StreamName, RetentionPeriodHours: $RetentionPeriodHours, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "RetentionPeriodHours": $retention_period_hours, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -657,7 +657,7 @@ export def "x-amz-target-kinesis-20131202increase-stream-retention-period Increa
 #
 # POST /#X-Amz-Target=Kinesis_20131202.ListShards
 # operationId: ListShards
-export def "x-amz-target-kinesis-20131202list-shards ListShards" [
+export def "x-amz-target-kinesis-20131202list-shards list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -666,29 +666,29 @@ export def "x-amz-target-kinesis-20131202list-shards ListShards" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  --StreamName: any
-  --NextToken: any
-  --ExclusiveStartShardId: any
-  --MaxResults: any
-  --StreamCreationTimestamp: any
-  --ShardFilter: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  --stream-name: any
+  --next-token: any
+  --exclusive-start-shard-id: any
+  --max-results: any
+  --stream-creation-timestamp: any
+  --shard-filter: any
+  --stream-arn: any
 ]: any -> record<Shards: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.ListShards")
-  let body = {StreamName: $StreamName, NextToken: $NextToken, ExclusiveStartShardId: $ExclusiveStartShardId, MaxResults: $MaxResults, StreamCreationTimestamp: $StreamCreationTimestamp, ShardFilter: $ShardFilter, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "NextToken": $next_token, "ExclusiveStartShardId": $exclusive_start_shard_id, "MaxResults": $max_results, "StreamCreationTimestamp": $stream_creation_timestamp, "ShardFilter": $shard_filter, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -699,7 +699,7 @@ export def "x-amz-target-kinesis-20131202list-shards ListShards" [
 #
 # POST /#X-Amz-Target=Kinesis_20131202.ListStreamConsumers
 # operationId: ListStreamConsumers
-export def "x-amz-target-kinesis-20131202list-stream-consumers ListStreamConsumers" [
+export def "x-amz-target-kinesis-20131202list-stream-consumers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -708,29 +708,29 @@ export def "x-amz-target-kinesis-20131202list-stream-consumers ListStreamConsume
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  StreamARN: any
-  --NextToken: any
-  --MaxResults: any
-  --StreamCreationTimestamp: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  stream_arn: any
+  --next-token: any
+  --max-results: any
+  --stream-creation-timestamp: any
 ]: any -> record<Consumers: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.ListStreamConsumers" $qp)
-  let body = {StreamARN: $StreamARN, NextToken: $NextToken, MaxResults: $MaxResults, StreamCreationTimestamp: $StreamCreationTimestamp} | compact
+  let body = {"StreamARN": $stream_arn, "NextToken": $next_token, "MaxResults": $max_results, "StreamCreationTimestamp": $stream_creation_timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -741,7 +741,7 @@ export def "x-amz-target-kinesis-20131202list-stream-consumers ListStreamConsume
 #
 # POST /#X-Amz-Target=Kinesis_20131202.ListStreams
 # operationId: ListStreams
-export def "x-amz-target-kinesis-20131202list-streams ListStreams" [
+export def "x-amz-target-kinesis-20131202list-streams list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,28 +750,28 @@ export def "x-amz-target-kinesis-20131202list-streams ListStreams" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  --Limit: any
-  --ExclusiveStartStreamName: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  --limit: any
+  --exclusive-start-stream-name: any
+  --next-token: any
 ]: any -> record<StreamNames: record, HasMoreStreams: record, NextToken: record, StreamSummaries: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.ListStreams" $qp)
-  let body = {Limit: $Limit, ExclusiveStartStreamName: $ExclusiveStartStreamName, NextToken: $NextToken} | compact
+  let body = {"Limit": $limit, "ExclusiveStartStreamName": $exclusive_start_stream_name, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -782,7 +782,7 @@ export def "x-amz-target-kinesis-20131202list-streams ListStreams" [
 #
 # POST /#X-Amz-Target=Kinesis_20131202.ListTagsForStream
 # operationId: ListTagsForStream
-export def "x-amz-target-kinesis-20131202list-tags-for-stream ListTagsForStream" [
+export def "x-amz-target-kinesis-20131202list-tags-for-stream list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -791,26 +791,26 @@ export def "x-amz-target-kinesis-20131202list-tags-for-stream ListTagsForStream"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  --StreamName: any
-  --ExclusiveStartTagKey: any
-  --Limit: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  --stream-name: any
+  --exclusive-start-tag-key: any
+  --limit: any
+  --stream-arn: any
 ]: any -> record<Tags: record, HasMoreTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.ListTagsForStream")
-  let body = {StreamName: $StreamName, ExclusiveStartTagKey: $ExclusiveStartTagKey, Limit: $Limit, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "ExclusiveStartTagKey": $exclusive_start_tag_key, "Limit": $limit, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -821,7 +821,7 @@ export def "x-amz-target-kinesis-20131202list-tags-for-stream ListTagsForStream"
 #
 # POST /#X-Amz-Target=Kinesis_20131202.MergeShards
 # operationId: MergeShards
-export def "x-amz-target-kinesis-20131202merge-shards MergeShards" [
+export def "x-amz-target-kinesis-20131202merge-shards post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,26 +830,26 @@ export def "x-amz-target-kinesis-20131202merge-shards MergeShards" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  --StreamName: any
-  ShardToMerge: any
-  AdjacentShardToMerge: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  --stream-name: any
+  shard_to_merge: any
+  adjacent_shard_to_merge: any
+  --stream-arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.MergeShards")
-  let body = {StreamName: $StreamName, ShardToMerge: $ShardToMerge, AdjacentShardToMerge: $AdjacentShardToMerge, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "ShardToMerge": $shard_to_merge, "AdjacentShardToMerge": $adjacent_shard_to_merge, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -860,7 +860,7 @@ export def "x-amz-target-kinesis-20131202merge-shards MergeShards" [
 #
 # POST /#X-Amz-Target=Kinesis_20131202.PutRecord
 # operationId: PutRecord
-export def "x-amz-target-kinesis-20131202put-record PutRecord" [
+export def "x-amz-target-kinesis-20131202put-record update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -869,28 +869,28 @@ export def "x-amz-target-kinesis-20131202put-record PutRecord" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  --StreamName: any
-  Data: any
-  PartitionKey: any
-  --ExplicitHashKey: any
-  --SequenceNumberForOrdering: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  --stream-name: any
+  data: any
+  partition_key: any
+  --explicit-hash-key: any
+  --sequence-number-for-ordering: any
+  --stream-arn: any
 ]: any -> record<ShardId: record, SequenceNumber: record, EncryptionType: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.PutRecord")
-  let body = {StreamName: $StreamName, Data: $Data, PartitionKey: $PartitionKey, ExplicitHashKey: $ExplicitHashKey, SequenceNumberForOrdering: $SequenceNumberForOrdering, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "Data": $data, "PartitionKey": $partition_key, "ExplicitHashKey": $explicit_hash_key, "SequenceNumberForOrdering": $sequence_number_for_ordering, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -901,7 +901,7 @@ export def "x-amz-target-kinesis-20131202put-record PutRecord" [
 #
 # POST /#X-Amz-Target=Kinesis_20131202.PutRecords
 # operationId: PutRecords
-export def "x-amz-target-kinesis-20131202put-records PutRecords" [
+export def "x-amz-target-kinesis-20131202put-records update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -910,25 +910,25 @@ export def "x-amz-target-kinesis-20131202put-records PutRecords" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  Records: any
-  --StreamName: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  records: any
+  --stream-name: any
+  --stream-arn: any
 ]: any -> record<FailedRecordCount: record, Records: record, EncryptionType: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.PutRecords")
-  let body = {Records: $Records, StreamName: $StreamName, StreamARN: $StreamARN} | compact
+  let body = {"Records": $records, "StreamName": $stream_name, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -939,7 +939,7 @@ export def "x-amz-target-kinesis-20131202put-records PutRecords" [
 #
 # POST /#X-Amz-Target=Kinesis_20131202.RegisterStreamConsumer
 # operationId: RegisterStreamConsumer
-export def "x-amz-target-kinesis-20131202register-stream-consumer RegisterStreamConsumer" [
+export def "x-amz-target-kinesis-20131202register-stream-consumer create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -948,24 +948,24 @@ export def "x-amz-target-kinesis-20131202register-stream-consumer RegisterStream
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  StreamARN: any
-  ConsumerName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  stream_arn: any
+  consumer_name: any
 ]: any -> record<Consumer: record<ConsumerName: record, ConsumerARN: record, ConsumerStatus: record, ConsumerCreationTimestamp: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.RegisterStreamConsumer")
-  let body = {StreamARN: $StreamARN, ConsumerName: $ConsumerName} | compact
+  let body = {"StreamARN": $stream_arn, "ConsumerName": $consumer_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -976,7 +976,7 @@ export def "x-amz-target-kinesis-20131202register-stream-consumer RegisterStream
 #
 # POST /#X-Amz-Target=Kinesis_20131202.RemoveTagsFromStream
 # operationId: RemoveTagsFromStream
-export def "x-amz-target-kinesis-20131202remove-tags-from-stream RemoveTagsFromStream" [
+export def "x-amz-target-kinesis-20131202remove-tags-from-stream delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -985,25 +985,25 @@ export def "x-amz-target-kinesis-20131202remove-tags-from-stream RemoveTagsFromS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  --StreamName: any
-  TagKeys: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  --stream-name: any
+  tag_keys: any
+  --stream-arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.RemoveTagsFromStream")
-  let body = {StreamName: $StreamName, TagKeys: $TagKeys, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "TagKeys": $tag_keys, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1014,7 +1014,7 @@ export def "x-amz-target-kinesis-20131202remove-tags-from-stream RemoveTagsFromS
 #
 # POST /#X-Amz-Target=Kinesis_20131202.SplitShard
 # operationId: SplitShard
-export def "x-amz-target-kinesis-20131202split-shard SplitShard" [
+export def "x-amz-target-kinesis-20131202split-shard post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1023,26 +1023,26 @@ export def "x-amz-target-kinesis-20131202split-shard SplitShard" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  --StreamName: any
-  ShardToSplit: any
-  NewStartingHashKey: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  --stream-name: any
+  shard_to_split: any
+  new_starting_hash_key: any
+  --stream-arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.SplitShard")
-  let body = {StreamName: $StreamName, ShardToSplit: $ShardToSplit, NewStartingHashKey: $NewStartingHashKey, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "ShardToSplit": $shard_to_split, "NewStartingHashKey": $new_starting_hash_key, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1053,7 +1053,7 @@ export def "x-amz-target-kinesis-20131202split-shard SplitShard" [
 #
 # POST /#X-Amz-Target=Kinesis_20131202.StartStreamEncryption
 # operationId: StartStreamEncryption
-export def "x-amz-target-kinesis-20131202start-stream-encryption StartStreamEncryption" [
+export def "x-amz-target-kinesis-20131202start-stream-encryption start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1062,26 +1062,26 @@ export def "x-amz-target-kinesis-20131202start-stream-encryption StartStreamEncr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  --StreamName: any
-  EncryptionType: any
-  KeyId: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  --stream-name: any
+  encryption_type: any
+  key_id: any
+  --stream-arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.StartStreamEncryption")
-  let body = {StreamName: $StreamName, EncryptionType: $EncryptionType, KeyId: $KeyId, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "EncryptionType": $encryption_type, "KeyId": $key_id, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1092,7 +1092,7 @@ export def "x-amz-target-kinesis-20131202start-stream-encryption StartStreamEncr
 #
 # POST /#X-Amz-Target=Kinesis_20131202.StopStreamEncryption
 # operationId: StopStreamEncryption
-export def "x-amz-target-kinesis-20131202stop-stream-encryption StopStreamEncryption" [
+export def "x-amz-target-kinesis-20131202stop-stream-encryption stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1101,26 +1101,26 @@ export def "x-amz-target-kinesis-20131202stop-stream-encryption StopStreamEncryp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  --StreamName: any
-  EncryptionType: any
-  KeyId: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  --stream-name: any
+  encryption_type: any
+  key_id: any
+  --stream-arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.StopStreamEncryption")
-  let body = {StreamName: $StreamName, EncryptionType: $EncryptionType, KeyId: $KeyId, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "EncryptionType": $encryption_type, "KeyId": $key_id, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1131,7 +1131,7 @@ export def "x-amz-target-kinesis-20131202stop-stream-encryption StopStreamEncryp
 #
 # POST /#X-Amz-Target=Kinesis_20131202.UpdateShardCount
 # operationId: UpdateShardCount
-export def "x-amz-target-kinesis-20131202update-shard-count UpdateShardCount" [
+export def "x-amz-target-kinesis-20131202update-shard-count update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1140,26 +1140,26 @@ export def "x-amz-target-kinesis-20131202update-shard-count UpdateShardCount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  --StreamName: any
-  TargetShardCount: any
-  ScalingType: any
-  --StreamARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  --stream-name: any
+  target_shard_count: any
+  scaling_type: any
+  --stream-arn: any
 ]: any -> record<StreamName: record, CurrentShardCount: record, TargetShardCount: record, StreamARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.UpdateShardCount")
-  let body = {StreamName: $StreamName, TargetShardCount: $TargetShardCount, ScalingType: $ScalingType, StreamARN: $StreamARN} | compact
+  let body = {"StreamName": $stream_name, "TargetShardCount": $target_shard_count, "ScalingType": $scaling_type, "StreamARN": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1170,7 +1170,7 @@ export def "x-amz-target-kinesis-20131202update-shard-count UpdateShardCount" [
 #
 # POST /#X-Amz-Target=Kinesis_20131202.UpdateStreamMode
 # operationId: UpdateStreamMode
-export def "x-amz-target-kinesis-20131202update-stream-mode UpdateStreamMode" [
+export def "x-amz-target-kinesis-20131202update-stream-mode update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1179,24 +1179,24 @@ export def "x-amz-target-kinesis-20131202update-stream-mode UpdateStreamMode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  StreamARN: any
-  StreamModeDetails: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  stream_arn: any
+  stream_mode_details: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Kinesis_20131202.UpdateStreamMode")
-  let body = {StreamARN: $StreamARN, StreamModeDetails: $StreamModeDetails} | compact
+  let body = {"StreamARN": $stream_arn, "StreamModeDetails": $stream_mode_details} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

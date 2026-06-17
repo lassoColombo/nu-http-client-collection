@@ -66,36 +66,36 @@ def base-url-completer [] { ["http://discovery.us-east-1.amazonaws.com" "http://
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AWSPoseidonService_V2015_11_01.AssociateConfigurationItemsToApplication"] }
-def X-Amz-Target-completer-1 [] { ["AWSPoseidonService_V2015_11_01.BatchDeleteImportData"] }
-def X-Amz-Target-completer-2 [] { ["AWSPoseidonService_V2015_11_01.CreateApplication"] }
-def X-Amz-Target-completer-3 [] { ["AWSPoseidonService_V2015_11_01.CreateTags"] }
-def X-Amz-Target-completer-4 [] { ["AWSPoseidonService_V2015_11_01.DeleteApplications"] }
-def X-Amz-Target-completer-5 [] { ["AWSPoseidonService_V2015_11_01.DeleteTags"] }
-def X-Amz-Target-completer-6 [] { ["AWSPoseidonService_V2015_11_01.DescribeAgents"] }
-def X-Amz-Target-completer-7 [] { ["AWSPoseidonService_V2015_11_01.DescribeConfigurations"] }
-def X-Amz-Target-completer-8 [] { ["AWSPoseidonService_V2015_11_01.DescribeContinuousExports"] }
-def X-Amz-Target-completer-9 [] { ["AWSPoseidonService_V2015_11_01.DescribeExportConfigurations"] }
-def X-Amz-Target-completer-10 [] { ["AWSPoseidonService_V2015_11_01.DescribeExportTasks"] }
-def X-Amz-Target-completer-11 [] { ["AWSPoseidonService_V2015_11_01.DescribeImportTasks"] }
-def X-Amz-Target-completer-12 [] { ["AWSPoseidonService_V2015_11_01.DescribeTags"] }
-def X-Amz-Target-completer-13 [] { ["AWSPoseidonService_V2015_11_01.DisassociateConfigurationItemsFromApplication"] }
-def X-Amz-Target-completer-14 [] { ["AWSPoseidonService_V2015_11_01.ExportConfigurations"] }
-def X-Amz-Target-completer-15 [] { ["AWSPoseidonService_V2015_11_01.GetDiscoverySummary"] }
-def X-Amz-Target-completer-16 [] { ["AWSPoseidonService_V2015_11_01.ListConfigurations"] }
-def X-Amz-Target-completer-17 [] { ["AWSPoseidonService_V2015_11_01.ListServerNeighbors"] }
-def X-Amz-Target-completer-18 [] { ["AWSPoseidonService_V2015_11_01.StartContinuousExport"] }
-def X-Amz-Target-completer-19 [] { ["AWSPoseidonService_V2015_11_01.StartDataCollectionByAgentIds"] }
-def X-Amz-Target-completer-20 [] { ["AWSPoseidonService_V2015_11_01.StartExportTask"] }
-def X-Amz-Target-completer-21 [] { ["AWSPoseidonService_V2015_11_01.StartImportTask"] }
-def X-Amz-Target-completer-22 [] { ["AWSPoseidonService_V2015_11_01.StopContinuousExport"] }
-def X-Amz-Target-completer-23 [] { ["AWSPoseidonService_V2015_11_01.StopDataCollectionByAgentIds"] }
-def X-Amz-Target-completer-24 [] { ["AWSPoseidonService_V2015_11_01.UpdateApplication"] }
+def x-amz-target-completer [] { ["AWSPoseidonService_V2015_11_01.AssociateConfigurationItemsToApplication"] }
+def x-amz-target-completer-1 [] { ["AWSPoseidonService_V2015_11_01.BatchDeleteImportData"] }
+def x-amz-target-completer-2 [] { ["AWSPoseidonService_V2015_11_01.CreateApplication"] }
+def x-amz-target-completer-3 [] { ["AWSPoseidonService_V2015_11_01.CreateTags"] }
+def x-amz-target-completer-4 [] { ["AWSPoseidonService_V2015_11_01.DeleteApplications"] }
+def x-amz-target-completer-5 [] { ["AWSPoseidonService_V2015_11_01.DeleteTags"] }
+def x-amz-target-completer-6 [] { ["AWSPoseidonService_V2015_11_01.DescribeAgents"] }
+def x-amz-target-completer-7 [] { ["AWSPoseidonService_V2015_11_01.DescribeConfigurations"] }
+def x-amz-target-completer-8 [] { ["AWSPoseidonService_V2015_11_01.DescribeContinuousExports"] }
+def x-amz-target-completer-9 [] { ["AWSPoseidonService_V2015_11_01.DescribeExportConfigurations"] }
+def x-amz-target-completer-10 [] { ["AWSPoseidonService_V2015_11_01.DescribeExportTasks"] }
+def x-amz-target-completer-11 [] { ["AWSPoseidonService_V2015_11_01.DescribeImportTasks"] }
+def x-amz-target-completer-12 [] { ["AWSPoseidonService_V2015_11_01.DescribeTags"] }
+def x-amz-target-completer-13 [] { ["AWSPoseidonService_V2015_11_01.DisassociateConfigurationItemsFromApplication"] }
+def x-amz-target-completer-14 [] { ["AWSPoseidonService_V2015_11_01.ExportConfigurations"] }
+def x-amz-target-completer-15 [] { ["AWSPoseidonService_V2015_11_01.GetDiscoverySummary"] }
+def x-amz-target-completer-16 [] { ["AWSPoseidonService_V2015_11_01.ListConfigurations"] }
+def x-amz-target-completer-17 [] { ["AWSPoseidonService_V2015_11_01.ListServerNeighbors"] }
+def x-amz-target-completer-18 [] { ["AWSPoseidonService_V2015_11_01.StartContinuousExport"] }
+def x-amz-target-completer-19 [] { ["AWSPoseidonService_V2015_11_01.StartDataCollectionByAgentIds"] }
+def x-amz-target-completer-20 [] { ["AWSPoseidonService_V2015_11_01.StartExportTask"] }
+def x-amz-target-completer-21 [] { ["AWSPoseidonService_V2015_11_01.StartImportTask"] }
+def x-amz-target-completer-22 [] { ["AWSPoseidonService_V2015_11_01.StopContinuousExport"] }
+def x-amz-target-completer-23 [] { ["AWSPoseidonService_V2015_11_01.StopDataCollectionByAgentIds"] }
+def x-amz-target-completer-24 [] { ["AWSPoseidonService_V2015_11_01.UpdateApplication"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-poseidon-service-v2015-11-01associate-configuration-items-to-application AssociateConfigurationItemsToApplication" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-poseidon-service-v2015-11-01associate-configuration-items-to-application post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -119,7 +119,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.AssociateConfigurationItemsToApplication
 # operationId: AssociateConfigurationItemsToApplication
-export def "x-amz-target-aws-poseidon-service-v2015-11-01associate-configuration-items-to-application AssociateConfigurationItemsToApplication" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01associate-configuration-items-to-application post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,24 +128,24 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01associate-configuration
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  applicationConfigurationId: any
-  configurationIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  application_configuration_id: any
+  configuration_ids: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.AssociateConfigurationItemsToApplication")
-  let body = {applicationConfigurationId: $applicationConfigurationId, configurationIds: $configurationIds} | compact
+  let body = {"applicationConfigurationId": $application_configuration_id, "configurationIds": $configuration_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -156,7 +156,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01associate-configuration
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.BatchDeleteImportData
 # operationId: BatchDeleteImportData
-export def "x-amz-target-aws-poseidon-service-v2015-11-01batch-delete-import-data BatchDeleteImportData" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01batch-delete-import-data post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,23 +165,23 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01batch-delete-import-dat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  importTaskIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  import_task_ids: any
 ]: any -> record<errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.BatchDeleteImportData")
-  let body = {importTaskIds: $importTaskIds} | compact
+  let body = {"importTaskIds": $import_task_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -192,7 +192,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01batch-delete-import-dat
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.CreateApplication
 # operationId: CreateApplication
-export def "x-amz-target-aws-poseidon-service-v2015-11-01create-application CreateApplication" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01create-application create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,14 +201,14 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01create-application Crea
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
   name: any
   --description: any
 ]: any -> record<configurationId: record> {
@@ -216,9 +216,9 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01create-application Crea
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.CreateApplication")
-  let body = {name: $name, description: $description} | compact
+  let body = {"name": $name, "description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -229,7 +229,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01create-application Crea
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.CreateTags
 # operationId: CreateTags
-export def "x-amz-target-aws-poseidon-service-v2015-11-01create-tags CreateTags" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01create-tags create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,24 +238,24 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01create-tags CreateTags"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  configurationIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  configuration_ids: any
   tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.CreateTags")
-  let body = {configurationIds: $configurationIds, tags: $tags} | compact
+  let body = {"configurationIds": $configuration_ids, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -266,7 +266,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01create-tags CreateTags"
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.DeleteApplications
 # operationId: DeleteApplications
-export def "x-amz-target-aws-poseidon-service-v2015-11-01delete-applications DeleteApplications" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01delete-applications delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,23 +275,23 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01delete-applications Del
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  configurationIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  configuration_ids: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.DeleteApplications")
-  let body = {configurationIds: $configurationIds} | compact
+  let body = {"configurationIds": $configuration_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -302,7 +302,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01delete-applications Del
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.DeleteTags
 # operationId: DeleteTags
-export def "x-amz-target-aws-poseidon-service-v2015-11-01delete-tags DeleteTags" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01delete-tags delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,24 +311,24 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01delete-tags DeleteTags"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  configurationIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  configuration_ids: any
   --tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.DeleteTags")
-  let body = {configurationIds: $configurationIds, tags: $tags} | compact
+  let body = {"configurationIds": $configuration_ids, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -339,7 +339,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01delete-tags DeleteTags"
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.DescribeAgents
 # operationId: DescribeAgents
-export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-agents DescribeAgents" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-agents post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,26 +348,26 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-agents Describ
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  --agentIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  --agent-ids: any
   --filters: any
-  --maxResults: any
-  --nextToken: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<agentsInfo: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.DescribeAgents")
-  let body = {agentIds: $agentIds, filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"agentIds": $agent_ids, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -378,7 +378,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-agents Describ
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.DescribeConfigurations
 # operationId: DescribeConfigurations
-export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-configurations DescribeConfigurations" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-configurations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -387,23 +387,23 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-configurations
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  configurationIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  configuration_ids: any
 ]: any -> record<configurations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.DescribeConfigurations")
-  let body = {configurationIds: $configurationIds} | compact
+  let body = {"configurationIds": $configuration_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -414,7 +414,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-configurations
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.DescribeContinuousExports
 # operationId: DescribeContinuousExports
-export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-continuous-exports DescribeContinuousExports" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-continuous-exports post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,28 +423,28 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-continuous-exp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  --exportIds: any
-  --maxResults: any
-  --nextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  --export-ids: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<descriptions: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.DescribeContinuousExports" $qp)
-  let body = {exportIds: $exportIds, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"exportIds": $export_ids, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -457,7 +457,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-continuous-exp
 # DEPRECATED
 # operationId: DescribeExportConfigurations
 @deprecated
-export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-export-configurations DescribeExportConfigurations" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-export-configurations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,25 +466,25 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-export-configu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  --exportIds: any
-  --maxResults: any
-  --nextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  --export-ids: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<exportsInfo: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.DescribeExportConfigurations")
-  let body = {exportIds: $exportIds, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"exportIds": $export_ids, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -495,7 +495,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-export-configu
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.DescribeExportTasks
 # operationId: DescribeExportTasks
-export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-export-tasks DescribeExportTasks" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-export-tasks post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,26 +504,26 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-export-tasks D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  --exportIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  --export-ids: any
   --filters: any
-  --maxResults: any
-  --nextToken: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<exportsInfo: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.DescribeExportTasks")
-  let body = {exportIds: $exportIds, filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"exportIds": $export_ids, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -534,7 +534,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-export-tasks D
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.DescribeImportTasks
 # operationId: DescribeImportTasks
-export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-import-tasks DescribeImportTasks" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-import-tasks post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,28 +543,28 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-import-tasks D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
   --filters: any
-  --maxResults: any
-  --nextToken: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<nextToken: record, tasks: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.DescribeImportTasks" $qp)
-  let body = {filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -575,7 +575,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-import-tasks D
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.DescribeTags
 # operationId: DescribeTags
-export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-tags DescribeTags" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-tags post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,25 +584,25 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-tags DescribeT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
   --filters: any
-  --maxResults: any
-  --nextToken: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<tags: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.DescribeTags")
-  let body = {filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -613,7 +613,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01describe-tags DescribeT
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.DisassociateConfigurationItemsFromApplication
 # operationId: DisassociateConfigurationItemsFromApplication
-export def "x-amz-target-aws-poseidon-service-v2015-11-01disassociate-configuration-items-from-application DisassociateConfigurationItemsFromApplication" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01disassociate-configuration-items-from-application post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,24 +622,24 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01disassociate-configurat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  applicationConfigurationId: any
-  configurationIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  application_configuration_id: any
+  configuration_ids: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.DisassociateConfigurationItemsFromApplication")
-  let body = {applicationConfigurationId: $applicationConfigurationId, configurationIds: $configurationIds} | compact
+  let body = {"applicationConfigurationId": $application_configuration_id, "configurationIds": $configuration_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -652,7 +652,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01disassociate-configurat
 # DEPRECATED
 # operationId: ExportConfigurations
 @deprecated
-export def "x-amz-target-aws-poseidon-service-v2015-11-01export-configurations ExportConfigurations" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01export-configurations export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -661,19 +661,19 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01export-configurations E
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
 ]: nothing -> record<exportId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.ExportConfigurations")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -684,7 +684,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01export-configurations E
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.GetDiscoverySummary
 # operationId: GetDiscoverySummary
-export def "x-amz-target-aws-poseidon-service-v2015-11-01get-discovery-summary GetDiscoverySummary" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01get-discovery-summary get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -693,14 +693,14 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01get-discovery-summary G
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
   --body: record
 ]: any -> record<servers: record, applications: record, serversMappedToApplications: record, serversMappedtoTags: record, agentSummary: record<activeAgents: record, healthyAgents: record, blackListedAgents: record, shutdownAgents: record, unhealthyAgents: record, totalAgents: record, unknownAgents: record>, connectorSummary: record<activeConnectors: record, healthyConnectors: record, blackListedConnectors: record, shutdownConnectors: record, unhealthyConnectors: record, totalConnectors: record, unknownConnectors: record>, meCollectorSummary: record<activeMeCollectors: record, healthyMeCollectors: record, denyListedMeCollectors: record, shutdownMeCollectors: record, unhealthyMeCollectors: record, totalMeCollectors: record, unknownMeCollectors: record>, agentlessCollectorSummary: record<activeAgentlessCollectors: int, healthyAgentlessCollectors: int, denyListedAgentlessCollectors: int, shutdownAgentlessCollectors: int, unhealthyAgentlessCollectors: int, totalAgentlessCollectors: int, unknownAgentlessCollectors: int>> {
   let input = $in
@@ -708,7 +708,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01get-discovery-summary G
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.GetDiscoverySummary")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -719,7 +719,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01get-discovery-summary G
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.ListConfigurations
 # operationId: ListConfigurations
-export def "x-amz-target-aws-poseidon-service-v2015-11-01list-configurations ListConfigurations" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01list-configurations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,27 +728,27 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01list-configurations Lis
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  configurationType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  configuration_type: any
   --filters: any
-  --maxResults: any
-  --nextToken: any
-  --orderBy: any
+  --max-results: any
+  --next-token: any
+  --order-by: any
 ]: any -> record<configurations: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.ListConfigurations")
-  let body = {configurationType: $configurationType, filters: $filters, maxResults: $maxResults, nextToken: $nextToken, orderBy: $orderBy} | compact
+  let body = {"configurationType": $configuration_type, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token, "orderBy": $order_by} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -759,7 +759,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01list-configurations Lis
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.ListServerNeighbors
 # operationId: ListServerNeighbors
-export def "x-amz-target-aws-poseidon-service-v2015-11-01list-server-neighbors ListServerNeighbors" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01list-server-neighbors list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -768,27 +768,27 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01list-server-neighbors L
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  configurationId: any
-  --portInformationNeeded: any
-  --neighborConfigurationIds: any
-  --maxResults: any
-  --nextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  configuration_id: any
+  --port-information-needed: any
+  --neighbor-configuration-ids: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<neighbors: record, nextToken: record, knownDependencyCount: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.ListServerNeighbors")
-  let body = {configurationId: $configurationId, portInformationNeeded: $portInformationNeeded, neighborConfigurationIds: $neighborConfigurationIds, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"configurationId": $configuration_id, "portInformationNeeded": $port_information_needed, "neighborConfigurationIds": $neighbor_configuration_ids, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -799,7 +799,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01list-server-neighbors L
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.StartContinuousExport
 # operationId: StartContinuousExport
-export def "x-amz-target-aws-poseidon-service-v2015-11-01start-continuous-export StartContinuousExport" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01start-continuous-export start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -808,14 +808,14 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01start-continuous-export
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
   --body: record
 ]: any -> record<exportId: record, s3Bucket: record, startTime: record, dataSource: record, schemaStorageConfig: record> {
   let input = $in
@@ -823,7 +823,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01start-continuous-export
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.StartContinuousExport")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -834,7 +834,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01start-continuous-export
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.StartDataCollectionByAgentIds
 # operationId: StartDataCollectionByAgentIds
-export def "x-amz-target-aws-poseidon-service-v2015-11-01start-data-collection-by-agent-ids StartDataCollectionByAgentIds" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01start-data-collection-by-agent-ids start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -843,23 +843,23 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01start-data-collection-b
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  agentIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  agent_ids: any
 ]: any -> record<agentsConfigurationStatus: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.StartDataCollectionByAgentIds")
-  let body = {agentIds: $agentIds} | compact
+  let body = {"agentIds": $agent_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -870,7 +870,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01start-data-collection-b
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.StartExportTask
 # operationId: StartExportTask
-export def "x-amz-target-aws-poseidon-service-v2015-11-01start-export-task StartExportTask" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01start-export-task start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,26 +879,26 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01start-export-task Start
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  --exportDataFormat: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  --export-data-format: any
   --filters: any
-  --startTime: any
-  --endTime: any
+  --start-time: any
+  --end-time: any
 ]: any -> record<exportId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.StartExportTask")
-  let body = {exportDataFormat: $exportDataFormat, filters: $filters, startTime: $startTime, endTime: $endTime} | compact
+  let body = {"exportDataFormat": $export_data_format, "filters": $filters, "startTime": $start_time, "endTime": $end_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -909,7 +909,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01start-export-task Start
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.StartImportTask
 # operationId: StartImportTask
-export def "x-amz-target-aws-poseidon-service-v2015-11-01start-import-task StartImportTask" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01start-import-task start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -918,25 +918,25 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01start-import-task Start
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  --clientRequestToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  --client-request-token: any
   name: any
-  importUrl: any
+  import_url: any
 ]: any -> record<task: record<importTaskId: record, clientRequestToken: record, name: record, importUrl: record, status: record, importRequestTime: record, importCompletionTime: record, importDeletedTime: record, serverImportSuccess: record, serverImportFailure: record, applicationImportSuccess: record, applicationImportFailure: record, errorsAndFailedEntriesZip: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.StartImportTask")
-  let body = {clientRequestToken: $clientRequestToken, name: $name, importUrl: $importUrl} | compact
+  let body = {"clientRequestToken": $client_request_token, "name": $name, "importUrl": $import_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -947,7 +947,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01start-import-task Start
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.StopContinuousExport
 # operationId: StopContinuousExport
-export def "x-amz-target-aws-poseidon-service-v2015-11-01stop-continuous-export StopContinuousExport" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01stop-continuous-export stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -956,23 +956,23 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01stop-continuous-export 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  exportId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  export_id: any
 ]: any -> record<startTime: record, stopTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.StopContinuousExport")
-  let body = {exportId: $exportId} | compact
+  let body = {"exportId": $export_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -983,7 +983,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01stop-continuous-export 
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.StopDataCollectionByAgentIds
 # operationId: StopDataCollectionByAgentIds
-export def "x-amz-target-aws-poseidon-service-v2015-11-01stop-data-collection-by-agent-ids StopDataCollectionByAgentIds" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01stop-data-collection-by-agent-ids stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -992,23 +992,23 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01stop-data-collection-by
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  agentIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  agent_ids: any
 ]: any -> record<agentsConfigurationStatus: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.StopDataCollectionByAgentIds")
-  let body = {agentIds: $agentIds} | compact
+  let body = {"agentIds": $agent_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1019,7 +1019,7 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01stop-data-collection-by
 #
 # POST /#X-Amz-Target=AWSPoseidonService_V2015_11_01.UpdateApplication
 # operationId: UpdateApplication
-export def "x-amz-target-aws-poseidon-service-v2015-11-01update-application UpdateApplication" [
+export def "x-amz-target-aws-poseidon-service-v2015-11-01update-application update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1028,15 +1028,15 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01update-application Upda
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  configurationId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  configuration_id: any
   --name: any
   --description: any
 ]: any -> record {
@@ -1044,9 +1044,9 @@ export def "x-amz-target-aws-poseidon-service-v2015-11-01update-application Upda
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSPoseidonService_V2015_11_01.UpdateApplication")
-  let body = {configurationId: $configurationId, name: $name, description: $description} | compact
+  let body = {"configurationId": $configuration_id, "name": $name, "description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["cast-local-authorization-token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "notic-ehtmlgz LegalNotice" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "notic-ehtmlgz get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /NOTICE.html.gz
 # operationId: LegalNotice
-export def "notic-ehtmlgz LegalNotice" [
+export def "notic-ehtmlgz get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,7 +115,7 @@ export def "notic-ehtmlgz LegalNotice" [
 #
 # POST /assistant/a11y_mode
 # operationId: Accessibility
-export def "assistant-a11y-mode Accessibility" [
+export def "assistant-a11y-mode post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,7 +131,7 @@ export def "assistant-a11y-mode Accessibility" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assistant/a11y_mode")
-  let body = {endpoint_enabled: $endpoint_enabled, hotword_enabled: $hotword_enabled} | compact
+  let body = {"endpoint_enabled": $endpoint_enabled, "hotword_enabled": $hotword_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -142,7 +142,7 @@ export def "assistant-a11y-mode Accessibility" [
 #
 # GET /assistant/alarms
 # operationId: GetAlarmsandTimers
-export def "assistant-alarms GetAlarmsandTimers" [
+export def "assistant-alarms get-alarmsand-timers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "assistant-alarms GetAlarmsandTimers" [
 #
 # POST /assistant/alarms/delete
 # operationId: DeleteAlarmsandTimers
-export def "assistant-alarms-delete DeleteAlarmsandTimers" [
+export def "assistant-alarms-delete delete-alarmsand-timers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "assistant-alarms-delete DeleteAlarmsandTimers" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assistant/alarms/delete")
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -190,7 +190,7 @@ export def "assistant-alarms-delete DeleteAlarmsandTimers" [
 #
 # POST /assistant/alarms/volume
 # operationId: AlarmVolume
-export def "assistant-alarms-volume AlarmVolume" [
+export def "assistant-alarms-volume post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "assistant-alarms-volume AlarmVolume" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assistant/alarms/volume")
-  let body = {volume: $volume} | compact
+  let body = {"volume": $volume} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -216,7 +216,7 @@ export def "assistant-alarms-volume AlarmVolume" [
 #
 # POST /assistant/check_ready_status
 # operationId: CheckReadyStatus
-export def "assistant-check-ready-status CheckReadyStatus" [
+export def "assistant-check-ready-status check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "assistant-check-ready-status CheckReadyStatus" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assistant/check_ready_status")
-  let body = {play_ready_message: $play_ready_message, user_id: $user_id} | compact
+  let body = {"play_ready_message": $play_ready_message, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -243,7 +243,7 @@ export def "assistant-check-ready-status CheckReadyStatus" [
 #
 # POST /assistant/notifications
 # operationId: DoNotDisturb
-export def "assistant-notifications DoNotDisturb" [
+export def "assistant-notifications post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,12 +252,12 @@ export def "assistant-notifications DoNotDisturb" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # e.g. application/json
+  --content-type: string # e.g. application/json
 ]: nothing -> record<notifications_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assistant/notifications")
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -269,7 +269,7 @@ export def "assistant-notifications DoNotDisturb" [
 # POST /assistant/set_night_mode_params
 # operationId: NightModesettings
 # --windows item shape: {days: list, length_hours: int, start_hour: int}
-export def "assistant-set-night-mode-params NightModesettings" [
+export def "assistant-set-night-mode-params post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "assistant-set-night-mode-params NightModesettings" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assistant/set_night_mode_params")
-  let body = {demo_to_user: $demo_to_user, do_not_disturb: $do_not_disturb, enabled: $enabled, led_brightness: $led_brightness, volume: $volume, windows: $windows} | compact
+  let body = {"demo_to_user": $demo_to_user, "do_not_disturb": $do_not_disturb, "enabled": $enabled, "led_brightness": $led_brightness, "volume": $volume, "windows": $windows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -300,7 +300,7 @@ export def "assistant-set-night-mode-params NightModesettings" [
 #
 # POST /bluetooth/bond
 # operationId: Forgetpaireddevice
-export def "bluetooth-bond Forgetpaireddevice" [
+export def "bluetooth-bond post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "bluetooth-bond Forgetpaireddevice" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bluetooth/bond")
-  let body = {bond: $bond, mac_address: $mac_address} | compact
+  let body = {"bond": $bond, "mac_address": $mac_address} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -327,7 +327,7 @@ export def "bluetooth-bond Forgetpaireddevice" [
 #
 # POST /bluetooth/connect
 # operationId: PairwithSpeaker
-export def "bluetooth-connect PairwithSpeaker" [
+export def "bluetooth-connect post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,7 +344,7 @@ export def "bluetooth-connect PairwithSpeaker" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bluetooth/connect")
-  let body = {connect: $connect, mac_address: $mac_address, profile: $profile} | compact
+  let body = {"connect": $connect, "mac_address": $mac_address, "profile": $profile} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -355,7 +355,7 @@ export def "bluetooth-connect PairwithSpeaker" [
 #
 # POST /bluetooth/discovery
 # operationId: ChangeDiscoverability
-export def "bluetooth-discovery ChangeDiscoverability" [
+export def "bluetooth-discovery post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "bluetooth-discovery ChangeDiscoverability" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bluetooth/discovery")
-  let body = {enable_discovery: $enable_discovery} | compact
+  let body = {"enable_discovery": $enable_discovery} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -381,7 +381,7 @@ export def "bluetooth-discovery ChangeDiscoverability" [
 #
 # GET /bluetooth/get_bonded
 # operationId: GetPairedDevices
-export def "bluetooth-get-bonded GetPairedDevices" [
+export def "bluetooth-get-bonded get-paired-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,7 +403,7 @@ export def "bluetooth-get-bonded GetPairedDevices" [
 #
 # POST /bluetooth/scan
 # operationId: Scanfordevices
-export def "bluetooth-scan Scanfordevices" [
+export def "bluetooth-scan post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,7 +420,7 @@ export def "bluetooth-scan Scanfordevices" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bluetooth/scan")
-  let body = {clear_results: $clear_results, enable: $enable, timeout: $timeout} | compact
+  let body = {"clear_results": $clear_results, "enable": $enable, "timeout": $timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -431,7 +431,7 @@ export def "bluetooth-scan Scanfordevices" [
 #
 # GET /bluetooth/scan_results
 # operationId: GetScanResults
-export def "bluetooth-scan-results GetScanResults" [
+export def "bluetooth-scan-results get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,7 +453,7 @@ export def "bluetooth-scan-results GetScanResults" [
 #
 # GET /bluetooth/status
 # operationId: Status
-export def "bluetooth-status Status" [
+export def "bluetooth-status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,7 +475,7 @@ export def "bluetooth-status Status" [
 #
 # GET /configured_networks
 # operationId: GetSavedNetworks
-export def "configured-networks GetSavedNetworks" [
+export def "configured-networks get-saved" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,7 +497,7 @@ export def "configured-networks GetSavedNetworks" [
 #
 # POST /connect_wifi
 # operationId: ConnecttoWi-FiNetwork
-export def "connect-wifi ConnecttoWi-FiNetwork" [
+export def "connect-wifi post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,7 +517,7 @@ export def "connect-wifi ConnecttoWi-FiNetwork" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/connect_wifi")
-  let body = {bssid: $bssid, enc_passwd: $enc_passwd, signal_level: $signal_level, ssid: $ssid, wpa_auth: $wpa_auth, wpa_cipher: $wpa_cipher} | compact
+  let body = {"bssid": $bssid, "enc_passwd": $enc_passwd, "signal_level": $signal_level, "ssid": $ssid, "wpa_auth": $wpa_auth, "wpa_cipher": $wpa_cipher} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -528,7 +528,7 @@ export def "connect-wifi ConnecttoWi-FiNetwork" [
 #
 # GET /eureka_info
 # operationId: EurekaInfo
-export def "eureka-info EurekaInfo" [
+export def "eureka-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -554,7 +554,7 @@ export def "eureka-info EurekaInfo" [
 #
 # POST /forget_wifi
 # operationId: ForgetWi-FiNetwork
-export def "forget-wifi ForgetWi-FiNetwork" [
+export def "forget-wifi post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,7 +569,7 @@ export def "forget-wifi ForgetWi-FiNetwork" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forget_wifi")
-  let body = {wpa_id: $wpa_id} | compact
+  let body = {"wpa_id": $wpa_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -580,7 +580,7 @@ export def "forget-wifi ForgetWi-FiNetwork" [
 #
 # POST /get_app_device_id
 # operationId: AppDeviceID
-export def "get-app-device-id AppDeviceID" [
+export def "get-app-device-id post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -595,7 +595,7 @@ export def "get-app-device-id AppDeviceID" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/get_app_device_id")
-  let body = {app_id: $app_id} | compact
+  let body = {"app_id": $app_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -606,7 +606,7 @@ export def "get-app-device-id AppDeviceID" [
 #
 # GET /icon.png
 # operationId: ChromecastIcon
-export def "iconpng ChromecastIcon" [
+export def "iconpng get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -628,7 +628,7 @@ export def "iconpng ChromecastIcon" [
 #
 # GET /offer
 # operationId: Offer
-export def "offer Offer" [
+export def "offer get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -650,7 +650,7 @@ export def "offer Offer" [
 #
 # POST /reboot
 # operationId: RebootandFactoryReset
-export def "reboot RebootandFactoryReset" [
+export def "reboot post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,7 +665,7 @@ export def "reboot RebootandFactoryReset" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reboot")
-  let body = {params: $params} | compact
+  let body = {"params": $params} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -676,7 +676,7 @@ export def "reboot RebootandFactoryReset" [
 #
 # GET /scan_results
 # operationId: GetWi-FiScanResults
-export def "scan-results GetWi-FiScanResults" [
+export def "scan-results get-wi-fi" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -698,7 +698,7 @@ export def "scan-results GetWi-FiScanResults" [
 #
 # POST /scan_wifi
 # operationId: ScanforNetworks
-export def "scan-wifi ScanforNetworks" [
+export def "scan-wifi post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,7 +722,7 @@ export def "scan-wifi ScanforNetworks" [
 # operationId: SetEurekaInfo
 # --opt_in shape: {opencast: bool, preview_channel: bool, remote_ducking: bool, stats: bool}
 # --settings shape: {control_notifications: int}
-export def "set-eureka-info SetEurekaInfo" [
+export def "set-eureka-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,7 +739,7 @@ export def "set-eureka-info SetEurekaInfo" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/set_eureka_info")
-  let body = {name: $name, opt_in: $opt_in, settings: $settings} | compact
+  let body = {"name": $name, "opt_in": $opt_in, "settings": $settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -750,7 +750,7 @@ export def "set-eureka-info SetEurekaInfo" [
 #
 # GET /supported_locales
 # operationId: Locales
-export def "supported-locales Locales" [
+export def "supported-locales get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,7 +772,7 @@ export def "supported-locales Locales" [
 #
 # GET /supported_timezones
 # operationId: Timezones
-export def "supported-timezones Timezones" [
+export def "supported-timezones get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -794,7 +794,7 @@ export def "supported-timezones Timezones" [
 #
 # POST /test_internet_download_speed
 # operationId: TestInternetDownloadSpeed
-export def "test-internet-download-speed TestInternetDownloadSpeed" [
+export def "test-internet-download-speed test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -809,7 +809,7 @@ export def "test-internet-download-speed TestInternetDownloadSpeed" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/test_internet_download_speed")
-  let body = {url: $body_url} | compact
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -822,7 +822,7 @@ export def "test-internet-download-speed TestInternetDownloadSpeed" [
 # operationId: SetEqualizerValues
 # --high_shelf shape: {gain_db: int}
 # --low_shelf shape: {gain_db: int}
-export def "user-eq-set-equalizer SetEqualizerValues" [
+export def "user-eq-set-equalizer post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -838,7 +838,7 @@ export def "user-eq-set-equalizer SetEqualizerValues" [
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user_eq/set_equalizer")
-  let body = {high_shelf: $high_shelf, low_shelf: $low_shelf} | compact
+  let body = {"high_shelf": $high_shelf, "low_shelf": $low_shelf} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

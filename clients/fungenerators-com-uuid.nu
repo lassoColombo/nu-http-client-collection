@@ -155,7 +155,7 @@ export def "uuid-version get" [
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/uuid/version/($version)" $qp)
+  let full_url = (build-url $base ({version: $version} | format pattern "/uuid/version/{version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

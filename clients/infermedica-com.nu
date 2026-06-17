@@ -65,7 +65,7 @@ def base-url-completer [] { ["https://api.infermedica.com/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def ageunit-completer [] { ["month" "year"] }
+def age-unit-completer [] { ["month" "year"] }
 def sex-completer [] { ["female" "male"] }
 
 # List all available API commands with their parameters
@@ -131,7 +131,7 @@ export def "concepts get" [
 ]: nothing -> record<common_name: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/concepts/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/concepts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -141,7 +141,7 @@ export def "concepts get" [
 #
 # GET /conditions
 # operationId: getAllConditions
-export def "conditions list" [
+export def "conditions get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,13 +150,13 @@ export def "conditions list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --agevalue: int # age value (format: int32, e.g. 18)
-  --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
+  --age-value: int # age value (format: int32, e.g. 18)
+  --age-unit: string@age-unit-completer # unit in which age value was provided (default: year, e.g. year)
   --enable-triage-5: oneof<nothing, bool> # enable 5-level triage values
 ]: nothing -> table<acuteness: string, categories: list<string>, common_name: string, extras: record, id: string, name: string, prevalence: string, severity: string, sex_filter: string, triage_level: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "age.value" $agevalue "scalar") (serialize-qp "age.unit" $ageunit "scalar") (serialize-qp "enable_triage_5" $enable_triage_5 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar") (serialize-qp "enable_triage_5" $enable_triage_5 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/conditions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -177,14 +177,14 @@ export def "conditions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --agevalue: int # age value (format: int32, e.g. 18)
-  --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
+  --age-value: int # age value (format: int32, e.g. 18)
+  --age-unit: string@age-unit-completer # unit in which age value was provided (default: year, e.g. year)
   --enable-triage-5: oneof<nothing, bool> # enable 5-level triage values
 ]: nothing -> record<acuteness: string, categories: list<string>, common_name: string, extras: record, id: string, name: string, prevalence: string, severity: string, sex_filter: string, triage_level: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "age.value" $agevalue "scalar") (serialize-qp "age.unit" $ageunit "scalar") (serialize-qp "enable_triage_5" $enable_triage_5 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/conditions/($id)" $qp)
+  let qp = [(serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar") (serialize-qp "enable_triage_5" $enable_triage_5 "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/conditions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -213,7 +213,7 @@ export def "diagnosis computeDiagnosis" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/diagnosis")
-  let body = {age: $age, evidence: $evidence, extras: $extras, sex: $sex} | compact
+  let body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -244,7 +244,7 @@ export def "explain computeExplanation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/explain")
-  let body = {age: $age, evidence: $evidence, extras: $extras, sex: $sex, target: $target} | compact
+  let body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex, "target": $target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -255,7 +255,7 @@ export def "explain computeExplanation" [
 #
 # GET /info
 # operationId: getDatabaseInfo
-export def "info get" [
+export def "info get-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,12 +264,12 @@ export def "info get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --agevalue: int # age value (format: int32, e.g. 18)
-  --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
+  --age-value: int # age value (format: int32, e.g. 18)
+  --age-unit: string@age-unit-completer # unit in which age value was provided (default: year, e.g. year)
 ]: nothing -> record<api_version: string, conditions_count: int, lab_tests_count: int, risk_factors_count: int, symptoms_count: int, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "age.value" $agevalue "scalar") (serialize-qp "age.unit" $ageunit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -280,7 +280,7 @@ export def "info get" [
 #
 # GET /lab_tests
 # operationId: getAllLabTests
-export def "lab-tests list" [
+export def "lab-tests get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,12 +289,12 @@ export def "lab-tests list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --agevalue: int # age value (format: int32, e.g. 18)
-  --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
+  --age-value: int # age value (format: int32, e.g. 18)
+  --age-unit: string@age-unit-completer # unit in which age value was provided (default: year, e.g. year)
 ]: nothing -> table<category: string, common_name: string, id: string, name: string, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "age.value" $agevalue "scalar") (serialize-qp "age.unit" $ageunit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lab_tests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -315,13 +315,13 @@ export def "lab-tests get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --agevalue: int # age value (format: int32, e.g. 18)
-  --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
+  --age-value: int # age value (format: int32, e.g. 18)
+  --age-unit: string@age-unit-completer # unit in which age value was provided (default: year, e.g. year)
 ]: nothing -> record<category: string, common_name: string, id: string, name: string, results: table<id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "age.value" $agevalue "scalar") (serialize-qp "age.unit" $ageunit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lab_tests/($id)" $qp)
+  let qp = [(serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/lab_tests/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -331,7 +331,7 @@ export def "lab-tests get" [
 #
 # GET /lookup
 # operationId: getMatchingObservation
-export def "lookup get" [
+export def "lookup get-matching-observation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,12 +342,12 @@ export def "lookup get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --phrase: string # phrase to match
   --sex: string@sex-completer # sex filter
-  --agevalue: int # age value (format: int32, e.g. 18)
-  --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
+  --age-value: int # age value (format: int32, e.g. 18)
+  --age-unit: string@age-unit-completer # unit in which age value was provided (default: year, e.g. year)
 ]: nothing -> record<id: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "phrase" $phrase "scalar") (serialize-qp "sex" $sex "scalar") (serialize-qp "age.value" $agevalue "scalar") (serialize-qp "age.unit" $ageunit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "phrase" $phrase "scalar") (serialize-qp "sex" $sex "scalar") (serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lookup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -358,7 +358,7 @@ export def "lookup get" [
 #
 # POST /parse
 # operationId: getMentions
-export def "parse post" [
+export def "parse get-mentions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +377,7 @@ export def "parse post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/parse")
-  let body = {concept_types: $concept_types, context: $context, correct_spelling: $correct_spelling, include_tokens: $include_tokens, text: $text} | compact
+  let body = {"concept_types": $concept_types, "context": $context, "correct_spelling": $correct_spelling, "include_tokens": $include_tokens, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -407,7 +407,7 @@ export def "rationale computeRationale" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rationale")
-  let body = {age: $age, evidence: $evidence, extras: $extras, sex: $sex} | compact
+  let body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -439,7 +439,7 @@ export def "red-flags computeRedFlags" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_results" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/red_flags" $qp)
-  let body = {age: $age, evidence: $evidence, extras: $extras, sex: $sex} | compact
+  let body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -450,7 +450,7 @@ export def "red-flags computeRedFlags" [
 #
 # GET /risk_factors
 # operationId: getAllRiskFactors
-export def "risk-factors list" [
+export def "risk-factors get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -459,13 +459,13 @@ export def "risk-factors list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --agevalue: int # age value (format: int32, e.g. 18)
-  --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
+  --age-value: int # age value (format: int32, e.g. 18)
+  --age-unit: string@age-unit-completer # unit in which age value was provided (default: year, e.g. year)
   --enable-triage-5: oneof<nothing, bool> # enable 5-level triage values
 ]: nothing -> table<category: string, common_name: string, extras: record, id: string, image_source: string, image_url: string, name: string, sex_filter: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "age.value" $agevalue "scalar") (serialize-qp "age.unit" $ageunit "scalar") (serialize-qp "enable_triage_5" $enable_triage_5 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar") (serialize-qp "enable_triage_5" $enable_triage_5 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/risk_factors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -486,14 +486,14 @@ export def "risk-factors get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --agevalue: int # age value (format: int32, e.g. 18)
-  --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
+  --age-value: int # age value (format: int32, e.g. 18)
+  --age-unit: string@age-unit-completer # unit in which age value was provided (default: year, e.g. year)
   --enable-triage-5: oneof<nothing, bool> # enable 5-level triage values
 ]: nothing -> record<category: string, common_name: string, extras: record, id: string, image_source: string, image_url: string, name: string, question: string, sex_filter: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "age.value" $agevalue "scalar") (serialize-qp "age.unit" $ageunit "scalar") (serialize-qp "enable_triage_5" $enable_triage_5 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/risk_factors/($id)" $qp)
+  let qp = [(serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar") (serialize-qp "enable_triage_5" $enable_triage_5 "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/risk_factors/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -503,7 +503,7 @@ export def "risk-factors get" [
 #
 # GET /search
 # operationId: getMatchingObservations
-export def "search get" [
+export def "search get-matching-observations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,14 +514,14 @@ export def "search get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --phrase: string # phrase to match
   --sex: string@sex-completer # sex filter
-  --agevalue: int # age value (format: int32, e.g. 18)
-  --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
+  --age-value: int # age value (format: int32, e.g. 18)
+  --age-unit: string@age-unit-completer # unit in which age value was provided (default: year, e.g. year)
   --max-results: int # maximum number of results (format: int32, default: 8)
   --type: list # type of results
 ]: nothing -> table<id: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "phrase" $phrase "scalar") (serialize-qp "sex" $sex "scalar") (serialize-qp "age.value" $agevalue "scalar") (serialize-qp "age.unit" $ageunit "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "type" $type "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "phrase" $phrase "scalar") (serialize-qp "sex" $sex "scalar") (serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "type" $type "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -533,7 +533,7 @@ export def "search get" [
 # POST /suggest
 # operationId: getSuggestions
 # --evidence item shape: {choice_id: "present"|"absent"|"unknown", id: string, observed_at?: string, source?: "initial"|"suggest"|"predefined"|"red_flags"}
-export def "suggest post" [
+export def "suggest get-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,7 +553,7 @@ export def "suggest post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_results" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggest" $qp)
-  let body = {age: $age, evidence: $evidence, extras: $extras, sex: $sex} | compact
+  let body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -564,7 +564,7 @@ export def "suggest post" [
 #
 # GET /symptoms
 # operationId: getAllSymptoms
-export def "symptoms list" [
+export def "symptoms get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -573,13 +573,13 @@ export def "symptoms list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --agevalue: int # age value (format: int32, e.g. 18)
-  --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
+  --age-value: int # age value (format: int32, e.g. 18)
+  --age-unit: string@age-unit-completer # unit in which age value was provided (default: year, e.g. year)
   --enable-triage-5: oneof<nothing, bool> # enable 5-level triage values
 ]: nothing -> table<category: string, children: record, common_name: string, extras: record, id: string, image_source: string, image_url: string, name: string, parent_id: string, parent_relation: string, sex_filter: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "age.value" $agevalue "scalar") (serialize-qp "age.unit" $ageunit "scalar") (serialize-qp "enable_triage_5" $enable_triage_5 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar") (serialize-qp "enable_triage_5" $enable_triage_5 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/symptoms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -600,14 +600,14 @@ export def "symptoms get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --agevalue: int # age value (format: int32, e.g. 18)
-  --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
+  --age-value: int # age value (format: int32, e.g. 18)
+  --age-unit: string@age-unit-completer # unit in which age value was provided (default: year, e.g. year)
   --enable-triage-5: oneof<nothing, bool> # enable 5-level triage values
 ]: nothing -> record<category: string, children: record, common_name: string, extras: record, id: string, image_source: string, image_url: string, name: string, parent_id: string, parent_relation: string, question: string, sex_filter: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "age.value" $agevalue "scalar") (serialize-qp "age.unit" $ageunit "scalar") (serialize-qp "enable_triage_5" $enable_triage_5 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/symptoms/($id)" $qp)
+  let qp = [(serialize-qp "age.value" $age_value "scalar") (serialize-qp "age.unit" $age_unit "scalar") (serialize-qp "enable_triage_5" $enable_triage_5 "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/symptoms/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -636,7 +636,7 @@ export def "triage computeTriage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/triage")
-  let body = {age: $age, evidence: $evidence, extras: $extras, sex: $sex} | compact
+  let body = {"age": $age, "evidence": $evidence, "extras": $extras, "sex": $sex} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

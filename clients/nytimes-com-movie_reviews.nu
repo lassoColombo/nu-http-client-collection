@@ -106,7 +106,7 @@ export def "critics get" [
 ]: nothing -> record<copyright: string, num_results: int, results: table<bio: string, display_name: string, multimedia: record, seo_name: string, sort_name: string, status: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/critics/($resource_type).json")
+  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/critics/{resource_type}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -156,7 +156,7 @@ export def "reviews get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/reviews/($resource_type).json" $qp)
+  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/reviews/{resource_type}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

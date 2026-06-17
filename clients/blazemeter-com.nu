@@ -144,7 +144,7 @@ export def "user-active-terminate terminate" [
 #
 # GET /user/collections
 # operationId: retrieveCollections
-export def "user-collections retrieveCollections" [
+export def "user-collections retrieve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "user-collections retrieveCollections" [
 #
 # GET /user/invites
 # operationId: retrieveInvites
-export def "user-invites retrieveInvites" [
+export def "user-invites retrieve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "user-invites retrieveInvites" [
 #
 # GET /user/locations
 # operationId: retrieveLocations
-export def "user-locations retrieveLocations" [
+export def "user-locations retrieve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "user-locations retrieveLocations" [
 #
 # GET /user/masters
 # operationId: retrieveMasters
-export def "user-masters retrieveMasters" [
+export def "user-masters retrieve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +317,7 @@ export def "user-password put" [
 #
 # GET /user/projects
 # operationId: retrieveProjects
-export def "user-projects retrieveProjects" [
+export def "user-projects retrieve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,12 +352,12 @@ export def "user-register get" [
   --accept: string@accept-completer # Response content type
   --email: string # Email address
   --password: string # Password
-  --firstName: string # First name
-  --lastName: string # Last name
+  --first-name: string # First name
+  --last-name: string # Last name
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "firstName" $firstName "scalar") (serialize-qp "lastName" $lastName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/register" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -394,7 +394,7 @@ export def "user-register register" [
 #
 # GET /user/tests
 # operationId: retrieveTests
-export def "user-tests retrieveTests" [
+export def "user-tests retrieve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

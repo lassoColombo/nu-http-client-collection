@@ -65,13 +65,13 @@ def base-url-completer [] { ["http://nsidc.org/api/dataset/2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def sortKeys-completer [] { ["score,,desc" "spatial_area,,asc" "spatial_area,,desc" "temporal_duration,,asc" "temporal_duration,,desc" "updated,,desc"] }
+def sort-keys-completer [] { ["score,,desc" "spatial_area,,asc" "spatial_area,,desc" "temporal_duration,,asc" "temporal_duration,,desc" "updated,,desc"] }
 def source-completer [] { ["ADE" "NSIDC"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "facets facets" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "facets get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /Facets
 # operationId: facets
-export def "facets facets" [
+export def "facets get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,19 +104,19 @@ export def "facets facets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --searchTerms: string # URL-encoded keyword or keywords desired by the client; OpenSearch 1.1
+  --search-terms: string # URL-encoded keyword or keywords desired by the client; OpenSearch 1.1
   --count: int # The number of search results per page desired by the client; OpenSearch 1.1 (default: 25)
-  --startIndex: int # First search result desired by the search client; OpenSearch 1.1 (default: 1)
+  --start-index: int # First search result desired by the search client; OpenSearch 1.1 (default: 1)
   --spatial: string # 4 comma separated values - W, S, E, N; OpenSearch-Geo 1.0, "box" parameter (default: -180.0,-90.0,180.0,90.0)
-  --sortKeys: string@sortKeys-completer # Sort the results by most relevant (default), smallest or largest spatial area, shortest or longest temporal duration, or most recently updated; partial implementation of OpenSearch SRU 1.0 (default: score,,desc)
-  --startDate: string # The start date in yyyy-mm-dd format (format: date)
-  --endDate: string # The end date in yyyy-mm-dd format (format: date)
-  --facetFilters: string # Describes faceted restrictions on the search. A URL-encoded JSON object where the keys are the names of the facet, and the values are arrays of the selected facet values
+  --sort-keys: string@sort-keys-completer # Sort the results by most relevant (default), smallest or largest spatial area, shortest or longest temporal duration, or most recently updated; partial implementation of OpenSearch SRU 1.0 (default: score,,desc)
+  --start-date: string # The start date in yyyy-mm-dd format (format: date)
+  --end-date: string # The end date in yyyy-mm-dd format (format: date)
+  --facet-filters: string # Describes faceted restrictions on the search. A URL-encoded JSON object where the keys are the names of the facet, and the values are arrays of the selected facet values
   --qp-source: string@source-completer # Custom parameter for selecting which source to use; the Arctic Data Explorer (ADE) uses data aggregated from many sources, including, but not limited to, NSIDC (default: NSIDC)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "searchTerms" $searchTerms "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "spatial" $spatial "scalar") (serialize-qp "sortKeys" $sortKeys "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "facetFilters" $facetFilters "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "searchTerms" $search_terms "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "spatial" $spatial "scalar") (serialize-qp "sortKeys" $sort_keys "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "facetFilters" $facet_filters "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Facets" $qp)
   let accept_val = "application/nsidcfacets+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -136,19 +136,19 @@ export def "open-search open-search" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --searchTerms: string # URL-encoded keyword or keywords desired by the client; OpenSearch 1.1
+  --search-terms: string # URL-encoded keyword or keywords desired by the client; OpenSearch 1.1
   --count: int # The number of search results per page desired by the client; OpenSearch 1.1 (default: 25)
-  --startIndex: int # First search result desired by the search client; OpenSearch 1.1 (default: 1)
+  --start-index: int # First search result desired by the search client; OpenSearch 1.1 (default: 1)
   --spatial: string # 4 comma separated values - W, S, E, N; OpenSearch-Geo 1.0, "box" parameter (default: -180.0,-90.0,180.0,90.0)
-  --sortKeys: string@sortKeys-completer # Sort the results by most relevant (default), smallest or largest spatial area, shortest or longest temporal duration, or most recently updated; partial implementation of OpenSearch SRU 1.0 (default: score,,desc)
-  --startDate: string # The start date in yyyy-mm-dd format (format: date)
-  --endDate: string # The end date in yyyy-mm-dd format (format: date)
-  --facetFilters: string # Describes faceted restrictions on the search. A URL-encoded JSON object where the keys are the names of the facet, and the values are arrays of the selected facet values
+  --sort-keys: string@sort-keys-completer # Sort the results by most relevant (default), smallest or largest spatial area, shortest or longest temporal duration, or most recently updated; partial implementation of OpenSearch SRU 1.0 (default: score,,desc)
+  --start-date: string # The start date in yyyy-mm-dd format (format: date)
+  --end-date: string # The end date in yyyy-mm-dd format (format: date)
+  --facet-filters: string # Describes faceted restrictions on the search. A URL-encoded JSON object where the keys are the names of the facet, and the values are arrays of the selected facet values
   --qp-source: string@source-completer # Custom parameter for selecting which source to use; the Arctic Data Explorer (ADE) uses data aggregated from many sources, including, but not limited to, NSIDC (default: NSIDC)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "searchTerms" $searchTerms "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "spatial" $spatial "scalar") (serialize-qp "sortKeys" $sortKeys "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "facetFilters" $facetFilters "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "searchTerms" $search_terms "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "spatial" $spatial "scalar") (serialize-qp "sortKeys" $sort_keys "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "facetFilters" $facet_filters "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/OpenSearch" $qp)
   let accept_val = "application/atom+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -159,7 +159,7 @@ export def "open-search open-search" [
 #
 # GET /OpenSearchDescription
 # operationId: opensearch description
-export def "open-search-description opensearch-description" [
+export def "open-search-description open" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

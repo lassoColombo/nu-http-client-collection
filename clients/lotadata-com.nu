@@ -150,7 +150,7 @@ export def "events get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fieldset" $fieldset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/events/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/events/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -218,7 +218,7 @@ export def "places get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fieldset" $fieldset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/places/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/places/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

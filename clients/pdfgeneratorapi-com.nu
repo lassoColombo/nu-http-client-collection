@@ -121,7 +121,7 @@ export def "templates get" [
 # operationId: createTemplate
 # --layout shape: {emptyLabels?: int, format?: "A4"|"letter"|"custom", height?: float, margins?: record, orientation?: "portrait"|"landscape", repeatLayout?: record, rotaion?: "0"|"90"|"180"|"270", unit?: "cm"|"in", width?: float}
 # --pages item shape: {components?: list, height?: float, margins?: record, width?: float}
-export def "templates createTemplate" [
+export def "templates create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,7 +130,7 @@ export def "templates createTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --isDraft: oneof<nothing, bool> # Indicates if the template is a draft or published. (e.g. true)
+  --is-draft: oneof<nothing, bool> # Indicates if the template is a draft or published. (e.g. true)
   --layout: record # Defines template layout (e.g page format, margins). — shape: {emptyLabels?: int, format?: "A4"|"letter"|"custom", height?: float, margins?: record, orientation?: "portrait"|"landscape", repeatLayout?: record, rotaion?: "0"|"90"|"180"|"270", unit?: "cm"|"in", width?: float}
   name: string # Template name (e.g. Invoice template)
   --pages: list # Defines page or label size, margins and components on page or label — item shape: {components?: list, height?: float, margins?: record, width?: float}
@@ -140,7 +140,7 @@ export def "templates createTemplate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates")
-  let body = {isDraft: $isDraft, layout: $layout, name: $name, pages: $pages, tags: $tags} | compact
+  let body = {"isDraft": $is_draft, "layout": $layout, "name": $name, "pages": $pages, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -189,11 +189,11 @@ export def "templates-template-id delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --templateId: int # Template unique identifier (e.g. 19375)
+  --template-id: int # Template unique identifier (e.g. 19375)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "templateId" $templateId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "templateId" $template_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates/templateId" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -213,11 +213,11 @@ export def "templates-template-id get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --templateId: int # Template unique identifier (e.g. 19375)
+  --template-id: int # Template unique identifier (e.g. 19375)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "templateId" $templateId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "templateId" $template_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates/templateId" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -230,7 +230,7 @@ export def "templates-template-id get" [
 # operationId: updateTemplate
 # --layout shape: {emptyLabels?: int, format?: "A4"|"letter"|"custom", height?: float, margins?: record, orientation?: "portrait"|"landscape", repeatLayout?: record, rotaion?: "0"|"90"|"180"|"270", unit?: "cm"|"in", width?: float}
 # --pages item shape: {components?: list, height?: float, margins?: record, width?: float}
-export def "templates-template-id updateTemplate" [
+export def "templates-template-id update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,8 +239,8 @@ export def "templates-template-id updateTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --templateId: int # Template unique identifier (e.g. 19375)
-  --isDraft: oneof<nothing, bool> # Indicates if the template is a draft or published. (e.g. true)
+  --template-id: int # Template unique identifier (e.g. 19375)
+  --is-draft: oneof<nothing, bool> # Indicates if the template is a draft or published. (e.g. true)
   --layout: record # Defines template layout (e.g page format, margins). — shape: {emptyLabels?: int, format?: "A4"|"letter"|"custom", height?: float, margins?: record, orientation?: "portrait"|"landscape", repeatLayout?: record, rotaion?: "0"|"90"|"180"|"270", unit?: "cm"|"in", width?: float}
   name: string # Template name (e.g. Invoice template)
   --pages: list # Defines page or label size, margins and components on page or label — item shape: {components?: list, height?: float, margins?: record, width?: float}
@@ -249,9 +249,9 @@ export def "templates-template-id updateTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "templateId" $templateId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "templateId" $template_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates/templateId" $qp)
-  let body = {isDraft: $isDraft, layout: $layout, name: $name, pages: $pages, tags: $tags} | compact
+  let body = {"isDraft": $is_draft, "layout": $layout, "name": $name, "pages": $pages, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -262,7 +262,7 @@ export def "templates-template-id updateTemplate" [
 #
 # POST /templates/templateId/copy
 # operationId: copyTemplate
-export def "templates-template-id-copy copyTemplate" [
+export def "templates-template-id-copy copy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,12 +271,12 @@ export def "templates-template-id-copy copyTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --templateId: int # Template unique identifier (e.g. 19375)
+  --template-id: int # Template unique identifier (e.g. 19375)
   --name: string # Name for the copied template. If name is not specified then the original name is used. (e.g. My copied template)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "templateId" $templateId "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "templateId" $template_id "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates/templateId/copy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -287,7 +287,7 @@ export def "templates-template-id-copy copyTemplate" [
 #
 # POST /templates/templateId/editor
 # operationId: getEditorUrl
-export def "templates-template-id-editor post" [
+export def "templates-template-id-editor get-editor-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,14 +296,14 @@ export def "templates-template-id-editor post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --templateId: int # Template unique identifier (e.g. 19375)
+  --template-id: int # Template unique identifier (e.g. 19375)
   --language: string@language-completer # Specify the editor UI language. Defaults to organization editor language. (e.g. en)
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "templateId" $templateId "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "templateId" $template_id "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates/templateId/editor" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -324,7 +324,7 @@ export def "templates-template-id-output mergeTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --templateId: int # Template unique identifier (e.g. 19375)
+  --template-id: int # Template unique identifier (e.g. 19375)
   --name: string # Document name, returned in the meta data. (e.g. My document)
   --format: string@format-completer # Document format. The zip option will return a ZIP file with PDF files. (default: pdf, e.g. pdf)
   --output: string@output-completer # Response format. With the url option, the document is stored for 30 days and automatically deleted. (default: base64, e.g. base64)
@@ -334,9 +334,9 @@ export def "templates-template-id-output mergeTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "templateId" $templateId "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "output" $output "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "templateId" $template_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "output" $output "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates/templateId/output" $qp)
-  let body = {id: $id, name: $name} | compact
+  let body = {"id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -356,11 +356,11 @@ export def "workspaces-workspace-id delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workspaceId: string # Workspace identifier (e.g. demo.example@actualreports.com)
+  --workspace-id: string # Workspace identifier (e.g. demo.example@actualreports.com)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workspaceId" $workspaceId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "workspaceId" $workspace_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/workspaces/workspaceId" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -380,11 +380,11 @@ export def "workspaces-workspace-id get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workspaceId: string # Workspace identifier (e.g. demo.example@actualreports.com)
+  --workspace-id: string # Workspace identifier (e.g. demo.example@actualreports.com)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workspaceId" $workspaceId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "workspaceId" $workspace_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/workspaces/workspaceId" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -66,9 +66,9 @@ def base-url-completer [] { ["https://api.bulksms.com/v1"] }
 def auth-scheme-completer [] { ["basic"] }
 
 # Completers for enum parameters
-def sortOrder-completer [] { ["ASCENDING"] }
-def invokeOption-completer [] { ["MANY" "ONE"] }
-def triggerScope-completer [] { ["RECEIVED" "SENT"] }
+def sort-order-completer [] { ["ASCENDING"] }
+def invoke-option-completer [] { ["MANY" "ONE"] }
+def trigger-scope-completer [] { ["RECEIVED" "SENT"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -153,17 +153,17 @@ export def "credit-transfer post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --commentOnFrom: string # An optional note that will be shown on the credit history of your account. The maximum length of the comment is 100.  (e.g. Tranfer to Bobby)
-  --commentOnTo: string # An optional note that will be shown on the credit history of the recipient's account. The maximum length of the comment is 100.  (e.g. Tranfer from Danny)
+  --comment-on-from: string # An optional note that will be shown on the credit history of your account. The maximum length of the comment is 100.  (e.g. Tranfer to Bobby)
+  --comment-on-to: string # An optional note that will be shown on the credit history of the recipient's account. The maximum length of the comment is 100.  (e.g. Tranfer from Danny)
   credits: float # The amount of credits to transfer.  (e.g. 2345)
-  toUserId: float # The numeric user ID of the account that will receive the credits. The ID must match the username.  (e.g. 2345)
-  toUsername: string # The username of the account that will receive the credits.  (e.g. roboto)
+  to_user_id: float # The numeric user ID of the account that will receive the credits. The ID must match the username.  (e.g. 2345)
+  to_username: string # The username of the account that will receive the credits.  (e.g. roboto)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/transfer")
-  let body = {commentOnFrom: $commentOnFrom, commentOnTo: $commentOnTo, credits: $credits, toUserId: $toUserId, toUsername: $toUsername} | compact
+  let body = {"commentOnFrom": $comment_on_from, "commentOnTo": $comment_on_to, "credits": $credits, "toUserId": $to_user_id, "toUsername": $to_username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -184,11 +184,11 @@ export def "messages list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: float # The maximum number of messages that are returned.  The default is 1000. The value of `limit` is not a guarantee that a specific number of messages will be in the response, even if there are more messages available.  Consider the case where you have 150 messages and you specify `limit=50`.  It is possible that only 49 messages will be returned.  The  way to make sure that there are no more messages is to submit a new call using the `id` filter field with the `<` operator (described below). (format: int)
   --filter: string # See the message filtering for more information.
-  --sortOrder: string@sortOrder-completer # The default value is DESCENDING  If the `sortOrder` is DESCENDING, the newest messages be first in the result.  ASCENDING places the oldest messages on top of the response.
+  --sort-order: string@sort-order-completer # The default value is DESCENDING  If the `sortOrder` is DESCENDING, the newest messages be first in the result.  ASCENDING places the oldest messages on top of the response.
 ]: nothing -> table<body: any, creditCost: float, encoding: string, from: string, id: string, messageClass: int, numberOfParts: int, protocolId: int, relatedSentMessageId: string, status: record<id: string, subtype: string, type: string>, submission: record<date: string, id: string>, to: string, type: string, userSuppliedId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sortOrder" $sortOrder "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -265,7 +265,7 @@ export def "messages get" [
 ]: nothing -> record<body: any, creditCost: float, encoding: string, from: string, id: string, messageClass: int, numberOfParts: int, protocolId: int, relatedSentMessageId: string, status: record<id: string, subtype: string, type: string>, submission: record<date: string, id: string>, to: string, type: string, userSuppliedId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messages/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/messages/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -287,7 +287,7 @@ export def "messages-related-received-messages get" [
 ]: nothing -> table<body: any, creditCost: float, encoding: string, from: string, id: string, messageClass: int, numberOfParts: int, protocolId: int, relatedSentMessageId: string, status: record<id: string, subtype: string, type: string>, submission: record<date: string, id: string>, to: string, type: string, userSuppliedId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messages/($id)/relatedReceivedMessages")
+  let full_url = (build-url $base ({id: $id} | format pattern "/messages/{id}/relatedReceivedMessages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -326,14 +326,14 @@ export def "rmm-pre-sign-attachment post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fileExtension: string # The extension of the file.  Usually related to the media type. (e.g. pdf)
-  --mediaType: string # The media type of the file you would like to upload.  If you are not sure what value to use here, check out the standard [list of media types](https://www.iana.org/assignments/media-types/media-types.xhtml). (e.g. application/pdf)
+  --file-extension: string # The extension of the file.  Usually related to the media type. (e.g. pdf)
+  --media-type: string # The media type of the file you would like to upload.  If you are not sure what value to use here, check out the standard [list of media types](https://www.iana.org/assignments/media-types/media-types.xhtml). (e.g. application/pdf)
 ]: any -> record<fetchUrl: string, fields: table<name: string, value: string>, putUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rmm/pre-sign-attachment")
-  let body = {fileExtension: $fileExtension, mediaType: $mediaType} | compact
+  let body = {"fileExtension": $file_extension, "mediaType": $media_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -374,18 +374,18 @@ export def "webhooks post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Indicates whether you want the webhook activated.  If the value is `true`, the webhook at the given `url` will be invoked with an empty array (`[]`) as part of the validation process. If the webhook responds with a `2xx` status code, the submission is accepted; if not the webhook is not created (or updated).  If the value is `false` the webhook will be inactive, and it will not be invoked when messages are `SENT` or `RECEIVED`.  The default value is `true`.  (e.g. true)
-  --contactEmailAddress: string # The email address to which emails will be sent if there are problem with invoking the webhook.  The value must be a valid email address. If this value is `null`, no email will be sent.  It is `null` by default.  (e.g. tech_team@example.com)
-  --invokeOption: string@invokeOption-completer # Specifies how to invoke your webhook.  If the value is `ONE` the array POSTed to your webhook will contain no more than a single message.  Use this option if your webhook logic is unable to handle more than one messages at a time.  If the value is `MANY` the array POSTed to your webhook can contain up to 10 messages.  This is the recommended option.  The number of calls made to your webhook would be less and this will speed up your total processing time. If your webhook fails for an invoke that has more than one message, each message in the array will automatically be retried one at a time.   This value defaults to `ONE` - but it is recommended that you set this property to `MANY`.  (e.g. MANY)
+  --contact-email-address: string # The email address to which emails will be sent if there are problem with invoking the webhook.  The value must be a valid email address. If this value is `null`, no email will be sent.  It is `null` by default.  (e.g. tech_team@example.com)
+  --invoke-option: string@invoke-option-completer # Specifies how to invoke your webhook.  If the value is `ONE` the array POSTed to your webhook will contain no more than a single message.  Use this option if your webhook logic is unable to handle more than one messages at a time.  If the value is `MANY` the array POSTed to your webhook can contain up to 10 messages.  This is the recommended option.  The number of calls made to your webhook would be less and this will speed up your total processing time. If your webhook fails for an invoke that has more than one message, each message in the array will automatically be retried one at a time.   This value defaults to `ONE` - but it is recommended that you set this property to `MANY`.  (e.g. MANY)
   name: string # A text identifier for the webhook. More than one webhook cannot have the same name.  (e.g. My MT Webhook)
-  --onWebApp: oneof<nothing, bool> # Indicates whether you want to show this webhook on the Web App.  Webhooks shown there can be updated by the user that use the public Web site.  The default value is `true`.  (e.g. true)
-  triggerScope: string@triggerScope-completer # Specifies when the webhook will be triggered.    Please note the values are case sensitive.  If the value is `SENT`, the webhook will be called when a status update becomes available for a message you sent (i.e. a mobile terminating (MT) message).  If the value is `RECEIVED`, the webhook will be called when a message is received (i.e. a mobile originating (MO) message).  Note that this field forces you to create two separate webhook entries if you want to collect all messages.  However,  you can use the same `url` for both webhooks if you want.  (e.g. SENT)
+  --on-web-app: oneof<nothing, bool> # Indicates whether you want to show this webhook on the Web App.  Webhooks shown there can be updated by the user that use the public Web site.  The default value is `true`.  (e.g. true)
+  trigger_scope: string@trigger-scope-completer # Specifies when the webhook will be triggered.    Please note the values are case sensitive.  If the value is `SENT`, the webhook will be called when a status update becomes available for a message you sent (i.e. a mobile terminating (MT) message).  If the value is `RECEIVED`, the webhook will be called when a message is received (i.e. a mobile originating (MO) message).  Note that this field forces you to create two separate webhook entries if you want to collect all messages.  However,  you can use the same `url` for both webhooks if you want.  (e.g. SENT)
   --body-url: string # The location of the webhook.  In addition to being a [valid URI](https://en.wikipedia.org/wiki/Uniform_Resource_Identifier#Syntax), the url must also start with `http` or `https`.  (e.g. https://www.example.com)
 ]: any -> record<active: bool, contactEmailAddress: string, id: float, name: string, onWebApp: bool, triggerScope: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks")
-  let body = {active: $active, contactEmailAddress: $contactEmailAddress, invokeOption: $invokeOption, name: $name, onWebApp: $onWebApp, triggerScope: $triggerScope, url: $body_url} | compact
+  let body = {"active": $active, "contactEmailAddress": $contact_email_address, "invokeOption": $invoke_option, "name": $name, "onWebApp": $on_web_app, "triggerScope": $trigger_scope, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -408,7 +408,7 @@ export def "webhooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhooks/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/webhooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -430,7 +430,7 @@ export def "webhooks get" [
 ]: nothing -> record<active: bool, contactEmailAddress: string, id: float, name: string, onWebApp: bool, triggerScope: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhooks/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/webhooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,18 +450,18 @@ export def "webhooks post-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Indicates whether you want the webhook activated.  If the value is `true`, the webhook at the given `url` will be invoked with an empty array (`[]`) as part of the validation process. If the webhook responds with a `2xx` status code, the submission is accepted; if not the webhook is not created (or updated).  If the value is `false` the webhook will be inactive, and it will not be invoked when messages are `SENT` or `RECEIVED`.  The default value is `true`.  (e.g. true)
-  --contactEmailAddress: string # The email address to which emails will be sent if there are problem with invoking the webhook.  The value must be a valid email address. If this value is `null`, no email will be sent.  It is `null` by default.  (e.g. tech_team@example.com)
-  --invokeOption: string@invokeOption-completer # Specifies how to invoke your webhook.  If the value is `ONE` the array POSTed to your webhook will contain no more than a single message.  Use this option if your webhook logic is unable to handle more than one messages at a time.  If the value is `MANY` the array POSTed to your webhook can contain up to 10 messages.  This is the recommended option.  The number of calls made to your webhook would be less and this will speed up your total processing time. If your webhook fails for an invoke that has more than one message, each message in the array will automatically be retried one at a time.   This value defaults to `ONE` - but it is recommended that you set this property to `MANY`.  (e.g. MANY)
+  --contact-email-address: string # The email address to which emails will be sent if there are problem with invoking the webhook.  The value must be a valid email address. If this value is `null`, no email will be sent.  It is `null` by default.  (e.g. tech_team@example.com)
+  --invoke-option: string@invoke-option-completer # Specifies how to invoke your webhook.  If the value is `ONE` the array POSTed to your webhook will contain no more than a single message.  Use this option if your webhook logic is unable to handle more than one messages at a time.  If the value is `MANY` the array POSTed to your webhook can contain up to 10 messages.  This is the recommended option.  The number of calls made to your webhook would be less and this will speed up your total processing time. If your webhook fails for an invoke that has more than one message, each message in the array will automatically be retried one at a time.   This value defaults to `ONE` - but it is recommended that you set this property to `MANY`.  (e.g. MANY)
   name: string # A text identifier for the webhook. More than one webhook cannot have the same name.  (e.g. My MT Webhook)
-  --onWebApp: oneof<nothing, bool> # Indicates whether you want to show this webhook on the Web App.  Webhooks shown there can be updated by the user that use the public Web site.  The default value is `true`.  (e.g. true)
-  triggerScope: string@triggerScope-completer # Specifies when the webhook will be triggered.    Please note the values are case sensitive.  If the value is `SENT`, the webhook will be called when a status update becomes available for a message you sent (i.e. a mobile terminating (MT) message).  If the value is `RECEIVED`, the webhook will be called when a message is received (i.e. a mobile originating (MO) message).  Note that this field forces you to create two separate webhook entries if you want to collect all messages.  However,  you can use the same `url` for both webhooks if you want.  (e.g. SENT)
+  --on-web-app: oneof<nothing, bool> # Indicates whether you want to show this webhook on the Web App.  Webhooks shown there can be updated by the user that use the public Web site.  The default value is `true`.  (e.g. true)
+  trigger_scope: string@trigger-scope-completer # Specifies when the webhook will be triggered.    Please note the values are case sensitive.  If the value is `SENT`, the webhook will be called when a status update becomes available for a message you sent (i.e. a mobile terminating (MT) message).  If the value is `RECEIVED`, the webhook will be called when a message is received (i.e. a mobile originating (MO) message).  Note that this field forces you to create two separate webhook entries if you want to collect all messages.  However,  you can use the same `url` for both webhooks if you want.  (e.g. SENT)
   --body-url: string # The location of the webhook.  In addition to being a [valid URI](https://en.wikipedia.org/wiki/Uniform_Resource_Identifier#Syntax), the url must also start with `http` or `https`.  (e.g. https://www.example.com)
 ]: any -> record<active: bool, contactEmailAddress: string, id: float, name: string, onWebApp: bool, triggerScope: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhooks/($id)")
-  let body = {active: $active, contactEmailAddress: $contactEmailAddress, invokeOption: $invokeOption, name: $name, onWebApp: $onWebApp, triggerScope: $triggerScope, url: $body_url} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/webhooks/{id}"))
+  let body = {"active": $active, "contactEmailAddress": $contact_email_address, "invokeOption": $invoke_option, "name": $name, "onWebApp": $on_web_app, "triggerScope": $trigger_scope, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

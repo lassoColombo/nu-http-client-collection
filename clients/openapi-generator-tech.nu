@@ -114,7 +114,7 @@ export def "gen-clients clientOptions" [
 #
 # GET /api/gen/clients/{language}
 # operationId: getClientOptions
-export def "gen-clients get" [
+export def "gen-clients get-client-options" [
   language: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -127,7 +127,7 @@ export def "gen-clients get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/gen/clients/($language)")
+  let full_url = (build-url $base ({language: $language} | format pattern "/api/gen/clients/{language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,16 +148,16 @@ export def "gen-clients generateClient" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorizationValue: record # shape: {keyName?: string, type?: string, urlMatcher?: record, value?: string}
-  --openAPIUrl: string # e.g. https://raw.githubusercontent.com/OpenAPITools/openapi-generator/master/modules/openapi-generator/src/test/resources/2_0/petstore.yaml
+  --authorization-value: record # shape: {keyName?: string, type?: string, urlMatcher?: record, value?: string}
+  --open-api-url: string # e.g. https://raw.githubusercontent.com/OpenAPITools/openapi-generator/master/modules/openapi-generator/src/test/resources/2_0/petstore.yaml
   --options: record
   --spec: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/gen/clients/($language)")
-  let body = {authorizationValue: $authorizationValue, openAPIUrl: $openAPIUrl, options: $options, spec: $spec} | compact
+  let full_url = (build-url $base ({language: $language} | format pattern "/api/gen/clients/{language}"))
+  let body = {"authorizationValue": $authorization_value, "openAPIUrl": $open_api_url, "options": $options, "spec": $spec} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -168,8 +168,8 @@ export def "gen-clients generateClient" [
 #
 # GET /api/gen/download/{fileId}
 # operationId: downloadFile
-export def "gen-download downloadFile" [
-  fileId: string
+export def "gen-download download-file" [
+  file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "gen-download downloadFile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/gen/download/($fileId)")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/api/gen/download/{file_id}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -213,7 +213,7 @@ export def "gen-servers serverOptions" [
 #
 # GET /api/gen/servers/{framework}
 # operationId: getServerOptions
-export def "gen-servers get" [
+export def "gen-servers get-server-options" [
   framework: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,7 +226,7 @@ export def "gen-servers get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/gen/servers/($framework)")
+  let full_url = (build-url $base ({framework: $framework} | format pattern "/api/gen/servers/{framework}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -247,16 +247,16 @@ export def "gen-servers generateServerForLanguage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorizationValue: record # shape: {keyName?: string, type?: string, urlMatcher?: record, value?: string}
-  --openAPIUrl: string # e.g. https://raw.githubusercontent.com/OpenAPITools/openapi-generator/master/modules/openapi-generator/src/test/resources/2_0/petstore.yaml
+  --authorization-value: record # shape: {keyName?: string, type?: string, urlMatcher?: record, value?: string}
+  --open-api-url: string # e.g. https://raw.githubusercontent.com/OpenAPITools/openapi-generator/master/modules/openapi-generator/src/test/resources/2_0/petstore.yaml
   --options: record
   --spec: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/gen/servers/($framework)")
-  let body = {authorizationValue: $authorizationValue, openAPIUrl: $openAPIUrl, options: $options, spec: $spec} | compact
+  let full_url = (build-url $base ({framework: $framework} | format pattern "/api/gen/servers/{framework}"))
+  let body = {"authorizationValue": $authorization_value, "openAPIUrl": $open_api_url, "options": $options, "spec": $spec} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

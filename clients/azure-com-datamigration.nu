@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-migration-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-migration-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DataMigration/operations
 # operationId: Operations_List
-export def "providers-microsoft-data-migration-operations List" [
+export def "providers-microsoft-data-migration-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-data-migration-operations List" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DataMigration/locations/{location}/checkNameAvailability
 # operationId: Services_CheckNameAvailability
-export def "subscriptions-providers-microsoft-data-migration-locations-check-name-availability CheckNameAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-data-migration-locations-check-name-availability check" [
+  subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -133,7 +133,7 @@ export def "subscriptions-providers-microsoft-data-migration-locations-check-nam
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DataMigration/locations/($location)/checkNameAvailability" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataMigration/locations/{location}/checkNameAvailability") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,8 +143,8 @@ export def "subscriptions-providers-microsoft-data-migration-locations-check-nam
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataMigration/locations/{location}/usages
 # operationId: Usages_List
-export def "subscriptions-providers-microsoft-data-migration-locations-usages List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-data-migration-locations-usages list" [
+  subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +159,7 @@ export def "subscriptions-providers-microsoft-data-migration-locations-usages Li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DataMigration/locations/($location)/usages" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataMigration/locations/{location}/usages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,8 +169,8 @@ export def "subscriptions-providers-microsoft-data-migration-locations-usages Li
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataMigration/services
 # operationId: Services_List
-export def "subscriptions-providers-microsoft-data-migration-services List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-data-migration-services list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "subscriptions-providers-microsoft-data-migration-services List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DataMigration/services" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataMigration/services") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -194,8 +194,8 @@ export def "subscriptions-providers-microsoft-data-migration-services List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataMigration/skus
 # operationId: ResourceSkus_ListSkus
-export def "subscriptions-providers-microsoft-data-migration-skus ListSkus" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-data-migration-skus list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "subscriptions-providers-microsoft-data-migration-skus ListSkus" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DataMigration/skus" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataMigration/skus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -219,9 +219,9 @@ export def "subscriptions-providers-microsoft-data-migration-skus ListSkus" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services
 # operationId: Services_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services ListByResourceGroup" [
-  subscriptionId: string
-  groupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services list-by" [
+  subscription_id: string
+  group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -245,10 +245,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}
 # operationId: Services_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services Delete" [
-  subscriptionId: any
-  groupName: any
-  serviceName: any
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services delete" [
+  subscription_id: any
+  group_name: any
+  service_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,12 +257,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --deleteRunningTasks: oneof<nothing, bool> # Delete the resource even if it contains running tasks
+  --delete-running-tasks: oneof<nothing, bool> # Delete the resource even if it contains running tasks
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deleteRunningTasks" $deleteRunningTasks "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)" $qp)
+  let qp = [(serialize-qp "deleteRunningTasks" $delete_running_tasks "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -272,10 +272,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}
 # operationId: Services_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services Get" [
-  subscriptionId: string
-  groupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services get" [
+  subscription_id: string
+  group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,10 +299,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}
 # operationId: Services_Update
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services Update" [
-  subscriptionId: any
-  groupName: any
-  serviceName: any
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services update" [
+  subscription_id: any
+  group_name: any
+  service_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,7 +314,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 ]: nothing -> record<etag: string, kind: string, properties: record<provisioningState: string, publicKey: string, virtualSubnetId: string>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -324,10 +324,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}
 # operationId: Services_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services CreateOrUpdate" [
-  subscriptionId: any
-  groupName: any
-  serviceName: any
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services create-or-update" [
+  subscription_id: any
+  group_name: any
+  service_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 ]: nothing -> record<etag: string, kind: string, properties: record<provisioningState: string, publicKey: string, virtualSubnetId: string>, sku: record<capacity: int, family: string, name: string, size: string, tier: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -349,10 +349,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/checkNameAvailability
 # operationId: Services_CheckChildrenNameAvailability
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-check-name-availability CheckChildrenNameAvailability" [
-  subscriptionId: string
-  groupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-check-name-availability check-children" [
+  subscription_id: string
+  group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +366,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)/checkNameAvailability" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}/checkNameAvailability") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -376,10 +376,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/checkStatus
 # operationId: Services_CheckStatus
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-check-status CheckStatus" [
-  subscriptionId: string
-  groupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-check-status check" [
+  subscription_id: string
+  group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,7 +393,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)/checkStatus" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}/checkStatus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -403,10 +403,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects
 # operationId: Projects_List
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects List" [
-  subscriptionId: string
-  groupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects list" [
+  subscription_id: string
+  group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,7 +420,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)/projects" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -430,11 +430,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}
 # operationId: Projects_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects Delete" [
-  subscriptionId: any
-  groupName: any
-  serviceName: any
-  projectName: any
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects delete" [
+  subscription_id: any
+  group_name: any
+  service_name: any
+  project_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,12 +443,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --deleteRunningTasks: oneof<nothing, bool> # Delete the resource even if it contains running tasks
+  --delete-running-tasks: oneof<nothing, bool> # Delete the resource even if it contains running tasks
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deleteRunningTasks" $deleteRunningTasks "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)/projects/($projectName)" $qp)
+  let qp = [(serialize-qp "deleteRunningTasks" $delete_running_tasks "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}/projects/{project_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -458,11 +458,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}
 # operationId: Projects_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects Get" [
-  subscriptionId: string
-  groupName: string
-  serviceName: string
-  projectName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects get" [
+  subscription_id: string
+  group_name: string
+  service_name: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,7 +476,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)/projects/($projectName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}/projects/{project_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -486,11 +486,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}
 # operationId: Projects_Update
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects Update" [
-  subscriptionId: any
-  groupName: any
-  serviceName: any
-  projectName: any
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects update" [
+  subscription_id: any
+  group_name: any
+  service_name: any
+  project_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,7 +502,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 ]: nothing -> record<properties: record<creationTime: string, databasesInfo: list<record>, provisioningState: string, sourceConnectionInfo: record<password: string, type: string, userName: string>, sourcePlatform: string, targetConnectionInfo: record<password: string, type: string, userName: string>, targetPlatform: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)/projects/($projectName)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}/projects/{project_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -512,11 +512,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}
 # operationId: Projects_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects CreateOrUpdate" [
-  subscriptionId: any
-  groupName: any
-  serviceName: any
-  projectName: any
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects create-or-update" [
+  subscription_id: any
+  group_name: any
+  service_name: any
+  project_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -528,7 +528,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 ]: nothing -> record<properties: record<creationTime: string, databasesInfo: list<record>, provisioningState: string, sourceConnectionInfo: record<password: string, type: string, userName: string>, sourcePlatform: string, targetConnectionInfo: record<password: string, type: string, userName: string>, targetPlatform: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)/projects/($projectName)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}/projects/{project_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -538,11 +538,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}/tasks
 # operationId: Tasks_List
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks List" [
-  subscriptionId: string
-  groupName: string
-  serviceName: string
-  projectName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks list" [
+  subscription_id: string
+  group_name: string
+  service_name: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,12 +552,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API
-  --taskType: string # Filter tasks by task type
+  --task-type: string # Filter tasks by task type
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "taskType" $taskType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)/projects/($projectName)/tasks" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "taskType" $task_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}/projects/{project_name}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -567,12 +567,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}/tasks/{taskName}
 # operationId: Tasks_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks Delete" [
-  subscriptionId: any
-  groupName: any
-  serviceName: any
-  projectName: any
-  taskName: any
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks delete" [
+  subscription_id: any
+  group_name: any
+  service_name: any
+  project_name: any
+  task_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,12 +581,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --deleteRunningTasks: oneof<nothing, bool> # Delete the resource even if it contains running tasks
+  --delete-running-tasks: oneof<nothing, bool> # Delete the resource even if it contains running tasks
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deleteRunningTasks" $deleteRunningTasks "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)/projects/($projectName)/tasks/($taskName)" $qp)
+  let qp = [(serialize-qp "deleteRunningTasks" $delete_running_tasks "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name, project_name: $project_name, task_name: $task_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}/projects/{project_name}/tasks/{task_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -596,12 +596,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}/tasks/{taskName}
 # operationId: Tasks_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks Get" [
-  subscriptionId: string
-  groupName: string
-  serviceName: string
-  projectName: string
-  taskName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks get" [
+  subscription_id: string
+  group_name: string
+  service_name: string
+  project_name: string
+  task_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,7 +616,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)/projects/($projectName)/tasks/($taskName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name, project_name: $project_name, task_name: $task_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}/projects/{project_name}/tasks/{task_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -626,12 +626,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}/tasks/{taskName}
 # operationId: Tasks_Update
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks Update" [
-  subscriptionId: any
-  groupName: any
-  serviceName: any
-  projectName: any
-  taskName: any
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks update" [
+  subscription_id: any
+  group_name: any
+  service_name: any
+  project_name: any
+  task_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,7 +643,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 ]: nothing -> record<etag: string, properties: record<errors: list<record>, state: string, taskType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)/projects/($projectName)/tasks/($taskName)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name, project_name: $project_name, task_name: $task_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}/projects/{project_name}/tasks/{task_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -653,12 +653,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}/tasks/{taskName}
 # operationId: Tasks_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks CreateOrUpdate" [
-  subscriptionId: any
-  groupName: any
-  serviceName: any
-  projectName: any
-  taskName: any
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks create-or-update" [
+  subscription_id: any
+  group_name: any
+  service_name: any
+  project_name: any
+  task_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -670,7 +670,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 ]: nothing -> record<etag: string, properties: record<errors: list<record>, state: string, taskType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)/projects/($projectName)/tasks/($taskName)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name, project_name: $project_name, task_name: $task_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}/projects/{project_name}/tasks/{task_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -680,12 +680,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}/tasks/{taskName}/cancel
 # operationId: Tasks_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks-cancel Cancel" [
-  subscriptionId: string
-  groupName: string
-  serviceName: string
-  projectName: string
-  taskName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks-cancel cancel" [
+  subscription_id: string
+  group_name: string
+  service_name: string
+  project_name: string
+  task_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -699,7 +699,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)/projects/($projectName)/tasks/($taskName)/cancel" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name, project_name: $project_name, task_name: $task_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}/projects/{project_name}/tasks/{task_name}/cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -709,10 +709,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/skus
 # operationId: Services_ListSkus
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-skus ListSkus" [
-  subscriptionId: string
-  groupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-skus list" [
+  subscription_id: string
+  group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,7 +726,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)/skus" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}/skus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -736,10 +736,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/start
 # operationId: Services_Start
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-start Start" [
-  subscriptionId: string
-  groupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-start start" [
+  subscription_id: string
+  group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -753,7 +753,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)/start" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -763,10 +763,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/stop
 # operationId: Services_Stop
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-stop Stop" [
-  subscriptionId: string
-  groupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-stop stop" [
+  subscription_id: string
+  group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -780,7 +780,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($groupName)/providers/Microsoft.DataMigration/services/($serviceName)/stop" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, group_name: $group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{group_name}/providers/Microsoft.DataMigration/services/{service_name}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

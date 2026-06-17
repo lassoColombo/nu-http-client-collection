@@ -71,7 +71,7 @@ def api-version-completer [] { ["2019-03-01-preview"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-service-fabric-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-service-fabric-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ServiceFabric/operations
 # operationId: Operations_List
-export def "providers-microsoft-service-fabric-operations List" [
+export def "providers-microsoft-service-fabric-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,8 +119,8 @@ export def "providers-microsoft-service-fabric-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabric/clusters
 # operationId: Clusters_List
-export def "subscriptions-providers-microsoft-service-fabric-clusters List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-service-fabric-clusters list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "subscriptions-providers-microsoft-service-fabric-clusters List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ServiceFabric/clusters" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ServiceFabric/clusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,9 +144,9 @@ export def "subscriptions-providers-microsoft-service-fabric-clusters List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabric/locations/{location}/clusterVersions
 # operationId: ClusterVersions_List
-export def "subscriptions-providers-microsoft-service-fabric-locations-cluster-versions List" [
+export def "subscriptions-providers-microsoft-service-fabric-locations-cluster-versions list" [
+  subscription_id: string
   location: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "subscriptions-providers-microsoft-service-fabric-locations-cluster-v
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ServiceFabric/locations/($location)/clusterVersions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ServiceFabric/locations/{location}/clusterVersions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,10 +170,10 @@ export def "subscriptions-providers-microsoft-service-fabric-locations-cluster-v
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabric/locations/{location}/clusterVersions/{clusterVersion}
 # operationId: ClusterVersions_Get
-export def "subscriptions-providers-microsoft-service-fabric-locations-cluster-versions Get" [
+export def "subscriptions-providers-microsoft-service-fabric-locations-cluster-versions get" [
+  subscription_id: string
   location: string
-  subscriptionId: string
-  clusterVersion: string
+  cluster_version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "subscriptions-providers-microsoft-service-fabric-locations-cluster-v
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ServiceFabric/locations/($location)/clusterVersions/($clusterVersion)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location, cluster_version: $cluster_version} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ServiceFabric/locations/{location}/clusterVersions/{cluster_version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,10 +197,10 @@ export def "subscriptions-providers-microsoft-service-fabric-locations-cluster-v
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabric/locations/{location}/environments/{environment}/clusterVersions
 # operationId: ClusterVersions_ListByEnvironment
-export def "subscriptions-providers-microsoft-service-fabric-locations-environments-cluster-versions ListByEnvironment" [
+export def "subscriptions-providers-microsoft-service-fabric-locations-environments-cluster-versions list-by" [
+  subscription_id: string
   location: string
   environment: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "subscriptions-providers-microsoft-service-fabric-locations-environme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ServiceFabric/locations/($location)/environments/($environment)/clusterVersions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location, environment: $environment} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ServiceFabric/locations/{location}/environments/{environment}/clusterVersions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -224,11 +224,11 @@ export def "subscriptions-providers-microsoft-service-fabric-locations-environme
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabric/locations/{location}/environments/{environment}/clusterVersions/{clusterVersion}
 # operationId: ClusterVersions_GetByEnvironment
-export def "subscriptions-providers-microsoft-service-fabric-locations-environments-cluster-versions GetByEnvironment" [
+export def "subscriptions-providers-microsoft-service-fabric-locations-environments-cluster-versions get-by" [
+  subscription_id: string
   location: string
   environment: string
-  subscriptionId: string
-  clusterVersion: string
+  cluster_version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "subscriptions-providers-microsoft-service-fabric-locations-environme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ServiceFabric/locations/($location)/environments/($environment)/clusterVersions/($clusterVersion)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location, environment: $environment, cluster_version: $cluster_version} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ServiceFabric/locations/{location}/environments/{environment}/clusterVersions/{cluster_version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -252,10 +252,10 @@ export def "subscriptions-providers-microsoft-service-fabric-locations-environme
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}
 # operationId: Clusters_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters Delete" [
-  resourceGroupName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters delete" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -279,10 +279,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}
 # operationId: Clusters_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters Get" [
-  resourceGroupName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters get" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,7 +296,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -307,10 +307,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}
 # operationId: Clusters_Update
 # --properties shape: {addOnFeatures?: list, certificate?: any, certificateCommonNames?: any, clientCertificateCommonNames?: list, clientCertificateThumbprints?: list, clusterCodeVersion?: string, eventStoreServiceEnabled?: bool, fabricSettings?: list, nodeTypes?: list, reliabilityLevel?: "None"|"Bronze"|"Silver"|"Gold"|"Platinum", reverseProxyCertificate?: any, upgradeDescription?: any, upgradeMode?: "Automatic"|"Manual"}
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters Update" [
-  resourceGroupName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters update" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,8 +327,8 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -340,10 +340,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}
 # operationId: Clusters_Create
 # --properties shape: {addOnFeatures?: list, azureActiveDirectory?: any, certificate?: any, certificateCommonNames?: any, clientCertificateCommonNames?: list, clientCertificateThumbprints?: list, clusterCodeVersion?: string, clusterState?: "WaitingForNodes"|"Deploying"|"BaselineUpgrade"|"UpdatingUserConfiguration"|"UpdatingUserCertificate"|"UpdatingInfrastructure"|"EnforcingClusterVersion"|"UpgradeServiceUnreachable"|"AutoScale"|"Ready", diagnosticsStorageAccountConfig?: any, eventStoreServiceEnabled?: bool, fabricSettings?: list, managementEndpoint: string, nodeTypes: list, reliabilityLevel?: "None"|"Bronze"|"Silver"|"Gold"|"Platinum", reverseProxyCertificate?: any, reverseProxyCertificateCommonNames?: any, upgradeDescription?: any, upgradeMode?: "Automatic"|"Manual", vmImage?: string}
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters Create" [
-  resourceGroupName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters create" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,8 +361,8 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters/($clusterName)" $qp)
-  let body = {location: $location, tags: $tags, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}") $qp)
+  let body = {"location": $location, "tags": $tags, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -373,9 +373,9 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters
 # operationId: Clusters_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-service-fabric-clusters ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-service-fabric-clusters list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,7 +389,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-service-fabric-clus
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.ServiceFabric/clusters" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -73,7 +73,7 @@ def angle-completer [] { ["-180" "-270" "-90" "0" "180" "270" "90"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-password addPasswordV1" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-password create-password-v1" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +98,7 @@ export def commands []: nothing -> table {
 # POST /v1/add_password
 # Docs: https://www.pdfblocks.com/docs/api/v1/add-password — Documentation and examples
 # operationId: addPasswordV1
-export def "add-password addPasswordV1" [
+export def "add-password create-password-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,7 +115,7 @@ export def "add-password addPasswordV1" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/add_password")
-  let body = {encryption_algorithm: $encryption_algorithm, file: $file, password: $password} | compact
+  let body = {"encryption_algorithm": $encryption_algorithm, "file": $file, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -127,7 +127,7 @@ export def "add-password addPasswordV1" [
 # POST /v1/add_restrictions
 # Docs: https://www.pdfblocks.com/docs/api/v1/add-restrictions — Documentation and examples
 # operationId: addRestrictionsV1
-export def "add-restrictions addRestrictionsV1" [
+export def "add-restrictions create-restrictions-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,7 +153,7 @@ export def "add-restrictions addRestrictionsV1" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/add_restrictions")
-  let body = {allow_accessibility: $allow_accessibility, allow_assemble_document: $allow_assemble_document, allow_change_content: $allow_change_content, allow_comment_and_fill_form: $allow_comment_and_fill_form, allow_copy_content: $allow_copy_content, allow_fill_form: $allow_fill_form, allow_print: $allow_print, allow_print_high_resolution: $allow_print_high_resolution, encryption_algorithm: $encryption_algorithm, file: $file, owner_password: $owner_password, user_password: $user_password} | compact
+  let body = {"allow_accessibility": $allow_accessibility, "allow_assemble_document": $allow_assemble_document, "allow_change_content": $allow_change_content, "allow_comment_and_fill_form": $allow_comment_and_fill_form, "allow_copy_content": $allow_copy_content, "allow_fill_form": $allow_fill_form, "allow_print": $allow_print, "allow_print_high_resolution": $allow_print_high_resolution, "encryption_algorithm": $encryption_algorithm, "file": $file, "owner_password": $owner_password, "user_password": $user_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -165,7 +165,7 @@ export def "add-restrictions addRestrictionsV1" [
 # POST /v1/add_watermark/image
 # Docs: https://www.pdfblocks.com/docs/api/v1/add-watermark-image — Documentation and examples
 # operationId: addImageWatermarkV1
-export def "add-watermark-image addImageWatermarkV1" [
+export def "add-watermark-image create-image-watermark-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "add-watermark-image addImageWatermarkV1" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/add_watermark/image")
-  let body = {file: $file, image: $image, margin: $margin, transparency: $transparency} | compact
+  let body = {"file": $file, "image": $image, "margin": $margin, "transparency": $transparency} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -195,7 +195,7 @@ export def "add-watermark-image addImageWatermarkV1" [
 # POST /v1/add_watermark/text
 # Docs: https://www.pdfblocks.com/docs/api/v1/add-watermark-text — Documentation and examples
 # operationId: addTextWatermarkV1
-export def "add-watermark-text addTextWatermarkV1" [
+export def "add-watermark-text create-text-watermark-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "add-watermark-text addTextWatermarkV1" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/add_watermark/text")
-  let body = {color: $color, file: $file, line_1: $line_1, line_2: $line_2, line_3: $line_3, margin: $margin, template: $template, transparency: $transparency} | compact
+  let body = {"color": $color, "file": $file, "line_1": $line_1, "line_2": $line_2, "line_3": $line_3, "margin": $margin, "template": $template, "transparency": $transparency} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -246,7 +246,7 @@ export def "extract-pages extractPagesV1" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/extract_pages")
-  let body = {file: $file, first_page: $first_page, last_page: $last_page} | compact
+  let body = {"file": $file, "first_page": $first_page, "last_page": $last_page} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -273,7 +273,7 @@ export def "merge-documents mergeDocumentsV1" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/merge_documents")
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -285,7 +285,7 @@ export def "merge-documents mergeDocumentsV1" [
 # POST /v1/remove_pages
 # Docs: https://www.pdfblocks.com/docs/api/v1/remove-pages — Documentation and examples
 # operationId: removePagesV1
-export def "remove-pages removePagesV1" [
+export def "remove-pages delete-pages-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "remove-pages removePagesV1" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/remove_pages")
-  let body = {file: $file, first_page: $first_page, last_page: $last_page} | compact
+  let body = {"file": $file, "first_page": $first_page, "last_page": $last_page} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -314,7 +314,7 @@ export def "remove-pages removePagesV1" [
 # POST /v1/remove_password
 # Docs: https://www.pdfblocks.com/docs/api/v1/remove-password — Documentation and examples
 # operationId: removePasswordV1
-export def "remove-password removePasswordV1" [
+export def "remove-password delete-password-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,7 +330,7 @@ export def "remove-password removePasswordV1" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/remove_password")
-  let body = {file: $file, password: $password} | compact
+  let body = {"file": $file, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -342,7 +342,7 @@ export def "remove-password removePasswordV1" [
 # POST /v1/remove_restrictions
 # Docs: https://www.pdfblocks.com/docs/api/v1/remove-restrictions — Documentation and examples
 # operationId: removeRestrictionsV1
-export def "remove-restrictions removeRestrictionsV1" [
+export def "remove-restrictions delete-restrictions-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +357,7 @@ export def "remove-restrictions removeRestrictionsV1" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/remove_restrictions")
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -369,7 +369,7 @@ export def "remove-restrictions removeRestrictionsV1" [
 # POST /v1/remove_signatures
 # Docs: https://www.pdfblocks.com/docs/api/v1/remove-signatures — Documentation and examples
 # operationId: removeSignaturesV1
-export def "remove-signatures removeSignaturesV1" [
+export def "remove-signatures delete-signatures-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,7 +384,7 @@ export def "remove-signatures removeSignaturesV1" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/remove_signatures")
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -411,7 +411,7 @@ export def "reverse-pages reversePagesV1" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/reverse_pages")
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -441,7 +441,7 @@ export def "rotate-pages rotatePagesV1" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/rotate_pages")
-  let body = {angle: $angle, file: $file, first_page: $first_page, last_page: $last_page} | compact
+  let body = {"angle": $angle, "file": $file, "first_page": $first_page, "last_page": $last_page} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

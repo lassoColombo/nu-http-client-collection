@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sms-voice-configuration-sets CreateConfigurationSet" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sms-voice-configuration-sets create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/sms-voice/configuration-sets
 # operationId: CreateConfigurationSet
-export def "sms-voice-configuration-sets CreateConfigurationSet" [
+export def "sms-voice-configuration-sets create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,22 +102,22 @@ export def "sms-voice-configuration-sets CreateConfigurationSet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --ConfigurationSetName: string # The name that you want to give the configuration set.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --configuration-set-name: string # The name that you want to give the configuration set.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/sms-voice/configuration-sets")
-  let body = {ConfigurationSetName: $ConfigurationSetName} | compact
+  let body = {"ConfigurationSetName": $configuration_set_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -128,7 +128,7 @@ export def "sms-voice-configuration-sets CreateConfigurationSet" [
 #
 # GET /v1/sms-voice/configuration-sets
 # operationId: ListConfigurationSets
-export def "sms-voice-configuration-sets ListConfigurationSets" [
+export def "sms-voice-configuration-sets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,21 +137,21 @@ export def "sms-voice-configuration-sets ListConfigurationSets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # A token returned from a previous call to the API that indicates the position in the list of results.
-  --PageSize: string # Used to specify the number of items that should be returned in the response.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --next-token: string # A token returned from a previous call to the API that indicates the position in the list of results.
+  --page-size: string # Used to specify the number of items that should be returned in the response.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ConfigurationSets: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar") (serialize-qp "PageSize" $PageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/sms-voice/configuration-sets" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -163,8 +163,8 @@ export def "sms-voice-configuration-sets ListConfigurationSets" [
 # POST /v1/sms-voice/configuration-sets/{ConfigurationSetName}/event-destinations
 # operationId: CreateConfigurationSetEventDestination
 # --EventDestination shape: {CloudWatchLogsDestination?: record, Enabled?: any, KinesisFirehoseDestination?: record, MatchingEventTypes?: list, SnsDestination?: record}
-export def "sms-voice-configuration-sets-event-destinations CreateConfigurationSetEventDestination" [
-  ConfigurationSetName: string
+export def "sms-voice-configuration-sets-event-destinations create" [
+  configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,23 +173,23 @@ export def "sms-voice-configuration-sets-event-destinations CreateConfigurationS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --EventDestination: record # An object that defines a single event destination. — shape: {CloudWatchLogsDestination?: record, Enabled?: any, KinesisFirehoseDestination?: record, MatchingEventTypes?: list, SnsDestination?: record}
-  --EventDestinationName: string # A name that identifies the event destination.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --event-destination: record # An object that defines a single event destination. — shape: {CloudWatchLogsDestination?: record, Enabled?: any, KinesisFirehoseDestination?: record, MatchingEventTypes?: list, SnsDestination?: record}
+  --event-destination-name: string # A name that identifies the event destination.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/sms-voice/configuration-sets/($ConfigurationSetName)/event-destinations")
-  let body = {EventDestination: $EventDestination, EventDestinationName: $EventDestinationName} | compact
+  let full_url = (build-url $base ({configuration_set_name: $configuration_set_name} | format pattern "/v1/sms-voice/configuration-sets/{configuration_set_name}/event-destinations"))
+  let body = {"EventDestination": $event_destination, "EventDestinationName": $event_destination_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,8 +200,8 @@ export def "sms-voice-configuration-sets-event-destinations CreateConfigurationS
 #
 # GET /v1/sms-voice/configuration-sets/{ConfigurationSetName}/event-destinations
 # operationId: GetConfigurationSetEventDestinations
-export def "sms-voice-configuration-sets-event-destinations GetConfigurationSetEventDestinations" [
-  ConfigurationSetName: string
+export def "sms-voice-configuration-sets-event-destinations get" [
+  configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,18 +210,18 @@ export def "sms-voice-configuration-sets-event-destinations GetConfigurationSetE
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<EventDestinations: table<CloudWatchLogsDestination: record, Enabled: record, KinesisFirehoseDestination: record, MatchingEventTypes: list, Name: record, SnsDestination: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/sms-voice/configuration-sets/($ConfigurationSetName)/event-destinations")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({configuration_set_name: $configuration_set_name} | format pattern "/v1/sms-voice/configuration-sets/{configuration_set_name}/event-destinations"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,8 +232,8 @@ export def "sms-voice-configuration-sets-event-destinations GetConfigurationSetE
 #
 # DELETE /v1/sms-voice/configuration-sets/{ConfigurationSetName}
 # operationId: DeleteConfigurationSet
-export def "sms-voice-configuration-sets DeleteConfigurationSet" [
-  ConfigurationSetName: string
+export def "sms-voice-configuration-sets delete" [
+  configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,18 +242,18 @@ export def "sms-voice-configuration-sets DeleteConfigurationSet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/sms-voice/configuration-sets/($ConfigurationSetName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({configuration_set_name: $configuration_set_name} | format pattern "/v1/sms-voice/configuration-sets/{configuration_set_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -264,9 +264,9 @@ export def "sms-voice-configuration-sets DeleteConfigurationSet" [
 #
 # DELETE /v1/sms-voice/configuration-sets/{ConfigurationSetName}/event-destinations/{EventDestinationName}
 # operationId: DeleteConfigurationSetEventDestination
-export def "sms-voice-configuration-sets-event-destinations DeleteConfigurationSetEventDestination" [
-  ConfigurationSetName: string
-  EventDestinationName: string
+export def "sms-voice-configuration-sets-event-destinations delete" [
+  configuration_set_name: string
+  event_destination_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,18 +275,18 @@ export def "sms-voice-configuration-sets-event-destinations DeleteConfigurationS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/sms-voice/configuration-sets/($ConfigurationSetName)/event-destinations/($EventDestinationName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({configuration_set_name: $configuration_set_name, event_destination_name: $event_destination_name} | format pattern "/v1/sms-voice/configuration-sets/{configuration_set_name}/event-destinations/{event_destination_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -298,9 +298,9 @@ export def "sms-voice-configuration-sets-event-destinations DeleteConfigurationS
 # PUT /v1/sms-voice/configuration-sets/{ConfigurationSetName}/event-destinations/{EventDestinationName}
 # operationId: UpdateConfigurationSetEventDestination
 # --EventDestination shape: {CloudWatchLogsDestination?: record, Enabled?: any, KinesisFirehoseDestination?: record, MatchingEventTypes?: list, SnsDestination?: record}
-export def "sms-voice-configuration-sets-event-destinations UpdateConfigurationSetEventDestination" [
-  ConfigurationSetName: string
-  EventDestinationName: string
+export def "sms-voice-configuration-sets-event-destinations update" [
+  configuration_set_name: string
+  event_destination_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,22 +309,22 @@ export def "sms-voice-configuration-sets-event-destinations UpdateConfigurationS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --EventDestination: record # An object that defines a single event destination. — shape: {CloudWatchLogsDestination?: record, Enabled?: any, KinesisFirehoseDestination?: record, MatchingEventTypes?: list, SnsDestination?: record}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --event-destination: record # An object that defines a single event destination. — shape: {CloudWatchLogsDestination?: record, Enabled?: any, KinesisFirehoseDestination?: record, MatchingEventTypes?: list, SnsDestination?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/sms-voice/configuration-sets/($ConfigurationSetName)/event-destinations/($EventDestinationName)")
-  let body = {EventDestination: $EventDestination} | compact
+  let full_url = (build-url $base ({configuration_set_name: $configuration_set_name, event_destination_name: $event_destination_name} | format pattern "/v1/sms-voice/configuration-sets/{configuration_set_name}/event-destinations/{event_destination_name}"))
+  let body = {"EventDestination": $event_destination} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -336,7 +336,7 @@ export def "sms-voice-configuration-sets-event-destinations UpdateConfigurationS
 # POST /v1/sms-voice/voice/message
 # operationId: SendVoiceMessage
 # --Content shape: {CallInstructionsMessage?: record, PlainTextMessage?: record, SSMLMessage?: record}
-export def "sms-voice-voice-message SendVoiceMessage" [
+export def "sms-voice-voice-message send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,26 +345,26 @@ export def "sms-voice-voice-message SendVoiceMessage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --CallerId: string # The phone number that appears on recipients' devices when they receive the message.
-  --ConfigurationSetName: string # The name of the configuration set that you want to use to send the message.
-  --Content: record # An object that contains a voice message and information about the recipient that you want to send it to. — shape: {CallInstructionsMessage?: record, PlainTextMessage?: record, SSMLMessage?: record}
-  --DestinationPhoneNumber: string # The phone number that you want to send the voice message to.
-  --OriginationPhoneNumber: string # The phone number that Amazon Pinpoint should use to send the voice message. This isn't necessarily the phone number that appears on recipients' devices when they receive the message, because you can specify a CallerId parameter in the request.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --caller-id: string # The phone number that appears on recipients' devices when they receive the message.
+  --configuration-set-name: string # The name of the configuration set that you want to use to send the message.
+  --content: record # An object that contains a voice message and information about the recipient that you want to send it to. — shape: {CallInstructionsMessage?: record, PlainTextMessage?: record, SSMLMessage?: record}
+  --destination-phone-number: string # The phone number that you want to send the voice message to.
+  --origination-phone-number: string # The phone number that Amazon Pinpoint should use to send the voice message. This isn't necessarily the phone number that appears on recipients' devices when they receive the message, because you can specify a CallerId parameter in the request.
 ]: any -> record<MessageId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/sms-voice/voice/message")
-  let body = {CallerId: $CallerId, ConfigurationSetName: $ConfigurationSetName, Content: $Content, DestinationPhoneNumber: $DestinationPhoneNumber, OriginationPhoneNumber: $OriginationPhoneNumber} | compact
+  let body = {"CallerId": $caller_id, "ConfigurationSetName": $configuration_set_name, "Content": $content, "DestinationPhoneNumber": $destination_phone_number, "OriginationPhoneNumber": $origination_phone_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

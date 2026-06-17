@@ -65,13 +65,13 @@ def base-url-completer [] { ["https://test.api.amadeus.com/v3"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def paymentPolicy-completer [] { ["DEPOSIT" "GUARANTEE" "NONE"] }
-def boardType-completer [] { ["ALL_INCLUSIVE" "BREAKFAST" "FULL_BOARD" "HALF_BOARD" "ROOM_ONLY"] }
+def payment-policy-completer [] { ["DEPOSIT" "GUARANTEE" "NONE"] }
+def board-type-completer [] { ["ALL_INCLUSIVE" "BREAKFAST" "FULL_BOARD" "HALF_BOARD" "ROOM_ONLY"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shopping-hotel-offers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shopping-hotel-offers get-multi" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /shopping/hotel-offers
 # operationId: getMultiHotelOffers
-export def "shopping-hotel-offers list" [
+export def "shopping-hotel-offers get-multi" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,23 +104,23 @@ export def "shopping-hotel-offers list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hotelIds: list # Amadeus property codes on 8 chars. Mandatory parameter for a search by predefined list of hotels. (e.g. [MCLONGHM])
+  --hotel-ids: list # Amadeus property codes on 8 chars. Mandatory parameter for a search by predefined list of hotels. (e.g. [MCLONGHM])
   --adults: int # Number of adult guests (1-9) per room. (format: int32, default: 1, e.g. 1)
-  --checkInDate: string # Check-in date of the stay (hotel local date). Format YYYY-MM-DD. The lowest accepted value is the present date (no dates in the past). If not present, the default value will be today's date in the GMT time zone. (format: date, e.g. 2023-11-22)
-  --checkOutDate: string # Check-out date of the stay (hotel local date). Format YYYY-MM-DD. The lowest accepted value is checkInDate+1. If not present, it will default to checkInDate +1. (format: date)
-  --countryOfResidence: string # Code of the country of residence of the traveler expressed using ISO 3166-1 format.
-  --roomQuantity: int # Number of rooms requested (1-9). (format: int32, default: 1)
-  --priceRange: string # Filter hotel offers by price per night interval (ex: 200-300 or -300 or 100). It is mandatory to include a currency when this field is set.
+  --check-in-date: string # Check-in date of the stay (hotel local date). Format YYYY-MM-DD. The lowest accepted value is the present date (no dates in the past). If not present, the default value will be today's date in the GMT time zone. (format: date, e.g. 2023-11-22)
+  --check-out-date: string # Check-out date of the stay (hotel local date). Format YYYY-MM-DD. The lowest accepted value is checkInDate+1. If not present, it will default to checkInDate +1. (format: date)
+  --country-of-residence: string # Code of the country of residence of the traveler expressed using ISO 3166-1 format.
+  --room-quantity: int # Number of rooms requested (1-9). (format: int32, default: 1)
+  --price-range: string # Filter hotel offers by price per night interval (ex: 200-300 or -300 or 100). It is mandatory to include a currency when this field is set.
   --currency: string # Use this parameter to request a specific currency. ISO currency code (http://www.iso.org/iso/home/standards/currency_codes.htm). If a hotel does not support the requested currency, the prices for the hotel will be returned in the local currency of the hotel.
-  --paymentPolicy: string@paymentPolicy-completer # Filter the response based on a specific payment type. NONE means all types (default). (default: NONE)
-  --boardType: string@boardType-completer # Filter response based on available meals:         * ROOM_ONLY = Room Only         * BREAKFAST = Breakfast         * HALF_BOARD = Diner & Breakfast (only for Aggregators)         * FULL_BOARD = Full Board (only for Aggregators)         * ALL_INCLUSIVE = All Inclusive (only for Aggregators)
-  --includeClosed: oneof<nothing, bool> # Show all properties (include sold out) or available only. For sold out properties, please check availability on other dates.
-  --bestRateOnly: oneof<nothing, bool> # Used to return only the cheapest offer per hotel or all available offers. (default: true)
+  --payment-policy: string@payment-policy-completer # Filter the response based on a specific payment type. NONE means all types (default). (default: NONE)
+  --board-type: string@board-type-completer # Filter response based on available meals:         * ROOM_ONLY = Room Only         * BREAKFAST = Breakfast         * HALF_BOARD = Diner & Breakfast (only for Aggregators)         * FULL_BOARD = Full Board (only for Aggregators)         * ALL_INCLUSIVE = All Inclusive (only for Aggregators)
+  --include-closed: oneof<nothing, bool> # Show all properties (include sold out) or available only. For sold out properties, please check availability on other dates.
+  --best-rate-only: oneof<nothing, bool> # Used to return only the cheapest offer per hotel or all available offers. (default: true)
   --lang: string # Requested language of descriptive texts.  Examples: FR , fr , fr-FR. If a language is not available the text will be returned in english. ISO language code (https://www.iso.org/iso-639-language-codes.html).
 ]: nothing -> record<data: record<available: bool, hotel: record<brandCode: string, chainCode: string, cityCode: string, dupeId: string, hotelId: string, name: string>, offers: list<record>, self: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelIds" $hotelIds "csv") (serialize-qp "adults" $adults "scalar") (serialize-qp "checkInDate" $checkInDate "scalar") (serialize-qp "checkOutDate" $checkOutDate "scalar") (serialize-qp "countryOfResidence" $countryOfResidence "scalar") (serialize-qp "roomQuantity" $roomQuantity "scalar") (serialize-qp "priceRange" $priceRange "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "paymentPolicy" $paymentPolicy "scalar") (serialize-qp "boardType" $boardType "scalar") (serialize-qp "includeClosed" $includeClosed "scalar") (serialize-qp "bestRateOnly" $bestRateOnly "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "hotelIds" $hotel_ids "csv") (serialize-qp "adults" $adults "scalar") (serialize-qp "checkInDate" $check_in_date "scalar") (serialize-qp "checkOutDate" $check_out_date "scalar") (serialize-qp "countryOfResidence" $country_of_residence "scalar") (serialize-qp "roomQuantity" $room_quantity "scalar") (serialize-qp "priceRange" $price_range "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "paymentPolicy" $payment_policy "scalar") (serialize-qp "boardType" $board_type "scalar") (serialize-qp "includeClosed" $include_closed "scalar") (serialize-qp "bestRateOnly" $best_rate_only "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shopping/hotel-offers" $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -131,8 +131,8 @@ export def "shopping-hotel-offers list" [
 #
 # GET /shopping/hotel-offers/{offerId}
 # operationId: getOfferPricing
-export def "shopping-hotel-offers get" [
-  offerId: string
+export def "shopping-hotel-offers get-offer-pricing" [
+  offer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,7 +146,7 @@ export def "shopping-hotel-offers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/shopping/hotel-offers/($offerId)" $qp)
+  let full_url = (build-url $base ({offer_id: $offer_id} | format pattern "/shopping/hotel-offers/{offer_id}") $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

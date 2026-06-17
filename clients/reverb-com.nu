@@ -224,7 +224,7 @@ export def "categories get-by-product_type-category" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/categories/($product_type)/($category)")
+  let full_url = (build-url $base ({product_type: $product_type, category: $category} | format pattern "/categories/{product_type}/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -246,7 +246,7 @@ export def "categories get-by-uuid" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/categories/($uuid)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/categories/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -311,7 +311,7 @@ export def "comparison-shopping-pages get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/comparison_shopping_pages/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/comparison_shopping_pages/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -338,7 +338,7 @@ export def "comparison-shopping-pages-listings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "condition" $condition "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/comparison_shopping_pages/($id)/listings" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/comparison_shopping_pages/{id}/listings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -360,7 +360,7 @@ export def "comparison-shopping-pages-reviews get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/comparison_shopping_pages/($id)/reviews")
+  let full_url = (build-url $base ({id: $id} | format pattern "/comparison_shopping_pages/{id}/reviews"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -395,8 +395,8 @@ export def "conversations-offer post-by-conversation_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conversations/($conversation_id)/offer")
-  let body = {country_code: $country_code, layaway_terms_slug: $layaway_terms_slug, message: $message, offer_items: $offer_items, price: $price, quantity: $quantity, recipient_id: $recipient_id, region_code: $region_code, shipping_price: $shipping_price} | compact
+  let full_url = (build-url $base ({conversation_id: $conversation_id} | format pattern "/conversations/{conversation_id}/offer"))
+  let body = {"country_code": $country_code, "layaway_terms_slug": $layaway_terms_slug, "message": $message, "offer_items": $offer_items, "price": $price, "quantity": $quantity, "recipient_id": $recipient_id, "region_code": $region_code, "shipping_price": $shipping_price} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -423,8 +423,8 @@ export def "conversations-offer post-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conversations/($id)/offer")
-  let body = {message: $message, price: $price, shipping_price: $shipping_price} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/conversations/{id}/offer"))
+  let body = {"message": $message, "price": $price, "shipping_price": $shipping_price} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -530,7 +530,7 @@ export def "csps get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/csps/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/csps/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -550,7 +550,7 @@ export def "curated-sets get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/curated_sets/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/curated_sets/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -614,7 +614,7 @@ export def "feedback get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/feedback/($feedback_id)")
+  let full_url = (build-url $base ({feedback_id: $feedback_id} | format pattern "/feedback/{feedback_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -671,7 +671,7 @@ export def "handpicked get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "auction_price_max" $auction_price_max "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "decade" $decade "scalar") (serialize-qp "finish" $finish "scalar") (serialize-qp "handmade" $handmade "scalar") (serialize-qp "item_city" $item_city "scalar") (serialize-qp "item_country" $item_country "scalar") (serialize-qp "item_region" $item_region "scalar") (serialize-qp "item_state" $item_state "scalar") (serialize-qp "make" $make "csv") (serialize-qp "model" $model "scalar") (serialize-qp "must_not" $must_not "scalar") (serialize-qp "price_max" $price_max "scalar") (serialize-qp "price_min" $price_min "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "year_max" $year_max "scalar") (serialize-qp "year_min" $year_min "scalar") (serialize-qp "accepts_gift_cards" $accepts_gift_cards "scalar") (serialize-qp "preferred_seller" $preferred_seller "scalar") (serialize-qp "shop" $shop "scalar") (serialize-qp "shop_id" $shop_id "scalar") (serialize-qp "listing_type" $listing_type "scalar") (serialize-qp "ships_to" $ships_to "scalar") (serialize-qp "exclude_auctions" $exclude_auctions "scalar") (serialize-qp "accepts_payment_plans" $accepts_payment_plans "scalar") (serialize-qp "watchers_count_min" $watchers_count_min "scalar") (serialize-qp "not_ids" $not_ids "csv") (serialize-qp "local_pickup" $local_pickup "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/handpicked/($slug)" $qp)
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/handpicked/{slug}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -811,7 +811,7 @@ export def "listings post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/listings")
-  let body = {categories: $categories, condition: $condition, description: $description, exclusive_channel: $exclusive_channel, finish: $finish, has_inventory: $has_inventory, inventory: $inventory, location: $location, make: $make, model: $model, multi_item: $multi_item, offers_enabled: $offers_enabled, origin_country_code: $origin_country_code, photos: $photos, preorder_info: $preorder_info, price: $price, prop_65_warning: $prop_65_warning, publish: $publish, seller: $seller, seller_cost: $seller_cost, shipping: $shipping, shipping_profile_id: $shipping_profile_id, shipping_profile_name: $shipping_profile_name, sku: $sku, sold_as_is: $sold_as_is, storage_location: $storage_location, tax_exempt: $tax_exempt, title: $title, upc: $upc, upc_does_not_apply: $upc_does_not_apply, videos: $videos, year: $year} | compact
+  let body = {"categories": $categories, "condition": $condition, "description": $description, "exclusive_channel": $exclusive_channel, "finish": $finish, "has_inventory": $has_inventory, "inventory": $inventory, "location": $location, "make": $make, "model": $model, "multi_item": $multi_item, "offers_enabled": $offers_enabled, "origin_country_code": $origin_country_code, "photos": $photos, "preorder_info": $preorder_info, "price": $price, "prop_65_warning": $prop_65_warning, "publish": $publish, "seller": $seller, "seller_cost": $seller_cost, "shipping": $shipping, "shipping_profile_id": $shipping_profile_id, "shipping_profile_name": $shipping_profile_name, "sku": $sku, "sold_as_is": $sold_as_is, "storage_location": $storage_location, "tax_exempt": $tax_exempt, "title": $title, "upc": $upc, "upc_does_not_apply": $upc_does_not_apply, "videos": $videos, "year": $year} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -911,7 +911,7 @@ export def "listings-negotiation get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listings/($id)/negotiation")
+  let full_url = (build-url $base ({id: $id} | format pattern "/listings/{id}/negotiation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -937,8 +937,8 @@ export def "listings-offer post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listings/($id)/offer")
-  let body = {message: $message, price: $price, shipping_price: $shipping_price} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/listings/{id}/offer"))
+  let body = {"message": $message, "price": $price, "shipping_price": $shipping_price} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -961,7 +961,7 @@ export def "listings-bump get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listings/($listing_id)/bump")
+  let full_url = (build-url $base ({listing_id: $listing_id} | format pattern "/listings/{listing_id}/bump"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -984,7 +984,7 @@ export def "listings-bump post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listings/($listing_id)/bump/($budget_type)")
+  let full_url = (build-url $base ({listing_id: $listing_id, budget_type: $budget_type} | format pattern "/listings/{listing_id}/bump/{budget_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1008,8 +1008,8 @@ export def "listings-conversations post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listings/($listing_id)/conversations")
-  let body = {body: $body_body} | compact
+  let full_url = (build-url $base ({listing_id: $listing_id} | format pattern "/listings/{listing_id}/conversations"))
+  let body = {"body": $body_body} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1032,7 +1032,7 @@ export def "listings-images get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listings/($listing_id)/images")
+  let full_url = (build-url $base ({listing_id: $listing_id} | format pattern "/listings/{listing_id}/images"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1055,7 +1055,7 @@ export def "listings-images delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listings/($listing_id)/images/($image_id)")
+  let full_url = (build-url $base ({listing_id: $listing_id, image_id: $image_id} | format pattern "/listings/{listing_id}/images/{image_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1077,7 +1077,7 @@ export def "listings-sales get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listings/($listing_id)/sales")
+  let full_url = (build-url $base ({listing_id: $listing_id} | format pattern "/listings/{listing_id}/sales"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1099,7 +1099,7 @@ export def "listings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listings/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/listings/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1121,7 +1121,7 @@ export def "listings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listings/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/listings/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1184,8 +1184,8 @@ export def "listings put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listings/($slug)")
-  let body = {categories: $categories, condition: $condition, description: $description, exclusive_channel: $exclusive_channel, finish: $finish, has_inventory: $has_inventory, inventory: $inventory, location: $location, make: $make, model: $model, multi_item: $multi_item, offers_enabled: $offers_enabled, origin_country_code: $origin_country_code, photos: $photos, preorder_info: $preorder_info, price: $price, prop_65_warning: $prop_65_warning, publish: $publish, seller: $seller, seller_cost: $seller_cost, shipping: $shipping, shipping_profile_id: $shipping_profile_id, shipping_profile_name: $shipping_profile_name, sku: $sku, sold_as_is: $sold_as_is, storage_location: $storage_location, tax_exempt: $tax_exempt, title: $title, upc: $upc, upc_does_not_apply: $upc_does_not_apply, videos: $videos, year: $year} | compact
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/listings/{slug}"))
+  let body = {"categories": $categories, "condition": $condition, "description": $description, "exclusive_channel": $exclusive_channel, "finish": $finish, "has_inventory": $has_inventory, "inventory": $inventory, "location": $location, "make": $make, "model": $model, "multi_item": $multi_item, "offers_enabled": $offers_enabled, "origin_country_code": $origin_country_code, "photos": $photos, "preorder_info": $preorder_info, "price": $price, "prop_65_warning": $prop_65_warning, "publish": $publish, "seller": $seller, "seller_cost": $seller_cost, "shipping": $shipping, "shipping_profile_id": $shipping_profile_id, "shipping_profile_name": $shipping_profile_name, "sku": $sku, "sold_as_is": $sold_as_is, "storage_location": $storage_location, "tax_exempt": $tax_exempt, "title": $title, "upc": $upc, "upc_does_not_apply": $upc_does_not_apply, "videos": $videos, "year": $year} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1208,7 +1208,7 @@ export def "listings-edit get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listings/($slug)/edit")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/listings/{slug}/edit"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1233,8 +1233,8 @@ export def "listings-flag post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listings/($slug)/flag")
-  let body = {description: $description, reason: $reason} | compact
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/listings/{slug}/flag"))
+  let body = {"description": $description, "reason": $reason} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1257,7 +1257,7 @@ export def "listings-reviews get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listings/($slug)/reviews")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/listings/{slug}/reviews"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1279,7 +1279,7 @@ export def "listings-reviews post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listings/($slug)/reviews")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/listings/{slug}/reviews"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1301,7 +1301,7 @@ export def "listings-similar-listings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/listings/($slug)/similar_listings")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/listings/{slug}/similar_listings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1351,7 +1351,7 @@ export def "my-account put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/account")
-  let body = {currency: $currency, first_name: $first_name, last_name: $last_name, locale_code: $locale_code, shipping_region_code: $shipping_region_code, third_party_ad_data_consent: $third_party_ad_data_consent} | compact
+  let body = {"currency": $currency, "first_name": $first_name, "last_name": $last_name, "locale_code": $locale_code, "shipping_region_code": $shipping_region_code, "third_party_ad_data_consent": $third_party_ad_data_consent} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1416,7 +1416,7 @@ export def "my-addresses delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/addresses/($address_id)")
+  let full_url = (build-url $base ({address_id: $address_id} | format pattern "/my/addresses/{address_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1438,7 +1438,7 @@ export def "my-addresses put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/addresses/($address_id)")
+  let full_url = (build-url $base ({address_id: $address_id} | format pattern "/my/addresses/{address_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1494,7 +1494,7 @@ export def "my-conversations post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/conversations")
-  let body = {body: $body_body, cloudinary_photos: $cloudinary_photos, listing_id: $listing_id, recipient_id: $recipient_id, recipient_uuid: $recipient_uuid, shop_id: $shop_id} | compact
+  let body = {"body": $body_body, "cloudinary_photos": $cloudinary_photos, "listing_id": $listing_id, "recipient_id": $recipient_id, "recipient_uuid": $recipient_uuid, "shop_id": $shop_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1519,8 +1519,8 @@ export def "my-conversations-messages post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/conversations/($conversation_id)/messages")
-  let body = {body: $body_body} | compact
+  let full_url = (build-url $base ({conversation_id: $conversation_id} | format pattern "/my/conversations/{conversation_id}/messages"))
+  let body = {"body": $body_body} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1543,7 +1543,7 @@ export def "my-conversations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/conversations/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/conversations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1567,8 +1567,8 @@ export def "my-conversations put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/conversations/($id)")
-  let body = {read: $read} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/conversations/{id}"))
+  let body = {"read": $read} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1610,7 +1610,7 @@ export def "my-curated-set-product delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/curated_set/product/($product_id)")
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/my/curated_set/product/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1630,7 +1630,7 @@ export def "my-curated-set-product post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/curated_set/product/($product_id)")
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/my/curated_set/product/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1801,7 +1801,7 @@ export def "my-follows-articles post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/follows/articles")
-  let body = {category_uuids: $category_uuids} | compact
+  let body = {"category_uuids": $category_uuids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1824,7 +1824,7 @@ export def "my-follows-brands delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/brands/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/my/follows/brands/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1846,7 +1846,7 @@ export def "my-follows-brands get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/brands/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/my/follows/brands/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1868,7 +1868,7 @@ export def "my-follows-brands post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/brands/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/my/follows/brands/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1891,7 +1891,7 @@ export def "my-follows-categories delete-by-category-subcategory" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/categories/($category)/($subcategory)")
+  let full_url = (build-url $base ({category: $category, subcategory: $subcategory} | format pattern "/my/follows/categories/{category}/{subcategory}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1914,7 +1914,7 @@ export def "my-follows-categories get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/categories/($category)/($subcategory)")
+  let full_url = (build-url $base ({category: $category, subcategory: $subcategory} | format pattern "/my/follows/categories/{category}/{subcategory}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1937,7 +1937,7 @@ export def "my-follows-categories post-by-category-subcategory" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/categories/($category)/($subcategory)")
+  let full_url = (build-url $base ({category: $category, subcategory: $subcategory} | format pattern "/my/follows/categories/{category}/{subcategory}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1959,7 +1959,7 @@ export def "my-follows-categories delete-by-identifier" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/categories/($identifier)")
+  let full_url = (build-url $base ({identifier: $identifier} | format pattern "/my/follows/categories/{identifier}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1981,7 +1981,7 @@ export def "my-follows-categories list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/categories/($identifier)")
+  let full_url = (build-url $base ({identifier: $identifier} | format pattern "/my/follows/categories/{identifier}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2003,7 +2003,7 @@ export def "my-follows-categories post-by-identifier" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/categories/($identifier)")
+  let full_url = (build-url $base ({identifier: $identifier} | format pattern "/my/follows/categories/{identifier}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2025,7 +2025,7 @@ export def "my-follows-categories post-by-uuid" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/categories/($uuid)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/my/follows/categories/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2047,7 +2047,7 @@ export def "my-follows-collections delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/collections/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/my/follows/collections/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2069,7 +2069,7 @@ export def "my-follows-collections get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/collections/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/my/follows/collections/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2091,7 +2091,7 @@ export def "my-follows-collections post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/collections/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/my/follows/collections/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2113,7 +2113,7 @@ export def "my-follows-handpicked delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/handpicked/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/my/follows/handpicked/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2135,7 +2135,7 @@ export def "my-follows-handpicked get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/handpicked/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/my/follows/handpicked/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2157,7 +2157,7 @@ export def "my-follows-handpicked post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/handpicked/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/my/follows/handpicked/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2232,7 +2232,7 @@ export def "my-follows-search post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/my/follows/search")
-  let body = {accepts_gift_cards: $accepts_gift_cards, accepts_payment_plans: $accepts_payment_plans, auction_price_max: $auction_price_max, category: $category, conditions: $conditions, currency: $currency, decade: $decade, exclude_auctions: $exclude_auctions, finish: $finish, handmade: $handmade, item_city: $item_city, item_country: $item_country, item_region: $item_region, item_state: $item_state, listing_type: $listing_type, local_pickup: $local_pickup, make: $make, model: $model, must_not: $must_not, not_ids: $not_ids, preferred_seller: $preferred_seller, price_max: $price_max, price_min: $price_min, product_type: $product_type, query: $query, ships_to: $ships_to, shop: $shop, shop_id: $shop_id, watchers_count_min: $watchers_count_min, year_max: $year_max, year_min: $year_min} | compact
+  let body = {"accepts_gift_cards": $accepts_gift_cards, "accepts_payment_plans": $accepts_payment_plans, "auction_price_max": $auction_price_max, "category": $category, "conditions": $conditions, "currency": $currency, "decade": $decade, "exclude_auctions": $exclude_auctions, "finish": $finish, "handmade": $handmade, "item_city": $item_city, "item_country": $item_country, "item_region": $item_region, "item_state": $item_state, "listing_type": $listing_type, "local_pickup": $local_pickup, "make": $make, "model": $model, "must_not": $must_not, "not_ids": $not_ids, "preferred_seller": $preferred_seller, "price_max": $price_max, "price_min": $price_min, "product_type": $product_type, "query": $query, "ships_to": $ships_to, "shop": $shop, "shop_id": $shop_id, "watchers_count_min": $watchers_count_min, "year_max": $year_max, "year_min": $year_min} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2255,7 +2255,7 @@ export def "my-follows-shops delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/shops/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/my/follows/shops/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2277,7 +2277,7 @@ export def "my-follows-shops get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/shops/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/my/follows/shops/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2299,7 +2299,7 @@ export def "my-follows-shops post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/shops/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/my/follows/shops/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2321,7 +2321,7 @@ export def "my-follows delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/($follow_id)")
+  let full_url = (build-url $base ({follow_id: $follow_id} | format pattern "/my/follows/{follow_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2341,7 +2341,7 @@ export def "my-follows-alert delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/($follow_id)/alert")
+  let full_url = (build-url $base ({follow_id: $follow_id} | format pattern "/my/follows/{follow_id}/alert"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2361,7 +2361,7 @@ export def "my-follows-alert post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/follows/($follow_id)/alert")
+  let full_url = (build-url $base ({follow_id: $follow_id} | format pattern "/my/follows/{follow_id}/alert"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2518,8 +2518,8 @@ export def "my-listings-state-end put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/listings/($slug)/state/end")
-  let body = {reason: $reason} | compact
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/my/listings/{slug}/state/end"))
+  let body = {"reason": $reason} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2588,7 +2588,7 @@ export def "my-negotiations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/negotiations/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/negotiations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2612,8 +2612,8 @@ export def "my-negotiations-accept post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/negotiations/($id)/accept")
-  let body = {message: $message} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/negotiations/{id}/accept"))
+  let body = {"message": $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2649,8 +2649,8 @@ export def "my-negotiations-counter post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/negotiations/($id)/counter")
-  let body = {country_code: $country_code, layaway_terms_slug: $layaway_terms_slug, message: $message, offer_items: $offer_items, price: $price, quantity: $quantity, recipient_id: $recipient_id, region_code: $region_code, shipping_price: $shipping_price} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/negotiations/{id}/counter"))
+  let body = {"country_code": $country_code, "layaway_terms_slug": $layaway_terms_slug, "message": $message, "offer_items": $offer_items, "price": $price, "quantity": $quantity, "recipient_id": $recipient_id, "region_code": $region_code, "shipping_price": $shipping_price} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2673,7 +2673,7 @@ export def "my-negotiations-decline post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/negotiations/($id)/decline")
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/negotiations/{id}/decline"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2735,7 +2735,7 @@ export def "my-orders-buying-by-uuid get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/orders/buying/by_uuid/($uuid)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/my/orders/buying/by_uuid/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2778,7 +2778,7 @@ export def "my-orders-buying get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/orders/buying/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/orders/buying/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2800,7 +2800,7 @@ export def "my-orders-buying-mark-received post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/orders/buying/($id)/mark_received")
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/orders/buying/{id}/mark_received"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2864,7 +2864,7 @@ export def "my-orders-selling-buyer-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/orders/selling/buyer_history/($buyer_id)")
+  let full_url = (build-url $base ({buyer_id: $buyer_id} | format pattern "/my/orders/selling/buyer_history/{buyer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2884,7 +2884,7 @@ export def "my-orders-selling-by-uuid get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/orders/selling/by_uuid/($uuid)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/my/orders/selling/by_uuid/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2927,7 +2927,7 @@ export def "my-orders-selling get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/orders/selling/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/orders/selling/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2951,8 +2951,8 @@ export def "my-orders-selling-mark-picked-up post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/orders/selling/($id)/mark_picked_up")
-  let body = {date: $date} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/orders/selling/{id}/mark_picked_up"))
+  let body = {"date": $date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2979,8 +2979,8 @@ export def "my-orders-selling-ship post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/orders/selling/($id)/ship")
-  let body = {provider: $provider, send_notification: $send_notification, tracking_number: $tracking_number} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/orders/selling/{id}/ship"))
+  let body = {"provider": $provider, "send_notification": $send_notification, "tracking_number": $tracking_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3003,7 +3003,7 @@ export def "my-orders-selling-refund-requests post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/orders/selling/($order_id)/refund_requests")
+  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/my/orders/selling/{order_id}/refund_requests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3055,7 +3055,7 @@ export def "my-payments-selling get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/payments/selling/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/payments/selling/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3098,7 +3098,7 @@ export def "my-payouts-line-items get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/payouts/($id)/line_items")
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/payouts/{id}/line_items"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3141,7 +3141,7 @@ export def "my-refund-requests-selling put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/refund_requests/selling/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/refund_requests/selling/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3205,7 +3205,7 @@ export def "my-wishlist delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/wishlist/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/wishlist/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3227,7 +3227,7 @@ export def "my-wishlist put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/my/wishlist/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/my/wishlist/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3249,7 +3249,7 @@ export def "orders-feedback-buyer get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orders/($order_id)/feedback/buyer")
+  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/feedback/buyer"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3271,7 +3271,7 @@ export def "orders-feedback-buyer post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orders/($order_id)/feedback/buyer")
+  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/feedback/buyer"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3293,7 +3293,7 @@ export def "orders-feedback-seller get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orders/($order_id)/feedback/seller")
+  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/feedback/seller"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3315,7 +3315,7 @@ export def "orders-feedback-seller post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orders/($order_id)/feedback/seller")
+  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/feedback/seller"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3361,7 +3361,7 @@ export def "priceguide-transactions-summary get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number_of_months" $number_of_months "scalar") (serialize-qp "condition" $condition "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/priceguide/($id)/transactions/summary" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/priceguide/{id}/transactions/summary") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3383,7 +3383,7 @@ export def "products-reviews get-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/products/reviews/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/products/reviews/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3409,8 +3409,8 @@ export def "products-reviews put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/products/reviews/($id)")
-  let body = {body: $body_body, rating: $rating, title: $title} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/products/reviews/{id}"))
+  let body = {"body": $body_body, "rating": $rating, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3433,7 +3433,7 @@ export def "products-reviews get-by-slug" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/products/($slug)/reviews")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/products/{slug}/reviews"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3455,7 +3455,7 @@ export def "products-reviews post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/products/($slug)/reviews")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/products/{slug}/reviews"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3519,7 +3519,7 @@ export def "sales-listings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sales/($sale_id)/listings")
+  let full_url = (build-url $base ({sale_id: $sale_id} | format pattern "/sales/{sale_id}/listings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3541,7 +3541,7 @@ export def "sales-listings post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sales/($sale_id)/listings")
+  let full_url = (build-url $base ({sale_id: $sale_id} | format pattern "/sales/{sale_id}/listings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3561,7 +3561,7 @@ export def "sales get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sales/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/sales/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3657,7 +3657,7 @@ export def "shop put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shop")
-  let body = {address: $address, currency: $currency, description: $description, legal_country_code: $legal_country_code, legal_country_code_confirmed: $legal_country_code_confirmed, name: $name, payment_policy: $payment_policy, return_policy: $return_policy, shipping_policy: $shipping_policy, shop_type: $shop_type, website: $website} | compact
+  let body = {"address": $address, "currency": $currency, "description": $description, "legal_country_code": $legal_country_code, "legal_country_code_confirmed": $legal_country_code_confirmed, "name": $name, "payment_policy": $payment_policy, "return_policy": $return_policy, "shipping_policy": $shipping_policy, "shop_type": $shop_type, "website": $website} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3785,7 +3785,7 @@ export def "shops-storefronts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shops/($id)/storefronts")
+  let full_url = (build-url $base ({id: $id} | format pattern "/shops/{id}/storefronts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3807,7 +3807,7 @@ export def "shops-shipping-profiles get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shops/($shop_id)/shipping_profiles")
+  let full_url = (build-url $base ({shop_id: $shop_id} | format pattern "/shops/{shop_id}/shipping_profiles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3831,7 +3831,7 @@ export def "shops get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_listing_count" $include_listing_count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/shops/($slug)" $qp)
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/shops/{slug}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3853,7 +3853,7 @@ export def "shops-feedback get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shops/($slug)/feedback")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/shops/{slug}/feedback"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3875,7 +3875,7 @@ export def "shops-feedback-buyer get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shops/($slug)/feedback/buyer")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/shops/{slug}/feedback/buyer"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3897,7 +3897,7 @@ export def "shops-feedback-seller get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shops/($slug)/feedback/seller")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/shops/{slug}/feedback/seller"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3940,7 +3940,7 @@ export def "wants delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/wants/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/wants/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3962,7 +3962,7 @@ export def "wants put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/wants/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/wants/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4008,7 +4008,7 @@ export def "webhooks-registrations post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/registrations")
-  let body = {topic: $topic, url: $body_url} | compact
+  let body = {"topic": $topic, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4031,7 +4031,7 @@ export def "webhooks-registrations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhooks/registrations/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/webhooks/registrations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4053,7 +4053,7 @@ export def "webhooks-registrations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhooks/registrations/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/webhooks/registrations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

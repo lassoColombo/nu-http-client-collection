@@ -106,7 +106,7 @@ export def "arrival-board get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/arrivalBoard/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/arrivalBoard/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -130,7 +130,7 @@ export def "departure-board get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/departureBoard/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/departureBoard/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -152,7 +152,7 @@ export def "journey-details get" [
 ]: nothing -> record<train_locs: table<arrTime: string, depTime: string, lat: float, lon: float, operator: string, stopId: string, stopName: string, train: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/journeyDetails/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/journeyDetails/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -174,7 +174,7 @@ export def "location get" [
 ]: nothing -> record<locations: table<id: string, lat: float, lon: float, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/location/($name)")
+  let full_url = (build-url $base ({name: $name} | format pattern "/location/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

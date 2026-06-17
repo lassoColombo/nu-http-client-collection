@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 # GET /strategies/strategyId/{strategyId}
 # operationId: getStrategiesStrategyIdStrategyId
 export def "strategies-strategy-id get" [
-  strategyId: string
+  strategy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,7 +105,7 @@ export def "strategies-strategy-id get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/strategies/strategyId/($strategyId)")
+  let full_url = (build-url $base ({strategy_id: $strategy_id} | format pattern "/strategies/strategyId/{strategy_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -137,7 +137,7 @@ export def "strategies-templates get" [
 #
 # POST /tradingAccounts
 # operationId: postTradingAccounts
-export def "trading-accounts post" [
+export def "trading-accounts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,8 +146,8 @@ export def "trading-accounts post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --brokerServer: string
-  --magickUsername: string
+  --broker-server: string
+  --magick-username: string
   --password: string
   --username: string
 ]: any -> any {
@@ -155,7 +155,7 @@ export def "trading-accounts post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tradingAccounts")
-  let body = {brokerServer: $brokerServer, magickUsername: $magickUsername, password: $password, username: $username} | compact
+  let body = {"brokerServer": $broker_server, "magickUsername": $magick_username, "password": $password, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -166,7 +166,7 @@ export def "trading-accounts post" [
 #
 # PUT /tradingAccounts/password/{username}/{brokerserver}/{mt4username}
 # operationId: putTradingAccountsPasswordUsernameBrokerserverMt4username
-export def "trading-accounts-password put" [
+export def "trading-accounts-password update" [
   username: string
   brokerserver: string
   mt4username: string
@@ -178,14 +178,14 @@ export def "trading-accounts-password put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --newPassword: string
-  --oldPassword: string
+  --new-password: string
+  --old-password: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tradingAccounts/password/($username)/($brokerserver)/($mt4username)")
-  let body = {newPassword: $newPassword, oldPassword: $oldPassword} | compact
+  let full_url = (build-url $base ({username: $username, brokerserver: $brokerserver, mt4username: $mt4username} | format pattern "/tradingAccounts/password/{username}/{brokerserver}/{mt4username}"))
+  let body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -196,7 +196,7 @@ export def "trading-accounts-password put" [
 #
 # POST /users
 # operationId: postUsers
-export def "users post" [
+export def "users create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,19 +205,19 @@ export def "users post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --affiliateId: string
+  --affiliate-id: string
   --email: string
-  --firstName: string
-  --lastName: string
+  --first-name: string
+  --last-name: string
   --password: string
-  --subscriptionType: string
+  --subscription-type: string
   --username: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users")
-  let body = {affiliateId: $affiliateId, email: $email, firstName: $firstName, lastName: $lastName, password: $password, subscriptionType: $subscriptionType, username: $username} | compact
+  let body = {"affiliateId": $affiliate_id, "email": $email, "firstName": $first_name, "lastName": $last_name, "password": $password, "subscriptionType": $subscription_type, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -241,7 +241,7 @@ export def "users-email get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/email/($email)")
+  let full_url = (build-url $base ({email: $email} | format pattern "/users/email/{email}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -251,7 +251,7 @@ export def "users-email get" [
 #
 # PUT /users/password/{username}
 # operationId: putUsersPasswordUsername
-export def "users-password put" [
+export def "users-password update" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,14 +261,14 @@ export def "users-password put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --newPassword: string
-  --oldPassword: string
+  --new-password: string
+  --old-password: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/password/($username)")
-  let body = {newPassword: $newPassword, oldPassword: $oldPassword} | compact
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/password/{username}"))
+  let body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -292,7 +292,7 @@ export def "users-username get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/username/($username)")
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/username/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

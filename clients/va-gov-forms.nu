@@ -130,7 +130,7 @@ export def "forms findFormByFormName" [
 ]: nothing -> record<data: record<attributes: record<benefit_categories: list, created_at: string, deleted_at: string, first_issued_on: string, form_details_url: string, form_name: string, form_tool_intro: string, form_tool_url: string, form_type: string, form_usage: string, language: string, last_revision_on: string, pages: int, related_forms: list, sha256: string, title: string, url: string, va_form_administration: string, valid_pdf: bool, versions: list>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/forms/($form_name)")
+  let full_url = (build-url $base ({form_name: $form_name} | format pattern "/forms/{form_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

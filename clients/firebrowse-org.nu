@@ -83,7 +83,7 @@ def sort-by-completer-10 [] { ["cohort" "mir" "sample_type" "tcga_participant_ba
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyses-copy-number-genes-all All" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyses-copy-number-genes-all get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -107,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # GET /Analyses/CopyNumber/Genes/All
 # operationId: All
-export def "analyses-copy-number-genes-all All" [
+export def "analyses-copy-number-genes-all get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,7 +138,7 @@ export def "analyses-copy-number-genes-all All" [
 #
 # GET /Analyses/CopyNumber/Genes/Amplified
 # operationId: Amplified
-export def "analyses-copy-number-genes-amplified Amplified" [
+export def "analyses-copy-number-genes-amplified get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "analyses-copy-number-genes-amplified Amplified" [
 #
 # GET /Analyses/CopyNumber/Genes/Deleted
 # operationId: Deleted
-export def "analyses-copy-number-genes-deleted Deleted" [
+export def "analyses-copy-number-genes-deleted delete-d" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "analyses-copy-number-genes-deleted Deleted" [
 #
 # GET /Analyses/CopyNumber/Genes/Focal
 # operationId: Focal
-export def "analyses-copy-number-genes-focal Focal" [
+export def "analyses-copy-number-genes-focal get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "analyses-copy-number-genes-focal Focal" [
 #
 # GET /Analyses/CopyNumber/Genes/Thresholded
 # operationId: Thresholded
-export def "analyses-copy-number-genes-thresholded Thresholded" [
+export def "analyses-copy-number-genes-thresholded get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "analyses-copy-number-genes-thresholded Thresholded" [
 #
 # GET /Analyses/FeatureTable
 # operationId: FeatureTable
-export def "analyses-feature-table FeatureTable" [
+export def "analyses-feature-table get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "analyses-feature-table FeatureTable" [
 #
 # GET /Analyses/Mutation/MAF
 # operationId: MAF
-export def "analyses-mutation-maf MAF" [
+export def "analyses-mutation-maf get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "analyses-mutation-maf MAF" [
 #
 # GET /Analyses/Mutation/SMG
 # operationId: SMG
-export def "analyses-mutation-smg SMG" [
+export def "analyses-mutation-smg get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,7 +358,7 @@ export def "analyses-mutation-smg SMG" [
 #
 # GET /Analyses/Reports
 # operationId: Reports
-export def "analyses-reports Reports" [
+export def "analyses-reports get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,7 +390,7 @@ export def "analyses-reports Reports" [
 #
 # GET /Analyses/mRNASeq/Quartiles
 # operationId: mRNASeq/Quartiles
-export def "analyses-m-rna-seq-quartiles mRNASeq/Quartiles" [
+export def "analyses-m-rna-seq-quartiles mRNASeq-Quartiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,11 +405,11 @@ export def "analyses-m-rna-seq-quartiles mRNASeq/Quartiles" [
   --cohort: list # Narrow search to one or more TCGA disease cohorts from the scrollable list.
   --protocol: list # Narrow search to one or more sample characterization protocols from the scrollable list.
   --sample-type: list # For which type of sample(s) should quartiles be computed?
-  --Exclude: list # Comma separated list of TCGA participants, identified by barcodes such as TCGA-GF-A4EO, denoting samples to exclude from computation.
+  --exclude: list # Comma separated list of TCGA participants, identified by barcodes such as TCGA-GF-A4EO, denoting samples to exclude from computation.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "gene" $gene "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "protocol" $protocol "csv") (serialize-qp "sample_type" $sample_type "csv") (serialize-qp "Exclude" $Exclude "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "gene" $gene "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "protocol" $protocol "csv") (serialize-qp "sample_type" $sample_type "csv") (serialize-qp "Exclude" $exclude "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/Analyses/mRNASeq/Quartiles" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -420,7 +420,7 @@ export def "analyses-m-rna-seq-quartiles mRNASeq/Quartiles" [
 #
 # GET /Archives/StandardData
 # operationId: StandardData
-export def "archives-standard-data StandardData" [
+export def "archives-standard-data get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "archives-standard-data StandardData" [
 #
 # GET /Metadata/Centers
 # operationId: Centers
-export def "metadata-centers Centers" [
+export def "metadata-centers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,7 +482,7 @@ export def "metadata-centers Centers" [
 #
 # GET /Metadata/ClinicalNames
 # operationId: ClinicalNames
-export def "metadata-clinical-names ClinicalNames" [
+export def "metadata-clinical-names get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,7 +507,7 @@ export def "metadata-clinical-names ClinicalNames" [
 #
 # GET /Metadata/ClinicalNames_FH
 # operationId: ClinicalNames_FH
-export def "metadata-clinical-names-fh FH" [
+export def "metadata-clinical-names-fh get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -532,7 +532,7 @@ export def "metadata-clinical-names-fh FH" [
 #
 # GET /Metadata/Cohorts
 # operationId: Cohorts
-export def "metadata-cohorts Cohorts" [
+export def "metadata-cohorts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -558,7 +558,7 @@ export def "metadata-cohorts Cohorts" [
 #
 # GET /Metadata/Counts
 # operationId: Counts
-export def "metadata-counts Counts" [
+export def "metadata-counts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -589,7 +589,7 @@ export def "metadata-counts Counts" [
 #
 # GET /Metadata/Dates
 # operationId: Dates
-export def "metadata-dates Dates" [
+export def "metadata-dates get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -614,7 +614,7 @@ export def "metadata-dates Dates" [
 #
 # GET /Metadata/HeartBeat
 # operationId: HeartBeat
-export def "metadata-heart-beat HeartBeat" [
+export def "metadata-heart-beat get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -639,7 +639,7 @@ export def "metadata-heart-beat HeartBeat" [
 #
 # GET /Metadata/MAFColNames
 # operationId: MAFColNames
-export def "metadata-maf-col-names MAFColNames" [
+export def "metadata-maf-col-names get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,7 +664,7 @@ export def "metadata-maf-col-names MAFColNames" [
 #
 # GET /Metadata/Patients
 # operationId: Patients
-export def "metadata-patients Patients" [
+export def "metadata-patients get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -693,7 +693,7 @@ export def "metadata-patients Patients" [
 #
 # GET /Metadata/Platforms
 # operationId: Platforms
-export def "metadata-platforms Platforms" [
+export def "metadata-platforms get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -719,8 +719,8 @@ export def "metadata-platforms Platforms" [
 #
 # GET /Metadata/SampleType/Barcode/{TCGA_Barcode}
 # operationId: Barcode
-export def "metadata-sample-type-barcode Barcode" [
-  TCGA_Barcode: string
+export def "metadata-sample-type-barcode get" [
+  tcga_barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -735,7 +735,7 @@ export def "metadata-sample-type-barcode Barcode" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Metadata/SampleType/Barcode/($TCGA_Barcode)" $qp)
+  let full_url = (build-url $base ({tcga_barcode: $tcga_barcode} | format pattern "/Metadata/SampleType/Barcode/{tcga_barcode}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -745,7 +745,7 @@ export def "metadata-sample-type-barcode Barcode" [
 #
 # GET /Metadata/SampleType/Code/{code}
 # operationId: Code
-export def "metadata-sample-type-code Code" [
+export def "metadata-sample-type-code get" [
   code: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -761,7 +761,7 @@ export def "metadata-sample-type-code Code" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Metadata/SampleType/Code/($code)" $qp)
+  let full_url = (build-url $base ({code: $code} | format pattern "/Metadata/SampleType/Code/{code}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -771,7 +771,7 @@ export def "metadata-sample-type-code Code" [
 #
 # GET /Metadata/SampleType/ShortLetterCode/{short_letter_code}
 # operationId: ShortLetterCode
-export def "metadata-sample-type-short-letter-code ShortLetterCode" [
+export def "metadata-sample-type-short-letter-code get" [
   short_letter_code: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -787,7 +787,7 @@ export def "metadata-sample-type-short-letter-code ShortLetterCode" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Metadata/SampleType/ShortLetterCode/($short_letter_code)" $qp)
+  let full_url = (build-url $base ({short_letter_code: $short_letter_code} | format pattern "/Metadata/SampleType/ShortLetterCode/{short_letter_code}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -797,7 +797,7 @@ export def "metadata-sample-type-short-letter-code ShortLetterCode" [
 #
 # GET /Metadata/SampleTypes
 # operationId: SampleTypes
-export def "metadata-sample-types SampleTypes" [
+export def "metadata-sample-types get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,7 +822,7 @@ export def "metadata-sample-types SampleTypes" [
 #
 # GET /Metadata/TSSites
 # operationId: TSSites
-export def "metadata-ts-sites TSSites" [
+export def "metadata-ts-sites get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -848,7 +848,7 @@ export def "metadata-ts-sites TSSites" [
 #
 # GET /Samples/Clinical
 # operationId: Clinical
-export def "samples-clinical Clinical" [
+export def "samples-clinical get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,7 +879,7 @@ export def "samples-clinical Clinical" [
 #
 # GET /Samples/Clinical_FH
 # operationId: Clinical_FH
-export def "samples-clinical-fh FH" [
+export def "samples-clinical-fh get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

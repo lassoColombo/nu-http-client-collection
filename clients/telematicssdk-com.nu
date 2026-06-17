@@ -101,11 +101,11 @@ export def "mobilesdk-stage-track-get-track tripsTripDetails" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --trackToken: string # e.g. 
+  --track-token: string # e.g. 
 ]: nothing -> record<Result: record<Code: float, Track: record<AccelerationCount: float, AddressEnd: string, AddressFinishParts: record, AddressStart: string, AddressStartParts: record, BeaconId: float, CityFinish: string, CityStart: string, DecelerationCount: float, Distance: float, DrivingTips: string, Duration: float, EcoScore: float, EcoScoreBrakes: float, EcoScoreDepreciation: float, EcoScoreFuel: float, EcoScoreTyres: float, EndDate: string, HighOverSpeedMileage: float, MidOverSpeedMileage: float, OriginChanged: bool, PhoneUsage: float, Points: list, Rating: float, Rating100: float, RatingAcceleration: float, RatingAcceleration100: float, RatingBraking: float, RatingBraking100: float, RatingCornering: float, RatingCornering100: float, RatingPhoneDistraction100: float, RatingPhoneUsage: float, RatingSpeeding: float, RatingSpeeding100: float, RatingTimeOfDay: float, ShareType: string, StartDate: string, Status: string, TrackOriginCode: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "trackToken" $trackToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "trackToken" $track_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/mobilesdk/stage/track/get_track/v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -116,7 +116,7 @@ export def "mobilesdk-stage-track-get-track tripsTripDetails" [
 #
 # GET /statistics/v1/Scorings/consolidated
 # operationId: /v1/scorings/consolidated
-export def "statistics-scorings-consolidated /v1/scorings/consolidated" [
+export def "statistics-scorings-consolidated v1-scorings-consolidated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -125,17 +125,17 @@ export def "statistics-scorings-consolidated /v1/scorings/consolidated" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --DeviceToken: string # e.g. 
-  --StartDate: string # e.g. 2021-01-17T01:04:22.840Z
-  --EndDate: string # e.g. 2021-01-18T01:04:22.840Z
-  --Tag: string # e.g. 
-  --InstanceId: string # e.g. 
-  --AppId: string # e.g. 
-  --CompanyId: string # e.g. 
+  --device-token: string # e.g. 
+  --start-date: string # e.g. 2021-01-17T01:04:22.840Z
+  --end-date: string # e.g. 2021-01-18T01:04:22.840Z
+  --tag: string # e.g. 
+  --instance-id: string # e.g. 
+  --app-id: string # e.g. 
+  --company-id: string # e.g. 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "DeviceToken" $DeviceToken "scalar") (serialize-qp "StartDate" $StartDate "scalar") (serialize-qp "EndDate" $EndDate "scalar") (serialize-qp "Tag" $Tag "scalar") (serialize-qp "InstanceId" $InstanceId "scalar") (serialize-qp "AppId" $AppId "scalar") (serialize-qp "CompanyId" $CompanyId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "DeviceToken" $device_token "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Tag" $tag "scalar") (serialize-qp "InstanceId" $instance_id "scalar") (serialize-qp "AppId" $app_id "scalar") (serialize-qp "CompanyId" $company_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statistics/v1/Scorings/consolidated" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -146,7 +146,7 @@ export def "statistics-scorings-consolidated /v1/scorings/consolidated" [
 #
 # GET /statistics/v1/Scorings/consolidated/daily
 # operationId: /v1/scorings/consolidated/daily
-export def "statistics-scorings-consolidated-daily /v1/scorings/consolidated/daily" [
+export def "statistics-scorings-consolidated-daily v1-scorings-consolidated-daily" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,17 +155,17 @@ export def "statistics-scorings-consolidated-daily /v1/scorings/consolidated/dai
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --DeviceToken: string # e.g. 
-  --StartDate: string # e.g. 2021-01-17T01:04:22.840Z
-  --EndDate: string # e.g. 2021-01-18T01:04:22.840Z
-  --Tag: string # e.g. 
-  --InstanceId: string # e.g. 
-  --AppId: string # e.g. 
-  --CompanyId: string # e.g. 
+  --device-token: string # e.g. 
+  --start-date: string # e.g. 2021-01-17T01:04:22.840Z
+  --end-date: string # e.g. 2021-01-18T01:04:22.840Z
+  --tag: string # e.g. 
+  --instance-id: string # e.g. 
+  --app-id: string # e.g. 
+  --company-id: string # e.g. 
 ]: nothing -> record<Errors: list<any>, Result: table<AccelerationScore: float, AppId: string, BrakingScore: float, CompanyId: string, CorneringScore: float, DeviceToken: string, DistractedScore: float, InstanceId: string, OverallScore: float, ReportDate: string, SpeedingScore: float>, Status: float, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "DeviceToken" $DeviceToken "scalar") (serialize-qp "StartDate" $StartDate "scalar") (serialize-qp "EndDate" $EndDate "scalar") (serialize-qp "Tag" $Tag "scalar") (serialize-qp "InstanceId" $InstanceId "scalar") (serialize-qp "AppId" $AppId "scalar") (serialize-qp "CompanyId" $CompanyId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "DeviceToken" $device_token "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Tag" $tag "scalar") (serialize-qp "InstanceId" $instance_id "scalar") (serialize-qp "AppId" $app_id "scalar") (serialize-qp "CompanyId" $company_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statistics/v1/Scorings/consolidated/daily" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -176,7 +176,7 @@ export def "statistics-scorings-consolidated-daily /v1/scorings/consolidated/dai
 #
 # GET /statistics/v1/Scorings/individual/
 # operationId: userSafeScoringAccumulatedValueV1/scorings/individual
-export def "statistics-scorings-individual userSafeScoringAccumulatedValueV1/scorings/individual" [
+export def "statistics-scorings-individual userSafeScoringAccumulatedValueV1-scorings-individual" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,12 +185,12 @@ export def "statistics-scorings-individual userSafeScoringAccumulatedValueV1/sco
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startDate: string # e.g. 2021-01-01
-  --endDate: string # e.g. 2021-01-30
+  --start-date: string # e.g. 2021-01-01
+  --end-date: string # e.g. 2021-01-30
 ]: nothing -> record<Errors: list<any>, Result: record<AccelerationScore: float, AppId: string, BrakingScore: float, CompanyId: string, CorneringScore: float, DeviceToken: string, DistractedScore: float, InstanceId: string, OverallScore: float, SpeedingScore: float>, Status: float, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statistics/v1/Scorings/individual/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -201,7 +201,7 @@ export def "statistics-scorings-individual userSafeScoringAccumulatedValueV1/sco
 #
 # GET /statistics/v1/Scorings/individual/daily
 # operationId: userSafeScoringDailyValue/v1/scorings/individual/daily
-export def "statistics-scorings-individual-daily userSafeScoringDailyValue/v1/scorings/individual/daily" [
+export def "statistics-scorings-individual-daily userSafeScoringDailyValue-v1-scorings-individual-daily" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,13 +210,13 @@ export def "statistics-scorings-individual-daily userSafeScoringDailyValue/v1/sc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Tag: string # Optional (e.g. )
-  --StartDate: string # (Required)  (e.g. 2021-01-01)
-  --EndDate: string # (Required)  (e.g. 2021-01-20)
+  --tag: string # Optional (e.g. )
+  --start-date: string # (Required)  (e.g. 2021-01-01)
+  --end-date: string # (Required)  (e.g. 2021-01-20)
 ]: nothing -> record<Errors: list<any>, Result: table<AccelerationScore: float, AppId: string, BrakingScore: float, CalcDate: string, CompanyId: string, CorneringScore: float, DeviceToken: string, DistractedScore: float, InstanceId: string, OverallScore: float, SpeedingScore: float>, Status: float, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Tag" $Tag "scalar") (serialize-qp "StartDate" $StartDate "scalar") (serialize-qp "EndDate" $EndDate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Tag" $tag "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statistics/v1/Scorings/individual/daily" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -227,7 +227,7 @@ export def "statistics-scorings-individual-daily userSafeScoringDailyValue/v1/sc
 #
 # GET /statistics/v1/Statistics/consolidated
 # operationId: /v1/statistics/consolidated
-export def "statistics-statistics-consolidated /v1/statistics/consolidated" [
+export def "statistics-statistics-consolidated v1-statistics-consolidated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,17 +236,17 @@ export def "statistics-statistics-consolidated /v1/statistics/consolidated" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --DeviceToken: string # e.g. 
-  --StartDate: string # e.g. 2021-01-18
-  --EndDate: string # e.g. 2021-03-18
-  --Tag: string # e.g. 
-  --InstanceId: string # e.g. 
-  --AppId: string # e.g. 
-  --CompanyId: string # e.g. 
+  --device-token: string # e.g. 
+  --start-date: string # e.g. 2021-01-18
+  --end-date: string # e.g. 2021-03-18
+  --tag: string # e.g. 
+  --instance-id: string # e.g. 
+  --app-id: string # e.g. 
+  --company-id: string # e.g. 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "DeviceToken" $DeviceToken "scalar") (serialize-qp "StartDate" $StartDate "scalar") (serialize-qp "EndDate" $EndDate "scalar") (serialize-qp "Tag" $Tag "scalar") (serialize-qp "InstanceId" $InstanceId "scalar") (serialize-qp "AppId" $AppId "scalar") (serialize-qp "CompanyId" $CompanyId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "DeviceToken" $device_token "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Tag" $tag "scalar") (serialize-qp "InstanceId" $instance_id "scalar") (serialize-qp "AppId" $app_id "scalar") (serialize-qp "CompanyId" $company_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statistics/v1/Statistics/consolidated" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -257,7 +257,7 @@ export def "statistics-statistics-consolidated /v1/statistics/consolidated" [
 #
 # GET /statistics/v1/Statistics/consolidated/daily
 # operationId: /v1/statistics/consolidated/daily
-export def "statistics-statistics-consolidated-daily /v1/statistics/consolidated/daily" [
+export def "statistics-statistics-consolidated-daily v1-statistics-consolidated-daily" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,17 +266,17 @@ export def "statistics-statistics-consolidated-daily /v1/statistics/consolidated
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --DeviceToken: string # e.g. 
-  --StartDate: string # e.g. 2021-01-17
-  --EndDate: string # e.g. 2021-01-18
-  --Tag: string # e.g. 
-  --InstanceId: string # e.g. 
-  --AppId: string # e.g. 
-  --CompanyId: string # e.g. 
+  --device-token: string # e.g. 
+  --start-date: string # e.g. 2021-01-17
+  --end-date: string # e.g. 2021-01-18
+  --tag: string # e.g. 
+  --instance-id: string # e.g. 
+  --app-id: string # e.g. 
+  --company-id: string # e.g. 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "DeviceToken" $DeviceToken "scalar") (serialize-qp "StartDate" $StartDate "scalar") (serialize-qp "EndDate" $EndDate "scalar") (serialize-qp "Tag" $Tag "scalar") (serialize-qp "InstanceId" $InstanceId "scalar") (serialize-qp "AppId" $AppId "scalar") (serialize-qp "CompanyId" $CompanyId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "DeviceToken" $device_token "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Tag" $tag "scalar") (serialize-qp "InstanceId" $instance_id "scalar") (serialize-qp "AppId" $app_id "scalar") (serialize-qp "CompanyId" $company_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statistics/v1/Statistics/consolidated/daily" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -287,7 +287,7 @@ export def "statistics-statistics-consolidated-daily /v1/statistics/consolidated
 #
 # GET /statistics/v1/Statistics/individual/
 # operationId: userStatisticsAccumulatedValue/v1/statistics/individual
-export def "statistics-statistics-individual userStatisticsAccumulatedValue/v1/statistics/individual" [
+export def "statistics-statistics-individual userStatisticsAccumulatedValue-v1-statistics-individual" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,12 +296,12 @@ export def "statistics-statistics-individual userStatisticsAccumulatedValue/v1/s
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startDate: string # e.g. 2021-01-01
-  --endDate: string # e.g. 2021-01-30
+  --start-date: string # e.g. 2021-01-01
+  --end-date: string # e.g. 2021-01-30
 ]: nothing -> record<Errors: list<any>, Result: record<AccelerationCount: float, AppId: string, AverageSpeedKmh: float, AverageSpeedMileh: float, BreakingCount: float, CompanyId: string, CorneringCount: float, DayDrivingTime: float, DeviceToken: string, DriverTripsCount: float, DrivingTime: float, InstanceId: string, MaxSpeedKmh: float, MaxSpeedMileh: float, MileageKm: float, MileageMile: float, NightDrivingTime: float, OtherTripsCount: float, PhoneUsageDistanceKm: float, PhoneUsageDistanceMile: float, PhoneUsageDurationMin: float, PhoneUsageOverSpeedDistanceKm: float, PhoneUsageOverSpeedDistanceMile: float, PhoneUsageOverSpeedDurationMin: float, RushHoursDrivingTime: float, TotalSpeedingKm: float, TotalSpeedingMile: float, TripsCount: float>, Status: float, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statistics/v1/Statistics/individual/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -312,7 +312,7 @@ export def "statistics-statistics-individual userStatisticsAccumulatedValue/v1/s
 #
 # GET /statistics/v1/Statistics/individual/daily/
 # operationId: userStatisticeDailyValueV1/statistics/individual/daily
-export def "statistics-statistics-individual-daily userStatisticeDailyValueV1/statistics/individual/daily" [
+export def "statistics-statistics-individual-daily userStatisticeDailyValueV1-statistics-individual-daily" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,12 +321,12 @@ export def "statistics-statistics-individual-daily userStatisticeDailyValueV1/st
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startDate: string # e.g. 2021-03-30
-  --endDate: string # e.g. 2021-03-30
+  --start-date: string # e.g. 2021-03-30
+  --end-date: string # e.g. 2021-03-30
 ]: nothing -> record<Errors: list<any>, Result: table<AccelerationCount: float, AppId: string, AverageSpeedKmh: float, AverageSpeedMileh: float, BreakingCount: float, CompanyId: string, CorneringCount: float, DayDrivingTime: float, DeviceToken: string, DriverTripsCount: float, DrivingTime: float, InstanceId: string, MaxSpeedKmh: float, MaxSpeedMileh: float, MileageKm: float, MileageMile: float, NightDrivingTime: float, OtherTripsCount: float, PhoneUsageDistanceKm: float, PhoneUsageDistanceMile: float, PhoneUsageDurationMin: float, PhoneUsageOverSpeedDistanceKm: float, PhoneUsageOverSpeedDistanceMile: float, PhoneUsageOverSpeedDurationMin: float, ReportDate: string, RushHoursDrivingTime: float, TotalSpeedingKm: float, TotalSpeedingMile: float, TripsCount: float>, Status: float, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statistics/v1/Statistics/individual/daily/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

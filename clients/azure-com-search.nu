@@ -71,7 +71,7 @@ def type-completer [] { ["searchServices"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-search-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-search-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Search/operations
 # operationId: Operations_List
-export def "providers-microsoft-search-operations List" [
+export def "providers-microsoft-search-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,8 +120,8 @@ export def "providers-microsoft-search-operations List" [
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Search/checkNameAvailability
 # Docs: https://aka.ms/search-manage
 # operationId: Services_CheckNameAvailability
-export def "subscriptions-providers-microsoft-search-check-name-availability CheckNameAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-search-check-name-availability check" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,8 +139,8 @@ export def "subscriptions-providers-microsoft-search-check-name-availability Che
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Search/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Search/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -154,8 +154,8 @@ export def "subscriptions-providers-microsoft-search-check-name-availability Che
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Search/searchServices
 # Docs: https://aka.ms/search-manage
 # operationId: Services_ListBySubscription
-export def "subscriptions-providers-microsoft-search-search-services ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-search-search-services list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "subscriptions-providers-microsoft-search-search-services ListBySubsc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Search/searchServices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Search/searchServices") $qp)
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -183,9 +183,9 @@ export def "subscriptions-providers-microsoft-search-search-services ListBySubsc
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Search/searchServices
 # Docs: https://aka.ms/search-manage
 # operationId: Services_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-search-search-services list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Search/searchServices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices") $qp)
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -213,10 +213,10 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Search/searchServices/{searchServiceName}
 # Docs: https://aka.ms/search-manage
 # operationId: Services_Delete
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services Delete" [
-  resourceGroupName: string
-  searchServiceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-search-search-services delete" [
+  subscription_id: string
+  resource_group_name: string
+  search_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Search/searchServices/($searchServiceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, search_service_name: $search_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}") $qp)
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -244,10 +244,10 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Search/searchServices/{searchServiceName}
 # Docs: https://aka.ms/search-manage
 # operationId: Services_Get
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services Get" [
-  resourceGroupName: string
-  searchServiceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-search-search-services get" [
+  subscription_id: string
+  resource_group_name: string
+  search_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Search/searchServices/($searchServiceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, search_service_name: $search_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}") $qp)
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -278,10 +278,10 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # --properties shape: {hostingMode?: "default"|"highDensity", partitionCount?: int, replicaCount?: int}
 # --sku shape: {name?: "free"|"basic"|"standard"|"standard2"|"standard3"|"storage_optimized_l1"|"storage_optimized_l2"}
 # --identity shape: {type: "None"|"SystemAssigned"}
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services Update" [
-  resourceGroupName: string
-  searchServiceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-search-search-services update" [
+  subscription_id: string
+  resource_group_name: string
+  search_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,8 +302,8 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Search/searchServices/($searchServiceName)" $qp)
-  let body = {properties: $properties, sku: $sku, identity: $identity, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, search_service_name: $search_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "identity": $identity, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -320,10 +320,10 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # --properties shape: {hostingMode?: "default"|"highDensity", partitionCount?: int, replicaCount?: int}
 # --sku shape: {name?: "free"|"basic"|"standard"|"standard2"|"standard3"|"storage_optimized_l1"|"storage_optimized_l2"}
 # --identity shape: {type: "None"|"SystemAssigned"}
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services CreateOrUpdate" [
-  resourceGroupName: string
-  searchServiceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-search-search-services create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  search_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,8 +344,8 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Search/searchServices/($searchServiceName)" $qp)
-  let body = {properties: $properties, sku: $sku, identity: $identity, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, search_service_name: $search_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "identity": $identity, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -359,11 +359,11 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Search/searchServices/{searchServiceName}/createQueryKey/{name}
 # Docs: https://aka.ms/search-manage
 # operationId: QueryKeys_Create
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services-create-query-key Create" [
-  resourceGroupName: string
-  searchServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-search-search-services-create-query-key create" [
+  subscription_id: string
+  resource_group_name: string
+  search_service_name: string
   name: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,7 +378,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Search/searchServices/($searchServiceName)/createQueryKey/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, search_service_name: $search_service_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}/createQueryKey/{name}") $qp)
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -391,11 +391,11 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Search/searchServices/{searchServiceName}/deleteQueryKey/{key}
 # Docs: https://aka.ms/search-manage
 # operationId: QueryKeys_Delete
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services-delete-query-key Delete" [
-  resourceGroupName: string
-  searchServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-search-search-services-delete-query-key delete" [
+  subscription_id: string
+  resource_group_name: string
+  search_service_name: string
   key: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,7 +410,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Search/searchServices/($searchServiceName)/deleteQueryKey/($key)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, search_service_name: $search_service_name, key: $key} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}/deleteQueryKey/{key}") $qp)
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -423,10 +423,10 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Search/searchServices/{searchServiceName}/listAdminKeys
 # Docs: https://aka.ms/search-manage
 # operationId: AdminKeys_Get
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services-list-admin-keys Get" [
-  resourceGroupName: string
-  searchServiceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-search-search-services-list-admin-keys get" [
+  subscription_id: string
+  resource_group_name: string
+  search_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,7 +441,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Search/searchServices/($searchServiceName)/listAdminKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, search_service_name: $search_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}/listAdminKeys") $qp)
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -454,10 +454,10 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Search/searchServices/{searchServiceName}/listQueryKeys
 # Docs: https://aka.ms/search-manage
 # operationId: QueryKeys_ListBySearchService
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services-list-query-keys ListBySearchService" [
-  resourceGroupName: string
-  searchServiceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-search-search-services-list-query-keys list-by" [
+  subscription_id: string
+  resource_group_name: string
+  search_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -472,7 +472,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Search/searchServices/($searchServiceName)/listQueryKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, search_service_name: $search_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}/listQueryKeys") $qp)
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -485,11 +485,11 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Search/searchServices/{searchServiceName}/regenerateAdminKey/{keyKind}
 # Docs: https://aka.ms/search-manage
 # operationId: AdminKeys_Regenerate
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services-regenerate-admin-key Regenerate" [
-  resourceGroupName: string
-  searchServiceName: string
-  keyKind: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-search-search-services-regenerate-admin-key post" [
+  subscription_id: string
+  resource_group_name: string
+  search_service_name: string
+  key_kind: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,7 +504,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Search/searchServices/($searchServiceName)/regenerateAdminKey/($keyKind)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, search_service_name: $search_service_name, key_kind: $key_kind} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}/regenerateAdminKey/{key_kind}") $qp)
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"

@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "safety-safety-rated-locations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "safety-safety-rated-locations get-safety-ranking" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /safety/safety-rated-locations
 # operationId: getSafetyRanking
-export def "safety-safety-rated-locations list" [
+export def "safety-safety-rated-locations get-safety-ranking" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,12 +104,12 @@ export def "safety-safety-rated-locations list" [
   --latitude: float # Latitude (decimal coordinates) (format: double, e.g. 41.397158)
   --longitude: float # Longitude (decimal coordinates) (format: double, e.g. 2.160873)
   --radius: int # radius of the search in Kilometer. Can be from 0 to 20, default value is 1 Km. (default: 1)
-  --pagelimit: int # maximum items in one page (default: 10)
-  --pageoffset: int # start index of the requested page (default: 0)
+  --page-limit: int # maximum items in one page (default: 10)
+  --page-offset: int # start index of the requested page (default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "page[limit]" $pagelimit "scalar") (serialize-qp "page[offset]" $pageoffset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[offset]" $page_offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/safety/safety-rated-locations" $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,7 +120,7 @@ export def "safety-safety-rated-locations list" [
 #
 # GET /safety/safety-rated-locations/by-square
 # operationId: getSafetyRankBySquare
-export def "safety-safety-rated-locations-by-square get" [
+export def "safety-safety-rated-locations-by-square get-safety-rank" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,12 +133,12 @@ export def "safety-safety-rated-locations-by-square get" [
   --west: float # Longitude west of bounding box (decimal coordinates) (format: double, e.g. 2.160873)
   --south: float # Latitude south of bounding box (decimal coordinates) (format: double, e.g. 41.394582)
   --east: float # Longitude east of bounding box (decimal coordinates) (format: double, e.g. 2.177181)
-  --pagelimit: int # maximum items in one page (default: 10)
-  --pageoffset: int # start index of the requested page (default: 0)
+  --page-limit: int # maximum items in one page (default: 10)
+  --page-offset: int # start index of the requested page (default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "north" $north "scalar") (serialize-qp "west" $west "scalar") (serialize-qp "south" $south "scalar") (serialize-qp "east" $east "scalar") (serialize-qp "page[limit]" $pagelimit "scalar") (serialize-qp "page[offset]" $pageoffset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "north" $north "scalar") (serialize-qp "west" $west "scalar") (serialize-qp "south" $south "scalar") (serialize-qp "east" $east "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[offset]" $page_offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/safety/safety-rated-locations/by-square" $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -149,8 +149,8 @@ export def "safety-safety-rated-locations-by-square get" [
 #
 # GET /safety/safety-rated-locations/{safety-rated-locationId}
 # operationId: getLocationSafetyRanking
-export def "safety-safety-rated-locations get" [
-  safety_rated_locationId: string
+export def "safety-safety-rated-locations get-location-safety-ranking" [
+  safety_rated_location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "safety-safety-rated-locations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/safety/safety-rated-locations/($safety_rated_locationId)")
+  let full_url = (build-url $base ({safety_rated_location_id: $safety_rated_location_id} | format pattern "/safety/safety-rated-locations/{safety_rated_location_id}"))
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

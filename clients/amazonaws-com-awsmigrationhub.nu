@@ -66,28 +66,28 @@ def base-url-completer [] { ["http://mgh.us-east-1.amazonaws.com" "http://mgh.us
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AWSMigrationHub.AssociateCreatedArtifact"] }
-def X-Amz-Target-completer-1 [] { ["AWSMigrationHub.AssociateDiscoveredResource"] }
-def X-Amz-Target-completer-2 [] { ["AWSMigrationHub.CreateProgressUpdateStream"] }
-def X-Amz-Target-completer-3 [] { ["AWSMigrationHub.DeleteProgressUpdateStream"] }
-def X-Amz-Target-completer-4 [] { ["AWSMigrationHub.DescribeApplicationState"] }
-def X-Amz-Target-completer-5 [] { ["AWSMigrationHub.DescribeMigrationTask"] }
-def X-Amz-Target-completer-6 [] { ["AWSMigrationHub.DisassociateCreatedArtifact"] }
-def X-Amz-Target-completer-7 [] { ["AWSMigrationHub.DisassociateDiscoveredResource"] }
-def X-Amz-Target-completer-8 [] { ["AWSMigrationHub.ImportMigrationTask"] }
-def X-Amz-Target-completer-9 [] { ["AWSMigrationHub.ListApplicationStates"] }
-def X-Amz-Target-completer-10 [] { ["AWSMigrationHub.ListCreatedArtifacts"] }
-def X-Amz-Target-completer-11 [] { ["AWSMigrationHub.ListDiscoveredResources"] }
-def X-Amz-Target-completer-12 [] { ["AWSMigrationHub.ListMigrationTasks"] }
-def X-Amz-Target-completer-13 [] { ["AWSMigrationHub.ListProgressUpdateStreams"] }
-def X-Amz-Target-completer-14 [] { ["AWSMigrationHub.NotifyApplicationState"] }
-def X-Amz-Target-completer-15 [] { ["AWSMigrationHub.NotifyMigrationTaskState"] }
-def X-Amz-Target-completer-16 [] { ["AWSMigrationHub.PutResourceAttributes"] }
+def x-amz-target-completer [] { ["AWSMigrationHub.AssociateCreatedArtifact"] }
+def x-amz-target-completer-1 [] { ["AWSMigrationHub.AssociateDiscoveredResource"] }
+def x-amz-target-completer-2 [] { ["AWSMigrationHub.CreateProgressUpdateStream"] }
+def x-amz-target-completer-3 [] { ["AWSMigrationHub.DeleteProgressUpdateStream"] }
+def x-amz-target-completer-4 [] { ["AWSMigrationHub.DescribeApplicationState"] }
+def x-amz-target-completer-5 [] { ["AWSMigrationHub.DescribeMigrationTask"] }
+def x-amz-target-completer-6 [] { ["AWSMigrationHub.DisassociateCreatedArtifact"] }
+def x-amz-target-completer-7 [] { ["AWSMigrationHub.DisassociateDiscoveredResource"] }
+def x-amz-target-completer-8 [] { ["AWSMigrationHub.ImportMigrationTask"] }
+def x-amz-target-completer-9 [] { ["AWSMigrationHub.ListApplicationStates"] }
+def x-amz-target-completer-10 [] { ["AWSMigrationHub.ListCreatedArtifacts"] }
+def x-amz-target-completer-11 [] { ["AWSMigrationHub.ListDiscoveredResources"] }
+def x-amz-target-completer-12 [] { ["AWSMigrationHub.ListMigrationTasks"] }
+def x-amz-target-completer-13 [] { ["AWSMigrationHub.ListProgressUpdateStreams"] }
+def x-amz-target-completer-14 [] { ["AWSMigrationHub.NotifyApplicationState"] }
+def x-amz-target-completer-15 [] { ["AWSMigrationHub.NotifyMigrationTaskState"] }
+def x-amz-target-completer-16 [] { ["AWSMigrationHub.PutResourceAttributes"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-migration-hub-associate-created-artifact AssociateCreatedArtifact" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-migration-hub-associate-created-artifact post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -111,7 +111,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AWSMigrationHub.AssociateCreatedArtifact
 # operationId: AssociateCreatedArtifact
-export def "x-amz-target-aws-migration-hub-associate-created-artifact AssociateCreatedArtifact" [
+export def "x-amz-target-aws-migration-hub-associate-created-artifact post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,26 +120,26 @@ export def "x-amz-target-aws-migration-hub-associate-created-artifact AssociateC
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  ProgressUpdateStream: any
-  MigrationTaskName: any
-  CreatedArtifact: any
-  --DryRun: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  progress_update_stream: any
+  migration_task_name: any
+  created_artifact: any
+  --body-dry-run: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.AssociateCreatedArtifact")
-  let body = {ProgressUpdateStream: $ProgressUpdateStream, MigrationTaskName: $MigrationTaskName, CreatedArtifact: $CreatedArtifact, DryRun: $DryRun} | compact
+  let body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "CreatedArtifact": $created_artifact, "DryRun": $body_dry_run} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -150,7 +150,7 @@ export def "x-amz-target-aws-migration-hub-associate-created-artifact AssociateC
 #
 # POST /#X-Amz-Target=AWSMigrationHub.AssociateDiscoveredResource
 # operationId: AssociateDiscoveredResource
-export def "x-amz-target-aws-migration-hub-associate-discovered-resource AssociateDiscoveredResource" [
+export def "x-amz-target-aws-migration-hub-associate-discovered-resource post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,26 +159,26 @@ export def "x-amz-target-aws-migration-hub-associate-discovered-resource Associa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  ProgressUpdateStream: any
-  MigrationTaskName: any
-  DiscoveredResource: any
-  --DryRun: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  progress_update_stream: any
+  migration_task_name: any
+  discovered_resource: any
+  --body-dry-run: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.AssociateDiscoveredResource")
-  let body = {ProgressUpdateStream: $ProgressUpdateStream, MigrationTaskName: $MigrationTaskName, DiscoveredResource: $DiscoveredResource, DryRun: $DryRun} | compact
+  let body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "DiscoveredResource": $discovered_resource, "DryRun": $body_dry_run} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -189,7 +189,7 @@ export def "x-amz-target-aws-migration-hub-associate-discovered-resource Associa
 #
 # POST /#X-Amz-Target=AWSMigrationHub.CreateProgressUpdateStream
 # operationId: CreateProgressUpdateStream
-export def "x-amz-target-aws-migration-hub-create-progress-update-stream CreateProgressUpdateStream" [
+export def "x-amz-target-aws-migration-hub-create-progress-update-stream create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,24 +198,24 @@ export def "x-amz-target-aws-migration-hub-create-progress-update-stream CreateP
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  ProgressUpdateStreamName: any
-  --DryRun: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  progress_update_stream_name: any
+  --body-dry-run: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.CreateProgressUpdateStream")
-  let body = {ProgressUpdateStreamName: $ProgressUpdateStreamName, DryRun: $DryRun} | compact
+  let body = {"ProgressUpdateStreamName": $progress_update_stream_name, "DryRun": $body_dry_run} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -226,7 +226,7 @@ export def "x-amz-target-aws-migration-hub-create-progress-update-stream CreateP
 #
 # POST /#X-Amz-Target=AWSMigrationHub.DeleteProgressUpdateStream
 # operationId: DeleteProgressUpdateStream
-export def "x-amz-target-aws-migration-hub-delete-progress-update-stream DeleteProgressUpdateStream" [
+export def "x-amz-target-aws-migration-hub-delete-progress-update-stream delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,24 +235,24 @@ export def "x-amz-target-aws-migration-hub-delete-progress-update-stream DeleteP
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  ProgressUpdateStreamName: any
-  --DryRun: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  progress_update_stream_name: any
+  --body-dry-run: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.DeleteProgressUpdateStream")
-  let body = {ProgressUpdateStreamName: $ProgressUpdateStreamName, DryRun: $DryRun} | compact
+  let body = {"ProgressUpdateStreamName": $progress_update_stream_name, "DryRun": $body_dry_run} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -263,7 +263,7 @@ export def "x-amz-target-aws-migration-hub-delete-progress-update-stream DeleteP
 #
 # POST /#X-Amz-Target=AWSMigrationHub.DescribeApplicationState
 # operationId: DescribeApplicationState
-export def "x-amz-target-aws-migration-hub-describe-application-state DescribeApplicationState" [
+export def "x-amz-target-aws-migration-hub-describe-application-state post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,23 +272,23 @@ export def "x-amz-target-aws-migration-hub-describe-application-state DescribeAp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  ApplicationId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  application_id: any
 ]: any -> record<ApplicationStatus: record, LastUpdatedTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.DescribeApplicationState")
-  let body = {ApplicationId: $ApplicationId} | compact
+  let body = {"ApplicationId": $application_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -299,7 +299,7 @@ export def "x-amz-target-aws-migration-hub-describe-application-state DescribeAp
 #
 # POST /#X-Amz-Target=AWSMigrationHub.DescribeMigrationTask
 # operationId: DescribeMigrationTask
-export def "x-amz-target-aws-migration-hub-describe-migration-task DescribeMigrationTask" [
+export def "x-amz-target-aws-migration-hub-describe-migration-task post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,24 +308,24 @@ export def "x-amz-target-aws-migration-hub-describe-migration-task DescribeMigra
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  ProgressUpdateStream: any
-  MigrationTaskName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  progress_update_stream: any
+  migration_task_name: any
 ]: any -> record<MigrationTask: record<ProgressUpdateStream: record, MigrationTaskName: record, Task: record<Status: record, StatusDetail: record, ProgressPercent: record>, UpdateDateTime: record, ResourceAttributeList: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.DescribeMigrationTask")
-  let body = {ProgressUpdateStream: $ProgressUpdateStream, MigrationTaskName: $MigrationTaskName} | compact
+  let body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -336,7 +336,7 @@ export def "x-amz-target-aws-migration-hub-describe-migration-task DescribeMigra
 #
 # POST /#X-Amz-Target=AWSMigrationHub.DisassociateCreatedArtifact
 # operationId: DisassociateCreatedArtifact
-export def "x-amz-target-aws-migration-hub-disassociate-created-artifact DisassociateCreatedArtifact" [
+export def "x-amz-target-aws-migration-hub-disassociate-created-artifact post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,26 +345,26 @@ export def "x-amz-target-aws-migration-hub-disassociate-created-artifact Disasso
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  ProgressUpdateStream: any
-  MigrationTaskName: any
-  CreatedArtifactName: any
-  --DryRun: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  progress_update_stream: any
+  migration_task_name: any
+  created_artifact_name: any
+  --body-dry-run: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.DisassociateCreatedArtifact")
-  let body = {ProgressUpdateStream: $ProgressUpdateStream, MigrationTaskName: $MigrationTaskName, CreatedArtifactName: $CreatedArtifactName, DryRun: $DryRun} | compact
+  let body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "CreatedArtifactName": $created_artifact_name, "DryRun": $body_dry_run} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -375,7 +375,7 @@ export def "x-amz-target-aws-migration-hub-disassociate-created-artifact Disasso
 #
 # POST /#X-Amz-Target=AWSMigrationHub.DisassociateDiscoveredResource
 # operationId: DisassociateDiscoveredResource
-export def "x-amz-target-aws-migration-hub-disassociate-discovered-resource DisassociateDiscoveredResource" [
+export def "x-amz-target-aws-migration-hub-disassociate-discovered-resource post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,26 +384,26 @@ export def "x-amz-target-aws-migration-hub-disassociate-discovered-resource Disa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  ProgressUpdateStream: any
-  MigrationTaskName: any
-  ConfigurationId: any
-  --DryRun: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  progress_update_stream: any
+  migration_task_name: any
+  configuration_id: any
+  --body-dry-run: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.DisassociateDiscoveredResource")
-  let body = {ProgressUpdateStream: $ProgressUpdateStream, MigrationTaskName: $MigrationTaskName, ConfigurationId: $ConfigurationId, DryRun: $DryRun} | compact
+  let body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "ConfigurationId": $configuration_id, "DryRun": $body_dry_run} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -414,7 +414,7 @@ export def "x-amz-target-aws-migration-hub-disassociate-discovered-resource Disa
 #
 # POST /#X-Amz-Target=AWSMigrationHub.ImportMigrationTask
 # operationId: ImportMigrationTask
-export def "x-amz-target-aws-migration-hub-import-migration-task ImportMigrationTask" [
+export def "x-amz-target-aws-migration-hub-import-migration-task import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,25 +423,25 @@ export def "x-amz-target-aws-migration-hub-import-migration-task ImportMigration
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  ProgressUpdateStream: any
-  MigrationTaskName: any
-  --DryRun: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  progress_update_stream: any
+  migration_task_name: any
+  --body-dry-run: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.ImportMigrationTask")
-  let body = {ProgressUpdateStream: $ProgressUpdateStream, MigrationTaskName: $MigrationTaskName, DryRun: $DryRun} | compact
+  let body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "DryRun": $body_dry_run} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -452,7 +452,7 @@ export def "x-amz-target-aws-migration-hub-import-migration-task ImportMigration
 #
 # POST /#X-Amz-Target=AWSMigrationHub.ListApplicationStates
 # operationId: ListApplicationStates
-export def "x-amz-target-aws-migration-hub-list-application-states ListApplicationStates" [
+export def "x-amz-target-aws-migration-hub-list-application-states list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,28 +461,28 @@ export def "x-amz-target-aws-migration-hub-list-application-states ListApplicati
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  --ApplicationIds: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  --application-ids: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<ApplicationStateList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.ListApplicationStates" $qp)
-  let body = {ApplicationIds: $ApplicationIds, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ApplicationIds": $application_ids, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -493,7 +493,7 @@ export def "x-amz-target-aws-migration-hub-list-application-states ListApplicati
 #
 # POST /#X-Amz-Target=AWSMigrationHub.ListCreatedArtifacts
 # operationId: ListCreatedArtifacts
-export def "x-amz-target-aws-migration-hub-list-created-artifacts ListCreatedArtifacts" [
+export def "x-amz-target-aws-migration-hub-list-created-artifacts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,29 +502,29 @@ export def "x-amz-target-aws-migration-hub-list-created-artifacts ListCreatedArt
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  ProgressUpdateStream: any
-  MigrationTaskName: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  progress_update_stream: any
+  migration_task_name: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: record, CreatedArtifactList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.ListCreatedArtifacts" $qp)
-  let body = {ProgressUpdateStream: $ProgressUpdateStream, MigrationTaskName: $MigrationTaskName, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -535,7 +535,7 @@ export def "x-amz-target-aws-migration-hub-list-created-artifacts ListCreatedArt
 #
 # POST /#X-Amz-Target=AWSMigrationHub.ListDiscoveredResources
 # operationId: ListDiscoveredResources
-export def "x-amz-target-aws-migration-hub-list-discovered-resources ListDiscoveredResources" [
+export def "x-amz-target-aws-migration-hub-list-discovered-resources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -544,29 +544,29 @@ export def "x-amz-target-aws-migration-hub-list-discovered-resources ListDiscove
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  ProgressUpdateStream: any
-  MigrationTaskName: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  progress_update_stream: any
+  migration_task_name: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: record, DiscoveredResourceList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.ListDiscoveredResources" $qp)
-  let body = {ProgressUpdateStream: $ProgressUpdateStream, MigrationTaskName: $MigrationTaskName, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -577,7 +577,7 @@ export def "x-amz-target-aws-migration-hub-list-discovered-resources ListDiscove
 #
 # POST /#X-Amz-Target=AWSMigrationHub.ListMigrationTasks
 # operationId: ListMigrationTasks
-export def "x-amz-target-aws-migration-hub-list-migration-tasks ListMigrationTasks" [
+export def "x-amz-target-aws-migration-hub-list-migration-tasks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -586,28 +586,28 @@ export def "x-amz-target-aws-migration-hub-list-migration-tasks ListMigrationTas
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  --NextToken: any
-  --MaxResults: any
-  --ResourceName: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  --next-token: any
+  --max-results: any
+  --resource-name: any
 ]: any -> record<NextToken: record, MigrationTaskSummaryList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.ListMigrationTasks" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, ResourceName: $ResourceName} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "ResourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -618,7 +618,7 @@ export def "x-amz-target-aws-migration-hub-list-migration-tasks ListMigrationTas
 #
 # POST /#X-Amz-Target=AWSMigrationHub.ListProgressUpdateStreams
 # operationId: ListProgressUpdateStreams
-export def "x-amz-target-aws-migration-hub-list-progress-update-streams ListProgressUpdateStreams" [
+export def "x-amz-target-aws-migration-hub-list-progress-update-streams list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -627,27 +627,27 @@ export def "x-amz-target-aws-migration-hub-list-progress-update-streams ListProg
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  --next-token: any
+  --max-results: any
 ]: any -> record<ProgressUpdateStreamSummaryList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.ListProgressUpdateStreams" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -658,7 +658,7 @@ export def "x-amz-target-aws-migration-hub-list-progress-update-streams ListProg
 #
 # POST /#X-Amz-Target=AWSMigrationHub.NotifyApplicationState
 # operationId: NotifyApplicationState
-export def "x-amz-target-aws-migration-hub-notify-application-state NotifyApplicationState" [
+export def "x-amz-target-aws-migration-hub-notify-application-state post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -667,26 +667,26 @@ export def "x-amz-target-aws-migration-hub-notify-application-state NotifyApplic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  ApplicationId: any
-  Status: any
-  --UpdateDateTime: any
-  --DryRun: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  application_id: any
+  status: any
+  --update-date-time: any
+  --body-dry-run: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.NotifyApplicationState")
-  let body = {ApplicationId: $ApplicationId, Status: $Status, UpdateDateTime: $UpdateDateTime, DryRun: $DryRun} | compact
+  let body = {"ApplicationId": $application_id, "Status": $status, "UpdateDateTime": $update_date_time, "DryRun": $body_dry_run} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -697,7 +697,7 @@ export def "x-amz-target-aws-migration-hub-notify-application-state NotifyApplic
 #
 # POST /#X-Amz-Target=AWSMigrationHub.NotifyMigrationTaskState
 # operationId: NotifyMigrationTaskState
-export def "x-amz-target-aws-migration-hub-notify-migration-task-state NotifyMigrationTaskState" [
+export def "x-amz-target-aws-migration-hub-notify-migration-task-state post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -706,28 +706,28 @@ export def "x-amz-target-aws-migration-hub-notify-migration-task-state NotifyMig
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  ProgressUpdateStream: any
-  MigrationTaskName: any
-  Task: any
-  UpdateDateTime: any
-  NextUpdateSeconds: any
-  --DryRun: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  progress_update_stream: any
+  migration_task_name: any
+  task: any
+  update_date_time: any
+  next_update_seconds: any
+  --body-dry-run: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.NotifyMigrationTaskState")
-  let body = {ProgressUpdateStream: $ProgressUpdateStream, MigrationTaskName: $MigrationTaskName, Task: $Task, UpdateDateTime: $UpdateDateTime, NextUpdateSeconds: $NextUpdateSeconds, DryRun: $DryRun} | compact
+  let body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "Task": $task, "UpdateDateTime": $update_date_time, "NextUpdateSeconds": $next_update_seconds, "DryRun": $body_dry_run} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -738,7 +738,7 @@ export def "x-amz-target-aws-migration-hub-notify-migration-task-state NotifyMig
 #
 # POST /#X-Amz-Target=AWSMigrationHub.PutResourceAttributes
 # operationId: PutResourceAttributes
-export def "x-amz-target-aws-migration-hub-put-resource-attributes PutResourceAttributes" [
+export def "x-amz-target-aws-migration-hub-put-resource-attributes update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,26 +747,26 @@ export def "x-amz-target-aws-migration-hub-put-resource-attributes PutResourceAt
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  ProgressUpdateStream: any
-  MigrationTaskName: any
-  ResourceAttributeList: any
-  --DryRun: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  progress_update_stream: any
+  migration_task_name: any
+  resource_attribute_list: any
+  --body-dry-run: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSMigrationHub.PutResourceAttributes")
-  let body = {ProgressUpdateStream: $ProgressUpdateStream, MigrationTaskName: $MigrationTaskName, ResourceAttributeList: $ResourceAttributeList, DryRun: $DryRun} | compact
+  let body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "ResourceAttributeList": $resource_attribute_list, "DryRun": $body_dry_run} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

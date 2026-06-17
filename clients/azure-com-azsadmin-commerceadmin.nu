@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-commerce-subscriber-usage-aggregates List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-commerce-subscriber-usage-aggregates list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Commerce/subscriberUsageAggregates
 # operationId: SubscriberUsageAggregates_List
-export def "subscriptions-providers-microsoft-commerce-subscriber-usage-aggregates List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-commerce-subscriber-usage-aggregates list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,16 +104,16 @@ export def "subscriptions-providers-microsoft-commerce-subscriber-usage-aggregat
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version. (default: 2015-06-01-preview)
-  --reportedStartTime: string # The reported start time (inclusive). (format: date-time)
-  --reportedEndTime: string # The reported end time (exclusive). (format: date-time)
-  --aggregationGranularity: string # The aggregation granularity.
-  --subscriberId: string # The tenant subscription identifier.
-  --continuationToken: string # The continuation token.
+  --reported-start-time: string # The reported start time (inclusive). (format: date-time)
+  --reported-end-time: string # The reported end time (exclusive). (format: date-time)
+  --aggregation-granularity: string # The aggregation granularity.
+  --subscriber-id: string # The tenant subscription identifier.
+  --continuation-token: string # The continuation token.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "reportedStartTime" $reportedStartTime "scalar") (serialize-qp "reportedEndTime" $reportedEndTime "scalar") (serialize-qp "aggregationGranularity" $aggregationGranularity "scalar") (serialize-qp "subscriberId" $subscriberId "scalar") (serialize-qp "continuationToken" $continuationToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Commerce/subscriberUsageAggregates" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "reportedStartTime" $reported_start_time "scalar") (serialize-qp "reportedEndTime" $reported_end_time "scalar") (serialize-qp "aggregationGranularity" $aggregation_granularity "scalar") (serialize-qp "subscriberId" $subscriber_id "scalar") (serialize-qp "continuationToken" $continuation_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Commerce/subscriberUsageAggregates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -181,7 +181,7 @@ export def "ats-applicants applicantsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ats/applicants" $qp)
-  let body = {addresses: $addresses, anonymized: $anonymized, applications: $applications, archived: $archived, birthday: $birthday, confidential: $confidential, coordinator_id: $coordinator_id, cover_letter: $cover_letter, custom_fields: $custom_fields, deleted: $deleted, emails: $emails, first_name: $first_name, followers: $followers, headline: $headline, initials: $initials, last_name: $last_name, middle_name: $middle_name, name: $name, owner_id: $owner_id, phone_numbers: $phone_numbers, photo_url: $photo_url, position_id: $position_id, record_url: $record_url, recruiter_id: $recruiter_id, social_links: $social_links, sources: $sources, stage_id: $stage_id, tags: $tags, title: $title, websites: $websites} | compact
+  let body = {"addresses": $addresses, "anonymized": $anonymized, "applications": $applications, "archived": $archived, "birthday": $birthday, "confidential": $confidential, "coordinator_id": $coordinator_id, "cover_letter": $cover_letter, "custom_fields": $custom_fields, "deleted": $deleted, "emails": $emails, "first_name": $first_name, "followers": $followers, "headline": $headline, "initials": $initials, "last_name": $last_name, "middle_name": $middle_name, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "position_id": $position_id, "record_url": $record_url, "recruiter_id": $recruiter_id, "social_links": $social_links, "sources": $sources, "stage_id": $stage_id, "tags": $tags, "title": $title, "websites": $websites} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -213,7 +213,7 @@ export def "ats-applicants applicantsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ats/applicants/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/ats/applicants/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -276,7 +276,7 @@ export def "ats-jobs jobsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ats/jobs/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/ats/jobs/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"

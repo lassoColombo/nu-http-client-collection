@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dataentities Listdataentities" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dataentities list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/dataentities
 # operationId: Listdataentities
-export def "dataentities Listdataentities" [
+export def "dataentities list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,13 +103,13 @@ export def "dataentities Listdataentities" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
 ]: nothing -> table<acronym: string, allowGetAll: bool, name: string, primaryKeyType: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/dataentities")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,7 +120,7 @@ export def "dataentities Listdataentities" [
 #
 # GET /api/dataentities/{acronym}
 # operationId: Getdataentitystructure
-export def "dataentities Getdataentitystructure" [
+export def "dataentities get-dataentitystructure" [
   acronym: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -130,13 +130,13 @@ export def "dataentities Getdataentitystructure" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
 ]: nothing -> record<acronym: string, allowGetAll: bool, fields: table<displayName: string, isFilter: bool, isInternal: bool, isNullable: bool, isSearchable: bool, name: string, type: string>, name: string, primaryKeyType: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({acronym: $acronym} | format pattern "/api/dataentities/{acronym}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -147,7 +147,7 @@ export def "dataentities Getdataentitystructure" [
 #
 # PATCH /api/dataentities/{acronym}/documents
 # operationId: Createorupdatepartialdocument
-export def "dataentities-documents Createorupdatepartialdocument" [
+export def "dataentities-documents create-orupdatepartialdocument" [
   acronym: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,15 +157,15 @@ export def "dataentities-documents Createorupdatepartialdocument" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/documents")
+  let full_url = (build-url $base ({acronym: $acronym} | format pattern "/api/dataentities/{acronym}/documents"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept} | compact
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -176,7 +176,7 @@ export def "dataentities-documents Createorupdatepartialdocument" [
 #
 # POST /api/dataentities/{acronym}/documents
 # operationId: Createnewdocument
-export def "dataentities-documents Createnewdocument" [
+export def "dataentities-documents create-newdocument" [
   acronym: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -186,15 +186,15 @@ export def "dataentities-documents Createnewdocument" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
   --body: record
 ]: any -> record<Href: string, Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/documents")
+  let full_url = (build-url $base ({acronym: $acronym} | format pattern "/api/dataentities/{acronym}/documents"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept} | compact
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -205,7 +205,7 @@ export def "dataentities-documents Createnewdocument" [
 #
 # PUT /api/dataentities/{acronym}/documents
 # operationId: Createorupdateentiredocument
-export def "dataentities-documents Createorupdateentiredocument" [
+export def "dataentities-documents create-orupdateentiredocument" [
   acronym: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -215,15 +215,15 @@ export def "dataentities-documents Createorupdateentiredocument" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/documents")
+  let full_url = (build-url $base ({acronym: $acronym} | format pattern "/api/dataentities/{acronym}/documents"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept} | compact
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -234,7 +234,7 @@ export def "dataentities-documents Createorupdateentiredocument" [
 #
 # DELETE /api/dataentities/{acronym}/documents/{id}
 # operationId: Deletedocument
-export def "dataentities-documents Deletedocument" [
+export def "dataentities-documents delete" [
   acronym: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -245,13 +245,13 @@ export def "dataentities-documents Deletedocument" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/documents/($id)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({acronym: $acronym, id: $id} | format pattern "/api/dataentities/{acronym}/documents/{id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -262,7 +262,7 @@ export def "dataentities-documents Deletedocument" [
 #
 # GET /api/dataentities/{acronym}/documents/{id}
 # operationId: Getdocument
-export def "dataentities-documents Getdocument" [
+export def "dataentities-documents get" [
   acronym: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -273,13 +273,13 @@ export def "dataentities-documents Getdocument" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
 ]: nothing -> record<campo1: string, campo2: string, campo3: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/documents/($id)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({acronym: $acronym, id: $id} | format pattern "/api/dataentities/{acronym}/documents/{id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -290,7 +290,7 @@ export def "dataentities-documents Getdocument" [
 #
 # PATCH /api/dataentities/{acronym}/documents/{id}
 # operationId: Updatepartialdocument
-export def "dataentities-documents Updatepartialdocument" [
+export def "dataentities-documents update-partialdocument" [
   acronym: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -301,15 +301,15 @@ export def "dataentities-documents Updatepartialdocument" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/documents/($id)")
+  let full_url = (build-url $base ({acronym: $acronym, id: $id} | format pattern "/api/dataentities/{acronym}/documents/{id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept} | compact
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -320,7 +320,7 @@ export def "dataentities-documents Updatepartialdocument" [
 #
 # PUT /api/dataentities/{acronym}/documents/{id}
 # operationId: Updateentiredocument
-export def "dataentities-documents Updateentiredocument" [
+export def "dataentities-documents update-entiredocument" [
   acronym: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -331,15 +331,15 @@ export def "dataentities-documents Updateentiredocument" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/documents/($id)")
+  let full_url = (build-url $base ({acronym: $acronym, id: $id} | format pattern "/api/dataentities/{acronym}/documents/{id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept} | compact
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -350,7 +350,7 @@ export def "dataentities-documents Updateentiredocument" [
 #
 # POST /api/dataentities/{acronym}/documents/{id}/clusters
 # operationId: ValidateDocumentbyClusters
-export def "dataentities-documents-clusters ValidateDocumentbyClusters" [
+export def "dataentities-documents-clusters validate-documentby" [
   acronym: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -361,15 +361,15 @@ export def "dataentities-documents-clusters ValidateDocumentbyClusters" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/documents/($id)/clusters")
+  let full_url = (build-url $base ({acronym: $acronym, id: $id} | format pattern "/api/dataentities/{acronym}/documents/{id}/clusters"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept} | compact
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -380,7 +380,7 @@ export def "dataentities-documents-clusters ValidateDocumentbyClusters" [
 #
 # PUT /api/dataentities/{acronym}/documents/{id}/score
 # operationId: Putscores
-export def "dataentities-documents-score Putscores" [
+export def "dataentities-documents-score update" [
   acronym: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -391,15 +391,15 @@ export def "dataentities-documents-score Putscores" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/documents/($id)/score")
+  let full_url = (build-url $base ({acronym: $acronym, id: $id} | format pattern "/api/dataentities/{acronym}/documents/{id}/score"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept} | compact
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -410,7 +410,7 @@ export def "dataentities-documents-score Putscores" [
 #
 # DELETE /api/dataentities/{acronym}/documents/{id}/score/{field-name}
 # operationId: Deletescorebyfield
-export def "dataentities-documents-score Deletescorebyfield" [
+export def "dataentities-documents-score delete-scorebyfield" [
   acronym: string
   id: string
   field_name: string
@@ -422,16 +422,16 @@ export def "dataentities-documents-score Deletescorebyfield" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
   key: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/documents/($id)/score/($field_name)")
-  let body = {key: $key} | compact
+  let full_url = (build-url $base ({acronym: $acronym, id: $id, field_name: $field_name} | format pattern "/api/dataentities/{acronym}/documents/{id}/score/{field_name}"))
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept} | compact
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -442,7 +442,7 @@ export def "dataentities-documents-score Deletescorebyfield" [
 #
 # PUT /api/dataentities/{acronym}/documents/{id}/score/{field-name}
 # operationId: Putscorebyfield
-export def "dataentities-documents-score Putscorebyfield" [
+export def "dataentities-documents-score update-scorebyfield" [
   acronym: string
   id: string
   field_name: string
@@ -454,7 +454,7 @@ export def "dataentities-documents-score Putscorebyfield" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
   key: string
   point: int # format: int32
   until: string
@@ -462,10 +462,10 @@ export def "dataentities-documents-score Putscorebyfield" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/documents/($id)/score/($field_name)")
-  let body = {key: $key, point: $point, until: $until} | compact
+  let full_url = (build-url $base ({acronym: $acronym, id: $id, field_name: $field_name} | format pattern "/api/dataentities/{acronym}/documents/{id}/score/{field_name}"))
+  let body = {"key": $key, "point": $point, "until": $until} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept} | compact
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -476,7 +476,7 @@ export def "dataentities-documents-score Putscorebyfield" [
 #
 # GET /api/dataentities/{acronym}/documents/{id}/versions
 # operationId: Listversions
-export def "dataentities-documents-versions Listversions" [
+export def "dataentities-documents-versions list" [
   acronym: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -487,13 +487,13 @@ export def "dataentities-documents-versions Listversions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
 ]: nothing -> table<date: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/documents/($id)/versions")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({acronym: $acronym, id: $id} | format pattern "/api/dataentities/{acronym}/documents/{id}/versions"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -504,10 +504,10 @@ export def "dataentities-documents-versions Listversions" [
 #
 # GET /api/dataentities/{acronym}/documents/{id}/versions/{versionId}
 # operationId: Getversion
-export def "dataentities-documents-versions Getversion" [
+export def "dataentities-documents-versions get" [
   acronym: string
   id: string
-  versionId: string
+  version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,13 +516,13 @@ export def "dataentities-documents-versions Getversion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
 ]: nothing -> record<author: string, document: record<accountId: string, accountName: string, carttag: string, checkouttag: string, dataEntityId: string, departmentVisitedTag: record<DisplayValue: string, Scores: record>, email: string, followers: list<string>, id: string, rclastsession: string, rclastsessiondate: string>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/documents/($id)/versions/($versionId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({acronym: $acronym, id: $id, version_id: $version_id} | format pattern "/api/dataentities/{acronym}/documents/{id}/versions/{version_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -533,10 +533,10 @@ export def "dataentities-documents-versions Getversion" [
 #
 # PUT /api/dataentities/{acronym}/documents/{id}/versions/{versionId}
 # operationId: Putversion
-export def "dataentities-documents-versions Putversion" [
+export def "dataentities-documents-versions update" [
   acronym: string
   id: string
-  versionId: string
+  version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -545,13 +545,13 @@ export def "dataentities-documents-versions Putversion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
 ]: nothing -> record<Href: string, Id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/documents/($id)/versions/($versionId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({acronym: $acronym, id: $id, version_id: $version_id} | format pattern "/api/dataentities/{acronym}/documents/{id}/versions/{version_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -562,7 +562,7 @@ export def "dataentities-documents-versions Putversion" [
 #
 # POST /api/dataentities/{acronym}/documents/{id}/{field}/attachments
 # operationId: Saveattachment
-export def "dataentities-documents-attachments Saveattachment" [
+export def "dataentities-documents-attachments post" [
   acronym: string
   id: string
   field: string
@@ -579,8 +579,8 @@ export def "dataentities-documents-attachments Saveattachment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/documents/($id)/($field)/attachments")
-  let body = {file: $file} | compact
+  let full_url = (build-url $base ({acronym: $acronym, id: $id, field: $field} | format pattern "/api/dataentities/{acronym}/documents/{id}/{field}/attachments"))
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -591,7 +591,7 @@ export def "dataentities-documents-attachments Saveattachment" [
 #
 # GET /api/dataentities/{acronym}/documents/{id}/{field}/attachments/{file-name}
 # operationId: Retrieveattachment
-export def "dataentities-documents-attachments Retrieveattachment" [
+export def "dataentities-documents-attachments retrieve" [
   acronym: string
   id: string
   field: string
@@ -607,7 +607,7 @@ export def "dataentities-documents-attachments Retrieveattachment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/documents/($id)/($field)/attachments/($file_name)")
+  let full_url = (build-url $base ({acronym: $acronym, id: $id, field: $field, file_name: $file_name} | format pattern "/api/dataentities/{acronym}/documents/{id}/{field}/attachments/{file_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -617,7 +617,7 @@ export def "dataentities-documents-attachments Retrieveattachment" [
 #
 # GET /api/dataentities/{acronym}/scroll
 # operationId: Scrolldocuments
-export def "dataentities-scroll Scrolldocuments" [
+export def "dataentities-scroll get" [
   acronym: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -627,13 +627,13 @@ export def "dataentities-scroll Scrolldocuments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/scroll")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({acronym: $acronym} | format pattern "/api/dataentities/{acronym}/scroll"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -644,7 +644,7 @@ export def "dataentities-scroll Scrolldocuments" [
 #
 # GET /api/dataentities/{acronym}/search
 # operationId: Searchdocuments
-export def "dataentities-search Searchdocuments" [
+export def "dataentities-search list-documents" [
   acronym: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -659,15 +659,15 @@ export def "dataentities-search Searchdocuments" [
   --schema: string # Enter with the name of the schema to filter documents by compatibility of the schema. (default: {{schema}})
   --keyword: string # String to search (default: String to search)
   --qp-sort: string # Use ASC value to sort ascending or DESC value to sort descending.  (default: firstName ASC)
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
-  --REST-Range: string # Range of documents to show
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --rest-range: string # Range of documents to show
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_fields" $fields "scalar") (serialize-qp "_where" $qp_where "scalar") (serialize-qp "_schema" $schema "scalar") (serialize-qp "_keyword" $keyword "scalar") (serialize-qp "_sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/dataentities/($acronym)/search" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept, "REST-Range": $REST_Range} | compact
+  let full_url = (build-url $base ({acronym: $acronym} | format pattern "/api/dataentities/{acronym}/search") $qp)
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "REST-Range": $rest_range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

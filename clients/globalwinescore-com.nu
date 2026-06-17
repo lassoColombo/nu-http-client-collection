@@ -73,7 +73,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "globalwinescores listHistoricalGWS" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "globalwinescores list-historical-gws" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +97,7 @@ export def commands []: nothing -> table {
 #
 # GET /globalwinescores/
 # operationId: listHistoricalGWS
-export def "globalwinescores listHistoricalGWS" [
+export def "globalwinescores list-historical-gws" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,13 +116,13 @@ export def "globalwinescores listHistoricalGWS" [
   --limit: int # Number of results to return per page. (default: 100)
   --offset: int # The initial index from which to return the results. (e.g. 100)
   --ordering: string@ordering-completer # Which field to use when ordering the results. (default: -date)
-  --Authorization: string # e.g. Token <YOUR-API-TOKEN>
+  --authorization: string # e.g. Token <YOUR-API-TOKEN>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "wine_id" $wine_id "multi") (serialize-qp "vintage" $vintage "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "is_primeurs" $is_primeurs "scalar") (serialize-qp "lwin" $lwin "scalar") (serialize-qp "lwin_11" $lwin_11 "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/globalwinescores/" $qp)
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -151,13 +151,13 @@ export def "globalwinescores-latest get" [
   --limit: int # Number of results to return per page. (default: 100)
   --offset: int # The initial index from which to return the results. (e.g. 100)
   --ordering: string@ordering-completer # Which field to use when ordering the results. (default: -date)
-  --Authorization: string # e.g. Token <YOUR-API-TOKEN>
+  --authorization: string # e.g. Token <YOUR-API-TOKEN>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "wine_id" $wine_id "multi") (serialize-qp "vintage" $vintage "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "is_primeurs" $is_primeurs "scalar") (serialize-qp "lwin" $lwin "scalar") (serialize-qp "lwin_11" $lwin_11 "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/globalwinescores/latest/" $qp)
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -117,7 +117,7 @@ export def "info groovInfo" [
 #
 # GET /v1/data-store/devices
 # operationId: listDevices
-export def "data-store-devices listDevices" [
+export def "data-store-devices list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,7 +139,7 @@ export def "data-store-devices listDevices" [
 #
 # GET /v1/data-store/devices/{id}/tags
 # operationId: listDeviceTags
-export def "data-store-devices-tags listDeviceTags" [
+export def "data-store-devices-tags list" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -152,7 +152,7 @@ export def "data-store-devices-tags listDeviceTags" [
 ]: nothing -> table<dataType: string, deviceId: float, id: float, length: float, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/data-store/devices/($id)/tags")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/data-store/devices/{id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -184,7 +184,7 @@ export def "data-store-read batchReadTags" [
 #
 # GET /v1/data-store/read/{id}
 # operationId: readTag
-export def "data-store-read readTag" [
+export def "data-store-read get-tag" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -200,7 +200,7 @@ export def "data-store-read readTag" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "index" $index "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/data-store/read/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/data-store/read/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -210,7 +210,7 @@ export def "data-store-read readTag" [
 #
 # GET /v1/data-store/tags
 # operationId: listAllTags
-export def "data-store-tags listAllTags" [
+export def "data-store-tags list-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "data-store-write writeTag" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "value" $value "scalar") (serialize-qp "index" $index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/data-store/write/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/data-store/write/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,7 +258,7 @@ export def "data-store-write writeTag" [
 #
 # GET /v1/logging/groovLogs.json
 # operationId: downloadLogJson
-export def "logging-groov-logsjson downloadLogJson" [
+export def "logging-groov-logsjson download-log-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,7 +284,7 @@ export def "logging-groov-logsjson downloadLogJson" [
 #
 # GET /v1/logging/groovLogs.txt
 # operationId: downloadLogText
-export def "logging-groov-logstxt downloadLogText" [
+export def "logging-groov-logstxt download-log-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -310,7 +310,7 @@ export def "logging-groov-logstxt downloadLogText" [
 #
 # GET /whoami
 # operationId: whoAmI
-export def "whoami whoAmI" [
+export def "whoami get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

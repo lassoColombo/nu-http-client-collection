@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "web-chats CreateWebChannel" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "web-chats create-web-channel" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 # POST /v2/WebChats
 #
 # operationId: CreateWebChannel
-export def "web-chats CreateWebChannel" [
+export def "web-chats create-web-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,16 +101,16 @@ export def "web-chats CreateWebChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  AddressSid: string # The SID of the Conversations Address. See [Address Configuration Resource](https://www.twilio.com/docs/conversations/api/address-configuration-resource) for configuration details. When a conversation is created on the Flex backend, the callback URL will be set to the corresponding Studio Flow SID or webhook URL in your address configuration.
-  --ChatFriendlyName: string # The Conversation's friendly name. See the [Conversation resource](https://www.twilio.com/docs/conversations/api/conversation-resource) for an example.
-  --CustomerFriendlyName: string # The Conversation participant's friendly name. See the [Conversation Participant Resource](https://www.twilio.com/docs/conversations/api/conversation-participant-resource) for an example.
-  --PreEngagementData: string # The pre-engagement data.
+  address_sid: string # The SID of the Conversations Address. See [Address Configuration Resource](https://www.twilio.com/docs/conversations/api/address-configuration-resource) for configuration details. When a conversation is created on the Flex backend, the callback URL will be set to the corresponding Studio Flow SID or webhook URL in your address configuration.
+  --chat-friendly-name: string # The Conversation's friendly name. See the [Conversation resource](https://www.twilio.com/docs/conversations/api/conversation-resource) for an example.
+  --customer-friendly-name: string # The Conversation participant's friendly name. See the [Conversation Participant Resource](https://www.twilio.com/docs/conversations/api/conversation-participant-resource) for an example.
+  --pre-engagement-data: string # The pre-engagement data.
 ]: any -> record<conversation_sid: string, identity: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v2/WebChats")
-  let body = {AddressSid: $AddressSid, ChatFriendlyName: $ChatFriendlyName, CustomerFriendlyName: $CustomerFriendlyName, PreEngagementData: $PreEngagementData} | compact
+  let body = {"AddressSid": $address_sid, "ChatFriendlyName": $chat_friendly_name, "CustomerFriendlyName": $customer_friendly_name, "PreEngagementData": $pre_engagement_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

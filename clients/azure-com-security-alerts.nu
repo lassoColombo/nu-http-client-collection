@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-alerts List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-alerts list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/alerts
 # operationId: Alerts_List
-export def "subscriptions-providers-microsoft-security-alerts List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-security-alerts list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,7 +111,7 @@ export def "subscriptions-providers-microsoft-security-alerts List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/alerts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/alerts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -121,9 +121,9 @@ export def "subscriptions-providers-microsoft-security-alerts List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/locations/{ascLocation}/alerts
 # operationId: Alerts_ListSubscriptionLevelAlertsByRegion
-export def "subscriptions-providers-microsoft-security-locations-alerts ListSubscriptionLevelAlertsByRegion" [
-  subscriptionId: string
-  ascLocation: string
+export def "subscriptions-providers-microsoft-security-locations-alerts list-subscription-level" [
+  subscription_id: string
+  asc_location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +140,7 @@ export def "subscriptions-providers-microsoft-security-locations-alerts ListSubs
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/locations/($ascLocation)/alerts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, asc_location: $asc_location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/locations/{asc_location}/alerts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,10 +150,10 @@ export def "subscriptions-providers-microsoft-security-locations-alerts ListSubs
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/locations/{ascLocation}/alerts/{alertName}
 # operationId: Alerts_GetSubscriptionLevelAlert
-export def "subscriptions-providers-microsoft-security-locations-alerts GetSubscriptionLevelAlert" [
-  subscriptionId: string
-  ascLocation: string
-  alertName: string
+export def "subscriptions-providers-microsoft-security-locations-alerts get-subscription-level" [
+  subscription_id: string
+  asc_location: string
+  alert_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "subscriptions-providers-microsoft-security-locations-alerts GetSubsc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/locations/($ascLocation)/alerts/($alertName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, asc_location: $asc_location, alert_name: $alert_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/locations/{asc_location}/alerts/{alert_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -177,10 +177,10 @@ export def "subscriptions-providers-microsoft-security-locations-alerts GetSubsc
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Security/locations/{ascLocation}/alerts/{alertName}/dismiss
 # operationId: Alerts_UpdateSubscriptionLevelAlertStateToDismiss
-export def "subscriptions-providers-microsoft-security-locations-alerts-dismiss UpdateSubscriptionLevelAlertStateToDismiss" [
-  subscriptionId: string
-  ascLocation: string
-  alertName: string
+export def "subscriptions-providers-microsoft-security-locations-alerts-dismiss update-subscription-level-alert-state-to" [
+  subscription_id: string
+  asc_location: string
+  alert_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "subscriptions-providers-microsoft-security-locations-alerts-dismiss 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/locations/($ascLocation)/alerts/($alertName)/dismiss" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, asc_location: $asc_location, alert_name: $alert_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/locations/{asc_location}/alerts/{alert_name}/dismiss") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,10 +204,10 @@ export def "subscriptions-providers-microsoft-security-locations-alerts-dismiss 
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Security/locations/{ascLocation}/alerts/{alertName}/reactivate
 # operationId: Alerts_UpdateSubscriptionLevelAlertStateToReactivate
-export def "subscriptions-providers-microsoft-security-locations-alerts-reactivate UpdateSubscriptionLevelAlertStateToReactivate" [
-  subscriptionId: string
-  ascLocation: string
-  alertName: string
+export def "subscriptions-providers-microsoft-security-locations-alerts-reactivate update-subscription-level-alert-state-to" [
+  subscription_id: string
+  asc_location: string
+  alert_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "subscriptions-providers-microsoft-security-locations-alerts-reactiva
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/locations/($ascLocation)/alerts/($alertName)/reactivate" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, asc_location: $asc_location, alert_name: $alert_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/locations/{asc_location}/alerts/{alert_name}/reactivate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -231,9 +231,9 @@ export def "subscriptions-providers-microsoft-security-locations-alerts-reactiva
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/alerts
 # operationId: Alerts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-security-alerts ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-alerts list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,7 +250,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-alerts Li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/alerts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/alerts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,10 +260,10 @@ export def "subscriptions-resource-groups-providers-microsoft-security-alerts Li
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/alerts
 # operationId: Alerts_ListResourceGroupLevelAlertsByRegion
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-alerts ListResourceGroupLevelAlertsByRegion" [
-  subscriptionId: string
-  ascLocation: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-locations-alerts list-resource-group-level" [
+  subscription_id: string
+  resource_group_name: string
+  asc_location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/locations/($ascLocation)/alerts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, asc_location: $asc_location} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/locations/{asc_location}/alerts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -290,11 +290,11 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/alerts/{alertName}
 # operationId: Alerts_GetResourceGroupLevelAlerts
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-alerts GetResourceGroupLevelAlerts" [
-  subscriptionId: string
-  ascLocation: string
-  alertName: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-locations-alerts get-resource-group-level" [
+  subscription_id: string
+  resource_group_name: string
+  asc_location: string
+  alert_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/locations/($ascLocation)/alerts/($alertName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, asc_location: $asc_location, alert_name: $alert_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/locations/{asc_location}/alerts/{alert_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,11 +318,11 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/alerts/{alertName}/dismiss
 # operationId: Alerts_UpdateResourceGroupLevelAlertStateToDismiss
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-alerts-dismiss UpdateResourceGroupLevelAlertStateToDismiss" [
-  subscriptionId: string
-  ascLocation: string
-  alertName: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-locations-alerts-dismiss update-resource-group-level-alert-state-to" [
+  subscription_id: string
+  resource_group_name: string
+  asc_location: string
+  alert_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,7 +336,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/locations/($ascLocation)/alerts/($alertName)/dismiss" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, asc_location: $asc_location, alert_name: $alert_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/locations/{asc_location}/alerts/{alert_name}/dismiss") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -346,11 +346,11 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/alerts/{alertName}/reactivate
 # operationId: Alerts_UpdateResourceGroupLevelAlertStateToReactivate
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-alerts-reactivate UpdateResourceGroupLevelAlertStateToReactivate" [
-  subscriptionId: string
-  ascLocation: string
-  alertName: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-locations-alerts-reactivate update-resource-group-level-alert-state-to" [
+  subscription_id: string
+  resource_group_name: string
+  asc_location: string
+  alert_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/locations/($ascLocation)/alerts/($alertName)/reactivate" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, asc_location: $asc_location, alert_name: $alert_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/locations/{asc_location}/alerts/{alert_name}/reactivate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

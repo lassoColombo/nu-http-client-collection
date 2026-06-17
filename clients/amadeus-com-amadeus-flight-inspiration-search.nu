@@ -65,7 +65,7 @@ def base-url-completer [] { ["https://test.api.amadeus.com/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def viewBy-completer [] { ["COUNTRY" "DATE" "DESTINATION" "DURATION" "WEEK"] }
+def view-by-completer [] { ["COUNTRY" "DATE" "DESTINATION" "DURATION" "WEEK"] }
 def accept-completer [] { ["application/json" "application/vnd.amadeus+json"] }
 
 # List all available API commands with their parameters
@@ -106,16 +106,16 @@ export def "shopping-flight-destinations get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --origin: string # IATA code of the city from which the flight will depart  [IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx) - e.g. MAD for Madrid  (e.g. MAD)
-  --departureDate: string # The date, or range of dates, on which the flight will depart from the origin. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2017-12-25.   Ranges are specified with a comma and are inclusive  Departure date can not be more than 180 days in the future.
-  --oneWay: oneof<nothing, bool> # if this parameter is set to true, only one-way flights are considered. If this parameter is not set or set to false, only round-trip flights are considered (default: false)
+  --departure-date: string # The date, or range of dates, on which the flight will depart from the origin. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2017-12-25.   Ranges are specified with a comma and are inclusive  Departure date can not be more than 180 days in the future.
+  --one-way: oneof<nothing, bool> # if this parameter is set to true, only one-way flights are considered. If this parameter is not set or set to false, only round-trip flights are considered (default: false)
   --duration: string # Exact duration or range of durations of the travel, in days.  This parameter must not be set if oneWay is true.   Ranges are specified with a comma and are inclusive, e.g. 2,8  Duration can not be lower than 1 days or higher than 15 days
-  --nonStop: oneof<nothing, bool> # if this parameter is set to true, only flights going from the origin to the destination with no stop in-between are considered (default: false)
-  --maxPrice: int # defines the price limit for each offer returned. The value should be a positive number, without decimals (format: int64)
-  --viewBy: string@viewBy-completer # view the flight destinations by DATE, DESTINATION, DURATION, WEEK, or COUNTRY. View by DATE (default when oneWay is true) to get the cheapest flight destination for every departure date in the given range. View by DURATION (default when oneWay is false) to get the cheapest flight destination for every departure date and for every duration in the given ranges. View by WEEK to get the cheapest flight destination for every week in the given range of departure dates. View by COUNTRY to get the cheapest flight destination by country. Note that specifying a detailed view but large ranges may result in a huge number of flight destinations being returned. For some very large numbers of flight destinations, the API may refuse to provide a response
+  --non-stop: oneof<nothing, bool> # if this parameter is set to true, only flights going from the origin to the destination with no stop in-between are considered (default: false)
+  --max-price: int # defines the price limit for each offer returned. The value should be a positive number, without decimals (format: int64)
+  --view-by: string@view-by-completer # view the flight destinations by DATE, DESTINATION, DURATION, WEEK, or COUNTRY. View by DATE (default when oneWay is true) to get the cheapest flight destination for every departure date in the given range. View by DURATION (default when oneWay is false) to get the cheapest flight destination for every departure date and for every duration in the given ranges. View by WEEK to get the cheapest flight destination for every week in the given range of departure dates. View by COUNTRY to get the cheapest flight destination by country. Note that specifying a detailed view but large ranges may result in a huge number of flight destinations being returned. For some very large numbers of flight destinations, the API may refuse to provide a response
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "origin" $origin "scalar") (serialize-qp "departureDate" $departureDate "scalar") (serialize-qp "oneWay" $oneWay "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "nonStop" $nonStop "scalar") (serialize-qp "maxPrice" $maxPrice "scalar") (serialize-qp "viewBy" $viewBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "origin" $origin "scalar") (serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "oneWay" $one_way "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "nonStop" $non_stop "scalar") (serialize-qp "maxPrice" $max_price "scalar") (serialize-qp "viewBy" $view_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shopping/flight-destinations" $qp)
   let accept_val = ($accept | default "application/vnd.amadeus+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

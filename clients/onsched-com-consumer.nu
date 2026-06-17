@@ -67,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def scope-completer [] { ["all" "company" "location"] }
-def sortOrder-completer [] { ["name" "natural"] }
+def sort-order-completer [] { ["name" "natural"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -104,25 +104,25 @@ export def "consumer-appointments list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locationId: string # id of business location
+  --location-id: string # id of business location
   --email: string # Filter by email address
   --lastname: string # Filter by lastname or part of it
   --phone: string # Filter by phone number or part of it
-  --serviceId: string # Filter by service
-  --calendarId: string # Filter by calendar
-  --resourceId: string # Filter by resource
-  --customerId: string # Filter by customer
-  --serviceAllocationId: string # Filter by service allocation
-  --startDate: string # Format YYYY-MM-DD. Filter by on/after startDate (format: date-time)
-  --endDate: string # Format YYYY-MM-DD. Filter on/before endDate (format: date-time)
+  --service-id: string # Filter by service
+  --calendar-id: string # Filter by calendar
+  --resource-id: string # Filter by resource
+  --customer-id: string # Filter by customer
+  --service-allocation-id: string # Filter by service allocation
+  --start-date: string # Format YYYY-MM-DD. Filter by on/after startDate (format: date-time)
+  --end-date: string # Format YYYY-MM-DD. Filter on/before endDate (format: date-time)
   --status: string # Filter by status: IN, BK, CN, RE, RS
-  --bookedBy: string # Filter by the email of who booked
+  --booked-by: string # Filter by the email of who booked
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit, default 20, max 100 (format: int32)
 ]: nothing -> record<count: int, data: table<auditTrail: list, bookedBy: string, businessName: string, calendarId: string, confirmationNumber: string, confirmed: bool, createDate: string, customFields: record, customerId: string, customerMessage: string, customers: list, date: string, dateInternational: string, downloadIcsUrl: string, duration: int, email: string, emailConfirmationSent: string, emailReminderSent: string, endDateTime: string, firstname: string, groupSize: int, id: string, ipAddress: string, lastModifiedBy: string, lastModifiedOn: string, lastname: string, latitude: string, location: string, locationId: string, longitude: string, name: string, notes: string, object: string, onlineBooking: bool, paymentStatus: int, phone: string, phoneExt: string, phoneType: string, rescheduledId: string, resourceEmail: string, resourceGroupId: string, resourceGroupName: string, resourceId: string, resourceImageUrl: string, resourceName: string, resources: list, serviceAllocationId: string, serviceId: string, serviceImageUrl: string, serviceName: string, smsConfirmationSent: string, smsReminderSent: string, startDateTime: string, status: string, stripeChargeId: string, stripeRefundId: string, time: int, timezone: int, timezoneIana: string, timezoneId: string>, hasMore: bool, object: string, total: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locationId" $locationId "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "phone" $phone "scalar") (serialize-qp "serviceId" $serviceId "scalar") (serialize-qp "calendarId" $calendarId "scalar") (serialize-qp "resourceId" $resourceId "scalar") (serialize-qp "customerId" $customerId "scalar") (serialize-qp "serviceAllocationId" $serviceAllocationId "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "bookedBy" $bookedBy "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "locationId" $location_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "phone" $phone "scalar") (serialize-qp "serviceId" $service_id "scalar") (serialize-qp "calendarId" $calendar_id "scalar") (serialize-qp "resourceId" $resource_id "scalar") (serialize-qp "customerId" $customer_id "scalar") (serialize-qp "serviceAllocationId" $service_allocation_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "bookedBy" $booked_by "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/consumer/v1/appointments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -144,40 +144,40 @@ export def "consumer-appointments post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --completeBooking: string # Options are "BK", "RS" or "IN"
-  --appointmentBookingFields: list # nullable — item shape: {name?: string, value?: string}
-  --bookedBy: string # nullable
-  --bookingWindowId: string # nullable
-  --calendarId: string # nullable
-  --customFields: record # shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
-  --customerBookingFields: list # nullable — item shape: {name?: string, value?: string}
-  --customerId: string # nullable
-  --customerMessage: string # nullable
+  --complete-booking: string # Options are "BK", "RS" or "IN"
+  --appointment-booking-fields: list # nullable — item shape: {name?: string, value?: string}
+  --booked-by: string # nullable
+  --booking-window-id: string # nullable
+  --calendar-id: string # nullable
+  --custom-fields: record # shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
+  --customer-booking-fields: list # nullable — item shape: {name?: string, value?: string}
+  --customer-id: string # nullable
+  --customer-message: string # nullable
   --email: string # nullable
-  --endDateTime: string # format: date-time
-  --groupSize: int # nullable, format: int32
+  --end-date-time: string # format: date-time
+  --group-size: int # nullable, format: int32
   --location: string # nullable
-  --locationId: string # nullable
+  --location-id: string # nullable
   --name: string # nullable
   --notes: string # nullable
   --phone: string # nullable
-  --phoneType: string # nullable
-  --resourceGroupId: string # nullable
-  --resourceId: string # nullable
-  --resourceIds: string # nullable
-  --serviceAllocationId: string # nullable
-  --serviceId: string # nullable
-  --startDateTime: string # format: date-time
-  --timezoneName: string # nullable
-  --travelAppointmentId: string # nullable
-  --travelTimeMins: int # format: int32
+  --phone-type: string # nullable
+  --resource-group-id: string # nullable
+  --resource-id: string # nullable
+  --resource-ids: string # nullable
+  --service-allocation-id: string # nullable
+  --service-id: string # nullable
+  --start-date-time: string # format: date-time
+  --timezone-name: string # nullable
+  --travel-appointment-id: string # nullable
+  --travel-time-mins: int # format: int32
 ]: any -> record<appointmentBookingFields: table<businessId: string, companyId: string, fieldLabel: string, fieldLength: int, fieldListItems: list, fieldName: string, fieldRequired: bool, fieldType: string, id: string, leadQuestion: bool, leadQuestionWeight: float, object: string, sortKey: int>, auditTrail: table<appointmentId: string, id: string, modificationType: string, modifiedBy: string, modifiedOn: string, notesAfter: string, notesBefore: string, statusAfter: string, statusBefore: string>, bookedBy: string, bookingForms: record<bookingConfirmationPage: string, bookingForm: string>, businessName: string, calendarId: string, confirmationNumber: string, confirmed: bool, createDate: string, customFields: record, customerBookingFields: table<businessId: string, companyId: string, fieldLabel: string, fieldLength: int, fieldListItems: list, fieldName: string, fieldRequired: bool, fieldType: string, id: string, leadQuestion: bool, leadQuestionWeight: float, object: string, sortKey: int>, customerId: string, customerMessage: string, customers: table<appointmentId: string, customerId: string>, date: string, dateInternational: string, downloadIcsUrl: string, duration: int, email: string, emailConfirmationSent: string, emailReminderSent: string, endDateTime: string, firstname: string, groupSize: int, id: string, ipAddress: string, lastModifiedBy: string, lastModifiedOn: string, lastname: string, latitude: string, location: string, locationId: string, longitude: string, name: string, notes: string, object: string, onlineBooking: bool, paymentStatus: int, phone: string, phoneExt: string, phoneType: string, rescheduledId: string, resourceEmail: string, resourceGroupId: string, resourceGroupName: string, resourceId: string, resourceImageUrl: string, resourceName: string, resources: table<appointmentId: string, resourceEmail: string, resourceGroupId: string, resourceId: string, resourceImageUrl: string, resourceName: string>, serviceAllocationId: string, serviceId: string, serviceImageUrl: string, serviceName: string, smsConfirmationSent: string, smsReminderSent: string, startDateTime: string, status: string, stripeChargeId: string, stripeRefundId: string, time: int, timezone: int, timezoneIana: string, timezoneId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "completeBooking" $completeBooking "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "completeBooking" $complete_booking "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/consumer/v1/appointments" $qp)
-  let body = {appointmentBookingFields: $appointmentBookingFields, bookedBy: $bookedBy, bookingWindowId: $bookingWindowId, calendarId: $calendarId, customFields: $customFields, customerBookingFields: $customerBookingFields, customerId: $customerId, customerMessage: $customerMessage, email: $email, endDateTime: $endDateTime, groupSize: $groupSize, location: $location, locationId: $locationId, name: $name, notes: $notes, phone: $phone, phoneType: $phoneType, resourceGroupId: $resourceGroupId, resourceId: $resourceId, resourceIds: $resourceIds, serviceAllocationId: $serviceAllocationId, serviceId: $serviceId, startDateTime: $startDateTime, timezoneName: $timezoneName, travelAppointmentId: $travelAppointmentId, travelTimeMins: $travelTimeMins} | compact
+  let body = {"appointmentBookingFields": $appointment_booking_fields, "bookedBy": $booked_by, "bookingWindowId": $booking_window_id, "calendarId": $calendar_id, "customFields": $custom_fields, "customerBookingFields": $customer_booking_fields, "customerId": $customer_id, "customerMessage": $customer_message, "email": $email, "endDateTime": $end_date_time, "groupSize": $group_size, "location": $location, "locationId": $location_id, "name": $name, "notes": $notes, "phone": $phone, "phoneType": $phone_type, "resourceGroupId": $resource_group_id, "resourceId": $resource_id, "resourceIds": $resource_ids, "serviceAllocationId": $service_allocation_id, "serviceId": $service_id, "startDateTime": $start_date_time, "timezoneName": $timezone_name, "travelAppointmentId": $travel_appointment_id, "travelTimeMins": $travel_time_mins} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -196,11 +196,11 @@ export def "consumer-appointments-bookingfields get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locationId: string # id of business location
+  --location-id: string # id of business location
 ]: nothing -> record<bookingFields: table<businessId: string, companyId: string, fieldLabel: string, fieldLength: int, fieldListItems: list, fieldName: string, fieldRequired: bool, fieldType: string, id: string, leadQuestion: bool, leadQuestionWeight: float, object: string, sortKey: int>, object: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locationId" $locationId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "locationId" $location_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/consumer/v1/appointments/bookingfields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -219,11 +219,11 @@ export def "consumer-appointments-customfields get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locationId: string # id of business location
+  --location-id: string # id of business location
 ]: nothing -> record<customFields: table<fieldKey: string, fieldLabel: string, fieldLength: int, fieldListItems: list, fieldName: string, fieldPublic: bool, fieldRequired: bool, fieldType: string, id: string, leadQuestion: bool, leadQuestionWeight: float, object: string, sortKey: int>, object: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locationId" $locationId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "locationId" $location_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/consumer/v1/appointments/customfields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -246,7 +246,7 @@ export def "consumer-appointments delete" [
 ]: nothing -> record<auditTrail: table<appointmentId: string, id: string, modificationType: string, modifiedBy: string, modifiedOn: string, notesAfter: string, notesBefore: string, statusAfter: string, statusBefore: string>, bookedBy: string, businessName: string, calendarId: string, confirmationNumber: string, confirmed: bool, createDate: string, customFields: record, customerId: string, customerMessage: string, customers: table<appointmentId: string, customerId: string>, date: string, dateInternational: string, downloadIcsUrl: string, duration: int, email: string, emailConfirmationSent: string, emailReminderSent: string, endDateTime: string, firstname: string, groupSize: int, id: string, ipAddress: string, lastModifiedBy: string, lastModifiedOn: string, lastname: string, latitude: string, location: string, locationId: string, longitude: string, name: string, notes: string, object: string, onlineBooking: bool, paymentStatus: int, phone: string, phoneExt: string, phoneType: string, rescheduledId: string, resourceEmail: string, resourceGroupId: string, resourceGroupName: string, resourceId: string, resourceImageUrl: string, resourceName: string, resources: table<appointmentId: string, resourceEmail: string, resourceGroupId: string, resourceId: string, resourceImageUrl: string, resourceName: string>, serviceAllocationId: string, serviceId: string, serviceImageUrl: string, serviceName: string, smsConfirmationSent: string, smsReminderSent: string, startDateTime: string, status: string, stripeChargeId: string, stripeRefundId: string, time: int, timezone: int, timezoneIana: string, timezoneId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/consumer/v1/appointments/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/appointments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -268,7 +268,7 @@ export def "consumer-appointments get" [
 ]: nothing -> record<auditTrail: table<appointmentId: string, id: string, modificationType: string, modifiedBy: string, modifiedOn: string, notesAfter: string, notesBefore: string, statusAfter: string, statusBefore: string>, bookedBy: string, businessName: string, calendarId: string, confirmationNumber: string, confirmed: bool, createDate: string, customFields: record, customerId: string, customerMessage: string, customers: table<appointmentId: string, customerId: string>, date: string, dateInternational: string, downloadIcsUrl: string, duration: int, email: string, emailConfirmationSent: string, emailReminderSent: string, endDateTime: string, firstname: string, groupSize: int, id: string, ipAddress: string, lastModifiedBy: string, lastModifiedOn: string, lastname: string, latitude: string, location: string, locationId: string, longitude: string, name: string, notes: string, object: string, onlineBooking: bool, paymentStatus: int, phone: string, phoneExt: string, phoneType: string, rescheduledId: string, resourceEmail: string, resourceGroupId: string, resourceGroupName: string, resourceId: string, resourceImageUrl: string, resourceName: string, resources: table<appointmentId: string, resourceEmail: string, resourceGroupId: string, resourceId: string, resourceImageUrl: string, resourceName: string>, serviceAllocationId: string, serviceId: string, serviceImageUrl: string, serviceName: string, smsConfirmationSent: string, smsReminderSent: string, startDateTime: string, status: string, stripeChargeId: string, stripeRefundId: string, time: int, timezone: int, timezoneIana: string, timezoneId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/consumer/v1/appointments/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/appointments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -290,23 +290,23 @@ export def "consumer-appointments-book put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --appointmentBookingFields: list # nullable — item shape: {name?: string, value?: string}
-  --customFields: record # shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
-  --customerBookingFields: list # nullable — item shape: {name?: string, value?: string}
-  --customerMessage: string # nullable
+  --appointment-booking-fields: list # nullable — item shape: {name?: string, value?: string}
+  --custom-fields: record # shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
+  --customer-booking-fields: list # nullable — item shape: {name?: string, value?: string}
+  --customer-message: string # nullable
   --email: string # nullable
-  --groupSize: int # nullable, format: int32
+  --group-size: int # nullable, format: int32
   --name: string # nullable
   --notes: string # nullable
   --phone: string # nullable
-  --phoneExt: string # nullable
-  --phoneType: string # nullable
+  --phone-ext: string # nullable
+  --phone-type: string # nullable
 ]: any -> record<auditTrail: table<appointmentId: string, id: string, modificationType: string, modifiedBy: string, modifiedOn: string, notesAfter: string, notesBefore: string, statusAfter: string, statusBefore: string>, bookedBy: string, businessName: string, calendarId: string, confirmationNumber: string, confirmed: bool, createDate: string, customFields: record, customerId: string, customerMessage: string, customers: table<appointmentId: string, customerId: string>, date: string, dateInternational: string, downloadIcsUrl: string, duration: int, email: string, emailConfirmationSent: string, emailReminderSent: string, endDateTime: string, firstname: string, groupSize: int, id: string, ipAddress: string, lastModifiedBy: string, lastModifiedOn: string, lastname: string, latitude: string, location: string, locationId: string, longitude: string, name: string, notes: string, object: string, onlineBooking: bool, paymentStatus: int, phone: string, phoneExt: string, phoneType: string, rescheduledId: string, resourceEmail: string, resourceGroupId: string, resourceGroupName: string, resourceId: string, resourceImageUrl: string, resourceName: string, resources: table<appointmentId: string, resourceEmail: string, resourceGroupId: string, resourceId: string, resourceImageUrl: string, resourceName: string>, serviceAllocationId: string, serviceId: string, serviceImageUrl: string, serviceName: string, smsConfirmationSent: string, smsReminderSent: string, startDateTime: string, status: string, stripeChargeId: string, stripeRefundId: string, time: int, timezone: int, timezoneIana: string, timezoneId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/consumer/v1/appointments/($id)/book")
-  let body = {appointmentBookingFields: $appointmentBookingFields, customFields: $customFields, customerBookingFields: $customerBookingFields, customerMessage: $customerMessage, email: $email, groupSize: $groupSize, name: $name, notes: $notes, phone: $phone, phoneExt: $phoneExt, phoneType: $phoneType} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/appointments/{id}/book"))
+  let body = {"appointmentBookingFields": $appointment_booking_fields, "customFields": $custom_fields, "customerBookingFields": $customer_booking_fields, "customerMessage": $customer_message, "email": $email, "groupSize": $group_size, "name": $name, "notes": $notes, "phone": $phone, "phoneExt": $phone_ext, "phoneType": $phone_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -329,7 +329,7 @@ export def "consumer-appointments-cancel put" [
 ]: nothing -> record<auditTrail: table<appointmentId: string, id: string, modificationType: string, modifiedBy: string, modifiedOn: string, notesAfter: string, notesBefore: string, statusAfter: string, statusBefore: string>, bookedBy: string, businessName: string, calendarId: string, confirmationNumber: string, confirmed: bool, createDate: string, customFields: record, customerId: string, customerMessage: string, customers: table<appointmentId: string, customerId: string>, date: string, dateInternational: string, downloadIcsUrl: string, duration: int, email: string, emailConfirmationSent: string, emailReminderSent: string, endDateTime: string, firstname: string, groupSize: int, id: string, ipAddress: string, lastModifiedBy: string, lastModifiedOn: string, lastname: string, latitude: string, location: string, locationId: string, longitude: string, name: string, notes: string, object: string, onlineBooking: bool, paymentStatus: int, phone: string, phoneExt: string, phoneType: string, rescheduledId: string, resourceEmail: string, resourceGroupId: string, resourceGroupName: string, resourceId: string, resourceImageUrl: string, resourceName: string, resources: table<appointmentId: string, resourceEmail: string, resourceGroupId: string, resourceId: string, resourceImageUrl: string, resourceName: string>, serviceAllocationId: string, serviceId: string, serviceImageUrl: string, serviceName: string, smsConfirmationSent: string, smsReminderSent: string, startDateTime: string, status: string, stripeChargeId: string, stripeRefundId: string, time: int, timezone: int, timezoneIana: string, timezoneId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/consumer/v1/appointments/($id)/cancel")
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/appointments/{id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -353,7 +353,7 @@ export def "consumer-appointments-confirm put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "undo" $undo "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/consumer/v1/appointments/($id)/confirm" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/appointments/{id}/confirm") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -377,7 +377,7 @@ export def "consumer-appointments-noshow put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/consumer/v1/appointments/($id)/noshow")
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/appointments/{id}/noshow"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -397,19 +397,19 @@ export def "consumer-appointments-reschedule put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --endDateTime: string # format: date-time
-  --resourceId: string # nullable
-  --resourceIds: string # nullable
-  --serviceId: string # nullable
-  --startDateTime: string # format: date-time
-  --travelAppointmentId: string # nullable
-  --travelTimeMins: int # format: int32
+  --end-date-time: string # format: date-time
+  --resource-id: string # nullable
+  --resource-ids: string # nullable
+  --service-id: string # nullable
+  --start-date-time: string # format: date-time
+  --travel-appointment-id: string # nullable
+  --travel-time-mins: int # format: int32
 ]: any -> record<auditTrail: table<appointmentId: string, id: string, modificationType: string, modifiedBy: string, modifiedOn: string, notesAfter: string, notesBefore: string, statusAfter: string, statusBefore: string>, bookedBy: string, businessName: string, calendarId: string, confirmationNumber: string, confirmed: bool, createDate: string, customFields: record, customerId: string, customerMessage: string, customers: table<appointmentId: string, customerId: string>, date: string, dateInternational: string, downloadIcsUrl: string, duration: int, email: string, emailConfirmationSent: string, emailReminderSent: string, endDateTime: string, firstname: string, groupSize: int, id: string, ipAddress: string, lastModifiedBy: string, lastModifiedOn: string, lastname: string, latitude: string, location: string, locationId: string, longitude: string, name: string, notes: string, object: string, onlineBooking: bool, paymentStatus: int, phone: string, phoneExt: string, phoneType: string, rescheduledId: string, resourceEmail: string, resourceGroupId: string, resourceGroupName: string, resourceId: string, resourceImageUrl: string, resourceName: string, resources: table<appointmentId: string, resourceEmail: string, resourceGroupId: string, resourceId: string, resourceImageUrl: string, resourceName: string>, serviceAllocationId: string, serviceId: string, serviceImageUrl: string, serviceName: string, smsConfirmationSent: string, smsReminderSent: string, startDateTime: string, status: string, stripeChargeId: string, stripeRefundId: string, time: int, timezone: int, timezoneIana: string, timezoneId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/consumer/v1/appointments/($id)/reschedule")
-  let body = {endDateTime: $endDateTime, resourceId: $resourceId, resourceIds: $resourceIds, serviceId: $serviceId, startDateTime: $startDateTime, travelAppointmentId: $travelAppointmentId, travelTimeMins: $travelTimeMins} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/appointments/{id}/reschedule"))
+  let body = {"endDateTime": $end_date_time, "resourceId": $resource_id, "resourceIds": $resource_ids, "serviceId": $service_id, "startDateTime": $start_date_time, "travelAppointmentId": $travel_appointment_id, "travelTimeMins": $travel_time_mins} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -432,24 +432,24 @@ export def "consumer-appointments-reserve put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sendNotifications: oneof<nothing, bool>
-  --appointmentBookingFields: list # nullable — item shape: {name?: string, value?: string}
-  --customFields: record # shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
-  --customerBookingFields: list # nullable — item shape: {name?: string, value?: string}
-  --customerMessage: string # nullable
+  --send-notifications: oneof<nothing, bool>
+  --appointment-booking-fields: list # nullable — item shape: {name?: string, value?: string}
+  --custom-fields: record # shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
+  --customer-booking-fields: list # nullable — item shape: {name?: string, value?: string}
+  --customer-message: string # nullable
   --email: string # nullable
   --name: string # nullable
   --notes: string # nullable
   --phone: string # nullable
-  --phoneExt: string # nullable
-  --phoneType: string # nullable
+  --phone-ext: string # nullable
+  --phone-type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sendNotifications" $sendNotifications "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/consumer/v1/appointments/($id)/reserve" $qp)
-  let body = {appointmentBookingFields: $appointmentBookingFields, customFields: $customFields, customerBookingFields: $customerBookingFields, customerMessage: $customerMessage, email: $email, name: $name, notes: $notes, phone: $phone, phoneExt: $phoneExt, phoneType: $phoneType} | compact
+  let qp = [(serialize-qp "sendNotifications" $send_notifications "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/appointments/{id}/reserve") $qp)
+  let body = {"appointmentBookingFields": $appointment_booking_fields, "customFields": $custom_fields, "customerBookingFields": $customer_booking_fields, "customerMessage": $customer_message, "email": $email, "name": $name, "notes": $notes, "phone": $phone, "phoneExt": $phone_ext, "phoneType": $phone_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -460,9 +460,9 @@ export def "consumer-appointments-reserve put" [
 #
 # GET /consumer/v1/availability/{serviceId}/{startDate}/{endDate}
 export def "consumer-availability get" [
-  serviceId: string
-  startDate: string
-  endDate: string
+  service_id: string
+  start_date: string
+  end_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,26 +471,26 @@ export def "consumer-availability get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startTime: int # Format Military Time Start Time for availability search. Defaults to Business Hours Start (format: int32)
-  --endTime: int # Format Military Time. End Time for availability search. Defaults to Business Hours End (format: int32)
-  --locationId: string # Id of business location, defaults to primary business location
-  --resourceId: string # Resource Id for availability search
-  --resourceGroupId: string # Resource Group Id for availability search
-  --resourceIds: string # Comma separated Resource Id's for availability search
-  --roundRobin: string # Round robin choice 0=none, 1=random, 2=balanced
+  --start-time: int # Format Military Time Start Time for availability search. Defaults to Business Hours Start (format: int32)
+  --end-time: int # Format Military Time. End Time for availability search. Defaults to Business Hours End (format: int32)
+  --location-id: string # Id of business location, defaults to primary business location
+  --resource-id: string # Resource Id for availability search
+  --resource-group-id: string # Resource Group Id for availability search
+  --resource-ids: string # Comma separated Resource Id's for availability search
+  --round-robin: string # Round robin choice 0=none, 1=random, 2=balanced
   --duration: int # Duration of the service if different from default (format: int32)
   --interval: int # Booking Interval if different than the default (format: int32)
-  --timezoneName: string # Requested IANA timezone Id to view availability
-  --tzOffset: int # Request timezone offset to view availability (format: int32)
+  --timezone-name: string # Requested IANA timezone Id to view availability
+  --tz-offset: int # Request timezone offset to view availability (format: int32)
   --destination: string # For calculating travel based availability, requires distance scope
-  --dayAvailabilityStartDate: string # Format YYYY-DD-YY: Start date for day availability, defaults to startDate (format: date-time)
-  --dayAvailability: int # Number of days of day availability to return (format: int32)
-  --firstDayAvailable: oneof<nothing, bool> # Return available times for the first available day
+  --day-availability-start-date: string # Format YYYY-DD-YY: Start date for day availability, defaults to startDate (format: date-time)
+  --day-availability: int # Number of days of day availability to return (format: int32)
+  --first-day-available: oneof<nothing, bool> # Return available times for the first available day
 ]: nothing -> record<availableDays: table<available: bool, bookingCount: int, bookingLimit: int, closed: bool, date: string, object: string, reason: string, reasonCode: int>, availableTimes: table<allowableBookings: int, allowableCapacity: int, availableBookings: int, availableCapacity: int, date: string, displayTime: string, duration: int, endDateTime: string, resourceId: string, startDateTime: string, time: int, travelAppointmentId: string, travelTimeMins: int>, businessName: string, calendarId: string, calendarResourceGroupId: string, endDate: string, firstAvailableDate: string, locationId: string, object: string, resourceDescription: string, resourceId: string, resourceIds: string, resourceName: string, serviceDescription: string, serviceDuration: int, serviceId: string, serviceName: string, startDate: string, timezoneName: string, tzRequested: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar") (serialize-qp "locationId" $locationId "scalar") (serialize-qp "resourceId" $resourceId "scalar") (serialize-qp "resourceGroupId" $resourceGroupId "scalar") (serialize-qp "resourceIds" $resourceIds "scalar") (serialize-qp "roundRobin" $roundRobin "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "timezoneName" $timezoneName "scalar") (serialize-qp "tzOffset" $tzOffset "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "dayAvailabilityStartDate" $dayAvailabilityStartDate "scalar") (serialize-qp "dayAvailability" $dayAvailability "scalar") (serialize-qp "firstDayAvailable" $firstDayAvailable "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/consumer/v1/availability/($serviceId)/($startDate)/($endDate)" $qp)
+  let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "locationId" $location_id "scalar") (serialize-qp "resourceId" $resource_id "scalar") (serialize-qp "resourceGroupId" $resource_group_id "scalar") (serialize-qp "resourceIds" $resource_ids "scalar") (serialize-qp "roundRobin" $round_robin "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "timezoneName" $timezone_name "scalar") (serialize-qp "tzOffset" $tz_offset "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "dayAvailabilityStartDate" $day_availability_start_date "scalar") (serialize-qp "dayAvailability" $day_availability "scalar") (serialize-qp "firstDayAvailable" $first_day_available "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_id: $service_id, start_date: $start_date, end_date: $end_date} | format pattern "/consumer/v1/availability/{service_id}/{start_date}/{end_date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -500,9 +500,9 @@ export def "consumer-availability get" [
 #
 # GET /consumer/v1/availability/{serviceId}/{startDate}/{endDate}/days
 export def "consumer-availability-days get" [
-  serviceId: string
-  startDate: string
-  endDate: string
+  service_id: string
+  start_date: string
+  end_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -511,14 +511,14 @@ export def "consumer-availability-days get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locationId: string # Id of business location, defaults to primary business location
-  --resourceId: string # Resource Id to filter on
-  --tzOffset: int # Timezone offset to view availability for (format: int32)
+  --location-id: string # Id of business location, defaults to primary business location
+  --resource-id: string # Resource Id to filter on
+  --tz-offset: int # Timezone offset to view availability for (format: int32)
 ]: nothing -> record<availableDays: table<available: bool, bookingCount: int, bookingLimit: int, closed: bool, date: string, object: string, reason: string, reasonCode: int>, object: string, resourceDescription: string, resourceId: string, resourceName: string, serviceDescription: string, serviceId: string, serviceName: string, tzRequested: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locationId" $locationId "scalar") (serialize-qp "resourceId" $resourceId "scalar") (serialize-qp "tzOffset" $tzOffset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/consumer/v1/availability/($serviceId)/($startDate)/($endDate)/days" $qp)
+  let qp = [(serialize-qp "locationId" $location_id "scalar") (serialize-qp "resourceId" $resource_id "scalar") (serialize-qp "tzOffset" $tz_offset "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_id: $service_id, start_date: $start_date, end_date: $end_date} | format pattern "/consumer/v1/availability/{service_id}/{start_date}/{end_date}/days") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -528,9 +528,9 @@ export def "consumer-availability-days get" [
 #
 # GET /consumer/v1/availability/{serviceId}/{startDate}/{endDate}/unavailable
 export def "consumer-availability-unavailable get" [
-  serviceId: string
-  startDate: string
-  endDate: string
+  service_id: string
+  start_date: string
+  end_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,16 +539,16 @@ export def "consumer-availability-unavailable get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locationId: string # Id of business location, defaults to primary business location
-  --resourceId: string # Resource Id to filter on
+  --location-id: string # Id of business location, defaults to primary business location
+  --resource-id: string # Resource Id to filter on
   --duration: int # Duration of the service if different from default (format: int32)
-  --tzOffset: int # Request timezone offset to view unavailable times (format: int32)
-  --skipTimePastUnavailability: oneof<nothing, bool> # Set as true to remove Time Past (TP) blocks in the response
+  --tz-offset: int # Request timezone offset to view unavailable times (format: int32)
+  --skip-time-past-unavailability: oneof<nothing, bool> # Set as true to remove Time Past (TP) blocks in the response
 ]: nothing -> record<object: string, unavailableTimes: table<calendarId: string, date: string, endDateTime: string, entityId: int, entityType: string, fromTime: int, locationId: string, objectName: string, reason: string, reasonCode: string, resourceId: string, resourceName: string, serviceId: string, serviceName: string, startDateTime: string, toTime: int, tzOffset: int>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locationId" $locationId "scalar") (serialize-qp "resourceId" $resourceId "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "tzOffset" $tzOffset "scalar") (serialize-qp "skipTimePastUnavailability" $skipTimePastUnavailability "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/consumer/v1/availability/($serviceId)/($startDate)/($endDate)/unavailable" $qp)
+  let qp = [(serialize-qp "locationId" $location_id "scalar") (serialize-qp "resourceId" $resource_id "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "tzOffset" $tz_offset "scalar") (serialize-qp "skipTimePastUnavailability" $skip_time_past_unavailability "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_id: $service_id, start_date: $start_date, end_date: $end_date} | format pattern "/consumer/v1/availability/{service_id}/{start_date}/{end_date}/unavailable") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -566,8 +566,8 @@ export def "consumer-customers list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locationId: string # id of business location, defaults to primary business location
-  --groupId: string # Filter by groupId
+  --location-id: string # id of business location, defaults to primary business location
+  --group-id: string # Filter by groupId
   --email: string # Filter by email address
   --lastname: string # Filter by lastname
   --deleted: oneof<nothing, bool> # Filter by deleted status
@@ -576,7 +576,7 @@ export def "consumer-customers list" [
 ]: nothing -> record<count: int, data: table<address: record, birthdate: string, businessName: string, companyName: string, contact: record, createdBy: string, createdOn: string, customFields: record, deletedStatus: bool, deletedTime: string, disabled: bool, email: string, emailInfo: bool, emailPromotion: bool, firstname: string, gender: string, groupId: string, id: string, inviteEmailSent: string, lastVisitDate: string, lastname: string, latitude: string, locationId: string, longitude: string, modifiedBy: string, modifiedOn: string, name: string, notificationType: string, object: string, registeredBy: string, registrationDate: string, resourceId: string, stripeCustomerId: string, subscriptionId: string, verificationDate: string, verifiedBy: string, welcomeEmailSent: string>, hasMore: bool, object: string, total: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locationId" $locationId "scalar") (serialize-qp "groupId" $groupId "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "locationId" $location_id "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/consumer/v1/customers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -600,22 +600,22 @@ export def "consumer-customers post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --address: record # shape: {addressLine1?: string, addressLine2?: string, city?: string, country?: string, postalCode?: string, state?: string}
   --contact: record # shape: {businessPhone?: string, businessPhoneExt?: string, conferenceInfo?: string, homePhone?: string, mobilePhone?: string, preferredPhoneType?: string, skypeUsername?: string}
-  --customFields: record # shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
+  --custom-fields: record # shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
   --email: string # nullable
   --firstname: string # nullable
   --lastname: string # nullable
-  --locationId: string # nullable
+  --location-id: string # nullable
   --name: string # nullable
-  --notificationType: string # 0 = default(Email), 1 = Email, 2 = SMS, 3 = Email and SMS (nullable)
-  --sendLeadNotification: oneof<nothing, bool>
-  --stripeCustomerId: string # nullable
+  --notification-type: string # 0 = default(Email), 1 = Email, 2 = SMS, 3 = Email and SMS (nullable)
+  --send-lead-notification: oneof<nothing, bool>
+  --stripe-customer-id: string # nullable
   --type: int # nullable, format: int32
 ]: any -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, birthdate: string, businessName: string, companyName: string, contact: record<businessPhone: string, businessPhoneExt: string, conferenceInfo: string, homePhone: string, mobilePhone: string, phoneType: string, skypeUsername: string>, createdBy: string, createdOn: string, customFields: record, deletedStatus: bool, deletedTime: string, disabled: bool, email: string, emailInfo: bool, emailPromotion: bool, firstname: string, gender: string, groupId: string, id: string, inviteEmailSent: string, lastVisitDate: string, lastname: string, latitude: string, locationId: string, longitude: string, modifiedBy: string, modifiedOn: string, name: string, notificationType: string, object: string, registeredBy: string, registrationDate: string, resourceId: string, stripeCustomerId: string, subscriptionId: string, verificationDate: string, verifiedBy: string, welcomeEmailSent: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/consumer/v1/customers")
-  let body = {address: $address, contact: $contact, customFields: $customFields, email: $email, firstname: $firstname, lastname: $lastname, locationId: $locationId, name: $name, notificationType: $notificationType, sendLeadNotification: $sendLeadNotification, stripeCustomerId: $stripeCustomerId, type: $type} | compact
+  let body = {"address": $address, "contact": $contact, "customFields": $custom_fields, "email": $email, "firstname": $firstname, "lastname": $lastname, "locationId": $location_id, "name": $name, "notificationType": $notification_type, "sendLeadNotification": $send_lead_notification, "stripeCustomerId": $stripe_customer_id, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -634,11 +634,11 @@ export def "consumer-customers-bookingfields get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locationId: string # id of business location, defaults to primary business location
+  --location-id: string # id of business location, defaults to primary business location
 ]: nothing -> record<bookingFields: table<businessId: string, companyId: string, fieldLabel: string, fieldLength: int, fieldListItems: list, fieldName: string, fieldRequired: bool, fieldType: string, id: string, leadQuestion: bool, leadQuestionWeight: float, object: string, sortKey: int>, object: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locationId" $locationId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "locationId" $location_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/consumer/v1/customers/bookingfields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -678,12 +678,12 @@ export def "consumer-customers-customfields get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locationId: string # id of business location, defaults to primary business location
-  --leadQuestions: oneof<nothing, bool> # A true/false indicator to filter on custom fields used for lead questions
+  --location-id: string # id of business location, defaults to primary business location
+  --lead-questions: oneof<nothing, bool> # A true/false indicator to filter on custom fields used for lead questions
 ]: nothing -> record<customFields: table<fieldKey: string, fieldLabel: string, fieldLength: int, fieldListItems: list, fieldName: string, fieldPublic: bool, fieldRequired: bool, fieldType: string, id: string, leadQuestion: bool, leadQuestionWeight: float, object: string, sortKey: int>, object: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locationId" $locationId "scalar") (serialize-qp "leadQuestions" $leadQuestions "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "locationId" $location_id "scalar") (serialize-qp "leadQuestions" $lead_questions "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/consumer/v1/customers/customfields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -729,7 +729,7 @@ export def "consumer-customers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/consumer/v1/customers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/customers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -751,7 +751,7 @@ export def "consumer-customers get" [
 ]: nothing -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, birthdate: string, businessName: string, companyName: string, contact: record<businessPhone: string, businessPhoneExt: string, conferenceInfo: string, homePhone: string, mobilePhone: string, phoneType: string, skypeUsername: string>, createdBy: string, createdOn: string, customFields: record, deletedStatus: bool, deletedTime: string, disabled: bool, email: string, emailInfo: bool, emailPromotion: bool, firstname: string, gender: string, groupId: string, id: string, inviteEmailSent: string, lastVisitDate: string, lastname: string, latitude: string, locationId: string, longitude: string, modifiedBy: string, modifiedOn: string, name: string, notificationType: string, object: string, registeredBy: string, registrationDate: string, resourceId: string, stripeCustomerId: string, subscriptionId: string, verificationDate: string, verifiedBy: string, welcomeEmailSent: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/consumer/v1/customers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/customers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -775,21 +775,21 @@ export def "consumer-customers put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --address: record # shape: {addressLine1?: string, addressLine2?: string, city?: string, country?: string, postalCode?: string, state?: string}
   --contact: record # shape: {businessPhone?: string, businessPhoneExt?: string, conferenceInfo?: string, homePhone?: string, mobilePhone?: string, preferredPhoneType?: string, skypeUsername?: string}
-  --customFields: record # shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
+  --custom-fields: record # shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
   --email: string # nullable
   --firstname: string # nullable
   --lastname: string # nullable
-  --locationId: string # nullable
+  --location-id: string # nullable
   --name: string # nullable
-  --notificationType: string # 0 = default(Email), 1 = Email, 2 = SMS, 3 = Email and SMS (nullable)
-  --stripeCustomerId: string # nullable
+  --notification-type: string # 0 = default(Email), 1 = Email, 2 = SMS, 3 = Email and SMS (nullable)
+  --stripe-customer-id: string # nullable
   --type: int # nullable, format: int32
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/consumer/v1/customers/($id)")
-  let body = {address: $address, contact: $contact, customFields: $customFields, email: $email, firstname: $firstname, lastname: $lastname, locationId: $locationId, name: $name, notificationType: $notificationType, stripeCustomerId: $stripeCustomerId, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/customers/{id}"))
+  let body = {"address": $address, "contact": $contact, "customFields": $custom_fields, "email": $email, "firstname": $firstname, "lastname": $lastname, "locationId": $location_id, "name": $name, "notificationType": $notification_type, "stripeCustomerId": $stripe_customer_id, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -809,19 +809,19 @@ export def "consumer-locations list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Location name (full or partial)
-  --nearestTo: string # Search by distance nearest Geocoords, City, Postal/Zip Code
+  --nearest-to: string # Search by distance nearest Geocoords, City, Postal/Zip Code
   --proximity: int # Maximum distance to display (format: int32)
   --units: string # Distance either imperial(miles), metric(kilometers)
-  --serviceId: string # Locations that offer this service
-  --friendlyId: string # Frienldy Id of location
-  --regionId: string # Locations within a specific region
-  --ignorePrimary: oneof<nothing, bool> # Don't include the Primary Location
+  --service-id: string # Locations that offer this service
+  --friendly-id: string # Frienldy Id of location
+  --region-id: string # Locations within a specific region
+  --ignore-primary: oneof<nothing, bool> # Don't include the Primary Location
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit, default 20, max 100 (format: int32)
 ]: nothing -> record<count: int, data: table<address: record, adminEmail: string, adminName: string, appointmentReminders: record, businessHolidays: list, businessHours: record, companyId: string, companyName: string, defaults: record, email: string, fax: string, friendlyId: string, id: string, imageUrl: string, latitude: float, logo: string, longitude: float, name: string, object: string, phone: string, primaryBusiness: bool, primaryCalendarId: string, regionId: string, services: list, settings: record, timezoneIana: string, timezoneId: string, timezoneOffset: int, travel: record, website: string>, hasMore: bool, object: string, total: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "nearestTo" $nearestTo "scalar") (serialize-qp "proximity" $proximity "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "serviceId" $serviceId "scalar") (serialize-qp "friendlyId" $friendlyId "scalar") (serialize-qp "regionId" $regionId "scalar") (serialize-qp "ignorePrimary" $ignorePrimary "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "nearestTo" $nearest_to "scalar") (serialize-qp "proximity" $proximity "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "serviceId" $service_id "scalar") (serialize-qp "friendlyId" $friendly_id "scalar") (serialize-qp "regionId" $region_id "scalar") (serialize-qp "ignorePrimary" $ignore_primary "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/consumer/v1/locations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -844,7 +844,7 @@ export def "consumer-locations get" [
 ]: nothing -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, adminEmail: string, adminName: string, appointmentReminders: record<emailFirstReminder: int, emailFirstReminderInterval: int, emailSecondReminder: int, emailSecondReminderInterval: int, smsFirstReminder: int, smsFirstReminderInterval: int, smsSecondReminder: int, smsSecondReminderInterval: int>, businessHolidays: table<businessClosed: bool, holidayName: string, id: string, publicHolidayId: int>, businessHours: record<fri: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, mon: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sat: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sun: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, thu: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, tue: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, wed: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>>, companyId: string, companyName: string, defaults: record<autoUpdateCustomer: bool, businessNotification: bool, customerCity: bool, customerState: bool, emailInfo: bool, enableUtcTimezone: bool, object: string>, email: string, fax: string, friendlyId: string, id: string, imageUrl: string, latitude: float, logo: string, longitude: float, name: string, object: string, phone: string, primaryBusiness: bool, primaryCalendarId: string, regionId: string, services: table<id: int, object: string, serviceId: int, serviceName: string>, settings: record<availabilityForm: int, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookWithAccount: bool, bookingConfirmationMessage: string, bookingMessage: string, bookingPolicy: string, bookingTimerMins: int, businessId: string, companyId: string, customerBookingsPerDay: int, customerVerification: bool, defaultService: bool, defaultToCustomerTimezone: bool, disableAuthorization: bool, enableWorldTimezones: bool, enabled: bool, familyMembersEnabled: bool, firstAvailable: bool, formFlow: int, hideBreadCrumbNav: bool, hideContinueBooking: bool, hideLocationNav: bool, hideNavBar: bool, hideServiceGroupsNav: bool, hideServicesNav: bool, id: int, lateCancelAction: int, lateCancelHours: int, lateRescheduleAction: int, lateRescheduleHours: int, liveMode: bool, locationId: string, object: string, resourceAnyLabel: string, resourceLabel: string, resourceSelection: bool, returnToAvailability: bool, returnToService: bool, serviceLabel: string, showBusinessLogo: bool, showOnSchedLogo: bool, showServiceGroups: bool>, timezoneIana: string, timezoneId: string, timezoneOffset: int, travel: record<distance: string, proximity: string, startAddress: string, startLat: string, startLon: string, units: string>, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/consumer/v1/locations/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/locations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -862,14 +862,14 @@ export def "consumer-resourcegroups list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locationId: string # id of business location, defaults to primary business location
+  --location-id: string # id of business location, defaults to primary business location
   --deleted: oneof<nothing, bool> # Filter results by deleted status
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit default 20, max 100 (format: int32)
 ]: nothing -> record<count: int, data: table<bookingNotification: int, deletedStatus: bool, deletedTime: string, description: string, email: string, id: string, locationId: string, name: string, object: string>, hasMore: bool, object: string, total: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locationId" $locationId "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "locationId" $location_id "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/consumer/v1/resourcegroups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -892,7 +892,7 @@ export def "consumer-resourcegroups get" [
 ]: nothing -> record<bookingNotification: int, deletedStatus: bool, deletedTime: string, description: string, email: string, id: string, locationId: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/consumer/v1/resourcegroups/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/resourcegroups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -910,17 +910,17 @@ export def "consumer-resources list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locationId: string # id of business location, defaults to primary business location
-  --resourceGroupId: int # Filter by groupId (format: int32)
+  --location-id: string # id of business location, defaults to primary business location
+  --resource-group-id: int # Filter by groupId (format: int32)
   --email: string # Filter by email address
   --name: string # Search by name, supports Partial name search
-  --sortOrder: string # Specify sort order of response
+  --sort-order: string # Specify sort order of response
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit default 20, max 100 (format: int32)
 ]: nothing -> record<count: int, data: table<address: record, availability: record, bioLink: string, bookingNotification: int, calendarAvailability: int, contact: record, customFields: record, deletedStatus: bool, deletedTime: string, description: string, effectiveDate: string, email: string, gender: string, googleCalendarId: string, groupId: string, hourly: float, id: string, ignoreBusinessHours: bool, imageUrl: string, locationId: string, name: string, notificationType: int, object: string, outlookCalendarId: string, recurringAvailability: bool, services: list, skypeName: string, sortKey: int, timezoneIana: string, timezoneId: string, timezoneOffset: int>, hasMore: bool, object: string, total: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locationId" $locationId "scalar") (serialize-qp "resourceGroupId" $resourceGroupId "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "locationId" $location_id "scalar") (serialize-qp "resourceGroupId" $resource_group_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/consumer/v1/resources" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -943,7 +943,7 @@ export def "consumer-resources get" [
 ]: nothing -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bioLink: string, bookingNotification: int, calendarAvailability: int, contact: record<businessPhone: string, businessPhoneExt: string, conferenceInfo: string, homePhone: string, mobilePhone: string, phoneType: string, skypeUsername: string>, customFields: record<field1: string, field10: string, field2: string, field3: string, field4: string, field5: string, field6: string, field7: string, field8: string, field9: string>, deletedStatus: bool, deletedTime: string, description: string, effectiveDate: string, email: string, gender: string, googleCalendarId: string, groupId: string, hourly: float, id: string, ignoreBusinessHours: bool, imageUrl: string, locationId: string, name: string, notificationType: int, object: string, outlookCalendarId: string, recurringAvailability: bool, services: table<object: string, resourceId: int, resourceName: string, serviceId: int, serviceName: string>, skypeName: string, sortKey: int, timezoneIana: string, timezoneId: string, timezoneOffset: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/consumer/v1/resources/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/resources/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -968,7 +968,7 @@ export def "consumer-resources-services get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/consumer/v1/resources/($id)/services" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/resources/{id}/services") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -986,13 +986,13 @@ export def "consumer-servicegroups list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locationId: string # id of business location, defaults to primary business location
+  --location-id: string # id of business location, defaults to primary business location
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit default 20, max 100 (format: int32)
 ]: nothing -> record<count: int, data: table<companyId: string, description: string, id: string, imageUrl: string, isDeleted: bool, locationId: string, name: string, object: string, type: int>, hasMore: bool, object: string, total: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locationId" $locationId "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "locationId" $location_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/consumer/v1/servicegroups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1015,7 +1015,7 @@ export def "consumer-servicegroups get" [
 ]: nothing -> record<companyId: string, description: string, id: string, imageUrl: string, isDeleted: bool, locationId: string, name: string, object: string, type: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/consumer/v1/servicegroups/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/servicegroups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1033,21 +1033,21 @@ export def "consumer-services list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locationId: string # id of business location, defaults to primary business location
-  --serviceGroupId: int # Filter by groupId (format: int32)
-  --defaultService: oneof<nothing, bool> # Filter by default service, default is false
-  --allLocations: oneof<nothing, bool> # Search All Locations, default is false
+  --location-id: string # id of business location, defaults to primary business location
+  --service-group-id: int # Filter by groupId (format: int32)
+  --default-service: oneof<nothing, bool> # Filter by default service, default is false
+  --all-locations: oneof<nothing, bool> # Search All Locations, default is false
   --scope: string@scope-completer # Filter by scope, Company, Location or All, default is All
   --name: string # Filter by Name, supports Partial name search
-  --serviceId: string # Filter by ServiceId, using this parameter would ignore all other parameters
+  --service-id: string # Filter by ServiceId, using this parameter would ignore all other parameters
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit default 20, max 100 (format: int32)
-  --sortOrder: string@sortOrder-completer # Sort results using Natural Sort or Sorted alphabetically by Service Names, default is natural
-  --sortDescending: oneof<nothing, bool> # Sort results in Descending Order, default true
+  --sort-order: string@sort-order-completer # Sort results using Natural Sort or Sorted alphabetically by Service Names, default is natural
+  --sort-descending: oneof<nothing, bool> # Sort results in Descending Order, default true
 ]: nothing -> record<count: int, data: table<availability: record, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookingInterval: int, bookingLimit: int, calendarId: string, calendarResourceGroupId: string, cancellationFeeAmount: float, cancellationFeeTaxable: bool, companyId: string, consumerPadding: bool, customFields: record, dailyBookingLimitCount: int, dailyBookingLimitMinutes: int, defaultService: bool, description: string, duration: int, durationInterval: int, durationMax: int, durationMin: int, durationSelect: bool, feeAmount: float, feeTaxable: bool, id: string, imageUrl: string, locationId: string, maxBookingLimit: int, maxCapacity: int, maxGroupSize: int, maxResourceBookingLimit: int, mediaPageUrl: string, name: string, nonRefundable: bool, object: string, padding: int, roundRobin: int, serviceGroupId: int, serviceGroupName: string, showOnline: bool, type: string>, hasMore: bool, object: string, total: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locationId" $locationId "scalar") (serialize-qp "serviceGroupId" $serviceGroupId "scalar") (serialize-qp "defaultService" $defaultService "scalar") (serialize-qp "allLocations" $allLocations "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "serviceId" $serviceId "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "sortDescending" $sortDescending "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "locationId" $location_id "scalar") (serialize-qp "serviceGroupId" $service_group_id "scalar") (serialize-qp "defaultService" $default_service "scalar") (serialize-qp "allLocations" $all_locations "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "serviceId" $service_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "sortDescending" $sort_descending "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/consumer/v1/services" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1070,7 +1070,7 @@ export def "consumer-services-allocations get-by-id" [
 ]: nothing -> record<bookingCount: int, bookingLimit: int, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: string, locationId: string, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, resourceAddress: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, resourceDescription: string, resourceId: string, resourceImageUrl: string, resourceName: string, resourcePhone: record<businessPhone: string, businessPhoneExt: string, homePhone: string, mobilePhone: string, phoneType: string>, serviceDescription: string, serviceDuration: int, serviceId: string, serviceImageUrl: string, serviceName: string, startDate: string, startTime: int, timezoneName: string, timezoneOffset: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/consumer/v1/services/allocations/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/services/allocations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1092,7 +1092,7 @@ export def "consumer-services get" [
 ]: nothing -> record<availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookingInterval: int, bookingLimit: int, calendarId: string, calendarResourceGroupId: string, cancellationFeeAmount: float, cancellationFeeTaxable: bool, companyId: string, consumerPadding: bool, customFields: record<field1: string, field10: string, field2: string, field3: string, field4: string, field5: string, field6: string, field7: string, field8: string, field9: string>, dailyBookingLimitCount: int, dailyBookingLimitMinutes: int, defaultService: bool, description: string, duration: int, durationInterval: int, durationMax: int, durationMin: int, durationSelect: bool, feeAmount: float, feeTaxable: bool, id: string, imageUrl: string, locationId: string, maxBookingLimit: int, maxCapacity: int, maxGroupSize: int, maxResourceBookingLimit: int, mediaPageUrl: string, name: string, nonRefundable: bool, object: string, padding: int, roundRobin: int, serviceGroupId: int, serviceGroupName: string, showOnline: bool, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/consumer/v1/services/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/services/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1111,17 +1111,17 @@ export def "consumer-services-allocations get-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locationId: string # id of the location, defaults to the primary location
-  --resourceId: string # id of the resource to filter on
-  --startDate: string # Format YYYY-MM-DD: Filter allocations on/after startDate (format: date-time)
-  --endDate: string # Format YYYY-MM-DD. Filter allocations on/before endDate (format: date-time)
+  --location-id: string # id of the location, defaults to the primary location
+  --resource-id: string # id of the resource to filter on
+  --start-date: string # Format YYYY-MM-DD: Filter allocations on/after startDate (format: date-time)
+  --end-date: string # Format YYYY-MM-DD. Filter allocations on/before endDate (format: date-time)
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit default 20, max 100 (format: int32)
 ]: nothing -> record<count: int, data: table<bookingCount: int, bookingLimit: int, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: string, locationId: string, object: string, reason: string, repeat: record, repeats: bool, resourceAddress: record, resourceDescription: string, resourceId: string, resourceImageUrl: string, resourceName: string, resourcePhone: record, serviceDescription: string, serviceDuration: int, serviceId: string, serviceImageUrl: string, serviceName: string, startDate: string, startTime: int, timezoneName: string, timezoneOffset: int>, hasMore: bool, object: string, total: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locationId" $locationId "scalar") (serialize-qp "resourceId" $resourceId "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/consumer/v1/services/($id)/allocations" $qp)
+  let qp = [(serialize-qp "locationId" $location_id "scalar") (serialize-qp "resourceId" $resource_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/services/{id}/allocations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1140,14 +1140,14 @@ export def "consumer-services-resources get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locationId: string # id of business location, defaults to primary business location
+  --location-id: string # id of business location, defaults to primary business location
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit default 20, max 100 (format: int32)
 ]: nothing -> record<count: int, data: table<address: record, availability: record, bioLink: string, bookingNotification: int, calendarAvailability: int, contact: record, customFields: record, deletedStatus: bool, deletedTime: string, description: string, effectiveDate: string, email: string, gender: string, googleCalendarId: string, groupId: string, hourly: float, id: string, ignoreBusinessHours: bool, imageUrl: string, locationId: string, name: string, notificationType: int, object: string, outlookCalendarId: string, recurringAvailability: bool, services: list, skypeName: string, sortKey: int, timezoneIana: string, timezoneId: string, timezoneOffset: int>, hasMore: bool, object: string, total: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locationId" $locationId "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/consumer/v1/services/($id)/resources" $qp)
+  let qp = [(serialize-qp "locationId" $location_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/consumer/v1/services/{id}/resources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

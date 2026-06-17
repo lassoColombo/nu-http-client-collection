@@ -138,7 +138,7 @@ export def "batch-schedule post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/batch/schedule")
-  let body = {content: $content, deliveryreporturl: $deliveryreporturl, destinations: $destinations, schedule: $schedule, sender: $sender, tag: $tag, ttl: $ttl, validity: $validity} | compact
+  let body = {"content": $content, "deliveryreporturl": $deliveryreporturl, "destinations": $destinations, "schedule": $schedule, "sender": $sender, "tag": $tag, "ttl": $ttl, "validity": $validity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -170,7 +170,7 @@ export def "batch-send post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/batch/send")
-  let body = {content: $content, deliveryreporturl: $deliveryreporturl, destinations: $destinations, schedule: $schedule, sender: $sender, tag: $tag, ttl: $ttl, validity: $validity} | compact
+  let body = {"content": $content, "deliveryreporturl": $deliveryreporturl, "destinations": $destinations, "schedule": $schedule, "sender": $sender, "tag": $tag, "ttl": $ttl, "validity": $validity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -193,7 +193,7 @@ export def "batch get" [
 ]: nothing -> table<batchid: string, content: string, created: string, customerid: string, deliveryreporturl: string, destination: float, failurereason: record<code: float, details: string, permanent: bool>, id: string, identifier: string, keyword: string, messageid: string, modified: string, schedule: string, sender: string, status: string, tag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/batch/($batchid)")
+  let full_url = (build-url $base ({batchid: $batchid} | format pattern "/batch/{batchid}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -215,7 +215,7 @@ export def "batches-schedule delete" [
 ]: nothing -> record<messageid: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/batches/schedule/($batchid)")
+  let full_url = (build-url $base ({batchid: $batchid} | format pattern "/batches/schedule/{batchid}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -246,7 +246,7 @@ export def "credits-balance get" [
 #
 # POST /message/flash
 # operationId: sendFlashMessage
-export def "message-flash sendFlashMessage" [
+export def "message-flash send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "message-flash sendFlashMessage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/message/flash")
-  let body = {content: $content, deliveryreporturl: $deliveryreporturl, destination: $destination, metadata: $metadata, responseemail: $responseemail, schedule: $schedule, sender: $sender, tag: $tag, ttl: $ttl, validity: $validity} | compact
+  let body = {"content": $content, "deliveryreporturl": $deliveryreporturl, "destination": $destination, "metadata": $metadata, "responseemail": $responseemail, "schedule": $schedule, "sender": $sender, "tag": $tag, "ttl": $ttl, "validity": $validity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -304,7 +304,7 @@ export def "message-schedule post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/message/schedule")
-  let body = {content: $content, deliveryreporturl: $deliveryreporturl, destination: $destination, metadata: $metadata, responseemail: $responseemail, schedule: $schedule, sender: $sender, tag: $tag, ttl: $ttl, validity: $validity} | compact
+  let body = {"content": $content, "deliveryreporturl": $deliveryreporturl, "destination": $destination, "metadata": $metadata, "responseemail": $responseemail, "schedule": $schedule, "sender": $sender, "tag": $tag, "ttl": $ttl, "validity": $validity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -338,7 +338,7 @@ export def "message-send post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/message/send")
-  let body = {content: $content, deliveryreporturl: $deliveryreporturl, destination: $destination, metadata: $metadata, responseemail: $responseemail, schedule: $schedule, sender: $sender, tag: $tag, ttl: $ttl, validity: $validity} | compact
+  let body = {"content": $content, "deliveryreporturl": $deliveryreporturl, "destination": $destination, "metadata": $metadata, "responseemail": $responseemail, "schedule": $schedule, "sender": $sender, "tag": $tag, "ttl": $ttl, "validity": $validity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -373,7 +373,7 @@ export def "messages post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages")
-  let body = {credits: $credits, destination: $destination, from: $body_from, keyword: $keyword, limit: $limit, metadata: $metadata, sender: $sender, skip: $skip, status: $status, to: $body_to, unread: $unread} | compact
+  let body = {"credits": $credits, "destination": $destination, "from": $body_from, "keyword": $keyword, "limit": $limit, "metadata": $metadata, "sender": $sender, "skip": $skip, "status": $status, "to": $body_to, "unread": $unread} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -408,7 +408,7 @@ export def "messages-failed post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/failed")
-  let body = {credits: $credits, destination: $destination, from: $body_from, keyword: $keyword, limit: $limit, metadata: $metadata, sender: $sender, skip: $skip, status: $status, to: $body_to, unread: $unread} | compact
+  let body = {"credits": $credits, "destination": $destination, "from": $body_from, "keyword": $keyword, "limit": $limit, "metadata": $metadata, "sender": $sender, "skip": $skip, "status": $status, "to": $body_to, "unread": $unread} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -443,7 +443,7 @@ export def "messages-inbox post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/inbox")
-  let body = {credits: $credits, destination: $destination, from: $body_from, keyword: $keyword, limit: $limit, metadata: $metadata, sender: $sender, skip: $skip, status: $status, to: $body_to, unread: $unread} | compact
+  let body = {"credits": $credits, "destination": $destination, "from": $body_from, "keyword": $keyword, "limit": $limit, "metadata": $metadata, "sender": $sender, "skip": $skip, "status": $status, "to": $body_to, "unread": $unread} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -487,7 +487,7 @@ export def "messages-schedule delete" [
 ]: nothing -> record<messageid: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messages/schedule/($messageid)")
+  let full_url = (build-url $base ({messageid: $messageid} | format pattern "/messages/schedule/{messageid}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -509,7 +509,7 @@ export def "messages delete" [
 ]: nothing -> record<messageid: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messages/($messageid)")
+  let full_url = (build-url $base ({messageid: $messageid} | format pattern "/messages/{messageid}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -531,7 +531,7 @@ export def "messages get" [
 ]: nothing -> record<batchid: string, content: string, created: string, customerid: string, deliveryreporturl: string, destination: float, failurereason: record<code: float, details: string, permanent: bool>, id: string, identifier: string, keyword: string, messageid: string, modified: string, schedule: string, sender: string, status: string, tag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messages/($messageid)")
+  let full_url = (build-url $base ({messageid: $messageid} | format pattern "/messages/{messageid}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -553,7 +553,7 @@ export def "utils-errors get" [
 ]: nothing -> record<message: string, errorCode: float, permanent: bool, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/utils/errors/($errorcode)")
+  let full_url = (build-url $base ({errorcode: $errorcode} | format pattern "/utils/errors/{errorcode}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

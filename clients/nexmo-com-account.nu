@@ -122,7 +122,7 @@ export def "account-get-balance get" [
 #
 # POST /account/register-sender
 # operationId: registerSender
-export def "account-register-sender registerSender" [
+export def "account-register-sender create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,7 +143,7 @@ export def "account-register-sender registerSender" [
   let base = ($base_url | default "https://rest.nexmo.com")
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/register-sender" $qp)
-  let body = {application_ids: $application_ids, name: $name, provider: $provider, value: $value} | compact
+  let body = {"application_ids": $application_ids, "name": $name, "provider": $provider, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -166,15 +166,15 @@ export def "account-settings changeAccountSettings" [
   --accept: string@accept-completer # Response content type
   --api-key: string # Your Vonage API key. You can find this in the [dashboard](https://dashboard.nexmo.com) (e.g. abcd1234)
   --api-secret: string # Your Vonage API secret. You can find this in the [dashboard](https://dashboard.nexmo.com) (e.g. ABCDEFGH01234abc)
-  --drCallBackUrl: string # The webhook URL that Vonage makes a request to when a delivery receipt is available  for an SMS sent by one of your Vonage numbers. Send an empty string to unset this value. (format: url, e.g. https://example.com/webhooks/delivery-receipt)
-  --moCallBackUrl: string # The default webhook URL for inbound SMS. If an SMS is received at a Vonage number  that does not have its own inbound SMS webhook configured, Vonage makes a request here. Send an empty string to unset this value. (format: url, e.g. https://example.com/webhooks/inbound-sms)
+  --dr-call-back-url: string # The webhook URL that Vonage makes a request to when a delivery receipt is available  for an SMS sent by one of your Vonage numbers. Send an empty string to unset this value. (format: url, e.g. https://example.com/webhooks/delivery-receipt)
+  --mo-call-back-url: string # The default webhook URL for inbound SMS. If an SMS is received at a Vonage number  that does not have its own inbound SMS webhook configured, Vonage makes a request here. Send an empty string to unset this value. (format: url, e.g. https://example.com/webhooks/inbound-sms)
 ]: any -> record<dr_callback_url: string, max_calls_per_second: int, max_inbound_request: int, max_outbound_request: int, mo_callback_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://rest.nexmo.com")
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/settings" $qp)
-  let body = {drCallBackUrl: $drCallBackUrl, moCallBackUrl: $moCallBackUrl} | compact
+  let body = {"drCallBackUrl": $dr_call_back_url, "moCallBackUrl": $mo_call_back_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -186,7 +186,7 @@ export def "account-settings changeAccountSettings" [
 # POST /account/top-up
 # Docs: https://help.nexmo.com/hc/en-us/articles/205603248-How-do-I-set-up-automatic-payments-using-PayPal-or-credit-card- — Read more about automatic payments on the Knowledgebase
 # operationId: topUpAccountBalance
-export def "account-top-up topUpAccountBalance" [
+export def "account-top-up top-up-account-balance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "account-top-up topUpAccountBalance" [
   let base = ($base_url | default "https://rest.nexmo.com")
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/top-up" $qp)
-  let body = {trx: $trx} | compact
+  let body = {"trx": $trx} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -216,7 +216,7 @@ export def "account-top-up topUpAccountBalance" [
 #
 # GET /accounts/{api_key}/secrets
 # operationId: retrieveAPISecrets
-export def "accounts-secrets retrieveAPISecrets" [
+export def "accounts-secrets list" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -229,7 +229,7 @@ export def "accounts-secrets retrieveAPISecrets" [
 ]: nothing -> record<_embedded: record<secrets: list<record>>, _links: record<self: record<href: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($api_key)/secrets")
+  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/accounts/{api_key}/secrets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -239,7 +239,7 @@ export def "accounts-secrets retrieveAPISecrets" [
 #
 # POST /accounts/{api_key}/secrets
 # operationId: createAPISecret
-export def "accounts-secrets createAPISecret" [
+export def "accounts-secrets create-pi" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -254,8 +254,8 @@ export def "accounts-secrets createAPISecret" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($api_key)/secrets")
-  let body = {secret: $secret} | compact
+  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/accounts/{api_key}/secrets"))
+  let body = {"secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -266,7 +266,7 @@ export def "accounts-secrets createAPISecret" [
 #
 # DELETE /accounts/{api_key}/secrets/{secret_id}
 # operationId: revokeAPISecret
-export def "accounts-secrets revokeAPISecret" [
+export def "accounts-secrets delete-pi" [
   api_key: string
   secret_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -280,7 +280,7 @@ export def "accounts-secrets revokeAPISecret" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($api_key)/secrets/($secret_id)")
+  let full_url = (build-url $base ({api_key: $api_key, secret_id: $secret_id} | format pattern "/accounts/{api_key}/secrets/{secret_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -290,7 +290,7 @@ export def "accounts-secrets revokeAPISecret" [
 #
 # GET /accounts/{api_key}/secrets/{secret_id}
 # operationId: retrieveAPISecret
-export def "accounts-secrets retrieveAPISecret" [
+export def "accounts-secrets retrieve-pi" [
   api_key: string
   secret_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -304,7 +304,7 @@ export def "accounts-secrets retrieveAPISecret" [
 ]: nothing -> record<_links: record<self: record<href: string>>, created_at: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($api_key)/secrets/($secret_id)")
+  let full_url = (build-url $base ({api_key: $api_key, secret_id: $secret_id} | format pattern "/accounts/{api_key}/secrets/{secret_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

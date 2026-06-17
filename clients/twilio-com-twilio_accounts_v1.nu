@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-tokens-promote UpdateAuthTokenPromotion" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-tokens-promote update-auth-token-promotion" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/AuthTokens/Promote
 # operationId: UpdateAuthTokenPromotion
-export def "auth-tokens-promote UpdateAuthTokenPromotion" [
+export def "auth-tokens-promote update-auth-token-promotion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,7 +115,7 @@ export def "auth-tokens-promote UpdateAuthTokenPromotion" [
 #
 # DELETE /v1/AuthTokens/Secondary
 # operationId: DeleteSecondaryAuthToken
-export def "auth-tokens-secondary DeleteSecondaryAuthToken" [
+export def "auth-tokens-secondary delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,7 +137,7 @@ export def "auth-tokens-secondary DeleteSecondaryAuthToken" [
 #
 # POST /v1/AuthTokens/Secondary
 # operationId: CreateSecondaryAuthToken
-export def "auth-tokens-secondary CreateSecondaryAuthToken" [
+export def "auth-tokens-secondary create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "auth-tokens-secondary CreateSecondaryAuthToken" [
 #
 # GET /v1/Credentials/AWS
 # operationId: ListCredentialAws
-export def "credentials-aws ListCredentialAws" [
+export def "credentials-aws list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,13 +168,13 @@ export def "credentials-aws ListCredentialAws" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<credentials: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://accounts.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Credentials/AWS" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -185,7 +185,7 @@ export def "credentials-aws ListCredentialAws" [
 #
 # POST /v1/Credentials/AWS
 # operationId: CreateCredentialAws
-export def "credentials-aws CreateCredentialAws" [
+export def "credentials-aws create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,15 +194,15 @@ export def "credentials-aws CreateCredentialAws" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AccountSid: string # The SID of the Subaccount that this Credential should be associated with. Must be a valid Subaccount of the account issuing the request.
-  Credentials: string # A string that contains the AWS access credentials in the format `<AWS_ACCESS_KEY_ID>:<AWS_SECRET_ACCESS_KEY>`. For example, `AKIAIOSFODNN7EXAMPLE:wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
-  --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
+  --account-sid: string # The SID of the Subaccount that this Credential should be associated with. Must be a valid Subaccount of the account issuing the request.
+  credentials: string # A string that contains the AWS access credentials in the format `<AWS_ACCESS_KEY_ID>:<AWS_SECRET_ACCESS_KEY>`. For example, `AKIAIOSFODNN7EXAMPLE:wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
+  --friendly-name: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://accounts.twilio.com")
   let full_url = (build-url $base "/v1/Credentials/AWS")
-  let body = {AccountSid: $AccountSid, Credentials: $Credentials, FriendlyName: $FriendlyName} | compact
+  let body = {"AccountSid": $account_sid, "Credentials": $credentials, "FriendlyName": $friendly_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -213,8 +213,8 @@ export def "credentials-aws CreateCredentialAws" [
 #
 # DELETE /v1/Credentials/AWS/{Sid}
 # operationId: DeleteCredentialAws
-export def "credentials-aws DeleteCredentialAws" [
-  Sid: string
+export def "credentials-aws delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "credentials-aws DeleteCredentialAws" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://accounts.twilio.com")
-  let full_url = (build-url $base $"/v1/Credentials/AWS/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Credentials/AWS/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -236,8 +236,8 @@ export def "credentials-aws DeleteCredentialAws" [
 #
 # GET /v1/Credentials/AWS/{Sid}
 # operationId: FetchCredentialAws
-export def "credentials-aws FetchCredentialAws" [
-  Sid: string
+export def "credentials-aws get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,7 +249,7 @@ export def "credentials-aws FetchCredentialAws" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://accounts.twilio.com")
-  let full_url = (build-url $base $"/v1/Credentials/AWS/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Credentials/AWS/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,8 +259,8 @@ export def "credentials-aws FetchCredentialAws" [
 #
 # POST /v1/Credentials/AWS/{Sid}
 # operationId: UpdateCredentialAws
-export def "credentials-aws UpdateCredentialAws" [
-  Sid: string
+export def "credentials-aws update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,13 +269,13 @@ export def "credentials-aws UpdateCredentialAws" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
+  --friendly-name: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://accounts.twilio.com")
-  let full_url = (build-url $base $"/v1/Credentials/AWS/($Sid)")
-  let body = {FriendlyName: $FriendlyName} | compact
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Credentials/AWS/{sid}"))
+  let body = {"FriendlyName": $friendly_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -286,7 +286,7 @@ export def "credentials-aws UpdateCredentialAws" [
 #
 # GET /v1/Credentials/PublicKeys
 # operationId: ListCredentialPublicKey
-export def "credentials-public-keys ListCredentialPublicKey" [
+export def "credentials-public-keys list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,13 +295,13 @@ export def "credentials-public-keys ListCredentialPublicKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<credentials: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://accounts.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Credentials/PublicKeys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -312,7 +312,7 @@ export def "credentials-public-keys ListCredentialPublicKey" [
 #
 # POST /v1/Credentials/PublicKeys
 # operationId: CreateCredentialPublicKey
-export def "credentials-public-keys CreateCredentialPublicKey" [
+export def "credentials-public-keys create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,15 +321,15 @@ export def "credentials-public-keys CreateCredentialPublicKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AccountSid: string # The SID of the Subaccount that this Credential should be associated with. Must be a valid Subaccount of the account issuing the request
-  --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
-  PublicKey: string # A URL encoded representation of the public key. For example, `-----BEGIN PUBLIC KEY-----MIIBIjANB.pa9xQIDAQAB-----END PUBLIC KEY-----`
+  --account-sid: string # The SID of the Subaccount that this Credential should be associated with. Must be a valid Subaccount of the account issuing the request
+  --friendly-name: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
+  public_key: string # A URL encoded representation of the public key. For example, `-----BEGIN PUBLIC KEY-----MIIBIjANB.pa9xQIDAQAB-----END PUBLIC KEY-----`
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://accounts.twilio.com")
   let full_url = (build-url $base "/v1/Credentials/PublicKeys")
-  let body = {AccountSid: $AccountSid, FriendlyName: $FriendlyName, PublicKey: $PublicKey} | compact
+  let body = {"AccountSid": $account_sid, "FriendlyName": $friendly_name, "PublicKey": $public_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -340,8 +340,8 @@ export def "credentials-public-keys CreateCredentialPublicKey" [
 #
 # DELETE /v1/Credentials/PublicKeys/{Sid}
 # operationId: DeleteCredentialPublicKey
-export def "credentials-public-keys DeleteCredentialPublicKey" [
-  Sid: string
+export def "credentials-public-keys delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "credentials-public-keys DeleteCredentialPublicKey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://accounts.twilio.com")
-  let full_url = (build-url $base $"/v1/Credentials/PublicKeys/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Credentials/PublicKeys/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -363,8 +363,8 @@ export def "credentials-public-keys DeleteCredentialPublicKey" [
 #
 # GET /v1/Credentials/PublicKeys/{Sid}
 # operationId: FetchCredentialPublicKey
-export def "credentials-public-keys FetchCredentialPublicKey" [
-  Sid: string
+export def "credentials-public-keys get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,7 +376,7 @@ export def "credentials-public-keys FetchCredentialPublicKey" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://accounts.twilio.com")
-  let full_url = (build-url $base $"/v1/Credentials/PublicKeys/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Credentials/PublicKeys/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -386,8 +386,8 @@ export def "credentials-public-keys FetchCredentialPublicKey" [
 #
 # POST /v1/Credentials/PublicKeys/{Sid}
 # operationId: UpdateCredentialPublicKey
-export def "credentials-public-keys UpdateCredentialPublicKey" [
-  Sid: string
+export def "credentials-public-keys update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,13 +396,13 @@ export def "credentials-public-keys UpdateCredentialPublicKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
+  --friendly-name: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://accounts.twilio.com")
-  let full_url = (build-url $base $"/v1/Credentials/PublicKeys/($Sid)")
-  let body = {FriendlyName: $FriendlyName} | compact
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Credentials/PublicKeys/{sid}"))
+  let body = {"FriendlyName": $friendly_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

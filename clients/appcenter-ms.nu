@@ -67,7 +67,7 @@ def base-url-completer [] { ["https://api.appcenter.ms"] }
 def auth-scheme-completer [] { ["x-api-token" "basic"] }
 
 # Completers for enum parameters
-def orderBy-completer [] { ["display_name" "name"] }
+def order-by-completer [] { ["display_name" "name"] }
 def os-completer [] { ["Android" "Custom" "Linux" "Tizen" "Windows" "iOS" "macOS" "tvOS"] }
 def platform-completer [] { ["Cordova" "Custom" "Electron" "Java" "Objective-C-Swift" "React-Native" "UWP" "Unity" "WPF" "WinForms" "Xamarin"] }
 def inlinecount-completer [] { ["allpages" "none"] }
@@ -85,8 +85,8 @@ def status-completer-1 [] { ["closed" "ignored" "open"] }
 def error-type-completer [] { ["CrashingErrors" "HandledErrors"] }
 def track-completer [] { ["alpha" "beta" "production" "testflight-external" "testflight-internal"] }
 def type-completer [] { ["apple" "googleplay" "intune"] }
-def errorType-completer [] { ["all" "handledError" "unhandledError"] }
-def errorType-completer-1 [] { ["handledError" "unhandledError"] }
+def error-type-completer-1 [] { ["all" "handledError" "unhandledError"] }
+def error-type-completer-2 [] { ["handledError" "unhandledError"] }
 def order-completer [] { ["asc" "desc"] }
 def sort-completer [] { ["exceptionClassName" "exceptionMessage" "exceptionMethod" "lastOccurrence" "matchingReportsCount"] }
 def state-completer [] { ["closed" "ignored" "open"] }
@@ -195,7 +195,7 @@ export def "v01-account-test-export-feature-flags gdprExportFeatureFlag" [
 #
 # GET /v0.1/administeredOrgs
 # operationId: organizations_listAdministered
-export def "v01-administered-orgs listAdministered" [
+export def "v01-administered-orgs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "v01-api-tokens new" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.1/api_tokens")
-  let body = {description: $description, scope: $scope} | compact
+  let body = {"description": $description, "scope": $scope} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -279,7 +279,7 @@ export def "v01-api-tokens delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/api_tokens/($api_token_id)")
+  let full_url = (build-url $base ({api_token_id: $api_token_id} | format pattern "/v0.1/api_tokens/{api_token_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -298,11 +298,11 @@ export def "v01-apps list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --orderBy: string@orderBy-completer # The name of the attribute by which to order the response by. By default, apps are in order of creation. All results are ordered in ascending order.
+  --order-by: string@order-by-completer # The name of the attribute by which to order the response by. By default, apps are in order of creation. All results are ordered in ascending order.
 ]: nothing -> table<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$orderBy" $orderBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$orderBy" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v0.1/apps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -333,7 +333,7 @@ export def "v01-apps create" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.1/apps")
-  let body = {description: $description, display_name: $display_name, name: $name, os: $os, platform: $platform, release_type: $release_type} | compact
+  let body = {"description": $description, "display_name": $display_name, "name": $name, "os": $os, "platform": $platform, "release_type": $release_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -345,8 +345,8 @@ export def "v01-apps create" [
 # DELETE /v0.1/apps/{owner_name}/{app_name}
 # operationId: apps_delete
 export def "v01-apps delete" [
-  app_name: string
   owner_name: string
+  app_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,7 +358,7 @@ export def "v01-apps delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -382,7 +382,7 @@ export def "v01-apps get" [
 ]: nothing -> record<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -393,8 +393,8 @@ export def "v01-apps get" [
 # PATCH /v0.1/apps/{owner_name}/{app_name}
 # operationId: apps_update
 export def "v01-apps update" [
-  app_name: string
   owner_name: string
+  app_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,8 +413,8 @@ export def "v01-apps update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)")
-  let body = {description: $description, display_name: $display_name, icon_asset_id: $icon_asset_id, icon_url: $icon_url, name: $name, release_type: $release_type} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}"))
+  let body = {"description": $description, "display_name": $display_name, "icon_asset_id": $icon_asset_id, "icon_url": $icon_url, "name": $name, "release_type": $release_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -425,7 +425,7 @@ export def "v01-apps update" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/active_device_counts
 # operationId: Analytics_DeviceCounts
-export def "v01-apps-analytics-active-device-counts DeviceCounts" [
+export def "v01-apps-analytics-active-device-counts get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -444,7 +444,7 @@ export def "v01-apps-analytics-active-device-counts DeviceCounts" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes") (serialize-qp "app_build" $app_build "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/active_device_counts" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/active_device_counts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -454,7 +454,7 @@ export def "v01-apps-analytics-active-device-counts DeviceCounts" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/audiences
 # operationId: Analytics_ListAudiences
-export def "v01-apps-analytics-audiences ListAudiences" [
+export def "v01-apps-analytics-audiences list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -470,7 +470,7 @@ export def "v01-apps-analytics-audiences ListAudiences" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_disabled" $include_disabled "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/audiences") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -480,7 +480,7 @@ export def "v01-apps-analytics-audiences ListAudiences" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/definition/test
 # operationId: Analytics_TestAudience
-export def "v01-apps-analytics-audiences-definition-test TestAudience" [
+export def "v01-apps-analytics-audiences-definition-test test" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -499,8 +499,8 @@ export def "v01-apps-analytics-audiences-definition-test TestAudience" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences/definition/test")
-  let body = {custom_properties: $custom_properties, definition: $definition, description: $description, enabled: $enabled} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/audiences/definition/test"))
+  let body = {"custom_properties": $custom_properties, "definition": $definition, "description": $description, "enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -511,7 +511,7 @@ export def "v01-apps-analytics-audiences-definition-test TestAudience" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/metadata/custom_properties
 # operationId: Analytics_ListCustomProperties
-export def "v01-apps-analytics-audiences-metadata-custom-properties ListCustomProperties" [
+export def "v01-apps-analytics-audiences-metadata-custom-properties list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -525,7 +525,7 @@ export def "v01-apps-analytics-audiences-metadata-custom-properties ListCustomPr
 ]: nothing -> record<values: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences/metadata/custom_properties")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/audiences/metadata/custom_properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -535,7 +535,7 @@ export def "v01-apps-analytics-audiences-metadata-custom-properties ListCustomPr
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/metadata/device_properties
 # operationId: Analytics_ListDeviceProperties
-export def "v01-apps-analytics-audiences-metadata-device-properties ListDeviceProperties" [
+export def "v01-apps-analytics-audiences-metadata-device-properties list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -549,7 +549,7 @@ export def "v01-apps-analytics-audiences-metadata-device-properties ListDevicePr
 ]: nothing -> record<values: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences/metadata/device_properties")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/audiences/metadata/device_properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -559,10 +559,10 @@ export def "v01-apps-analytics-audiences-metadata-device-properties ListDevicePr
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/metadata/device_properties/{property_name}/values
 # operationId: Analytics_ListDevicePropertyValues
-export def "v01-apps-analytics-audiences-metadata-device-properties-values ListDevicePropertyValues" [
-  property_name: string
+export def "v01-apps-analytics-audiences-metadata-device-properties-values list-device-property" [
   owner_name: string
   app_name: string
+  property_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -576,7 +576,7 @@ export def "v01-apps-analytics-audiences-metadata-device-properties-values ListD
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contains" $contains "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences/metadata/device_properties/($property_name)/values" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, property_name: $property_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/audiences/metadata/device_properties/{property_name}/values") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -586,10 +586,10 @@ export def "v01-apps-analytics-audiences-metadata-device-properties-values ListD
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/{audience_name}
 # operationId: Analytics_DeleteAudience
-export def "v01-apps-analytics-audiences DeleteAudience" [
-  audience_name: string
+export def "v01-apps-analytics-audiences delete" [
   owner_name: string
   app_name: string
+  audience_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,7 +601,7 @@ export def "v01-apps-analytics-audiences DeleteAudience" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences/($audience_name)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, audience_name: $audience_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/audiences/{audience_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -611,10 +611,10 @@ export def "v01-apps-analytics-audiences DeleteAudience" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/{audience_name}
 # operationId: Analytics_GetAudience
-export def "v01-apps-analytics-audiences GetAudience" [
-  audience_name: string
+export def "v01-apps-analytics-audiences get" [
   owner_name: string
   app_name: string
+  audience_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -626,7 +626,7 @@ export def "v01-apps-analytics-audiences GetAudience" [
 ]: nothing -> record<custom_properties: record, enabled: bool, estimated_total_count: int, timestamp: string, definition: string, description: string, estimated_count: int, name: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences/($audience_name)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, audience_name: $audience_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/audiences/{audience_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -636,10 +636,10 @@ export def "v01-apps-analytics-audiences GetAudience" [
 #
 # HEAD /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/{audience_name}
 # operationId: Analytics_AudienceNameExists
-export def "v01-apps-analytics-audiences AudienceNameExists" [
-  audience_name: string
+export def "v01-apps-analytics-audiences head" [
   owner_name: string
   app_name: string
+  audience_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -651,7 +651,7 @@ export def "v01-apps-analytics-audiences AudienceNameExists" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences/($audience_name)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, audience_name: $audience_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/audiences/{audience_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -661,10 +661,10 @@ export def "v01-apps-analytics-audiences AudienceNameExists" [
 #
 # PUT /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/{audience_name}
 # operationId: Analytics_CreateOrUpdateAudience
-export def "v01-apps-analytics-audiences CreateOrUpdateAudience" [
-  audience_name: string
+export def "v01-apps-analytics-audiences create-or-update" [
   owner_name: string
   app_name: string
+  audience_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,8 +681,8 @@ export def "v01-apps-analytics-audiences CreateOrUpdateAudience" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/audiences/($audience_name)")
-  let body = {custom_properties: $custom_properties, definition: $definition, description: $description, enabled: $enabled} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, audience_name: $audience_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/audiences/{audience_name}"))
+  let body = {"custom_properties": $custom_properties, "definition": $definition, "description": $description, "enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -695,7 +695,7 @@ export def "v01-apps-analytics-audiences CreateOrUpdateAudience" [
 # DEPRECATED
 # operationId: Analytics_CrashCounts
 @deprecated
-export def "v01-apps-analytics-crash-counts CrashCounts" [
+export def "v01-apps-analytics-crash-counts get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -713,7 +713,7 @@ export def "v01-apps-analytics-crash-counts CrashCounts" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/crash_counts" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/crash_counts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -724,7 +724,7 @@ export def "v01-apps-analytics-crash-counts CrashCounts" [
 # POST /v0.1/apps/{owner_name}/{app_name}/analytics/crash_groups
 # operationId: Analytics_CrashGroupsTotals
 # --crash_groups item shape: {app_version?: string, crash_group_id?: string}
-export def "v01-apps-analytics-crash-groups CrashGroupsTotals" [
+export def "v01-apps-analytics-crash-groups post" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -740,8 +740,8 @@ export def "v01-apps-analytics-crash-groups CrashGroupsTotals" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/crash_groups")
-  let body = {crash_groups: $crash_groups} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/crash_groups"))
+  let body = {"crash_groups": $crash_groups} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -754,10 +754,10 @@ export def "v01-apps-analytics-crash-groups CrashGroupsTotals" [
 # DEPRECATED
 # operationId: Analytics_CrashGroupCounts
 @deprecated
-export def "v01-apps-analytics-crash-groups-crash-counts CrashGroupCounts" [
-  crash_group_id: string
+export def "v01-apps-analytics-crash-groups-crash-counts get" [
   owner_name: string
   app_name: string
+  crash_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -773,7 +773,7 @@ export def "v01-apps-analytics-crash-groups-crash-counts CrashGroupCounts" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/crash_groups/($crash_group_id)/crash_counts" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_group_id: $crash_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/crash_groups/{crash_group_id}/crash_counts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -785,10 +785,10 @@ export def "v01-apps-analytics-crash-groups-crash-counts CrashGroupCounts" [
 # DEPRECATED
 # operationId: Analytics_CrashGroupModelCounts
 @deprecated
-export def "v01-apps-analytics-crash-groups-models CrashGroupModelCounts" [
-  crash_group_id: string
+export def "v01-apps-analytics-crash-groups-models get" [
   owner_name: string
   app_name: string
+  crash_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -803,7 +803,7 @@ export def "v01-apps-analytics-crash-groups-models CrashGroupModelCounts" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/crash_groups/($crash_group_id)/models" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_group_id: $crash_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/crash_groups/{crash_group_id}/models") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -815,10 +815,10 @@ export def "v01-apps-analytics-crash-groups-models CrashGroupModelCounts" [
 # DEPRECATED
 # operationId: Analytics_CrashGroupOperatingSystemCounts
 @deprecated
-export def "v01-apps-analytics-crash-groups-operating-systems CrashGroupOperatingSystemCounts" [
-  crash_group_id: string
+export def "v01-apps-analytics-crash-groups-operating-systems get" [
   owner_name: string
   app_name: string
+  crash_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -833,7 +833,7 @@ export def "v01-apps-analytics-crash-groups-operating-systems CrashGroupOperatin
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/crash_groups/($crash_group_id)/operating_systems" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_group_id: $crash_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/crash_groups/{crash_group_id}/operating_systems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -845,10 +845,10 @@ export def "v01-apps-analytics-crash-groups-operating-systems CrashGroupOperatin
 # DEPRECATED
 # operationId: Analytics_CrashGroupTotals
 @deprecated
-export def "v01-apps-analytics-crash-groups-overall CrashGroupTotals" [
-  crash_group_id: string
+export def "v01-apps-analytics-crash-groups-overall get" [
   owner_name: string
   app_name: string
+  crash_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -862,7 +862,7 @@ export def "v01-apps-analytics-crash-groups-overall CrashGroupTotals" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/crash_groups/($crash_group_id)/overall" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_group_id: $crash_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/crash_groups/{crash_group_id}/overall") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -874,7 +874,7 @@ export def "v01-apps-analytics-crash-groups-overall CrashGroupTotals" [
 # DEPRECATED
 # operationId: Analytics_CrashFreeDevicePercentages
 @deprecated
-export def "v01-apps-analytics-crashfree-device-percentages CrashFreeDevicePercentages" [
+export def "v01-apps-analytics-crashfree-device-percentages get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -892,7 +892,7 @@ export def "v01-apps-analytics-crashfree-device-percentages CrashFreeDevicePerce
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/crashfree_device_percentages" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/crashfree_device_percentages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -903,7 +903,7 @@ export def "v01-apps-analytics-crashfree-device-percentages CrashFreeDevicePerce
 # POST /v0.1/apps/{owner_name}/{app_name}/analytics/distribution/release_counts
 # operationId: Analytics_DistributionReleaseCounts
 # --releases item shape: {distribution_group?: string, release: string}
-export def "v01-apps-analytics-distribution-release-counts DistributionReleaseCounts" [
+export def "v01-apps-analytics-distribution-release-counts post" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -919,8 +919,8 @@ export def "v01-apps-analytics-distribution-release-counts DistributionReleaseCo
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/distribution/release_counts")
-  let body = {releases: $releases} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/distribution/release_counts"))
+  let body = {"releases": $releases} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -931,10 +931,10 @@ export def "v01-apps-analytics-distribution-release-counts DistributionReleaseCo
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/analytics/event_logs/{event_name}
 # operationId: Analytics_EventsDeleteLogs
-export def "v01-apps-analytics-event-logs EventsDeleteLogs" [
-  event_name: string
+export def "v01-apps-analytics-event-logs logs" [
   owner_name: string
   app_name: string
+  event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -946,7 +946,7 @@ export def "v01-apps-analytics-event-logs EventsDeleteLogs" [
 ]: nothing -> record<error: record<code: int, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/event_logs/($event_name)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, event_name: $event_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/event_logs/{event_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -956,7 +956,7 @@ export def "v01-apps-analytics-event-logs EventsDeleteLogs" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/events
 # operationId: Analytics_Events
-export def "v01-apps-analytics-events Events" [
+export def "v01-apps-analytics-events get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -979,7 +979,7 @@ export def "v01-apps-analytics-events Events" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes") (serialize-qp "event_name" $event_name "pipes") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$inlinecount" $inlinecount "scalar") (serialize-qp "$orderby" $orderby "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/events" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -989,10 +989,10 @@ export def "v01-apps-analytics-events Events" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}
 # operationId: Analytics_EventsDelete
-export def "v01-apps-analytics-events EventsDelete" [
-  event_name: string
+export def "v01-apps-analytics-events delete" [
   owner_name: string
   app_name: string
+  event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1004,7 +1004,7 @@ export def "v01-apps-analytics-events EventsDelete" [
 ]: nothing -> record<error: record<code: int, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/events/($event_name)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, event_name: $event_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1014,10 +1014,10 @@ export def "v01-apps-analytics-events EventsDelete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/count_per_device
 # operationId: Analytics_EventPerDeviceCount
-export def "v01-apps-analytics-events-count-per-device EventPerDeviceCount" [
-  event_name: string
+export def "v01-apps-analytics-events-count-per-device get" [
   owner_name: string
   app_name: string
+  event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1033,7 +1033,7 @@ export def "v01-apps-analytics-events-count-per-device EventPerDeviceCount" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/events/($event_name)/count_per_device" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, event_name: $event_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/count_per_device") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1043,10 +1043,10 @@ export def "v01-apps-analytics-events-count-per-device EventPerDeviceCount" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/count_per_session
 # operationId: Analytics_EventPerSessionCount
-export def "v01-apps-analytics-events-count-per-session EventPerSessionCount" [
-  event_name: string
+export def "v01-apps-analytics-events-count-per-session get" [
   owner_name: string
   app_name: string
+  event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1062,7 +1062,7 @@ export def "v01-apps-analytics-events-count-per-session EventPerSessionCount" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/events/($event_name)/count_per_session" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, event_name: $event_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/count_per_session") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1072,10 +1072,10 @@ export def "v01-apps-analytics-events-count-per-session EventPerSessionCount" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/device_count
 # operationId: Analytics_EventDeviceCount
-export def "v01-apps-analytics-events-device-count EventDeviceCount" [
-  event_name: string
+export def "v01-apps-analytics-events-device-count get" [
   owner_name: string
   app_name: string
+  event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1091,7 +1091,7 @@ export def "v01-apps-analytics-events-device-count EventDeviceCount" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/events/($event_name)/device_count" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, event_name: $event_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/device_count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1101,10 +1101,10 @@ export def "v01-apps-analytics-events-device-count EventDeviceCount" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/event_count
 # operationId: Analytics_EventCount
-export def "v01-apps-analytics-events-event-count EventCount" [
-  event_name: string
+export def "v01-apps-analytics-events-event-count get" [
   owner_name: string
   app_name: string
+  event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1120,7 +1120,7 @@ export def "v01-apps-analytics-events-event-count EventCount" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/events/($event_name)/event_count" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, event_name: $event_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/event_count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1130,10 +1130,10 @@ export def "v01-apps-analytics-events-event-count EventCount" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/properties
 # operationId: Analytics_EventProperties
-export def "v01-apps-analytics-events-properties EventProperties" [
-  event_name: string
+export def "v01-apps-analytics-events-properties get" [
   owner_name: string
   app_name: string
+  event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1145,7 +1145,7 @@ export def "v01-apps-analytics-events-properties EventProperties" [
 ]: nothing -> record<event_properties: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/events/($event_name)/properties")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, event_name: $event_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1155,11 +1155,11 @@ export def "v01-apps-analytics-events-properties EventProperties" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/properties/{event_property_name}/counts
 # operationId: Analytics_EventPropertyCounts
-export def "v01-apps-analytics-events-properties-counts EventPropertyCounts" [
-  event_name: string
-  event_property_name: string
+export def "v01-apps-analytics-events-properties-counts get" [
   owner_name: string
   app_name: string
+  event_name: string
+  event_property_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1176,7 +1176,7 @@ export def "v01-apps-analytics-events-properties-counts EventPropertyCounts" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/events/($event_name)/properties/($event_property_name)/counts" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, event_name: $event_name, event_property_name: $event_property_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/properties/{event_property_name}/counts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1186,7 +1186,7 @@ export def "v01-apps-analytics-events-properties-counts EventPropertyCounts" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/generic_log_flow
 # operationId: Analytics_GenericLogFlow
-export def "v01-apps-analytics-generic-log-flow GenericLogFlow" [
+export def "v01-apps-analytics-generic-log-flow get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1202,7 +1202,7 @@ export def "v01-apps-analytics-generic-log-flow GenericLogFlow" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/generic_log_flow" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/generic_log_flow") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1212,7 +1212,7 @@ export def "v01-apps-analytics-generic-log-flow GenericLogFlow" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/languages
 # operationId: Analytics_LanguageCounts
-export def "v01-apps-analytics-languages LanguageCounts" [
+export def "v01-apps-analytics-languages get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1231,7 +1231,7 @@ export def "v01-apps-analytics-languages LanguageCounts" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/languages" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/languages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1241,7 +1241,7 @@ export def "v01-apps-analytics-languages LanguageCounts" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/log_flow
 # operationId: Analytics_LogFlow
-export def "v01-apps-analytics-log-flow LogFlow" [
+export def "v01-apps-analytics-log-flow get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1257,7 +1257,7 @@ export def "v01-apps-analytics-log-flow LogFlow" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/log_flow" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/log_flow") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1267,7 +1267,7 @@ export def "v01-apps-analytics-log-flow LogFlow" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/models
 # operationId: Analytics_ModelCounts
-export def "v01-apps-analytics-models ModelCounts" [
+export def "v01-apps-analytics-models get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1286,7 +1286,7 @@ export def "v01-apps-analytics-models ModelCounts" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/models" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/models") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1296,7 +1296,7 @@ export def "v01-apps-analytics-models ModelCounts" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/oses
 # operationId: Analytics_OperatingSystemCounts
-export def "v01-apps-analytics-oses OperatingSystemCounts" [
+export def "v01-apps-analytics-oses get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1315,7 +1315,7 @@ export def "v01-apps-analytics-oses OperatingSystemCounts" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/oses" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/oses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1325,7 +1325,7 @@ export def "v01-apps-analytics-oses OperatingSystemCounts" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/places
 # operationId: Analytics_PlaceCounts
-export def "v01-apps-analytics-places PlaceCounts" [
+export def "v01-apps-analytics-places get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1344,7 +1344,7 @@ export def "v01-apps-analytics-places PlaceCounts" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/places" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/places") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1354,7 +1354,7 @@ export def "v01-apps-analytics-places PlaceCounts" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/session_counts
 # operationId: Analytics_SessionCounts
-export def "v01-apps-analytics-session-counts SessionCounts" [
+export def "v01-apps-analytics-session-counts get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1372,7 +1372,7 @@ export def "v01-apps-analytics-session-counts SessionCounts" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/session_counts" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/session_counts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1382,7 +1382,7 @@ export def "v01-apps-analytics-session-counts SessionCounts" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/session_durations_distribution
 # operationId: Analytics_SessionDurationsDistribution
-export def "v01-apps-analytics-session-durations-distribution SessionDurationsDistribution" [
+export def "v01-apps-analytics-session-durations-distribution get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1400,7 +1400,7 @@ export def "v01-apps-analytics-session-durations-distribution SessionDurationsDi
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/session_durations_distribution" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/session_durations_distribution") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1410,7 +1410,7 @@ export def "v01-apps-analytics-session-durations-distribution SessionDurationsDi
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/sessions_per_device
 # operationId: Analytics_PerDeviceCounts
-export def "v01-apps-analytics-sessions-per-device PerDeviceCounts" [
+export def "v01-apps-analytics-sessions-per-device get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1428,7 +1428,7 @@ export def "v01-apps-analytics-sessions-per-device PerDeviceCounts" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/sessions_per_device" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/sessions_per_device") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1438,7 +1438,7 @@ export def "v01-apps-analytics-sessions-per-device PerDeviceCounts" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/versions
 # operationId: Analytics_Versions
-export def "v01-apps-analytics-versions Versions" [
+export def "v01-apps-analytics-versions version-s" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1457,7 +1457,7 @@ export def "v01-apps-analytics-versions Versions" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/analytics/versions" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1481,7 +1481,7 @@ export def "v01-apps-api-tokens list" [
 ]: nothing -> table<created_at: string, description: string, id: string, scope: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/api_tokens")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/api_tokens"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1508,8 +1508,8 @@ export def "v01-apps-api-tokens new" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/api_tokens")
-  let body = {description: $description, scope: $scope} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/api_tokens"))
+  let body = {"description": $description, "scope": $scope} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1535,7 +1535,7 @@ export def "v01-apps-api-tokens delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/api_tokens/($api_token_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, api_token_id: $api_token_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/api_tokens/{api_token_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1561,7 +1561,7 @@ export def "v01-apps-apple-mapping delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/apple_mapping")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/apple_mapping"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1586,7 +1586,7 @@ export def "v01-apps-apple-mapping get" [
 ]: nothing -> record<app_id: string, apple_id: string, service_connection_id: string, team_identifier: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/apple_mapping")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/apple_mapping"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1615,8 +1615,8 @@ export def "v01-apps-apple-mapping create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/apple_mapping")
-  let body = {apple_id: $apple_id, bundle_identifier: $bundle_identifier, service_connection_id: $service_connection_id, team_identifier: $team_identifier} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/apple_mapping"))
+  let body = {"apple_id": $apple_id, "bundle_identifier": $bundle_identifier, "service_connection_id": $service_connection_id, "team_identifier": $team_identifier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1629,7 +1629,7 @@ export def "v01-apps-apple-mapping create" [
 # DEPRECATED
 # operationId: appleMapping_TestFlightGroups
 @deprecated
-export def "v01-apps-apple-test-flight-groups TestFlightGroups" [
+export def "v01-apps-apple-test-flight-groups test" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1643,7 +1643,7 @@ export def "v01-apps-apple-test-flight-groups TestFlightGroups" [
 ]: nothing -> table<appleId: float, id: string, name: string, providerId: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/apple_test_flight_groups")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/apple_test_flight_groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1667,7 +1667,7 @@ export def "v01-apps-avatar delete" [
 ]: nothing -> record<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/avatar")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/avatar"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1677,7 +1677,7 @@ export def "v01-apps-avatar delete" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/avatar
 # operationId: apps_updateAvatar
-export def "v01-apps-avatar updateAvatar" [
+export def "v01-apps-avatar update" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1693,8 +1693,8 @@ export def "v01-apps-avatar updateAvatar" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/avatar")
-  let body = {avatar: $avatar} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/avatar"))
+  let body = {"avatar": $avatar} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1705,7 +1705,7 @@ export def "v01-apps-avatar updateAvatar" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/azure_subscriptions
 # operationId: azureSubscription_listForApp
-export def "v01-apps-azure-subscriptions listForApp" [
+export def "v01-apps-azure-subscriptions list-for" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1719,7 +1719,7 @@ export def "v01-apps-azure-subscriptions listForApp" [
 ]: nothing -> table<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/azure_subscriptions")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/azure_subscriptions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1745,8 +1745,8 @@ export def "v01-apps-azure-subscriptions linkForApp" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/azure_subscriptions")
-  let body = {subscription_id: $subscription_id} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/azure_subscriptions"))
+  let body = {"subscription_id": $subscription_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1757,10 +1757,10 @@ export def "v01-apps-azure-subscriptions linkForApp" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/azure_subscriptions/{azure_subscription_id}
 # operationId: azureSubscription_deleteForApp
-export def "v01-apps-azure-subscriptions delete" [
-  azure_subscription_id: string
+export def "v01-apps-azure-subscriptions delete-for" [
   owner_name: string
   app_name: string
+  azure_subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1772,7 +1772,7 @@ export def "v01-apps-azure-subscriptions delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/azure_subscriptions/($azure_subscription_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, azure_subscription_id: $azure_subscription_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/azure_subscriptions/{azure_subscription_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1782,7 +1782,7 @@ export def "v01-apps-azure-subscriptions delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/billing/aggregated
 # operationId: billingAggregatedInformation_getByApp
-export def "v01-apps-billing-aggregated get" [
+export def "v01-apps-billing-aggregated get-by" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1795,12 +1795,12 @@ export def "v01-apps-billing-aggregated get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --service: string@service-completer # Type of service that should be included in the Billing Information
   --period: string@period-completer # Type of period that should be included in the Billing Information
-  --showOriginalPlans: oneof<nothing, bool> # Controls whether the API should show the original plan when Azure Subscription is not enabled
+  --show-original-plans: oneof<nothing, bool> # Controls whether the API should show the original plan when Azure Subscription is not enabled
 ]: nothing -> record<azureSubscriptionId: string, azureSubscriptionState: string, billingPlans: record<buildService: record<canSelectTrialPlan: bool, currentBillingPeriod: record, lastTrialPlanExpirationTime: string>, testService: record<canSelectTrialPlan: bool, currentBillingPeriod: record, lastTrialPlanExpirationTime: string>>, id: string, timestamp: string, usage: record<buildService: record<currentUsagePeriod: record>, testService: record<currentUsagePeriod: record>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "service" $service "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "showOriginalPlans" $showOriginalPlans "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/billing/aggregated" $qp)
+  let qp = [(serialize-qp "service" $service "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "showOriginalPlans" $show_original_plans "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/billing/aggregated") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1810,7 +1810,7 @@ export def "v01-apps-billing-aggregated get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/branches
 # operationId: builds_listBranches
-export def "v01-apps-branches listBranches" [
+export def "v01-apps-branches list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1824,7 +1824,7 @@ export def "v01-apps-branches listBranches" [
 ]: nothing -> table<configured: bool, lastBuild: record<buildNumber: string, finishTime: string, id: int, lastChangedDate: string, queueTime: string, result: string, sourceBranch: string, sourceVersion: string, startTime: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/branches"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1834,10 +1834,10 @@ export def "v01-apps-branches listBranches" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/builds
 # operationId: builds_listByBranch
-export def "v01-apps-branches-builds listByBranch" [
-  branch: string
+export def "v01-apps-branches-builds list-by" [
   owner_name: string
   app_name: string
+  branch: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1849,7 +1849,7 @@ export def "v01-apps-branches-builds listByBranch" [
 ]: nothing -> table<buildNumber: string, finishTime: string, id: int, lastChangedDate: string, queueTime: string, result: string, sourceBranch: string, sourceVersion: string, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches/($branch)/builds")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, branch: $branch} | format pattern "/v0.1/apps/{owner_name}/{app_name}/branches/{branch}/builds"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1860,9 +1860,9 @@ export def "v01-apps-branches-builds listByBranch" [
 # POST /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/builds
 # operationId: builds_create
 export def "v01-apps-branches-builds create" [
-  branch: string
   owner_name: string
   app_name: string
+  branch: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1872,13 +1872,13 @@ export def "v01-apps-branches-builds create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --debug: oneof<nothing, bool> # Run build in debug mode
-  --sourceVersion: string # Version to build which represents the full Git commit reference
+  --source-version: string # Version to build which represents the full Git commit reference
 ]: any -> record<buildNumber: string, finishTime: string, id: int, lastChangedDate: string, queueTime: string, result: string, sourceBranch: string, sourceVersion: string, startTime: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches/($branch)/builds")
-  let body = {debug: $debug, sourceVersion: $sourceVersion} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, branch: $branch} | format pattern "/v0.1/apps/{owner_name}/{app_name}/branches/{branch}/builds"))
+  let body = {"debug": $debug, "sourceVersion": $source_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1890,9 +1890,9 @@ export def "v01-apps-branches-builds create" [
 # DELETE /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/config
 # operationId: branchConfigurations_delete
 export def "v01-apps-branches-config delete" [
-  branch: string
   owner_name: string
   app_name: string
+  branch: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1906,7 +1906,7 @@ export def "v01-apps-branches-config delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches/($branch)/config")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, branch: $branch} | format pattern "/v0.1/apps/{owner_name}/{app_name}/branches/{branch}/config"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1918,9 +1918,9 @@ export def "v01-apps-branches-config delete" [
 # GET /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/config
 # operationId: branchConfigurations_get
 export def "v01-apps-branches-config get" [
-  branch: string
   owner_name: string
   app_name: string
+  branch: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1932,7 +1932,7 @@ export def "v01-apps-branches-config get" [
 ]: nothing -> record<artifactVersioning: record<buildNumberFormat: string>, badgeIsEnabled: bool, cloneFromBranch: string, signed: bool, testsEnabled: bool, toolsets: record<android: record<automaticSigning: bool, buildVariant: string, gradleWrapperPath: string, isRoot: bool, keyAlias: string, keyPassword: string, keystoreEncoded: string, keystoreFilename: string, keystorePassword: string, module: string, runLint: bool, runTests: bool>, javascript: record<packageJsonPath: string, reactNativeVersion: string, runTests: bool>, xamarin: record<args: string, configuration: string, isSimBuild: bool, monoVersion: string, p12File: string, p12Pwd: string, provProfile: string, sdkBundle: string, slnPath: string, symlink: string>, xcode: record<appExtensionProvisioningProfileFiles: list, archiveConfiguration: string, automaticSigning: bool, cartfilePath: string, certificateEncoded: string, certificateFileId: string, certificateFilename: string, certificatePassword: string, certificateUploadId: string, forceLegacyBuildSystem: bool, podfilePath: string, projectOrWorkspacePath: string, provisioningProfileEncoded: string, provisioningProfileFileId: string, provisioningProfileFilename: string, provisioningProfileUploadId: string, scheme: string, targetToArchive: string, teamId: string, xcodeProjectSha: string, xcodeVersion: string>>, trigger: string, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches/($branch)/config")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, branch: $branch} | format pattern "/v0.1/apps/{owner_name}/{app_name}/branches/{branch}/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1945,9 +1945,9 @@ export def "v01-apps-branches-config get" [
 # --artifactVersioning shape: {buildNumberFormat?: "buildId"|"timestamp"}
 # --toolsets shape: {android?: any, javascript?: any, xamarin?: any, xcode?: any}
 export def "v01-apps-branches-config create" [
-  branch: string
   owner_name: string
   app_name: string
+  branch: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1956,19 +1956,19 @@ export def "v01-apps-branches-config create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --artifactVersioning: record # The versioning configuration for artifacts built for this branch — shape: {buildNumberFormat?: "buildId"|"timestamp"}
-  --badgeIsEnabled: oneof<nothing, bool>
-  --cloneFromBranch: string # A configured branch name to clone from. If provided, all other parameters will be ignored. Only supported in POST requests.
+  --artifact-versioning: record # The versioning configuration for artifacts built for this branch — shape: {buildNumberFormat?: "buildId"|"timestamp"}
+  --badge-is-enabled: oneof<nothing, bool>
+  --clone-from-branch: string # A configured branch name to clone from. If provided, all other parameters will be ignored. Only supported in POST requests.
   --signed: oneof<nothing, bool>
-  --testsEnabled: oneof<nothing, bool>
+  --tests-enabled: oneof<nothing, bool>
   --toolsets: any # The branch build configuration for each toolset — shape: {android?: any, javascript?: any, xamarin?: any, xcode?: any}
   --trigger: string@trigger-completer
 ]: any -> record<artifactVersioning: record<buildNumberFormat: string>, badgeIsEnabled: bool, cloneFromBranch: string, signed: bool, testsEnabled: bool, toolsets: record<android: record<automaticSigning: bool, buildVariant: string, gradleWrapperPath: string, isRoot: bool, keyAlias: string, keyPassword: string, keystoreEncoded: string, keystoreFilename: string, keystorePassword: string, module: string, runLint: bool, runTests: bool>, javascript: record<packageJsonPath: string, reactNativeVersion: string, runTests: bool>, xamarin: record<args: string, configuration: string, isSimBuild: bool, monoVersion: string, p12File: string, p12Pwd: string, provProfile: string, sdkBundle: string, slnPath: string, symlink: string>, xcode: record<appExtensionProvisioningProfileFiles: list, archiveConfiguration: string, automaticSigning: bool, cartfilePath: string, certificateEncoded: string, certificateFileId: string, certificateFilename: string, certificatePassword: string, certificateUploadId: string, forceLegacyBuildSystem: bool, podfilePath: string, projectOrWorkspacePath: string, provisioningProfileEncoded: string, provisioningProfileFileId: string, provisioningProfileFilename: string, provisioningProfileUploadId: string, scheme: string, targetToArchive: string, teamId: string, xcodeProjectSha: string, xcodeVersion: string>>, trigger: string, id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches/($branch)/config")
-  let body = {artifactVersioning: $artifactVersioning, badgeIsEnabled: $badgeIsEnabled, cloneFromBranch: $cloneFromBranch, signed: $signed, testsEnabled: $testsEnabled, toolsets: $toolsets, trigger: $trigger} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, branch: $branch} | format pattern "/v0.1/apps/{owner_name}/{app_name}/branches/{branch}/config"))
+  let body = {"artifactVersioning": $artifact_versioning, "badgeIsEnabled": $badge_is_enabled, "cloneFromBranch": $clone_from_branch, "signed": $signed, "testsEnabled": $tests_enabled, "toolsets": $toolsets, "trigger": $trigger} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1982,9 +1982,9 @@ export def "v01-apps-branches-config create" [
 # --artifactVersioning shape: {buildNumberFormat?: "buildId"|"timestamp"}
 # --toolsets shape: {android?: any, javascript?: any, xamarin?: any, xcode?: any}
 export def "v01-apps-branches-config update" [
-  branch: string
   owner_name: string
   app_name: string
+  branch: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1993,19 +1993,19 @@ export def "v01-apps-branches-config update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --artifactVersioning: record # The versioning configuration for artifacts built for this branch — shape: {buildNumberFormat?: "buildId"|"timestamp"}
-  --badgeIsEnabled: oneof<nothing, bool>
-  --cloneFromBranch: string # A configured branch name to clone from. If provided, all other parameters will be ignored. Only supported in POST requests.
+  --artifact-versioning: record # The versioning configuration for artifacts built for this branch — shape: {buildNumberFormat?: "buildId"|"timestamp"}
+  --badge-is-enabled: oneof<nothing, bool>
+  --clone-from-branch: string # A configured branch name to clone from. If provided, all other parameters will be ignored. Only supported in POST requests.
   --signed: oneof<nothing, bool>
-  --testsEnabled: oneof<nothing, bool>
+  --tests-enabled: oneof<nothing, bool>
   --toolsets: any # The branch build configuration for each toolset — shape: {android?: any, javascript?: any, xamarin?: any, xcode?: any}
   --trigger: string@trigger-completer
 ]: any -> record<artifactVersioning: record<buildNumberFormat: string>, badgeIsEnabled: bool, cloneFromBranch: string, signed: bool, testsEnabled: bool, toolsets: record<android: record<automaticSigning: bool, buildVariant: string, gradleWrapperPath: string, isRoot: bool, keyAlias: string, keyPassword: string, keystoreEncoded: string, keystoreFilename: string, keystorePassword: string, module: string, runLint: bool, runTests: bool>, javascript: record<packageJsonPath: string, reactNativeVersion: string, runTests: bool>, xamarin: record<args: string, configuration: string, isSimBuild: bool, monoVersion: string, p12File: string, p12Pwd: string, provProfile: string, sdkBundle: string, slnPath: string, symlink: string>, xcode: record<appExtensionProvisioningProfileFiles: list, archiveConfiguration: string, automaticSigning: bool, cartfilePath: string, certificateEncoded: string, certificateFileId: string, certificateFilename: string, certificatePassword: string, certificateUploadId: string, forceLegacyBuildSystem: bool, podfilePath: string, projectOrWorkspacePath: string, provisioningProfileEncoded: string, provisioningProfileFileId: string, provisioningProfileFilename: string, provisioningProfileUploadId: string, scheme: string, targetToArchive: string, teamId: string, xcodeProjectSha: string, xcodeVersion: string>>, trigger: string, id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches/($branch)/config")
-  let body = {artifactVersioning: $artifactVersioning, badgeIsEnabled: $badgeIsEnabled, cloneFromBranch: $cloneFromBranch, signed: $signed, testsEnabled: $testsEnabled, toolsets: $toolsets, trigger: $trigger} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, branch: $branch} | format pattern "/v0.1/apps/{owner_name}/{app_name}/branches/{branch}/config"))
+  let body = {"artifactVersioning": $artifact_versioning, "badgeIsEnabled": $badge_is_enabled, "cloneFromBranch": $clone_from_branch, "signed": $signed, "testsEnabled": $tests_enabled, "toolsets": $toolsets, "trigger": $trigger} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2017,9 +2017,9 @@ export def "v01-apps-branches-config update" [
 # GET /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/export_config
 # operationId: buildConfigurations_get
 export def "v01-apps-branches-export-config get" [
-  branch: string
   owner_name: string
   app_name: string
+  branch: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2033,7 +2033,7 @@ export def "v01-apps-branches-export-config get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches/($branch)/export_config" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, branch: $branch} | format pattern "/v0.1/apps/{owner_name}/{app_name}/branches/{branch}/export_config") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2043,10 +2043,10 @@ export def "v01-apps-branches-export-config get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/toolset_projects
 # operationId: builds_listToolsetProjects
-export def "v01-apps-branches-toolset-projects listToolsetProjects" [
-  branch: string
+export def "v01-apps-branches-toolset-projects list" [
   owner_name: string
   app_name: string
+  branch: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2057,12 +2057,12 @@ export def "v01-apps-branches-toolset-projects listToolsetProjects" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --os: string@os-completer-1 # The desired OS for the project scan; normally the same as the app OS
   --platform: string@platform-completer-1 # The desired platform for the project scan
-  --maxSearchDepth: int # The depth of the repository to search for project files
+  --max-search-depth: int # The depth of the repository to search for project files
 ]: nothing -> record<android: record<androidModules: list<record>, gradleWrapperPath: string>, buildscripts: any, commit: string, javascript: record<javascriptSolutions: list<record>, packageJsonPaths: list<string>>, testcloud: record<projects: list<record>>, uwp: record<uwpSolutions: list<record>>, xamarin: record<xamarinSolutions: list<record>>, xcode: record<xcodeSchemeContainers: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "os" $os "scalar") (serialize-qp "platform" $platform "scalar") (serialize-qp "maxSearchDepth" $maxSearchDepth "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/branches/($branch)/toolset_projects" $qp)
+  let qp = [(serialize-qp "os" $os "scalar") (serialize-qp "platform" $platform "scalar") (serialize-qp "maxSearchDepth" $max_search_depth "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, branch: $branch} | format pattern "/v0.1/apps/{owner_name}/{app_name}/branches/{branch}/toolset_projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2072,7 +2072,7 @@ export def "v01-apps-branches-toolset-projects listToolsetProjects" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/bugtracker
 # operationId: bugtracker_getSettings
-export def "v01-apps-bugtracker get" [
+export def "v01-apps-bugtracker get-settings" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2086,7 +2086,7 @@ export def "v01-apps-bugtracker get" [
 ]: nothing -> record<event_types: list<string>, settings: record<callback_url: string, owner_name: string, type: string>, state: string, token_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/bugtracker")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/bugtracker"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2096,10 +2096,10 @@ export def "v01-apps-bugtracker get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/bugtracker/crashGroup/{crash_group_id}
 # operationId: bugTracker_getRepoIssueFromCrash
-export def "v01-apps-bugtracker-crash-group get" [
-  crash_group_id: string
+export def "v01-apps-bugtracker-crash-group get-repo-issue-from" [
   owner_name: string
   app_name: string
+  crash_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2111,7 +2111,7 @@ export def "v01-apps-bugtracker-crash-group get" [
 ]: nothing -> record<bug_tracker_type: string, event_type: string, id: string, mobile_center_id: string, repo_name: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/bugtracker/crashGroup/($crash_group_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_group_id: $crash_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/bugtracker/crashGroup/{crash_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2135,7 +2135,7 @@ export def "v01-apps-build-service-status get" [
 ]: nothing -> record<message: string, os: string, service: string, status: string, url: string, valid_until: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/build_service_status")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/build_service_status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2146,9 +2146,9 @@ export def "v01-apps-build-service-status get" [
 # GET /v0.1/apps/{owner_name}/{app_name}/builds/{build_id}
 # operationId: builds_get
 export def "v01-apps-builds get" [
-  build_id: int
   owner_name: string
   app_name: string
+  build_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2160,7 +2160,7 @@ export def "v01-apps-builds get" [
 ]: nothing -> record<buildNumber: string, finishTime: string, id: int, lastChangedDate: string, queueTime: string, result: string, sourceBranch: string, sourceVersion: string, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/builds/($build_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, build_id: $build_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/builds/{build_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2171,9 +2171,9 @@ export def "v01-apps-builds get" [
 # PATCH /v0.1/apps/{owner_name}/{app_name}/builds/{build_id}
 # operationId: builds_update
 export def "v01-apps-builds update" [
-  build_id: int
   owner_name: string
   app_name: string
+  build_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2187,8 +2187,8 @@ export def "v01-apps-builds update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/builds/($build_id)")
-  let body = {status: $status} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, build_id: $build_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/builds/{build_id}"))
+  let body = {"status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2201,9 +2201,9 @@ export def "v01-apps-builds update" [
 # operationId: builds_distribute
 # --destinations item shape: {id: string, type: "store"|"group"|"tester"}
 export def "v01-apps-builds-distribute distribute" [
-  build_id: int
   owner_name: string
   app_name: string
+  build_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2213,15 +2213,15 @@ export def "v01-apps-builds-distribute distribute" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --destinations: list # Array of objects {id:string, type:string} with "id" being the distribution group ID, store ID, or tester email, and "type" being "group", "store", or "tester" — item shape: {id: string, type: "store"|"group"|"tester"}
-  --mandatoryUpdate: oneof<nothing, bool>
-  --notifyTesters: oneof<nothing, bool> # default: true
-  --releaseNotes: string # The release notes
+  --mandatory-update: oneof<nothing, bool>
+  --notify-testers: oneof<nothing, bool> # default: true
+  --release-notes: string # The release notes
 ]: any -> record<status: string, upload_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/builds/($build_id)/distribute")
-  let body = {destinations: $destinations, mandatoryUpdate: $mandatoryUpdate, notifyTesters: $notifyTesters, releaseNotes: $releaseNotes} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, build_id: $build_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/builds/{build_id}/distribute"))
+  let body = {"destinations": $destinations, "mandatoryUpdate": $mandatory_update, "notifyTesters": $notify_testers, "releaseNotes": $release_notes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2232,11 +2232,11 @@ export def "v01-apps-builds-distribute distribute" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/builds/{build_id}/downloads/{download_type}
 # operationId: builds_getDownloadUri
-export def "v01-apps-builds-downloads get" [
-  build_id: int
-  download_type: string
+export def "v01-apps-builds-downloads get-download-uri" [
   owner_name: string
   app_name: string
+  build_id: int
+  download_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2248,7 +2248,7 @@ export def "v01-apps-builds-downloads get" [
 ]: nothing -> record<uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/builds/($build_id)/downloads/($download_type)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, build_id: $build_id, download_type: $download_type} | format pattern "/v0.1/apps/{owner_name}/{app_name}/builds/{build_id}/downloads/{download_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2259,9 +2259,9 @@ export def "v01-apps-builds-downloads get" [
 # GET /v0.1/apps/{owner_name}/{app_name}/builds/{build_id}/logs
 # operationId: builds_getLog
 export def "v01-apps-builds-logs get" [
-  build_id: int
   owner_name: string
   app_name: string
+  build_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2273,7 +2273,7 @@ export def "v01-apps-builds-logs get" [
 ]: nothing -> record<value: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/builds/($build_id)/logs")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, build_id: $build_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/builds/{build_id}/logs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2283,7 +2283,7 @@ export def "v01-apps-builds-logs get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/commits/batch
 # operationId: commits_listByShaList
-export def "v01-apps-commits-batch listByShaList" [
+export def "v01-apps-commits-batch list-by-sha-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2299,7 +2299,7 @@ export def "v01-apps-commits-batch listByShaList" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hashes" $hashes "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/commits/batch" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/commits/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2334,7 +2334,7 @@ export def "v01-apps-crash-groups list" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "last_occurrence_from" $last_occurrence_from "scalar") (serialize-qp "last_occurrence_to" $last_occurrence_to "scalar") (serialize-qp "app_version" $app_version "scalar") (serialize-qp "group_type" $group_type "scalar") (serialize-qp "group_status" $group_status "scalar") (serialize-qp "group_text_search" $group_text_search "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "continuation_token" $continuation_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/crash_groups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2347,9 +2347,9 @@ export def "v01-apps-crash-groups list" [
 # operationId: crashGroups_get
 @deprecated
 export def "v01-apps-crash-groups get" [
-  crash_group_id: string
   owner_name: string
   app_name: string
+  crash_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2361,7 +2361,7 @@ export def "v01-apps-crash-groups get" [
 ]: nothing -> record<annotation: string, app_version: string, build: string, count: int, crash_group_id: string, crash_reason: string, display_id: string, exception: string, fatal: bool, first_occurrence: string, impacted_users: int, last_occurrence: string, new_crash_group_id: string, reason_frame: record<app_code: bool, class_method: bool, class_name: string, code_formatted: string, code_raw: string, exception_type: string, file: string, framework_name: string, language: string, line: int, method: string, method_params: string, os_exception_type: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_group_id: $crash_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2374,9 +2374,9 @@ export def "v01-apps-crash-groups get" [
 # operationId: crashGroups_update
 @deprecated
 export def "v01-apps-crash-groups update" [
-  crash_group_id: string
   owner_name: string
   app_name: string
+  crash_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2391,8 +2391,8 @@ export def "v01-apps-crash-groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)")
-  let body = {annotation: $annotation, status: $status} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_group_id: $crash_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}"))
+  let body = {"annotation": $annotation, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2406,9 +2406,9 @@ export def "v01-apps-crash-groups update" [
 # operationId: crashes_list
 @deprecated
 export def "v01-apps-crash-groups-crashes list" [
-  crash_group_id: string
   owner_name: string
   app_name: string
+  crash_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2427,7 +2427,7 @@ export def "v01-apps-crash-groups-crashes list" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_report" $include_report "scalar") (serialize-qp "include_log" $include_log "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "app_version" $app_version "scalar") (serialize-qp "error_type" $error_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)/crashes" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_group_id: $crash_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}/crashes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2440,10 +2440,10 @@ export def "v01-apps-crash-groups-crashes list" [
 # operationId: crashes_delete
 @deprecated
 export def "v01-apps-crash-groups-crashes delete" [
-  crash_group_id: string
-  crash_id: string
   owner_name: string
   app_name: string
+  crash_group_id: string
+  crash_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2457,7 +2457,7 @@ export def "v01-apps-crash-groups-crashes delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "retention_delete" $retention_delete "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)/crashes/($crash_id)" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_group_id: $crash_group_id, crash_id: $crash_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}/crashes/{crash_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2470,10 +2470,10 @@ export def "v01-apps-crash-groups-crashes delete" [
 # operationId: crashes_get
 @deprecated
 export def "v01-apps-crash-groups-crashes get" [
-  crash_group_id: string
-  crash_id: string
   owner_name: string
   app_name: string
+  crash_group_id: string
+  crash_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2491,7 +2491,7 @@ export def "v01-apps-crash-groups-crashes get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_report" $include_report "scalar") (serialize-qp "include_log" $include_log "scalar") (serialize-qp "include_details" $include_details "scalar") (serialize-qp "include_stacktrace" $include_stacktrace "scalar") (serialize-qp "grouping_only" $grouping_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)/crashes/($crash_id)" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_group_id: $crash_group_id, crash_id: $crash_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}/crashes/{crash_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2504,10 +2504,10 @@ export def "v01-apps-crash-groups-crashes get" [
 # operationId: crashes_getNativeCrash
 @deprecated
 export def "v01-apps-crash-groups-crashes-native get" [
-  crash_group_id: string
-  crash_id: string
   owner_name: string
   app_name: string
+  crash_group_id: string
+  crash_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2519,7 +2519,7 @@ export def "v01-apps-crash-groups-crashes-native get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)/crashes/($crash_id)/native")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_group_id: $crash_group_id, crash_id: $crash_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}/crashes/{crash_id}/native"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2532,10 +2532,10 @@ export def "v01-apps-crash-groups-crashes-native get" [
 # operationId: crashes_getNativeCrashDownload
 @deprecated
 export def "v01-apps-crash-groups-crashes-native-download get" [
-  crash_group_id: string
-  crash_id: string
   owner_name: string
   app_name: string
+  crash_group_id: string
+  crash_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2547,7 +2547,7 @@ export def "v01-apps-crash-groups-crashes-native-download get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)/crashes/($crash_id)/native/download")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_group_id: $crash_group_id, crash_id: $crash_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}/crashes/{crash_id}/native/download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2560,10 +2560,10 @@ export def "v01-apps-crash-groups-crashes-native-download get" [
 # operationId: crashes_getRawCrashLocation
 @deprecated
 export def "v01-apps-crash-groups-crashes-raw-location get" [
-  crash_group_id: string
-  crash_id: string
   owner_name: string
   app_name: string
+  crash_group_id: string
+  crash_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2575,7 +2575,7 @@ export def "v01-apps-crash-groups-crashes-raw-location get" [
 ]: nothing -> record<uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)/crashes/($crash_id)/raw/location")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_group_id: $crash_group_id, crash_id: $crash_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}/crashes/{crash_id}/raw/location"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2588,10 +2588,10 @@ export def "v01-apps-crash-groups-crashes-raw-location get" [
 # operationId: crashes_getStacktrace
 @deprecated
 export def "v01-apps-crash-groups-crashes-stacktrace get" [
-  crash_group_id: string
-  crash_id: string
   owner_name: string
   app_name: string
+  crash_group_id: string
+  crash_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2605,7 +2605,7 @@ export def "v01-apps-crash-groups-crashes-stacktrace get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "grouping_only" $grouping_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)/crashes/($crash_id)/stacktrace" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_group_id: $crash_group_id, crash_id: $crash_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}/crashes/{crash_id}/stacktrace") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2618,9 +2618,9 @@ export def "v01-apps-crash-groups-crashes-stacktrace get" [
 # operationId: crashGroups_getStacktrace
 @deprecated
 export def "v01-apps-crash-groups-stacktrace get" [
-  crash_group_id: string
   owner_name: string
   app_name: string
+  crash_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2634,7 +2634,7 @@ export def "v01-apps-crash-groups-stacktrace get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "grouping_only" $grouping_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crash_groups/($crash_group_id)/stacktrace" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_group_id: $crash_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/crash_groups/{crash_group_id}/stacktrace") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2646,10 +2646,10 @@ export def "v01-apps-crash-groups-stacktrace get" [
 # DEPRECATED
 # operationId: crashes_listAttachments
 @deprecated
-export def "v01-apps-crashes-attachments listAttachments" [
-  crash_id: string
+export def "v01-apps-crashes-attachments list" [
   owner_name: string
   app_name: string
+  crash_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2661,7 +2661,7 @@ export def "v01-apps-crashes-attachments listAttachments" [
 ]: nothing -> table<app_id: string, attachment_id: string, blob_location: string, content_type: string, crash_id: string, created_time: string, file_name: string, size: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crashes/($crash_id)/attachments")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_id: $crash_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/crashes/{crash_id}/attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2673,11 +2673,11 @@ export def "v01-apps-crashes-attachments listAttachments" [
 # DEPRECATED
 # operationId: crashes_getCrashAttachmentLocation
 @deprecated
-export def "v01-apps-crashes-attachments-location get" [
-  crash_id: string
-  attachment_id: string
+export def "v01-apps-crashes-attachments-location get-crash" [
   owner_name: string
   app_name: string
+  crash_id: string
+  attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2689,7 +2689,7 @@ export def "v01-apps-crashes-attachments-location get" [
 ]: nothing -> record<uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crashes/($crash_id)/attachments/($attachment_id)/location")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_id: $crash_id, attachment_id: $attachment_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/crashes/{crash_id}/attachments/{attachment_id}/location"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2701,11 +2701,11 @@ export def "v01-apps-crashes-attachments-location get" [
 # DEPRECATED
 # operationId: crashes_getCrashTextAttachmentContent
 @deprecated
-export def "v01-apps-crashes-attachments-text get" [
-  crash_id: string
-  attachment_id: string
+export def "v01-apps-crashes-attachments-text get-crash-text-attachment-content" [
   owner_name: string
   app_name: string
+  crash_id: string
+  attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2717,7 +2717,7 @@ export def "v01-apps-crashes-attachments-text get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crashes/($crash_id)/attachments/($attachment_id)/text")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_id: $crash_id, attachment_id: $attachment_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/crashes/{crash_id}/attachments/{attachment_id}/text"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2727,10 +2727,10 @@ export def "v01-apps-crashes-attachments-text get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/crashes/{crash_id}/session_logs
 # operationId: Crashes_ListSessionLogs
-export def "v01-apps-crashes-session-logs ListSessionLogs" [
-  crash_id: string
+export def "v01-apps-crashes-session-logs list" [
   owner_name: string
   app_name: string
+  crash_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2744,7 +2744,7 @@ export def "v01-apps-crashes-session-logs ListSessionLogs" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crashes/($crash_id)/session_logs" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, crash_id: $crash_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/crashes/{crash_id}/session_logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2770,7 +2770,7 @@ export def "v01-apps-crashes-info get" [
 ]: nothing -> record<features: record<crash_download_raw: bool, crashgroup_analytics_crashfreeusers: bool, crashgroup_analytics_impactedusers: bool, crashgroup_modify_annotation: bool, crashgroup_modify_status: bool, search: bool>, has_crashes: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/crashes_info")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/crashes_info"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2794,7 +2794,7 @@ export def "v01-apps-deployments list" [
 ]: nothing -> table<key: string, latest_release: record<description: string, is_disabled: bool, is_mandatory: bool, rollout: int, target_binary_range: string, blob_url: string, diff_package_map: record, label: string, original_deployment: string, original_label: string, package_hash: string, release_method: string, released_by: string, size: float, upload_time: int>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/deployments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2822,8 +2822,8 @@ export def "v01-apps-deployments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments")
-  let body = {key: $key, latest_release: $latest_release, name: $name} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/deployments"))
+  let body = {"key": $key, "latest_release": $latest_release, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2835,9 +2835,9 @@ export def "v01-apps-deployments create" [
 # DELETE /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}
 # operationId: codePushDeployments_delete
 export def "v01-apps-deployments delete" [
-  deployment_name: string
   owner_name: string
   app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2851,7 +2851,7 @@ export def "v01-apps-deployments delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2863,9 +2863,9 @@ export def "v01-apps-deployments delete" [
 # GET /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}
 # operationId: codePushDeployments_get
 export def "v01-apps-deployments get" [
-  deployment_name: string
   owner_name: string
   app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2877,7 +2877,7 @@ export def "v01-apps-deployments get" [
 ]: nothing -> record<key: string, latest_release: record<description: string, is_disabled: bool, is_mandatory: bool, rollout: int, target_binary_range: string, blob_url: string, diff_package_map: record, label: string, original_deployment: string, original_label: string, package_hash: string, release_method: string, released_by: string, size: float, upload_time: int>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2888,9 +2888,9 @@ export def "v01-apps-deployments get" [
 # PATCH /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}
 # operationId: codePushDeployments_update
 export def "v01-apps-deployments update" [
-  deployment_name: string
   owner_name: string
   app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2904,8 +2904,8 @@ export def "v01-apps-deployments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2917,9 +2917,9 @@ export def "v01-apps-deployments update" [
 # GET /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/metrics
 # operationId: codePushDeploymentMetrics_get
 export def "v01-apps-deployments-metrics get" [
-  deployment_name: string
   owner_name: string
   app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2931,7 +2931,7 @@ export def "v01-apps-deployments-metrics get" [
 ]: nothing -> table<active: int, downloaded: int, failed: int, installed: int, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)/metrics")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/metrics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2942,10 +2942,10 @@ export def "v01-apps-deployments-metrics get" [
 # POST /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/promote_release/{promote_deployment_name}
 # operationId: codePushDeployments_promote
 export def "v01-apps-deployments-promote-release promote" [
-  deployment_name: string
-  promote_deployment_name: string
   owner_name: string
   app_name: string
+  deployment_name: string
+  promote_deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2964,8 +2964,8 @@ export def "v01-apps-deployments-promote-release promote" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)/promote_release/($promote_deployment_name)")
-  let body = {description: $description, is_disabled: $is_disabled, is_mandatory: $is_mandatory, rollout: $rollout, target_binary_range: $target_binary_range, label: $label} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, deployment_name: $deployment_name, promote_deployment_name: $promote_deployment_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/promote_release/{promote_deployment_name}"))
+  let body = {"description": $description, "is_disabled": $is_disabled, "is_mandatory": $is_mandatory, "rollout": $rollout, "target_binary_range": $target_binary_range, "label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2977,9 +2977,9 @@ export def "v01-apps-deployments-promote-release promote" [
 # DELETE /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/releases
 # operationId: codePushDeploymentReleases_delete
 export def "v01-apps-deployments-releases delete" [
-  deployment_name: string
   owner_name: string
   app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2991,7 +2991,7 @@ export def "v01-apps-deployments-releases delete" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)/releases")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/releases"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3002,9 +3002,9 @@ export def "v01-apps-deployments-releases delete" [
 # GET /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/releases
 # operationId: codePushDeploymentReleases_get
 export def "v01-apps-deployments-releases get" [
-  deployment_name: string
   owner_name: string
   app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3016,7 +3016,7 @@ export def "v01-apps-deployments-releases get" [
 ]: nothing -> table<description: string, is_disabled: bool, is_mandatory: bool, rollout: int, target_binary_range: string, blob_url: string, diff_package_map: record, label: string, original_deployment: string, original_label: string, package_hash: string, release_method: string, released_by: string, size: float, upload_time: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)/releases")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/releases"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3028,9 +3028,9 @@ export def "v01-apps-deployments-releases get" [
 # operationId: codePushDeploymentReleases_create
 # --release_upload shape: {id: string, token: string, upload_domain: string}
 export def "v01-apps-deployments-releases create" [
-  deployment_name: string
   owner_name: string
   app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3051,8 +3051,8 @@ export def "v01-apps-deployments-releases create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)/releases")
-  let body = {deployment_name: $body_deployment_name, description: $description, disabled: $disabled, mandatory: $mandatory, no_duplicate_release_error: $no_duplicate_release_error, release_upload: $release_upload, rollout: $rollout, target_binary_version: $target_binary_version} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/releases"))
+  let body = {"deployment_name": $body_deployment_name, "description": $description, "disabled": $disabled, "mandatory": $mandatory, "no_duplicate_release_error": $no_duplicate_release_error, "release_upload": $release_upload, "rollout": $rollout, "target_binary_version": $target_binary_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3064,10 +3064,10 @@ export def "v01-apps-deployments-releases create" [
 # PATCH /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/releases/{release_label}
 # operationId: deploymentReleases_update
 export def "v01-apps-deployments-releases update" [
-  deployment_name: string
-  release_label: string
   owner_name: string
   app_name: string
+  deployment_name: string
+  release_label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3085,8 +3085,8 @@ export def "v01-apps-deployments-releases update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)/releases/($release_label)")
-  let body = {description: $description, is_disabled: $is_disabled, is_mandatory: $is_mandatory, rollout: $rollout, target_binary_range: $target_binary_range} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, deployment_name: $deployment_name, release_label: $release_label} | format pattern "/v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/releases/{release_label}"))
+  let body = {"description": $description, "is_disabled": $is_disabled, "is_mandatory": $is_mandatory, "rollout": $rollout, "target_binary_range": $target_binary_range} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3098,9 +3098,9 @@ export def "v01-apps-deployments-releases update" [
 # POST /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/rollback_release
 # operationId: codePushDeploymentRelease_rollback
 export def "v01-apps-deployments-rollback-release rollback" [
-  deployment_name: string
   owner_name: string
   app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3114,8 +3114,8 @@ export def "v01-apps-deployments-rollback-release rollback" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)/rollback_release")
-  let body = {label: $label} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/rollback_release"))
+  let body = {"label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3127,9 +3127,9 @@ export def "v01-apps-deployments-rollback-release rollback" [
 # POST /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/uploads
 # operationId: codePushDeploymentUpload_create
 export def "v01-apps-deployments-uploads create" [
-  deployment_name: string
   owner_name: string
   app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3141,7 +3141,7 @@ export def "v01-apps-deployments-uploads create" [
 ]: nothing -> record<id: string, token: string, upload_domain: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/deployments/($deployment_name)/uploads")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/uploads"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3167,7 +3167,7 @@ export def "v01-apps-device-configurations get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "app_upload_id" $app_upload_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/device_configurations" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/device_configurations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3177,7 +3177,7 @@ export def "v01-apps-device-configurations get" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/device_selection
 # operationId: test_createDeviceSelection
-export def "v01-apps-device-selection createDeviceSelection" [
+export def "v01-apps-device-selection create" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3193,8 +3193,8 @@ export def "v01-apps-device-selection createDeviceSelection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/device_selection")
-  let body = {devices: $devices} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/device_selection"))
+  let body = {"devices": $devices} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3205,7 +3205,7 @@ export def "v01-apps-device-selection createDeviceSelection" [
 #
 # PUT /v0.1/apps/{owner_name}/{app_name}/devices/block_logs
 # operationId: App_BlockLogs
-export def "v01-apps-devices-block-logs BlockLogs-by-owner_name-app_name" [
+export def "v01-apps-devices-block-logs logs-by-owner_name-app_name" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3219,7 +3219,7 @@ export def "v01-apps-devices-block-logs BlockLogs-by-owner_name-app_name" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/devices/block_logs")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/devices/block_logs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3229,10 +3229,10 @@ export def "v01-apps-devices-block-logs BlockLogs-by-owner_name-app_name" [
 #
 # PUT /v0.1/apps/{owner_name}/{app_name}/devices/block_logs/{install_id}
 # operationId: Devices_BlockLogs
-export def "v01-apps-devices-block-logs BlockLogs-by-install_id-owner_name-app_name" [
-  install_id: string
+export def "v01-apps-devices-block-logs logs-by-owner_name-app_name-install_id" [
   owner_name: string
   app_name: string
+  install_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3244,7 +3244,7 @@ export def "v01-apps-devices-block-logs BlockLogs-by-install_id-owner_name-app_n
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/devices/block_logs/($install_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, install_id: $install_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/devices/block_logs/{install_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3270,7 +3270,7 @@ export def "v01-apps-diagnostics-symbol-groups list" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/diagnostics/symbol_groups" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/diagnostics/symbol_groups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3281,9 +3281,9 @@ export def "v01-apps-diagnostics-symbol-groups list" [
 # GET /v0.1/apps/{owner_name}/{app_name}/diagnostics/symbol_groups/{symbol_group_id}
 # operationId: missingSymbolGroups_get
 export def "v01-apps-diagnostics-symbol-groups get" [
-  symbol_group_id: string
   owner_name: string
   app_name: string
+  symbol_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3295,7 +3295,7 @@ export def "v01-apps-diagnostics-symbol-groups get" [
 ]: nothing -> record<groups: table<app_build: string, app_id: string, app_ver: string, crash_count: int, error_count: int, last_modified: string, missing_symbols: list, status: string, symbol_group_id: string>, total_crash_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/diagnostics/symbol_groups/($symbol_group_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, symbol_group_id: $symbol_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/diagnostics/symbol_groups/{symbol_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3319,7 +3319,7 @@ export def "v01-apps-diagnostics-symbol-groups-info info" [
 ]: nothing -> record<total_crash_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/diagnostics/symbol_groups_info")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/diagnostics/symbol_groups_info"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3343,7 +3343,7 @@ export def "v01-apps-distribution-groups list" [
 ]: nothing -> table<display_name: string, id: string, is_public: bool, name: string, origin: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3370,8 +3370,8 @@ export def "v01-apps-distribution-groups create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups")
-  let body = {display_name: $display_name, name: $name} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_groups"))
+  let body = {"display_name": $display_name, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3383,8 +3383,8 @@ export def "v01-apps-distribution-groups create" [
 # DELETE /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}
 # operationId: distributionGroups_delete
 export def "v01-apps-distribution-groups delete" [
-  app_name: string
   owner_name: string
+  app_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3397,7 +3397,7 @@ export def "v01-apps-distribution-groups delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3422,7 +3422,7 @@ export def "v01-apps-distribution-groups get" [
 ]: nothing -> record<display_name: string, id: string, is_public: bool, name: string, origin: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3450,8 +3450,8 @@ export def "v01-apps-distribution-groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)")
-  let body = {is_public: $is_public, name: $name} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}"))
+  let body = {"is_public": $is_public, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3463,9 +3463,9 @@ export def "v01-apps-distribution-groups update" [
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/devices
 # operationId: devices_list
 export def "v01-apps-distribution-groups-devices list" [
-  distribution_group_name: string
   owner_name: string
   app_name: string
+  distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3479,7 +3479,7 @@ export def "v01-apps-distribution-groups-devices list" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "release_id" $release_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/devices" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3489,10 +3489,10 @@ export def "v01-apps-distribution-groups-devices list" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/devices/download_devices_list
 # operationId: devices_listCsvFormat
-export def "v01-apps-distribution-groups-devices-download-devices-list listCsvFormat" [
-  distribution_group_name: string
+export def "v01-apps-distribution-groups-devices-download-devices-list list-csv-format" [
   owner_name: string
   app_name: string
+  distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3507,7 +3507,7 @@ export def "v01-apps-distribution-groups-devices-download-devices-list listCsvFo
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "unprovisioned_only" $unprovisioned_only "scalar") (serialize-qp "udids" $udids "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/devices/download_devices_list" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/devices/download_devices_list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3517,7 +3517,7 @@ export def "v01-apps-distribution-groups-devices-download-devices-list listCsvFo
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/members
 # operationId: distributionGroups_listUsers
-export def "v01-apps-distribution-groups-members listUsers" [
+export def "v01-apps-distribution-groups-members list-users" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -3534,7 +3534,7 @@ export def "v01-apps-distribution-groups-members listUsers" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "exclude_pending_invitations" $exclude_pending_invitations "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/members" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3544,7 +3544,7 @@ export def "v01-apps-distribution-groups-members listUsers" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/members
 # operationId: distributionGroups_addUser
-export def "v01-apps-distribution-groups-members addUser" [
+export def "v01-apps-distribution-groups-members create-user" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -3561,8 +3561,8 @@ export def "v01-apps-distribution-groups-members addUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/members")
-  let body = {user_emails: $user_emails} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/members"))
+  let body = {"user_emails": $user_emails} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3573,7 +3573,7 @@ export def "v01-apps-distribution-groups-members addUser" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/members/bulk_delete
 # operationId: distributionGroups_removeUser
-export def "v01-apps-distribution-groups-members-bulk-delete removeUser" [
+export def "v01-apps-distribution-groups-members-bulk-delete delete-user" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -3590,8 +3590,8 @@ export def "v01-apps-distribution-groups-members-bulk-delete removeUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/members/bulk_delete")
-  let body = {user_emails: $user_emails} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/members/bulk_delete"))
+  let body = {"user_emails": $user_emails} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3602,10 +3602,10 @@ export def "v01-apps-distribution-groups-members-bulk-delete removeUser" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/releases
 # operationId: releases_listByDistributionGroup
-export def "v01-apps-distribution-groups-releases listByDistributionGroup" [
-  distribution_group_name: string
+export def "v01-apps-distribution-groups-releases list-by" [
   owner_name: string
   app_name: string
+  distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3617,7 +3617,7 @@ export def "v01-apps-distribution-groups-releases listByDistributionGroup" [
 ]: nothing -> table<enabled: bool, id: int, is_external_build: bool, mandatory_update: bool, origin: string, short_version: string, uploaded_at: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/releases")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/releases"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3627,7 +3627,7 @@ export def "v01-apps-distribution-groups-releases listByDistributionGroup" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/releases/{release_id}
 # operationId: releases_deleteWithDistributionGroupId
-export def "v01-apps-distribution-groups-releases delete" [
+export def "v01-apps-distribution-groups-releases delete-with" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -3643,7 +3643,7 @@ export def "v01-apps-distribution-groups-releases delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/releases/($release_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, distribution_group_name: $distribution_group_name, release_id: $release_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/releases/{release_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3653,7 +3653,7 @@ export def "v01-apps-distribution-groups-releases delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/releases/{release_id}
 # operationId: releases_getLatestByDistributionGroup
-export def "v01-apps-distribution-groups-releases get" [
+export def "v01-apps-distribution-groups-releases get-latest" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -3671,7 +3671,7 @@ export def "v01-apps-distribution-groups-releases get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "is_install_page" $is_install_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/releases/($release_id)" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, distribution_group_name: $distribution_group_name, release_id: $release_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/releases/{release_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3698,8 +3698,8 @@ export def "v01-apps-distribution-groups-resend-invite resendInvite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_groups/($distribution_group_name)/resend_invite")
-  let body = {user_emails: $user_emails} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/resend_invite"))
+  let body = {"user_emails": $user_emails} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3724,7 +3724,7 @@ export def "v01-apps-distribution-stores list" [
 ]: nothing -> table<created_by: string, created_by_principal_type: string, id: string, intune_details: record<app_category: record, target_audience: record>, name: string, service_connection_id: string, track: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_stores"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3755,8 +3755,8 @@ export def "v01-apps-distribution-stores create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores")
-  let body = {intune_details: $intune_details, name: $name, service_connection_id: $service_connection_id, track: $track, type: $type} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_stores"))
+  let body = {"intune_details": $intune_details, "name": $name, "service_connection_id": $service_connection_id, "track": $track, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3768,9 +3768,9 @@ export def "v01-apps-distribution-stores create" [
 # DELETE /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}
 # operationId: stores_delete
 export def "v01-apps-distribution-stores delete" [
-  store_name: string
   owner_name: string
   app_name: string
+  store_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3784,7 +3784,7 @@ export def "v01-apps-distribution-stores delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, store_name: $store_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3796,9 +3796,9 @@ export def "v01-apps-distribution-stores delete" [
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}
 # operationId: stores_get
 export def "v01-apps-distribution-stores get" [
-  store_name: string
   owner_name: string
   app_name: string
+  store_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3810,7 +3810,7 @@ export def "v01-apps-distribution-stores get" [
 ]: nothing -> record<created_by: string, created_by_principal_type: string, id: string, intune_details: record<app_category: record<id: string, name: string>, target_audience: record<id: string, name: string>>, name: string, service_connection_id: string, track: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, store_name: $store_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3821,9 +3821,9 @@ export def "v01-apps-distribution-stores get" [
 # PATCH /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}
 # operationId: stores_patch
 export def "v01-apps-distribution-stores patch" [
-  store_name: string
   owner_name: string
   app_name: string
+  store_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3837,8 +3837,8 @@ export def "v01-apps-distribution-stores patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)")
-  let body = {service_connection_id: $service_connection_id} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, store_name: $store_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}"))
+  let body = {"service_connection_id": $service_connection_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3850,9 +3850,9 @@ export def "v01-apps-distribution-stores patch" [
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/latest_release
 # operationId: storeReleases_getLatest
 export def "v01-apps-distribution-stores-latest-release get" [
-  store_name: string
   owner_name: string
   app_name: string
+  store_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3864,7 +3864,7 @@ export def "v01-apps-distribution-stores-latest-release get" [
 ]: nothing -> table<android_min_api_level: string, app_display_name: string, app_name: string, bundle_identifier: string, distribution_stores: list<record>, download_url: string, fingerprint: string, id: float, install_url: string, min_os: string, release_notes: string, short_version: string, size: float, status: string, uploaded_at: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)/latest_release")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, store_name: $store_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/latest_release"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3875,9 +3875,9 @@ export def "v01-apps-distribution-stores-latest-release get" [
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases
 # operationId: storeReleases_list
 export def "v01-apps-distribution-stores-releases list" [
-  store_name: string
   owner_name: string
   app_name: string
+  store_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3889,7 +3889,7 @@ export def "v01-apps-distribution-stores-releases list" [
 ]: nothing -> table<destination_type: string, distribution_stores: list<record>, id: float, short_version: string, uploaded_at: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)/releases")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, store_name: $store_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3900,10 +3900,10 @@ export def "v01-apps-distribution-stores-releases list" [
 # DELETE /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}
 # operationId: storeReleases_delete
 export def "v01-apps-distribution-stores-releases delete" [
-  store_name: string
-  release_id: string
   owner_name: string
   app_name: string
+  store_name: string
+  release_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3917,7 +3917,7 @@ export def "v01-apps-distribution-stores-releases delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)/releases/($release_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, store_name: $store_name, release_id: $release_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3929,10 +3929,10 @@ export def "v01-apps-distribution-stores-releases delete" [
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}
 # operationId: storeReleases_get
 export def "v01-apps-distribution-stores-releases get" [
-  store_name: string
-  release_id: string
   owner_name: string
   app_name: string
+  store_name: string
+  release_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3944,7 +3944,7 @@ export def "v01-apps-distribution-stores-releases get" [
 ]: nothing -> table<android_min_api_level: string, app_display_name: string, app_name: string, bundle_identifier: string, distribution_stores: list<record>, download_url: string, fingerprint: string, id: float, install_url: string, min_os: string, release_notes: string, short_version: string, size: float, status: string, uploaded_at: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)/releases/($release_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, store_name: $store_name, release_id: $release_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3955,10 +3955,10 @@ export def "v01-apps-distribution-stores-releases get" [
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}/publish_error_details
 # operationId: storeReleases_getPublishError
 export def "v01-apps-distribution-stores-releases-publish-error-details get" [
-  store_name: string
-  release_id: float
   owner_name: string
   app_name: string
+  store_name: string
+  release_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3970,7 +3970,7 @@ export def "v01-apps-distribution-stores-releases-publish-error-details get" [
 ]: nothing -> record<is_log_available: bool, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)/releases/($release_id)/publish_error_details")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, store_name: $store_name, release_id: $release_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}/publish_error_details"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3981,10 +3981,10 @@ export def "v01-apps-distribution-stores-releases-publish-error-details get" [
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}/publish_logs
 # operationId: storeReleasePublishLogs_get
 export def "v01-apps-distribution-stores-releases-publish-logs get" [
-  store_name: string
-  release_id: string
   owner_name: string
   app_name: string
+  store_name: string
+  release_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3996,7 +3996,7 @@ export def "v01-apps-distribution-stores-releases-publish-logs get" [
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)/releases/($release_id)/publish_logs")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, store_name: $store_name, release_id: $release_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}/publish_logs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4006,11 +4006,11 @@ export def "v01-apps-distribution-stores-releases-publish-logs get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}/realtimestatus
 # operationId: storeReleases_getRealTimeStatusByReleaseId
-export def "v01-apps-distribution-stores-releases-realtimestatus get" [
-  store_name: string
-  release_id: float
+export def "v01-apps-distribution-stores-releases-realtimestatus get-real-time-status" [
   owner_name: string
   app_name: string
+  store_name: string
+  release_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4022,7 +4022,7 @@ export def "v01-apps-distribution-stores-releases-realtimestatus get" [
 ]: nothing -> record<app_id: string, release_id: string, status: record<status: string, storetype: string, track: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/distribution_stores/($store_name)/releases/($release_id)/realtimestatus")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, store_name: $store_name, release_id: $release_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}/realtimestatus"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4032,7 +4032,7 @@ export def "v01-apps-distribution-stores-releases-realtimestatus get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/availableAppBuilds
 # operationId: Errors_AppBuildsList
-export def "v01-apps-errors-available-app-builds AppBuildsList" [
+export def "v01-apps-errors-available-app-builds list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4047,12 +4047,12 @@ export def "v01-apps-errors-available-app-builds AppBuildsList" [
   --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
   --top: int # The maximum number of results to return. (0 will fetch all results till the max number.) (format: int64, default: 30)
-  --errorType: string@errorType-completer # Type of error (handled vs unhandled), including All
+  --error-type: string@error-type-completer-1 # Type of error (handled vs unhandled), including All
 ]: nothing -> record<appBuilds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "errorType" $errorType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/availableAppBuilds" $qp)
+  let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "errorType" $error_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/availableAppBuilds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4062,7 +4062,7 @@ export def "v01-apps-errors-available-app-builds AppBuildsList" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/available_versions
 # operationId: Errors_AvailableVersions
-export def "v01-apps-errors-available-versions AvailableVersions" [
+export def "v01-apps-errors-available-versions get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4079,12 +4079,12 @@ export def "v01-apps-errors-available-versions AvailableVersions" [
   --skip: int # The offset (starting at 0) of the first result to return. This parameter along with limit is used to perform pagination. (format: int64, default: 0)
   --filter: string # A filter as specified in https://github.com/Microsoft/api-guidelines/blob/master/Guidelines.md#97-filtering. (format: string)
   --inlinecount: string@inlinecount-completer # Controls whether or not to include a count of all the items across all pages. (default: none)
-  --errorType: string@errorType-completer # Type of error (handled vs unhandled), including All
+  --error-type: string@error-type-completer-1 # Type of error (handled vs unhandled), including All
 ]: nothing -> record<total_count: int, versions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$inlinecount" $inlinecount "scalar") (serialize-qp "errorType" $errorType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/available_versions" $qp)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$inlinecount" $inlinecount "scalar") (serialize-qp "errorType" $error_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/available_versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4094,7 +4094,7 @@ export def "v01-apps-errors-available-versions AvailableVersions" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorCountsPerDay
 # operationId: Errors_CountsPerDay
-export def "v01-apps-errors-error-counts-per-day CountsPerDay" [
+export def "v01-apps-errors-error-counts-per-day get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4109,12 +4109,12 @@ export def "v01-apps-errors-error-counts-per-day CountsPerDay" [
   --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
   --app-build: string # app build (format: string)
-  --errorType: string@errorType-completer-1 # Type of error (handled vs unhandled), excluding All
+  --error-type: string@error-type-completer-2 # Type of error (handled vs unhandled), excluding All
 ]: nothing -> record<count: int, errors: table<count: int, datetime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "app_build" $app_build "scalar") (serialize-qp "errorType" $errorType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorCountsPerDay" $qp)
+  let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "app_build" $app_build "scalar") (serialize-qp "errorType" $error_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorCountsPerDay") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4124,7 +4124,7 @@ export def "v01-apps-errors-error-counts-per-day CountsPerDay" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups
 # operationId: Errors_GroupList
-export def "v01-apps-errors-error-groups GroupList" [
+export def "v01-apps-errors-error-groups list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4137,17 +4137,17 @@ export def "v01-apps-errors-error-groups GroupList" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # format: string
   --app-build: string # app build (format: string)
-  --groupState: string # format: string
+  --group-state: string # format: string
   --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
   --orderby: string # controls the sorting order and sorting based on which column (default: count desc)
   --top: int # The maximum number of results to return. (0 will fetch all results till the max number.) (format: int64, default: 30)
-  --errorType: string@errorType-completer # Type of error (handled vs unhandled), including All
+  --error-type: string@error-type-completer-1 # Type of error (handled vs unhandled), including All
 ]: nothing -> record<errorGroups: list<record>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "app_build" $app_build "scalar") (serialize-qp "groupState" $groupState "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "errorType" $errorType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups" $qp)
+  let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "app_build" $app_build "scalar") (serialize-qp "groupState" $group_state "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "errorType" $error_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4157,7 +4157,7 @@ export def "v01-apps-errors-error-groups GroupList" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/search
 # operationId: Errors_ErrorGroupsSearch
-export def "v01-apps-errors-error-groups-search ErrorGroupsSearch" [
+export def "v01-apps-errors-error-groups-search list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4178,7 +4178,7 @@ export def "v01-apps-errors-error-groups-search ErrorGroupsSearch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/search" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4188,10 +4188,10 @@ export def "v01-apps-errors-error-groups-search ErrorGroupsSearch" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}
 # operationId: Errors_GroupDetails
-export def "v01-apps-errors-error-groups GroupDetails" [
-  errorGroupId: string
+export def "v01-apps-errors-error-groups get" [
   owner_name: string
   app_name: string
+  error_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4203,7 +4203,7 @@ export def "v01-apps-errors-error-groups GroupDetails" [
 ]: nothing -> record<appBuild: string, appVersion: string, codeRaw: string, count: int, deviceCount: int, errorGroupId: string, exceptionAppCode: bool, exceptionClassMethod: bool, exceptionClassName: string, exceptionFile: string, exceptionLine: string, exceptionMessage: string, exceptionMethod: string, exceptionType: string, firstOccurrence: string, hidden: bool, lastOccurrence: string, reasonFrames: table<appCode: bool, classMethod: bool, className: string, codeFormatted: string, codeRaw: string, exceptionType: string, file: string, frameworkName: string, language: string, line: int, method: string, methodParams: string, osExceptionType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_group_id: $error_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4213,10 +4213,10 @@ export def "v01-apps-errors-error-groups GroupDetails" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}
 # operationId: Errors_UpdateState
-export def "v01-apps-errors-error-groups UpdateState" [
-  errorGroupId: string
+export def "v01-apps-errors-error-groups update-state" [
   owner_name: string
   app_name: string
+  error_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4231,8 +4231,8 @@ export def "v01-apps-errors-error-groups UpdateState" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)")
-  let body = {annotation: $annotation, state: $state} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_group_id: $error_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}"))
+  let body = {"annotation": $annotation, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4243,10 +4243,10 @@ export def "v01-apps-errors-error-groups UpdateState" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errorCountsPerDay
 # operationId: Errors_GroupCountsPerDay
-export def "v01-apps-errors-error-groups-error-counts-per-day GroupCountsPerDay" [
-  errorGroupId: string
+export def "v01-apps-errors-error-groups-error-counts-per-day get" [
   owner_name: string
   app_name: string
+  error_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4262,7 +4262,7 @@ export def "v01-apps-errors-error-groups-error-counts-per-day GroupCountsPerDay"
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errorCountsPerDay" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_group_id: $error_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}/errorCountsPerDay") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4272,10 +4272,10 @@ export def "v01-apps-errors-error-groups-error-counts-per-day GroupCountsPerDay"
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errorfreeDevicePercentages
 # operationId: Errors_GroupErrorFreeDevicePercentages
-export def "v01-apps-errors-error-groups-errorfree-device-percentages GroupErrorFreeDevicePercentages" [
-  errorGroupId: string
+export def "v01-apps-errors-error-groups-errorfree-device-percentages get" [
   owner_name: string
   app_name: string
+  error_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4290,7 +4290,7 @@ export def "v01-apps-errors-error-groups-errorfree-device-percentages GroupError
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errorfreeDevicePercentages" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_group_id: $error_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}/errorfreeDevicePercentages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4300,10 +4300,10 @@ export def "v01-apps-errors-error-groups-errorfree-device-percentages GroupError
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors
 # operationId: Errors_ListForGroup
-export def "v01-apps-errors-error-groups-errors ListForGroup" [
-  errorGroupId: string
+export def "v01-apps-errors-error-groups-errors list-for" [
   owner_name: string
   app_name: string
+  error_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4321,7 +4321,7 @@ export def "v01-apps-errors-error-groups-errors ListForGroup" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "os" $os "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errors" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_group_id: $error_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}/errors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4331,10 +4331,10 @@ export def "v01-apps-errors-error-groups-errors ListForGroup" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/latest
 # operationId: Errors_LatestErrorDetails
-export def "v01-apps-errors-error-groups-errors-latest LatestErrorDetails" [
-  errorGroupId: string
+export def "v01-apps-errors-error-groups-errors-latest get" [
   owner_name: string
   app_name: string
+  error_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4346,7 +4346,7 @@ export def "v01-apps-errors-error-groups-errors-latest LatestErrorDetails" [
 ]: nothing -> record<appLaunchTimestamp: string, carrierName: string, jailbreak: bool, name: string, properties: record, reasonFrames: table<appCode: bool, classMethod: bool, className: string, codeFormatted: string, codeRaw: string, exceptionType: string, file: string, frameworkName: string, language: string, line: int, method: string, methodParams: string, osExceptionType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errors/latest")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_group_id: $error_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}/errors/latest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4356,11 +4356,11 @@ export def "v01-apps-errors-error-groups-errors-latest LatestErrorDetails" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/{errorId}
 # operationId: Errors_DeleteError
-export def "v01-apps-errors-error-groups-errors DeleteError" [
-  errorGroupId: string
-  errorId: string
+export def "v01-apps-errors-error-groups-errors delete" [
   owner_name: string
   app_name: string
+  error_group_id: string
+  error_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4372,7 +4372,7 @@ export def "v01-apps-errors-error-groups-errors DeleteError" [
 ]: nothing -> record<appId: string, attachmentsDeleted: int, blobsFailed: int, blobsSucceeded: int, errorGroupId: string, errorId: string, errorsDeleted: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errors/($errorId)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_group_id: $error_group_id, error_id: $error_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}/errors/{error_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4382,11 +4382,11 @@ export def "v01-apps-errors-error-groups-errors DeleteError" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/{errorId}
 # operationId: Errors_GetErrorDetails
-export def "v01-apps-errors-error-groups-errors GetErrorDetails" [
-  errorGroupId: string
-  errorId: string
+export def "v01-apps-errors-error-groups-errors get-error-details" [
   owner_name: string
   app_name: string
+  error_group_id: string
+  error_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4398,7 +4398,7 @@ export def "v01-apps-errors-error-groups-errors GetErrorDetails" [
 ]: nothing -> record<appLaunchTimestamp: string, carrierName: string, jailbreak: bool, name: string, properties: record, reasonFrames: table<appCode: bool, classMethod: bool, className: string, codeFormatted: string, codeRaw: string, exceptionType: string, file: string, frameworkName: string, language: string, line: int, method: string, methodParams: string, osExceptionType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errors/($errorId)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_group_id: $error_group_id, error_id: $error_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}/errors/{error_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4408,11 +4408,11 @@ export def "v01-apps-errors-error-groups-errors GetErrorDetails" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/{errorId}/download
 # operationId: Errors_ErrorDownload
-export def "v01-apps-errors-error-groups-errors-download ErrorDownload" [
-  errorGroupId: string
-  errorId: string
+export def "v01-apps-errors-error-groups-errors-download download" [
   owner_name: string
   app_name: string
+  error_group_id: string
+  error_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4426,7 +4426,7 @@ export def "v01-apps-errors-error-groups-errors-download ErrorDownload" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errors/($errorId)/download" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_group_id: $error_group_id, error_id: $error_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}/errors/{error_id}/download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4436,11 +4436,11 @@ export def "v01-apps-errors-error-groups-errors-download ErrorDownload" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/{errorId}/location
 # operationId: Errors_ErrorLocation
-export def "v01-apps-errors-error-groups-errors-location ErrorLocation" [
-  errorGroupId: string
-  errorId: string
+export def "v01-apps-errors-error-groups-errors-location get" [
   owner_name: string
   app_name: string
+  error_group_id: string
+  error_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4452,7 +4452,7 @@ export def "v01-apps-errors-error-groups-errors-location ErrorLocation" [
 ]: nothing -> record<uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errors/($errorId)/location")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_group_id: $error_group_id, error_id: $error_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}/errors/{error_id}/location"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4462,11 +4462,11 @@ export def "v01-apps-errors-error-groups-errors-location ErrorLocation" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/{errorId}/stacktrace
 # operationId: Errors_ErrorStackTrace
-export def "v01-apps-errors-error-groups-errors-stacktrace ErrorStackTrace" [
-  errorGroupId: string
-  errorId: string
+export def "v01-apps-errors-error-groups-errors-stacktrace get" [
   owner_name: string
   app_name: string
+  error_group_id: string
+  error_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4478,7 +4478,7 @@ export def "v01-apps-errors-error-groups-errors-stacktrace ErrorStackTrace" [
 ]: nothing -> record<exception: record<frames: list<record>, inner_exceptions: list<any>, platform: string, reason: string, relevant: bool, type: string>, reason: string, threads: table<crashed: bool, exception: record, frames: list, platform: string, relevant: bool, title: string>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/errors/($errorId)/stacktrace")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_group_id: $error_group_id, error_id: $error_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}/errors/{error_id}/stacktrace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4488,10 +4488,10 @@ export def "v01-apps-errors-error-groups-errors-stacktrace ErrorStackTrace" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/models
 # operationId: Errors_GroupModelCounts
-export def "v01-apps-errors-error-groups-models GroupModelCounts" [
-  errorGroupId: string
+export def "v01-apps-errors-error-groups-models get" [
   owner_name: string
   app_name: string
+  error_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4505,7 +4505,7 @@ export def "v01-apps-errors-error-groups-models GroupModelCounts" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/models" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_group_id: $error_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}/models") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4515,10 +4515,10 @@ export def "v01-apps-errors-error-groups-models GroupModelCounts" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/operatingSystems
 # operationId: Errors_GroupOperatingSystemCounts
-export def "v01-apps-errors-error-groups-operating-systems GroupOperatingSystemCounts" [
-  errorGroupId: string
+export def "v01-apps-errors-error-groups-operating-systems get" [
   owner_name: string
   app_name: string
+  error_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4532,7 +4532,7 @@ export def "v01-apps-errors-error-groups-operating-systems GroupOperatingSystemC
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/operatingSystems" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_group_id: $error_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}/operatingSystems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4542,10 +4542,10 @@ export def "v01-apps-errors-error-groups-operating-systems GroupOperatingSystemC
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/stacktrace
 # operationId: Errors_GroupErrorStackTrace
-export def "v01-apps-errors-error-groups-stacktrace GroupErrorStackTrace" [
-  errorGroupId: string
+export def "v01-apps-errors-error-groups-stacktrace get" [
   owner_name: string
   app_name: string
+  error_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4557,7 +4557,7 @@ export def "v01-apps-errors-error-groups-stacktrace GroupErrorStackTrace" [
 ]: nothing -> record<exception: record<frames: list<record>, inner_exceptions: list<any>, platform: string, reason: string, relevant: bool, type: string>, reason: string, threads: table<crashed: bool, exception: record, frames: list, platform: string, relevant: bool, title: string>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorGroups/($errorGroupId)/stacktrace")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_group_id: $error_group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}/stacktrace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4567,7 +4567,7 @@ export def "v01-apps-errors-error-groups-stacktrace GroupErrorStackTrace" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorfreeDevicePercentages
 # operationId: Errors_ErrorFreeDevicePercentages
-export def "v01-apps-errors-errorfree-device-percentages ErrorFreeDevicePercentages" [
+export def "v01-apps-errors-errorfree-device-percentages get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4582,12 +4582,12 @@ export def "v01-apps-errors-errorfree-device-percentages ErrorFreeDevicePercenta
   --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
   --versions: list
   --app-build: string # app build (format: string)
-  --errorType: string@errorType-completer-1 # Type of error (handled vs unhandled), excluding All
+  --error-type: string@error-type-completer-2 # Type of error (handled vs unhandled), excluding All
 ]: nothing -> record<averagePercentage: float, dailyPercentages: table<datetime: string, percentage: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes") (serialize-qp "app_build" $app_build "scalar") (serialize-qp "errorType" $errorType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/errorfreeDevicePercentages" $qp)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes") (serialize-qp "app_build" $app_build "scalar") (serialize-qp "errorType" $error_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorfreeDevicePercentages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4611,7 +4611,7 @@ export def "v01-apps-errors-retention-settings get" [
 ]: nothing -> record<retention_in_days: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/retention_settings")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/retention_settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4621,7 +4621,7 @@ export def "v01-apps-errors-retention-settings get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/search
 # operationId: Errors_ErrorSearch
-export def "v01-apps-errors-search ErrorSearch" [
+export def "v01-apps-errors-search list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4642,7 +4642,7 @@ export def "v01-apps-errors-search ErrorSearch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/search" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4652,10 +4652,10 @@ export def "v01-apps-errors-search ErrorSearch" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/{errorId}/attachments
 # operationId: Errors_ErrorAttachments
-export def "v01-apps-errors-attachments ErrorAttachments" [
-  errorId: string
+export def "v01-apps-errors-attachments get" [
   owner_name: string
   app_name: string
+  error_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4667,7 +4667,7 @@ export def "v01-apps-errors-attachments ErrorAttachments" [
 ]: nothing -> table<appId: string, attachmentId: string, blobLocation: string, contentType: string, crashId: string, createdTime: string, fileName: string, size: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/($errorId)/attachments")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_id: $error_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/{error_id}/attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4677,11 +4677,11 @@ export def "v01-apps-errors-attachments ErrorAttachments" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/{errorId}/attachments/{attachmentId}/location
 # operationId: Errors_ErrorAttachmentLocation
-export def "v01-apps-errors-attachments-location ErrorAttachmentLocation" [
-  errorId: string
-  attachmentId: string
+export def "v01-apps-errors-attachments-location get" [
   owner_name: string
   app_name: string
+  error_id: string
+  attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4693,7 +4693,7 @@ export def "v01-apps-errors-attachments-location ErrorAttachmentLocation" [
 ]: nothing -> record<uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/($errorId)/attachments/($attachmentId)/location")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_id: $error_id, attachment_id: $attachment_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/{error_id}/attachments/{attachment_id}/location"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4703,11 +4703,11 @@ export def "v01-apps-errors-attachments-location ErrorAttachmentLocation" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/{errorId}/attachments/{attachmentId}/text
 # operationId: Errors_ErrorAttachmentText
-export def "v01-apps-errors-attachments-text ErrorAttachmentText" [
-  errorId: string
-  attachmentId: string
+export def "v01-apps-errors-attachments-text get" [
   owner_name: string
   app_name: string
+  error_id: string
+  attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4719,7 +4719,7 @@ export def "v01-apps-errors-attachments-text ErrorAttachmentText" [
 ]: nothing -> record<content: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/($errorId)/attachments/($attachmentId)/text")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_id: $error_id, attachment_id: $attachment_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/{error_id}/attachments/{attachment_id}/text"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4729,10 +4729,10 @@ export def "v01-apps-errors-attachments-text ErrorAttachmentText" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/{errorId}/sessionLogs
 # operationId: Errors_ListSessionLogs
-export def "v01-apps-errors-session-logs ListSessionLogs" [
-  errorId: string
+export def "v01-apps-errors-session-logs list" [
   owner_name: string
   app_name: string
+  error_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4746,7 +4746,7 @@ export def "v01-apps-errors-session-logs ListSessionLogs" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/errors/($errorId)/sessionLogs" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, error_id: $error_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/{error_id}/sessionLogs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4756,7 +4756,7 @@ export def "v01-apps-errors-session-logs ListSessionLogs" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/export_configurations
 # operationId: ExportConfigurations_List
-export def "v01-apps-export-configurations List" [
+export def "v01-apps-export-configurations list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4770,7 +4770,7 @@ export def "v01-apps-export-configurations List" [
 ]: nothing -> record<nextLink: string, total: int, values: table<creation_time: string, export_configuration: record, export_entities: list, export_type: string, id: string, last_run_time: string, resource_group: string, resource_name: string, state: string, state_info: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/export_configurations")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/export_configurations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4781,7 +4781,7 @@ export def "v01-apps-export-configurations List" [
 # POST /v0.1/apps/{owner_name}/{app_name}/export_configurations
 # Discriminator (request): type
 # operationId: ExportConfigurations_Create
-export def "v01-apps-export-configurations Create" [
+export def "v01-apps-export-configurations create" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4801,8 +4801,8 @@ export def "v01-apps-export-configurations Create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/export_configurations")
-  let body = {backfill: $backfill, export_entities: $export_entities, resource_group: $resource_group, resource_name: $resource_name, type: $type} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/export_configurations"))
+  let body = {"backfill": $backfill, "export_entities": $export_entities, "resource_group": $resource_group, "resource_name": $resource_name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4813,10 +4813,10 @@ export def "v01-apps-export-configurations Create" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}
 # operationId: ExportConfigurations_Delete
-export def "v01-apps-export-configurations Delete" [
-  export_configuration_id: string
+export def "v01-apps-export-configurations delete" [
   owner_name: string
   app_name: string
+  export_configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4828,7 +4828,7 @@ export def "v01-apps-export-configurations Delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/export_configurations/($export_configuration_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, export_configuration_id: $export_configuration_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4838,10 +4838,10 @@ export def "v01-apps-export-configurations Delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}
 # operationId: ExportConfigurations_Get
-export def "v01-apps-export-configurations Get" [
-  export_configuration_id: string
+export def "v01-apps-export-configurations get" [
   owner_name: string
   app_name: string
+  export_configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4853,7 +4853,7 @@ export def "v01-apps-export-configurations Get" [
 ]: nothing -> record<creation_time: string, export_configuration: record<backfill: bool, export_entities: list<string>, resource_group: string, resource_name: string, type: string>, export_entities: list<string>, export_type: string, id: string, last_run_time: string, resource_group: string, resource_name: string, state: string, state_info: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/export_configurations/($export_configuration_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, export_configuration_id: $export_configuration_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4864,10 +4864,10 @@ export def "v01-apps-export-configurations Get" [
 # PATCH /v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}
 # Discriminator (request): type
 # operationId: ExportConfigurations_PartialUpdate
-export def "v01-apps-export-configurations PartialUpdate" [
-  export_configuration_id: string
+export def "v01-apps-export-configurations patch" [
   owner_name: string
   app_name: string
+  export_configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4885,8 +4885,8 @@ export def "v01-apps-export-configurations PartialUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/export_configurations/($export_configuration_id)")
-  let body = {backfill: $backfill, export_entities: $export_entities, resource_group: $resource_group, resource_name: $resource_name, type: $type} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, export_configuration_id: $export_configuration_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}"))
+  let body = {"backfill": $backfill, "export_entities": $export_entities, "resource_group": $resource_group, "resource_name": $resource_name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4897,10 +4897,10 @@ export def "v01-apps-export-configurations PartialUpdate" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}/disable
 # operationId: ExportConfigurations_Disable
-export def "v01-apps-export-configurations-disable Disable" [
-  export_configuration_id: string
+export def "v01-apps-export-configurations-disable disable" [
   owner_name: string
   app_name: string
+  export_configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4912,7 +4912,7 @@ export def "v01-apps-export-configurations-disable Disable" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/export_configurations/($export_configuration_id)/disable")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, export_configuration_id: $export_configuration_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4922,10 +4922,10 @@ export def "v01-apps-export-configurations-disable Disable" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}/enable
 # operationId: ExportConfigurations_Enable
-export def "v01-apps-export-configurations-enable Enable" [
-  export_configuration_id: string
+export def "v01-apps-export-configurations-enable enable" [
   owner_name: string
   app_name: string
+  export_configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4937,7 +4937,7 @@ export def "v01-apps-export-configurations-enable Enable" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/export_configurations/($export_configuration_id)/enable")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, export_configuration_id: $export_configuration_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4963,7 +4963,7 @@ export def "v01-apps-file-asset create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/file_asset")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/file_asset"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4988,7 +4988,7 @@ export def "v01-apps-invitations list" [
 ]: nothing -> record<app: record<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string>, app_count: float, distribution_group: record<owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>>, email: string, id: string, invite_type: string, invited_by: record<avatar_url: string, can_change_password: bool, display_name: string, email: string, id: string, name: string, origin: string, permissions: list<string>>, is_existing_user: bool, permissions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/invitations")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/invitations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5015,8 +5015,8 @@ export def "v01-apps-invitations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/invitations")
-  let body = {role: $role, user_email: $user_email} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/invitations"))
+  let body = {"role": $role, "user_email": $user_email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5042,7 +5042,7 @@ export def "v01-apps-invitations delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/invitations/($user_email)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, user_email: $user_email} | format pattern "/v0.1/apps/{owner_name}/{app_name}/invitations/{user_email}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5052,7 +5052,7 @@ export def "v01-apps-invitations delete" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/invitations/{user_email}
 # operationId: appInvitations_updatePermissions
-export def "v01-apps-invitations updatePermissions" [
+export def "v01-apps-invitations update-permissions" [
   owner_name: string
   app_name: string
   user_email: string
@@ -5069,8 +5069,8 @@ export def "v01-apps-invitations updatePermissions" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/invitations/($user_email)")
-  let body = {permissions: $permissions} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, user_email: $user_email} | format pattern "/v0.1/apps/{owner_name}/{app_name}/invitations/{user_email}"))
+  let body = {"permissions": $permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5083,7 +5083,7 @@ export def "v01-apps-invitations updatePermissions" [
 # DEPRECATED
 # operationId: appInvitations_createByEmail
 @deprecated
-export def "v01-apps-invitations createByEmail" [
+export def "v01-apps-invitations create-by-email" [
   owner_name: string
   app_name: string
   user_email: string
@@ -5100,8 +5100,8 @@ export def "v01-apps-invitations createByEmail" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/invitations/($user_email)")
-  let body = {role: $role} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, user_email: $user_email} | format pattern "/v0.1/apps/{owner_name}/{app_name}/invitations/{user_email}"))
+  let body = {"role": $role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5126,7 +5126,7 @@ export def "v01-apps-notifications-email-settings get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/notifications/emailSettings")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/notifications/emailSettings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5136,7 +5136,7 @@ export def "v01-apps-notifications-email-settings get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/owner/device_sets
 # operationId: test_listDeviceSetsOfOwner
-export def "v01-apps-owner-device-sets listDeviceSetsOfOwner" [
+export def "v01-apps-owner-device-sets list-device-sets-of" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5150,7 +5150,7 @@ export def "v01-apps-owner-device-sets listDeviceSetsOfOwner" [
 ]: nothing -> table<deviceConfigurations: list<record>, id: string, manufacturerCount: float, name: string, osVersionCount: float, owner: record<displayName: string, id: string, name: string, type: string>, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/owner/device_sets")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/owner/device_sets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5160,7 +5160,7 @@ export def "v01-apps-owner-device-sets listDeviceSetsOfOwner" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/owner/device_sets
 # operationId: test_createDeviceSetOfOwner
-export def "v01-apps-owner-device-sets createDeviceSetOfOwner" [
+export def "v01-apps-owner-device-sets create-device-set-of" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5177,8 +5177,8 @@ export def "v01-apps-owner-device-sets createDeviceSetOfOwner" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/owner/device_sets")
-  let body = {devices: $devices, name: $name} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/owner/device_sets"))
+  let body = {"devices": $devices, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5189,10 +5189,10 @@ export def "v01-apps-owner-device-sets createDeviceSetOfOwner" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/owner/device_sets/{id}
 # operationId: test_deleteDeviceSetOfOwner
-export def "v01-apps-owner-device-sets delete" [
-  id: string
+export def "v01-apps-owner-device-sets delete-device-set-of" [
   owner_name: string
   app_name: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5204,7 +5204,7 @@ export def "v01-apps-owner-device-sets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/owner/device_sets/($id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, id: $id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/owner/device_sets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5214,10 +5214,10 @@ export def "v01-apps-owner-device-sets delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/owner/device_sets/{id}
 # operationId: test_getDeviceSetOfOwner
-export def "v01-apps-owner-device-sets get" [
-  id: string
+export def "v01-apps-owner-device-sets get-device-set-of" [
   owner_name: string
   app_name: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5229,7 +5229,7 @@ export def "v01-apps-owner-device-sets get" [
 ]: nothing -> record<deviceConfigurations: table<id: string, image: record, model: record, os: string, osName: string>, id: string, manufacturerCount: float, name: string, osVersionCount: float, owner: record<displayName: string, id: string, name: string, type: string>, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/owner/device_sets/($id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, id: $id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/owner/device_sets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5239,10 +5239,10 @@ export def "v01-apps-owner-device-sets get" [
 #
 # PUT /v0.1/apps/{owner_name}/{app_name}/owner/device_sets/{id}
 # operationId: test_updateDeviceSetOfOwner
-export def "v01-apps-owner-device-sets updateDeviceSetOfOwner" [
-  id: string
+export def "v01-apps-owner-device-sets update-device-set-of" [
   owner_name: string
   app_name: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5257,8 +5257,8 @@ export def "v01-apps-owner-device-sets updateDeviceSetOfOwner" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/owner/device_sets/($id)")
-  let body = {devices: $devices, name: $name} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, id: $id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/owner/device_sets/{id}"))
+  let body = {"devices": $devices, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5269,7 +5269,7 @@ export def "v01-apps-owner-device-sets updateDeviceSetOfOwner" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/recent_releases
 # operationId: releases_listLatest
-export def "v01-apps-recent-releases listLatest" [
+export def "v01-apps-recent-releases list-latest" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5283,7 +5283,7 @@ export def "v01-apps-recent-releases listLatest" [
 ]: nothing -> table<build: record<branch_name: string, commit_hash: string, commit_message: string>, destination_type: string, destinations: list<record>, distribution_groups: list<record>, distribution_stores: list<record>, enabled: bool, file_extension: string, id: int, is_external_build: bool, origin: string, short_version: string, uploaded_at: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/recent_releases")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/recent_releases"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5307,12 +5307,12 @@ export def "v01-apps-releases list" [
   --published-only: oneof<nothing, bool> # When *true*, filters out releases that were uploaded but were never distributed. Releases that under deleted distribution groups will not be filtered out.
   --scope: string # When the scope is 'tester', only includes releases that have been distributed to groups that the user belongs to.
   --top: float # The number of releases to return
-  --releaseId: float # The id of a release
+  --release-id: float # The id of a release
 ]: nothing -> table<build: record<branch_name: string, commit_hash: string, commit_message: string>, destination_type: string, destinations: list<record>, distribution_groups: list<record>, distribution_stores: list<record>, enabled: bool, file_extension: string, id: int, is_external_build: bool, origin: string, short_version: string, uploaded_at: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "published_only" $published_only "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "releaseId" $releaseId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases" $qp)
+  let qp = [(serialize-qp "published_only" $published_only "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "releaseId" $release_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5340,7 +5340,7 @@ export def "v01-apps-releases-filter-by-tester availableToTester" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "published_only" $published_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/filter_by_tester" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/filter_by_tester") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5351,9 +5351,9 @@ export def "v01-apps-releases-filter-by-tester availableToTester" [
 # DELETE /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}
 # operationId: releases_delete
 export def "v01-apps-releases delete" [
-  release_id: int
   owner_name: string
   app_name: string
+  release_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5365,7 +5365,7 @@ export def "v01-apps-releases delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, release_id: $release_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/{release_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5375,10 +5375,10 @@ export def "v01-apps-releases delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}
 # operationId: releases_getLatestByUser
-export def "v01-apps-releases get" [
-  release_id: string
+export def "v01-apps-releases get-latest" [
   owner_name: string
   app_name: string
+  release_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5393,7 +5393,7 @@ export def "v01-apps-releases get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "udid" $udid "scalar") (serialize-qp "is_install_page" $is_install_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, release_id: $release_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/{release_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5404,9 +5404,9 @@ export def "v01-apps-releases get" [
 # PATCH /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}
 # operationId: releases_update
 export def "v01-apps-releases update" [
-  release_id: int
   owner_name: string
   app_name: string
+  release_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5420,7 +5420,7 @@ export def "v01-apps-releases update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, release_id: $release_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/{release_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5432,10 +5432,10 @@ export def "v01-apps-releases update" [
 # PUT /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}
 # operationId: releases_updateDetails
 # --build shape: {branch_name?: string, commit_hash?: string, commit_message?: string}
-export def "v01-apps-releases updateDetails" [
-  release_id: int
+export def "v01-apps-releases update-details" [
   owner_name: string
   app_name: string
+  release_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5451,8 +5451,8 @@ export def "v01-apps-releases updateDetails" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)")
-  let body = {build: $build, enabled: $enabled, release_notes: $release_notes} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, release_id: $release_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/{release_id}"))
+  let body = {"build": $build, "enabled": $enabled, "release_notes": $release_notes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5463,10 +5463,10 @@ export def "v01-apps-releases updateDetails" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/groups
 # operationId: releases_addDistributionGroup
-export def "v01-apps-releases-groups addDistributionGroup" [
-  release_id: int
+export def "v01-apps-releases-groups create-distribution" [
   owner_name: string
   app_name: string
+  release_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5482,8 +5482,8 @@ export def "v01-apps-releases-groups addDistributionGroup" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/groups")
-  let body = {id: $id, mandatory_update: $mandatory_update, notify_testers: $notify_testers} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, release_id: $release_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/groups"))
+  let body = {"id": $id, "mandatory_update": $mandatory_update, "notify_testers": $notify_testers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5494,11 +5494,11 @@ export def "v01-apps-releases-groups addDistributionGroup" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/groups/{group_id}
 # operationId: releases_deleteDistributionGroup
-export def "v01-apps-releases-groups delete" [
-  release_id: int
-  group_id: string
+export def "v01-apps-releases-groups delete-distribution" [
   owner_name: string
   app_name: string
+  release_id: int
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5510,7 +5510,7 @@ export def "v01-apps-releases-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/groups/($group_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, release_id: $release_id, group_id: $group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5520,11 +5520,11 @@ export def "v01-apps-releases-groups delete" [
 #
 # PUT /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/groups/{group_id}
 # operationId: releases_putDistributionGroup
-export def "v01-apps-releases-groups put" [
-  release_id: int
-  group_id: string
+export def "v01-apps-releases-groups update-distribution" [
   owner_name: string
   app_name: string
+  release_id: int
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5538,8 +5538,8 @@ export def "v01-apps-releases-groups put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/groups/($group_id)")
-  let body = {mandatory_update: $mandatory_update} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, release_id: $release_id, group_id: $group_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/groups/{group_id}"))
+  let body = {"mandatory_update": $mandatory_update} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5551,9 +5551,9 @@ export def "v01-apps-releases-groups put" [
 # GET /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/provisioning_profile
 # operationId: provisioning_profile
 export def "v01-apps-releases-provisioning-profile profile" [
-  release_id: int
   owner_name: string
   app_name: string
+  release_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5565,7 +5565,7 @@ export def "v01-apps-releases-provisioning-profile profile" [
 ]: nothing -> record<appex_profiles: list<any>, provisioning_bundle_id: string, provisioning_profile_name: string, provisioning_profile_type: string, team_identifier: string, udids: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/provisioning_profile")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, release_id: $release_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/provisioning_profile"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5575,10 +5575,10 @@ export def "v01-apps-releases-provisioning-profile profile" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/stores
 # operationId: releases_addStore
-export def "v01-apps-releases-stores addStore" [
-  release_id: int
+export def "v01-apps-releases-stores create" [
   owner_name: string
   app_name: string
+  release_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5592,8 +5592,8 @@ export def "v01-apps-releases-stores addStore" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/stores")
-  let body = {id: $id} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, release_id: $release_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/stores"))
+  let body = {"id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5604,11 +5604,11 @@ export def "v01-apps-releases-stores addStore" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/stores/{store_id}
 # operationId: releases_deleteDistributionStore
-export def "v01-apps-releases-stores delete" [
-  release_id: int
-  store_id: string
+export def "v01-apps-releases-stores delete-distribution" [
   owner_name: string
   app_name: string
+  release_id: int
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5620,7 +5620,7 @@ export def "v01-apps-releases-stores delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/stores/($store_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, release_id: $release_id, store_id: $store_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/stores/{store_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5630,10 +5630,10 @@ export def "v01-apps-releases-stores delete" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/testers
 # operationId: releases_addTesters
-export def "v01-apps-releases-testers addTesters" [
-  release_id: int
+export def "v01-apps-releases-testers create" [
   owner_name: string
   app_name: string
+  release_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5649,8 +5649,8 @@ export def "v01-apps-releases-testers addTesters" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/testers")
-  let body = {email: $email, mandatory_update: $mandatory_update, notify_testers: $notify_testers} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, release_id: $release_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/testers"))
+  let body = {"email": $email, "mandatory_update": $mandatory_update, "notify_testers": $notify_testers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5661,11 +5661,11 @@ export def "v01-apps-releases-testers addTesters" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/testers/{tester_id}
 # operationId: releases_deleteDistributionTester
-export def "v01-apps-releases-testers delete" [
-  release_id: int
-  tester_id: string
+export def "v01-apps-releases-testers delete-distribution" [
   owner_name: string
   app_name: string
+  release_id: int
+  tester_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5677,7 +5677,7 @@ export def "v01-apps-releases-testers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/testers/($tester_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, release_id: $release_id, tester_id: $tester_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/testers/{tester_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5687,11 +5687,11 @@ export def "v01-apps-releases-testers delete" [
 #
 # PUT /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/testers/{tester_id}
 # operationId: releases_putDistributionTester
-export def "v01-apps-releases-testers put" [
-  release_id: int
-  tester_id: string
+export def "v01-apps-releases-testers update-distribution" [
   owner_name: string
   app_name: string
+  release_id: int
+  tester_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5705,8 +5705,8 @@ export def "v01-apps-releases-testers put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/testers/($tester_id)")
-  let body = {mandatory_update: $mandatory_update} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, release_id: $release_id, tester_id: $tester_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/testers/{tester_id}"))
+  let body = {"mandatory_update": $mandatory_update} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5717,11 +5717,11 @@ export def "v01-apps-releases-testers put" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/update_devices/{resign_id}
 # operationId: devices_getReleaseUpdateDevicesStatus
-export def "v01-apps-releases-update-devices get" [
-  release_id: string
-  resign_id: string
+export def "v01-apps-releases-update-devices get-release-update-devices-status" [
   owner_name: string
   app_name: string
+  release_id: string
+  resign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5735,7 +5735,7 @@ export def "v01-apps-releases-update-devices get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_provisioning_profile" $include_provisioning_profile "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/releases/($release_id)/update_devices/($resign_id)" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, release_id: $release_id, resign_id: $resign_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/update_devices/{resign_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5759,7 +5759,7 @@ export def "v01-apps-repo-config delete" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/repo_config")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/repo_config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5780,12 +5780,12 @@ export def "v01-apps-repo-config list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --includeInactive: oneof<nothing, bool> # Include inactive configurations if none are active
+  --include-inactive: oneof<nothing, bool> # Include inactive configurations if none are active
 ]: nothing -> table<id: string, state: string, type: string, user_email: string, installation_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includeInactive" $includeInactive "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/repo_config" $qp)
+  let qp = [(serialize-qp "includeInactive" $include_inactive "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/repo_config") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5795,7 +5795,7 @@ export def "v01-apps-repo-config list" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/repo_config
 # operationId: repositoryConfigurations_createOrUpdate
-export def "v01-apps-repo-config createOrUpdate" [
+export def "v01-apps-repo-config create-or-update" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5815,8 +5815,8 @@ export def "v01-apps-repo-config createOrUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/repo_config")
-  let body = {installation_id: $installation_id, external_user_id: $external_user_id, repo_id: $repo_id, repo_url: $repo_url, service_connection_id: $service_connection_id} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/repo_config"))
+  let body = {"installation_id": $installation_id, "external_user_id": $external_user_id, "repo_id": $repo_id, "repo_url": $repo_url, "service_connection_id": $service_connection_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5828,9 +5828,9 @@ export def "v01-apps-repo-config createOrUpdate" [
 # GET /v0.1/apps/{owner_name}/{app_name}/source_hosts/{source_host}/repositories
 # operationId: repositories_list
 export def "v01-apps-source-hosts-repositories list" [
-  source_host: string
   owner_name: string
   app_name: string
+  source_host: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5839,15 +5839,15 @@ export def "v01-apps-source-hosts-repositories list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --vstsAccountName: string # Filter repositories only for specified account and project, "vstsProjectId" is required
-  --vstsProjectId: string # Filter repositories only for specified account and project, "vstsAccountName" is required
+  --vsts-account-name: string # Filter repositories only for specified account and project, "vstsProjectId" is required
+  --vsts-project-id: string # Filter repositories only for specified account and project, "vstsAccountName" is required
   --service-connection-id: string # The id of the service connection (private). Required for GitLab self-hosted repositories
   --form: string@form-completer # The selected form of the object
 ]: nothing -> table<clone_url: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "vstsAccountName" $vstsAccountName "scalar") (serialize-qp "vstsProjectId" $vstsProjectId "scalar") (serialize-qp "service_connection_id" $service_connection_id "scalar") (serialize-qp "form" $form "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/source_hosts/($source_host)/repositories" $qp)
+  let qp = [(serialize-qp "vstsAccountName" $vsts_account_name "scalar") (serialize-qp "vstsProjectId" $vsts_project_id "scalar") (serialize-qp "service_connection_id" $service_connection_id "scalar") (serialize-qp "form" $form "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, source_host: $source_host} | format pattern "/v0.1/apps/{owner_name}/{app_name}/source_hosts/{source_host}/repositories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5857,7 +5857,7 @@ export def "v01-apps-source-hosts-repositories list" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/store_service_status
 # operationId: storeNotifications_getNotificationByAppId
-export def "v01-apps-store-service-status get" [
+export def "v01-apps-store-service-status get-notification" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5871,7 +5871,7 @@ export def "v01-apps-store-service-status get" [
 ]: nothing -> record<service: string, status: string, valid_until: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/store_service_status")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/store_service_status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5895,7 +5895,7 @@ export def "v01-apps-subscriptions get" [
 ]: nothing -> record<active: bool, concurrentDevicesLimit: int, daysLeft: float, endsAt: string, id: string, runningDevices: int, startsAt: string, tier: record<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/subscriptions")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/subscriptions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5905,7 +5905,7 @@ export def "v01-apps-subscriptions get" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/subscriptions
 # operationId: test_createSubscription
-export def "v01-apps-subscriptions createSubscription" [
+export def "v01-apps-subscriptions create" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5919,7 +5919,7 @@ export def "v01-apps-subscriptions createSubscription" [
 ]: nothing -> record<active: bool, concurrentDevicesLimit: int, daysLeft: float, endsAt: string, id: string, runningDevices: int, startsAt: string, tier: record<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/subscriptions")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/subscriptions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5947,7 +5947,7 @@ export def "v01-apps-symbol-uploads list" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "top" $top "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "symbol_type" $symbol_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbol_uploads" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/symbol_uploads") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5977,8 +5977,8 @@ export def "v01-apps-symbol-uploads create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbol_uploads")
-  let body = {build: $build, client_callback: $client_callback, file_name: $file_name, symbol_type: $symbol_type, version: $version} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/symbol_uploads"))
+  let body = {"build": $build, "client_callback": $client_callback, "file_name": $file_name, "symbol_type": $symbol_type, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5990,9 +5990,9 @@ export def "v01-apps-symbol-uploads create" [
 # DELETE /v0.1/apps/{owner_name}/{app_name}/symbol_uploads/{symbol_upload_id}
 # operationId: symbolUploads_delete
 export def "v01-apps-symbol-uploads delete" [
-  symbol_upload_id: string
   owner_name: string
   app_name: string
+  symbol_upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6004,7 +6004,7 @@ export def "v01-apps-symbol-uploads delete" [
 ]: nothing -> record<app_id: string, file_name: string, file_size: float, origin: string, status: string, symbol_type: string, symbol_upload_id: string, symbols_uploaded: table<platform: string, symbol_id: string>, timestamp: string, user: record<display_name: string, email: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbol_uploads/($symbol_upload_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, symbol_upload_id: $symbol_upload_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/symbol_uploads/{symbol_upload_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6015,9 +6015,9 @@ export def "v01-apps-symbol-uploads delete" [
 # GET /v0.1/apps/{owner_name}/{app_name}/symbol_uploads/{symbol_upload_id}
 # operationId: symbolUploads_get
 export def "v01-apps-symbol-uploads get" [
-  symbol_upload_id: string
   owner_name: string
   app_name: string
+  symbol_upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6029,7 +6029,7 @@ export def "v01-apps-symbol-uploads get" [
 ]: nothing -> record<app_id: string, file_name: string, file_size: float, origin: string, status: string, symbol_type: string, symbol_upload_id: string, symbols_uploaded: table<platform: string, symbol_id: string>, timestamp: string, user: record<display_name: string, email: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbol_uploads/($symbol_upload_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, symbol_upload_id: $symbol_upload_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/symbol_uploads/{symbol_upload_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6040,9 +6040,9 @@ export def "v01-apps-symbol-uploads get" [
 # PATCH /v0.1/apps/{owner_name}/{app_name}/symbol_uploads/{symbol_upload_id}
 # operationId: symbolUploads_complete
 export def "v01-apps-symbol-uploads complete" [
-  symbol_upload_id: string
   owner_name: string
   app_name: string
+  symbol_upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6056,8 +6056,8 @@ export def "v01-apps-symbol-uploads complete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbol_uploads/($symbol_upload_id)")
-  let body = {status: $status} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, symbol_upload_id: $symbol_upload_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/symbol_uploads/{symbol_upload_id}"))
+  let body = {"status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6069,9 +6069,9 @@ export def "v01-apps-symbol-uploads complete" [
 # GET /v0.1/apps/{owner_name}/{app_name}/symbol_uploads/{symbol_upload_id}/location
 # operationId: symbolUploads_getLocation
 export def "v01-apps-symbol-uploads-location get" [
-  symbol_upload_id: string
   owner_name: string
   app_name: string
+  symbol_upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6083,7 +6083,7 @@ export def "v01-apps-symbol-uploads-location get" [
 ]: nothing -> record<uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbol_uploads/($symbol_upload_id)/location")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, symbol_upload_id: $symbol_upload_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/symbol_uploads/{symbol_upload_id}/location"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6107,7 +6107,7 @@ export def "v01-apps-symbols list" [
 ]: nothing -> table<alternate_symbol_ids: list<string>, app_id: string, build: string, origin: string, platform: string, status: string, symbol_id: string, symbol_upload_id: string, type: string, url: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbols")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/symbols"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6118,9 +6118,9 @@ export def "v01-apps-symbols list" [
 # GET /v0.1/apps/{owner_name}/{app_name}/symbols/{symbol_id}
 # operationId: symbols_get
 export def "v01-apps-symbols get" [
-  symbol_id: string
   owner_name: string
   app_name: string
+  symbol_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6132,7 +6132,7 @@ export def "v01-apps-symbols get" [
 ]: nothing -> record<alternate_symbol_ids: list<string>, app_id: string, build: string, origin: string, platform: string, status: string, symbol_id: string, symbol_upload_id: string, type: string, url: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbols/($symbol_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, symbol_id: $symbol_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/symbols/{symbol_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6143,9 +6143,9 @@ export def "v01-apps-symbols get" [
 # POST /v0.1/apps/{owner_name}/{app_name}/symbols/{symbol_id}/ignore
 # operationId: symbols_ignore
 export def "v01-apps-symbols-ignore ignore" [
-  symbol_id: string
   owner_name: string
   app_name: string
+  symbol_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6157,7 +6157,7 @@ export def "v01-apps-symbols-ignore ignore" [
 ]: nothing -> record<alternate_symbol_ids: list<string>, app_id: string, build: string, origin: string, platform: string, status: string, symbol_id: string, symbol_upload_id: string, type: string, url: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbols/($symbol_id)/ignore")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, symbol_id: $symbol_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/symbols/{symbol_id}/ignore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6168,9 +6168,9 @@ export def "v01-apps-symbols-ignore ignore" [
 # GET /v0.1/apps/{owner_name}/{app_name}/symbols/{symbol_id}/location
 # operationId: symbols_getLocation
 export def "v01-apps-symbols-location get" [
-  symbol_id: string
   owner_name: string
   app_name: string
+  symbol_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6182,7 +6182,7 @@ export def "v01-apps-symbols-location get" [
 ]: nothing -> record<uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbols/($symbol_id)/location")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, symbol_id: $symbol_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/symbols/{symbol_id}/location"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6193,9 +6193,9 @@ export def "v01-apps-symbols-location get" [
 # GET /v0.1/apps/{owner_name}/{app_name}/symbols/{symbol_id}/status
 # operationId: symbols_getStatus
 export def "v01-apps-symbols-status get" [
-  symbol_id: string
   owner_name: string
   app_name: string
+  symbol_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6207,7 +6207,7 @@ export def "v01-apps-symbols-status get" [
 ]: nothing -> record<app_id: string, status: string, symbol_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/symbols/($symbol_id)/status")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, symbol_id: $symbol_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/symbols/{symbol_id}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6218,8 +6218,8 @@ export def "v01-apps-symbols-status get" [
 # GET /v0.1/apps/{owner_name}/{app_name}/teams
 # operationId: apps_getTeams
 export def "v01-apps-teams get" [
-  app_name: string
   owner_name: string
+  app_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6231,7 +6231,7 @@ export def "v01-apps-teams get" [
 ]: nothing -> table<description: string, display_name: string, id: string, name: string, permissions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/teams")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/teams"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6255,7 +6255,7 @@ export def "v01-apps-test-export gdprExportApps" [
 ]: nothing -> record<resources: table<path: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test/export")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test/export"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6279,7 +6279,7 @@ export def "v01-apps-test-export-apps gdprExportApp" [
 ]: nothing -> record<hash_files_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test/export/apps")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test/export/apps"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6303,7 +6303,7 @@ export def "v01-apps-test-export-file-set-files gdprExportFileSetFile" [
 ]: nothing -> record<app_upload_id: string, hash_file_id: string, hash_file_url: string, path: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test/export/fileSetFiles")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test/export/fileSetFiles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6327,7 +6327,7 @@ export def "v01-apps-test-export-hash-files gdprExportHashFile" [
 ]: nothing -> record<filename: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test/export/hashFiles")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test/export/hashFiles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6351,7 +6351,7 @@ export def "v01-apps-test-export-pipeline-tests gdprExportPipelineTest" [
 ]: nothing -> record<app_upload_id: string, test_parameters: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test/export/pipelineTests")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test/export/pipelineTests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6375,7 +6375,7 @@ export def "v01-apps-test-export-test-runs gdprExportTestRun" [
 ]: nothing -> record<app_hash_file_id: string, app_hash_file_url: string, app_icon_url: string, dsym_hash_file_id: string, dsym_hash_file_url: string, id: string, locale: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test/export/testRuns")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test/export/testRuns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6399,7 +6399,7 @@ export def "v01-apps-test-runs list" [
 ]: nothing -> table<appVersion: string, date: string, description: string, id: string, platform: string, resultStatus: string, runStatus: string, state: string, stats: record<devices: float, devicesFailed: float, devicesFinished: float, failed: float, passed: float, peakMemory: float, skipped: float, total: float, totalDeviceMinutes: float>, status: string, testSeries: string, testType: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test_runs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6409,7 +6409,7 @@ export def "v01-apps-test-runs list" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/test_runs
 # operationId: test_createTestRun
-export def "v01-apps-test-runs createTestRun" [
+export def "v01-apps-test-runs create" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6423,7 +6423,7 @@ export def "v01-apps-test-runs createTestRun" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test_runs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6433,10 +6433,10 @@ export def "v01-apps-test-runs createTestRun" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}
 # operationId: test_archiveTestRun
-export def "v01-apps-test-runs archiveTestRun" [
-  test_run_id: string
+export def "v01-apps-test-runs archive" [
   owner_name: string
   app_name: string
+  test_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6448,7 +6448,7 @@ export def "v01-apps-test-runs archiveTestRun" [
 ]: nothing -> record<appVersion: string, date: string, description: string, id: string, platform: string, resultStatus: string, runStatus: string, state: string, stats: record<devices: float, devicesFailed: float, devicesFinished: float, failed: float, passed: float, peakMemory: float, skipped: float, total: float, totalDeviceMinutes: float>, status: string, testSeries: string, testType: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, test_run_id: $test_run_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6459,9 +6459,9 @@ export def "v01-apps-test-runs archiveTestRun" [
 # GET /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}
 # operationId: test_getTestRun
 export def "v01-apps-test-runs get" [
-  test_run_id: string
   owner_name: string
   app_name: string
+  test_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6473,7 +6473,7 @@ export def "v01-apps-test-runs get" [
 ]: nothing -> record<appVersion: string, date: string, description: string, id: string, platform: string, resultStatus: string, runStatus: string, state: string, stats: record<devices: float, devicesFailed: float, devicesFinished: float, failed: float, passed: float, peakMemory: float, skipped: float, total: float, totalDeviceMinutes: float>, status: string, testSeries: string, testType: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, test_run_id: $test_run_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6483,10 +6483,10 @@ export def "v01-apps-test-runs get" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/files
 # operationId: test_startUploadingFile
-export def "v01-apps-test-runs-files startUploadingFile" [
-  test_run_id: string
+export def "v01-apps-test-runs-files start-uploading" [
   owner_name: string
   app_name: string
+  test_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6498,7 +6498,7 @@ export def "v01-apps-test-runs-files startUploadingFile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)/files")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, test_run_id: $test_run_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/files"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6508,10 +6508,10 @@ export def "v01-apps-test-runs-files startUploadingFile" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/hashes
 # operationId: test_uploadHash
-export def "v01-apps-test-runs-hashes uploadHash" [
-  test_run_id: string
+export def "v01-apps-test-runs-hashes upload-hash" [
   owner_name: string
   app_name: string
+  test_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6528,8 +6528,8 @@ export def "v01-apps-test-runs-hashes uploadHash" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)/hashes")
-  let body = {byte_range: $byte_range, checksum: $checksum, file_type: $file_type, relative_path: $relative_path} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, test_run_id: $test_run_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/hashes"))
+  let body = {"byte_range": $byte_range, "checksum": $checksum, "file_type": $file_type, "relative_path": $relative_path} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6540,10 +6540,10 @@ export def "v01-apps-test-runs-hashes uploadHash" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/hashes/batch
 # operationId: test_uploadHashesBatch
-export def "v01-apps-test-runs-hashes-batch uploadHashesBatch" [
-  test_run_id: string
+export def "v01-apps-test-runs-hashes-batch upload" [
   owner_name: string
   app_name: string
+  test_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6557,7 +6557,7 @@ export def "v01-apps-test-runs-hashes-batch uploadHashesBatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)/hashes/batch")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, test_run_id: $test_run_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/hashes/batch"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6569,9 +6569,9 @@ export def "v01-apps-test-runs-hashes-batch uploadHashesBatch" [
 # GET /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/report
 # operationId: test_getTestReport
 export def "v01-apps-test-runs-report get" [
-  test_run_id: string
   owner_name: string
   app_name: string
+  test_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6583,7 +6583,7 @@ export def "v01-apps-test-runs-report get" [
 ]: nothing -> record<app_upload_id: string, date: string, date_finished: string, device_logs: table<appium_log: string, device_log: string, device_snapshot_id: string, test_log: string>, errorMessage: string, features: table<failed: float, name: string, peakDuration: float, peakMemory: float, skipped: float, tests: list>, finished_device_snapshots: list<string>, id: string, platform: string, revision: float, schema_version: float, snapshot_fatal_errors: table<device_snapshot_id: string, error_message: string, error_title: string>, stats: record<artifacts: record, devices: float, devices_failed: float, devices_finished: float, devices_not_runned: float, devices_skipped: float, failed: float, filesize: float, os: float, passed: float, skipped: float, step_count: float, total: float, totalDeviceMinutes: float>, testType: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)/report")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, test_run_id: $test_run_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/report"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6593,10 +6593,10 @@ export def "v01-apps-test-runs-report get" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/start
 # operationId: test_startTestRun
-export def "v01-apps-test-runs-start startTestRun" [
-  test_run_id: string
+export def "v01-apps-test-runs-start start" [
   owner_name: string
   app_name: string
+  test_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6615,8 +6615,8 @@ export def "v01-apps-test-runs-start startTestRun" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)/start")
-  let body = {device_selection: $device_selection, language: $language, locale: $locale, test_framework: $test_framework, test_parameters: $test_parameters, test_series: $test_series} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, test_run_id: $test_run_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/start"))
+  let body = {"device_selection": $device_selection, "language": $language, "locale": $locale, "test_framework": $test_framework, "test_parameters": $test_parameters, "test_series": $test_series} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6628,9 +6628,9 @@ export def "v01-apps-test-runs-start startTestRun" [
 # GET /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/state
 # operationId: test_getTestRunState
 export def "v01-apps-test-runs-state get" [
-  test_run_id: string
   owner_name: string
   app_name: string
+  test_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6642,7 +6642,7 @@ export def "v01-apps-test-runs-state get" [
 ]: nothing -> record<exit_code: int, message: list<string>, wait_time: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)/state")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, test_run_id: $test_run_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6652,10 +6652,10 @@ export def "v01-apps-test-runs-state get" [
 #
 # PUT /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/stop
 # operationId: test_stopTestRun
-export def "v01-apps-test-runs-stop stopTestRun" [
-  test_run_id: string
+export def "v01-apps-test-runs-stop stop" [
   owner_name: string
   app_name: string
+  test_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6667,7 +6667,7 @@ export def "v01-apps-test-runs-stop stopTestRun" [
 ]: nothing -> record<appVersion: string, date: string, description: string, id: string, platform: string, resultStatus: string, runStatus: string, state: string, stats: record<devices: float, devicesFailed: float, devicesFinished: float, failed: float, passed: float, peakMemory: float, skipped: float, total: float, totalDeviceMinutes: float>, status: string, testSeries: string, testType: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_runs/($test_run_id)/stop")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, test_run_id: $test_run_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6677,7 +6677,7 @@ export def "v01-apps-test-runs-stop stopTestRun" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/test_series
 # operationId: test_getAllTestSeries
-export def "v01-apps-test-series get" [
+export def "v01-apps-test-series get-all" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6693,7 +6693,7 @@ export def "v01-apps-test-series get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_series" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test_series") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6703,7 +6703,7 @@ export def "v01-apps-test-series get" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/test_series
 # operationId: test_createTestSeries
-export def "v01-apps-test-series createTestSeries" [
+export def "v01-apps-test-series create" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6719,8 +6719,8 @@ export def "v01-apps-test-series createTestSeries" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_series")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test_series"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6732,9 +6732,9 @@ export def "v01-apps-test-series createTestSeries" [
 # DELETE /v0.1/apps/{owner_name}/{app_name}/test_series/{test_series_slug}
 # operationId: test_deleteTestSeries
 export def "v01-apps-test-series delete" [
-  test_series_slug: string
   owner_name: string
   app_name: string
+  test_series_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6746,7 +6746,7 @@ export def "v01-apps-test-series delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_series/($test_series_slug)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, test_series_slug: $test_series_slug} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test_series/{test_series_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6756,10 +6756,10 @@ export def "v01-apps-test-series delete" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/test_series/{test_series_slug}
 # operationId: test_patchTestSeries
-export def "v01-apps-test-series patch" [
-  test_series_slug: string
+export def "v01-apps-test-series update" [
   owner_name: string
   app_name: string
+  test_series_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6773,8 +6773,8 @@ export def "v01-apps-test-series patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_series/($test_series_slug)")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, test_series_slug: $test_series_slug} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test_series/{test_series_slug}"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6785,10 +6785,10 @@ export def "v01-apps-test-series patch" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/test_series/{test_series_slug}/test_runs
 # operationId: test_getAllTestRunsForSeries
-export def "v01-apps-test-series-test-runs get" [
-  test_series_slug: string
+export def "v01-apps-test-series-test-runs get-all-test-runs-for" [
   owner_name: string
   app_name: string
+  test_series_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6800,7 +6800,7 @@ export def "v01-apps-test-series-test-runs get" [
 ]: nothing -> table<appVersion: string, date: string, description: string, id: string, platform: string, resultStatus: string, runStatus: string, state: string, stats: record<devices: float, devicesFailed: float, devicesFinished: float, failed: float, passed: float, peakMemory: float, skipped: float, total: float, totalDeviceMinutes: float>, status: string, testSeries: string, testType: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/test_series/($test_series_slug)/test_runs")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, test_series_slug: $test_series_slug} | format pattern "/v0.1/apps/{owner_name}/{app_name}/test_series/{test_series_slug}/test_runs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6810,7 +6810,7 @@ export def "v01-apps-test-series-test-runs get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/testers
 # operationId: apps_listTesters
-export def "v01-apps-testers listTesters" [
+export def "v01-apps-testers list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6824,7 +6824,7 @@ export def "v01-apps-testers listTesters" [
 ]: nothing -> table<avatar_url: string, can_change_password: bool, display_name: string, email: string, id: string, name: string, origin: string, permissions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/testers")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/testers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6834,10 +6834,10 @@ export def "v01-apps-testers listTesters" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/testers/{tester_id}
 # operationId: releases_deleteTesterFromDestinations
-export def "v01-apps-testers delete" [
-  tester_id: string
+export def "v01-apps-testers delete-tester-from-destinations" [
   owner_name: string
   app_name: string
+  tester_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6849,7 +6849,7 @@ export def "v01-apps-testers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/testers/($tester_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, tester_id: $tester_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/testers/{tester_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6859,7 +6859,7 @@ export def "v01-apps-testers delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/toolsets
 # operationId: builds_listToolsets
-export def "v01-apps-toolsets listToolsets" [
+export def "v01-apps-toolsets list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6875,7 +6875,7 @@ export def "v01-apps-toolsets listToolsets" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tools" $tools "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/toolsets" $qp)
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/toolsets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6902,7 +6902,7 @@ export def "v01-apps-transfer transferOwnership" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/transfer/($destination_owner_name)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, destination_owner_name: $destination_owner_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/transfer/{destination_owner_name}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6929,7 +6929,7 @@ export def "v01-apps-transfer-to-org transferToOrg" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/transfer_to_org")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/transfer_to_org"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6940,7 +6940,7 @@ export def "v01-apps-transfer-to-org transferToOrg" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/uploads/releases
 # operationId: releases_createReleaseUpload
-export def "v01-apps-uploads-releases createReleaseUpload" [
+export def "v01-apps-uploads-releases create" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6957,8 +6957,8 @@ export def "v01-apps-uploads-releases createReleaseUpload" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/uploads/releases")
-  let body = {build_number: $build_number, build_version: $build_version} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/uploads/releases"))
+  let body = {"build_number": $build_number, "build_version": $build_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6969,10 +6969,10 @@ export def "v01-apps-uploads-releases createReleaseUpload" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/uploads/releases/{upload_id}
 # operationId: releases_getReleaseUploadStatus
-export def "v01-apps-uploads-releases get" [
-  upload_id: string
+export def "v01-apps-uploads-releases get-release-upload-status" [
   owner_name: string
   app_name: string
+  upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6984,7 +6984,7 @@ export def "v01-apps-uploads-releases get" [
 ]: nothing -> record<error_details: string, id: string, release_distinct_id: float, release_url: any, upload_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/uploads/releases/($upload_id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, upload_id: $upload_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/uploads/releases/{upload_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6994,10 +6994,10 @@ export def "v01-apps-uploads-releases get" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/uploads/releases/{upload_id}
 # operationId: releases_updateReleaseUploadStatus
-export def "v01-apps-uploads-releases updateReleaseUploadStatus" [
-  upload_id: string
+export def "v01-apps-uploads-releases update-release-upload-status" [
   owner_name: string
   app_name: string
+  upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7013,8 +7013,8 @@ export def "v01-apps-uploads-releases updateReleaseUploadStatus" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "extract" $extract "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/uploads/releases/($upload_id)" $qp)
-  let body = {upload_status: $upload_status} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, upload_id: $upload_id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/uploads/releases/{upload_id}") $qp)
+  let body = {"upload_status": $upload_status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7025,7 +7025,7 @@ export def "v01-apps-uploads-releases updateReleaseUploadStatus" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/user/device_sets
 # operationId: test_listDeviceSetsOfUser
-export def "v01-apps-user-device-sets listDeviceSetsOfUser" [
+export def "v01-apps-user-device-sets list-device-sets-of" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7039,7 +7039,7 @@ export def "v01-apps-user-device-sets listDeviceSetsOfUser" [
 ]: nothing -> table<deviceConfigurations: list<record>, id: string, manufacturerCount: float, name: string, osVersionCount: float, owner: record<displayName: string, id: string, name: string, type: string>, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/user/device_sets")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/user/device_sets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7049,7 +7049,7 @@ export def "v01-apps-user-device-sets listDeviceSetsOfUser" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/user/device_sets
 # operationId: test_createDeviceSetOfUser
-export def "v01-apps-user-device-sets createDeviceSetOfUser" [
+export def "v01-apps-user-device-sets create-device-set-of" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7066,8 +7066,8 @@ export def "v01-apps-user-device-sets createDeviceSetOfUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/user/device_sets")
-  let body = {devices: $devices, name: $name} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/user/device_sets"))
+  let body = {"devices": $devices, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7078,10 +7078,10 @@ export def "v01-apps-user-device-sets createDeviceSetOfUser" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/user/device_sets/{id}
 # operationId: test_deleteDeviceSetOfUser
-export def "v01-apps-user-device-sets delete" [
-  id: string
+export def "v01-apps-user-device-sets delete-device-set-of" [
   owner_name: string
   app_name: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7093,7 +7093,7 @@ export def "v01-apps-user-device-sets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/user/device_sets/($id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, id: $id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/user/device_sets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7103,10 +7103,10 @@ export def "v01-apps-user-device-sets delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/user/device_sets/{id}
 # operationId: test_getDeviceSetOfUser
-export def "v01-apps-user-device-sets get" [
-  id: string
+export def "v01-apps-user-device-sets get-device-set-of" [
   owner_name: string
   app_name: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7118,7 +7118,7 @@ export def "v01-apps-user-device-sets get" [
 ]: nothing -> record<deviceConfigurations: table<id: string, image: record, model: record, os: string, osName: string>, id: string, manufacturerCount: float, name: string, osVersionCount: float, owner: record<displayName: string, id: string, name: string, type: string>, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/user/device_sets/($id)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, id: $id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/user/device_sets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7128,10 +7128,10 @@ export def "v01-apps-user-device-sets get" [
 #
 # PUT /v0.1/apps/{owner_name}/{app_name}/user/device_sets/{id}
 # operationId: test_updateDeviceSetOfUser
-export def "v01-apps-user-device-sets updateDeviceSetOfUser" [
-  id: string
+export def "v01-apps-user-device-sets update-device-set-of" [
   owner_name: string
   app_name: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7146,8 +7146,8 @@ export def "v01-apps-user-device-sets updateDeviceSetOfUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/user/device_sets/($id)")
-  let body = {devices: $devices, name: $name} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, id: $id} | format pattern "/v0.1/apps/{owner_name}/{app_name}/user/device_sets/{id}"))
+  let body = {"devices": $devices, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7172,7 +7172,7 @@ export def "v01-apps-users list" [
 ]: nothing -> table<avatar_url: string, can_change_password: bool, display_name: string, email: string, id: string, name: string, origin: string, permissions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/users")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7182,7 +7182,7 @@ export def "v01-apps-users list" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/users/{user_email}
 # operationId: apps_removeUser
-export def "v01-apps-users removeUser" [
+export def "v01-apps-users delete" [
   owner_name: string
   app_name: string
   user_email: string
@@ -7197,7 +7197,7 @@ export def "v01-apps-users removeUser" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/users/($user_email)")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, user_email: $user_email} | format pattern "/v0.1/apps/{owner_name}/{app_name}/users/{user_email}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7207,7 +7207,7 @@ export def "v01-apps-users removeUser" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/users/{user_email}
 # operationId: apps_updateUserPermissions
-export def "v01-apps-users updateUserPermissions" [
+export def "v01-apps-users update-user-permissions" [
   owner_name: string
   app_name: string
   user_email: string
@@ -7224,8 +7224,8 @@ export def "v01-apps-users updateUserPermissions" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/users/($user_email)")
-  let body = {permissions: $permissions} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name, user_email: $user_email} | format pattern "/v0.1/apps/{owner_name}/{app_name}/users/{user_email}"))
+  let body = {"permissions": $permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7252,7 +7252,7 @@ export def "v01-apps-versions get" [
 ]: nothing -> table<app_id: string, app_version: string, app_version_id: string, build_number: string, display_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/versions")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/versions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7276,7 +7276,7 @@ export def "v01-apps-webhooks list" [
 ]: nothing -> record<values: table<enabled: bool, event_types: list, id: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/webhooks")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/webhooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7288,7 +7288,7 @@ export def "v01-apps-webhooks list" [
 # DEPRECATED
 # operationId: builds_listXamarinSDKBundles
 @deprecated
-export def "v01-apps-xamarin-sdk-bundles listXamarinSDKBundles" [
+export def "v01-apps-xamarin-sdk-bundles list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7302,7 +7302,7 @@ export def "v01-apps-xamarin-sdk-bundles listXamarinSDKBundles" [
 ]: nothing -> table<current: bool, monoVersion: string, sdkBundle: string, stable: bool, xcodeVersions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/xamarin_sdk_bundles")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/xamarin_sdk_bundles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7314,7 +7314,7 @@ export def "v01-apps-xamarin-sdk-bundles listXamarinSDKBundles" [
 # DEPRECATED
 # operationId: builds_listXcodeVersions
 @deprecated
-export def "v01-apps-xcode-versions listXcodeVersions" [
+export def "v01-apps-xcode-versions list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7328,7 +7328,7 @@ export def "v01-apps-xcode-versions listXcodeVersions" [
 ]: nothing -> table<current: bool, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/apps/($owner_name)/($app_name)/xcode_versions")
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/apps/{owner_name}/{app_name}/xcode_versions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7338,7 +7338,7 @@ export def "v01-apps-xcode-versions listXcodeVersions" [
 #
 # GET /v0.1/azure_subscriptions
 # operationId: azureSubscription_listForUser
-export def "v01-azure-subscriptions listForUser" [
+export def "v01-azure-subscriptions list-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7371,11 +7371,11 @@ export def "v01-billing-all-accounts-aggregated get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --service: string@service-completer # Type of service that should be included in the Billing Information
   --period: string@period-completer # Type of period that should be included in the Billing Information
-  --showOriginalPlans: oneof<nothing, bool> # Controls whether the API should show the original plan when Azure Subscription is not enabled
+  --show-original-plans: oneof<nothing, bool> # Controls whether the API should show the original plan when Azure Subscription is not enabled
 ]: nothing -> record<aggregatedBillings: record<azureSubscriptionId: string, azureSubscriptionState: string, billingPlans: record<buildService: record, testService: record>, id: string, timestamp: string, usage: record<buildService: record, testService: record>, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "service" $service "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "showOriginalPlans" $showOriginalPlans "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "service" $service "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "showOriginalPlans" $show_original_plans "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v0.1/billing/allAccountsAggregated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7408,7 +7408,7 @@ export def "v01-invitations-sent sent" [
 #
 # POST /v0.1/legacy/reportStatus/deploy
 # operationId: legacyCodePushAcquisition_updateInstallsStatus
-export def "v01-legacy-report-status-deploy updateInstallsStatus" [
+export def "v01-legacy-report-status-deploy update-installs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7417,19 +7417,19 @@ export def "v01-legacy-report-status-deploy updateInstallsStatus" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --appVersion: string
-  --clientUniqueId: string
-  --deploymentKey: string
+  --app-version: string
+  --client-unique-id: string
+  --deployment-key: string
   --label: string
-  --previousDeploymentKey: string
-  --previousLabelOrAppVersion: string
+  --previous-deployment-key: string
+  --previous-label-or-app-version: string
   --status: string
 ]: any -> record<message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.1/legacy/reportStatus/deploy")
-  let body = {appVersion: $appVersion, clientUniqueId: $clientUniqueId, deploymentKey: $deploymentKey, label: $label, previousDeploymentKey: $previousDeploymentKey, previousLabelOrAppVersion: $previousLabelOrAppVersion, status: $status} | compact
+  let body = {"appVersion": $app_version, "clientUniqueId": $client_unique_id, "deploymentKey": $deployment_key, "label": $label, "previousDeploymentKey": $previous_deployment_key, "previousLabelOrAppVersion": $previous_label_or_app_version, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7440,7 +7440,7 @@ export def "v01-legacy-report-status-deploy updateInstallsStatus" [
 #
 # POST /v0.1/legacy/reportStatus/download
 # operationId: legacyCodePushAcquisition_updateDownloadStatus
-export def "v01-legacy-report-status-download updateDownloadStatus" [
+export def "v01-legacy-report-status-download update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7449,19 +7449,19 @@ export def "v01-legacy-report-status-download updateDownloadStatus" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --appVersion: string
-  --clientUniqueId: string
-  --deploymentKey: string
+  --app-version: string
+  --client-unique-id: string
+  --deployment-key: string
   --label: string
-  --previousDeploymentKey: string
-  --previousLabelOrAppVersion: string
+  --previous-deployment-key: string
+  --previous-label-or-app-version: string
   --status: string
 ]: any -> record<message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.1/legacy/reportStatus/download")
-  let body = {appVersion: $appVersion, clientUniqueId: $clientUniqueId, deploymentKey: $deploymentKey, label: $label, previousDeploymentKey: $previousDeploymentKey, previousLabelOrAppVersion: $previousLabelOrAppVersion, status: $status} | compact
+  let body = {"appVersion": $app_version, "clientUniqueId": $client_unique_id, "deploymentKey": $deployment_key, "label": $label, "previousDeploymentKey": $previous_deployment_key, "previousLabelOrAppVersion": $previous_label_or_app_version, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7472,7 +7472,7 @@ export def "v01-legacy-report-status-download updateDownloadStatus" [
 #
 # GET /v0.1/legacy/updateCheck
 # operationId: legacyCodePushAcquisition_updateCheck
-export def "v01-legacy-update-check updateCheck" [
+export def "v01-legacy-update-check update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7481,16 +7481,16 @@ export def "v01-legacy-update-check updateCheck" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --deploymentKey: string
-  --appVersion: string
-  --packageHash: string
+  --deployment-key: string
+  --app-version: string
+  --package-hash: string
   --label: string
-  --clientUniqueId: string
-  --isCompanion: string
+  --client-unique-id: string
+  --is-companion: string
 ]: nothing -> record<updateInfo: record<appVersion: string, description: string, isDisabled: bool, isMandatory: bool, rollout: int, downloadURL: string, isAvailable: bool, label: string, packageHash: string, packageSize: float, shouldRunBinaryVersion: bool, updateAppVersion: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deploymentKey" $deploymentKey "scalar") (serialize-qp "appVersion" $appVersion "scalar") (serialize-qp "packageHash" $packageHash "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "clientUniqueId" $clientUniqueId "scalar") (serialize-qp "isCompanion" $isCompanion "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "deploymentKey" $deployment_key "scalar") (serialize-qp "appVersion" $app_version "scalar") (serialize-qp "packageHash" $package_hash "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "clientUniqueId" $client_unique_id "scalar") (serialize-qp "isCompanion" $is_companion "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v0.1/legacy/updateCheck" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7523,7 +7523,7 @@ export def "v01-orgs list" [
 #
 # POST /v0.1/orgs
 # operationId: organizations_createOrUpdate
-export def "v01-orgs createOrUpdate" [
+export def "v01-orgs create-or-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7539,7 +7539,7 @@ export def "v01-orgs createOrUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.1/orgs")
-  let body = {display_name: $display_name, name: $name} | compact
+  let body = {"display_name": $display_name, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7550,8 +7550,8 @@ export def "v01-orgs createOrUpdate" [
 #
 # GET /v0.1/orgs/{orgName}/billing/aggregated
 # operationId: billingAggregatedInformation_getForOrg
-export def "v01-orgs-billing-aggregated get" [
-  orgName: string
+export def "v01-orgs-billing-aggregated get-for" [
+  org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7562,12 +7562,12 @@ export def "v01-orgs-billing-aggregated get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --service: string@service-completer # Type of service that should be included in the Billing Information
   --period: string@period-completer # Type of period that should be included in the Billing Information
-  --showOriginalPlans: oneof<nothing, bool> # Controls whether the API should show the original plan when Azure Subscription is not enabled
+  --show-original-plans: oneof<nothing, bool> # Controls whether the API should show the original plan when Azure Subscription is not enabled
 ]: nothing -> record<azureSubscriptionId: string, azureSubscriptionState: string, billingPlans: record<buildService: record<canSelectTrialPlan: bool, currentBillingPeriod: record, lastTrialPlanExpirationTime: string>, testService: record<canSelectTrialPlan: bool, currentBillingPeriod: record, lastTrialPlanExpirationTime: string>>, id: string, timestamp: string, usage: record<buildService: record<currentUsagePeriod: record>, testService: record<currentUsagePeriod: record>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "service" $service "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "showOriginalPlans" $showOriginalPlans "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/orgs/($orgName)/billing/aggregated" $qp)
+  let qp = [(serialize-qp "service" $service "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "showOriginalPlans" $show_original_plans "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}/billing/aggregated") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7590,7 +7590,7 @@ export def "v01-orgs delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)")
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7613,7 +7613,7 @@ export def "v01-orgs get" [
 ]: nothing -> record<avatar_url: string, created_at: string, display_name: string, id: string, name: string, origin: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)")
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7639,8 +7639,8 @@ export def "v01-orgs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)")
-  let body = {display_name: $display_name, name: $name} | compact
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}"))
+  let body = {"display_name": $display_name, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7651,7 +7651,7 @@ export def "v01-orgs update" [
 #
 # GET /v0.1/orgs/{org_name}/apps
 # operationId: apps_listForOrg
-export def "v01-orgs-apps listForOrg" [
+export def "v01-orgs-apps list-for" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7664,7 +7664,7 @@ export def "v01-orgs-apps listForOrg" [
 ]: nothing -> table<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/apps")
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}/apps"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7674,7 +7674,7 @@ export def "v01-orgs-apps listForOrg" [
 #
 # POST /v0.1/orgs/{org_name}/apps
 # operationId: apps_createForOrg
-export def "v01-orgs-apps createForOrg" [
+export def "v01-orgs-apps create-for" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7694,8 +7694,8 @@ export def "v01-orgs-apps createForOrg" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/apps")
-  let body = {description: $description, display_name: $display_name, name: $name, os: $os, platform: $platform, release_type: $release_type} | compact
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}/apps"))
+  let body = {"description": $description, "display_name": $display_name, "name": $name, "os": $os, "platform": $platform, "release_type": $release_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7719,7 +7719,7 @@ export def "v01-orgs-avatar delete" [
 ]: nothing -> record<avatar_url: string, created_at: string, display_name: string, id: string, name: string, origin: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/avatar")
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}/avatar"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7729,7 +7729,7 @@ export def "v01-orgs-avatar delete" [
 #
 # POST /v0.1/orgs/{org_name}/avatar
 # operationId: organization_updateAvatar
-export def "v01-orgs-avatar updateAvatar" [
+export def "v01-orgs-avatar update" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7744,8 +7744,8 @@ export def "v01-orgs-avatar updateAvatar" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/avatar")
-  let body = {avatar: $avatar} | compact
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}/avatar"))
+  let body = {"avatar": $avatar} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7756,7 +7756,7 @@ export def "v01-orgs-avatar updateAvatar" [
 #
 # GET /v0.1/orgs/{org_name}/azure_subscriptions
 # operationId: azureSubscription_listForOrg
-export def "v01-orgs-azure-subscriptions listForOrg" [
+export def "v01-orgs-azure-subscriptions list-for" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7769,7 +7769,7 @@ export def "v01-orgs-azure-subscriptions listForOrg" [
 ]: nothing -> table<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/azure_subscriptions")
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}/azure_subscriptions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7779,7 +7779,7 @@ export def "v01-orgs-azure-subscriptions listForOrg" [
 #
 # GET /v0.1/orgs/{org_name}/distribution_groups
 # operationId: distributionGroups_listForOrg
-export def "v01-orgs-distribution-groups listForOrg" [
+export def "v01-orgs-distribution-groups list-for" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7792,7 +7792,7 @@ export def "v01-orgs-distribution-groups listForOrg" [
 ]: nothing -> table<display_name: string, id: string, is_public: bool, name: string, origin: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups")
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}/distribution_groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7802,7 +7802,7 @@ export def "v01-orgs-distribution-groups listForOrg" [
 #
 # POST /v0.1/orgs/{org_name}/distribution_groups
 # operationId: distributionGroups_createForOrg
-export def "v01-orgs-distribution-groups createForOrg" [
+export def "v01-orgs-distribution-groups create-for" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7818,8 +7818,8 @@ export def "v01-orgs-distribution-groups createForOrg" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups")
-  let body = {display_name: $display_name, name: $name} | compact
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}/distribution_groups"))
+  let body = {"display_name": $display_name, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7830,7 +7830,7 @@ export def "v01-orgs-distribution-groups createForOrg" [
 #
 # DELETE /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}
 # operationId: distributionGroups_deleteForOrg
-export def "v01-orgs-distribution-groups delete" [
+export def "v01-orgs-distribution-groups delete-for" [
   org_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7844,7 +7844,7 @@ export def "v01-orgs-distribution-groups delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)")
+  let full_url = (build-url $base ({org_name: $org_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7854,7 +7854,7 @@ export def "v01-orgs-distribution-groups delete" [
 #
 # GET /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}
 # operationId: distributionGroups_getForOrg
-export def "v01-orgs-distribution-groups get" [
+export def "v01-orgs-distribution-groups get-for" [
   org_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7868,7 +7868,7 @@ export def "v01-orgs-distribution-groups get" [
 ]: nothing -> record<display_name: string, id: string, is_public: bool, name: string, origin: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)")
+  let full_url = (build-url $base ({org_name: $org_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7878,7 +7878,7 @@ export def "v01-orgs-distribution-groups get" [
 #
 # PATCH /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}
 # operationId: distributionGroups_patchForOrg
-export def "v01-orgs-distribution-groups patch" [
+export def "v01-orgs-distribution-groups update-for" [
   org_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7895,8 +7895,8 @@ export def "v01-orgs-distribution-groups patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)")
-  let body = {is_public: $is_public, name: $name} | compact
+  let full_url = (build-url $base ({org_name: $org_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}"))
+  let body = {"is_public": $is_public, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7921,7 +7921,7 @@ export def "v01-orgs-distribution-groups-apps get" [
 ]: nothing -> table<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, origin: string, platform: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)/apps")
+  let full_url = (build-url $base ({org_name: $org_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/apps"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7932,7 +7932,7 @@ export def "v01-orgs-distribution-groups-apps get" [
 # POST /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/apps
 # operationId: distributionGroups_addApps
 # --apps item shape: {name: string}
-export def "v01-orgs-distribution-groups-apps addApps" [
+export def "v01-orgs-distribution-groups-apps create" [
   org_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7948,8 +7948,8 @@ export def "v01-orgs-distribution-groups-apps addApps" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)/apps")
-  let body = {apps: $apps} | compact
+  let full_url = (build-url $base ({org_name: $org_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/apps"))
+  let body = {"apps": $apps} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7977,8 +7977,8 @@ export def "v01-orgs-distribution-groups-apps-bulk-delete bulkDeleteApps" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)/apps/bulk_delete")
-  let body = {apps: $apps} | compact
+  let full_url = (build-url $base ({org_name: $org_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/apps/bulk_delete"))
+  let body = {"apps": $apps} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7989,7 +7989,7 @@ export def "v01-orgs-distribution-groups-apps-bulk-delete bulkDeleteApps" [
 #
 # GET /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/members
 # operationId: distributionGroups_listUsersForOrg
-export def "v01-orgs-distribution-groups-members listUsersForOrg" [
+export def "v01-orgs-distribution-groups-members list-users-for" [
   org_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8003,7 +8003,7 @@ export def "v01-orgs-distribution-groups-members listUsersForOrg" [
 ]: nothing -> table<avatar_url: string, can_change_password: bool, display_name: string, email: string, id: string, invite_pending: bool, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)/members")
+  let full_url = (build-url $base ({org_name: $org_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/members"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8013,7 +8013,7 @@ export def "v01-orgs-distribution-groups-members listUsersForOrg" [
 #
 # POST /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/members
 # operationId: distributionGroups_addUsersForOrg
-export def "v01-orgs-distribution-groups-members addUsersForOrg" [
+export def "v01-orgs-distribution-groups-members create-users-for" [
   org_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8029,8 +8029,8 @@ export def "v01-orgs-distribution-groups-members addUsersForOrg" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)/members")
-  let body = {user_emails: $user_emails} | compact
+  let full_url = (build-url $base ({org_name: $org_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/members"))
+  let body = {"user_emails": $user_emails} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8057,8 +8057,8 @@ export def "v01-orgs-distribution-groups-members-bulk-delete bulkDeleteUsers" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)/members/bulk_delete")
-  let body = {user_emails: $user_emails} | compact
+  let full_url = (build-url $base ({org_name: $org_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/members/bulk_delete"))
+  let body = {"user_emails": $user_emails} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8085,8 +8085,8 @@ export def "v01-orgs-distribution-groups-resend-invite resendSharedInvite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups/($distribution_group_name)/resend_invite")
-  let body = {user_emails: $user_emails} | compact
+  let full_url = (build-url $base ({org_name: $org_name, distribution_group_name: $distribution_group_name} | format pattern "/v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/resend_invite"))
+  let body = {"user_emails": $user_emails} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8112,7 +8112,7 @@ export def "v01-orgs-distribution-groups-details detailsForOrg" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "apps_limit" $apps_limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/distribution_groups_details" $qp)
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}/distribution_groups_details") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8137,8 +8137,8 @@ export def "v01-orgs-invitations delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/invitations")
-  let body = {user_email: $user_email} | compact
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}/invitations"))
+  let body = {"user_email": $user_email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8149,7 +8149,7 @@ export def "v01-orgs-invitations delete" [
 #
 # GET /v0.1/orgs/{org_name}/invitations
 # operationId: orgInvitations_listPending
-export def "v01-orgs-invitations listPending" [
+export def "v01-orgs-invitations list-pending" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8162,7 +8162,7 @@ export def "v01-orgs-invitations listPending" [
 ]: nothing -> table<email: string, id: string, role: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/invitations")
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}/invitations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8188,8 +8188,8 @@ export def "v01-orgs-invitations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/invitations")
-  let body = {role: $role, user_email: $user_email} | compact
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}/invitations"))
+  let body = {"role": $role, "user_email": $user_email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8216,8 +8216,8 @@ export def "v01-orgs-invitations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/invitations/($email)")
-  let body = {role: $role} | compact
+  let full_url = (build-url $base ({org_name: $org_name, email: $email} | format pattern "/v0.1/orgs/{org_name}/invitations/{email}"))
+  let body = {"role": $role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8228,7 +8228,7 @@ export def "v01-orgs-invitations update" [
 #
 # POST /v0.1/orgs/{org_name}/invitations/{email}/resend
 # operationId: orgInvitations_sendNewInvitation
-export def "v01-orgs-invitations-resend sendNewInvitation" [
+export def "v01-orgs-invitations-resend send-new" [
   org_name: string
   email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8244,8 +8244,8 @@ export def "v01-orgs-invitations-resend sendNewInvitation" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/invitations/($email)/resend")
-  let body = {role: $role} | compact
+  let full_url = (build-url $base ({org_name: $org_name, email: $email} | format pattern "/v0.1/orgs/{org_name}/invitations/{email}/resend"))
+  let body = {"role": $role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8256,7 +8256,7 @@ export def "v01-orgs-invitations-resend sendNewInvitation" [
 #
 # POST /v0.1/orgs/{org_name}/invitations/{email}/revoke
 # operationId: orgInvitations_
-export def "v01-orgs-invitations-revoke " [
+export def "v01-orgs-invitations-revoke post" [
   org_name: string
   email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8272,7 +8272,7 @@ export def "v01-orgs-invitations-revoke " [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/invitations/($email)/revoke")
+  let full_url = (build-url $base ({org_name: $org_name, email: $email} | format pattern "/v0.1/orgs/{org_name}/invitations/{email}/revoke"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8283,7 +8283,7 @@ export def "v01-orgs-invitations-revoke " [
 #
 # GET /v0.1/orgs/{org_name}/teams
 # operationId: teams_listAll
-export def "v01-orgs-teams listAll" [
+export def "v01-orgs-teams list-all" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8296,7 +8296,7 @@ export def "v01-orgs-teams listAll" [
 ]: nothing -> table<description: string, display_name: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams")
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}/teams"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8306,7 +8306,7 @@ export def "v01-orgs-teams listAll" [
 #
 # POST /v0.1/orgs/{org_name}/teams
 # operationId: teams_createTeam
-export def "v01-orgs-teams createTeam" [
+export def "v01-orgs-teams create" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8323,8 +8323,8 @@ export def "v01-orgs-teams createTeam" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams")
-  let body = {description: $description, display_name: $display_name, name: $name} | compact
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}/teams"))
+  let body = {"description": $description, "display_name": $display_name, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8349,7 +8349,7 @@ export def "v01-orgs-teams delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)")
+  let full_url = (build-url $base ({org_name: $org_name, team_name: $team_name} | format pattern "/v0.1/orgs/{org_name}/teams/{team_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8373,7 +8373,7 @@ export def "v01-orgs-teams get" [
 ]: nothing -> record<description: string, display_name: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)")
+  let full_url = (build-url $base ({org_name: $org_name, team_name: $team_name} | format pattern "/v0.1/orgs/{org_name}/teams/{team_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8399,8 +8399,8 @@ export def "v01-orgs-teams update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)")
-  let body = {display_name: $display_name} | compact
+  let full_url = (build-url $base ({org_name: $org_name, team_name: $team_name} | format pattern "/v0.1/orgs/{org_name}/teams/{team_name}"))
+  let body = {"display_name": $display_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8411,7 +8411,7 @@ export def "v01-orgs-teams update" [
 #
 # GET /v0.1/orgs/{org_name}/teams/{team_name}/apps
 # operationId: teams_listApps
-export def "v01-orgs-teams-apps listApps" [
+export def "v01-orgs-teams-apps list" [
   org_name: string
   team_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8425,7 +8425,7 @@ export def "v01-orgs-teams-apps listApps" [
 ]: nothing -> table<team_permissions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)/apps")
+  let full_url = (build-url $base ({org_name: $org_name, team_name: $team_name} | format pattern "/v0.1/orgs/{org_name}/teams/{team_name}/apps"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8435,7 +8435,7 @@ export def "v01-orgs-teams-apps listApps" [
 #
 # POST /v0.1/orgs/{org_name}/teams/{team_name}/apps
 # operationId: teams_addApp
-export def "v01-orgs-teams-apps addApp" [
+export def "v01-orgs-teams-apps create" [
   org_name: string
   team_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8451,8 +8451,8 @@ export def "v01-orgs-teams-apps addApp" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)/apps")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({org_name: $org_name, team_name: $team_name} | format pattern "/v0.1/orgs/{org_name}/teams/{team_name}/apps"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8463,7 +8463,7 @@ export def "v01-orgs-teams-apps addApp" [
 #
 # DELETE /v0.1/orgs/{org_name}/teams/{team_name}/apps/{app_name}
 # operationId: teams_removeApp
-export def "v01-orgs-teams-apps removeApp" [
+export def "v01-orgs-teams-apps delete" [
   org_name: string
   team_name: string
   app_name: string
@@ -8478,7 +8478,7 @@ export def "v01-orgs-teams-apps removeApp" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)/apps/($app_name)")
+  let full_url = (build-url $base ({org_name: $org_name, team_name: $team_name, app_name: $app_name} | format pattern "/v0.1/orgs/{org_name}/teams/{team_name}/apps/{app_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8488,7 +8488,7 @@ export def "v01-orgs-teams-apps removeApp" [
 #
 # PATCH /v0.1/orgs/{org_name}/teams/{team_name}/apps/{app_name}
 # operationId: teams_updatePermissions
-export def "v01-orgs-teams-apps updatePermissions" [
+export def "v01-orgs-teams-apps update-permissions" [
   org_name: string
   team_name: string
   app_name: string
@@ -8505,8 +8505,8 @@ export def "v01-orgs-teams-apps updatePermissions" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)/apps/($app_name)")
-  let body = {permissions: $permissions} | compact
+  let full_url = (build-url $base ({org_name: $org_name, team_name: $team_name, app_name: $app_name} | format pattern "/v0.1/orgs/{org_name}/teams/{team_name}/apps/{app_name}"))
+  let body = {"permissions": $permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8531,7 +8531,7 @@ export def "v01-orgs-teams-users get" [
 ]: nothing -> record<display_name: string, email: string, name: string, role: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)/users")
+  let full_url = (build-url $base ({org_name: $org_name, team_name: $team_name} | format pattern "/v0.1/orgs/{org_name}/teams/{team_name}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8541,7 +8541,7 @@ export def "v01-orgs-teams-users get" [
 #
 # POST /v0.1/orgs/{org_name}/teams/{team_name}/users
 # operationId: teams_addUser
-export def "v01-orgs-teams-users addUser" [
+export def "v01-orgs-teams-users create" [
   org_name: string
   team_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8557,8 +8557,8 @@ export def "v01-orgs-teams-users addUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)/users")
-  let body = {user_email: $user_email} | compact
+  let full_url = (build-url $base ({org_name: $org_name, team_name: $team_name} | format pattern "/v0.1/orgs/{org_name}/teams/{team_name}/users"))
+  let body = {"user_email": $user_email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8569,7 +8569,7 @@ export def "v01-orgs-teams-users addUser" [
 #
 # DELETE /v0.1/orgs/{org_name}/teams/{team_name}/users/{user_name}
 # operationId: teams_removeUser
-export def "v01-orgs-teams-users removeUser" [
+export def "v01-orgs-teams-users delete" [
   org_name: string
   team_name: string
   user_name: string
@@ -8584,7 +8584,7 @@ export def "v01-orgs-teams-users removeUser" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/teams/($team_name)/users/($user_name)")
+  let full_url = (build-url $base ({org_name: $org_name, team_name: $team_name, user_name: $user_name} | format pattern "/v0.1/orgs/{org_name}/teams/{team_name}/users/{user_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8594,7 +8594,7 @@ export def "v01-orgs-teams-users removeUser" [
 #
 # GET /v0.1/orgs/{org_name}/testers
 # operationId: distributionGroups_listAllTestersForOrg
-export def "v01-orgs-testers listAllTestersForOrg" [
+export def "v01-orgs-testers list-all-testers-for" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8607,7 +8607,7 @@ export def "v01-orgs-testers listAllTestersForOrg" [
 ]: nothing -> table<display_name: string, email: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/testers")
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}/testers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8617,7 +8617,7 @@ export def "v01-orgs-testers listAllTestersForOrg" [
 #
 # GET /v0.1/orgs/{org_name}/users
 # operationId: users_listForOrg
-export def "v01-orgs-users listForOrg" [
+export def "v01-orgs-users list-for" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8630,7 +8630,7 @@ export def "v01-orgs-users listForOrg" [
 ]: nothing -> table<display_name: string, email: string, joined_at: string, name: string, role: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/users")
+  let full_url = (build-url $base ({org_name: $org_name} | format pattern "/v0.1/orgs/{org_name}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8640,7 +8640,7 @@ export def "v01-orgs-users listForOrg" [
 #
 # DELETE /v0.1/orgs/{org_name}/users/{user_name}
 # operationId: users_removeFromOrg
-export def "v01-orgs-users removeFromOrg" [
+export def "v01-orgs-users delete-from" [
   org_name: string
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8654,7 +8654,7 @@ export def "v01-orgs-users removeFromOrg" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/users/($user_name)")
+  let full_url = (build-url $base ({org_name: $org_name, user_name: $user_name} | format pattern "/v0.1/orgs/{org_name}/users/{user_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8664,7 +8664,7 @@ export def "v01-orgs-users removeFromOrg" [
 #
 # GET /v0.1/orgs/{org_name}/users/{user_name}
 # operationId: users_getForOrg
-export def "v01-orgs-users get" [
+export def "v01-orgs-users get-for" [
   org_name: string
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8678,7 +8678,7 @@ export def "v01-orgs-users get" [
 ]: nothing -> record<display_name: string, email: string, joined_at: string, name: string, role: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/users/($user_name)")
+  let full_url = (build-url $base ({org_name: $org_name, user_name: $user_name} | format pattern "/v0.1/orgs/{org_name}/users/{user_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8688,7 +8688,7 @@ export def "v01-orgs-users get" [
 #
 # PATCH /v0.1/orgs/{org_name}/users/{user_name}
 # operationId: users_updateOrgRole
-export def "v01-orgs-users updateOrgRole" [
+export def "v01-orgs-users update-org-role" [
   org_name: string
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8704,8 +8704,8 @@ export def "v01-orgs-users updateOrgRole" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/users/($user_name)")
-  let body = {role: $role} | compact
+  let full_url = (build-url $base ({org_name: $org_name, user_name: $user_name} | format pattern "/v0.1/orgs/{org_name}/users/{user_name}"))
+  let body = {"role": $role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8716,7 +8716,7 @@ export def "v01-orgs-users updateOrgRole" [
 #
 # GET /v0.1/orgs/{org_name}/users/{user_name}/apps
 # operationId: apps_getForOrgUser
-export def "v01-orgs-users-apps get" [
+export def "v01-orgs-users-apps get-for" [
   org_name: string
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8730,7 +8730,7 @@ export def "v01-orgs-users-apps get" [
 ]: nothing -> table<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/orgs/($org_name)/users/($user_name)/apps")
+  let full_url = (build-url $base ({org_name: $org_name, user_name: $user_name} | format pattern "/v0.1/orgs/{org_name}/users/{user_name}/apps"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8756,7 +8756,7 @@ export def "v01-public-apps-releases-ios-manifest get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/public/apps/($app_id)/releases/($release_id)/ios_manifest" $qp)
+  let full_url = (build-url $base ({app_id: $app_id, release_id: $release_id} | format pattern "/v0.1/public/apps/{app_id}/releases/{release_id}/ios_manifest") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8783,8 +8783,8 @@ export def "v01-public-apps-install-analytics installAnalytics" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/public/apps/($owner_name)/($app_name)/install_analytics")
-  let body = {releases: $releases} | compact
+  let full_url = (build-url $base ({owner_name: $owner_name, app_name: $app_name} | format pattern "/v0.1/public/apps/{owner_name}/{app_name}/install_analytics"))
+  let body = {"releases": $releases} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8795,7 +8795,7 @@ export def "v01-public-apps-install-analytics installAnalytics" [
 #
 # POST /v0.1/public/codepush/report_status/deploy
 # operationId: codePushAcquisition_updateDeployStatus
-export def "v01-public-codepush-report-status-deploy updateDeployStatus" [
+export def "v01-public-codepush-report-status-deploy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8816,7 +8816,7 @@ export def "v01-public-codepush-report-status-deploy updateDeployStatus" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.1/public/codepush/report_status/deploy")
-  let body = {app_version: $app_version, client_unique_id: $client_unique_id, deployment_key: $deployment_key, label: $label, previous_deployment_key: $previous_deployment_key, previous_label_or_app_version: $previous_label_or_app_version, status: $status} | compact
+  let body = {"app_version": $app_version, "client_unique_id": $client_unique_id, "deployment_key": $deployment_key, "label": $label, "previous_deployment_key": $previous_deployment_key, "previous_label_or_app_version": $previous_label_or_app_version, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8827,7 +8827,7 @@ export def "v01-public-codepush-report-status-deploy updateDeployStatus" [
 #
 # POST /v0.1/public/codepush/report_status/download
 # operationId: codePushAcquisition_updateDownloadStatus
-export def "v01-public-codepush-report-status-download updateDownloadStatus" [
+export def "v01-public-codepush-report-status-download update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8848,7 +8848,7 @@ export def "v01-public-codepush-report-status-download updateDownloadStatus" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.1/public/codepush/report_status/download")
-  let body = {app_version: $app_version, client_unique_id: $client_unique_id, deployment_key: $deployment_key, label: $label, previous_deployment_key: $previous_deployment_key, previous_label_or_app_version: $previous_label_or_app_version, status: $status} | compact
+  let body = {"app_version": $app_version, "client_unique_id": $client_unique_id, "deployment_key": $deployment_key, "label": $label, "previous_deployment_key": $previous_deployment_key, "previous_label_or_app_version": $previous_label_or_app_version, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8859,7 +8859,7 @@ export def "v01-public-codepush-report-status-download updateDownloadStatus" [
 #
 # GET /v0.1/public/codepush/status
 # operationId: codePushAcquisition_getAcquisitionStatus
-export def "v01-public-codepush-status get" [
+export def "v01-public-codepush-status get-acquisition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8881,7 +8881,7 @@ export def "v01-public-codepush-status get" [
 #
 # GET /v0.1/public/codepush/update_check
 # operationId: codePushAcquisition_updateCheck
-export def "v01-public-codepush-update-check updateCheck" [
+export def "v01-public-codepush-update-check update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8953,7 +8953,7 @@ export def "v01-public-sdk-apps-distribution-groups-releases-latest get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "is_install_page" $is_install_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/public/sdk/apps/($app_secret)/distribution_groups/($distribution_group_id)/releases/latest" $qp)
+  let full_url = (build-url $base ({app_secret: $app_secret, distribution_group_id: $distribution_group_id} | format pattern "/v0.1/public/sdk/apps/{app_secret}/distribution_groups/{distribution_group_id}/releases/latest") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8978,7 +8978,7 @@ export def "v01-public-sdk-apps-releases-latest get" [
 ]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/public/sdk/apps/($app_secret)/releases/latest")
+  let full_url = (build-url $base ({app_secret: $app_secret} | format pattern "/v0.1/public/sdk/apps/{app_secret}/releases/latest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8988,7 +8988,7 @@ export def "v01-public-sdk-apps-releases-latest get" [
 #
 # GET /v0.1/public/sdk/apps/{app_secret}/releases/{release_hash}/public_distribution_groups
 # operationId: releases_getPublicGroupsForReleaseByHash
-export def "v01-public-sdk-apps-releases-public-distribution-groups get" [
+export def "v01-public-sdk-apps-releases-public-distribution-groups get-public-groups-for" [
   app_secret: string
   release_hash: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9002,7 +9002,7 @@ export def "v01-public-sdk-apps-releases-public-distribution-groups get" [
 ]: nothing -> table<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/public/sdk/apps/($app_secret)/releases/($release_hash)/public_distribution_groups")
+  let full_url = (build-url $base ({app_secret: $app_secret, release_hash: $release_hash} | format pattern "/v0.1/public/sdk/apps/{app_secret}/releases/{release_hash}/public_distribution_groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9012,7 +9012,7 @@ export def "v01-public-sdk-apps-releases-public-distribution-groups get" [
 #
 # GET /v0.1/public/sparkle/apps/{app_secret}
 # operationId: releases_getSparkleFeed
-export def "v01-public-sparkle-apps get" [
+export def "v01-public-sparkle-apps get-sparkle-feed" [
   app_secret: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9025,7 +9025,7 @@ export def "v01-public-sparkle-apps get" [
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/public/sparkle/apps/($app_secret)")
+  let full_url = (build-url $base ({app_secret: $app_secret} | format pattern "/v0.1/public/sparkle/apps/{app_secret}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9050,7 +9050,7 @@ export def "v01-sdk-apps-releases-private-latest get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "udid" $udid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/sdk/apps/($app_secret)/releases/private/latest" $qp)
+  let full_url = (build-url $base ({app_secret: $app_secret} | format pattern "/v0.1/sdk/apps/{app_secret}/releases/private/latest") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9060,7 +9060,7 @@ export def "v01-sdk-apps-releases-private-latest get" [
 #
 # GET /v0.1/sdk/apps/{app_secret}/releases/{release_hash}
 # operationId: releases_getLatestByHash
-export def "v01-sdk-apps-releases get" [
+export def "v01-sdk-apps-releases get-latest" [
   app_secret: string
   release_hash: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9076,7 +9076,7 @@ export def "v01-sdk-apps-releases get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "udid" $udid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/sdk/apps/($app_secret)/releases/($release_hash)" $qp)
+  let full_url = (build-url $base ({app_secret: $app_secret, release_hash: $release_hash} | format pattern "/v0.1/sdk/apps/{app_secret}/releases/{release_hash}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9123,7 +9123,7 @@ export def "v01-user update" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.1/user")
-  let body = {display_name: $display_name} | compact
+  let body = {"display_name": $display_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9156,7 +9156,7 @@ export def "v01-user-devices userDevicesList" [
 #
 # DELETE /v0.1/user/devices/{device_udid}
 # operationId: devices_removeUserDevice
-export def "v01-user-devices removeUserDevice" [
+export def "v01-user-devices delete" [
   device_udid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9169,7 +9169,7 @@ export def "v01-user-devices removeUserDevice" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/user/devices/($device_udid)")
+  let full_url = (build-url $base ({device_udid: $device_udid} | format pattern "/v0.1/user/devices/{device_udid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9192,7 +9192,7 @@ export def "v01-user-devices deviceDetails" [
 ]: nothing -> record<device_name: string, full_device_name: string, imei: string, model: string, os_build: string, os_version: string, owner_id: string, registered_at: string, serial: string, status: string, udid: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/user/devices/($device_udid)")
+  let full_url = (build-url $base ({device_udid: $device_udid} | format pattern "/v0.1/user/devices/{device_udid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9201,7 +9201,7 @@ export def "v01-user-devices deviceDetails" [
 # POST /v0.1/user/dsr/delete
 #
 # operationId: DataSubjectRight_DeleteRequest
-export def "v01-user-dsr-delete DeleteRequest" [
+export def "v01-user-dsr-delete delete-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9222,8 +9222,8 @@ export def "v01-user-dsr-delete DeleteRequest" [
 # GET /v0.1/user/dsr/delete/{token}
 #
 # operationId: DataSubjectRight_DeleteStatusRequest
-export def "v01-user-dsr-delete DeleteStatusRequest" [
-  token: string
+export def "v01-user-dsr-delete delete-status-request" [
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9237,7 +9237,7 @@ export def "v01-user-dsr-delete DeleteStatusRequest" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0.1/user/dsr/delete/($token)" $qp)
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/v0.1/user/dsr/delete/{token_arg}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9246,8 +9246,8 @@ export def "v01-user-dsr-delete DeleteStatusRequest" [
 # POST /v0.1/user/dsr/delete/{token}/cancel
 #
 # operationId: DataSubjectRight_CancelDeleteRequest
-export def "v01-user-dsr-delete-cancel CancelDeleteRequest" [
-  token: string
+export def "v01-user-dsr-delete-cancel cancel-delete-request" [
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9261,8 +9261,8 @@ export def "v01-user-dsr-delete-cancel CancelDeleteRequest" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/user/dsr/delete/($token)/cancel")
-  let body = {email: $email} | compact
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/v0.1/user/dsr/delete/{token_arg}/cancel"))
+  let body = {"email": $email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9272,7 +9272,7 @@ export def "v01-user-dsr-delete-cancel CancelDeleteRequest" [
 # POST /v0.1/user/dsr/export
 #
 # operationId: DataSubjectRight_ExportRequest
-export def "v01-user-dsr-export ExportRequest" [
+export def "v01-user-dsr-export export-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9293,8 +9293,8 @@ export def "v01-user-dsr-export ExportRequest" [
 # GET /v0.1/user/dsr/export/{token}
 #
 # operationId: DataSubjectRight_ExportStatusRequest
-export def "v01-user-dsr-export ExportStatusRequest" [
-  token: string
+export def "v01-user-dsr-export export-status-request" [
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9306,7 +9306,7 @@ export def "v01-user-dsr-export ExportStatusRequest" [
 ]: nothing -> record<message: string, sasUrl: string, sasUrlExpired: bool, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/user/dsr/export/($token)")
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/v0.1/user/dsr/export/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9315,8 +9315,8 @@ export def "v01-user-dsr-export ExportStatusRequest" [
 # POST /v0.1/user/dsr/export/{token}/cancel
 #
 # operationId: DataSubjectRight_CancelExportRequest
-export def "v01-user-dsr-export-cancel CancelExportRequest" [
-  token: string
+export def "v01-user-dsr-export-cancel cancel-export-request" [
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9328,7 +9328,7 @@ export def "v01-user-dsr-export-cancel CancelExportRequest" [
 ]: nothing -> record<createdAt: string, token: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/user/dsr/export/($token)/cancel")
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/v0.1/user/dsr/export/{token_arg}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9338,7 +9338,7 @@ export def "v01-user-dsr-export-cancel CancelExportRequest" [
 #
 # GET /v0.1/user/export/serviceConnections
 # operationId: sharedconnection_Connections
-export def "v01-user-export-service-connections Connections" [
+export def "v01-user-export-service-connections get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9375,7 +9375,7 @@ export def "v01-user-invitations-apps-accept accept" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/user/invitations/apps/($invitation_token)/accept")
+  let full_url = (build-url $base ({invitation_token: $invitation_token} | format pattern "/v0.1/user/invitations/apps/{invitation_token}/accept"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9401,7 +9401,7 @@ export def "v01-user-invitations-apps-reject reject" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/user/invitations/apps/($invitation_token)/reject")
+  let full_url = (build-url $base ({invitation_token: $invitation_token} | format pattern "/v0.1/user/invitations/apps/{invitation_token}/reject"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9452,7 +9452,7 @@ export def "v01-user-invitations-orgs-accept accept" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/user/invitations/orgs/($invitation_token)/accept")
+  let full_url = (build-url $base ({invitation_token: $invitation_token} | format pattern "/v0.1/user/invitations/orgs/{invitation_token}/accept"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9478,7 +9478,7 @@ export def "v01-user-invitations-orgs-reject reject" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/user/invitations/orgs/($invitation_token)/reject")
+  let full_url = (build-url $base ({invitation_token: $invitation_token} | format pattern "/v0.1/user/invitations/orgs/{invitation_token}/reject"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9532,7 +9532,7 @@ export def "v01-user-notifications-email-settings get" [
 #
 # POST /v0.1/users/{user_id}/devices/register
 # operationId: devices_registerUserForDevice
-export def "v01-users-devices-register registerUserForDevice" [
+export def "v01-users-devices-register create-user-for" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9553,8 +9553,8 @@ export def "v01-users-devices-register registerUserForDevice" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v0.1/users/($user_id)/devices/register")
-  let body = {imei: $imei, model: $model, os_build: $os_build, os_version: $os_version, owner_id: $owner_id, serial: $serial, udid: $udid} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/v0.1/users/{user_id}/devices/register"))
+  let body = {"imei": $imei, "model": $model, "os_build": $os_build, "os_version": $os_version, "owner_id": $owner_id, "serial": $serial, "udid": $udid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

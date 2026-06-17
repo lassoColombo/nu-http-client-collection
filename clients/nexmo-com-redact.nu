@@ -113,7 +113,7 @@ export def "transaction redact-message" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transaction")
-  let body = {id: $id, product: $product, type: $type} | compact
+  let body = {"id": $id, "product": $product, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

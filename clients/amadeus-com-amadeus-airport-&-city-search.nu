@@ -71,7 +71,7 @@ def view-completer [] { ["FULL" "LIGHT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reference-data-locations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reference-data-locations get-airport-city-search" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /reference-data/locations
 # operationId: getAirportCitySearch
-export def "reference-data-locations list" [
+export def "reference-data-locations get-airport-city-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,17 +104,17 @@ export def "reference-data-locations list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subType: list # sub type of the location (AIRPORT and/or CITY) (e.g. CITY)
+  --sub-type: list # sub type of the location (AIRPORT and/or CITY) (e.g. CITY)
   --keyword: string # keyword that should represent the start of a word in a city or airport name or code.   Supported charaters are: A-Za-z0-9./:-'()" (e.g. MUC)
-  --countryCode: string # Country code of the location using [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) code format (e.g. US).
-  --pagelimit: int # maximum items in one page (default: 10)
-  --pageoffset: int # start index of the requested page (default: 0)
+  --country-code: string # Country code of the location using [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) code format (e.g. US).
+  --page-limit: int # maximum items in one page (default: 10)
+  --page-offset: int # start index of the requested page (default: 0)
   --qp-sort: string@sort-completer # defines on which attribute the sorting will be done: * analytics.travelers.score - sort by the number of travelers by airport or city, the airports and cities with the highest traffic are on top of the results  (default: analytics.travelers.score)
   --view: string@view-completer # select the level of information of the reply: * LIGHT - Gives only the IATACode, name, detailedName, cityName and countryName * FULL - Adds on top of the LIGHT information the timeZoneOffset, geocode, detailed address and travelers.score default option is FULL  (default: FULL)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "subType" $subType "csv") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "countryCode" $countryCode "scalar") (serialize-qp "page[limit]" $pagelimit "scalar") (serialize-qp "page[offset]" $pageoffset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "subType" $sub_type "csv") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[offset]" $page_offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reference-data/locations" $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -125,8 +125,8 @@ export def "reference-data-locations list" [
 #
 # GET /reference-data/locations/{locationId}
 # operationId: getAirportCity
-export def "reference-data-locations get" [
-  locationId: string
+export def "reference-data-locations get-airport-city" [
+  location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,7 +138,7 @@ export def "reference-data-locations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reference-data/locations/($locationId)")
+  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/reference-data/locations/{location_id}"))
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

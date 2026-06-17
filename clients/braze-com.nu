@@ -154,11 +154,11 @@ export def "campaigns-list campaignList" [
   --page: string # (Optional) Integer  The page of campaigns to return, defaults to 0 (returns the first set of up to 100) (e.g. 0)
   --include-archived: string # (Optional) Boolean  Whether or not to include archived campaigns, defaults to false (e.g. false)
   --sort-direction: string # (Optional) String  Pass in the value `desc` to sort by creation time from newest to oldest. Pass in `asc` to sort from oldest to newest. If sort_direction is not included, the default order is oldest to newest. (e.g. desc)
-  --last-edittimegt: string # (Optional) DateTime (ISO 8601 string)  Filters the results and only returns campaigns that were edited greater than the time provided till now.  (e.g. 2020-06-28T23:59:59-5:00)
+  --last-edit-time-gt: string # (Optional) DateTime (ISO 8601 string)  Filters the results and only returns campaigns that were edited greater than the time provided till now.  (e.g. 2020-06-28T23:59:59-5:00)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "include_archived" $include_archived "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "last_edit.time[gt]" $last_edittimegt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "include_archived" $include_archived "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "last_edit.time[gt]" $last_edit_time_gt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/campaigns/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -265,11 +265,11 @@ export def "canvas-list canvasList" [
   --page: string # (Optional) Integer  The page of Canvases to return, defaults to `0` (returns the first set of up to 100) (e.g. 1)
   --include-archived: string # (Optional) Boolean  Whether or not to include archived Canvases, defaults to `false`. (e.g. false)
   --sort-direction: string # (Optional) String  Pass in the value `desc` to sort by creation time from newest to oldest. Pass in `asc` to sort from oldest to newest. If sort_direction is not included, the default order is oldest to newest. (e.g. desc)
-  --last-edittimegt: string # (Optional) DateTime (ISO 8601 string)  Filters the results and only returns Canvases that were edited greater than the time provided till now. (e.g. 2020-06-28T23:59:59-5:00)
+  --last-edit-time-gt: string # (Optional) DateTime (ISO 8601 string)  Filters the results and only returns Canvases that were edited greater than the time provided till now. (e.g. 2020-06-28T23:59:59-5:00)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "include_archived" $include_archived "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "last_edit.time[gt]" $last_edittimegt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "include_archived" $include_archived "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "last_edit.time[gt]" $last_edit_time_gt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/canvas/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -303,7 +303,7 @@ export def "canvas-trigger-schedule-create scheduleApiTriggeredCanvases" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/canvas/trigger/schedule/create")
-  let body = {audience: $audience, broadcast: $broadcast, canvas_entry_properties: $canvas_entry_properties, canvas_id: $canvas_id, recipients: $recipients, schedule: $schedule} | compact
+  let body = {"audience": $audience, "broadcast": $broadcast, "canvas_entry_properties": $canvas_entry_properties, "canvas_id": $canvas_id, "recipients": $recipients, "schedule": $schedule} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -339,7 +339,7 @@ export def "content-blocks-info seeContentBlockInformation" [
 #
 # GET /content_blocks/list
 # operationId: listAvailableContentBlocks
-export def "content-blocks-list listAvailableContentBlocks" [
+export def "content-blocks-list list-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +366,7 @@ export def "content-blocks-list listAvailableContentBlocks" [
 #
 # GET /email/hard_bounces
 # operationId: queryHardBouncedEmails
-export def "email-hard-bounces queryHardBouncedEmails" [
+export def "email-hard-bounces list-hard-bounced" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,7 +394,7 @@ export def "email-hard-bounces queryHardBouncedEmails" [
 #
 # GET /email/unsubscribes
 # operationId: queryListOfUnsubscribedEmailAddresses
-export def "email-unsubscribes queryListOfUnsubscribedEmailAddresses" [
+export def "email-unsubscribes list-list-of-unsubscribed-email-addresses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -657,7 +657,7 @@ export def "kpi-uninstalls-data-series kpIsForDailyAppUninstallsByDate" [
 #
 # GET /messages/scheduled_broadcasts
 # operationId: getUpcomingScheduledCampaignsAndCanvases
-export def "messages-scheduled-broadcasts get" [
+export def "messages-scheduled-broadcasts get-upcoming-scheduled-campaigns-and-canvases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,7 +756,7 @@ export def "segments-list segmentList" [
 #
 # GET /sends/data_series
 # operationId: sendAnalytics
-export def "sends-data-series sendAnalytics" [
+export def "sends-data-series send-analytics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -811,7 +811,7 @@ export def "sessions-data-series appSessionsByTime" [
 #
 # GET /subscription/status/get
 # operationId: listUser'sSubscriptionGroupStatusSms
-export def "subscription-status-get listUsersSubscriptionGroupStatusSms" [
+export def "subscription-status-get list-user-s-subscription-group-status-sms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -837,7 +837,7 @@ export def "subscription-status-get listUsersSubscriptionGroupStatusSms" [
 #
 # GET /subscription/user/status
 # operationId: listUser'sSubscriptionGroupSms
-export def "subscription-user-status listUsersSubscriptionGroupSms" [
+export def "subscription-user-status list-user-s-subscription-group-sms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -888,7 +888,7 @@ export def "templates-email-info seeEmailTemplateInformation" [
 #
 # GET /templates/email/list
 # operationId: listAvailableEmailTemplates
-export def "templates-email-list listAvailableEmailTemplates" [
+export def "templates-email-list list-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

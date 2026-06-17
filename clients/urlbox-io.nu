@@ -129,7 +129,7 @@ export def "render-sync renderSync" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/render/sync")
-  let body = {block_ads: $block_ads, click_accept: $click_accept, delay: $delay, format: $format, full_page: $full_page, gpu: $gpu, height: $height, hide_cookie_banners: $hide_cookie_banners, html: $html, metadata: $metadata, retina: $retina, selector: $selector, thumb_height: $thumb_height, thumb_width: $thumb_width, url: $body_url, wait_for: $wait_for, wait_to_leave: $wait_to_leave, wait_until: $wait_until, width: $width} | compact
+  let body = {"block_ads": $block_ads, "click_accept": $click_accept, "delay": $delay, "format": $format, "full_page": $full_page, "gpu": $gpu, "height": $height, "hide_cookie_banners": $hide_cookie_banners, "html": $html, "metadata": $metadata, "retina": $retina, "selector": $selector, "thumb_height": $thumb_height, "thumb_width": $thumb_width, "url": $body_url, "wait_for": $wait_for, "wait_to_leave": $wait_to_leave, "wait_until": $wait_until, "width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

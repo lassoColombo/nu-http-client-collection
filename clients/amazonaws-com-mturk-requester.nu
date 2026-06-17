@@ -66,50 +66,50 @@ def base-url-completer [] { ["http://mturk-requester.us-east-1.amazonaws.com" "h
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["MTurkRequesterServiceV20170117.AcceptQualificationRequest"] }
-def X-Amz-Target-completer-1 [] { ["MTurkRequesterServiceV20170117.ApproveAssignment"] }
-def X-Amz-Target-completer-2 [] { ["MTurkRequesterServiceV20170117.AssociateQualificationWithWorker"] }
-def X-Amz-Target-completer-3 [] { ["MTurkRequesterServiceV20170117.CreateAdditionalAssignmentsForHIT"] }
-def X-Amz-Target-completer-4 [] { ["MTurkRequesterServiceV20170117.CreateHIT"] }
-def X-Amz-Target-completer-5 [] { ["MTurkRequesterServiceV20170117.CreateHITType"] }
-def X-Amz-Target-completer-6 [] { ["MTurkRequesterServiceV20170117.CreateHITWithHITType"] }
-def X-Amz-Target-completer-7 [] { ["MTurkRequesterServiceV20170117.CreateQualificationType"] }
-def X-Amz-Target-completer-8 [] { ["MTurkRequesterServiceV20170117.CreateWorkerBlock"] }
-def X-Amz-Target-completer-9 [] { ["MTurkRequesterServiceV20170117.DeleteHIT"] }
-def X-Amz-Target-completer-10 [] { ["MTurkRequesterServiceV20170117.DeleteQualificationType"] }
-def X-Amz-Target-completer-11 [] { ["MTurkRequesterServiceV20170117.DeleteWorkerBlock"] }
-def X-Amz-Target-completer-12 [] { ["MTurkRequesterServiceV20170117.DisassociateQualificationFromWorker"] }
-def X-Amz-Target-completer-13 [] { ["MTurkRequesterServiceV20170117.GetAccountBalance"] }
-def X-Amz-Target-completer-14 [] { ["MTurkRequesterServiceV20170117.GetAssignment"] }
-def X-Amz-Target-completer-15 [] { ["MTurkRequesterServiceV20170117.GetFileUploadURL"] }
-def X-Amz-Target-completer-16 [] { ["MTurkRequesterServiceV20170117.GetHIT"] }
-def X-Amz-Target-completer-17 [] { ["MTurkRequesterServiceV20170117.GetQualificationScore"] }
-def X-Amz-Target-completer-18 [] { ["MTurkRequesterServiceV20170117.GetQualificationType"] }
-def X-Amz-Target-completer-19 [] { ["MTurkRequesterServiceV20170117.ListAssignmentsForHIT"] }
-def X-Amz-Target-completer-20 [] { ["MTurkRequesterServiceV20170117.ListBonusPayments"] }
-def X-Amz-Target-completer-21 [] { ["MTurkRequesterServiceV20170117.ListHITs"] }
-def X-Amz-Target-completer-22 [] { ["MTurkRequesterServiceV20170117.ListHITsForQualificationType"] }
-def X-Amz-Target-completer-23 [] { ["MTurkRequesterServiceV20170117.ListQualificationRequests"] }
-def X-Amz-Target-completer-24 [] { ["MTurkRequesterServiceV20170117.ListQualificationTypes"] }
-def X-Amz-Target-completer-25 [] { ["MTurkRequesterServiceV20170117.ListReviewPolicyResultsForHIT"] }
-def X-Amz-Target-completer-26 [] { ["MTurkRequesterServiceV20170117.ListReviewableHITs"] }
-def X-Amz-Target-completer-27 [] { ["MTurkRequesterServiceV20170117.ListWorkerBlocks"] }
-def X-Amz-Target-completer-28 [] { ["MTurkRequesterServiceV20170117.ListWorkersWithQualificationType"] }
-def X-Amz-Target-completer-29 [] { ["MTurkRequesterServiceV20170117.NotifyWorkers"] }
-def X-Amz-Target-completer-30 [] { ["MTurkRequesterServiceV20170117.RejectAssignment"] }
-def X-Amz-Target-completer-31 [] { ["MTurkRequesterServiceV20170117.RejectQualificationRequest"] }
-def X-Amz-Target-completer-32 [] { ["MTurkRequesterServiceV20170117.SendBonus"] }
-def X-Amz-Target-completer-33 [] { ["MTurkRequesterServiceV20170117.SendTestEventNotification"] }
-def X-Amz-Target-completer-34 [] { ["MTurkRequesterServiceV20170117.UpdateExpirationForHIT"] }
-def X-Amz-Target-completer-35 [] { ["MTurkRequesterServiceV20170117.UpdateHITReviewStatus"] }
-def X-Amz-Target-completer-36 [] { ["MTurkRequesterServiceV20170117.UpdateHITTypeOfHIT"] }
-def X-Amz-Target-completer-37 [] { ["MTurkRequesterServiceV20170117.UpdateNotificationSettings"] }
-def X-Amz-Target-completer-38 [] { ["MTurkRequesterServiceV20170117.UpdateQualificationType"] }
+def x-amz-target-completer [] { ["MTurkRequesterServiceV20170117.AcceptQualificationRequest"] }
+def x-amz-target-completer-1 [] { ["MTurkRequesterServiceV20170117.ApproveAssignment"] }
+def x-amz-target-completer-2 [] { ["MTurkRequesterServiceV20170117.AssociateQualificationWithWorker"] }
+def x-amz-target-completer-3 [] { ["MTurkRequesterServiceV20170117.CreateAdditionalAssignmentsForHIT"] }
+def x-amz-target-completer-4 [] { ["MTurkRequesterServiceV20170117.CreateHIT"] }
+def x-amz-target-completer-5 [] { ["MTurkRequesterServiceV20170117.CreateHITType"] }
+def x-amz-target-completer-6 [] { ["MTurkRequesterServiceV20170117.CreateHITWithHITType"] }
+def x-amz-target-completer-7 [] { ["MTurkRequesterServiceV20170117.CreateQualificationType"] }
+def x-amz-target-completer-8 [] { ["MTurkRequesterServiceV20170117.CreateWorkerBlock"] }
+def x-amz-target-completer-9 [] { ["MTurkRequesterServiceV20170117.DeleteHIT"] }
+def x-amz-target-completer-10 [] { ["MTurkRequesterServiceV20170117.DeleteQualificationType"] }
+def x-amz-target-completer-11 [] { ["MTurkRequesterServiceV20170117.DeleteWorkerBlock"] }
+def x-amz-target-completer-12 [] { ["MTurkRequesterServiceV20170117.DisassociateQualificationFromWorker"] }
+def x-amz-target-completer-13 [] { ["MTurkRequesterServiceV20170117.GetAccountBalance"] }
+def x-amz-target-completer-14 [] { ["MTurkRequesterServiceV20170117.GetAssignment"] }
+def x-amz-target-completer-15 [] { ["MTurkRequesterServiceV20170117.GetFileUploadURL"] }
+def x-amz-target-completer-16 [] { ["MTurkRequesterServiceV20170117.GetHIT"] }
+def x-amz-target-completer-17 [] { ["MTurkRequesterServiceV20170117.GetQualificationScore"] }
+def x-amz-target-completer-18 [] { ["MTurkRequesterServiceV20170117.GetQualificationType"] }
+def x-amz-target-completer-19 [] { ["MTurkRequesterServiceV20170117.ListAssignmentsForHIT"] }
+def x-amz-target-completer-20 [] { ["MTurkRequesterServiceV20170117.ListBonusPayments"] }
+def x-amz-target-completer-21 [] { ["MTurkRequesterServiceV20170117.ListHITs"] }
+def x-amz-target-completer-22 [] { ["MTurkRequesterServiceV20170117.ListHITsForQualificationType"] }
+def x-amz-target-completer-23 [] { ["MTurkRequesterServiceV20170117.ListQualificationRequests"] }
+def x-amz-target-completer-24 [] { ["MTurkRequesterServiceV20170117.ListQualificationTypes"] }
+def x-amz-target-completer-25 [] { ["MTurkRequesterServiceV20170117.ListReviewPolicyResultsForHIT"] }
+def x-amz-target-completer-26 [] { ["MTurkRequesterServiceV20170117.ListReviewableHITs"] }
+def x-amz-target-completer-27 [] { ["MTurkRequesterServiceV20170117.ListWorkerBlocks"] }
+def x-amz-target-completer-28 [] { ["MTurkRequesterServiceV20170117.ListWorkersWithQualificationType"] }
+def x-amz-target-completer-29 [] { ["MTurkRequesterServiceV20170117.NotifyWorkers"] }
+def x-amz-target-completer-30 [] { ["MTurkRequesterServiceV20170117.RejectAssignment"] }
+def x-amz-target-completer-31 [] { ["MTurkRequesterServiceV20170117.RejectQualificationRequest"] }
+def x-amz-target-completer-32 [] { ["MTurkRequesterServiceV20170117.SendBonus"] }
+def x-amz-target-completer-33 [] { ["MTurkRequesterServiceV20170117.SendTestEventNotification"] }
+def x-amz-target-completer-34 [] { ["MTurkRequesterServiceV20170117.UpdateExpirationForHIT"] }
+def x-amz-target-completer-35 [] { ["MTurkRequesterServiceV20170117.UpdateHITReviewStatus"] }
+def x-amz-target-completer-36 [] { ["MTurkRequesterServiceV20170117.UpdateHITTypeOfHIT"] }
+def x-amz-target-completer-37 [] { ["MTurkRequesterServiceV20170117.UpdateNotificationSettings"] }
+def x-amz-target-completer-38 [] { ["MTurkRequesterServiceV20170117.UpdateQualificationType"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-m-turk-requester-service-v20170117-accept-qualification-request AcceptQualificationRequest" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-m-turk-requester-service-v20170117-accept-qualification-request request" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.AcceptQualificationRequest
 # operationId: AcceptQualificationRequest
-export def "x-amz-target-m-turk-requester-service-v20170117-accept-qualification-request AcceptQualificationRequest" [
+export def "x-amz-target-m-turk-requester-service-v20170117-accept-qualification-request request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,24 +142,24 @@ export def "x-amz-target-m-turk-requester-service-v20170117-accept-qualification
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  QualificationRequestId: any
-  --IntegerValue: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  qualification_request_id: any
+  --integer-value: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.AcceptQualificationRequest")
-  let body = {QualificationRequestId: $QualificationRequestId, IntegerValue: $IntegerValue} | compact
+  let body = {"QualificationRequestId": $qualification_request_id, "IntegerValue": $integer_value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -170,7 +170,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-accept-qualification
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.ApproveAssignment
 # operationId: ApproveAssignment
-export def "x-amz-target-m-turk-requester-service-v20170117-approve-assignment ApproveAssignment" [
+export def "x-amz-target-m-turk-requester-service-v20170117-approve-assignment approve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,25 +179,25 @@ export def "x-amz-target-m-turk-requester-service-v20170117-approve-assignment A
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  AssignmentId: any
-  --RequesterFeedback: any
-  --OverrideRejection: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  assignment_id: any
+  --requester-feedback: any
+  --override-rejection: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.ApproveAssignment")
-  let body = {AssignmentId: $AssignmentId, RequesterFeedback: $RequesterFeedback, OverrideRejection: $OverrideRejection} | compact
+  let body = {"AssignmentId": $assignment_id, "RequesterFeedback": $requester_feedback, "OverrideRejection": $override_rejection} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -208,7 +208,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-approve-assignment A
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.AssociateQualificationWithWorker
 # operationId: AssociateQualificationWithWorker
-export def "x-amz-target-m-turk-requester-service-v20170117-associate-qualification-with-worker AssociateQualificationWithWorker" [
+export def "x-amz-target-m-turk-requester-service-v20170117-associate-qualification-with-worker post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,26 +217,26 @@ export def "x-amz-target-m-turk-requester-service-v20170117-associate-qualificat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  QualificationTypeId: any
-  WorkerId: any
-  --IntegerValue: any
-  --SendNotification: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  qualification_type_id: any
+  worker_id: any
+  --integer-value: any
+  --send-notification: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.AssociateQualificationWithWorker")
-  let body = {QualificationTypeId: $QualificationTypeId, WorkerId: $WorkerId, IntegerValue: $IntegerValue, SendNotification: $SendNotification} | compact
+  let body = {"QualificationTypeId": $qualification_type_id, "WorkerId": $worker_id, "IntegerValue": $integer_value, "SendNotification": $send_notification} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -247,7 +247,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-associate-qualificat
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.CreateAdditionalAssignmentsForHIT
 # operationId: CreateAdditionalAssignmentsForHIT
-export def "x-amz-target-m-turk-requester-service-v20170117-create-additional-assignments-for-hit CreateAdditionalAssignmentsForHIT" [
+export def "x-amz-target-m-turk-requester-service-v20170117-create-additional-assignments-for-hit create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,25 +256,25 @@ export def "x-amz-target-m-turk-requester-service-v20170117-create-additional-as
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  HITId: any
-  NumberOfAdditionalAssignments: any
-  --UniqueRequestToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  hit_id: any
+  number_of_additional_assignments: any
+  --unique-request-token: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.CreateAdditionalAssignmentsForHIT")
-  let body = {HITId: $HITId, NumberOfAdditionalAssignments: $NumberOfAdditionalAssignments, UniqueRequestToken: $UniqueRequestToken} | compact
+  let body = {"HITId": $hit_id, "NumberOfAdditionalAssignments": $number_of_additional_assignments, "UniqueRequestToken": $unique_request_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -285,7 +285,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-create-additional-as
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.CreateHIT
 # operationId: CreateHIT
-export def "x-amz-target-m-turk-requester-service-v20170117-create-hit CreateHIT" [
+export def "x-amz-target-m-turk-requester-service-v20170117-create-hit create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,38 +294,38 @@ export def "x-amz-target-m-turk-requester-service-v20170117-create-hit CreateHIT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  --MaxAssignments: any
-  --AutoApprovalDelayInSeconds: any
-  LifetimeInSeconds: any
-  AssignmentDurationInSeconds: any
-  Reward: any
-  Title: any
-  --Keywords: any
-  Description: any
-  --Question: any
-  --RequesterAnnotation: any
-  --QualificationRequirements: any
-  --UniqueRequestToken: any
-  --AssignmentReviewPolicy: any
-  --HITReviewPolicy: any
-  --HITLayoutId: any
-  --HITLayoutParameters: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  --max-assignments: any
+  --auto-approval-delay-in-seconds: any
+  lifetime_in_seconds: any
+  assignment_duration_in_seconds: any
+  reward: any
+  title: any
+  --keywords: any
+  description: any
+  --question: any
+  --requester-annotation: any
+  --qualification-requirements: any
+  --unique-request-token: any
+  --assignment-review-policy: any
+  --hit-review-policy: any
+  --hit-layout-id: any
+  --hit-layout-parameters: any
 ]: any -> record<HIT: record<HITId: record, HITTypeId: record, HITGroupId: record, HITLayoutId: record, CreationTime: record, Title: record, Description: record, Question: record, Keywords: record, HITStatus: record, MaxAssignments: record, Reward: string, AutoApprovalDelayInSeconds: record, Expiration: record, AssignmentDurationInSeconds: record, RequesterAnnotation: record, QualificationRequirements: record, HITReviewStatus: record, NumberOfAssignmentsPending: record, NumberOfAssignmentsAvailable: record, NumberOfAssignmentsCompleted: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.CreateHIT")
-  let body = {MaxAssignments: $MaxAssignments, AutoApprovalDelayInSeconds: $AutoApprovalDelayInSeconds, LifetimeInSeconds: $LifetimeInSeconds, AssignmentDurationInSeconds: $AssignmentDurationInSeconds, Reward: $Reward, Title: $Title, Keywords: $Keywords, Description: $Description, Question: $Question, RequesterAnnotation: $RequesterAnnotation, QualificationRequirements: $QualificationRequirements, UniqueRequestToken: $UniqueRequestToken, AssignmentReviewPolicy: $AssignmentReviewPolicy, HITReviewPolicy: $HITReviewPolicy, HITLayoutId: $HITLayoutId, HITLayoutParameters: $HITLayoutParameters} | compact
+  let body = {"MaxAssignments": $max_assignments, "AutoApprovalDelayInSeconds": $auto_approval_delay_in_seconds, "LifetimeInSeconds": $lifetime_in_seconds, "AssignmentDurationInSeconds": $assignment_duration_in_seconds, "Reward": $reward, "Title": $title, "Keywords": $keywords, "Description": $description, "Question": $question, "RequesterAnnotation": $requester_annotation, "QualificationRequirements": $qualification_requirements, "UniqueRequestToken": $unique_request_token, "AssignmentReviewPolicy": $assignment_review_policy, "HITReviewPolicy": $hit_review_policy, "HITLayoutId": $hit_layout_id, "HITLayoutParameters": $hit_layout_parameters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -336,7 +336,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-create-hit CreateHIT
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.CreateHITType
 # operationId: CreateHITType
-export def "x-amz-target-m-turk-requester-service-v20170117-create-hit-type CreateHITType" [
+export def "x-amz-target-m-turk-requester-service-v20170117-create-hit-type create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,29 +345,29 @@ export def "x-amz-target-m-turk-requester-service-v20170117-create-hit-type Crea
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  --AutoApprovalDelayInSeconds: any
-  AssignmentDurationInSeconds: any
-  Reward: any
-  Title: any
-  --Keywords: any
-  Description: any
-  --QualificationRequirements: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  --auto-approval-delay-in-seconds: any
+  assignment_duration_in_seconds: any
+  reward: any
+  title: any
+  --keywords: any
+  description: any
+  --qualification-requirements: any
 ]: any -> record<HITTypeId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.CreateHITType")
-  let body = {AutoApprovalDelayInSeconds: $AutoApprovalDelayInSeconds, AssignmentDurationInSeconds: $AssignmentDurationInSeconds, Reward: $Reward, Title: $Title, Keywords: $Keywords, Description: $Description, QualificationRequirements: $QualificationRequirements} | compact
+  let body = {"AutoApprovalDelayInSeconds": $auto_approval_delay_in_seconds, "AssignmentDurationInSeconds": $assignment_duration_in_seconds, "Reward": $reward, "Title": $title, "Keywords": $keywords, "Description": $description, "QualificationRequirements": $qualification_requirements} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -378,7 +378,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-create-hit-type Crea
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.CreateHITWithHITType
 # operationId: CreateHITWithHITType
-export def "x-amz-target-m-turk-requester-service-v20170117-create-hit-with-hit-type CreateHITWithHITType" [
+export def "x-amz-target-m-turk-requester-service-v20170117-create-hit-with-hit-type create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -387,32 +387,32 @@ export def "x-amz-target-m-turk-requester-service-v20170117-create-hit-with-hit-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  HITTypeId: any
-  --MaxAssignments: any
-  LifetimeInSeconds: any
-  --Question: any
-  --RequesterAnnotation: any
-  --UniqueRequestToken: any
-  --AssignmentReviewPolicy: any
-  --HITReviewPolicy: any
-  --HITLayoutId: any
-  --HITLayoutParameters: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  hit_type_id: any
+  --max-assignments: any
+  lifetime_in_seconds: any
+  --question: any
+  --requester-annotation: any
+  --unique-request-token: any
+  --assignment-review-policy: any
+  --hit-review-policy: any
+  --hit-layout-id: any
+  --hit-layout-parameters: any
 ]: any -> record<HIT: record<HITId: record, HITTypeId: record, HITGroupId: record, HITLayoutId: record, CreationTime: record, Title: record, Description: record, Question: record, Keywords: record, HITStatus: record, MaxAssignments: record, Reward: string, AutoApprovalDelayInSeconds: record, Expiration: record, AssignmentDurationInSeconds: record, RequesterAnnotation: record, QualificationRequirements: record, HITReviewStatus: record, NumberOfAssignmentsPending: record, NumberOfAssignmentsAvailable: record, NumberOfAssignmentsCompleted: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.CreateHITWithHITType")
-  let body = {HITTypeId: $HITTypeId, MaxAssignments: $MaxAssignments, LifetimeInSeconds: $LifetimeInSeconds, Question: $Question, RequesterAnnotation: $RequesterAnnotation, UniqueRequestToken: $UniqueRequestToken, AssignmentReviewPolicy: $AssignmentReviewPolicy, HITReviewPolicy: $HITReviewPolicy, HITLayoutId: $HITLayoutId, HITLayoutParameters: $HITLayoutParameters} | compact
+  let body = {"HITTypeId": $hit_type_id, "MaxAssignments": $max_assignments, "LifetimeInSeconds": $lifetime_in_seconds, "Question": $question, "RequesterAnnotation": $requester_annotation, "UniqueRequestToken": $unique_request_token, "AssignmentReviewPolicy": $assignment_review_policy, "HITReviewPolicy": $hit_review_policy, "HITLayoutId": $hit_layout_id, "HITLayoutParameters": $hit_layout_parameters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -423,7 +423,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-create-hit-with-hit-
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.CreateQualificationType
 # operationId: CreateQualificationType
-export def "x-amz-target-m-turk-requester-service-v20170117-create-qualification-type CreateQualificationType" [
+export def "x-amz-target-m-turk-requester-service-v20170117-create-qualification-type create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,32 +432,32 @@ export def "x-amz-target-m-turk-requester-service-v20170117-create-qualification
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  Name: any
-  --Keywords: any
-  Description: any
-  QualificationTypeStatus: any
-  --RetryDelayInSeconds: any
-  --Test: any
-  --AnswerKey: any
-  --TestDurationInSeconds: any
-  --AutoGranted: any
-  --AutoGrantedValue: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  name: any
+  --keywords: any
+  description: any
+  qualification_type_status: any
+  --retry-delay-in-seconds: any
+  --test: any
+  --answer-key: any
+  --test-duration-in-seconds: any
+  --auto-granted: any
+  --auto-granted-value: any
 ]: any -> record<QualificationType: record<QualificationTypeId: record, CreationTime: record, Name: record, Description: record, Keywords: record, QualificationTypeStatus: record, Test: record, TestDurationInSeconds: record, AnswerKey: record, RetryDelayInSeconds: record, IsRequestable: record, AutoGranted: record, AutoGrantedValue: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.CreateQualificationType")
-  let body = {Name: $Name, Keywords: $Keywords, Description: $Description, QualificationTypeStatus: $QualificationTypeStatus, RetryDelayInSeconds: $RetryDelayInSeconds, Test: $Test, AnswerKey: $AnswerKey, TestDurationInSeconds: $TestDurationInSeconds, AutoGranted: $AutoGranted, AutoGrantedValue: $AutoGrantedValue} | compact
+  let body = {"Name": $name, "Keywords": $keywords, "Description": $description, "QualificationTypeStatus": $qualification_type_status, "RetryDelayInSeconds": $retry_delay_in_seconds, "Test": $test, "AnswerKey": $answer_key, "TestDurationInSeconds": $test_duration_in_seconds, "AutoGranted": $auto_granted, "AutoGrantedValue": $auto_granted_value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -468,7 +468,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-create-qualification
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.CreateWorkerBlock
 # operationId: CreateWorkerBlock
-export def "x-amz-target-m-turk-requester-service-v20170117-create-worker-block CreateWorkerBlock" [
+export def "x-amz-target-m-turk-requester-service-v20170117-create-worker-block create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -477,24 +477,24 @@ export def "x-amz-target-m-turk-requester-service-v20170117-create-worker-block 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  WorkerId: any
-  Reason: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  worker_id: any
+  reason: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.CreateWorkerBlock")
-  let body = {WorkerId: $WorkerId, Reason: $Reason} | compact
+  let body = {"WorkerId": $worker_id, "Reason": $reason} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -505,7 +505,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-create-worker-block 
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.DeleteHIT
 # operationId: DeleteHIT
-export def "x-amz-target-m-turk-requester-service-v20170117-delete-hit DeleteHIT" [
+export def "x-amz-target-m-turk-requester-service-v20170117-delete-hit delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,23 +514,23 @@ export def "x-amz-target-m-turk-requester-service-v20170117-delete-hit DeleteHIT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  HITId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  hit_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.DeleteHIT")
-  let body = {HITId: $HITId} | compact
+  let body = {"HITId": $hit_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -541,7 +541,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-delete-hit DeleteHIT
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.DeleteQualificationType
 # operationId: DeleteQualificationType
-export def "x-amz-target-m-turk-requester-service-v20170117-delete-qualification-type DeleteQualificationType" [
+export def "x-amz-target-m-turk-requester-service-v20170117-delete-qualification-type delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -550,23 +550,23 @@ export def "x-amz-target-m-turk-requester-service-v20170117-delete-qualification
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  QualificationTypeId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  qualification_type_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.DeleteQualificationType")
-  let body = {QualificationTypeId: $QualificationTypeId} | compact
+  let body = {"QualificationTypeId": $qualification_type_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -577,7 +577,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-delete-qualification
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.DeleteWorkerBlock
 # operationId: DeleteWorkerBlock
-export def "x-amz-target-m-turk-requester-service-v20170117-delete-worker-block DeleteWorkerBlock" [
+export def "x-amz-target-m-turk-requester-service-v20170117-delete-worker-block delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -586,24 +586,24 @@ export def "x-amz-target-m-turk-requester-service-v20170117-delete-worker-block 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  WorkerId: any
-  --Reason: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  worker_id: any
+  --reason: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.DeleteWorkerBlock")
-  let body = {WorkerId: $WorkerId, Reason: $Reason} | compact
+  let body = {"WorkerId": $worker_id, "Reason": $reason} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -614,7 +614,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-delete-worker-block 
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.DisassociateQualificationFromWorker
 # operationId: DisassociateQualificationFromWorker
-export def "x-amz-target-m-turk-requester-service-v20170117-disassociate-qualification-from-worker DisassociateQualificationFromWorker" [
+export def "x-amz-target-m-turk-requester-service-v20170117-disassociate-qualification-from-worker post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -623,25 +623,25 @@ export def "x-amz-target-m-turk-requester-service-v20170117-disassociate-qualifi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  WorkerId: any
-  QualificationTypeId: any
-  --Reason: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  worker_id: any
+  qualification_type_id: any
+  --reason: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.DisassociateQualificationFromWorker")
-  let body = {WorkerId: $WorkerId, QualificationTypeId: $QualificationTypeId, Reason: $Reason} | compact
+  let body = {"WorkerId": $worker_id, "QualificationTypeId": $qualification_type_id, "Reason": $reason} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -652,7 +652,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-disassociate-qualifi
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.GetAccountBalance
 # operationId: GetAccountBalance
-export def "x-amz-target-m-turk-requester-service-v20170117-get-account-balance GetAccountBalance" [
+export def "x-amz-target-m-turk-requester-service-v20170117-get-account-balance get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -661,14 +661,14 @@ export def "x-amz-target-m-turk-requester-service-v20170117-get-account-balance 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
   --body: record
 ]: any -> record<AvailableBalance: string, OnHoldBalance: string> {
   let input = $in
@@ -676,7 +676,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-get-account-balance 
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.GetAccountBalance")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -687,7 +687,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-get-account-balance 
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.GetAssignment
 # operationId: GetAssignment
-export def "x-amz-target-m-turk-requester-service-v20170117-get-assignment GetAssignment" [
+export def "x-amz-target-m-turk-requester-service-v20170117-get-assignment get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -696,23 +696,23 @@ export def "x-amz-target-m-turk-requester-service-v20170117-get-assignment GetAs
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  AssignmentId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  assignment_id: any
 ]: any -> record<Assignment: record<AssignmentId: record, WorkerId: record, HITId: record, AssignmentStatus: record, AutoApprovalTime: record, AcceptTime: record, SubmitTime: record, ApprovalTime: record, RejectionTime: record, Deadline: record, Answer: record, RequesterFeedback: record>, HIT: record<HITId: record, HITTypeId: record, HITGroupId: record, HITLayoutId: record, CreationTime: record, Title: record, Description: record, Question: record, Keywords: record, HITStatus: record, MaxAssignments: record, Reward: string, AutoApprovalDelayInSeconds: record, Expiration: record, AssignmentDurationInSeconds: record, RequesterAnnotation: record, QualificationRequirements: record, HITReviewStatus: record, NumberOfAssignmentsPending: record, NumberOfAssignmentsAvailable: record, NumberOfAssignmentsCompleted: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.GetAssignment")
-  let body = {AssignmentId: $AssignmentId} | compact
+  let body = {"AssignmentId": $assignment_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -723,7 +723,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-get-assignment GetAs
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.GetFileUploadURL
 # operationId: GetFileUploadURL
-export def "x-amz-target-m-turk-requester-service-v20170117-get-file-upload-url GetFileUploadURL" [
+export def "x-amz-target-m-turk-requester-service-v20170117-get-file-upload-url get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -732,24 +732,24 @@ export def "x-amz-target-m-turk-requester-service-v20170117-get-file-upload-url 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  AssignmentId: any
-  QuestionIdentifier: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  assignment_id: any
+  question_identifier: any
 ]: any -> record<FileUploadURL: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.GetFileUploadURL")
-  let body = {AssignmentId: $AssignmentId, QuestionIdentifier: $QuestionIdentifier} | compact
+  let body = {"AssignmentId": $assignment_id, "QuestionIdentifier": $question_identifier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -760,7 +760,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-get-file-upload-url 
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.GetHIT
 # operationId: GetHIT
-export def "x-amz-target-m-turk-requester-service-v20170117-get-hit GetHIT" [
+export def "x-amz-target-m-turk-requester-service-v20170117-get-hit get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -769,23 +769,23 @@ export def "x-amz-target-m-turk-requester-service-v20170117-get-hit GetHIT" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  HITId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  hit_id: any
 ]: any -> record<HIT: record<HITId: record, HITTypeId: record, HITGroupId: record, HITLayoutId: record, CreationTime: record, Title: record, Description: record, Question: record, Keywords: record, HITStatus: record, MaxAssignments: record, Reward: string, AutoApprovalDelayInSeconds: record, Expiration: record, AssignmentDurationInSeconds: record, RequesterAnnotation: record, QualificationRequirements: record, HITReviewStatus: record, NumberOfAssignmentsPending: record, NumberOfAssignmentsAvailable: record, NumberOfAssignmentsCompleted: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.GetHIT")
-  let body = {HITId: $HITId} | compact
+  let body = {"HITId": $hit_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -796,7 +796,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-get-hit GetHIT" [
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.GetQualificationScore
 # operationId: GetQualificationScore
-export def "x-amz-target-m-turk-requester-service-v20170117-get-qualification-score GetQualificationScore" [
+export def "x-amz-target-m-turk-requester-service-v20170117-get-qualification-score get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -805,24 +805,24 @@ export def "x-amz-target-m-turk-requester-service-v20170117-get-qualification-sc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  QualificationTypeId: any
-  WorkerId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  qualification_type_id: any
+  worker_id: any
 ]: any -> record<Qualification: record<QualificationTypeId: record, WorkerId: record, GrantTime: record, IntegerValue: record, LocaleValue: record<Country: record, Subdivision: record>, Status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.GetQualificationScore")
-  let body = {QualificationTypeId: $QualificationTypeId, WorkerId: $WorkerId} | compact
+  let body = {"QualificationTypeId": $qualification_type_id, "WorkerId": $worker_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -833,7 +833,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-get-qualification-sc
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.GetQualificationType
 # operationId: GetQualificationType
-export def "x-amz-target-m-turk-requester-service-v20170117-get-qualification-type GetQualificationType" [
+export def "x-amz-target-m-turk-requester-service-v20170117-get-qualification-type get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,23 +842,23 @@ export def "x-amz-target-m-turk-requester-service-v20170117-get-qualification-ty
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  QualificationTypeId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  qualification_type_id: any
 ]: any -> record<QualificationType: record<QualificationTypeId: record, CreationTime: record, Name: record, Description: record, Keywords: record, QualificationTypeStatus: record, Test: record, TestDurationInSeconds: record, AnswerKey: record, RetryDelayInSeconds: record, IsRequestable: record, AutoGranted: record, AutoGrantedValue: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.GetQualificationType")
-  let body = {QualificationTypeId: $QualificationTypeId} | compact
+  let body = {"QualificationTypeId": $qualification_type_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -869,7 +869,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-get-qualification-ty
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.ListAssignmentsForHIT
 # operationId: ListAssignmentsForHIT
-export def "x-amz-target-m-turk-requester-service-v20170117-list-assignments-for-hit ListAssignmentsForHIT" [
+export def "x-amz-target-m-turk-requester-service-v20170117-list-assignments-for-hit list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -878,29 +878,29 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-assignments-for
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  HITId: any
-  --NextToken: any
-  --MaxResults: int
-  --AssignmentStatuses: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  hit_id: any
+  --next-token: any
+  --max-results: int
+  --assignment-statuses: any
 ]: any -> record<NextToken: string, NumResults: record, Assignments: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.ListAssignmentsForHIT" $qp)
-  let body = {HITId: $HITId, NextToken: $NextToken, MaxResults: $MaxResults, AssignmentStatuses: $AssignmentStatuses} | compact
+  let body = {"HITId": $hit_id, "NextToken": $next_token, "MaxResults": $max_results, "AssignmentStatuses": $assignment_statuses} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -911,7 +911,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-assignments-for
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.ListBonusPayments
 # operationId: ListBonusPayments
-export def "x-amz-target-m-turk-requester-service-v20170117-list-bonus-payments ListBonusPayments" [
+export def "x-amz-target-m-turk-requester-service-v20170117-list-bonus-payments list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -920,29 +920,29 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-bonus-payments 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  --HITId: any
-  --AssignmentId: any
-  --NextToken: any
-  --MaxResults: int
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  --hit-id: any
+  --assignment-id: any
+  --next-token: any
+  --max-results: int
 ]: any -> record<NumResults: record, NextToken: string, BonusPayments: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.ListBonusPayments" $qp)
-  let body = {HITId: $HITId, AssignmentId: $AssignmentId, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"HITId": $hit_id, "AssignmentId": $assignment_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -953,7 +953,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-bonus-payments 
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.ListHITs
 # operationId: ListHITs
-export def "x-amz-target-m-turk-requester-service-v20170117-list-hi-ts ListHITs" [
+export def "x-amz-target-m-turk-requester-service-v20170117-list-hi-ts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,27 +962,27 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-hi-ts ListHITs"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  --NextToken: any
-  --MaxResults: int
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  --next-token: any
+  --max-results: int
 ]: any -> record<NextToken: string, NumResults: record, HITs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.ListHITs" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -993,7 +993,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-hi-ts ListHITs"
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.ListHITsForQualificationType
 # operationId: ListHITsForQualificationType
-export def "x-amz-target-m-turk-requester-service-v20170117-list-hi-ts-for-qualification-type ListHITsForQualificationType" [
+export def "x-amz-target-m-turk-requester-service-v20170117-list-hi-ts-for-qualification-type list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1002,28 +1002,28 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-hi-ts-for-quali
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  QualificationTypeId: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  qualification_type_id: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: string, NumResults: record, HITs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.ListHITsForQualificationType" $qp)
-  let body = {QualificationTypeId: $QualificationTypeId, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"QualificationTypeId": $qualification_type_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1034,7 +1034,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-hi-ts-for-quali
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.ListQualificationRequests
 # operationId: ListQualificationRequests
-export def "x-amz-target-m-turk-requester-service-v20170117-list-qualification-requests ListQualificationRequests" [
+export def "x-amz-target-m-turk-requester-service-v20170117-list-qualification-requests list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1043,28 +1043,28 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-qualification-r
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  --QualificationTypeId: any
-  --NextToken: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. 
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  --qualification-type-id: any
+  --next-token: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. 
+  --max-results: any
 ]: any -> record<NumResults: record, NextToken: string, QualificationRequests: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.ListQualificationRequests" $qp)
-  let body = {QualificationTypeId: $QualificationTypeId, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"QualificationTypeId": $qualification_type_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1075,7 +1075,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-qualification-r
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.ListQualificationTypes
 # operationId: ListQualificationTypes
-export def "x-amz-target-m-turk-requester-service-v20170117-list-qualification-types ListQualificationTypes" [
+export def "x-amz-target-m-turk-requester-service-v20170117-list-qualification-types list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1084,30 +1084,30 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-qualification-t
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  --Query: any
-  MustBeRequestable: any
-  --MustBeOwnedByCaller: any
-  --NextToken: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. 
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  --query: any
+  must_be_requestable: any
+  --must-be-owned-by-caller: any
+  --next-token: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. 
+  --max-results: any
 ]: any -> record<NumResults: record, NextToken: string, QualificationTypes: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.ListQualificationTypes" $qp)
-  let body = {Query: $Query, MustBeRequestable: $MustBeRequestable, MustBeOwnedByCaller: $MustBeOwnedByCaller, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Query": $query, "MustBeRequestable": $must_be_requestable, "MustBeOwnedByCaller": $must_be_owned_by_caller, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1118,7 +1118,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-qualification-t
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.ListReviewPolicyResultsForHIT
 # operationId: ListReviewPolicyResultsForHIT
-export def "x-amz-target-m-turk-requester-service-v20170117-list-review-policy-results-for-hit ListReviewPolicyResultsForHIT" [
+export def "x-amz-target-m-turk-requester-service-v20170117-list-review-policy-results-for-hit list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1127,31 +1127,31 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-review-policy-r
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  HITId: any
-  --PolicyLevels: any
-  --RetrieveActions: any
-  --RetrieveResults: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  hit_id: any
+  --policy-levels: any
+  --retrieve-actions: any
+  --retrieve-results: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<HITId: record, AssignmentReviewPolicy: record<PolicyName: record, Parameters: record>, HITReviewPolicy: record<PolicyName: record, Parameters: record>, AssignmentReviewReport: record<ReviewResults: record, ReviewActions: record>, HITReviewReport: record<ReviewResults: record, ReviewActions: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.ListReviewPolicyResultsForHIT" $qp)
-  let body = {HITId: $HITId, PolicyLevels: $PolicyLevels, RetrieveActions: $RetrieveActions, RetrieveResults: $RetrieveResults, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"HITId": $hit_id, "PolicyLevels": $policy_levels, "RetrieveActions": $retrieve_actions, "RetrieveResults": $retrieve_results, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1162,7 +1162,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-review-policy-r
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.ListReviewableHITs
 # operationId: ListReviewableHITs
-export def "x-amz-target-m-turk-requester-service-v20170117-list-reviewable-hi-ts ListReviewableHITs" [
+export def "x-amz-target-m-turk-requester-service-v20170117-list-reviewable-hi-ts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1171,29 +1171,29 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-reviewable-hi-t
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  --HITTypeId: any
-  --Status: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  --hit-type-id: any
+  --status: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: string, NumResults: record, HITs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.ListReviewableHITs" $qp)
-  let body = {HITTypeId: $HITTypeId, Status: $Status, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"HITTypeId": $hit_type_id, "Status": $status, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1204,7 +1204,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-reviewable-hi-t
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.ListWorkerBlocks
 # operationId: ListWorkerBlocks
-export def "x-amz-target-m-turk-requester-service-v20170117-list-worker-blocks ListWorkerBlocks" [
+export def "x-amz-target-m-turk-requester-service-v20170117-list-worker-blocks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1213,27 +1213,27 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-worker-blocks L
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  --NextToken: any
-  --MaxResults: int
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  --next-token: any
+  --max-results: int
 ]: any -> record<NextToken: string, NumResults: record, WorkerBlocks: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.ListWorkerBlocks" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1244,7 +1244,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-worker-blocks L
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.ListWorkersWithQualificationType
 # operationId: ListWorkersWithQualificationType
-export def "x-amz-target-m-turk-requester-service-v20170117-list-workers-with-qualification-type ListWorkersWithQualificationType" [
+export def "x-amz-target-m-turk-requester-service-v20170117-list-workers-with-qualification-type list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1253,29 +1253,29 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-workers-with-qu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  QualificationTypeId: any
-  --Status: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  qualification_type_id: any
+  --status: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: string, NumResults: record, Qualifications: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.ListWorkersWithQualificationType" $qp)
-  let body = {QualificationTypeId: $QualificationTypeId, Status: $Status, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"QualificationTypeId": $qualification_type_id, "Status": $status, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1286,7 +1286,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-list-workers-with-qu
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.NotifyWorkers
 # operationId: NotifyWorkers
-export def "x-amz-target-m-turk-requester-service-v20170117-notify-workers NotifyWorkers" [
+export def "x-amz-target-m-turk-requester-service-v20170117-notify-workers post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1295,25 +1295,25 @@ export def "x-amz-target-m-turk-requester-service-v20170117-notify-workers Notif
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  Subject: any
-  MessageText: any
-  WorkerIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  subject: any
+  message_text: any
+  worker_ids: any
 ]: any -> record<NotifyWorkersFailureStatuses: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.NotifyWorkers")
-  let body = {Subject: $Subject, MessageText: $MessageText, WorkerIds: $WorkerIds} | compact
+  let body = {"Subject": $subject, "MessageText": $message_text, "WorkerIds": $worker_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1324,7 +1324,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-notify-workers Notif
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.RejectAssignment
 # operationId: RejectAssignment
-export def "x-amz-target-m-turk-requester-service-v20170117-reject-assignment RejectAssignment" [
+export def "x-amz-target-m-turk-requester-service-v20170117-reject-assignment reject" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1333,24 +1333,24 @@ export def "x-amz-target-m-turk-requester-service-v20170117-reject-assignment Re
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  AssignmentId: any
-  RequesterFeedback: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  assignment_id: any
+  requester_feedback: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.RejectAssignment")
-  let body = {AssignmentId: $AssignmentId, RequesterFeedback: $RequesterFeedback} | compact
+  let body = {"AssignmentId": $assignment_id, "RequesterFeedback": $requester_feedback} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1361,7 +1361,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-reject-assignment Re
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.RejectQualificationRequest
 # operationId: RejectQualificationRequest
-export def "x-amz-target-m-turk-requester-service-v20170117-reject-qualification-request RejectQualificationRequest" [
+export def "x-amz-target-m-turk-requester-service-v20170117-reject-qualification-request reject" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1370,24 +1370,24 @@ export def "x-amz-target-m-turk-requester-service-v20170117-reject-qualification
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  QualificationRequestId: any
-  --Reason: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  qualification_request_id: any
+  --reason: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.RejectQualificationRequest")
-  let body = {QualificationRequestId: $QualificationRequestId, Reason: $Reason} | compact
+  let body = {"QualificationRequestId": $qualification_request_id, "Reason": $reason} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1398,7 +1398,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-reject-qualification
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.SendBonus
 # operationId: SendBonus
-export def "x-amz-target-m-turk-requester-service-v20170117-send-bonus SendBonus" [
+export def "x-amz-target-m-turk-requester-service-v20170117-send-bonus send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1407,27 +1407,27 @@ export def "x-amz-target-m-turk-requester-service-v20170117-send-bonus SendBonus
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  WorkerId: any
-  BonusAmount: any
-  AssignmentId: any
-  Reason: any
-  --UniqueRequestToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  worker_id: any
+  bonus_amount: any
+  assignment_id: any
+  reason: any
+  --unique-request-token: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.SendBonus")
-  let body = {WorkerId: $WorkerId, BonusAmount: $BonusAmount, AssignmentId: $AssignmentId, Reason: $Reason, UniqueRequestToken: $UniqueRequestToken} | compact
+  let body = {"WorkerId": $worker_id, "BonusAmount": $bonus_amount, "AssignmentId": $assignment_id, "Reason": $reason, "UniqueRequestToken": $unique_request_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1438,7 +1438,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-send-bonus SendBonus
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.SendTestEventNotification
 # operationId: SendTestEventNotification
-export def "x-amz-target-m-turk-requester-service-v20170117-send-test-event-notification SendTestEventNotification" [
+export def "x-amz-target-m-turk-requester-service-v20170117-send-test-event-notification send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1447,24 +1447,24 @@ export def "x-amz-target-m-turk-requester-service-v20170117-send-test-event-noti
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  Notification: any
-  TestEventType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  notification: any
+  test_event_type: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.SendTestEventNotification")
-  let body = {Notification: $Notification, TestEventType: $TestEventType} | compact
+  let body = {"Notification": $notification, "TestEventType": $test_event_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1475,7 +1475,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-send-test-event-noti
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.UpdateExpirationForHIT
 # operationId: UpdateExpirationForHIT
-export def "x-amz-target-m-turk-requester-service-v20170117-update-expiration-for-hit UpdateExpirationForHIT" [
+export def "x-amz-target-m-turk-requester-service-v20170117-update-expiration-for-hit update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1484,24 +1484,24 @@ export def "x-amz-target-m-turk-requester-service-v20170117-update-expiration-fo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  HITId: any
-  ExpireAt: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  hit_id: any
+  expire_at: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.UpdateExpirationForHIT")
-  let body = {HITId: $HITId, ExpireAt: $ExpireAt} | compact
+  let body = {"HITId": $hit_id, "ExpireAt": $expire_at} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1512,7 +1512,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-update-expiration-fo
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.UpdateHITReviewStatus
 # operationId: UpdateHITReviewStatus
-export def "x-amz-target-m-turk-requester-service-v20170117-update-hit-review-status UpdateHITReviewStatus" [
+export def "x-amz-target-m-turk-requester-service-v20170117-update-hit-review-status update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1521,24 +1521,24 @@ export def "x-amz-target-m-turk-requester-service-v20170117-update-hit-review-st
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  HITId: any
-  --Revert: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  hit_id: any
+  --revert: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.UpdateHITReviewStatus")
-  let body = {HITId: $HITId, Revert: $Revert} | compact
+  let body = {"HITId": $hit_id, "Revert": $revert} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1549,7 +1549,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-update-hit-review-st
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.UpdateHITTypeOfHIT
 # operationId: UpdateHITTypeOfHIT
-export def "x-amz-target-m-turk-requester-service-v20170117-update-hit-type-of-hit UpdateHITTypeOfHIT" [
+export def "x-amz-target-m-turk-requester-service-v20170117-update-hit-type-of-hit update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1558,24 +1558,24 @@ export def "x-amz-target-m-turk-requester-service-v20170117-update-hit-type-of-h
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  HITId: any
-  HITTypeId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  hit_id: any
+  hit_type_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.UpdateHITTypeOfHIT")
-  let body = {HITId: $HITId, HITTypeId: $HITTypeId} | compact
+  let body = {"HITId": $hit_id, "HITTypeId": $hit_type_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1586,7 +1586,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-update-hit-type-of-h
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.UpdateNotificationSettings
 # operationId: UpdateNotificationSettings
-export def "x-amz-target-m-turk-requester-service-v20170117-update-notification-settings UpdateNotificationSettings" [
+export def "x-amz-target-m-turk-requester-service-v20170117-update-notification-settings update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1595,25 +1595,25 @@ export def "x-amz-target-m-turk-requester-service-v20170117-update-notification-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  HITTypeId: any
-  --Notification: any
-  --Active: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  hit_type_id: any
+  --notification: any
+  --active: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.UpdateNotificationSettings")
-  let body = {HITTypeId: $HITTypeId, Notification: $Notification, Active: $Active} | compact
+  let body = {"HITTypeId": $hit_type_id, "Notification": $notification, "Active": $active} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1624,7 +1624,7 @@ export def "x-amz-target-m-turk-requester-service-v20170117-update-notification-
 #
 # POST /#X-Amz-Target=MTurkRequesterServiceV20170117.UpdateQualificationType
 # operationId: UpdateQualificationType
-export def "x-amz-target-m-turk-requester-service-v20170117-update-qualification-type UpdateQualificationType" [
+export def "x-amz-target-m-turk-requester-service-v20170117-update-qualification-type update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1633,31 +1633,31 @@ export def "x-amz-target-m-turk-requester-service-v20170117-update-qualification
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  QualificationTypeId: any
-  --Description: any
-  --QualificationTypeStatus: any
-  --Test: any
-  --AnswerKey: any
-  --TestDurationInSeconds: any
-  --RetryDelayInSeconds: any
-  --AutoGranted: any
-  --AutoGrantedValue: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  qualification_type_id: any
+  --description: any
+  --qualification-type-status: any
+  --test: any
+  --answer-key: any
+  --test-duration-in-seconds: any
+  --retry-delay-in-seconds: any
+  --auto-granted: any
+  --auto-granted-value: any
 ]: any -> record<QualificationType: record<QualificationTypeId: record, CreationTime: record, Name: record, Description: record, Keywords: record, QualificationTypeStatus: record, Test: record, TestDurationInSeconds: record, AnswerKey: record, RetryDelayInSeconds: record, IsRequestable: record, AutoGranted: record, AutoGrantedValue: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=MTurkRequesterServiceV20170117.UpdateQualificationType")
-  let body = {QualificationTypeId: $QualificationTypeId, Description: $Description, QualificationTypeStatus: $QualificationTypeStatus, Test: $Test, AnswerKey: $AnswerKey, TestDurationInSeconds: $TestDurationInSeconds, RetryDelayInSeconds: $RetryDelayInSeconds, AutoGranted: $AutoGranted, AutoGrantedValue: $AutoGrantedValue} | compact
+  let body = {"QualificationTypeId": $qualification_type_id, "Description": $description, "QualificationTypeStatus": $qualification_type_status, "Test": $test, "AnswerKey": $answer_key, "TestDurationInSeconds": $test_duration_in_seconds, "RetryDelayInSeconds": $retry_delay_in_seconds, "AutoGranted": $auto_granted, "AutoGrantedValue": $auto_granted_value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

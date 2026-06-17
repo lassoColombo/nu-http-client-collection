@@ -73,7 +73,7 @@ def accept-completer-3 [] { ["application/json;charset=utf-8" "application/x.exv
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vehicles-dtc-readouts post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vehicles-dtc-readouts get-dtc-data-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,8 +97,8 @@ export def commands []: nothing -> table {
 #
 # POST /vehicles/{vehicleId}/dtcReadouts
 # operationId: getDtcDataListByEcuUsingPOST
-export def "vehicles-dtc-readouts post" [
-  vehicleId: string
+export def "vehicles-dtc-readouts get-dtc-data-list" [
+  vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,13 +108,13 @@ export def "vehicles-dtc-readouts post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --ecuId: string # Return DTCs from this ECU id only. Default: Return DTCs from all ECUs.
-  --dtcStatus: string # Returns DTCs with this statuses only. Default: Return DTCs with all statuses.
+  --ecu-id: string # Return DTCs from this ECU id only. Default: Return DTCs from all ECUs.
+  --dtc-status: string # Returns DTCs with this statuses only. Default: Return DTCs with all statuses.
 ]: nothing -> record<dtcReadout: record<asyncEstimatedComplete: string, asyncProgress: int, asyncStatus: string, asyncWait: int, exveErrorId: string, exveErrorMsg: string, exveErrorRef: string, exveNote: string, id: string, messageTimestamp: string, receivedTimestamp: string, vehicleId: string, dtcs: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ecuId" $ecuId "scalar") (serialize-qp "dtcStatus" $dtcStatus "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/vehicles/($vehicleId)/dtcReadouts" $qp)
+  let qp = [(serialize-qp "ecuId" $ecu_id "scalar") (serialize-qp "dtcStatus" $dtc_status "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({vehicle_id: $vehicle_id} | format pattern "/vehicles/{vehicle_id}/dtcReadouts") $qp)
   let accept_val = ($accept | default "application/x.exve.org.dtcreadout.v1+json;charset=utf-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -124,10 +124,10 @@ export def "vehicles-dtc-readouts post" [
 #
 # POST /vehicles/{vehicleId}/ecuId/{ecuId}/dtcId/{dtcId}/dtcSnapshotReadouts
 # operationId: getDtcSnapshotReadoutsUsingPOST
-export def "vehicles-ecu-id-dtc-id-dtc-snapshot-readouts post" [
-  vehicleId: string
-  ecuId: string
-  dtcId: string
+export def "vehicles-ecu-id-dtc-id-dtc-snapshot-readouts get-dtc-snapshot-readouts-using-post" [
+  vehicle_id: string
+  ecu_id: string
+  dtc_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +140,7 @@ export def "vehicles-ecu-id-dtc-id-dtc-snapshot-readouts post" [
 ]: nothing -> record<dtcSnapshotReadout: record<asyncEstimatedComplete: string, asyncProgress: int, asyncStatus: string, asyncWait: int, exveErrorId: string, exveErrorMsg: string, exveErrorRef: string, exveNote: string, id: string, messageTimestamp: string, receivedTimestamp: string, vehicleId: string, dtcId: string, dtcSnapshotParameters: list<record>, ecuId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vehicles/($vehicleId)/ecuId/($ecuId)/dtcId/($dtcId)/dtcSnapshotReadouts")
+  let full_url = (build-url $base ({vehicle_id: $vehicle_id, ecu_id: $ecu_id, dtc_id: $dtc_id} | format pattern "/vehicles/{vehicle_id}/ecuId/{ecu_id}/dtcId/{dtc_id}/dtcSnapshotReadouts"))
   let accept_val = ($accept | default "application/x.exve.org.dtcSnapshotReadout.v1+json;charset=utf-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,8 +150,8 @@ export def "vehicles-ecu-id-dtc-id-dtc-snapshot-readouts post" [
 #
 # POST /vehicles/{vehicleId}/ecuReadouts
 # operationId: getEcuDataListByVehicleIdUsingPOST
-export def "vehicles-ecu-readouts post" [
-  vehicleId: string
+export def "vehicles-ecu-readouts get-ecu-data-list" [
+  vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,12 +161,12 @@ export def "vehicles-ecu-readouts post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --ecuId: string # Return this ECU id only. Default: Return all ECUs.
+  --ecu-id: string # Return this ECU id only. Default: Return all ECUs.
 ]: nothing -> record<ecuReadout: record<asyncEstimatedComplete: string, asyncProgress: int, asyncStatus: string, asyncWait: int, exveErrorId: string, exveErrorMsg: string, exveErrorRef: string, exveNote: string, id: string, messageTimestamp: string, receivedTimestamp: string, vehicleId: string, ecus: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ecuId" $ecuId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/vehicles/($vehicleId)/ecuReadouts" $qp)
+  let qp = [(serialize-qp "ecuId" $ecu_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({vehicle_id: $vehicle_id} | format pattern "/vehicles/{vehicle_id}/ecuReadouts") $qp)
   let accept_val = ($accept | default "application/x.exve.org.ecureadout.v1+json;charset=utf-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,8 +176,8 @@ export def "vehicles-ecu-readouts post" [
 #
 # POST /vehicles/{vehicleId}/resourceReadouts
 # operationId: getResourceReadoutsUsingPOST
-export def "vehicles-resource-readouts post" [
-  vehicleId: string
+export def "vehicles-resource-readouts get-resource-readouts-using-post" [
+  vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "vehicles-resource-readouts post" [
 ]: nothing -> record<resourceReadout: record<asyncEstimatedComplete: string, asyncProgress: int, asyncStatus: string, asyncWait: int, exveErrorId: string, exveErrorMsg: string, exveErrorRef: string, exveNote: string, id: string, messageTimestamp: string, receivedTimestamp: string, vehicleId: string, resources: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vehicles/($vehicleId)/resourceReadouts")
+  let full_url = (build-url $base ({vehicle_id: $vehicle_id} | format pattern "/vehicles/{vehicle_id}/resourceReadouts"))
   let accept_val = ($accept | default "application/x.exve.org.resourceReadout.v1+json;charset=utf-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

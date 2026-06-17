@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-source-controls-source-control-sync-jobs-streams ListBySyncJob" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-source-controls-source-control-sync-jobs-streams list-by" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,12 +94,12 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/sourceControls/{sourceControlName}/sourceControlSyncJobs/{sourceControlSyncJobId}/streams
 # Docs: http://aka.ms/azureautomationsdk/sourcecontrolsyncjoboperations
 # operationId: SourceControlSyncJobStreams_ListBySyncJob
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-source-controls-source-control-sync-jobs-streams ListBySyncJob" [
-  resourceGroupName: string
-  automationAccountName: string
-  sourceControlName: string
-  sourceControlSyncJobId: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-source-controls-source-control-sync-jobs-streams list-by" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  source_control_name: string
+  source_control_sync_job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,7 +114,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/sourceControls/($sourceControlName)/sourceControlSyncJobs/($sourceControlSyncJobId)/streams" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, source_control_name: $source_control_name, source_control_sync_job_id: $source_control_sync_job_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/sourceControls/{source_control_name}/sourceControlSyncJobs/{source_control_sync_job_id}/streams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -125,13 +125,13 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/sourceControls/{sourceControlName}/sourceControlSyncJobs/{sourceControlSyncJobId}/streams/{streamId}
 # Docs: http://aka.ms/azureautomationsdk/sourcecontrolsyncjoboperations
 # operationId: SourceControlSyncJobStreams_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-source-controls-source-control-sync-jobs-streams Get" [
-  resourceGroupName: string
-  automationAccountName: string
-  sourceControlName: string
-  sourceControlSyncJobId: string
-  streamId: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-source-controls-source-control-sync-jobs-streams get" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  source_control_name: string
+  source_control_sync_job_id: string
+  stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,7 +145,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/sourceControls/($sourceControlName)/sourceControlSyncJobs/($sourceControlSyncJobId)/streams/($streamId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, source_control_name: $source_control_name, source_control_sync_job_id: $source_control_sync_job_id, stream_id: $stream_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/sourceControls/{source_control_name}/sourceControlSyncJobs/{source_control_sync_job_id}/streams/{stream_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

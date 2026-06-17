@@ -67,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def alt-completer [] { ["json"] }
-def orderBy-completer [] { ["displayTime" "writeTime"] }
+def order-by-completer [] { ["displayTime" "writeTime"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -99,9 +99,9 @@ export def commands []: nothing -> table {
 # --authTokens item shape: {authToken?: string, type?: string}
 # --userData item shape: {key?: string, value?: string}
 export def "accounts mirroraccountsinsert" [
-  userToken: string
-  accountType: string
-  accountName: string
+  user_token: string
+  account_type: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,20 +114,20 @@ export def "accounts mirroraccountsinsert" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
-  --authTokens: list # item shape: {authToken?: string, type?: string}
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
+  --auth-tokens: list # item shape: {authToken?: string, type?: string}
   --features: list
   --password: string
-  --userData: list # item shape: {key?: string, value?: string}
+  --user-data: list # item shape: {key?: string, value?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($userToken)/($accountType)/($accountName)" $qp)
-  let body = {authTokens: $authTokens, features: $features, password: $password, userData: $userData} | compact
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({user_token: $user_token, account_type: $account_type, account_name: $account_name} | format pattern "/accounts/{user_token}/{account_type}/{account_name}") $qp)
+  let body = {"authTokens": $auth_tokens, "features": $features, "password": $password, "userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -151,13 +151,13 @@ export def "contacts mirrorcontactslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -182,28 +182,28 @@ export def "contacts mirrorcontactsinsert" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
-  --acceptCommands: list # A list of voice menu commands that a contact can handle. Glass shows up to three contacts for each voice menu command. If there are more than that, the three contacts with the highest priority are shown for that particular command. — item shape: {type?: string}
-  --acceptTypes: list # A list of MIME types that a contact supports. The contact will be shown to the user if any of its acceptTypes matches any of the types of the attachments on the item. If no acceptTypes are given, the contact will be shown for all items.
-  --displayName: string # The name to display for this contact.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
+  --accept-commands: list # A list of voice menu commands that a contact can handle. Glass shows up to three contacts for each voice menu command. If there are more than that, the three contacts with the highest priority are shown for that particular command. — item shape: {type?: string}
+  --accept-types: list # A list of MIME types that a contact supports. The contact will be shown to the user if any of its acceptTypes matches any of the types of the attachments on the item. If no acceptTypes are given, the contact will be shown for all items.
+  --display-name: string # The name to display for this contact.
   --id: string # An ID for this contact. This is generated by the application and is treated as an opaque token.
-  --imageUrls: list # Set of image URLs to display for a contact. Most contacts will have a single image, but a "group" contact may include up to 8 image URLs and they will be resized and cropped into a mosaic on the client.
+  --image-urls: list # Set of image URLs to display for a contact. Most contacts will have a single image, but a "group" contact may include up to 8 image URLs and they will be resized and cropped into a mosaic on the client.
   --kind: string # The type of resource. This is always mirror#contact. (default: mirror#contact)
-  --phoneNumber: string # Primary phone number for the contact. This can be a fully-qualified number, with country calling code and area code, or a local number.
+  --phone-number: string # Primary phone number for the contact. This can be a fully-qualified number, with country calling code and area code, or a local number.
   --priority: int # Priority for the contact to determine ordering in a list of contacts. Contacts with higher priorities will be shown before ones with lower priorities. (format: uint32)
-  --sharingFeatures: list # A list of sharing features that a contact can handle. Allowed values are:   - ADD_CAPTION
+  --sharing-features: list # A list of sharing features that a contact can handle. Allowed values are:   - ADD_CAPTION
   --body-source: string # The ID of the application that created this contact. This is populated by the API
-  --speakableName: string # Name of this contact as it should be pronounced. If this contact's name must be spoken as part of a voice disambiguation menu, this name is used as the expected pronunciation. This is useful for contact names with unpronounceable characters or whose display spelling is otherwise not phonetic.
+  --speakable-name: string # Name of this contact as it should be pronounced. If this contact's name must be spoken as part of a voice disambiguation menu, this name is used as the expected pronunciation. This is useful for contact names with unpronounceable characters or whose display spelling is otherwise not phonetic.
   --type: string # The type for this contact. This is used for sorting in UIs. Allowed values are:   - INDIVIDUAL - Represents a single person. This is the default.  - GROUP - Represents more than a single person.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts" $qp)
-  let body = {acceptCommands: $acceptCommands, acceptTypes: $acceptTypes, displayName: $displayName, id: $id, imageUrls: $imageUrls, kind: $kind, phoneNumber: $phoneNumber, priority: $priority, sharingFeatures: $sharingFeatures, source: $body_source, speakableName: $speakableName, type: $type} | compact
+  let body = {"acceptCommands": $accept_commands, "acceptTypes": $accept_types, "displayName": $display_name, "id": $id, "imageUrls": $image_urls, "kind": $kind, "phoneNumber": $phone_number, "priority": $priority, "sharingFeatures": $sharing_features, "source": $body_source, "speakableName": $speakable_name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -228,14 +228,14 @@ export def "contacts mirrorcontactsdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contacts/($id)" $qp)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,14 +259,14 @@ export def "contacts mirrorcontactsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contacts/($id)" $qp)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -291,28 +291,28 @@ export def "contacts mirrorcontactspatch" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
-  --acceptCommands: list # A list of voice menu commands that a contact can handle. Glass shows up to three contacts for each voice menu command. If there are more than that, the three contacts with the highest priority are shown for that particular command. — item shape: {type?: string}
-  --acceptTypes: list # A list of MIME types that a contact supports. The contact will be shown to the user if any of its acceptTypes matches any of the types of the attachments on the item. If no acceptTypes are given, the contact will be shown for all items.
-  --displayName: string # The name to display for this contact.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
+  --accept-commands: list # A list of voice menu commands that a contact can handle. Glass shows up to three contacts for each voice menu command. If there are more than that, the three contacts with the highest priority are shown for that particular command. — item shape: {type?: string}
+  --accept-types: list # A list of MIME types that a contact supports. The contact will be shown to the user if any of its acceptTypes matches any of the types of the attachments on the item. If no acceptTypes are given, the contact will be shown for all items.
+  --display-name: string # The name to display for this contact.
   --body-id: string # An ID for this contact. This is generated by the application and is treated as an opaque token.
-  --imageUrls: list # Set of image URLs to display for a contact. Most contacts will have a single image, but a "group" contact may include up to 8 image URLs and they will be resized and cropped into a mosaic on the client.
+  --image-urls: list # Set of image URLs to display for a contact. Most contacts will have a single image, but a "group" contact may include up to 8 image URLs and they will be resized and cropped into a mosaic on the client.
   --kind: string # The type of resource. This is always mirror#contact. (default: mirror#contact)
-  --phoneNumber: string # Primary phone number for the contact. This can be a fully-qualified number, with country calling code and area code, or a local number.
+  --phone-number: string # Primary phone number for the contact. This can be a fully-qualified number, with country calling code and area code, or a local number.
   --priority: int # Priority for the contact to determine ordering in a list of contacts. Contacts with higher priorities will be shown before ones with lower priorities. (format: uint32)
-  --sharingFeatures: list # A list of sharing features that a contact can handle. Allowed values are:   - ADD_CAPTION
+  --sharing-features: list # A list of sharing features that a contact can handle. Allowed values are:   - ADD_CAPTION
   --body-source: string # The ID of the application that created this contact. This is populated by the API
-  --speakableName: string # Name of this contact as it should be pronounced. If this contact's name must be spoken as part of a voice disambiguation menu, this name is used as the expected pronunciation. This is useful for contact names with unpronounceable characters or whose display spelling is otherwise not phonetic.
+  --speakable-name: string # Name of this contact as it should be pronounced. If this contact's name must be spoken as part of a voice disambiguation menu, this name is used as the expected pronunciation. This is useful for contact names with unpronounceable characters or whose display spelling is otherwise not phonetic.
   --type: string # The type for this contact. This is used for sorting in UIs. Allowed values are:   - INDIVIDUAL - Represents a single person. This is the default.  - GROUP - Represents more than a single person.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contacts/($id)" $qp)
-  let body = {acceptCommands: $acceptCommands, acceptTypes: $acceptTypes, displayName: $displayName, id: $body_id, imageUrls: $imageUrls, kind: $kind, phoneNumber: $phoneNumber, priority: $priority, sharingFeatures: $sharingFeatures, source: $body_source, speakableName: $speakableName, type: $type} | compact
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/{id}") $qp)
+  let body = {"acceptCommands": $accept_commands, "acceptTypes": $accept_types, "displayName": $display_name, "id": $body_id, "imageUrls": $image_urls, "kind": $kind, "phoneNumber": $phone_number, "priority": $priority, "sharingFeatures": $sharing_features, "source": $body_source, "speakableName": $speakable_name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -338,28 +338,28 @@ export def "contacts mirrorcontactsupdate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
-  --acceptCommands: list # A list of voice menu commands that a contact can handle. Glass shows up to three contacts for each voice menu command. If there are more than that, the three contacts with the highest priority are shown for that particular command. — item shape: {type?: string}
-  --acceptTypes: list # A list of MIME types that a contact supports. The contact will be shown to the user if any of its acceptTypes matches any of the types of the attachments on the item. If no acceptTypes are given, the contact will be shown for all items.
-  --displayName: string # The name to display for this contact.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
+  --accept-commands: list # A list of voice menu commands that a contact can handle. Glass shows up to three contacts for each voice menu command. If there are more than that, the three contacts with the highest priority are shown for that particular command. — item shape: {type?: string}
+  --accept-types: list # A list of MIME types that a contact supports. The contact will be shown to the user if any of its acceptTypes matches any of the types of the attachments on the item. If no acceptTypes are given, the contact will be shown for all items.
+  --display-name: string # The name to display for this contact.
   --body-id: string # An ID for this contact. This is generated by the application and is treated as an opaque token.
-  --imageUrls: list # Set of image URLs to display for a contact. Most contacts will have a single image, but a "group" contact may include up to 8 image URLs and they will be resized and cropped into a mosaic on the client.
+  --image-urls: list # Set of image URLs to display for a contact. Most contacts will have a single image, but a "group" contact may include up to 8 image URLs and they will be resized and cropped into a mosaic on the client.
   --kind: string # The type of resource. This is always mirror#contact. (default: mirror#contact)
-  --phoneNumber: string # Primary phone number for the contact. This can be a fully-qualified number, with country calling code and area code, or a local number.
+  --phone-number: string # Primary phone number for the contact. This can be a fully-qualified number, with country calling code and area code, or a local number.
   --priority: int # Priority for the contact to determine ordering in a list of contacts. Contacts with higher priorities will be shown before ones with lower priorities. (format: uint32)
-  --sharingFeatures: list # A list of sharing features that a contact can handle. Allowed values are:   - ADD_CAPTION
+  --sharing-features: list # A list of sharing features that a contact can handle. Allowed values are:   - ADD_CAPTION
   --body-source: string # The ID of the application that created this contact. This is populated by the API
-  --speakableName: string # Name of this contact as it should be pronounced. If this contact's name must be spoken as part of a voice disambiguation menu, this name is used as the expected pronunciation. This is useful for contact names with unpronounceable characters or whose display spelling is otherwise not phonetic.
+  --speakable-name: string # Name of this contact as it should be pronounced. If this contact's name must be spoken as part of a voice disambiguation menu, this name is used as the expected pronunciation. This is useful for contact names with unpronounceable characters or whose display spelling is otherwise not phonetic.
   --type: string # The type for this contact. This is used for sorting in UIs. Allowed values are:   - INDIVIDUAL - Represents a single person. This is the default.  - GROUP - Represents more than a single person.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contacts/($id)" $qp)
-  let body = {acceptCommands: $acceptCommands, acceptTypes: $acceptTypes, displayName: $displayName, id: $body_id, imageUrls: $imageUrls, kind: $kind, phoneNumber: $phoneNumber, priority: $priority, sharingFeatures: $sharingFeatures, source: $body_source, speakableName: $speakableName, type: $type} | compact
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/{id}") $qp)
+  let body = {"acceptCommands": $accept_commands, "acceptTypes": $accept_types, "displayName": $display_name, "id": $body_id, "imageUrls": $image_urls, "kind": $kind, "phoneNumber": $phone_number, "priority": $priority, "sharingFeatures": $sharing_features, "source": $body_source, "speakableName": $speakable_name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -383,13 +383,13 @@ export def "locations mirrorlocationslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/locations" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -414,14 +414,14 @@ export def "locations mirrorlocationsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/locations/($id)" $qp)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/locations/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -445,14 +445,14 @@ export def "settings mirrorsettingsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/settings/($id)" $qp)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/settings/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -475,13 +475,13 @@ export def "subscriptions mirrorsubscriptionslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscriptions" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -506,25 +506,25 @@ export def "subscriptions mirrorsubscriptionsinsert" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
-  --callbackUrl: string # The URL where notifications should be delivered (must start with https://).
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
+  --callback-url: string # The URL where notifications should be delivered (must start with https://).
   --collection: string # The collection to subscribe to. Allowed values are:   - timeline - Changes in the timeline including insertion, deletion, and updates.  - locations - Location updates.  - settings - Settings updates.
   --id: string # The ID of the subscription.
   --kind: string # The type of resource. This is always mirror#subscription. (default: mirror#subscription)
   --notification: record # A notification delivered by the API. — shape: {collection?: string, itemId?: string, operation?: string, userActions?: list, userToken?: string, verifyToken?: string}
   --operation: list # A list of operations that should be subscribed to. An empty list indicates that all operations on the collection should be subscribed to. Allowed values are:   - UPDATE - The item has been updated.  - INSERT - A new item has been inserted.  - DELETE - The item has been deleted.  - MENU_ACTION - A custom menu item has been triggered by the user.
   --updated: string # The time at which this subscription was last modified, formatted according to RFC 3339. (format: date-time)
-  --userToken: string # An opaque token sent to the subscriber in notifications so that it can determine the ID of the user.
-  --verifyToken: string # A secret token sent to the subscriber in notifications so that it can verify that the notification was generated by Google.
+  --user-token: string # An opaque token sent to the subscriber in notifications so that it can determine the ID of the user.
+  --verify-token: string # A secret token sent to the subscriber in notifications so that it can verify that the notification was generated by Google.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscriptions" $qp)
-  let body = {callbackUrl: $callbackUrl, collection: $collection, id: $id, kind: $kind, notification: $notification, operation: $operation, updated: $updated, userToken: $userToken, verifyToken: $verifyToken} | compact
+  let body = {"callbackUrl": $callback_url, "collection": $collection, "id": $id, "kind": $kind, "notification": $notification, "operation": $operation, "updated": $updated, "userToken": $user_token, "verifyToken": $verify_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -549,14 +549,14 @@ export def "subscriptions mirrorsubscriptionsdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($id)" $qp)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/subscriptions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -581,25 +581,25 @@ export def "subscriptions mirrorsubscriptionsupdate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
-  --callbackUrl: string # The URL where notifications should be delivered (must start with https://).
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
+  --callback-url: string # The URL where notifications should be delivered (must start with https://).
   --collection: string # The collection to subscribe to. Allowed values are:   - timeline - Changes in the timeline including insertion, deletion, and updates.  - locations - Location updates.  - settings - Settings updates.
   --body-id: string # The ID of the subscription.
   --kind: string # The type of resource. This is always mirror#subscription. (default: mirror#subscription)
   --notification: record # A notification delivered by the API. — shape: {collection?: string, itemId?: string, operation?: string, userActions?: list, userToken?: string, verifyToken?: string}
   --operation: list # A list of operations that should be subscribed to. An empty list indicates that all operations on the collection should be subscribed to. Allowed values are:   - UPDATE - The item has been updated.  - INSERT - A new item has been inserted.  - DELETE - The item has been deleted.  - MENU_ACTION - A custom menu item has been triggered by the user.
   --updated: string # The time at which this subscription was last modified, formatted according to RFC 3339. (format: date-time)
-  --userToken: string # An opaque token sent to the subscriber in notifications so that it can determine the ID of the user.
-  --verifyToken: string # A secret token sent to the subscriber in notifications so that it can verify that the notification was generated by Google.
+  --user-token: string # An opaque token sent to the subscriber in notifications so that it can determine the ID of the user.
+  --verify-token: string # A secret token sent to the subscriber in notifications so that it can verify that the notification was generated by Google.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($id)" $qp)
-  let body = {callbackUrl: $callbackUrl, collection: $collection, id: $body_id, kind: $kind, notification: $notification, operation: $operation, updated: $updated, userToken: $userToken, verifyToken: $verifyToken} | compact
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/subscriptions/{id}") $qp)
+  let body = {"callbackUrl": $callback_url, "collection": $collection, "id": $body_id, "kind": $kind, "notification": $notification, "operation": $operation, "updated": $updated, "userToken": $user_token, "verifyToken": $verify_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -623,20 +623,20 @@ export def "timeline mirrortimelinelist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
-  --bundleId: string # If provided, only items with the given bundleId will be returned.
-  --includeDeleted: oneof<nothing, bool> # If true, tombstone records for deleted items will be returned.
-  --maxResults: int # The maximum number of items to include in the response, used for paging.
-  --orderBy: string@orderBy-completer # Controls the order in which timeline items are returned.
-  --pageToken: string # Token for the page of results to return.
-  --pinnedOnly: oneof<nothing, bool> # If true, only pinned items will be returned.
-  --sourceItemId: string # If provided, only items with the given sourceItemId will be returned.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
+  --bundle-id: string # If provided, only items with the given bundleId will be returned.
+  --include-deleted: oneof<nothing, bool> # If true, tombstone records for deleted items will be returned.
+  --max-results: int # The maximum number of items to include in the response, used for paging.
+  --order-by: string@order-by-completer # Controls the order in which timeline items are returned.
+  --page-token: string # Token for the page of results to return.
+  --pinned-only: oneof<nothing, bool> # If true, only pinned items will be returned.
+  --source-item-id: string # If provided, only items with the given sourceItemId will be returned.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "bundleId" $bundleId "scalar") (serialize-qp "includeDeleted" $includeDeleted "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "pinnedOnly" $pinnedOnly "scalar") (serialize-qp "sourceItemId" $sourceItemId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "bundleId" $bundle_id "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "pinnedOnly" $pinned_only "scalar") (serialize-qp "sourceItemId" $source_item_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeline" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -660,15 +660,15 @@ export def "timeline mirrortimelineinsert" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeline" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
@@ -694,14 +694,14 @@ export def "timeline mirrortimelinedelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/timeline/($id)" $qp)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/timeline/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -725,14 +725,14 @@ export def "timeline mirrortimelineget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/timeline/($id)" $qp)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/timeline/{id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -762,32 +762,32 @@ export def "timeline mirrortimelinepatch" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
   --attachments: list # A list of media attachments associated with this item. As a convenience, you can refer to attachments in your HTML payloads with the attachment or cid scheme. For example:   - attachment: <img src="attachment:attachment_index"> where attachment_index is the 0-based index of this array.  - cid: <img src="cid:attachment_id"> where attachment_id is the ID of the attachment. — item shape: {contentType?: string, contentUrl?: string, id?: string, isProcessingContent?: bool}
-  --bundleId: string # The bundle ID for this item. Services can specify a bundleId to group many items together. They appear under a single top-level item on the device.
-  --canonicalUrl: string # A canonical URL pointing to the canonical/high quality version of the data represented by the timeline item.
+  --bundle-id: string # The bundle ID for this item. Services can specify a bundleId to group many items together. They appear under a single top-level item on the device.
+  --canonical-url: string # A canonical URL pointing to the canonical/high quality version of the data represented by the timeline item.
   --created: string # The time at which this item was created, formatted according to RFC 3339. (format: date-time)
   --creator: record # A person or group that can be used as a creator or a contact. — shape: {acceptCommands?: list, acceptTypes?: list, displayName?: string, id?: string, imageUrls?: list, kind?: string, phoneNumber?: string, priority?: int, sharingFeatures?: list, source?: string, speakableName?: string, type?: string}
-  --displayTime: string # The time that should be displayed when this item is viewed in the timeline, formatted according to RFC 3339. This user's timeline is sorted chronologically on display time, so this will also determine where the item is displayed in the timeline. If not set by the service, the display time defaults to the updated time. (format: date-time)
+  --display-time: string # The time that should be displayed when this item is viewed in the timeline, formatted according to RFC 3339. This user's timeline is sorted chronologically on display time, so this will also determine where the item is displayed in the timeline. If not set by the service, the display time defaults to the updated time. (format: date-time)
   --etag: string # ETag for this item.
   --html: string # HTML content for this item. If both text and html are provided for an item, the html will be rendered in the timeline. Allowed HTML elements - You can use these elements in your timeline cards.   - Headers: h1, h2, h3, h4, h5, h6  - Images: img  - Lists: li, ol, ul  - HTML5 semantics: article, aside, details, figure, figcaption, footer, header, nav, section, summary, time  - Structural: blockquote, br, div, hr, p, span  - Style: b, big, center, em, i, u, s, small, strike, strong, style, sub, sup  - Tables: table, tbody, td, tfoot, th, thead, tr   Blocked HTML elements: These elements and their contents are removed from HTML payloads.   - Document headers: head, title  - Embeds: audio, embed, object, source, video  - Frames: frame, frameset  - Scripting: applet, script   Other elements: Any elements that aren't listed are removed, but their contents are preserved.
   --body-id: string # The ID of the timeline item. This is unique within a user's timeline.
-  --inReplyTo: string # If this item was generated as a reply to another item, this field will be set to the ID of the item being replied to. This can be used to attach a reply to the appropriate conversation or post.
-  --isBundleCover: oneof<nothing, bool> # Whether this item is a bundle cover.  If an item is marked as a bundle cover, it will be the entry point to the bundle of items that have the same bundleId as that item. It will be shown only on the main timeline — not within the opened bundle.  On the main timeline, items that are shown are:   - Items that have isBundleCover set to true   - Items that do not have a bundleId  In a bundle sub-timeline, items that are shown are:   - Items that have the bundleId in question AND isBundleCover set to false
-  --isDeleted: oneof<nothing, bool> # When true, indicates this item is deleted, and only the ID property is set.
-  --isPinned: oneof<nothing, bool> # When true, indicates this item is pinned, which means it's grouped alongside "active" items like navigation and hangouts, on the opposite side of the home screen from historical (non-pinned) timeline items. You can allow the user to toggle the value of this property with the TOGGLE_PINNED built-in menu item.
+  --in-reply-to: string # If this item was generated as a reply to another item, this field will be set to the ID of the item being replied to. This can be used to attach a reply to the appropriate conversation or post.
+  --is-bundle-cover: oneof<nothing, bool> # Whether this item is a bundle cover.  If an item is marked as a bundle cover, it will be the entry point to the bundle of items that have the same bundleId as that item. It will be shown only on the main timeline — not within the opened bundle.  On the main timeline, items that are shown are:   - Items that have isBundleCover set to true   - Items that do not have a bundleId  In a bundle sub-timeline, items that are shown are:   - Items that have the bundleId in question AND isBundleCover set to false
+  --is-deleted: oneof<nothing, bool> # When true, indicates this item is deleted, and only the ID property is set.
+  --is-pinned: oneof<nothing, bool> # When true, indicates this item is pinned, which means it's grouped alongside "active" items like navigation and hangouts, on the opposite side of the home screen from historical (non-pinned) timeline items. You can allow the user to toggle the value of this property with the TOGGLE_PINNED built-in menu item.
   --kind: string # The type of resource. This is always mirror#timelineItem. (default: mirror#timelineItem)
   --location: record # A geographic location that can be associated with a timeline item. — shape: {accuracy?: float, address?: string, displayName?: string, id?: string, kind?: string, latitude?: float, longitude?: float, timestamp?: string}
-  --menuItems: list # A list of menu items that will be presented to the user when this item is selected in the timeline. — item shape: {action?: string, contextual_command?: string, id?: string, payload?: string, removeWhenSelected?: bool, values?: list}
+  --menu-items: list # A list of menu items that will be presented to the user when this item is selected in the timeline. — item shape: {action?: string, contextual_command?: string, id?: string, payload?: string, removeWhenSelected?: bool, values?: list}
   --notification: record # Controls how notifications for a timeline item are presented to the user. — shape: {deliveryTime?: string, level?: string}
-  --pinScore: int # For pinned items, this determines the order in which the item is displayed in the timeline, with a higher score appearing closer to the clock. Note: setting this field is currently not supported. (format: int32)
+  --pin-score: int # For pinned items, this determines the order in which the item is displayed in the timeline, with a higher score appearing closer to the clock. Note: setting this field is currently not supported. (format: int32)
   --recipients: list # A list of users or groups that this item has been shared with. — item shape: {acceptCommands?: list, acceptTypes?: list, displayName?: string, id?: string, imageUrls?: list, kind?: string, phoneNumber?: string, priority?: int, sharingFeatures?: list, source?: string, speakableName?: string, type?: string}
-  --selfLink: string # A URL that can be used to retrieve this item.
-  --sourceItemId: string # Opaque string you can use to map a timeline item to data in your own service.
-  --speakableText: string # The speakable version of the content of this item. Along with the READ_ALOUD menu item, use this field to provide text that would be clearer when read aloud, or to provide extended information to what is displayed visually on Glass.  Glassware should also specify the speakableType field, which will be spoken before this text in cases where the additional context is useful, for example when the user requests that the item be read aloud following a notification.
-  --speakableType: string # A speakable description of the type of this item. This will be announced to the user prior to reading the content of the item in cases where the additional context is useful, for example when the user requests that the item be read aloud following a notification.  This should be a short, simple noun phrase such as "Email", "Text message", or "Daily Planet News Update".  Glassware are encouraged to populate this field for every timeline item, even if the item does not contain speakableText or text so that the user can learn the type of the item without looking at the screen.
+  --self-link: string # A URL that can be used to retrieve this item.
+  --source-item-id: string # Opaque string you can use to map a timeline item to data in your own service.
+  --speakable-text: string # The speakable version of the content of this item. Along with the READ_ALOUD menu item, use this field to provide text that would be clearer when read aloud, or to provide extended information to what is displayed visually on Glass.  Glassware should also specify the speakableType field, which will be spoken before this text in cases where the additional context is useful, for example when the user requests that the item be read aloud following a notification.
+  --speakable-type: string # A speakable description of the type of this item. This will be announced to the user prior to reading the content of the item in cases where the additional context is useful, for example when the user requests that the item be read aloud following a notification.  This should be a short, simple noun phrase such as "Email", "Text message", or "Daily Planet News Update".  Glassware are encouraged to populate this field for every timeline item, even if the item does not contain speakableText or text so that the user can learn the type of the item without looking at the screen.
   --text: string # Text content of this item.
   --title: string # The title of this item.
   --updated: string # The time at which this item was last modified, formatted according to RFC 3339. (format: date-time)
@@ -795,9 +795,9 @@ export def "timeline mirrortimelinepatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/timeline/($id)" $qp)
-  let body = {attachments: $attachments, bundleId: $bundleId, canonicalUrl: $canonicalUrl, created: $created, creator: $creator, displayTime: $displayTime, etag: $etag, html: $html, id: $body_id, inReplyTo: $inReplyTo, isBundleCover: $isBundleCover, isDeleted: $isDeleted, isPinned: $isPinned, kind: $kind, location: $location, menuItems: $menuItems, notification: $notification, pinScore: $pinScore, recipients: $recipients, selfLink: $selfLink, sourceItemId: $sourceItemId, speakableText: $speakableText, speakableType: $speakableType, text: $text, title: $title, updated: $updated} | compact
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/timeline/{id}") $qp)
+  let body = {"attachments": $attachments, "bundleId": $bundle_id, "canonicalUrl": $canonical_url, "created": $created, "creator": $creator, "displayTime": $display_time, "etag": $etag, "html": $html, "id": $body_id, "inReplyTo": $in_reply_to, "isBundleCover": $is_bundle_cover, "isDeleted": $is_deleted, "isPinned": $is_pinned, "kind": $kind, "location": $location, "menuItems": $menu_items, "notification": $notification, "pinScore": $pin_score, "recipients": $recipients, "selfLink": $self_link, "sourceItemId": $source_item_id, "speakableText": $speakable_text, "speakableType": $speakable_type, "text": $text, "title": $title, "updated": $updated} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -822,16 +822,16 @@ export def "timeline mirrortimelineupdate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/timeline/($id)" $qp)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/timeline/{id}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -843,7 +843,7 @@ export def "timeline mirrortimelineupdate" [
 # GET /timeline/{itemId}/attachments
 # operationId: mirror.timeline.attachments.list
 export def "timeline-attachments mirrortimelineattachmentslist" [
-  itemId: string
+  item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,14 +856,14 @@ export def "timeline-attachments mirrortimelineattachmentslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/timeline/($itemId)/attachments" $qp)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/timeline/{item_id}/attachments") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -874,7 +874,7 @@ export def "timeline-attachments mirrortimelineattachmentslist" [
 # POST /timeline/{itemId}/attachments
 # operationId: mirror.timeline.attachments.insert
 export def "timeline-attachments mirrortimelineattachmentsinsert" [
-  itemId: string
+  item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,14 +887,14 @@ export def "timeline-attachments mirrortimelineattachmentsinsert" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/timeline/($itemId)/attachments" $qp)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/timeline/{item_id}/attachments") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -905,8 +905,8 @@ export def "timeline-attachments mirrortimelineattachmentsinsert" [
 # DELETE /timeline/{itemId}/attachments/{attachmentId}
 # operationId: mirror.timeline.attachments.delete
 export def "timeline-attachments mirrortimelineattachmentsdelete" [
-  itemId: string
-  attachmentId: string
+  item_id: string
+  attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -919,14 +919,14 @@ export def "timeline-attachments mirrortimelineattachmentsdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/timeline/($itemId)/attachments/($attachmentId)" $qp)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({item_id: $item_id, attachment_id: $attachment_id} | format pattern "/timeline/{item_id}/attachments/{attachment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -937,8 +937,8 @@ export def "timeline-attachments mirrortimelineattachmentsdelete" [
 # GET /timeline/{itemId}/attachments/{attachmentId}
 # operationId: mirror.timeline.attachments.get
 export def "timeline-attachments mirrortimelineattachmentsget" [
-  itemId: string
-  attachmentId: string
+  item_id: string
+  attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -951,14 +951,14 @@ export def "timeline-attachments mirrortimelineattachmentsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/timeline/($itemId)/attachments/($attachmentId)" $qp)
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({item_id: $item_id, attachment_id: $attachment_id} | format pattern "/timeline/{item_id}/attachments/{attachment_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

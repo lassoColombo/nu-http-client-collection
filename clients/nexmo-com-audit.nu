@@ -124,7 +124,7 @@ export def "events list" [
 #
 # OPTIONS /events
 # operationId: getEventsOptions
-export def "events options" [
+export def "events get-events-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "events get" [
 ]: nothing -> record<_links: record<self: record<href: string>>, account_id: string, context: record, created_at: string, event_type: string, event_type_description: string, id: string, source: string, source_country: string, source_description: string, source_ip: string, user_email: string, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/events/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

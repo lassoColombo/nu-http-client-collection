@@ -108,16 +108,16 @@ export def "balance-transfer post-balanceTransfer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: record # shape: {currency: string, value: int}
   --description: string # A human-readable description for the transfer. You can use alphanumeric characters and hyphens. We recommend sending a maximum of 140 characters, otherwise the description may be truncated.
-  fromMerchant: string # The unique identifier of the source merchant account from which funds are deducted.
+  from_merchant: string # The unique identifier of the source merchant account from which funds are deducted.
   --reference: string # A reference for the balance transfer. If you don't provide this in the request, Adyen generates a unique reference. Maximum length: 80 characters.
-  toMerchant: string # The unique identifier of the destination merchant account from which funds are transferred.
+  to_merchant: string # The unique identifier of the destination merchant account from which funds are transferred.
   type: string@type-completer # The type of balance transfer. Possible values: **tax**, **fee**, **terminalSale**, **credit**, **debit**, and **adjustment**.
 ]: any -> record<amount: record<currency: string, value: int>, createdAt: string, description: string, fromMerchant: string, pspReference: string, reference: string, status: string, toMerchant: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/balanceTransfer")
-  let body = {amount: $amount, description: $description, fromMerchant: $fromMerchant, reference: $reference, toMerchant: $toMerchant, type: $type} | compact
+  let body = {"amount": $amount, "description": $description, "fromMerchant": $from_merchant, "reference": $reference, "toMerchant": $to_merchant, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-insights-components-annotations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-insights-components-annotations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/Annotations
 # operationId: Annotations_List
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-annotations List" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-annotations list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,7 +112,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/Annotations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/Annotations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,10 +122,10 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/Annotations
 # operationId: Annotations_Create
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-annotations Create" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-annotations create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,19 +135,19 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --AnnotationName: string # Name of annotation
-  --Category: string # Category of annotation, free form
-  --EventTime: string # Time when event occurred (format: date-time)
-  --Id: string # Unique Id for annotation
-  --Properties: string # Serialized JSON object for detailed properties
-  --RelatedAnnotation: string # Related parent annotation if any (default: null)
+  --annotation-name: string # Name of annotation
+  --category: string # Category of annotation, free form
+  --event-time: string # Time when event occurred (format: date-time)
+  --id: string # Unique Id for annotation
+  --properties: string # Serialized JSON object for detailed properties
+  --related-annotation: string # Related parent annotation if any (default: null)
 ]: any -> table<AnnotationName: string, Category: string, EventTime: string, Id: string, Properties: string, RelatedAnnotation: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/Annotations" $qp)
-  let body = {AnnotationName: $AnnotationName, Category: $Category, EventTime: $EventTime, Id: $Id, Properties: $Properties, RelatedAnnotation: $RelatedAnnotation} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/Annotations") $qp)
+  let body = {"AnnotationName": $annotation_name, "Category": $category, "EventTime": $event_time, "Id": $id, "Properties": $properties, "RelatedAnnotation": $related_annotation} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -158,11 +158,11 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/Annotations/{annotationId}
 # operationId: Annotations_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-annotations Delete" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
-  annotationId: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-annotations delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  annotation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/Annotations/($annotationId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, annotation_id: $annotation_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/Annotations/{annotation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -186,11 +186,11 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/Annotations/{annotationId}
 # operationId: Annotations_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-annotations Get" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
-  annotationId: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-annotations get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  annotation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +204,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/Annotations/($annotationId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, annotation_id: $annotation_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/Annotations/{annotation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

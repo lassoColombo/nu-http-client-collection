@@ -129,7 +129,7 @@ export def "books-sentences get-sentences-from-book" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/books/($id)/sentences" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/books/{id}/sentences") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,7 +176,7 @@ export def "sentences get-specific-sentence" [
 ]: nothing -> record<data: record<book: record<id: string, name: string, year: string>, id: string, sentence: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sentences/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sentences/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

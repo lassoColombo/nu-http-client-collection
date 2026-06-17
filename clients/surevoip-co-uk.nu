@@ -160,7 +160,7 @@ export def "announcements post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/announcements")
-  let body = {description: $description, file: $file} | compact
+  let body = {"description": $description, "file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -258,7 +258,7 @@ export def "calls post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls")
-  let body = {announcement_at: $announcement_at, announcement_id: $announcement_id, caller_id: $caller_id, from: $body_from, hangup_announcement_id: $hangup_announcement_id, hangup_at: $hangup_at, options: $options, to: $body_to} | compact
+  let body = {"announcement_at": $announcement_at, "announcement_id": $announcement_id, "caller_id": $caller_id, "from": $body_from, "hangup_announcement_id": $hangup_announcement_id, "hangup_at": $hangup_at, "options": $options, "to": $body_to} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -366,7 +366,7 @@ export def "customers get" [
 ]: nothing -> record<address: string, balance: int, city: string, company_name: string, company_website: string, country: string, creditlimit: string, email: string, fax: string, firstname: string, lastname: string, phone: string, postcode: string, state: string, username: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/customers/($account)")
+  let full_url = (build-url $base ({account: $account} | format pattern "/customers/{account}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -388,7 +388,7 @@ export def "customers-announcements list" [
 ]: nothing -> record<list: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/customers/($account)/announcements")
+  let full_url = (build-url $base ({account: $account} | format pattern "/customers/{account}/announcements"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,7 +411,7 @@ export def "customers-announcements delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/customers/($account)/announcements/($announcement_id)")
+  let full_url = (build-url $base ({account: $account, announcement_id: $announcement_id} | format pattern "/customers/{account}/announcements/{announcement_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -421,8 +421,8 @@ export def "customers-announcements delete" [
 #
 # GET /customers/{account}/announcements/{announcement_id}
 export def "customers-announcements get" [
-  announcement_id: string
   account: any
+  announcement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "customers-announcements get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/customers/($account)/announcements/($announcement_id)")
+  let full_url = (build-url $base ({account: $account, announcement_id: $announcement_id} | format pattern "/customers/{account}/announcements/{announcement_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "entities Entities" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "entities post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 # POST /entities
 # operationId: Entities
 # --documents item shape: {id?: string, language?: string, text?: string}
-export def "entities Entities" [
+export def "entities post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,7 +109,7 @@ export def "entities Entities" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/entities")
-  let body = {documents: $documents} | compact
+  let body = {"documents": $documents} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -121,7 +121,7 @@ export def "entities Entities" [
 # POST /keyPhrases
 # operationId: Key Phrases
 # --documents item shape: {id?: string, language?: string, text?: string}
-export def "key-phrases Key-Phrases" [
+export def "key-phrases post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,7 +136,7 @@ export def "key-phrases Key-Phrases" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/keyPhrases")
-  let body = {documents: $documents} | compact
+  let body = {"documents": $documents} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -148,7 +148,7 @@ export def "key-phrases Key-Phrases" [
 # POST /languages
 # operationId: Detect Language
 # --documents item shape: {id?: string, text?: string}
-export def "languages Detect-Language" [
+export def "languages post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "languages Detect-Language" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/languages")
-  let body = {documents: $documents} | compact
+  let body = {"documents": $documents} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -175,7 +175,7 @@ export def "languages Detect-Language" [
 # POST /sentiment
 # operationId: Sentiment
 # --documents item shape: {id?: string, language?: string, text?: string}
-export def "sentiment Sentiment" [
+export def "sentiment post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "sentiment Sentiment" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sentiment")
-  let body = {documents: $documents} | compact
+  let body = {"documents": $documents} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

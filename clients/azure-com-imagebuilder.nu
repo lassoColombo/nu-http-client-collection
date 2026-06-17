@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-virtual-machine-images-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-virtual-machine-images-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.VirtualMachineImages/operations
 # operationId: Operations_List
-export def "providers-microsoft-virtual-machine-images-operations List" [
+export def "providers-microsoft-virtual-machine-images-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-virtual-machine-images-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VirtualMachineImages/imageTemplates
 # operationId: VirtualMachineImageTemplates_List
-export def "subscriptions-providers-microsoft-virtual-machine-images-image-templates List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-virtual-machine-images-image-templates list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "subscriptions-providers-microsoft-virtual-machine-images-image-templ
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.VirtualMachineImages/imageTemplates" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VirtualMachineImages/imageTemplates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,9 +142,9 @@ export def "subscriptions-providers-microsoft-virtual-machine-images-image-templ
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VirtualMachineImages/imageTemplates
 # operationId: VirtualMachineImageTemplates_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VirtualMachineImages/imageTemplates" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VirtualMachineImages/imageTemplates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -168,10 +168,10 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VirtualMachineImages/imageTemplates/{imageTemplateName}
 # operationId: VirtualMachineImageTemplates_Delete
-export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  imageTemplateName: string
+export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates delete" [
+  subscription_id: string
+  resource_group_name: string
+  image_template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VirtualMachineImages/imageTemplates/($imageTemplateName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, image_template_name: $image_template_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VirtualMachineImages/imageTemplates/{image_template_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,10 +195,10 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VirtualMachineImages/imageTemplates/{imageTemplateName}
 # operationId: VirtualMachineImageTemplates_Get
-export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  imageTemplateName: string
+export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates get" [
+  subscription_id: string
+  resource_group_name: string
+  image_template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VirtualMachineImages/imageTemplates/($imageTemplateName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, image_template_name: $image_template_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VirtualMachineImages/imageTemplates/{image_template_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -223,10 +223,10 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VirtualMachineImages/imageTemplates/{imageTemplateName}
 # operationId: VirtualMachineImageTemplates_Update
 # --identity shape: {type?: "UserAssigned"|"None", userAssignedIdentities?: record}
-export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  imageTemplateName: string
+export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates update" [
+  subscription_id: string
+  resource_group_name: string
+  image_template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,8 +243,8 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VirtualMachineImages/imageTemplates/($imageTemplateName)" $qp)
-  let body = {identity: $identity, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, image_template_name: $image_template_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VirtualMachineImages/imageTemplates/{image_template_name}") $qp)
+  let body = {"identity": $identity, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -257,10 +257,10 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
 # operationId: VirtualMachineImageTemplates_CreateOrUpdate
 # --identity shape: {type?: "UserAssigned"|"None", userAssignedIdentities?: record}
 # --properties shape: {buildTimeoutInMinutes?: int, customize?: list, distribute: list, lastRunStatus?: any, provisioningError?: any, provisioningState?: "Creating"|"Updating"|"Succeeded"|"Failed"|"Deleting", source: any, vmProfile?: any}
-export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  imageTemplateName: string
+export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  image_template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,8 +279,8 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VirtualMachineImages/imageTemplates/($imageTemplateName)" $qp)
-  let body = {identity: $identity, properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, image_template_name: $image_template_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VirtualMachineImages/imageTemplates/{image_template_name}") $qp)
+  let body = {"identity": $identity, "properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -291,10 +291,10 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VirtualMachineImages/imageTemplates/{imageTemplateName}/run
 # operationId: VirtualMachineImageTemplates_Run
-export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates-run Run" [
-  subscriptionId: string
-  resourceGroupName: string
-  imageTemplateName: string
+export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates-run post" [
+  subscription_id: string
+  resource_group_name: string
+  image_template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VirtualMachineImages/imageTemplates/($imageTemplateName)/run" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, image_template_name: $image_template_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VirtualMachineImages/imageTemplates/{image_template_name}/run") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,10 +318,10 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VirtualMachineImages/imageTemplates/{imageTemplateName}/runOutputs
 # operationId: VirtualMachineImageTemplates_ListRunOutputs
-export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates-run-outputs ListRunOutputs" [
-  subscriptionId: string
-  resourceGroupName: string
-  imageTemplateName: string
+export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates-run-outputs list" [
+  subscription_id: string
+  resource_group_name: string
+  image_template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,7 +335,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VirtualMachineImages/imageTemplates/($imageTemplateName)/runOutputs" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, image_template_name: $image_template_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VirtualMachineImages/imageTemplates/{image_template_name}/runOutputs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -345,11 +345,11 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VirtualMachineImages/imageTemplates/{imageTemplateName}/runOutputs/{runOutputName}
 # operationId: VirtualMachineImageTemplates_GetRunOutput
-export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates-run-outputs GetRunOutput" [
-  subscriptionId: string
-  resourceGroupName: string
-  imageTemplateName: string
-  runOutputName: string
+export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates-run-outputs get" [
+  subscription_id: string
+  resource_group_name: string
+  image_template_name: string
+  run_output_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.VirtualMachineImages/imageTemplates/($imageTemplateName)/runOutputs/($runOutputName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, image_template_name: $image_template_name, run_output_name: $run_output_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VirtualMachineImages/imageTemplates/{image_template_name}/runOutputs/{run_output_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

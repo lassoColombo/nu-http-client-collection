@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "phone-numbers FetchPhoneNumber" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "phone-numbers get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,8 +92,8 @@ export def commands []: nothing -> table {
 # GET /v2/PhoneNumbers/{PhoneNumber}
 #
 # operationId: FetchPhoneNumber
-export def "phone-numbers FetchPhoneNumber" [
-  PhoneNumber: string
+export def "phone-numbers get" [
+  phone_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,23 +102,23 @@ export def "phone-numbers FetchPhoneNumber" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Fields: string # A comma-separated list of fields to return. Possible values are caller_name, sim_swap, call_forwarding, live_activity, line_type_intelligence, identity_match.
-  --CountryCode: string # The [country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) used if the phone number provided is in national format.
-  --FirstName: string # User’s first name. This query parameter is only used (optionally) for identity_match package requests.
-  --LastName: string # User’s last name. This query parameter is only used (optionally) for identity_match package requests.
-  --AddressLine1: string # User’s first address line. This query parameter is only used (optionally) for identity_match package requests.
-  --AddressLine2: string # User’s second address line. This query parameter is only used (optionally) for identity_match package requests.
-  --City: string # User’s city. This query parameter is only used (optionally) for identity_match package requests.
-  --State: string # User’s country subdivision, such as state, province, or locality. This query parameter is only used (optionally) for identity_match package requests.
-  --PostalCode: string # User’s postal zip code. This query parameter is only used (optionally) for identity_match package requests.
-  --AddressCountryCode: string # User’s country, up to two characters. This query parameter is only used (optionally) for identity_match package requests. (format: iso-country-code)
-  --NationalId: string # User’s national ID, such as SSN or Passport ID. This query parameter is only used (optionally) for identity_match package requests.
-  --DateOfBirth: string # User’s date of birth, in YYYYMMDD format. This query parameter is only used (optionally) for identity_match package requests.
+  --fields: string # A comma-separated list of fields to return. Possible values are caller_name, sim_swap, call_forwarding, live_activity, line_type_intelligence, identity_match.
+  --country-code: string # The [country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) used if the phone number provided is in national format.
+  --first-name: string # User’s first name. This query parameter is only used (optionally) for identity_match package requests.
+  --last-name: string # User’s last name. This query parameter is only used (optionally) for identity_match package requests.
+  --address-line1: string # User’s first address line. This query parameter is only used (optionally) for identity_match package requests.
+  --address-line2: string # User’s second address line. This query parameter is only used (optionally) for identity_match package requests.
+  --city: string # User’s city. This query parameter is only used (optionally) for identity_match package requests.
+  --state: string # User’s country subdivision, such as state, province, or locality. This query parameter is only used (optionally) for identity_match package requests.
+  --postal-code: string # User’s postal zip code. This query parameter is only used (optionally) for identity_match package requests.
+  --address-country-code: string # User’s country, up to two characters. This query parameter is only used (optionally) for identity_match package requests. (format: iso-country-code)
+  --national-id: string # User’s national ID, such as SSN or Passport ID. This query parameter is only used (optionally) for identity_match package requests.
+  --date-of-birth: string # User’s date of birth, in YYYYMMDD format. This query parameter is only used (optionally) for identity_match package requests.
 ]: nothing -> record<call_forwarding: any, caller_name: any, calling_country_code: string, country_code: string, identity_match: any, line_type_intelligence: any, live_activity: any, national_format: string, phone_number: string, sim_swap: any, sms_pumping_risk: any, url: string, valid: bool, validation_errors: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://lookups.twilio.com")
-  let qp = [(serialize-qp "Fields" $Fields "scalar") (serialize-qp "CountryCode" $CountryCode "scalar") (serialize-qp "FirstName" $FirstName "scalar") (serialize-qp "LastName" $LastName "scalar") (serialize-qp "AddressLine1" $AddressLine1 "scalar") (serialize-qp "AddressLine2" $AddressLine2 "scalar") (serialize-qp "City" $City "scalar") (serialize-qp "State" $State "scalar") (serialize-qp "PostalCode" $PostalCode "scalar") (serialize-qp "AddressCountryCode" $AddressCountryCode "scalar") (serialize-qp "NationalId" $NationalId "scalar") (serialize-qp "DateOfBirth" $DateOfBirth "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/PhoneNumbers/($PhoneNumber)" $qp)
+  let qp = [(serialize-qp "Fields" $fields "scalar") (serialize-qp "CountryCode" $country_code "scalar") (serialize-qp "FirstName" $first_name "scalar") (serialize-qp "LastName" $last_name "scalar") (serialize-qp "AddressLine1" $address_line1 "scalar") (serialize-qp "AddressLine2" $address_line2 "scalar") (serialize-qp "City" $city "scalar") (serialize-qp "State" $state "scalar") (serialize-qp "PostalCode" $postal_code "scalar") (serialize-qp "AddressCountryCode" $address_country_code "scalar") (serialize-qp "NationalId" $national_id "scalar") (serialize-qp "DateOfBirth" $date_of_birth "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({phone_number: $phone_number} | format pattern "/v2/PhoneNumbers/{phone_number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

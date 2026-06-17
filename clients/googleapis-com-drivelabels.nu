@@ -67,10 +67,10 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def xgafv-completer [] { ["1" "2"] }
 def alt-completer [] { ["json" "media" "proto"] }
-def minimumRole-completer [] { ["APPLIER" "EDITOR" "LABEL_ROLE_UNSPECIFIED" "ORGANIZER" "READER"] }
+def minimum-role-completer [] { ["APPLIER" "EDITOR" "LABEL_ROLE_UNSPECIFIED" "ORGANIZER" "READER"] }
 def view-completer [] { ["LABEL_VIEW_BASIC" "LABEL_VIEW_FULL"] }
-def labelType-completer [] { ["ADMIN" "LABEL_TYPE_UNSPECIFIED" "SHARED"] }
-def copyMode-completer [] { ["ALWAYS_COPY" "COPY_APPLIABLE" "COPY_MODE_UNSPECIFIED" "DO_NOT_COPY"] }
+def label-type-completer [] { ["ADMIN" "LABEL_TYPE_UNSPECIFIED" "SHARED"] }
+def copy-mode-completer [] { ["ALWAYS_COPY" "COPY_APPLIABLE" "COPY_MODE_UNSPECIFIED" "DO_NOT_COPY"] }
 def role-completer [] { ["APPLIER" "EDITOR" "LABEL_ROLE_UNSPECIFIED" "ORGANIZER" "READER"] }
 
 # List all available API commands with their parameters
@@ -116,22 +116,22 @@ export def "v2beta-labels drivelabelslabelslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --customer: string # The customer to scope this list request to. For example: "customers/abcd1234". If unset, will return all labels within the current customer.
-  --languageCode: string # The BCP-47 language code to use for evaluating localized field labels. When not specified, values in the default configured language are used.
-  --minimumRole: string@minimumRole-completer # Specifies the level of access the user must have on the returned Labels. The minimum role a user must have on a label. Defaults to `READER`.
-  --pageSize: int # Maximum number of labels to return per page. Default: 50. Max: 200.
-  --pageToken: string # The token of the page to return.
-  --publishedOnly: oneof<nothing, bool> # Whether to include only published labels in the results. * When `true`, only the current published label revisions are returned. Disabled labels are included. Returned label resource names reference the published revision (`labels/{id}/{revision_id}`). * When `false`, the current label revisions are returned, which might not be published. Returned label resource names don't reference a specific revision (`labels/{id}`).
-  --useAdminAccess: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. This will return all Labels within the customer.
+  --language-code: string # The BCP-47 language code to use for evaluating localized field labels. When not specified, values in the default configured language are used.
+  --minimum-role: string@minimum-role-completer # Specifies the level of access the user must have on the returned Labels. The minimum role a user must have on a label. Defaults to `READER`.
+  --page-size: int # Maximum number of labels to return per page. Default: 50. Max: 200.
+  --page-token: string # The token of the page to return.
+  --published-only: oneof<nothing, bool> # Whether to include only published labels in the results. * When `true`, only the current published label revisions are returned. Disabled labels are included. Returned label resource names reference the published revision (`labels/{id}/{revision_id}`). * When `false`, the current label revisions are returned, which might not be published. Returned label resource names don't reference a specific revision (`labels/{id}`).
+  --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. This will return all Labels within the customer.
   --view: string@view-completer # When specified, only certain fields belonging to the indicated view are returned.
 ]: nothing -> record<labels: table<appliedCapabilities: record, appliedLabelPolicy: record, createTime: string, creator: record, customer: string, disableTime: string, disabler: record, displayHints: record, fields: list, id: string, labelType: string, learnMoreUri: string, lifecycle: record, lockStatus: record, name: string, properties: record, publishTime: string, publisher: record, revisionCreateTime: string, revisionCreator: record, revisionId: string, schemaCapabilities: record>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "languageCode" $languageCode "scalar") (serialize-qp "minimumRole" $minimumRole "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "publishedOnly" $publishedOnly "scalar") (serialize-qp "useAdminAccess" $useAdminAccess "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "minimumRole" $minimum_role "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "publishedOnly" $published_only "scalar") (serialize-qp "useAdminAccess" $use_admin_access "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2beta/labels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -169,33 +169,33 @@ export def "v2beta-labels drivelabelslabelscreate" [
   --fields: string # Selector specifying which fields to include in a partial response. — item shape: {appliedCapabilities?: record, creator?: record, dateOptions?: record, disabler?: record, displayHints?: record, integerOptions?: record, lifecycle?: record, lockStatus?: record, properties?: record, publisher?: record, schemaCapabilities?: record, selectionOptions?: record, textOptions?: record, updater?: record, userOptions?: record}
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --languageCode: string # The BCP-47 language code to use for evaluating localized Field labels in response. When not specified, values in the default configured language will be used.
-  --useAdminAccess: oneof<nothing, bool> # Set to `true` in order to use the user's admin privileges. The server will verify the user is an admin before allowing access.
-  --appliedCapabilities: record # The capabilities a user has on this label's applied metadata. — shape: {canApply?: bool, canRead?: bool, canRemove?: bool}
-  --appliedLabelPolicy: record # Behavior of this label when it's applied to Drive items. — shape: {copyMode?: "COPY_MODE_UNSPECIFIED"|"DO_NOT_COPY"|"ALWAYS_COPY"|"COPY_APPLIABLE"}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --language-code: string # The BCP-47 language code to use for evaluating localized Field labels in response. When not specified, values in the default configured language will be used.
+  --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin privileges. The server will verify the user is an admin before allowing access.
+  --applied-capabilities: record # The capabilities a user has on this label's applied metadata. — shape: {canApply?: bool, canRead?: bool, canRemove?: bool}
+  --applied-label-policy: record # Behavior of this label when it's applied to Drive items. — shape: {copyMode?: "COPY_MODE_UNSPECIFIED"|"DO_NOT_COPY"|"ALWAYS_COPY"|"COPY_APPLIABLE"}
   --creator: record # Information about a user. — shape: {person?: string}
   --disabler: record # Information about a user. — shape: {person?: string}
-  --displayHints: record # UI display hints for rendering the label. — shape: {disabled?: bool, hiddenInSearch?: bool, priority?: string, shownInApply?: bool}
+  --display-hints: record # UI display hints for rendering the label. — shape: {disabled?: bool, hiddenInSearch?: bool, priority?: string, shownInApply?: bool}
   --fields: list # List of fields in descending priority order. — item shape: {appliedCapabilities?: record, creator?: record, dateOptions?: record, disabler?: record, displayHints?: record, integerOptions?: record, lifecycle?: record, lockStatus?: record, properties?: record, publisher?: record, schemaCapabilities?: record, selectionOptions?: record, textOptions?: record, updater?: record, userOptions?: record}
-  --labelType: string@labelType-completer # Required. The type of label.
-  --learnMoreUri: string # Custom URL to present to users to allow them to learn more about this label and how it should be used.
+  --label-type: string@label-type-completer # Required. The type of label.
+  --learn-more-uri: string # Custom URL to present to users to allow them to learn more about this label and how it should be used.
   --lifecycle: record # The lifecycle state of an object, such as label, field, or choice. The lifecycle enforces the following transitions: * `UNPUBLISHED_DRAFT` (starting state) * `UNPUBLISHED_DRAFT` -> `PUBLISHED` * `UNPUBLISHED_DRAFT` -> (Deleted) * `PUBLISHED` -> `DISABLED` * `DISABLED` -> `PUBLISHED` * `DISABLED` -> (Deleted) The published and disabled states have some distinct characteristics: * Published—Some kinds of changes might be made to an object in this state, in which case `has_unpublished_changes` will be true. Also, some kinds of changes are not permitted. Generally, any change that would invalidate or cause new restrictions on existing metadata related to the label are rejected. * Disabled—When disabled, the configured `DisabledPolicy` takes effect. — shape: {disabledPolicy?: record}
-  --lockStatus: record # Contains information about whether a label component should be considered locked.
+  --lock-status: record # Contains information about whether a label component should be considered locked.
   --properties: record # Basic properties of the label. — shape: {description?: string, title?: string}
   --publisher: record # Information about a user. — shape: {person?: string}
-  --revisionCreator: record # Information about a user. — shape: {person?: string}
-  --schemaCapabilities: record # The capabilities related to this label when editing the label. — shape: {canDelete?: bool, canDisable?: bool, canEnable?: bool, canUpdate?: bool}
+  --revision-creator: record # Information about a user. — shape: {person?: string}
+  --schema-capabilities: record # The capabilities related to this label when editing the label. — shape: {canDelete?: bool, canDisable?: bool, canEnable?: bool, canUpdate?: bool}
 ]: any -> record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: table<appliedCapabilities: record, createTime: string, creator: record, dateOptions: record, disableTime: string, disabler: record, displayHints: record, id: string, integerOptions: record, lifecycle: record, lockStatus: record, properties: record, publisher: record, queryKey: string, schemaCapabilities: record, selectionOptions: record, textOptions: record, updateTime: string, updater: record, userOptions: record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record<hideInSearch: bool, showInApply: bool>, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "languageCode" $languageCode "scalar") (serialize-qp "useAdminAccess" $useAdminAccess "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "useAdminAccess" $use_admin_access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2beta/labels" $qp)
-  let body = {appliedCapabilities: $appliedCapabilities, appliedLabelPolicy: $appliedLabelPolicy, creator: $creator, disabler: $disabler, displayHints: $displayHints, fields: $fields, labelType: $labelType, learnMoreUri: $learnMoreUri, lifecycle: $lifecycle, lockStatus: $lockStatus, properties: $properties, publisher: $publisher, revisionCreator: $revisionCreator, schemaCapabilities: $schemaCapabilities} | compact
+  let body = {"appliedCapabilities": $applied_capabilities, "appliedLabelPolicy": $applied_label_policy, "creator": $creator, "disabler": $disabler, "displayHints": $display_hints, "fields": $fields, "labelType": $label_type, "learnMoreUri": $learn_more_uri, "lifecycle": $lifecycle, "lockStatus": $lock_status, "properties": $properties, "publisher": $publisher, "revisionCreator": $revision_creator, "schemaCapabilities": $schema_capabilities} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -222,15 +222,15 @@ export def "v2beta-limits-label drivelabelslimitsgetLabel" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --name: string # Required. Label revision resource name Must be: "limits/label"
 ]: nothing -> record<fieldLimits: record<dateLimits: record<maxValue: record, minValue: record>, integerLimits: record<maxValue: string, minValue: string>, longTextLimits: record<maxLength: int, minLength: int>, maxDescriptionLength: int, maxDisplayNameLength: int, maxIdLength: int, selectionLimits: record<listLimits: record, maxChoices: int, maxDeletedChoices: int, maxDisplayNameLength: int, maxIdLength: int>, textLimits: record<maxLength: int, minLength: int>, userLimits: record<listLimits: record>>, maxDeletedFields: int, maxDescriptionLength: int, maxDraftRevisions: int, maxFields: int, maxTitleLength: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2beta/limits/label" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -258,17 +258,17 @@ export def "v2beta drivelabelslabelsrevisionspermissionsdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --useAdminAccess: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
-  --writeControlrequiredRevisionId: string # The revision_id of the label that the write request will be applied to. If this is not the latest revision of the label, the request will not be processed and will return a 400 Bad Request error.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
+  --write-control-required-revision-id: string # The revision_id of the label that the write request will be applied to. If this is not the latest revision of the label, the request will not be processed and will return a 400 Bad Request error.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "useAdminAccess" $useAdminAccess "scalar") (serialize-qp "writeControl.requiredRevisionId" $writeControlrequiredRevisionId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2beta/($name)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "useAdminAccess" $use_admin_access "scalar") (serialize-qp "writeControl.requiredRevisionId" $write_control_required_revision_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -295,18 +295,18 @@ export def "v2beta drivelabelsusersgetCapabilities" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --customer: string # The customer to scope this request to. For example: "customers/abcd1234". If unset, will return settings within the current customer.
-  --useAdminAccess: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server verifies that the user is an admin for the label before allowing access.
+  --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server verifies that the user is an admin for the label before allowing access.
   --view: string@view-completer # When specified, only certain fields belonging to the indicated view are returned.
 ]: nothing -> record<canAccessLabelManager: bool, canAdministrateLabels: bool, canCreateAdminLabels: bool, canCreateSharedLabels: bool, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "useAdminAccess" $useAdminAccess "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2beta/($name)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "useAdminAccess" $use_admin_access "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -335,22 +335,22 @@ export def "v2beta drivelabelslabelsdelta" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --languageCode: string # The BCP-47 language code to use for evaluating localized Field labels when `include_label_in_response` is `true`.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --language-code: string # The BCP-47 language code to use for evaluating localized Field labels when `include_label_in_response` is `true`.
   --requests: list # A list of updates to apply to the Label. Requests will be applied in the order they are specified. — item shape: {createField?: record, createSelectionChoice?: record, deleteField?: record, deleteSelectionChoice?: record, disableField?: record, disableSelectionChoice?: record, enableField?: record, enableSelectionChoice?: record, updateField?: record, updateFieldType?: record, updateLabel?: record, updateSelectionChoiceProperties?: record}
-  --useAdminAccess: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
+  --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
   --view: string@view-completer # When specified, only certain fields belonging to the indicated view will be returned.
-  --writeControl: record # Provides control over how write requests are executed. When not specified, the last write wins. — shape: {requiredRevisionId?: string}
+  --write-control: record # Provides control over how write requests are executed. When not specified, the last write wins. — shape: {requiredRevisionId?: string}
 ]: any -> record<responses: table<createField: record, createSelectionChoice: record, deleteField: record, deleteSelectionChoice: record, disableField: record, disableSelectionChoice: record, enableField: record, enableSelectionChoice: record, updateField: record, updateFieldType: record, updateLabel: record, updateSelectionChoiceProperties: record>, updatedLabel: record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: list<record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2beta/($name):delta" $qp)
-  let body = {languageCode: $languageCode, requests: $requests, useAdminAccess: $useAdminAccess, view: $view, writeControl: $writeControl} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}:delta") $qp)
+  let body = {"languageCode": $language_code, "requests": $requests, "useAdminAccess": $use_admin_access, "view": $view, "writeControl": $write_control} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -380,22 +380,22 @@ export def "v2beta drivelabelslabelsdisable" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --disabledPolicy: record # The policy that governs how to treat a disabled label, field, or selection choice in different contexts. — shape: {hideInSearch?: bool, showInApply?: bool}
-  --languageCode: string # The BCP-47 language code to use for evaluating localized field labels. When not specified, values in the default configured language will be used.
-  --updateMask: string # The fields that should be updated. At least one field must be specified. The root `disabled_policy` is implied and should not be specified. A single `*` can be used as short-hand for updating every field. (format: google-fieldmask)
-  --useAdminAccess: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
-  --writeControl: record # Provides control over how write requests are executed. When not specified, the last write wins. — shape: {requiredRevisionId?: string}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --disabled-policy: record # The policy that governs how to treat a disabled label, field, or selection choice in different contexts. — shape: {hideInSearch?: bool, showInApply?: bool}
+  --language-code: string # The BCP-47 language code to use for evaluating localized field labels. When not specified, values in the default configured language will be used.
+  --update-mask: string # The fields that should be updated. At least one field must be specified. The root `disabled_policy` is implied and should not be specified. A single `*` can be used as short-hand for updating every field. (format: google-fieldmask)
+  --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
+  --write-control: record # Provides control over how write requests are executed. When not specified, the last write wins. — shape: {requiredRevisionId?: string}
 ]: any -> record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: table<appliedCapabilities: record, createTime: string, creator: record, dateOptions: record, disableTime: string, disabler: record, displayHints: record, id: string, integerOptions: record, lifecycle: record, lockStatus: record, properties: record, publisher: record, queryKey: string, schemaCapabilities: record, selectionOptions: record, textOptions: record, updateTime: string, updater: record, userOptions: record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record<hideInSearch: bool, showInApply: bool>, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2beta/($name):disable" $qp)
-  let body = {disabledPolicy: $disabledPolicy, languageCode: $languageCode, updateMask: $updateMask, useAdminAccess: $useAdminAccess, writeControl: $writeControl} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}:disable") $qp)
+  let body = {"disabledPolicy": $disabled_policy, "languageCode": $language_code, "updateMask": $update_mask, "useAdminAccess": $use_admin_access, "writeControl": $write_control} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -424,20 +424,20 @@ export def "v2beta drivelabelslabelsenable" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --languageCode: string # The BCP-47 language code to use for evaluating localized field labels. When not specified, values in the default configured language will be used.
-  --useAdminAccess: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
-  --writeControl: record # Provides control over how write requests are executed. When not specified, the last write wins. — shape: {requiredRevisionId?: string}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --language-code: string # The BCP-47 language code to use for evaluating localized field labels. When not specified, values in the default configured language will be used.
+  --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
+  --write-control: record # Provides control over how write requests are executed. When not specified, the last write wins. — shape: {requiredRevisionId?: string}
 ]: any -> record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: table<appliedCapabilities: record, createTime: string, creator: record, dateOptions: record, disableTime: string, disabler: record, displayHints: record, id: string, integerOptions: record, lifecycle: record, lockStatus: record, properties: record, publisher: record, queryKey: string, schemaCapabilities: record, selectionOptions: record, textOptions: record, updateTime: string, updater: record, userOptions: record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record<hideInSearch: bool, showInApply: bool>, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2beta/($name):enable" $qp)
-  let body = {languageCode: $languageCode, useAdminAccess: $useAdminAccess, writeControl: $writeControl} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}:enable") $qp)
+  let body = {"languageCode": $language_code, "useAdminAccess": $use_admin_access, "writeControl": $write_control} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -466,20 +466,20 @@ export def "v2beta drivelabelslabelspublish" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --languageCode: string # The BCP-47 language code to use for evaluating localized field labels. When not specified, values in the default configured language will be used.
-  --useAdminAccess: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
-  --writeControl: record # Provides control over how write requests are executed. When not specified, the last write wins. — shape: {requiredRevisionId?: string}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --language-code: string # The BCP-47 language code to use for evaluating localized field labels. When not specified, values in the default configured language will be used.
+  --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
+  --write-control: record # Provides control over how write requests are executed. When not specified, the last write wins. — shape: {requiredRevisionId?: string}
 ]: any -> record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: table<appliedCapabilities: record, createTime: string, creator: record, dateOptions: record, disableTime: string, disabler: record, displayHints: record, id: string, integerOptions: record, lifecycle: record, lockStatus: record, properties: record, publisher: record, queryKey: string, schemaCapabilities: record, selectionOptions: record, textOptions: record, updateTime: string, updater: record, userOptions: record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record<hideInSearch: bool, showInApply: bool>, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2beta/($name):publish" $qp)
-  let body = {languageCode: $languageCode, useAdminAccess: $useAdminAccess, writeControl: $writeControl} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}:publish") $qp)
+  let body = {"languageCode": $language_code, "useAdminAccess": $use_admin_access, "writeControl": $write_control} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -507,21 +507,21 @@ export def "v2beta drivelabelslabelsupdateLabelCopyMode" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --copyMode: string@copyMode-completer # Required. Indicates how the applied Label, and Field values should be copied when a Drive item is copied.
-  --languageCode: string # The BCP-47 language code to use for evaluating localized field labels. When not specified, values in the default configured language will be used.
-  --useAdminAccess: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --copy-mode: string@copy-mode-completer # Required. Indicates how the applied Label, and Field values should be copied when a Drive item is copied.
+  --language-code: string # The BCP-47 language code to use for evaluating localized field labels. When not specified, values in the default configured language will be used.
+  --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
   --view: string@view-completer # When specified, only certain fields belonging to the indicated view will be returned.
 ]: any -> record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: table<appliedCapabilities: record, createTime: string, creator: record, dateOptions: record, disableTime: string, disabler: record, displayHints: record, id: string, integerOptions: record, lifecycle: record, lockStatus: record, properties: record, publisher: record, queryKey: string, schemaCapabilities: record, selectionOptions: record, textOptions: record, updateTime: string, updater: record, userOptions: record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record<hideInSearch: bool, showInApply: bool>, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2beta/($name):updateLabelCopyMode" $qp)
-  let body = {copyMode: $copyMode, languageCode: $languageCode, useAdminAccess: $useAdminAccess, view: $view} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v2beta/{name}:updateLabelCopyMode") $qp)
+  let body = {"copyMode": $copy_mode, "languageCode": $language_code, "useAdminAccess": $use_admin_access, "view": $view} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -549,17 +549,17 @@ export def "v2beta-locks drivelabelslabelsrevisionslockslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --pageSize: int # Maximum number of Locks to return per page. Default: 100. Max: 200.
-  --pageToken: string # The token of the page to return.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --page-size: int # Maximum number of Locks to return per page. Default: 100. Max: 200.
+  --page-token: string # The token of the page to return.
 ]: nothing -> record<labelLocks: table<capabilities: record, choiceId: string, createTime: string, creator: record, deleteTime: string, fieldId: string, name: string, state: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2beta/($parent)/locks" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/locks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -586,18 +586,18 @@ export def "v2beta-permissions drivelabelslabelsrevisionspermissionslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --pageSize: int # Maximum number of permissions to return per page. Default: 50. Max: 200.
-  --pageToken: string # The token of the page to return.
-  --useAdminAccess: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --page-size: int # Maximum number of permissions to return per page. Default: 50. Max: 200.
+  --page-token: string # The token of the page to return.
+  --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
 ]: nothing -> record<labelPermissions: table<audience: string, email: string, group: string, name: string, person: string, role: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "useAdminAccess" $useAdminAccess "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2beta/($parent)/permissions" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "useAdminAccess" $use_admin_access "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/permissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -624,11 +624,11 @@ export def "v2beta-permissions drivelabelslabelsrevisionsupdatePermissions" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --useAdminAccess: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
   --audience: string # Audience to grant a role to. The magic value of `audiences/default` may be used to apply the role to the default audience in the context of the organization that owns the Label.
   --email: string # Specifies the email address for a user or group pricinpal. Not populated for audience principals. User and Group permissions may only be inserted using email address. On update requests, if email address is specified, no principal should be specified.
   --group: string # Group resource name.
@@ -639,9 +639,9 @@ export def "v2beta-permissions drivelabelslabelsrevisionsupdatePermissions" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "useAdminAccess" $useAdminAccess "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2beta/($parent)/permissions" $qp)
-  let body = {audience: $audience, email: $email, group: $group, name: $name, person: $person, role: $role} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "useAdminAccess" $use_admin_access "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/permissions") $qp)
+  let body = {"audience": $audience, "email": $email, "group": $group, "name": $name, "person": $person, "role": $role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -669,11 +669,11 @@ export def "v2beta-permissions drivelabelslabelsrevisionspermissionscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --useAdminAccess: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
   --audience: string # Audience to grant a role to. The magic value of `audiences/default` may be used to apply the role to the default audience in the context of the organization that owns the Label.
   --email: string # Specifies the email address for a user or group pricinpal. Not populated for audience principals. User and Group permissions may only be inserted using email address. On update requests, if email address is specified, no principal should be specified.
   --group: string # Group resource name.
@@ -684,9 +684,9 @@ export def "v2beta-permissions drivelabelslabelsrevisionspermissionscreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "useAdminAccess" $useAdminAccess "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2beta/($parent)/permissions" $qp)
-  let body = {audience: $audience, email: $email, group: $group, name: $name, person: $person, role: $role} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "useAdminAccess" $use_admin_access "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/permissions") $qp)
+  let body = {"audience": $audience, "email": $email, "group": $group, "name": $name, "person": $person, "role": $role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -715,19 +715,19 @@ export def "v2beta-permissions-batch-delete drivelabelslabelsrevisionspermission
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --requests: list # Required. The request message specifying the resources to update. — item shape: {name?: string, useAdminAccess?: bool}
-  --useAdminAccess: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access. If this is set, the use_admin_access field in the DeleteLabelPermissionRequest messages must either be empty or match this field.
+  --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access. If this is set, the use_admin_access field in the DeleteLabelPermissionRequest messages must either be empty or match this field.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2beta/($parent)/permissions:batchDelete" $qp)
-  let body = {requests: $requests, useAdminAccess: $useAdminAccess} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/permissions:batchDelete") $qp)
+  let body = {"requests": $requests, "useAdminAccess": $use_admin_access} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -756,19 +756,19 @@ export def "v2beta-permissions-batch-update drivelabelslabelsrevisionspermission
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --requests: list # Required. The request message specifying the resources to update. — item shape: {labelPermission?: record, parent?: string, useAdminAccess?: bool}
-  --useAdminAccess: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access. If this is set, the use_admin_access field in the UpdateLabelPermissionRequest messages must either be empty or match this field.
+  --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access. If this is set, the use_admin_access field in the UpdateLabelPermissionRequest messages must either be empty or match this field.
 ]: any -> record<permissions: table<audience: string, email: string, group: string, name: string, person: string, role: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2beta/($parent)/permissions:batchUpdate" $qp)
-  let body = {requests: $requests, useAdminAccess: $useAdminAccess} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2beta/{parent}/permissions:batchUpdate") $qp)
+  let body = {"requests": $requests, "useAdminAccess": $use_admin_access} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

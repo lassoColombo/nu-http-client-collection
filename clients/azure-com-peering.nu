@@ -71,7 +71,7 @@ def kind-completer [] { ["Direct" "Exchange"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-peering-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-peering-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Peering/operations
 # operationId: Operations_List
-export def "providers-microsoft-peering-operations List" [
+export def "providers-microsoft-peering-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,8 +119,8 @@ export def "providers-microsoft-peering-operations List" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Peering/CheckServiceProviderAvailability
 # operationId: CheckServiceProviderAvailability
-export def "subscriptions-providers-microsoft-peering-check-service-provider-availability CheckServiceProviderAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-peering-check-service-provider-availability check" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,15 +130,15 @@ export def "subscriptions-providers-microsoft-peering-check-service-provider-ava
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The client API version.
-  --peeringServiceLocation: string # Gets or sets the PeeringServiceLocation
-  --peeringServiceProvider: string # Gets or sets the PeeringServiceProvider
+  --peering-service-location: string # Gets or sets the PeeringServiceLocation
+  --peering-service-provider: string # Gets or sets the PeeringServiceProvider
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Peering/CheckServiceProviderAvailability" $qp)
-  let body = {peeringServiceLocation: $peeringServiceLocation, peeringServiceProvider: $peeringServiceProvider} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/CheckServiceProviderAvailability") $qp)
+  let body = {"peeringServiceLocation": $peering_service_location, "peeringServiceProvider": $peering_service_provider} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -149,8 +149,8 @@ export def "subscriptions-providers-microsoft-peering-check-service-provider-ava
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Peering/legacyPeerings
 # operationId: LegacyPeerings_List
-export def "subscriptions-providers-microsoft-peering-legacy-peerings List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-peering-legacy-peerings list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,14 +159,14 @@ export def "subscriptions-providers-microsoft-peering-legacy-peerings List" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --peeringLocation: string # The location of the peering.
+  --peering-location: string # The location of the peering.
   --kind: string@kind-completer # The kind of the peering.
   --api-version: string # The client API version.
 ]: nothing -> record<nextLink: string, value: table<kind: string, location: string, properties: record, sku: record, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "peeringLocation" $peeringLocation "scalar") (serialize-qp "kind" $kind "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Peering/legacyPeerings" $qp)
+  let qp = [(serialize-qp "peeringLocation" $peering_location "scalar") (serialize-qp "kind" $kind "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/legacyPeerings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,8 +176,8 @@ export def "subscriptions-providers-microsoft-peering-legacy-peerings List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peerAsns
 # operationId: PeerAsns_ListBySubscription
-export def "subscriptions-providers-microsoft-peering-peer-asns ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-peering-peer-asns list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "subscriptions-providers-microsoft-peering-peer-asns ListBySubscripti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Peering/peerAsns" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peerAsns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -201,9 +201,9 @@ export def "subscriptions-providers-microsoft-peering-peer-asns ListBySubscripti
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peerAsns/{peerAsnName}
 # operationId: PeerAsns_Delete
-export def "subscriptions-providers-microsoft-peering-peer-asns Delete" [
-  peerAsnName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-peering-peer-asns delete" [
+  subscription_id: string
+  peer_asn_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "subscriptions-providers-microsoft-peering-peer-asns Delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Peering/peerAsns/($peerAsnName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, peer_asn_name: $peer_asn_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peerAsns/{peer_asn_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -227,9 +227,9 @@ export def "subscriptions-providers-microsoft-peering-peer-asns Delete" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peerAsns/{peerAsnName}
 # operationId: PeerAsns_Get
-export def "subscriptions-providers-microsoft-peering-peer-asns Get" [
-  peerAsnName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-peering-peer-asns get" [
+  subscription_id: string
+  peer_asn_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "subscriptions-providers-microsoft-peering-peer-asns Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Peering/peerAsns/($peerAsnName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, peer_asn_name: $peer_asn_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peerAsns/{peer_asn_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -254,9 +254,9 @@ export def "subscriptions-providers-microsoft-peering-peer-asns Get" [
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peerAsns/{peerAsnName}
 # operationId: PeerAsns_CreateOrUpdate
 # --properties shape: {peerAsn?: int, peerContactInfo?: record, peerName?: string, validationState?: "None"|"Pending"|"Approved"|"Failed"}
-export def "subscriptions-providers-microsoft-peering-peer-asns CreateOrUpdate" [
-  peerAsnName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-peering-peer-asns create-or-update" [
+  subscription_id: string
+  peer_asn_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,8 +272,8 @@ export def "subscriptions-providers-microsoft-peering-peer-asns CreateOrUpdate" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Peering/peerAsns/($peerAsnName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, peer_asn_name: $peer_asn_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peerAsns/{peer_asn_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -284,8 +284,8 @@ export def "subscriptions-providers-microsoft-peering-peer-asns CreateOrUpdate" 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peeringLocations
 # operationId: PeeringLocations_List
-export def "subscriptions-providers-microsoft-peering-peering-locations List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-peering-peering-locations list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +300,7 @@ export def "subscriptions-providers-microsoft-peering-peering-locations List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "kind" $kind "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Peering/peeringLocations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peeringLocations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -310,8 +310,8 @@ export def "subscriptions-providers-microsoft-peering-peering-locations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peeringServiceLocations
 # operationId: PeeringServiceLocations_List
-export def "subscriptions-providers-microsoft-peering-peering-service-locations List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-peering-peering-service-locations list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "subscriptions-providers-microsoft-peering-peering-service-locations 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Peering/peeringServiceLocations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peeringServiceLocations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -335,8 +335,8 @@ export def "subscriptions-providers-microsoft-peering-peering-service-locations 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peeringServiceProviders
 # operationId: PeeringServiceProviders_List
-export def "subscriptions-providers-microsoft-peering-peering-service-providers List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-peering-peering-service-providers list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,7 +350,7 @@ export def "subscriptions-providers-microsoft-peering-peering-service-providers 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Peering/peeringServiceProviders" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peeringServiceProviders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -360,8 +360,8 @@ export def "subscriptions-providers-microsoft-peering-peering-service-providers 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peeringServices
 # operationId: PeeringServices_ListBySubscription
-export def "subscriptions-providers-microsoft-peering-peering-services ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-peering-peering-services list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "subscriptions-providers-microsoft-peering-peering-services ListBySub
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Peering/peeringServices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peeringServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -385,8 +385,8 @@ export def "subscriptions-providers-microsoft-peering-peering-services ListBySub
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peerings
 # operationId: Peerings_ListBySubscription
-export def "subscriptions-providers-microsoft-peering-peerings ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-peering-peerings list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +400,7 @@ export def "subscriptions-providers-microsoft-peering-peerings ListBySubscriptio
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Peering/peerings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peerings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -410,9 +410,9 @@ export def "subscriptions-providers-microsoft-peering-peerings ListBySubscriptio
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices
 # operationId: PeeringServices_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,7 +426,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Peering/peeringServices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -436,10 +436,10 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices/{peeringServiceName}
 # operationId: PeeringServices_Delete
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services Delete" [
-  resourceGroupName: string
-  peeringServiceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services delete" [
+  subscription_id: string
+  resource_group_name: string
+  peering_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,7 +453,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Peering/peeringServices/($peeringServiceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, peering_service_name: $peering_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices/{peering_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -463,10 +463,10 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices/{peeringServiceName}
 # operationId: PeeringServices_Get
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services Get" [
-  resourceGroupName: string
-  peeringServiceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services get" [
+  subscription_id: string
+  resource_group_name: string
+  peering_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,7 +480,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Peering/peeringServices/($peeringServiceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, peering_service_name: $peering_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices/{peering_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -490,10 +490,10 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices/{peeringServiceName}
 # operationId: PeeringServices_Update
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services Update" [
-  resourceGroupName: string
-  peeringServiceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services update" [
+  subscription_id: string
+  resource_group_name: string
+  peering_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,8 +509,8 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Peering/peeringServices/($peeringServiceName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, peering_service_name: $peering_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices/{peering_service_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -522,10 +522,10 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices/{peeringServiceName}
 # operationId: PeeringServices_CreateOrUpdate
 # --properties shape: {peeringServiceLocation?: string, peeringServiceProvider?: string}
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services CreateOrUpdate" [
-  resourceGroupName: string
-  peeringServiceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  peering_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,8 +543,8 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Peering/peeringServices/($peeringServiceName)" $qp)
-  let body = {location: $location, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, peering_service_name: $peering_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices/{peering_service_name}") $qp)
+  let body = {"location": $location, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -555,10 +555,10 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices/{peeringServiceName}/prefixes
 # operationId: Prefixes_ListByPeeringService
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services-prefixes ListByPeeringService" [
-  resourceGroupName: string
-  peeringServiceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services-prefixes list-by" [
+  subscription_id: string
+  resource_group_name: string
+  peering_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Peering/peeringServices/($peeringServiceName)/prefixes" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, peering_service_name: $peering_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices/{peering_service_name}/prefixes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -582,11 +582,11 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices/{peeringServiceName}/prefixes/{prefixName}
 # operationId: PeeringServicePrefixes_Delete
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services-prefixes Delete" [
-  resourceGroupName: string
-  peeringServiceName: string
-  prefixName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services-prefixes delete" [
+  subscription_id: string
+  resource_group_name: string
+  peering_service_name: string
+  prefix_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +600,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Peering/peeringServices/($peeringServiceName)/prefixes/($prefixName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, peering_service_name: $peering_service_name, prefix_name: $prefix_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices/{peering_service_name}/prefixes/{prefix_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -610,11 +610,11 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices/{peeringServiceName}/prefixes/{prefixName}
 # operationId: PeeringServicePrefixes_Get
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services-prefixes Get" [
-  resourceGroupName: string
-  peeringServiceName: string
-  prefixName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services-prefixes get" [
+  subscription_id: string
+  resource_group_name: string
+  peering_service_name: string
+  prefix_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -628,7 +628,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Peering/peeringServices/($peeringServiceName)/prefixes/($prefixName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, peering_service_name: $peering_service_name, prefix_name: $prefix_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices/{peering_service_name}/prefixes/{prefix_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -639,11 +639,11 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices/{peeringServiceName}/prefixes/{prefixName}
 # operationId: PeeringServicePrefixes_CreateOrUpdate
 # --properties shape: {learnedType?: "None"|"ViaPartner"|"ViaSession", prefix?: string, prefixValidationState?: "None"|"Invalid"|"Verified"|"Failed"|"Pending"|"Unknown"}
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services-prefixes CreateOrUpdate" [
-  resourceGroupName: string
-  peeringServiceName: string
-  prefixName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services-prefixes create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  peering_service_name: string
+  prefix_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,8 +659,8 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Peering/peeringServices/($peeringServiceName)/prefixes/($prefixName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, peering_service_name: $peering_service_name, prefix_name: $prefix_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices/{peering_service_name}/prefixes/{prefix_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -671,9 +671,9 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peerings
 # operationId: Peerings_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-peering-peerings ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-peering-peerings list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -687,7 +687,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peerings L
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Peering/peerings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peerings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -697,10 +697,10 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peerings L
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peerings/{peeringName}
 # operationId: Peerings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-peering-peerings Delete" [
-  resourceGroupName: string
-  peeringName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-peering-peerings delete" [
+  subscription_id: string
+  resource_group_name: string
+  peering_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -714,7 +714,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peerings D
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Peering/peerings/($peeringName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, peering_name: $peering_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peerings/{peering_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -724,10 +724,10 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peerings D
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peerings/{peeringName}
 # operationId: Peerings_Get
-export def "subscriptions-resource-groups-providers-microsoft-peering-peerings Get" [
-  resourceGroupName: string
-  peeringName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-peering-peerings get" [
+  subscription_id: string
+  resource_group_name: string
+  peering_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,7 +741,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peerings G
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Peering/peerings/($peeringName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, peering_name: $peering_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peerings/{peering_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -751,10 +751,10 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peerings G
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peerings/{peeringName}
 # operationId: Peerings_Update
-export def "subscriptions-resource-groups-providers-microsoft-peering-peerings Update" [
-  resourceGroupName: string
-  peeringName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-peering-peerings update" [
+  subscription_id: string
+  resource_group_name: string
+  peering_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -770,8 +770,8 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peerings U
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Peering/peerings/($peeringName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, peering_name: $peering_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peerings/{peering_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -784,10 +784,10 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peerings U
 # operationId: Peerings_CreateOrUpdate
 # --properties shape: {direct?: record, exchange?: record, peeringLocation?: string}
 # --sku shape: {family?: "Direct"|"Exchange", name?: "Basic_Exchange_Free"|"Basic_Direct_Free"|"Premium_Direct_Free"|"Premium_Exchange_Metered", size?: "Free"|"Metered"|"Unlimited", tier?: "Basic"|"Premium"}
-export def "subscriptions-resource-groups-providers-microsoft-peering-peerings CreateOrUpdate" [
-  resourceGroupName: string
-  peeringName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-peering-peerings create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  peering_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,8 +807,8 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peerings C
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Peering/peerings/($peeringName)" $qp)
-  let body = {kind: $kind, location: $location, properties: $properties, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, peering_name: $peering_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peerings/{peering_name}") $qp)
+  let body = {"kind": $kind, "location": $location, "properties": $properties, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

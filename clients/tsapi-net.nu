@@ -117,7 +117,7 @@ export def "surveys get" [
 #
 # GET /Surveys/{surveyId}/Interviews
 export def "surveys-interviews get" [
-  surveyId: string
+  survey_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,12 +128,12 @@ export def "surveys-interviews get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --start: int # format: int32
-  --maxLength: int # format: int32
+  --max-length: int # format: int32
 ]: nothing -> table<dataItems: list<record>, hierarchicalInterviews: list<record>, ident: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "maxLength" $maxLength "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Surveys/($surveyId)/Interviews" $qp)
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "maxLength" $max_length "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({survey_id: $survey_id} | format pattern "/Surveys/{survey_id}/Interviews") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,7 +143,7 @@ export def "surveys-interviews get" [
 #
 # GET /Surveys/{surveyId}/Metadata
 export def "surveys-metadata get" [
-  surveyId: string
+  survey_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "surveys-metadata get" [
 ]: nothing -> record<hierarchies: table<ident: string, metadata: record, parent: record>, interviewCount: int, languages: table<ident: string, name: string, subLanguages: list>, name: string, title: string, variables: table<ident: string, label: record, maxResponses: int, name: string, parentType: record, questions: list, type: record, use: record, variableValues: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Surveys/($surveyId)/Metadata")
+  let full_url = (build-url $base ({survey_id: $survey_id} | format pattern "/Surveys/{survey_id}/Metadata"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

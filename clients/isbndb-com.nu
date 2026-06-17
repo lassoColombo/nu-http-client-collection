@@ -103,12 +103,12 @@ export def "author get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # The number of page to retrieve, please note the API will not return more than 10,000 results no matter how you paginate them
-  --pageSize: string # How many items should be returned per page, maximum of 1,000
+  --page-size: string # How many items should be returned per page, maximum of 1,000
 ]: nothing -> record<author: string, books: table<authors: list, date_published: string, dewey_decimal: string, dimensions: string, edition: string, excerpt: string, format: string, isbn: string, isbn13: string, language: string, overview: string, pages: int, publisher: string, reviews: list, subjects: list, synopsys: string, title: string, title_long: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/author/($name)" $qp)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/author/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -127,13 +127,13 @@ export def "authors get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageSize: string # How many items should be returned per page, maximum of 1,000
+  --page-size: string # How many items should be returned per page, maximum of 1,000
   --page: string # The number of page to retrieve, please note the API will not return more than 10,000 results no matter how you paginate them
 ]: nothing -> record<authors: list<string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/authors/($query)" $qp)
+  let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({query: $query} | format pattern "/authors/{query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -155,7 +155,7 @@ export def "book get" [
 ]: nothing -> record<authors: list<string>, date_published: string, dewey_decimal: string, dimensions: string, edition: string, excerpt: string, format: string, isbn: string, isbn13: string, language: string, overview: string, pages: int, publisher: string, reviews: list<string>, subjects: list<string>, synopsys: string, title: string, title_long: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/book/($isbn)")
+  let full_url = (build-url $base ({isbn: $isbn} | format pattern "/book/{isbn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,12 +176,12 @@ export def "books get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # The number of page to retrieve, please note the API will not return more than 10,000 results no matter how you paginate them
   --author: string # Filters the query results by author
-  --pageSize: string # How many items should be returned per page, maximum of 1,000
+  --page-size: string # How many items should be returned per page, maximum of 1,000
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/books/($query)" $qp)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({query: $query} | format pattern "/books/{query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -201,12 +201,12 @@ export def "publisher get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # The number of page to retrieve, please note the API will not return more than 10,000 results no matter how you paginate them
-  --pageSize: string # How many items should be returned per page, maximum of 1,000
+  --page-size: string # How many items should be returned per page, maximum of 1,000
 ]: nothing -> record<books: table<isbn: string>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/publisher/($name)" $qp)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/publisher/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -225,13 +225,13 @@ export def "publishers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageSize: string # How many items should be returned per page, maximum of 1,000
+  --page-size: string # How many items should be returned per page, maximum of 1,000
   --page: string # The number of page to retrieve, please note the API will not return more than 10,000 results no matter how you paginate them
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/publishers/($query)" $qp)
+  let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({query: $query} | format pattern "/publishers/{query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -297,7 +297,7 @@ export def "subject get" [
 ]: nothing -> record<parent: string, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subject/($name)")
+  let full_url = (build-url $base ({name: $name} | format pattern "/subject/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -316,13 +316,13 @@ export def "subjects get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageSize: string # How many items should be returned per page, maximum of 1,000
+  --page-size: string # How many items should be returned per page, maximum of 1,000
   --page: string # The number of page to retrieve, please note the API will not return more than 10,000 results no matter how you paginate them
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subjects/($query)" $qp)
+  let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({query: $query} | format pattern "/subjects/{query}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

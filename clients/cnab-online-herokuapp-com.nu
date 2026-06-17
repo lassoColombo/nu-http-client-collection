@@ -106,7 +106,7 @@ export def "file post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/file")
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -118,7 +118,7 @@ export def "file post" [
 #
 # GET /file/{fileId}
 export def "file get" [
-  fileId: string
+  file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,7 +130,7 @@ export def "file get" [
 ]: nothing -> record<data: record<attributes: record<account_number: string, bank_code: int, bank_name: string, company_name: string, generation_date: string, name: string>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/file/($fileId)")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/file/{file_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -140,7 +140,7 @@ export def "file get" [
 #
 # GET /file/{fileId}/lines
 export def "file-lines get" [
-  fileId: string
+  file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -152,7 +152,7 @@ export def "file-lines get" [
 ]: nothing -> record<data: table<attributes: record, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/file/($fileId)/lines")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/file/{file_id}/lines"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -162,7 +162,7 @@ export def "file-lines get" [
 #
 # GET /file/{fileId}/occurrences
 export def "file-occurrences get" [
-  fileId: string
+  file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +174,7 @@ export def "file-occurrences get" [
 ]: nothing -> record<data: table<attributes: record, id: int, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/file/($fileId)/occurrences")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/file/{file_id}/occurrences"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

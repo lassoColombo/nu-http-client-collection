@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 # DELETE /actions/{idAction}
 # operationId: deleteActionsByIdAction
 export def "actions delete" [
-  idAction: string
+  id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "actions delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)" $qp)
+  let full_url = (build-url $base ({id_action: $id_action} | format pattern "/actions/{id_action}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -121,7 +121,7 @@ export def "actions delete" [
 # GET /actions/{idAction}
 # operationId: getActionsByIdAction
 export def "actions list" [
-  idAction: string
+  id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,15 +135,15 @@ export def "actions list" [
   --fields: string # all or a comma-separated list of: data, date, idMemberCreator or type (default: all)
   --member: string #  true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
-  --memberCreator: string #  true or false
-  --memberCreator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
+  --member-creator: string #  true or false
+  --member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "display" $display "scalar") (serialize-qp "entities" $entities "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $memberCreator "scalar") (serialize-qp "memberCreator_fields" $memberCreator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)" $qp)
+  let qp = [(serialize-qp "display" $display "scalar") (serialize-qp "entities" $entities "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_action: $id_action} | format pattern "/actions/{id_action}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -153,8 +153,8 @@ export def "actions list" [
 #
 # PUT /actions/{idAction}
 # operationId: updateActionsByIdAction
-export def "actions updateActionsByIdAction" [
-  idAction: string
+export def "actions update" [
+  id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,8 +171,8 @@ export def "actions updateActionsByIdAction" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)" $qp)
-  let body = {text: $text} | compact
+  let full_url = (build-url $base ({id_action: $id_action} | format pattern "/actions/{id_action}") $qp)
+  let body = {"text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -184,7 +184,7 @@ export def "actions updateActionsByIdAction" [
 # GET /actions/{idAction}/board
 # operationId: getActionsBoardByIdAction
 export def "actions-board list" [
-  idAction: string
+  id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "actions-board list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)/board" $qp)
+  let full_url = (build-url $base ({id_action: $id_action} | format pattern "/actions/{id_action}/board") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -211,7 +211,7 @@ export def "actions-board list" [
 # GET /actions/{idAction}/board/{field}
 # operationId: getActionsBoardByIdActionByField
 export def "actions-board get" [
-  idAction: string
+  id_action: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -227,7 +227,7 @@ export def "actions-board get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)/board/($field)" $qp)
+  let full_url = (build-url $base ({id_action: $id_action, field: $field} | format pattern "/actions/{id_action}/board/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -238,7 +238,7 @@ export def "actions-board get" [
 # GET /actions/{idAction}/card
 # operationId: getActionsCardByIdAction
 export def "actions-card list" [
-  idAction: string
+  id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "actions-card list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)/card" $qp)
+  let full_url = (build-url $base ({id_action: $id_action} | format pattern "/actions/{id_action}/card") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -265,7 +265,7 @@ export def "actions-card list" [
 # GET /actions/{idAction}/card/{field}
 # operationId: getActionsCardByIdActionByField
 export def "actions-card get" [
-  idAction: string
+  id_action: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -281,7 +281,7 @@ export def "actions-card get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)/card/($field)" $qp)
+  let full_url = (build-url $base ({id_action: $id_action, field: $field} | format pattern "/actions/{id_action}/card/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -292,7 +292,7 @@ export def "actions-card get" [
 # GET /actions/{idAction}/display
 # operationId: getActionsDisplayByIdAction
 export def "actions-display get" [
-  idAction: string
+  id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,7 +307,7 @@ export def "actions-display get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)/display" $qp)
+  let full_url = (build-url $base ({id_action: $id_action} | format pattern "/actions/{id_action}/display") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,7 +318,7 @@ export def "actions-display get" [
 # GET /actions/{idAction}/entities
 # operationId: getActionsEntitiesByIdAction
 export def "actions-entities get" [
-  idAction: string
+  id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "actions-entities get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)/entities" $qp)
+  let full_url = (build-url $base ({id_action: $id_action} | format pattern "/actions/{id_action}/entities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,7 +344,7 @@ export def "actions-entities get" [
 # GET /actions/{idAction}/list
 # operationId: getActionsListByIdAction
 export def "actions-list list" [
-  idAction: string
+  id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,7 +360,7 @@ export def "actions-list list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)/list" $qp)
+  let full_url = (build-url $base ({id_action: $id_action} | format pattern "/actions/{id_action}/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -371,7 +371,7 @@ export def "actions-list list" [
 # GET /actions/{idAction}/list/{field}
 # operationId: getActionsListByIdActionByField
 export def "actions-list get" [
-  idAction: string
+  id_action: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,7 +387,7 @@ export def "actions-list get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)/list/($field)" $qp)
+  let full_url = (build-url $base ({id_action: $id_action, field: $field} | format pattern "/actions/{id_action}/list/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -398,7 +398,7 @@ export def "actions-list get" [
 # GET /actions/{idAction}/member
 # operationId: getActionsMemberByIdAction
 export def "actions-member list" [
-  idAction: string
+  id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "actions-member list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)/member" $qp)
+  let full_url = (build-url $base ({id_action: $id_action} | format pattern "/actions/{id_action}/member") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -425,7 +425,7 @@ export def "actions-member list" [
 # GET /actions/{idAction}/member/{field}
 # operationId: getActionsMemberByIdActionByField
 export def "actions-member get" [
-  idAction: string
+  id_action: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -441,7 +441,7 @@ export def "actions-member get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)/member/($field)" $qp)
+  let full_url = (build-url $base ({id_action: $id_action, field: $field} | format pattern "/actions/{id_action}/member/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -452,7 +452,7 @@ export def "actions-member get" [
 # GET /actions/{idAction}/memberCreator
 # operationId: getActionsMemberCreatorByIdAction
 export def "actions-member-creator list" [
-  idAction: string
+  id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -468,7 +468,7 @@ export def "actions-member-creator list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)/memberCreator" $qp)
+  let full_url = (build-url $base ({id_action: $id_action} | format pattern "/actions/{id_action}/memberCreator") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -479,7 +479,7 @@ export def "actions-member-creator list" [
 # GET /actions/{idAction}/memberCreator/{field}
 # operationId: getActionsMemberCreatorByIdActionByField
 export def "actions-member-creator get" [
-  idAction: string
+  id_action: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -495,7 +495,7 @@ export def "actions-member-creator get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)/memberCreator/($field)" $qp)
+  let full_url = (build-url $base ({id_action: $id_action, field: $field} | format pattern "/actions/{id_action}/memberCreator/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -506,7 +506,7 @@ export def "actions-member-creator get" [
 # GET /actions/{idAction}/organization
 # operationId: getActionsOrganizationByIdAction
 export def "actions-organization list" [
-  idAction: string
+  id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,7 +522,7 @@ export def "actions-organization list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)/organization" $qp)
+  let full_url = (build-url $base ({id_action: $id_action} | format pattern "/actions/{id_action}/organization") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -533,7 +533,7 @@ export def "actions-organization list" [
 # GET /actions/{idAction}/organization/{field}
 # operationId: getActionsOrganizationByIdActionByField
 export def "actions-organization get" [
-  idAction: string
+  id_action: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -549,7 +549,7 @@ export def "actions-organization get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)/organization/($field)" $qp)
+  let full_url = (build-url $base ({id_action: $id_action, field: $field} | format pattern "/actions/{id_action}/organization/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -559,8 +559,8 @@ export def "actions-organization get" [
 #
 # PUT /actions/{idAction}/text
 # operationId: updateActionsTextByIdAction
-export def "actions-text updateActionsTextByIdAction" [
-  idAction: string
+export def "actions-text update" [
+  id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -577,8 +577,8 @@ export def "actions-text updateActionsTextByIdAction" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)/text" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_action: $id_action} | format pattern "/actions/{id_action}/text") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -590,7 +590,7 @@ export def "actions-text updateActionsTextByIdAction" [
 # GET /actions/{idAction}/{field}
 # operationId: getActionsByIdActionByField
 export def "actions get" [
-  idAction: string
+  id_action: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -606,7 +606,7 @@ export def "actions get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($idAction)/($field)" $qp)
+  let full_url = (build-url $base ({id_action: $id_action, field: $field} | format pattern "/actions/{id_action}/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -642,7 +642,7 @@ export def "batch get" [
 #
 # POST /boards
 # operationId: addBoards
-export def "boards addBoards" [
+export def "boards create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,33 +655,33 @@ export def "boards addBoards" [
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --closed: string #  true or false
   --desc: string # a string with a length from 0 to 16384
-  --idBoardSource: string # The id of the board to copy into the new board
-  --idOrganization: string # The id or name of the organization to add the board to.
-  --keepFromSource: string # Components of the source board to copy.
-  --labelNamesblue: string # a string with a length from 0 to 16384
-  --labelNamesgreen: string # a string with a length from 0 to 16384
-  --labelNamesorange: string # a string with a length from 0 to 16384
-  --labelNamespurple: string # a string with a length from 0 to 16384
-  --labelNamesred: string # a string with a length from 0 to 16384
-  --labelNamesyellow: string # a string with a length from 0 to 16384
+  --id-board-source: string # The id of the board to copy into the new board
+  --id-organization: string # The id or name of the organization to add the board to.
+  --keep-from-source: string # Components of the source board to copy.
+  --label-names-blue: string # a string with a length from 0 to 16384
+  --label-names-green: string # a string with a length from 0 to 16384
+  --label-names-orange: string # a string with a length from 0 to 16384
+  --label-names-purple: string # a string with a length from 0 to 16384
+  --label-names-red: string # a string with a length from 0 to 16384
+  --label-names-yellow: string # a string with a length from 0 to 16384
   --name: string # a string with a length from 1 to 16384
-  --powerUps: string # all or a comma-separated list of: calendar, cardAging, recap or voting
-  --prefsbackground: string # A standard background name, or the id of a custom background
-  --prefscalendarFeedEnabled: string #  true or false
-  --prefscardAging: string # One of: pirate or regular
-  --prefscardCovers: string #  true or false
-  --prefscomments: string # One of: disabled, members, observers, org or public
-  --prefsinvitations: string # One of: admins or members
-  --prefspermissionLevel: string # One of: org, private or public
-  --prefsselfJoin: string #  true or false
-  --prefsvoting: string # One of: disabled, members, observers, org or public
-  --prefs-background: string # a string with a length from 0 to 16384
-  --prefs-cardAging: string # One of: pirate or regular
-  --prefs-cardCovers: string #  true or false
+  --power-ups: string # all or a comma-separated list of: calendar, cardAging, recap or voting
+  --prefs-background: string # A standard background name, or the id of a custom background
+  --prefs-calendar-feed-enabled: string #  true or false
+  --prefs-card-aging: string # One of: pirate or regular
+  --prefs-card-covers: string #  true or false
   --prefs-comments: string # One of: disabled, members, observers, org or public
   --prefs-invitations: string # One of: admins or members
-  --prefs-permissionLevel: string # One of: org, private or public
-  --prefs-selfJoin: string #  true or false
+  --prefs-permission-level: string # One of: org, private or public
+  --prefs-self-join: string #  true or false
+  --prefs-voting: string # One of: disabled, members, observers, org or public
+  --prefs-background: string # a string with a length from 0 to 16384
+  --prefs-card-aging: string # One of: pirate or regular
+  --prefs-card-covers: string #  true or false
+  --prefs-comments: string # One of: disabled, members, observers, org or public
+  --prefs-invitations: string # One of: admins or members
+  --prefs-permission-level: string # One of: org, private or public
+  --prefs-self-join: string #  true or false
   --prefs-voting: string # One of: disabled, members, observers, org or public
   --subscribed: string #  true or false
 ]: any -> any {
@@ -690,7 +690,7 @@ export def "boards addBoards" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/boards" $qp)
-  let body = {closed: $closed, desc: $desc, idBoardSource: $idBoardSource, idOrganization: $idOrganization, keepFromSource: $keepFromSource, labelNames/blue: $labelNamesblue, labelNames/green: $labelNamesgreen, labelNames/orange: $labelNamesorange, labelNames/purple: $labelNamespurple, labelNames/red: $labelNamesred, labelNames/yellow: $labelNamesyellow, name: $name, powerUps: $powerUps, prefs/background: $prefsbackground, prefs/calendarFeedEnabled: $prefscalendarFeedEnabled, prefs/cardAging: $prefscardAging, prefs/cardCovers: $prefscardCovers, prefs/comments: $prefscomments, prefs/invitations: $prefsinvitations, prefs/permissionLevel: $prefspermissionLevel, prefs/selfJoin: $prefsselfJoin, prefs/voting: $prefsvoting, prefs_background: $prefs_background, prefs_cardAging: $prefs_cardAging, prefs_cardCovers: $prefs_cardCovers, prefs_comments: $prefs_comments, prefs_invitations: $prefs_invitations, prefs_permissionLevel: $prefs_permissionLevel, prefs_selfJoin: $prefs_selfJoin, prefs_voting: $prefs_voting, subscribed: $subscribed} | compact
+  let body = {"closed": $closed, "desc": $desc, "idBoardSource": $id_board_source, "idOrganization": $id_organization, "keepFromSource": $keep_from_source, "labelNames/blue": $label_names_blue, "labelNames/green": $label_names_green, "labelNames/orange": $label_names_orange, "labelNames/purple": $label_names_purple, "labelNames/red": $label_names_red, "labelNames/yellow": $label_names_yellow, "name": $name, "powerUps": $power_ups, "prefs/background": $prefs_background, "prefs/calendarFeedEnabled": $prefs_calendar_feed_enabled, "prefs/cardAging": $prefs_card_aging, "prefs/cardCovers": $prefs_card_covers, "prefs/comments": $prefs_comments, "prefs/invitations": $prefs_invitations, "prefs/permissionLevel": $prefs_permission_level, "prefs/selfJoin": $prefs_self_join, "prefs/voting": $prefs_voting, "prefs_background": $prefs_background, "prefs_cardAging": $prefs_card_aging, "prefs_cardCovers": $prefs_card_covers, "prefs_comments": $prefs_comments, "prefs_invitations": $prefs_invitations, "prefs_permissionLevel": $prefs_permission_level, "prefs_selfJoin": $prefs_self_join, "prefs_voting": $prefs_voting, "subscribed": $subscribed} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -702,7 +702,7 @@ export def "boards addBoards" [
 # GET /boards/{idBoard}
 # operationId: getBoardsByIdBoard
 export def "boards list" [
-  idBoard: string
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -720,15 +720,15 @@ export def "boards list" [
   --action-fields: string # all or a comma-separated list of: data, date, idMemberCreator or type (default: all)
   --action-member: string #  true or false
   --action-member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
-  --action-memberCreator: string #  true or false
-  --action-memberCreator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
+  --action-member-creator: string #  true or false
+  --action-member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --cards: string # One of: all, closed, none, open or visible (default: none)
   --card-fields: string # all or a comma-separated list of: badges, checkItemStates, closed, dateLastActivity, desc, descData, due, email, idAttachmentCover, idBoard, idChecklists, idLabels, idList, idMembers, idMembersVoted, idShort, labels, manualCoverAttachment, name, pos, shortLink, shortUrl, subscribed or url (default: all)
   --card-attachments: string # A boolean value or &quot;cover&quot; for only card cover attachments
   --card-attachment-fields: string # all or a comma-separated list of: bytes, date, edgeColor, idMember, isUpload, mimeType, name, previews or url (default: all)
   --card-checklists: string # One of: all or none (default: none)
   --card-stickers: string #  true or false
-  --boardStars: string # One of: mine or none (default: none)
+  --board-stars: string # One of: mine or none (default: none)
   --labels: string # One of: all or none (default: none)
   --label-fields: string # all or a comma-separated list of: color, idBoard, name or uses (default: all)
   --labels-limit: string # a number from 0 to 1000 (default: 50)
@@ -739,22 +739,22 @@ export def "boards list" [
   --memberships-member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: fullName and username)
   --members: string # One of: admins, all, none, normal or owners (default: none)
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, initials, fullName, username and confirmed)
-  --membersInvited: string # One of: admins, all, none, normal or owners (default: none)
-  --membersInvited-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, initials, fullName and username)
+  --members-invited: string # One of: admins, all, none, normal or owners (default: none)
+  --members-invited-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, initials, fullName and username)
   --checklists: string # One of: all or none (default: none)
   --checklist-fields: string # all or a comma-separated list of: idBoard, idCard, name or pos (default: all)
   --organization: string #  true or false
   --organization-fields: string # all or a comma-separated list of: billableMemberCount, desc, descData, displayName, idBoards, invitations, invited, logoHash, memberships, name, powerUps, prefs, premiumFeatures, products, url or website (default: name and displayName)
   --organization-memberships: string # all or a comma-separated list of: active, admin, deactivated, me or normal (default: none)
-  --myPrefs: string #  true or false
+  --my-prefs: string #  true or false
   --fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: name, desc, descData, closed, idOrganization, pinned, url, shortUrl, prefs and labelNames)
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_format" $actions_format "scalar") (serialize-qp "actions_since" $actions_since "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "action_member" $action_member "scalar") (serialize-qp "action_member_fields" $action_member_fields "scalar") (serialize-qp "action_memberCreator" $action_memberCreator "scalar") (serialize-qp "action_memberCreator_fields" $action_memberCreator_fields "scalar") (serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "card_attachments" $card_attachments "scalar") (serialize-qp "card_attachment_fields" $card_attachment_fields "scalar") (serialize-qp "card_checklists" $card_checklists "scalar") (serialize-qp "card_stickers" $card_stickers "scalar") (serialize-qp "boardStars" $boardStars "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "label_fields" $label_fields "scalar") (serialize-qp "labels_limit" $labels_limit "scalar") (serialize-qp "lists" $lists "scalar") (serialize-qp "list_fields" $list_fields "scalar") (serialize-qp "memberships" $memberships "scalar") (serialize-qp "memberships_member" $memberships_member "scalar") (serialize-qp "memberships_member_fields" $memberships_member_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "membersInvited" $membersInvited "scalar") (serialize-qp "membersInvited_fields" $membersInvited_fields "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "checklist_fields" $checklist_fields "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "organization_memberships" $organization_memberships "scalar") (serialize-qp "myPrefs" $myPrefs "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)" $qp)
+  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_format" $actions_format "scalar") (serialize-qp "actions_since" $actions_since "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "action_member" $action_member "scalar") (serialize-qp "action_member_fields" $action_member_fields "scalar") (serialize-qp "action_memberCreator" $action_member_creator "scalar") (serialize-qp "action_memberCreator_fields" $action_member_creator_fields "scalar") (serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "card_attachments" $card_attachments "scalar") (serialize-qp "card_attachment_fields" $card_attachment_fields "scalar") (serialize-qp "card_checklists" $card_checklists "scalar") (serialize-qp "card_stickers" $card_stickers "scalar") (serialize-qp "boardStars" $board_stars "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "label_fields" $label_fields "scalar") (serialize-qp "labels_limit" $labels_limit "scalar") (serialize-qp "lists" $lists "scalar") (serialize-qp "list_fields" $list_fields "scalar") (serialize-qp "memberships" $memberships "scalar") (serialize-qp "memberships_member" $memberships_member "scalar") (serialize-qp "memberships_member_fields" $memberships_member_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "membersInvited" $members_invited "scalar") (serialize-qp "membersInvited_fields" $members_invited_fields "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "checklist_fields" $checklist_fields "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "organization_memberships" $organization_memberships "scalar") (serialize-qp "myPrefs" $my_prefs "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -764,8 +764,8 @@ export def "boards list" [
 #
 # PUT /boards/{idBoard}
 # operationId: updateBoardsByIdBoard
-export def "boards updateBoardsByIdBoard" [
-  idBoard: string
+export def "boards update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,33 +778,33 @@ export def "boards updateBoardsByIdBoard" [
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --closed: string #  true or false
   --desc: string # a string with a length from 0 to 16384
-  --idBoardSource: string # The id of the board to copy into the new board
-  --idOrganization: string # The id or name of the organization to add the board to.
-  --keepFromSource: string # Components of the source board to copy.
-  --labelNamesblue: string # a string with a length from 0 to 16384
-  --labelNamesgreen: string # a string with a length from 0 to 16384
-  --labelNamesorange: string # a string with a length from 0 to 16384
-  --labelNamespurple: string # a string with a length from 0 to 16384
-  --labelNamesred: string # a string with a length from 0 to 16384
-  --labelNamesyellow: string # a string with a length from 0 to 16384
+  --id-board-source: string # The id of the board to copy into the new board
+  --id-organization: string # The id or name of the organization to add the board to.
+  --keep-from-source: string # Components of the source board to copy.
+  --label-names-blue: string # a string with a length from 0 to 16384
+  --label-names-green: string # a string with a length from 0 to 16384
+  --label-names-orange: string # a string with a length from 0 to 16384
+  --label-names-purple: string # a string with a length from 0 to 16384
+  --label-names-red: string # a string with a length from 0 to 16384
+  --label-names-yellow: string # a string with a length from 0 to 16384
   --name: string # a string with a length from 1 to 16384
-  --powerUps: string # all or a comma-separated list of: calendar, cardAging, recap or voting
-  --prefsbackground: string # A standard background name, or the id of a custom background
-  --prefscalendarFeedEnabled: string #  true or false
-  --prefscardAging: string # One of: pirate or regular
-  --prefscardCovers: string #  true or false
-  --prefscomments: string # One of: disabled, members, observers, org or public
-  --prefsinvitations: string # One of: admins or members
-  --prefspermissionLevel: string # One of: org, private or public
-  --prefsselfJoin: string #  true or false
-  --prefsvoting: string # One of: disabled, members, observers, org or public
-  --prefs-background: string # a string with a length from 0 to 16384
-  --prefs-cardAging: string # One of: pirate or regular
-  --prefs-cardCovers: string #  true or false
+  --power-ups: string # all or a comma-separated list of: calendar, cardAging, recap or voting
+  --prefs-background: string # A standard background name, or the id of a custom background
+  --prefs-calendar-feed-enabled: string #  true or false
+  --prefs-card-aging: string # One of: pirate or regular
+  --prefs-card-covers: string #  true or false
   --prefs-comments: string # One of: disabled, members, observers, org or public
   --prefs-invitations: string # One of: admins or members
-  --prefs-permissionLevel: string # One of: org, private or public
-  --prefs-selfJoin: string #  true or false
+  --prefs-permission-level: string # One of: org, private or public
+  --prefs-self-join: string #  true or false
+  --prefs-voting: string # One of: disabled, members, observers, org or public
+  --prefs-background: string # a string with a length from 0 to 16384
+  --prefs-card-aging: string # One of: pirate or regular
+  --prefs-card-covers: string #  true or false
+  --prefs-comments: string # One of: disabled, members, observers, org or public
+  --prefs-invitations: string # One of: admins or members
+  --prefs-permission-level: string # One of: org, private or public
+  --prefs-self-join: string #  true or false
   --prefs-voting: string # One of: disabled, members, observers, org or public
   --subscribed: string #  true or false
 ]: any -> any {
@@ -812,8 +812,8 @@ export def "boards updateBoardsByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)" $qp)
-  let body = {closed: $closed, desc: $desc, idBoardSource: $idBoardSource, idOrganization: $idOrganization, keepFromSource: $keepFromSource, labelNames/blue: $labelNamesblue, labelNames/green: $labelNamesgreen, labelNames/orange: $labelNamesorange, labelNames/purple: $labelNamespurple, labelNames/red: $labelNamesred, labelNames/yellow: $labelNamesyellow, name: $name, powerUps: $powerUps, prefs/background: $prefsbackground, prefs/calendarFeedEnabled: $prefscalendarFeedEnabled, prefs/cardAging: $prefscardAging, prefs/cardCovers: $prefscardCovers, prefs/comments: $prefscomments, prefs/invitations: $prefsinvitations, prefs/permissionLevel: $prefspermissionLevel, prefs/selfJoin: $prefsselfJoin, prefs/voting: $prefsvoting, prefs_background: $prefs_background, prefs_cardAging: $prefs_cardAging, prefs_cardCovers: $prefs_cardCovers, prefs_comments: $prefs_comments, prefs_invitations: $prefs_invitations, prefs_permissionLevel: $prefs_permissionLevel, prefs_selfJoin: $prefs_selfJoin, prefs_voting: $prefs_voting, subscribed: $subscribed} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}") $qp)
+  let body = {"closed": $closed, "desc": $desc, "idBoardSource": $id_board_source, "idOrganization": $id_organization, "keepFromSource": $keep_from_source, "labelNames/blue": $label_names_blue, "labelNames/green": $label_names_green, "labelNames/orange": $label_names_orange, "labelNames/purple": $label_names_purple, "labelNames/red": $label_names_red, "labelNames/yellow": $label_names_yellow, "name": $name, "powerUps": $power_ups, "prefs/background": $prefs_background, "prefs/calendarFeedEnabled": $prefs_calendar_feed_enabled, "prefs/cardAging": $prefs_card_aging, "prefs/cardCovers": $prefs_card_covers, "prefs/comments": $prefs_comments, "prefs/invitations": $prefs_invitations, "prefs/permissionLevel": $prefs_permission_level, "prefs/selfJoin": $prefs_self_join, "prefs/voting": $prefs_voting, "prefs_background": $prefs_background, "prefs_cardAging": $prefs_card_aging, "prefs_cardCovers": $prefs_card_covers, "prefs_comments": $prefs_comments, "prefs_invitations": $prefs_invitations, "prefs_permissionLevel": $prefs_permission_level, "prefs_selfJoin": $prefs_self_join, "prefs_voting": $prefs_voting, "subscribed": $subscribed} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -825,7 +825,7 @@ export def "boards updateBoardsByIdBoard" [
 # GET /boards/{idBoard}/actions
 # operationId: getBoardsActionsByIdBoard
 export def "boards-actions get" [
-  idBoard: string
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -843,18 +843,18 @@ export def "boards-actions get" [
   --since: string # A date, null or lastView
   --before: string # A date, or null
   --page: string # Page * limit must be less than 1000 (default: 0)
-  --idModels: string # Only return actions related to these model ids
+  --id-models: string # Only return actions related to these model ids
   --member: string #  true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
-  --memberCreator: string #  true or false
-  --memberCreator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
+  --member-creator: string #  true or false
+  --member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $idModels "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $memberCreator "scalar") (serialize-qp "memberCreator_fields" $memberCreator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/actions" $qp)
+  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $id_models "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/actions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -865,7 +865,7 @@ export def "boards-actions get" [
 # GET /boards/{idBoard}/boardStars
 # operationId: getBoardsBoardStarsByIdBoard
 export def "boards-board-stars get" [
-  idBoard: string
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,7 +881,7 @@ export def "boards-board-stars get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/boardStars" $qp)
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/boardStars") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -891,8 +891,8 @@ export def "boards-board-stars get" [
 #
 # POST /boards/{idBoard}/calendarKey/generate
 # operationId: addBoardsCalendarKeyGenerateByIdBoard
-export def "boards-calendar-key-generate addBoardsCalendarKeyGenerateByIdBoard" [
-  idBoard: string
+export def "boards-calendar-key-generate create" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -907,7 +907,7 @@ export def "boards-calendar-key-generate addBoardsCalendarKeyGenerateByIdBoard" 
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/calendarKey/generate" $qp)
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/calendarKey/generate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -918,7 +918,7 @@ export def "boards-calendar-key-generate addBoardsCalendarKeyGenerateByIdBoard" 
 # GET /boards/{idBoard}/cards
 # operationId: getBoardsCardsByIdBoard
 export def "boards-cards get-by-idBoard" [
-  idBoard: string
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,7 +933,7 @@ export def "boards-cards get-by-idBoard" [
   --stickers: string #  true or false
   --members: string #  true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
-  --checkItemStates: string #  true or false
+  --check-item-states: string #  true or false
   --checklists: string # One of: all or none (default: none)
   --limit: string # a number from 1 to 1000
   --since: string # A date, or null
@@ -945,8 +945,8 @@ export def "boards-cards get-by-idBoard" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $checkItemStates "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/cards" $qp)
+  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/cards") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -957,7 +957,7 @@ export def "boards-cards get-by-idBoard" [
 # GET /boards/{idBoard}/cards/{filter}
 # operationId: getBoardsCardsByIdBoardByFilter
 export def "boards-cards get-by-idBoard-filter" [
-  idBoard: string
+  id_board: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -973,7 +973,7 @@ export def "boards-cards get-by-idBoard-filter" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/cards/($filter)" $qp)
+  let full_url = (build-url $base ({id_board: $id_board, filter: $filter} | format pattern "/boards/{id_board}/cards/{filter}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -984,8 +984,8 @@ export def "boards-cards get-by-idBoard-filter" [
 # GET /boards/{idBoard}/cards/{idCard}
 # operationId: getBoardsCardsByIdBoardByIdCard
 export def "boards-cards get-by-idBoard-idCard" [
-  idBoard: string
-  idCard: string
+  id_board: string
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1001,11 +1001,11 @@ export def "boards-cards get-by-idBoard-idCard" [
   --actions-display: string #  true or false
   --actions-limit: string # a number from 0 to 1000 (default: 50)
   --action-fields: string # all or a comma-separated list of: data, date, idMemberCreator or type (default: all)
-  --action-memberCreator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
+  --action-member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --members: string #  true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, initials, fullName and username)
-  --checkItemStates: string #  true or false
-  --checkItemState-fields: string # all or a comma-separated list of: idCheckItem or state (default: all)
+  --check-item-states: string #  true or false
+  --check-item-state-fields: string # all or a comma-separated list of: idCheckItem or state (default: all)
   --labels: string #  true or false
   --checklists: string # One of: all or none (default: none)
   --checklist-fields: string # all or a comma-separated list of: idBoard, idCard, name or pos (default: all)
@@ -1015,8 +1015,8 @@ export def "boards-cards get-by-idBoard-idCard" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "action_memberCreator_fields" $action_memberCreator_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $checkItemStates "scalar") (serialize-qp "checkItemState_fields" $checkItemState_fields "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "checklist_fields" $checklist_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/cards/($idCard)" $qp)
+  let qp = [(serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "action_memberCreator_fields" $action_member_creator_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checkItemState_fields" $check_item_state_fields "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "checklist_fields" $checklist_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_board: $id_board, id_card: $id_card} | format pattern "/boards/{id_board}/cards/{id_card}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1027,7 +1027,7 @@ export def "boards-cards get-by-idBoard-idCard" [
 # GET /boards/{idBoard}/checklists
 # operationId: getBoardsChecklistsByIdBoard
 export def "boards-checklists get" [
-  idBoard: string
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1038,8 +1038,8 @@ export def "boards-checklists get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cards: string # One of: all, closed, none, open or visible (default: none)
   --card-fields: string # all or a comma-separated list of: badges, checkItemStates, closed, dateLastActivity, desc, descData, due, email, idAttachmentCover, idBoard, idChecklists, idLabels, idList, idMembers, idMembersVoted, idShort, labels, manualCoverAttachment, name, pos, shortLink, shortUrl, subscribed or url (default: all)
-  --checkItems: string # One of: all or none (default: all)
-  --checkItem-fields: string # all or a comma-separated list of: name, nameData, pos, state or type (default: name, nameData, pos and state)
+  --check-items: string # One of: all or none (default: all)
+  --check-item-fields: string # all or a comma-separated list of: name, nameData, pos, state or type (default: name, nameData, pos and state)
   --filter: string # One of: all or none (default: all)
   --fields: string # all or a comma-separated list of: idBoard, idCard, name or pos (default: all)
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
@@ -1047,8 +1047,8 @@ export def "boards-checklists get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "checkItems" $checkItems "scalar") (serialize-qp "checkItem_fields" $checkItem_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/checklists" $qp)
+  let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "checkItems" $check_items "scalar") (serialize-qp "checkItem_fields" $check_item_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/checklists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1058,8 +1058,8 @@ export def "boards-checklists get" [
 #
 # POST /boards/{idBoard}/checklists
 # operationId: addBoardsChecklistsByIdBoard
-export def "boards-checklists addBoardsChecklistsByIdBoard" [
-  idBoard: string
+export def "boards-checklists create" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,8 +1076,8 @@ export def "boards-checklists addBoardsChecklistsByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/checklists" $qp)
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/checklists") $qp)
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1088,8 +1088,8 @@ export def "boards-checklists addBoardsChecklistsByIdBoard" [
 #
 # PUT /boards/{idBoard}/closed
 # operationId: updateBoardsClosedByIdBoard
-export def "boards-closed updateBoardsClosedByIdBoard" [
-  idBoard: string
+export def "boards-closed update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1106,8 +1106,8 @@ export def "boards-closed updateBoardsClosedByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/closed" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/closed") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1119,7 +1119,7 @@ export def "boards-closed updateBoardsClosedByIdBoard" [
 # GET /boards/{idBoard}/deltas
 # operationId: getBoardsDeltasByIdBoard
 export def "boards-deltas get" [
-  idBoard: string
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1129,14 +1129,14 @@ export def "boards-deltas get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --tags: string # A valid tag for subscribing
-  --ixLastUpdate: string # a number from -1 to Infinity
+  --ix-last-update: string # a number from -1 to Infinity
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "ixLastUpdate" $ixLastUpdate "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/deltas" $qp)
+  let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "ixLastUpdate" $ix_last_update "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/deltas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1146,8 +1146,8 @@ export def "boards-deltas get" [
 #
 # PUT /boards/{idBoard}/desc
 # operationId: updateBoardsDescByIdBoard
-export def "boards-desc updateBoardsDescByIdBoard" [
-  idBoard: string
+export def "boards-desc update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1164,8 +1164,8 @@ export def "boards-desc updateBoardsDescByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/desc" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/desc") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1176,8 +1176,8 @@ export def "boards-desc updateBoardsDescByIdBoard" [
 #
 # POST /boards/{idBoard}/emailKey/generate
 # operationId: addBoardsEmailKeyGenerateByIdBoard
-export def "boards-email-key-generate addBoardsEmailKeyGenerateByIdBoard" [
-  idBoard: string
+export def "boards-email-key-generate create" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1192,7 +1192,7 @@ export def "boards-email-key-generate addBoardsEmailKeyGenerateByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/emailKey/generate" $qp)
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/emailKey/generate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1202,8 +1202,8 @@ export def "boards-email-key-generate addBoardsEmailKeyGenerateByIdBoard" [
 #
 # PUT /boards/{idBoard}/idOrganization
 # operationId: updateBoardsIdOrganizationByIdBoard
-export def "boards-id-organization updateBoardsIdOrganizationByIdBoard" [
-  idBoard: string
+export def "boards-id-organization update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1220,8 +1220,8 @@ export def "boards-id-organization updateBoardsIdOrganizationByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/idOrganization" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/idOrganization") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1232,8 +1232,8 @@ export def "boards-id-organization updateBoardsIdOrganizationByIdBoard" [
 #
 # PUT /boards/{idBoard}/labelNames/blue
 # operationId: updateBoardsLabelNamesBlueByIdBoard
-export def "boards-label-names-blue updateBoardsLabelNamesBlueByIdBoard" [
-  idBoard: string
+export def "boards-label-names-blue update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1250,8 +1250,8 @@ export def "boards-label-names-blue updateBoardsLabelNamesBlueByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/labelNames/blue" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/labelNames/blue") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1262,8 +1262,8 @@ export def "boards-label-names-blue updateBoardsLabelNamesBlueByIdBoard" [
 #
 # PUT /boards/{idBoard}/labelNames/green
 # operationId: updateBoardsLabelNamesGreenByIdBoard
-export def "boards-label-names-green updateBoardsLabelNamesGreenByIdBoard" [
-  idBoard: string
+export def "boards-label-names-green update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1280,8 +1280,8 @@ export def "boards-label-names-green updateBoardsLabelNamesGreenByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/labelNames/green" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/labelNames/green") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1292,8 +1292,8 @@ export def "boards-label-names-green updateBoardsLabelNamesGreenByIdBoard" [
 #
 # PUT /boards/{idBoard}/labelNames/orange
 # operationId: updateBoardsLabelNamesOrangeByIdBoard
-export def "boards-label-names-orange updateBoardsLabelNamesOrangeByIdBoard" [
-  idBoard: string
+export def "boards-label-names-orange update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1310,8 +1310,8 @@ export def "boards-label-names-orange updateBoardsLabelNamesOrangeByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/labelNames/orange" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/labelNames/orange") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1322,8 +1322,8 @@ export def "boards-label-names-orange updateBoardsLabelNamesOrangeByIdBoard" [
 #
 # PUT /boards/{idBoard}/labelNames/purple
 # operationId: updateBoardsLabelNamesPurpleByIdBoard
-export def "boards-label-names-purple updateBoardsLabelNamesPurpleByIdBoard" [
-  idBoard: string
+export def "boards-label-names-purple update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1340,8 +1340,8 @@ export def "boards-label-names-purple updateBoardsLabelNamesPurpleByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/labelNames/purple" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/labelNames/purple") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1352,8 +1352,8 @@ export def "boards-label-names-purple updateBoardsLabelNamesPurpleByIdBoard" [
 #
 # PUT /boards/{idBoard}/labelNames/red
 # operationId: updateBoardsLabelNamesRedByIdBoard
-export def "boards-label-names-red updateBoardsLabelNamesRedByIdBoard" [
-  idBoard: string
+export def "boards-label-names-red update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1370,8 +1370,8 @@ export def "boards-label-names-red updateBoardsLabelNamesRedByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/labelNames/red" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/labelNames/red") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1382,8 +1382,8 @@ export def "boards-label-names-red updateBoardsLabelNamesRedByIdBoard" [
 #
 # PUT /boards/{idBoard}/labelNames/yellow
 # operationId: updateBoardsLabelNamesYellowByIdBoard
-export def "boards-label-names-yellow updateBoardsLabelNamesYellowByIdBoard" [
-  idBoard: string
+export def "boards-label-names-yellow update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1400,8 +1400,8 @@ export def "boards-label-names-yellow updateBoardsLabelNamesYellowByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/labelNames/yellow" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/labelNames/yellow") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1413,7 +1413,7 @@ export def "boards-label-names-yellow updateBoardsLabelNamesYellowByIdBoard" [
 # GET /boards/{idBoard}/labels
 # operationId: getBoardsLabelsByIdBoard
 export def "boards-labels list" [
-  idBoard: string
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1430,7 +1430,7 @@ export def "boards-labels list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/labels" $qp)
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/labels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1440,8 +1440,8 @@ export def "boards-labels list" [
 #
 # POST /boards/{idBoard}/labels
 # operationId: addBoardsLabelsByIdBoard
-export def "boards-labels addBoardsLabelsByIdBoard" [
-  idBoard: string
+export def "boards-labels create" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1459,8 +1459,8 @@ export def "boards-labels addBoardsLabelsByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/labels" $qp)
-  let body = {color: $color, name: $name} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/labels") $qp)
+  let body = {"color": $color, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1472,8 +1472,8 @@ export def "boards-labels addBoardsLabelsByIdBoard" [
 # GET /boards/{idBoard}/labels/{idLabel}
 # operationId: getBoardsLabelsByIdBoardByIdLabel
 export def "boards-labels get" [
-  idBoard: string
-  idLabel: string
+  id_board: string
+  id_label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1489,7 +1489,7 @@ export def "boards-labels get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/labels/($idLabel)" $qp)
+  let full_url = (build-url $base ({id_board: $id_board, id_label: $id_label} | format pattern "/boards/{id_board}/labels/{id_label}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1500,7 +1500,7 @@ export def "boards-labels get" [
 # GET /boards/{idBoard}/lists
 # operationId: getBoardsListsByIdBoard
 export def "boards-lists list" [
-  idBoard: string
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1519,7 +1519,7 @@ export def "boards-lists list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/lists" $qp)
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/lists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1529,8 +1529,8 @@ export def "boards-lists list" [
 #
 # POST /boards/{idBoard}/lists
 # operationId: addBoardsListsByIdBoard
-export def "boards-lists addBoardsListsByIdBoard" [
-  idBoard: string
+export def "boards-lists create" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1548,8 +1548,8 @@ export def "boards-lists addBoardsListsByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/lists" $qp)
-  let body = {name: $name, pos: $pos} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/lists") $qp)
+  let body = {"name": $name, "pos": $pos} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1561,7 +1561,7 @@ export def "boards-lists addBoardsListsByIdBoard" [
 # GET /boards/{idBoard}/lists/{filter}
 # operationId: getBoardsListsByIdBoardByFilter
 export def "boards-lists get" [
-  idBoard: string
+  id_board: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1577,7 +1577,7 @@ export def "boards-lists get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/lists/($filter)" $qp)
+  let full_url = (build-url $base ({id_board: $id_board, filter: $filter} | format pattern "/boards/{id_board}/lists/{filter}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1587,8 +1587,8 @@ export def "boards-lists get" [
 #
 # POST /boards/{idBoard}/markAsViewed
 # operationId: addBoardsMarkAsViewedByIdBoard
-export def "boards-mark-as-viewed addBoardsMarkAsViewedByIdBoard" [
-  idBoard: string
+export def "boards-mark-as-viewed create" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1603,7 +1603,7 @@ export def "boards-mark-as-viewed addBoardsMarkAsViewedByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/markAsViewed" $qp)
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/markAsViewed") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1614,7 +1614,7 @@ export def "boards-mark-as-viewed addBoardsMarkAsViewedByIdBoard" [
 # GET /boards/{idBoard}/members
 # operationId: getBoardsMembersByIdBoard
 export def "boards-members list" [
-  idBoard: string
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1632,7 +1632,7 @@ export def "boards-members list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "activity" $activity "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/members" $qp)
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1642,8 +1642,8 @@ export def "boards-members list" [
 #
 # PUT /boards/{idBoard}/members
 # operationId: updateBoardsMembersByIdBoard
-export def "boards-members updateBoardsMembersByIdBoard" [
-  idBoard: string
+export def "boards-members update-by-idBoard" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1655,15 +1655,15 @@ export def "boards-members updateBoardsMembersByIdBoard" [
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --email: string # An email address
-  --fullName: string # A string with a length of at least 1.  Cannot begin or end with a space.
+  --full-name: string # A string with a length of at least 1.  Cannot begin or end with a space.
   --type: string # One of: admin, normal or observer
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/members" $qp)
-  let body = {email: $email, fullName: $fullName, type: $type} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/members") $qp)
+  let body = {"email": $email, "fullName": $full_name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1675,7 +1675,7 @@ export def "boards-members updateBoardsMembersByIdBoard" [
 # GET /boards/{idBoard}/members/{filter}
 # operationId: getBoardsMembersByIdBoardByFilter
 export def "boards-members get" [
-  idBoard: string
+  id_board: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1691,7 +1691,7 @@ export def "boards-members get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/members/($filter)" $qp)
+  let full_url = (build-url $base ({id_board: $id_board, filter: $filter} | format pattern "/boards/{id_board}/members/{filter}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1702,8 +1702,8 @@ export def "boards-members get" [
 # DELETE /boards/{idBoard}/members/{idMember}
 # operationId: deleteBoardsMembersByIdBoardByIdMember
 export def "boards-members delete" [
-  idBoard: string
-  idMember: string
+  id_board: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1718,7 +1718,7 @@ export def "boards-members delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/members/($idMember)" $qp)
+  let full_url = (build-url $base ({id_board: $id_board, id_member: $id_member} | format pattern "/boards/{id_board}/members/{id_member}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1728,9 +1728,9 @@ export def "boards-members delete" [
 #
 # PUT /boards/{idBoard}/members/{idMember}
 # operationId: updateBoardsMembersByIdBoardByIdMember
-export def "boards-members updateBoardsMembersByIdBoardByIdMember" [
-  idBoard: string
-  idMember: string
+export def "boards-members update-by-idBoard-idMember" [
+  id_board: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1742,15 +1742,15 @@ export def "boards-members updateBoardsMembersByIdBoardByIdMember" [
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --email: string # An email address
-  --fullName: string # A string with a length of at least 1.  Cannot begin or end with a space.
+  --full-name: string # A string with a length of at least 1.  Cannot begin or end with a space.
   --type: string # One of: admin, normal or observer
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/members/($idMember)" $qp)
-  let body = {email: $email, fullName: $fullName, type: $type} | compact
+  let full_url = (build-url $base ({id_board: $id_board, id_member: $id_member} | format pattern "/boards/{id_board}/members/{id_member}") $qp)
+  let body = {"email": $email, "fullName": $full_name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1762,8 +1762,8 @@ export def "boards-members updateBoardsMembersByIdBoardByIdMember" [
 # GET /boards/{idBoard}/members/{idMember}/cards
 # operationId: getBoardsMembersCardsByIdBoardByIdMember
 export def "boards-members-cards get" [
-  idBoard: string
-  idMember: string
+  id_board: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1777,7 +1777,7 @@ export def "boards-members-cards get" [
   --attachment-fields: string # all or a comma-separated list of: bytes, date, edgeColor, idMember, isUpload, mimeType, name, previews or url (default: all)
   --members: string #  true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
-  --checkItemStates: string #  true or false
+  --check-item-states: string #  true or false
   --checklists: string # One of: all or none (default: none)
   --board: string #  true or false
   --board-fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: name, desc, closed, idOrganization, pinned, url and prefs)
@@ -1790,8 +1790,8 @@ export def "boards-members-cards get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $checkItemStates "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "list" $list "scalar") (serialize-qp "list_fields" $list_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/members/($idMember)/cards" $qp)
+  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "list" $list "scalar") (serialize-qp "list_fields" $list_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_board: $id_board, id_member: $id_member} | format pattern "/boards/{id_board}/members/{id_member}/cards") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1802,7 +1802,7 @@ export def "boards-members-cards get" [
 # GET /boards/{idBoard}/membersInvited
 # operationId: getBoardsMembersInvitedByIdBoard
 export def "boards-members-invited list" [
-  idBoard: string
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1818,7 +1818,7 @@ export def "boards-members-invited list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/membersInvited" $qp)
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/membersInvited") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1829,7 +1829,7 @@ export def "boards-members-invited list" [
 # GET /boards/{idBoard}/membersInvited/{field}
 # operationId: getBoardsMembersInvitedByIdBoardByField
 export def "boards-members-invited get" [
-  idBoard: string
+  id_board: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1845,7 +1845,7 @@ export def "boards-members-invited get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/membersInvited/($field)" $qp)
+  let full_url = (build-url $base ({id_board: $id_board, field: $field} | format pattern "/boards/{id_board}/membersInvited/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1856,7 +1856,7 @@ export def "boards-members-invited get" [
 # GET /boards/{idBoard}/memberships
 # operationId: getBoardsMembershipsByIdBoard
 export def "boards-memberships list" [
-  idBoard: string
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1874,7 +1874,7 @@ export def "boards-memberships list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/memberships" $qp)
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1885,8 +1885,8 @@ export def "boards-memberships list" [
 # GET /boards/{idBoard}/memberships/{idMembership}
 # operationId: getBoardsMembershipsByIdBoardByIdMembership
 export def "boards-memberships get" [
-  idBoard: string
-  idMembership: string
+  id_board: string
+  id_membership: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1903,7 +1903,7 @@ export def "boards-memberships get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/memberships/($idMembership)" $qp)
+  let full_url = (build-url $base ({id_board: $id_board, id_membership: $id_membership} | format pattern "/boards/{id_board}/memberships/{id_membership}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1913,9 +1913,9 @@ export def "boards-memberships get" [
 #
 # PUT /boards/{idBoard}/memberships/{idMembership}
 # operationId: updateBoardsMembershipsByIdBoardByIdMembership
-export def "boards-memberships updateBoardsMembershipsByIdBoardByIdMembership" [
-  idBoard: string
-  idMembership: string
+export def "boards-memberships update" [
+  id_board: string
+  id_membership: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1933,8 +1933,8 @@ export def "boards-memberships updateBoardsMembershipsByIdBoardByIdMembership" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/memberships/($idMembership)" $qp)
-  let body = {member_fields: $member_fields, type: $type} | compact
+  let full_url = (build-url $base ({id_board: $id_board, id_membership: $id_membership} | format pattern "/boards/{id_board}/memberships/{id_membership}") $qp)
+  let body = {"member_fields": $member_fields, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1946,7 +1946,7 @@ export def "boards-memberships updateBoardsMembershipsByIdBoardByIdMembership" [
 # GET /boards/{idBoard}/myPrefs
 # operationId: getBoardsMyPrefsByIdBoard
 export def "boards-my-prefs get" [
-  idBoard: string
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1961,7 +1961,7 @@ export def "boards-my-prefs get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/myPrefs" $qp)
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/myPrefs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1971,8 +1971,8 @@ export def "boards-my-prefs get" [
 #
 # PUT /boards/{idBoard}/myPrefs/emailPosition
 # operationId: updateBoardsMyPrefsEmailPositionByIdBoard
-export def "boards-my-prefs-email-position updateBoardsMyPrefsEmailPositionByIdBoard" [
-  idBoard: string
+export def "boards-my-prefs-email-position update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1989,8 +1989,8 @@ export def "boards-my-prefs-email-position updateBoardsMyPrefsEmailPositionByIdB
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/myPrefs/emailPosition" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/myPrefs/emailPosition") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2001,8 +2001,8 @@ export def "boards-my-prefs-email-position updateBoardsMyPrefsEmailPositionByIdB
 #
 # PUT /boards/{idBoard}/myPrefs/idEmailList
 # operationId: updateBoardsMyPrefsIdEmailListByIdBoard
-export def "boards-my-prefs-id-email-list updateBoardsMyPrefsIdEmailListByIdBoard" [
-  idBoard: string
+export def "boards-my-prefs-id-email-list update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2019,8 +2019,8 @@ export def "boards-my-prefs-id-email-list updateBoardsMyPrefsIdEmailListByIdBoar
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/myPrefs/idEmailList" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/myPrefs/idEmailList") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2031,8 +2031,8 @@ export def "boards-my-prefs-id-email-list updateBoardsMyPrefsIdEmailListByIdBoar
 #
 # PUT /boards/{idBoard}/myPrefs/showListGuide
 # operationId: updateBoardsMyPrefsShowListGuideByIdBoard
-export def "boards-my-prefs-show-list-guide updateBoardsMyPrefsShowListGuideByIdBoard" [
-  idBoard: string
+export def "boards-my-prefs-show-list-guide update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2049,8 +2049,8 @@ export def "boards-my-prefs-show-list-guide updateBoardsMyPrefsShowListGuideById
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/myPrefs/showListGuide" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/myPrefs/showListGuide") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2061,8 +2061,8 @@ export def "boards-my-prefs-show-list-guide updateBoardsMyPrefsShowListGuideById
 #
 # PUT /boards/{idBoard}/myPrefs/showSidebar
 # operationId: updateBoardsMyPrefsShowSidebarByIdBoard
-export def "boards-my-prefs-show-sidebar updateBoardsMyPrefsShowSidebarByIdBoard" [
-  idBoard: string
+export def "boards-my-prefs-show-sidebar update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2079,8 +2079,8 @@ export def "boards-my-prefs-show-sidebar updateBoardsMyPrefsShowSidebarByIdBoard
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/myPrefs/showSidebar" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/myPrefs/showSidebar") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2091,8 +2091,8 @@ export def "boards-my-prefs-show-sidebar updateBoardsMyPrefsShowSidebarByIdBoard
 #
 # PUT /boards/{idBoard}/myPrefs/showSidebarActivity
 # operationId: updateBoardsMyPrefsShowSidebarActivityByIdBoard
-export def "boards-my-prefs-show-sidebar-activity updateBoardsMyPrefsShowSidebarActivityByIdBoard" [
-  idBoard: string
+export def "boards-my-prefs-show-sidebar-activity update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2109,8 +2109,8 @@ export def "boards-my-prefs-show-sidebar-activity updateBoardsMyPrefsShowSidebar
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/myPrefs/showSidebarActivity" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/myPrefs/showSidebarActivity") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2121,8 +2121,8 @@ export def "boards-my-prefs-show-sidebar-activity updateBoardsMyPrefsShowSidebar
 #
 # PUT /boards/{idBoard}/myPrefs/showSidebarBoardActions
 # operationId: updateBoardsMyPrefsShowSidebarBoardActionsByIdBoard
-export def "boards-my-prefs-show-sidebar-board-actions updateBoardsMyPrefsShowSidebarBoardActionsByIdBoard" [
-  idBoard: string
+export def "boards-my-prefs-show-sidebar-board-actions update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2139,8 +2139,8 @@ export def "boards-my-prefs-show-sidebar-board-actions updateBoardsMyPrefsShowSi
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/myPrefs/showSidebarBoardActions" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/myPrefs/showSidebarBoardActions") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2151,8 +2151,8 @@ export def "boards-my-prefs-show-sidebar-board-actions updateBoardsMyPrefsShowSi
 #
 # PUT /boards/{idBoard}/myPrefs/showSidebarMembers
 # operationId: updateBoardsMyPrefsShowSidebarMembersByIdBoard
-export def "boards-my-prefs-show-sidebar-members updateBoardsMyPrefsShowSidebarMembersByIdBoard" [
-  idBoard: string
+export def "boards-my-prefs-show-sidebar-members update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2169,8 +2169,8 @@ export def "boards-my-prefs-show-sidebar-members updateBoardsMyPrefsShowSidebarM
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/myPrefs/showSidebarMembers" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/myPrefs/showSidebarMembers") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2181,8 +2181,8 @@ export def "boards-my-prefs-show-sidebar-members updateBoardsMyPrefsShowSidebarM
 #
 # PUT /boards/{idBoard}/name
 # operationId: updateBoardsNameByIdBoard
-export def "boards-name updateBoardsNameByIdBoard" [
-  idBoard: string
+export def "boards-name update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2199,8 +2199,8 @@ export def "boards-name updateBoardsNameByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/name" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/name") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2212,7 +2212,7 @@ export def "boards-name updateBoardsNameByIdBoard" [
 # GET /boards/{idBoard}/organization
 # operationId: getBoardsOrganizationByIdBoard
 export def "boards-organization list" [
-  idBoard: string
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2228,7 +2228,7 @@ export def "boards-organization list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/organization" $qp)
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/organization") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2239,7 +2239,7 @@ export def "boards-organization list" [
 # GET /boards/{idBoard}/organization/{field}
 # operationId: getBoardsOrganizationByIdBoardByField
 export def "boards-organization get" [
-  idBoard: string
+  id_board: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2255,7 +2255,7 @@ export def "boards-organization get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/organization/($field)" $qp)
+  let full_url = (build-url $base ({id_board: $id_board, field: $field} | format pattern "/boards/{id_board}/organization/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2265,8 +2265,8 @@ export def "boards-organization get" [
 #
 # POST /boards/{idBoard}/powerUps
 # operationId: addBoardsPowerUpsByIdBoard
-export def "boards-power-ups addBoardsPowerUpsByIdBoard" [
-  idBoard: string
+export def "boards-power-ups create" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2283,8 +2283,8 @@ export def "boards-power-ups addBoardsPowerUpsByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/powerUps" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/powerUps") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2296,8 +2296,8 @@ export def "boards-power-ups addBoardsPowerUpsByIdBoard" [
 # DELETE /boards/{idBoard}/powerUps/{powerUp}
 # operationId: deleteBoardsPowerUpsByIdBoardByPowerUp
 export def "boards-power-ups delete" [
-  idBoard: string
-  powerUp: string
+  id_board: string
+  power_up: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2312,7 +2312,7 @@ export def "boards-power-ups delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/powerUps/($powerUp)" $qp)
+  let full_url = (build-url $base ({id_board: $id_board, power_up: $power_up} | format pattern "/boards/{id_board}/powerUps/{power_up}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2322,8 +2322,8 @@ export def "boards-power-ups delete" [
 #
 # PUT /boards/{idBoard}/prefs/background
 # operationId: updateBoardsPrefsBackgroundByIdBoard
-export def "boards-prefs-background updateBoardsPrefsBackgroundByIdBoard" [
-  idBoard: string
+export def "boards-prefs-background update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2340,8 +2340,8 @@ export def "boards-prefs-background updateBoardsPrefsBackgroundByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/prefs/background" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/prefs/background") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2352,8 +2352,8 @@ export def "boards-prefs-background updateBoardsPrefsBackgroundByIdBoard" [
 #
 # PUT /boards/{idBoard}/prefs/calendarFeedEnabled
 # operationId: updateBoardsPrefsCalendarFeedEnabledByIdBoard
-export def "boards-prefs-calendar-feed-enabled updateBoardsPrefsCalendarFeedEnabledByIdBoard" [
-  idBoard: string
+export def "boards-prefs-calendar-feed-enabled update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2370,8 +2370,8 @@ export def "boards-prefs-calendar-feed-enabled updateBoardsPrefsCalendarFeedEnab
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/prefs/calendarFeedEnabled" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/prefs/calendarFeedEnabled") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2382,8 +2382,8 @@ export def "boards-prefs-calendar-feed-enabled updateBoardsPrefsCalendarFeedEnab
 #
 # PUT /boards/{idBoard}/prefs/cardAging
 # operationId: updateBoardsPrefsCardAgingByIdBoard
-export def "boards-prefs-card-aging updateBoardsPrefsCardAgingByIdBoard" [
-  idBoard: string
+export def "boards-prefs-card-aging update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2400,8 +2400,8 @@ export def "boards-prefs-card-aging updateBoardsPrefsCardAgingByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/prefs/cardAging" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/prefs/cardAging") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2412,8 +2412,8 @@ export def "boards-prefs-card-aging updateBoardsPrefsCardAgingByIdBoard" [
 #
 # PUT /boards/{idBoard}/prefs/cardCovers
 # operationId: updateBoardsPrefsCardCoversByIdBoard
-export def "boards-prefs-card-covers updateBoardsPrefsCardCoversByIdBoard" [
-  idBoard: string
+export def "boards-prefs-card-covers update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2430,8 +2430,8 @@ export def "boards-prefs-card-covers updateBoardsPrefsCardCoversByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/prefs/cardCovers" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/prefs/cardCovers") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2442,8 +2442,8 @@ export def "boards-prefs-card-covers updateBoardsPrefsCardCoversByIdBoard" [
 #
 # PUT /boards/{idBoard}/prefs/comments
 # operationId: updateBoardsPrefsCommentsByIdBoard
-export def "boards-prefs-comments updateBoardsPrefsCommentsByIdBoard" [
-  idBoard: string
+export def "boards-prefs-comments update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2460,8 +2460,8 @@ export def "boards-prefs-comments updateBoardsPrefsCommentsByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/prefs/comments" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/prefs/comments") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2472,8 +2472,8 @@ export def "boards-prefs-comments updateBoardsPrefsCommentsByIdBoard" [
 #
 # PUT /boards/{idBoard}/prefs/invitations
 # operationId: updateBoardsPrefsInvitationsByIdBoard
-export def "boards-prefs-invitations updateBoardsPrefsInvitationsByIdBoard" [
-  idBoard: string
+export def "boards-prefs-invitations update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2490,8 +2490,8 @@ export def "boards-prefs-invitations updateBoardsPrefsInvitationsByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/prefs/invitations" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/prefs/invitations") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2502,8 +2502,8 @@ export def "boards-prefs-invitations updateBoardsPrefsInvitationsByIdBoard" [
 #
 # PUT /boards/{idBoard}/prefs/permissionLevel
 # operationId: updateBoardsPrefsPermissionLevelByIdBoard
-export def "boards-prefs-permission-level updateBoardsPrefsPermissionLevelByIdBoard" [
-  idBoard: string
+export def "boards-prefs-permission-level update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2520,8 +2520,8 @@ export def "boards-prefs-permission-level updateBoardsPrefsPermissionLevelByIdBo
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/prefs/permissionLevel" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/prefs/permissionLevel") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2532,8 +2532,8 @@ export def "boards-prefs-permission-level updateBoardsPrefsPermissionLevelByIdBo
 #
 # PUT /boards/{idBoard}/prefs/selfJoin
 # operationId: updateBoardsPrefsSelfJoinByIdBoard
-export def "boards-prefs-self-join updateBoardsPrefsSelfJoinByIdBoard" [
-  idBoard: string
+export def "boards-prefs-self-join update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2550,8 +2550,8 @@ export def "boards-prefs-self-join updateBoardsPrefsSelfJoinByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/prefs/selfJoin" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/prefs/selfJoin") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2562,8 +2562,8 @@ export def "boards-prefs-self-join updateBoardsPrefsSelfJoinByIdBoard" [
 #
 # PUT /boards/{idBoard}/prefs/voting
 # operationId: updateBoardsPrefsVotingByIdBoard
-export def "boards-prefs-voting updateBoardsPrefsVotingByIdBoard" [
-  idBoard: string
+export def "boards-prefs-voting update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2580,8 +2580,8 @@ export def "boards-prefs-voting updateBoardsPrefsVotingByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/prefs/voting" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/prefs/voting") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2592,8 +2592,8 @@ export def "boards-prefs-voting updateBoardsPrefsVotingByIdBoard" [
 #
 # PUT /boards/{idBoard}/subscribed
 # operationId: updateBoardsSubscribedByIdBoard
-export def "boards-subscribed updateBoardsSubscribedByIdBoard" [
-  idBoard: string
+export def "boards-subscribed update" [
+  id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2610,8 +2610,8 @@ export def "boards-subscribed updateBoardsSubscribedByIdBoard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/subscribed" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_board: $id_board} | format pattern "/boards/{id_board}/subscribed") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2623,7 +2623,7 @@ export def "boards-subscribed updateBoardsSubscribedByIdBoard" [
 # GET /boards/{idBoard}/{field}
 # operationId: getBoardsByIdBoardByField
 export def "boards get" [
-  idBoard: string
+  id_board: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2639,7 +2639,7 @@ export def "boards get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/boards/($idBoard)/($field)" $qp)
+  let full_url = (build-url $base ({id_board: $id_board, field: $field} | format pattern "/boards/{id_board}/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2649,7 +2649,7 @@ export def "boards get" [
 #
 # POST /cards
 # operationId: addCards
-export def "cards addCards" [
+export def "cards create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2663,26 +2663,26 @@ export def "cards addCards" [
   --closed: string #  true or false
   --desc: string # a string with a length from 0 to 16384
   --due: string # A date, or null
-  --fileSource: string # A file
-  --idAttachmentCover: string # Id of the image attachment of this card to use as its cover, or null for no cover
-  --idBoard: string # id of the board the card should be moved to
-  --idCardSource: string # The id of the card to copy into a new card.
-  --idLabels: string # A comma-separated list of objectIds, 24-character hex strings
-  --idList: string # id of the list that the card should be added to
-  --idMembers: string # A comma-separated list of objectIds, 24-character hex strings
-  --keepFromSource: string # Properties of the card to copy over from the source.
+  --file-source: string # A file
+  --id-attachment-cover: string # Id of the image attachment of this card to use as its cover, or null for no cover
+  --id-board: string # id of the board the card should be moved to
+  --id-card-source: string # The id of the card to copy into a new card.
+  --id-labels: string # A comma-separated list of objectIds, 24-character hex strings
+  --id-list: string # id of the list that the card should be added to
+  --id-members: string # A comma-separated list of objectIds, 24-character hex strings
+  --keep-from-source: string # Properties of the card to copy over from the source.
   --labels: string # all or a comma-separated list of: blue, green, orange, purple, red or yellow
   --name: string # The name of the new card.  It isn&#39;t required if the name is being copied from provided by a URL, file or card that is being copied.
   --pos: string # A position. top , bottom , or a positive number.
   --subscribed: string #  true or false
-  --urlSource: string # A URL starting with http:// or https:// or null
+  --url-source: string # A URL starting with http:// or https:// or null
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cards" $qp)
-  let body = {closed: $closed, desc: $desc, due: $due, fileSource: $fileSource, idAttachmentCover: $idAttachmentCover, idBoard: $idBoard, idCardSource: $idCardSource, idLabels: $idLabels, idList: $idList, idMembers: $idMembers, keepFromSource: $keepFromSource, labels: $labels, name: $name, pos: $pos, subscribed: $subscribed, urlSource: $urlSource} | compact
+  let body = {"closed": $closed, "desc": $desc, "due": $due, "fileSource": $file_source, "idAttachmentCover": $id_attachment_cover, "idBoard": $id_board, "idCardSource": $id_card_source, "idLabels": $id_labels, "idList": $id_list, "idMembers": $id_members, "keepFromSource": $keep_from_source, "labels": $labels, "name": $name, "pos": $pos, "subscribed": $subscribed, "urlSource": $url_source} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2694,7 +2694,7 @@ export def "cards addCards" [
 # DELETE /cards/{idCard}
 # operationId: deleteCardsByIdCard
 export def "cards delete" [
-  idCard: string
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2709,7 +2709,7 @@ export def "cards delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)" $qp)
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2720,7 +2720,7 @@ export def "cards delete" [
 # GET /cards/{idCard}
 # operationId: getCardsByIdCard
 export def "cards list" [
-  idCard: string
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2734,15 +2734,15 @@ export def "cards list" [
   --actions-display: string #  true or false
   --actions-limit: string # a number from 0 to 1000 (default: 50)
   --action-fields: string # all or a comma-separated list of: data, date, idMemberCreator or type (default: all)
-  --action-memberCreator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
+  --action-member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --attachments: string # A boolean value or &quot;cover&quot; for only card cover attachments
   --attachment-fields: string # all or a comma-separated list of: bytes, date, edgeColor, idMember, isUpload, mimeType, name, previews or url (default: all)
   --members: string #  true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
-  --membersVoted: string #  true or false
-  --memberVoted-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
-  --checkItemStates: string #  true or false
-  --checkItemState-fields: string # all or a comma-separated list of: idCheckItem or state (default: all)
+  --members-voted: string #  true or false
+  --member-voted-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
+  --check-item-states: string #  true or false
+  --check-item-state-fields: string # all or a comma-separated list of: idCheckItem or state (default: all)
   --checklists: string # One of: all or none (default: none)
   --checklist-fields: string # all or a comma-separated list of: idBoard, idCard, name or pos (default: all)
   --board: string #  true or false
@@ -2757,8 +2757,8 @@ export def "cards list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "action_memberCreator_fields" $action_memberCreator_fields "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "membersVoted" $membersVoted "scalar") (serialize-qp "memberVoted_fields" $memberVoted_fields "scalar") (serialize-qp "checkItemStates" $checkItemStates "scalar") (serialize-qp "checkItemState_fields" $checkItemState_fields "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "checklist_fields" $checklist_fields "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "list" $list "scalar") (serialize-qp "list_fields" $list_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "sticker_fields" $sticker_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)" $qp)
+  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "action_memberCreator_fields" $action_member_creator_fields "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "membersVoted" $members_voted "scalar") (serialize-qp "memberVoted_fields" $member_voted_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checkItemState_fields" $check_item_state_fields "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "checklist_fields" $checklist_fields "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "list" $list "scalar") (serialize-qp "list_fields" $list_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "sticker_fields" $sticker_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2768,8 +2768,8 @@ export def "cards list" [
 #
 # PUT /cards/{idCard}
 # operationId: updateCardsByIdCard
-export def "cards updateCardsByIdCard" [
-  idCard: string
+export def "cards update" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2783,26 +2783,26 @@ export def "cards updateCardsByIdCard" [
   --closed: string #  true or false
   --desc: string # a string with a length from 0 to 16384
   --due: string # A date, or null
-  --fileSource: string # A file
-  --idAttachmentCover: string # Id of the image attachment of this card to use as its cover, or null for no cover
-  --idBoard: string # id of the board the card should be moved to
-  --idCardSource: string # The id of the card to copy into a new card.
-  --idLabels: string # A comma-separated list of objectIds, 24-character hex strings
-  --idList: string # id of the list that the card should be added to
-  --idMembers: string # A comma-separated list of objectIds, 24-character hex strings
-  --keepFromSource: string # Properties of the card to copy over from the source.
+  --file-source: string # A file
+  --id-attachment-cover: string # Id of the image attachment of this card to use as its cover, or null for no cover
+  --id-board: string # id of the board the card should be moved to
+  --id-card-source: string # The id of the card to copy into a new card.
+  --id-labels: string # A comma-separated list of objectIds, 24-character hex strings
+  --id-list: string # id of the list that the card should be added to
+  --id-members: string # A comma-separated list of objectIds, 24-character hex strings
+  --keep-from-source: string # Properties of the card to copy over from the source.
   --labels: string # all or a comma-separated list of: blue, green, orange, purple, red or yellow
   --name: string # The name of the new card.  It isn&#39;t required if the name is being copied from provided by a URL, file or card that is being copied.
   --pos: string # A position. top , bottom , or a positive number.
   --subscribed: string #  true or false
-  --urlSource: string # A URL starting with http:// or https:// or null
+  --url-source: string # A URL starting with http:// or https:// or null
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)" $qp)
-  let body = {closed: $closed, desc: $desc, due: $due, fileSource: $fileSource, idAttachmentCover: $idAttachmentCover, idBoard: $idBoard, idCardSource: $idCardSource, idLabels: $idLabels, idList: $idList, idMembers: $idMembers, keepFromSource: $keepFromSource, labels: $labels, name: $name, pos: $pos, subscribed: $subscribed, urlSource: $urlSource} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}") $qp)
+  let body = {"closed": $closed, "desc": $desc, "due": $due, "fileSource": $file_source, "idAttachmentCover": $id_attachment_cover, "idBoard": $id_board, "idCardSource": $id_card_source, "idLabels": $id_labels, "idList": $id_list, "idMembers": $id_members, "keepFromSource": $keep_from_source, "labels": $labels, "name": $name, "pos": $pos, "subscribed": $subscribed, "urlSource": $url_source} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2814,7 +2814,7 @@ export def "cards updateCardsByIdCard" [
 # GET /cards/{idCard}/actions
 # operationId: getCardsActionsByIdCard
 export def "cards-actions get" [
-  idCard: string
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2832,18 +2832,18 @@ export def "cards-actions get" [
   --since: string # A date, null or lastView
   --before: string # A date, or null
   --page: string # Page * limit must be less than 1000 (default: 0)
-  --idModels: string # Only return actions related to these model ids
+  --id-models: string # Only return actions related to these model ids
   --member: string #  true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
-  --memberCreator: string #  true or false
-  --memberCreator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
+  --member-creator: string #  true or false
+  --member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $idModels "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $memberCreator "scalar") (serialize-qp "memberCreator_fields" $memberCreator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/actions" $qp)
+  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $id_models "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/actions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2853,8 +2853,8 @@ export def "cards-actions get" [
 #
 # POST /cards/{idCard}/actions/comments
 # operationId: addCardsActionsCommentsByIdCard
-export def "cards-actions-comments addCardsActionsCommentsByIdCard" [
-  idCard: string
+export def "cards-actions-comments create" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2871,8 +2871,8 @@ export def "cards-actions-comments addCardsActionsCommentsByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/actions/comments" $qp)
-  let body = {text: $text} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/actions/comments") $qp)
+  let body = {"text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2884,8 +2884,8 @@ export def "cards-actions-comments addCardsActionsCommentsByIdCard" [
 # DELETE /cards/{idCard}/actions/{idAction}/comments
 # operationId: deleteCardsActionsCommentsByIdCardByIdAction
 export def "cards-actions-comments delete" [
-  idCard: string
-  idAction: string
+  id_card: string
+  id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2900,7 +2900,7 @@ export def "cards-actions-comments delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/actions/($idAction)/comments" $qp)
+  let full_url = (build-url $base ({id_card: $id_card, id_action: $id_action} | format pattern "/cards/{id_card}/actions/{id_action}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2910,9 +2910,9 @@ export def "cards-actions-comments delete" [
 #
 # PUT /cards/{idCard}/actions/{idAction}/comments
 # operationId: updateCardsActionsCommentsByIdCardByIdAction
-export def "cards-actions-comments updateCardsActionsCommentsByIdCardByIdAction" [
-  idCard: string
-  idAction: string
+export def "cards-actions-comments update" [
+  id_card: string
+  id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2929,8 +2929,8 @@ export def "cards-actions-comments updateCardsActionsCommentsByIdCardByIdAction"
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/actions/($idAction)/comments" $qp)
-  let body = {text: $text} | compact
+  let full_url = (build-url $base ({id_card: $id_card, id_action: $id_action} | format pattern "/cards/{id_card}/actions/{id_action}/comments") $qp)
+  let body = {"text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2942,7 +2942,7 @@ export def "cards-actions-comments updateCardsActionsCommentsByIdCardByIdAction"
 # GET /cards/{idCard}/attachments
 # operationId: getCardsAttachmentsByIdCard
 export def "cards-attachments list" [
-  idCard: string
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2959,7 +2959,7 @@ export def "cards-attachments list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/attachments" $qp)
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/attachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2969,8 +2969,8 @@ export def "cards-attachments list" [
 #
 # POST /cards/{idCard}/attachments
 # operationId: addCardsAttachmentsByIdCard
-export def "cards-attachments addCardsAttachmentsByIdCard" [
-  idCard: string
+export def "cards-attachments create" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2982,7 +2982,7 @@ export def "cards-attachments addCardsAttachmentsByIdCard" [
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --file: string # A file
-  --mimeType: string # a string with a length from 0 to 256
+  --mime-type: string # a string with a length from 0 to 256
   --name: string # a string with a length from 0 to 256
   --body-url: string # A URL starting with http:// or https:// or null
 ]: any -> any {
@@ -2990,8 +2990,8 @@ export def "cards-attachments addCardsAttachmentsByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/attachments" $qp)
-  let body = {file: $file, mimeType: $mimeType, name: $name, url: $body_url} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/attachments") $qp)
+  let body = {"file": $file, "mimeType": $mime_type, "name": $name, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3003,8 +3003,8 @@ export def "cards-attachments addCardsAttachmentsByIdCard" [
 # DELETE /cards/{idCard}/attachments/{idAttachment}
 # operationId: deleteCardsAttachmentsByIdCardByIdAttachment
 export def "cards-attachments delete" [
-  idCard: string
-  idAttachment: string
+  id_card: string
+  id_attachment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3019,7 +3019,7 @@ export def "cards-attachments delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/attachments/($idAttachment)" $qp)
+  let full_url = (build-url $base ({id_card: $id_card, id_attachment: $id_attachment} | format pattern "/cards/{id_card}/attachments/{id_attachment}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3030,8 +3030,8 @@ export def "cards-attachments delete" [
 # GET /cards/{idCard}/attachments/{idAttachment}
 # operationId: getCardsAttachmentsByIdCardByIdAttachment
 export def "cards-attachments get" [
-  idCard: string
-  idAttachment: string
+  id_card: string
+  id_attachment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3047,7 +3047,7 @@ export def "cards-attachments get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/attachments/($idAttachment)" $qp)
+  let full_url = (build-url $base ({id_card: $id_card, id_attachment: $id_attachment} | format pattern "/cards/{id_card}/attachments/{id_attachment}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3058,7 +3058,7 @@ export def "cards-attachments get" [
 # GET /cards/{idCard}/board
 # operationId: getCardsBoardByIdCard
 export def "cards-board list" [
-  idCard: string
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3074,7 +3074,7 @@ export def "cards-board list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/board" $qp)
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/board") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3085,7 +3085,7 @@ export def "cards-board list" [
 # GET /cards/{idCard}/board/{field}
 # operationId: getCardsBoardByIdCardByField
 export def "cards-board get" [
-  idCard: string
+  id_card: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3101,7 +3101,7 @@ export def "cards-board get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/board/($field)" $qp)
+  let full_url = (build-url $base ({id_card: $id_card, field: $field} | format pattern "/cards/{id_card}/board/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3112,7 +3112,7 @@ export def "cards-board get" [
 # GET /cards/{idCard}/checkItemStates
 # operationId: getCardsCheckItemStatesByIdCard
 export def "cards-check-item-states get" [
-  idCard: string
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3128,7 +3128,7 @@ export def "cards-check-item-states get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/checkItemStates" $qp)
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/checkItemStates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3138,10 +3138,10 @@ export def "cards-check-item-states get" [
 #
 # PUT /cards/{idCard}/checklist/{idChecklistCurrent}/checkItem/{idCheckItem}
 # operationId: updateCardsChecklistCheckItemByIdCardByIdChecklistCurrentByIdCheckItem
-export def "cards-checklist-check-item updateCardsChecklistCheckItemByIdCardByIdChecklistCurrentByIdCheckItem" [
-  idCard: string
-  idChecklistCurrent: string
-  idCheckItem: string
+export def "cards-checklist-check-item update" [
+  id_card: string
+  id_checklist_current: string
+  id_check_item: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3152,7 +3152,7 @@ export def "cards-checklist-check-item updateCardsChecklistCheckItemByIdCardById
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
-  --idChecklist: string # An id, or null
+  --id-checklist: string # An id, or null
   --name: string # a string with a length from 1 to 16384
   --pos: string # A position. top , bottom , or a positive number.
   --state: string # One of: complete, false, incomplete or true
@@ -3161,8 +3161,8 @@ export def "cards-checklist-check-item updateCardsChecklistCheckItemByIdCardById
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/checklist/($idChecklistCurrent)/checkItem/($idCheckItem)" $qp)
-  let body = {idChecklist: $idChecklist, name: $name, pos: $pos, state: $state} | compact
+  let full_url = (build-url $base ({id_card: $id_card, id_checklist_current: $id_checklist_current, id_check_item: $id_check_item} | format pattern "/cards/{id_card}/checklist/{id_checklist_current}/checkItem/{id_check_item}") $qp)
+  let body = {"idChecklist": $id_checklist, "name": $name, "pos": $pos, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3173,9 +3173,9 @@ export def "cards-checklist-check-item updateCardsChecklistCheckItemByIdCardById
 #
 # POST /cards/{idCard}/checklist/{idChecklist}/checkItem
 # operationId: addCardsChecklistCheckItemByIdCardByIdChecklist
-export def "cards-checklist-check-item addCardsChecklistCheckItemByIdCardByIdChecklist" [
-  idCard: string
-  idChecklist: string
+export def "cards-checklist-check-item create" [
+  id_card: string
+  id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3193,8 +3193,8 @@ export def "cards-checklist-check-item addCardsChecklistCheckItemByIdCardByIdChe
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/checklist/($idChecklist)/checkItem" $qp)
-  let body = {name: $name, pos: $pos} | compact
+  let full_url = (build-url $base ({id_card: $id_card, id_checklist: $id_checklist} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem") $qp)
+  let body = {"name": $name, "pos": $pos} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3206,9 +3206,9 @@ export def "cards-checklist-check-item addCardsChecklistCheckItemByIdCardByIdChe
 # DELETE /cards/{idCard}/checklist/{idChecklist}/checkItem/{idCheckItem}
 # operationId: deleteCardsChecklistCheckItemByIdCardByIdChecklistByIdCheckItem
 export def "cards-checklist-check-item delete" [
-  idCard: string
-  idChecklist: string
-  idCheckItem: string
+  id_card: string
+  id_checklist: string
+  id_check_item: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3223,7 +3223,7 @@ export def "cards-checklist-check-item delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/checklist/($idChecklist)/checkItem/($idCheckItem)" $qp)
+  let full_url = (build-url $base ({id_card: $id_card, id_checklist: $id_checklist, id_check_item: $id_check_item} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem/{id_check_item}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3233,10 +3233,10 @@ export def "cards-checklist-check-item delete" [
 #
 # POST /cards/{idCard}/checklist/{idChecklist}/checkItem/{idCheckItem}/convertToCard
 # operationId: addCardsChecklistCheckItemConvertToCardByIdCardByIdChecklistByIdCheckItem
-export def "cards-checklist-check-item-convert-to-card addCardsChecklistCheckItemConvertToCardByIdCardByIdChecklistByIdCheckItem" [
-  idCard: string
-  idChecklist: string
-  idCheckItem: string
+export def "cards-checklist-check-item-convert-to-card create" [
+  id_card: string
+  id_checklist: string
+  id_check_item: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3251,7 +3251,7 @@ export def "cards-checklist-check-item-convert-to-card addCardsChecklistCheckIte
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/checklist/($idChecklist)/checkItem/($idCheckItem)/convertToCard" $qp)
+  let full_url = (build-url $base ({id_card: $id_card, id_checklist: $id_checklist, id_check_item: $id_check_item} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem/{id_check_item}/convertToCard") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3261,10 +3261,10 @@ export def "cards-checklist-check-item-convert-to-card addCardsChecklistCheckIte
 #
 # PUT /cards/{idCard}/checklist/{idChecklist}/checkItem/{idCheckItem}/name
 # operationId: updateCardsChecklistCheckItemNameByIdCardByIdChecklistByIdCheckItem
-export def "cards-checklist-check-item-name updateCardsChecklistCheckItemNameByIdCardByIdChecklistByIdCheckItem" [
-  idCard: string
-  idChecklist: string
-  idCheckItem: string
+export def "cards-checklist-check-item-name update" [
+  id_card: string
+  id_checklist: string
+  id_check_item: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3281,8 +3281,8 @@ export def "cards-checklist-check-item-name updateCardsChecklistCheckItemNameByI
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/checklist/($idChecklist)/checkItem/($idCheckItem)/name" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card, id_checklist: $id_checklist, id_check_item: $id_check_item} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem/{id_check_item}/name") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3293,10 +3293,10 @@ export def "cards-checklist-check-item-name updateCardsChecklistCheckItemNameByI
 #
 # PUT /cards/{idCard}/checklist/{idChecklist}/checkItem/{idCheckItem}/pos
 # operationId: updateCardsChecklistCheckItemPosByIdCardByIdChecklistByIdCheckItem
-export def "cards-checklist-check-item-pos updateCardsChecklistCheckItemPosByIdCardByIdChecklistByIdCheckItem" [
-  idCard: string
-  idChecklist: string
-  idCheckItem: string
+export def "cards-checklist-check-item-pos update" [
+  id_card: string
+  id_checklist: string
+  id_check_item: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3313,8 +3313,8 @@ export def "cards-checklist-check-item-pos updateCardsChecklistCheckItemPosByIdC
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/checklist/($idChecklist)/checkItem/($idCheckItem)/pos" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card, id_checklist: $id_checklist, id_check_item: $id_check_item} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem/{id_check_item}/pos") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3325,10 +3325,10 @@ export def "cards-checklist-check-item-pos updateCardsChecklistCheckItemPosByIdC
 #
 # PUT /cards/{idCard}/checklist/{idChecklist}/checkItem/{idCheckItem}/state
 # operationId: updateCardsChecklistCheckItemStateByIdCardByIdChecklistByIdCheckItem
-export def "cards-checklist-check-item-state updateCardsChecklistCheckItemStateByIdCardByIdChecklistByIdCheckItem" [
-  idCard: string
-  idChecklist: string
-  idCheckItem: string
+export def "cards-checklist-check-item-state update" [
+  id_card: string
+  id_checklist: string
+  id_check_item: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3345,8 +3345,8 @@ export def "cards-checklist-check-item-state updateCardsChecklistCheckItemStateB
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/checklist/($idChecklist)/checkItem/($idCheckItem)/state" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card, id_checklist: $id_checklist, id_check_item: $id_check_item} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem/{id_check_item}/state") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3358,7 +3358,7 @@ export def "cards-checklist-check-item-state updateCardsChecklistCheckItemStateB
 # GET /cards/{idCard}/checklists
 # operationId: getCardsChecklistsByIdCard
 export def "cards-checklists get" [
-  idCard: string
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3369,8 +3369,8 @@ export def "cards-checklists get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cards: string # One of: all, closed, none, open or visible (default: none)
   --card-fields: string # all or a comma-separated list of: badges, checkItemStates, closed, dateLastActivity, desc, descData, due, email, idAttachmentCover, idBoard, idChecklists, idLabels, idList, idMembers, idMembersVoted, idShort, labels, manualCoverAttachment, name, pos, shortLink, shortUrl, subscribed or url (default: all)
-  --checkItems: string # One of: all or none (default: all)
-  --checkItem-fields: string # all or a comma-separated list of: name, nameData, pos, state or type (default: name, nameData, pos and state)
+  --check-items: string # One of: all or none (default: all)
+  --check-item-fields: string # all or a comma-separated list of: name, nameData, pos, state or type (default: name, nameData, pos and state)
   --filter: string # One of: all or none (default: all)
   --fields: string # all or a comma-separated list of: idBoard, idCard, name or pos (default: all)
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
@@ -3378,8 +3378,8 @@ export def "cards-checklists get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "checkItems" $checkItems "scalar") (serialize-qp "checkItem_fields" $checkItem_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/checklists" $qp)
+  let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "checkItems" $check_items "scalar") (serialize-qp "checkItem_fields" $check_item_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/checklists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3389,8 +3389,8 @@ export def "cards-checklists get" [
 #
 # POST /cards/{idCard}/checklists
 # operationId: addCardsChecklistsByIdCard
-export def "cards-checklists addCardsChecklistsByIdCard" [
-  idCard: string
+export def "cards-checklists create" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3401,7 +3401,7 @@ export def "cards-checklists addCardsChecklistsByIdCard" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
-  --idChecklistSource: string # The id of the source checklist to copy into a new checklist.
+  --id-checklist-source: string # The id of the source checklist to copy into a new checklist.
   --name: string # a string with a length from 0 to 16384
   --value: string # The id of the checklist to add to the card, or null to create a new one.
 ]: any -> any {
@@ -3409,8 +3409,8 @@ export def "cards-checklists addCardsChecklistsByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/checklists" $qp)
-  let body = {idChecklistSource: $idChecklistSource, name: $name, value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/checklists") $qp)
+  let body = {"idChecklistSource": $id_checklist_source, "name": $name, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3422,8 +3422,8 @@ export def "cards-checklists addCardsChecklistsByIdCard" [
 # DELETE /cards/{idCard}/checklists/{idChecklist}
 # operationId: deleteCardsChecklistsByIdCardByIdChecklist
 export def "cards-checklists delete" [
-  idCard: string
-  idChecklist: string
+  id_card: string
+  id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3438,7 +3438,7 @@ export def "cards-checklists delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/checklists/($idChecklist)" $qp)
+  let full_url = (build-url $base ({id_card: $id_card, id_checklist: $id_checklist} | format pattern "/cards/{id_card}/checklists/{id_checklist}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3448,8 +3448,8 @@ export def "cards-checklists delete" [
 #
 # PUT /cards/{idCard}/closed
 # operationId: updateCardsClosedByIdCard
-export def "cards-closed updateCardsClosedByIdCard" [
-  idCard: string
+export def "cards-closed update" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3466,8 +3466,8 @@ export def "cards-closed updateCardsClosedByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/closed" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/closed") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3478,8 +3478,8 @@ export def "cards-closed updateCardsClosedByIdCard" [
 #
 # PUT /cards/{idCard}/desc
 # operationId: updateCardsDescByIdCard
-export def "cards-desc updateCardsDescByIdCard" [
-  idCard: string
+export def "cards-desc update" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3496,8 +3496,8 @@ export def "cards-desc updateCardsDescByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/desc" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/desc") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3508,8 +3508,8 @@ export def "cards-desc updateCardsDescByIdCard" [
 #
 # PUT /cards/{idCard}/due
 # operationId: updateCardsDueByIdCard
-export def "cards-due updateCardsDueByIdCard" [
-  idCard: string
+export def "cards-due update" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3526,8 +3526,8 @@ export def "cards-due updateCardsDueByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/due" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/due") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3538,8 +3538,8 @@ export def "cards-due updateCardsDueByIdCard" [
 #
 # PUT /cards/{idCard}/idAttachmentCover
 # operationId: updateCardsIdAttachmentCoverByIdCard
-export def "cards-id-attachment-cover updateCardsIdAttachmentCoverByIdCard" [
-  idCard: string
+export def "cards-id-attachment-cover update" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3556,8 +3556,8 @@ export def "cards-id-attachment-cover updateCardsIdAttachmentCoverByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/idAttachmentCover" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/idAttachmentCover") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3568,8 +3568,8 @@ export def "cards-id-attachment-cover updateCardsIdAttachmentCoverByIdCard" [
 #
 # PUT /cards/{idCard}/idBoard
 # operationId: updateCardsIdBoardByIdCard
-export def "cards-id-board updateCardsIdBoardByIdCard" [
-  idCard: string
+export def "cards-id-board update" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3580,15 +3580,15 @@ export def "cards-id-board updateCardsIdBoardByIdCard" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
-  --idList: string # id of the list that the card should be moved to on the new board
+  --id-list: string # id of the list that the card should be moved to on the new board
   --value: string # id of the board the card should be moved to
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/idBoard" $qp)
-  let body = {idList: $idList, value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/idBoard") $qp)
+  let body = {"idList": $id_list, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3599,8 +3599,8 @@ export def "cards-id-board updateCardsIdBoardByIdCard" [
 #
 # POST /cards/{idCard}/idLabels
 # operationId: addCardsIdLabelsByIdCard
-export def "cards-id-labels addCardsIdLabelsByIdCard" [
-  idCard: string
+export def "cards-id-labels create" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3617,8 +3617,8 @@ export def "cards-id-labels addCardsIdLabelsByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/idLabels" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/idLabels") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3630,8 +3630,8 @@ export def "cards-id-labels addCardsIdLabelsByIdCard" [
 # DELETE /cards/{idCard}/idLabels/{idLabel}
 # operationId: deleteCardsIdLabelsByIdCardByIdLabel
 export def "cards-id-labels delete" [
-  idCard: string
-  idLabel: string
+  id_card: string
+  id_label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3646,7 +3646,7 @@ export def "cards-id-labels delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/idLabels/($idLabel)" $qp)
+  let full_url = (build-url $base ({id_card: $id_card, id_label: $id_label} | format pattern "/cards/{id_card}/idLabels/{id_label}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3656,8 +3656,8 @@ export def "cards-id-labels delete" [
 #
 # PUT /cards/{idCard}/idList
 # operationId: updateCardsIdListByIdCard
-export def "cards-id-list updateCardsIdListByIdCard" [
-  idCard: string
+export def "cards-id-list update" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3674,8 +3674,8 @@ export def "cards-id-list updateCardsIdListByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/idList" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/idList") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3686,8 +3686,8 @@ export def "cards-id-list updateCardsIdListByIdCard" [
 #
 # POST /cards/{idCard}/idMembers
 # operationId: addCardsIdMembersByIdCard
-export def "cards-id-members addCardsIdMembersByIdCard" [
-  idCard: string
+export def "cards-id-members create" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3704,8 +3704,8 @@ export def "cards-id-members addCardsIdMembersByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/idMembers" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/idMembers") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3716,8 +3716,8 @@ export def "cards-id-members addCardsIdMembersByIdCard" [
 #
 # PUT /cards/{idCard}/idMembers
 # operationId: updateCardsIdMembersByIdCard
-export def "cards-id-members updateCardsIdMembersByIdCard" [
-  idCard: string
+export def "cards-id-members update" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3734,8 +3734,8 @@ export def "cards-id-members updateCardsIdMembersByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/idMembers" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/idMembers") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3747,8 +3747,8 @@ export def "cards-id-members updateCardsIdMembersByIdCard" [
 # DELETE /cards/{idCard}/idMembers/{idMember}
 # operationId: deleteCardsIdMembersByIdCardByIdMember
 export def "cards-id-members delete" [
-  idCard: string
-  idMember: string
+  id_card: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3763,7 +3763,7 @@ export def "cards-id-members delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/idMembers/($idMember)" $qp)
+  let full_url = (build-url $base ({id_card: $id_card, id_member: $id_member} | format pattern "/cards/{id_card}/idMembers/{id_member}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3773,8 +3773,8 @@ export def "cards-id-members delete" [
 #
 # POST /cards/{idCard}/labels
 # operationId: addCardsLabelsByIdCard
-export def "cards-labels addCardsLabelsByIdCard" [
-  idCard: string
+export def "cards-labels create" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3793,8 +3793,8 @@ export def "cards-labels addCardsLabelsByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/labels" $qp)
-  let body = {color: $color, name: $name, value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/labels") $qp)
+  let body = {"color": $color, "name": $name, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3805,8 +3805,8 @@ export def "cards-labels addCardsLabelsByIdCard" [
 #
 # PUT /cards/{idCard}/labels
 # operationId: updateCardsLabelsByIdCard
-export def "cards-labels updateCardsLabelsByIdCard" [
-  idCard: string
+export def "cards-labels update" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3825,8 +3825,8 @@ export def "cards-labels updateCardsLabelsByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/labels" $qp)
-  let body = {color: $color, name: $name, value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/labels") $qp)
+  let body = {"color": $color, "name": $name, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3838,7 +3838,7 @@ export def "cards-labels updateCardsLabelsByIdCard" [
 # DELETE /cards/{idCard}/labels/{color}
 # operationId: deleteCardsLabelsByIdCardByColor
 export def "cards-labels delete" [
-  idCard: string
+  id_card: string
   color: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3854,7 +3854,7 @@ export def "cards-labels delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/labels/($color)" $qp)
+  let full_url = (build-url $base ({id_card: $id_card, color: $color} | format pattern "/cards/{id_card}/labels/{color}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3865,7 +3865,7 @@ export def "cards-labels delete" [
 # GET /cards/{idCard}/list
 # operationId: getCardsListByIdCard
 export def "cards-list list" [
-  idCard: string
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3881,7 +3881,7 @@ export def "cards-list list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/list" $qp)
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3892,7 +3892,7 @@ export def "cards-list list" [
 # GET /cards/{idCard}/list/{field}
 # operationId: getCardsListByIdCardByField
 export def "cards-list get" [
-  idCard: string
+  id_card: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3908,7 +3908,7 @@ export def "cards-list get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/list/($field)" $qp)
+  let full_url = (build-url $base ({id_card: $id_card, field: $field} | format pattern "/cards/{id_card}/list/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3918,8 +3918,8 @@ export def "cards-list get" [
 #
 # POST /cards/{idCard}/markAssociatedNotificationsRead
 # operationId: addCardsMarkAssociatedNotificationsReadByIdCard
-export def "cards-mark-associated-notifications-read addCardsMarkAssociatedNotificationsReadByIdCard" [
-  idCard: string
+export def "cards-mark-associated-notifications-read create" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3934,7 +3934,7 @@ export def "cards-mark-associated-notifications-read addCardsMarkAssociatedNotif
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/markAssociatedNotificationsRead" $qp)
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/markAssociatedNotificationsRead") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3945,7 +3945,7 @@ export def "cards-mark-associated-notifications-read addCardsMarkAssociatedNotif
 # GET /cards/{idCard}/members
 # operationId: getCardsMembersByIdCard
 export def "cards-members get" [
-  idCard: string
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3961,7 +3961,7 @@ export def "cards-members get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/members" $qp)
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3972,7 +3972,7 @@ export def "cards-members get" [
 # GET /cards/{idCard}/membersVoted
 # operationId: getCardsMembersVotedByIdCard
 export def "cards-members-voted get" [
-  idCard: string
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3988,7 +3988,7 @@ export def "cards-members-voted get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/membersVoted" $qp)
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/membersVoted") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3998,8 +3998,8 @@ export def "cards-members-voted get" [
 #
 # POST /cards/{idCard}/membersVoted
 # operationId: addCardsMembersVotedByIdCard
-export def "cards-members-voted addCardsMembersVotedByIdCard" [
-  idCard: string
+export def "cards-members-voted create" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4016,8 +4016,8 @@ export def "cards-members-voted addCardsMembersVotedByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/membersVoted" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/membersVoted") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4029,8 +4029,8 @@ export def "cards-members-voted addCardsMembersVotedByIdCard" [
 # DELETE /cards/{idCard}/membersVoted/{idMember}
 # operationId: deleteCardsMembersVotedByIdCardByIdMember
 export def "cards-members-voted delete" [
-  idCard: string
-  idMember: string
+  id_card: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4045,7 +4045,7 @@ export def "cards-members-voted delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/membersVoted/($idMember)" $qp)
+  let full_url = (build-url $base ({id_card: $id_card, id_member: $id_member} | format pattern "/cards/{id_card}/membersVoted/{id_member}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4055,8 +4055,8 @@ export def "cards-members-voted delete" [
 #
 # PUT /cards/{idCard}/name
 # operationId: updateCardsNameByIdCard
-export def "cards-name updateCardsNameByIdCard" [
-  idCard: string
+export def "cards-name update" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4073,8 +4073,8 @@ export def "cards-name updateCardsNameByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/name" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/name") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4085,8 +4085,8 @@ export def "cards-name updateCardsNameByIdCard" [
 #
 # PUT /cards/{idCard}/pos
 # operationId: updateCardsPosByIdCard
-export def "cards-pos updateCardsPosByIdCard" [
-  idCard: string
+export def "cards-pos update" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4103,8 +4103,8 @@ export def "cards-pos updateCardsPosByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/pos" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/pos") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4116,7 +4116,7 @@ export def "cards-pos updateCardsPosByIdCard" [
 # GET /cards/{idCard}/stickers
 # operationId: getCardsStickersByIdCard
 export def "cards-stickers list" [
-  idCard: string
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4132,7 +4132,7 @@ export def "cards-stickers list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/stickers" $qp)
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/stickers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4142,8 +4142,8 @@ export def "cards-stickers list" [
 #
 # POST /cards/{idCard}/stickers
 # operationId: addCardsStickersByIdCard
-export def "cards-stickers addCardsStickersByIdCard" [
-  idCard: string
+export def "cards-stickers create" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4158,14 +4158,14 @@ export def "cards-stickers addCardsStickersByIdCard" [
   --left: string # undefined
   --rotate: string # undefined
   --top: string # undefined
-  --zIndex: string # Valid Z values for stickers, must be an integer
+  --z-index: string # Valid Z values for stickers, must be an integer
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/stickers" $qp)
-  let body = {image: $image, left: $left, rotate: $rotate, top: $top, zIndex: $zIndex} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/stickers") $qp)
+  let body = {"image": $image, "left": $left, "rotate": $rotate, "top": $top, "zIndex": $z_index} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4177,8 +4177,8 @@ export def "cards-stickers addCardsStickersByIdCard" [
 # DELETE /cards/{idCard}/stickers/{idSticker}
 # operationId: deleteCardsStickersByIdCardByIdSticker
 export def "cards-stickers delete" [
-  idCard: string
-  idSticker: string
+  id_card: string
+  id_sticker: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4193,7 +4193,7 @@ export def "cards-stickers delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/stickers/($idSticker)" $qp)
+  let full_url = (build-url $base ({id_card: $id_card, id_sticker: $id_sticker} | format pattern "/cards/{id_card}/stickers/{id_sticker}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4204,8 +4204,8 @@ export def "cards-stickers delete" [
 # GET /cards/{idCard}/stickers/{idSticker}
 # operationId: getCardsStickersByIdCardByIdSticker
 export def "cards-stickers get" [
-  idCard: string
-  idSticker: string
+  id_card: string
+  id_sticker: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4221,7 +4221,7 @@ export def "cards-stickers get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/stickers/($idSticker)" $qp)
+  let full_url = (build-url $base ({id_card: $id_card, id_sticker: $id_sticker} | format pattern "/cards/{id_card}/stickers/{id_sticker}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4231,9 +4231,9 @@ export def "cards-stickers get" [
 #
 # PUT /cards/{idCard}/stickers/{idSticker}
 # operationId: updateCardsStickersByIdCardByIdSticker
-export def "cards-stickers updateCardsStickersByIdCardByIdSticker" [
-  idCard: string
-  idSticker: string
+export def "cards-stickers update" [
+  id_card: string
+  id_sticker: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4248,14 +4248,14 @@ export def "cards-stickers updateCardsStickersByIdCardByIdSticker" [
   --left: string # undefined
   --rotate: string # undefined
   --top: string # undefined
-  --zIndex: string # Valid Z values for stickers, must be an integer
+  --z-index: string # Valid Z values for stickers, must be an integer
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/stickers/($idSticker)" $qp)
-  let body = {image: $image, left: $left, rotate: $rotate, top: $top, zIndex: $zIndex} | compact
+  let full_url = (build-url $base ({id_card: $id_card, id_sticker: $id_sticker} | format pattern "/cards/{id_card}/stickers/{id_sticker}") $qp)
+  let body = {"image": $image, "left": $left, "rotate": $rotate, "top": $top, "zIndex": $z_index} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4266,8 +4266,8 @@ export def "cards-stickers updateCardsStickersByIdCardByIdSticker" [
 #
 # PUT /cards/{idCard}/subscribed
 # operationId: updateCardsSubscribedByIdCard
-export def "cards-subscribed updateCardsSubscribedByIdCard" [
-  idCard: string
+export def "cards-subscribed update" [
+  id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4284,8 +4284,8 @@ export def "cards-subscribed updateCardsSubscribedByIdCard" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/subscribed" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_card: $id_card} | format pattern "/cards/{id_card}/subscribed") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4297,7 +4297,7 @@ export def "cards-subscribed updateCardsSubscribedByIdCard" [
 # GET /cards/{idCard}/{field}
 # operationId: getCardsByIdCardByField
 export def "cards get" [
-  idCard: string
+  id_card: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4313,7 +4313,7 @@ export def "cards get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/cards/($idCard)/($field)" $qp)
+  let full_url = (build-url $base ({id_card: $id_card, field: $field} | format pattern "/cards/{id_card}/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4323,7 +4323,7 @@ export def "cards get" [
 #
 # POST /checklists
 # operationId: addChecklists
-export def "checklists addChecklists" [
+export def "checklists create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4334,9 +4334,9 @@ export def "checklists addChecklists" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
-  --idBoard: string # id of the board that the checklist should be added to
-  --idCard: string # id of the card that the checklist should be added to
-  --idChecklistSource: string # The id of the source checklist to copy into a new checklist.
+  --id-board: string # id of the board that the checklist should be added to
+  --id-card: string # id of the card that the checklist should be added to
+  --id-checklist-source: string # The id of the source checklist to copy into a new checklist.
   --name: string # a string with a length from 0 to 16384
   --pos: string # A position. top , bottom , or a positive number.
 ]: any -> any {
@@ -4345,7 +4345,7 @@ export def "checklists addChecklists" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/checklists" $qp)
-  let body = {idBoard: $idBoard, idCard: $idCard, idChecklistSource: $idChecklistSource, name: $name, pos: $pos} | compact
+  let body = {"idBoard": $id_board, "idCard": $id_card, "idChecklistSource": $id_checklist_source, "name": $name, "pos": $pos} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4357,7 +4357,7 @@ export def "checklists addChecklists" [
 # DELETE /checklists/{idChecklist}
 # operationId: deleteChecklistsByIdChecklist
 export def "checklists delete" [
-  idChecklist: string
+  id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4372,7 +4372,7 @@ export def "checklists delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/checklists/($idChecklist)" $qp)
+  let full_url = (build-url $base ({id_checklist: $id_checklist} | format pattern "/checklists/{id_checklist}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4383,7 +4383,7 @@ export def "checklists delete" [
 # GET /checklists/{idChecklist}
 # operationId: getChecklistsByIdChecklist
 export def "checklists list" [
-  idChecklist: string
+  id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4394,16 +4394,16 @@ export def "checklists list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cards: string # One of: all, closed, none, open or visible (default: none)
   --card-fields: string # all or a comma-separated list of: badges, checkItemStates, closed, dateLastActivity, desc, descData, due, email, idAttachmentCover, idBoard, idChecklists, idLabels, idList, idMembers, idMembersVoted, idShort, labels, manualCoverAttachment, name, pos, shortLink, shortUrl, subscribed or url (default: all)
-  --checkItems: string # One of: all or none (default: all)
-  --checkItem-fields: string # all or a comma-separated list of: name, nameData, pos, state or type (default: name, nameData, pos and state)
+  --check-items: string # One of: all or none (default: all)
+  --check-item-fields: string # all or a comma-separated list of: name, nameData, pos, state or type (default: name, nameData, pos and state)
   --fields: string # all or a comma-separated list of: idBoard, idCard, name or pos (default: all)
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "checkItems" $checkItems "scalar") (serialize-qp "checkItem_fields" $checkItem_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/checklists/($idChecklist)" $qp)
+  let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "checkItems" $check_items "scalar") (serialize-qp "checkItem_fields" $check_item_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_checklist: $id_checklist} | format pattern "/checklists/{id_checklist}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4413,8 +4413,8 @@ export def "checklists list" [
 #
 # PUT /checklists/{idChecklist}
 # operationId: updateChecklistsByIdChecklist
-export def "checklists updateChecklistsByIdChecklist" [
-  idChecklist: string
+export def "checklists update" [
+  id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4425,9 +4425,9 @@ export def "checklists updateChecklistsByIdChecklist" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
-  --idBoard: string # id of the board that the checklist should be added to
-  --idCard: string # id of the card that the checklist should be added to
-  --idChecklistSource: string # The id of the source checklist to copy into a new checklist.
+  --id-board: string # id of the board that the checklist should be added to
+  --id-card: string # id of the card that the checklist should be added to
+  --id-checklist-source: string # The id of the source checklist to copy into a new checklist.
   --name: string # a string with a length from 0 to 16384
   --pos: string # A position. top , bottom , or a positive number.
 ]: any -> any {
@@ -4435,8 +4435,8 @@ export def "checklists updateChecklistsByIdChecklist" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/checklists/($idChecklist)" $qp)
-  let body = {idBoard: $idBoard, idCard: $idCard, idChecklistSource: $idChecklistSource, name: $name, pos: $pos} | compact
+  let full_url = (build-url $base ({id_checklist: $id_checklist} | format pattern "/checklists/{id_checklist}") $qp)
+  let body = {"idBoard": $id_board, "idCard": $id_card, "idChecklistSource": $id_checklist_source, "name": $name, "pos": $pos} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4448,7 +4448,7 @@ export def "checklists updateChecklistsByIdChecklist" [
 # GET /checklists/{idChecklist}/board
 # operationId: getChecklistsBoardByIdChecklist
 export def "checklists-board list" [
-  idChecklist: string
+  id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4464,7 +4464,7 @@ export def "checklists-board list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/checklists/($idChecklist)/board" $qp)
+  let full_url = (build-url $base ({id_checklist: $id_checklist} | format pattern "/checklists/{id_checklist}/board") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4475,7 +4475,7 @@ export def "checklists-board list" [
 # GET /checklists/{idChecklist}/board/{field}
 # operationId: getChecklistsBoardByIdChecklistByField
 export def "checklists-board get" [
-  idChecklist: string
+  id_checklist: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4491,7 +4491,7 @@ export def "checklists-board get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/checklists/($idChecklist)/board/($field)" $qp)
+  let full_url = (build-url $base ({id_checklist: $id_checklist, field: $field} | format pattern "/checklists/{id_checklist}/board/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4502,7 +4502,7 @@ export def "checklists-board get" [
 # GET /checklists/{idChecklist}/cards
 # operationId: getChecklistsCardsByIdChecklist
 export def "checklists-cards list" [
-  idChecklist: string
+  id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4517,7 +4517,7 @@ export def "checklists-cards list" [
   --stickers: string #  true or false
   --members: string #  true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
-  --checkItemStates: string #  true or false
+  --check-item-states: string #  true or false
   --checklists: string # One of: all or none (default: none)
   --limit: string # a number from 1 to 1000
   --since: string # A date, or null
@@ -4529,8 +4529,8 @@ export def "checklists-cards list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $checkItemStates "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/checklists/($idChecklist)/cards" $qp)
+  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_checklist: $id_checklist} | format pattern "/checklists/{id_checklist}/cards") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4541,7 +4541,7 @@ export def "checklists-cards list" [
 # GET /checklists/{idChecklist}/cards/{filter}
 # operationId: getChecklistsCardsByIdChecklistByFilter
 export def "checklists-cards get" [
-  idChecklist: string
+  id_checklist: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4557,7 +4557,7 @@ export def "checklists-cards get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/checklists/($idChecklist)/cards/($filter)" $qp)
+  let full_url = (build-url $base ({id_checklist: $id_checklist, filter: $filter} | format pattern "/checklists/{id_checklist}/cards/{filter}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4568,7 +4568,7 @@ export def "checklists-cards get" [
 # GET /checklists/{idChecklist}/checkItems
 # operationId: getChecklistsCheckItemsByIdChecklist
 export def "checklists-check-items list" [
-  idChecklist: string
+  id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4585,7 +4585,7 @@ export def "checklists-check-items list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/checklists/($idChecklist)/checkItems" $qp)
+  let full_url = (build-url $base ({id_checklist: $id_checklist} | format pattern "/checklists/{id_checklist}/checkItems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4595,8 +4595,8 @@ export def "checklists-check-items list" [
 #
 # POST /checklists/{idChecklist}/checkItems
 # operationId: addChecklistsCheckItemsByIdChecklist
-export def "checklists-check-items addChecklistsCheckItemsByIdChecklist" [
-  idChecklist: string
+export def "checklists-check-items create" [
+  id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4615,8 +4615,8 @@ export def "checklists-check-items addChecklistsCheckItemsByIdChecklist" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/checklists/($idChecklist)/checkItems" $qp)
-  let body = {checked: $checked, name: $name, pos: $pos} | compact
+  let full_url = (build-url $base ({id_checklist: $id_checklist} | format pattern "/checklists/{id_checklist}/checkItems") $qp)
+  let body = {"checked": $checked, "name": $name, "pos": $pos} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4628,8 +4628,8 @@ export def "checklists-check-items addChecklistsCheckItemsByIdChecklist" [
 # DELETE /checklists/{idChecklist}/checkItems/{idCheckItem}
 # operationId: deleteChecklistsCheckItemsByIdChecklistByIdCheckItem
 export def "checklists-check-items delete" [
-  idChecklist: string
-  idCheckItem: string
+  id_checklist: string
+  id_check_item: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4644,7 +4644,7 @@ export def "checklists-check-items delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/checklists/($idChecklist)/checkItems/($idCheckItem)" $qp)
+  let full_url = (build-url $base ({id_checklist: $id_checklist, id_check_item: $id_check_item} | format pattern "/checklists/{id_checklist}/checkItems/{id_check_item}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4655,8 +4655,8 @@ export def "checklists-check-items delete" [
 # GET /checklists/{idChecklist}/checkItems/{idCheckItem}
 # operationId: getChecklistsCheckItemsByIdChecklistByIdCheckItem
 export def "checklists-check-items get" [
-  idChecklist: string
-  idCheckItem: string
+  id_checklist: string
+  id_check_item: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4672,7 +4672,7 @@ export def "checklists-check-items get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/checklists/($idChecklist)/checkItems/($idCheckItem)" $qp)
+  let full_url = (build-url $base ({id_checklist: $id_checklist, id_check_item: $id_check_item} | format pattern "/checklists/{id_checklist}/checkItems/{id_check_item}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4682,8 +4682,8 @@ export def "checklists-check-items get" [
 #
 # PUT /checklists/{idChecklist}/idCard
 # operationId: updateChecklistsIdCardByIdChecklist
-export def "checklists-id-card updateChecklistsIdCardByIdChecklist" [
-  idChecklist: string
+export def "checklists-id-card update" [
+  id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4700,8 +4700,8 @@ export def "checklists-id-card updateChecklistsIdCardByIdChecklist" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/checklists/($idChecklist)/idCard" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_checklist: $id_checklist} | format pattern "/checklists/{id_checklist}/idCard") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4712,8 +4712,8 @@ export def "checklists-id-card updateChecklistsIdCardByIdChecklist" [
 #
 # PUT /checklists/{idChecklist}/name
 # operationId: updateChecklistsNameByIdChecklist
-export def "checklists-name updateChecklistsNameByIdChecklist" [
-  idChecklist: string
+export def "checklists-name update" [
+  id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4730,8 +4730,8 @@ export def "checklists-name updateChecklistsNameByIdChecklist" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/checklists/($idChecklist)/name" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_checklist: $id_checklist} | format pattern "/checklists/{id_checklist}/name") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4742,8 +4742,8 @@ export def "checklists-name updateChecklistsNameByIdChecklist" [
 #
 # PUT /checklists/{idChecklist}/pos
 # operationId: updateChecklistsPosByIdChecklist
-export def "checklists-pos updateChecklistsPosByIdChecklist" [
-  idChecklist: string
+export def "checklists-pos update" [
+  id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4760,8 +4760,8 @@ export def "checklists-pos updateChecklistsPosByIdChecklist" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/checklists/($idChecklist)/pos" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_checklist: $id_checklist} | format pattern "/checklists/{id_checklist}/pos") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4773,7 +4773,7 @@ export def "checklists-pos updateChecklistsPosByIdChecklist" [
 # GET /checklists/{idChecklist}/{field}
 # operationId: getChecklistsByIdChecklistByField
 export def "checklists get" [
-  idChecklist: string
+  id_checklist: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4789,7 +4789,7 @@ export def "checklists get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/checklists/($idChecklist)/($field)" $qp)
+  let full_url = (build-url $base ({id_checklist: $id_checklist, field: $field} | format pattern "/checklists/{id_checklist}/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4799,7 +4799,7 @@ export def "checklists get" [
 #
 # POST /labels
 # operationId: addLabels
-export def "labels addLabels" [
+export def "labels create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4811,7 +4811,7 @@ export def "labels addLabels" [
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --color: string # A valid label color or null
-  --idBoard: string # An id
+  --id-board: string # An id
   --name: string # a string with a length from 0 to 16384
 ]: any -> any {
   let input = $in
@@ -4819,7 +4819,7 @@ export def "labels addLabels" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/labels" $qp)
-  let body = {color: $color, idBoard: $idBoard, name: $name} | compact
+  let body = {"color": $color, "idBoard": $id_board, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4831,7 +4831,7 @@ export def "labels addLabels" [
 # DELETE /labels/{idLabel}
 # operationId: deleteLabelsByIdLabel
 export def "labels delete" [
-  idLabel: string
+  id_label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4846,7 +4846,7 @@ export def "labels delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/labels/($idLabel)" $qp)
+  let full_url = (build-url $base ({id_label: $id_label} | format pattern "/labels/{id_label}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4857,7 +4857,7 @@ export def "labels delete" [
 # GET /labels/{idLabel}
 # operationId: getLabelsByIdLabel
 export def "labels get" [
-  idLabel: string
+  id_label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4873,7 +4873,7 @@ export def "labels get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/labels/($idLabel)" $qp)
+  let full_url = (build-url $base ({id_label: $id_label} | format pattern "/labels/{id_label}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4883,8 +4883,8 @@ export def "labels get" [
 #
 # PUT /labels/{idLabel}
 # operationId: updateLabelsByIdLabel
-export def "labels updateLabelsByIdLabel" [
-  idLabel: string
+export def "labels update" [
+  id_label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4896,15 +4896,15 @@ export def "labels updateLabelsByIdLabel" [
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --color: string # A valid label color or null
-  --idBoard: string # An id
+  --id-board: string # An id
   --name: string # a string with a length from 0 to 16384
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/labels/($idLabel)" $qp)
-  let body = {color: $color, idBoard: $idBoard, name: $name} | compact
+  let full_url = (build-url $base ({id_label: $id_label} | format pattern "/labels/{id_label}") $qp)
+  let body = {"color": $color, "idBoard": $id_board, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4916,7 +4916,7 @@ export def "labels updateLabelsByIdLabel" [
 # GET /labels/{idLabel}/board
 # operationId: getLabelsBoardByIdLabel
 export def "labels-board list" [
-  idLabel: string
+  id_label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4932,7 +4932,7 @@ export def "labels-board list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/labels/($idLabel)/board" $qp)
+  let full_url = (build-url $base ({id_label: $id_label} | format pattern "/labels/{id_label}/board") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4943,7 +4943,7 @@ export def "labels-board list" [
 # GET /labels/{idLabel}/board/{field}
 # operationId: getLabelsBoardByIdLabelByField
 export def "labels-board get" [
-  idLabel: string
+  id_label: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4959,7 +4959,7 @@ export def "labels-board get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/labels/($idLabel)/board/($field)" $qp)
+  let full_url = (build-url $base ({id_label: $id_label, field: $field} | format pattern "/labels/{id_label}/board/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4969,8 +4969,8 @@ export def "labels-board get" [
 #
 # PUT /labels/{idLabel}/color
 # operationId: updateLabelsColorByIdLabel
-export def "labels-color updateLabelsColorByIdLabel" [
-  idLabel: string
+export def "labels-color update" [
+  id_label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4987,8 +4987,8 @@ export def "labels-color updateLabelsColorByIdLabel" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/labels/($idLabel)/color" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_label: $id_label} | format pattern "/labels/{id_label}/color") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4999,8 +4999,8 @@ export def "labels-color updateLabelsColorByIdLabel" [
 #
 # PUT /labels/{idLabel}/name
 # operationId: updateLabelsNameByIdLabel
-export def "labels-name updateLabelsNameByIdLabel" [
-  idLabel: string
+export def "labels-name update" [
+  id_label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5017,8 +5017,8 @@ export def "labels-name updateLabelsNameByIdLabel" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/labels/($idLabel)/name" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_label: $id_label} | format pattern "/labels/{id_label}/name") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5029,7 +5029,7 @@ export def "labels-name updateLabelsNameByIdLabel" [
 #
 # POST /lists
 # operationId: addLists
-export def "lists addLists" [
+export def "lists create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5041,8 +5041,8 @@ export def "lists addLists" [
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --closed: string #  true or false
-  --idBoard: string # id of the board that the list should be added to
-  --idListSource: string # The id of the list to copy into a new list.
+  --id-board: string # id of the board that the list should be added to
+  --id-list-source: string # The id of the list to copy into a new list.
   --name: string # a string with a length from 1 to 16384
   --pos: string # A position. top , bottom , or a positive number.
   --subscribed: string #  true or false
@@ -5052,7 +5052,7 @@ export def "lists addLists" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lists" $qp)
-  let body = {closed: $closed, idBoard: $idBoard, idListSource: $idListSource, name: $name, pos: $pos, subscribed: $subscribed} | compact
+  let body = {"closed": $closed, "idBoard": $id_board, "idListSource": $id_list_source, "name": $name, "pos": $pos, "subscribed": $subscribed} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5064,7 +5064,7 @@ export def "lists addLists" [
 # GET /lists/{idList}
 # operationId: getListsByIdList
 export def "lists list" [
-  idList: string
+  id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5084,7 +5084,7 @@ export def "lists list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($idList)" $qp)
+  let full_url = (build-url $base ({id_list: $id_list} | format pattern "/lists/{id_list}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5094,8 +5094,8 @@ export def "lists list" [
 #
 # PUT /lists/{idList}
 # operationId: updateListsByIdList
-export def "lists updateListsByIdList" [
-  idList: string
+export def "lists update" [
+  id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5107,8 +5107,8 @@ export def "lists updateListsByIdList" [
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --closed: string #  true or false
-  --idBoard: string # id of the board that the list should be added to
-  --idListSource: string # The id of the list to copy into a new list.
+  --id-board: string # id of the board that the list should be added to
+  --id-list-source: string # The id of the list to copy into a new list.
   --name: string # a string with a length from 1 to 16384
   --pos: string # A position. top , bottom , or a positive number.
   --subscribed: string #  true or false
@@ -5117,8 +5117,8 @@ export def "lists updateListsByIdList" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($idList)" $qp)
-  let body = {closed: $closed, idBoard: $idBoard, idListSource: $idListSource, name: $name, pos: $pos, subscribed: $subscribed} | compact
+  let full_url = (build-url $base ({id_list: $id_list} | format pattern "/lists/{id_list}") $qp)
+  let body = {"closed": $closed, "idBoard": $id_board, "idListSource": $id_list_source, "name": $name, "pos": $pos, "subscribed": $subscribed} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5130,7 +5130,7 @@ export def "lists updateListsByIdList" [
 # GET /lists/{idList}/actions
 # operationId: getListsActionsByIdList
 export def "lists-actions get" [
-  idList: string
+  id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5148,18 +5148,18 @@ export def "lists-actions get" [
   --since: string # A date, null or lastView
   --before: string # A date, or null
   --page: string # Page * limit must be less than 1000 (default: 0)
-  --idModels: string # Only return actions related to these model ids
+  --id-models: string # Only return actions related to these model ids
   --member: string #  true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
-  --memberCreator: string #  true or false
-  --memberCreator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
+  --member-creator: string #  true or false
+  --member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $idModels "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $memberCreator "scalar") (serialize-qp "memberCreator_fields" $memberCreator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($idList)/actions" $qp)
+  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $id_models "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_list: $id_list} | format pattern "/lists/{id_list}/actions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5169,8 +5169,8 @@ export def "lists-actions get" [
 #
 # POST /lists/{idList}/archiveAllCards
 # operationId: addListsArchiveAllCardsByIdList
-export def "lists-archive-all-cards addListsArchiveAllCardsByIdList" [
-  idList: string
+export def "lists-archive-all-cards create" [
+  id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5185,7 +5185,7 @@ export def "lists-archive-all-cards addListsArchiveAllCardsByIdList" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($idList)/archiveAllCards" $qp)
+  let full_url = (build-url $base ({id_list: $id_list} | format pattern "/lists/{id_list}/archiveAllCards") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5196,7 +5196,7 @@ export def "lists-archive-all-cards addListsArchiveAllCardsByIdList" [
 # GET /lists/{idList}/board
 # operationId: getListsBoardByIdList
 export def "lists-board list" [
-  idList: string
+  id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5212,7 +5212,7 @@ export def "lists-board list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($idList)/board" $qp)
+  let full_url = (build-url $base ({id_list: $id_list} | format pattern "/lists/{id_list}/board") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5223,7 +5223,7 @@ export def "lists-board list" [
 # GET /lists/{idList}/board/{field}
 # operationId: getListsBoardByIdListByField
 export def "lists-board get" [
-  idList: string
+  id_list: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5239,7 +5239,7 @@ export def "lists-board get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($idList)/board/($field)" $qp)
+  let full_url = (build-url $base ({id_list: $id_list, field: $field} | format pattern "/lists/{id_list}/board/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5250,7 +5250,7 @@ export def "lists-board get" [
 # GET /lists/{idList}/cards
 # operationId: getListsCardsByIdList
 export def "lists-cards list" [
-  idList: string
+  id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5265,7 +5265,7 @@ export def "lists-cards list" [
   --stickers: string #  true or false
   --members: string #  true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
-  --checkItemStates: string #  true or false
+  --check-item-states: string #  true or false
   --checklists: string # One of: all or none (default: none)
   --limit: string # a number from 1 to 1000
   --since: string # A date, or null
@@ -5277,8 +5277,8 @@ export def "lists-cards list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $checkItemStates "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($idList)/cards" $qp)
+  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_list: $id_list} | format pattern "/lists/{id_list}/cards") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5288,8 +5288,8 @@ export def "lists-cards list" [
 #
 # POST /lists/{idList}/cards
 # operationId: addListsCardsByIdList
-export def "lists-cards addListsCardsByIdList" [
-  idList: string
+export def "lists-cards create" [
+  id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5302,7 +5302,7 @@ export def "lists-cards addListsCardsByIdList" [
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --desc: string # a string with a length from 0 to 16384
   --due: string # A date, or null
-  --idMembers: string # A comma-separated list of objectIds, 24-character hex strings
+  --id-members: string # A comma-separated list of objectIds, 24-character hex strings
   --labels: string # all or a comma-separated list of: blue, green, orange, purple, red or yellow
   --name: string # a string with a length from 1 to 16384
 ]: any -> any {
@@ -5310,8 +5310,8 @@ export def "lists-cards addListsCardsByIdList" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($idList)/cards" $qp)
-  let body = {desc: $desc, due: $due, idMembers: $idMembers, labels: $labels, name: $name} | compact
+  let full_url = (build-url $base ({id_list: $id_list} | format pattern "/lists/{id_list}/cards") $qp)
+  let body = {"desc": $desc, "due": $due, "idMembers": $id_members, "labels": $labels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5323,7 +5323,7 @@ export def "lists-cards addListsCardsByIdList" [
 # GET /lists/{idList}/cards/{filter}
 # operationId: getListsCardsByIdListByFilter
 export def "lists-cards get" [
-  idList: string
+  id_list: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5339,7 +5339,7 @@ export def "lists-cards get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($idList)/cards/($filter)" $qp)
+  let full_url = (build-url $base ({id_list: $id_list, filter: $filter} | format pattern "/lists/{id_list}/cards/{filter}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5349,8 +5349,8 @@ export def "lists-cards get" [
 #
 # PUT /lists/{idList}/closed
 # operationId: updateListsClosedByIdList
-export def "lists-closed updateListsClosedByIdList" [
-  idList: string
+export def "lists-closed update" [
+  id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5367,8 +5367,8 @@ export def "lists-closed updateListsClosedByIdList" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($idList)/closed" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_list: $id_list} | format pattern "/lists/{id_list}/closed") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5379,8 +5379,8 @@ export def "lists-closed updateListsClosedByIdList" [
 #
 # PUT /lists/{idList}/idBoard
 # operationId: updateListsIdBoardByIdList
-export def "lists-id-board updateListsIdBoardByIdList" [
-  idList: string
+export def "lists-id-board update" [
+  id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5398,8 +5398,8 @@ export def "lists-id-board updateListsIdBoardByIdList" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($idList)/idBoard" $qp)
-  let body = {pos: $pos, value: $value} | compact
+  let full_url = (build-url $base ({id_list: $id_list} | format pattern "/lists/{id_list}/idBoard") $qp)
+  let body = {"pos": $pos, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5410,8 +5410,8 @@ export def "lists-id-board updateListsIdBoardByIdList" [
 #
 # POST /lists/{idList}/moveAllCards
 # operationId: addListsMoveAllCardsByIdList
-export def "lists-move-all-cards addListsMoveAllCardsByIdList" [
-  idList: string
+export def "lists-move-all-cards create" [
+  id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5422,14 +5422,14 @@ export def "lists-move-all-cards addListsMoveAllCardsByIdList" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
-  --idBoard: string # id of the board that the cards should be moved to
+  --id-board: string # id of the board that the cards should be moved to
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($idList)/moveAllCards" $qp)
-  let body = {idBoard: $idBoard} | compact
+  let full_url = (build-url $base ({id_list: $id_list} | format pattern "/lists/{id_list}/moveAllCards") $qp)
+  let body = {"idBoard": $id_board} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5440,8 +5440,8 @@ export def "lists-move-all-cards addListsMoveAllCardsByIdList" [
 #
 # PUT /lists/{idList}/name
 # operationId: updateListsNameByIdList
-export def "lists-name updateListsNameByIdList" [
-  idList: string
+export def "lists-name update" [
+  id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5458,8 +5458,8 @@ export def "lists-name updateListsNameByIdList" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($idList)/name" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_list: $id_list} | format pattern "/lists/{id_list}/name") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5470,8 +5470,8 @@ export def "lists-name updateListsNameByIdList" [
 #
 # PUT /lists/{idList}/pos
 # operationId: updateListsPosByIdList
-export def "lists-pos updateListsPosByIdList" [
-  idList: string
+export def "lists-pos update" [
+  id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5488,8 +5488,8 @@ export def "lists-pos updateListsPosByIdList" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($idList)/pos" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_list: $id_list} | format pattern "/lists/{id_list}/pos") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5500,8 +5500,8 @@ export def "lists-pos updateListsPosByIdList" [
 #
 # PUT /lists/{idList}/subscribed
 # operationId: updateListsSubscribedByIdList
-export def "lists-subscribed updateListsSubscribedByIdList" [
-  idList: string
+export def "lists-subscribed update" [
+  id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5518,8 +5518,8 @@ export def "lists-subscribed updateListsSubscribedByIdList" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($idList)/subscribed" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_list: $id_list} | format pattern "/lists/{id_list}/subscribed") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5531,7 +5531,7 @@ export def "lists-subscribed updateListsSubscribedByIdList" [
 # GET /lists/{idList}/{field}
 # operationId: getListsByIdListByField
 export def "lists get" [
-  idList: string
+  id_list: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5547,7 +5547,7 @@ export def "lists get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($idList)/($field)" $qp)
+  let full_url = (build-url $base ({id_list: $id_list, field: $field} | format pattern "/lists/{id_list}/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5558,7 +5558,7 @@ export def "lists get" [
 # GET /members/{idMember}
 # operationId: getMembersByIdMember
 export def "members list" [
-  idMember: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5594,38 +5594,38 @@ export def "members list" [
   --board-memberships: string # all or a comma-separated list of: active, admin, deactivated, me or normal (default: none)
   --board-organization: string #  true or false
   --board-organization-fields: string # all or a comma-separated list of: billableMemberCount, desc, descData, displayName, idBoards, invitations, invited, logoHash, memberships, name, powerUps, prefs, premiumFeatures, products, url or website (default: name and displayName)
-  --boardsInvited: string # all or a comma-separated list of: closed, members, open, organization, pinned, public, starred or unpinned
-  --boardsInvited-fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: name, closed, idOrganization and pinned)
-  --boardStars: string #  true or false
-  --savedSearches: string #  true or false
+  --boards-invited: string # all or a comma-separated list of: closed, members, open, organization, pinned, public, starred or unpinned
+  --boards-invited-fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: name, closed, idOrganization and pinned)
+  --board-stars: string #  true or false
+  --saved-searches: string #  true or false
   --organizations: string # One of: all, members, none or public (default: none)
   --organization-fields: string # all or a comma-separated list of: billableMemberCount, desc, descData, displayName, idBoards, invitations, invited, logoHash, memberships, name, powerUps, prefs, premiumFeatures, products, url or website (default: all)
   --organization-paid-account: string #  true or false
-  --organizationsInvited: string # One of: all, members, none or public (default: none)
-  --organizationsInvited-fields: string # all or a comma-separated list of: billableMemberCount, desc, descData, displayName, idBoards, invitations, invited, logoHash, memberships, name, powerUps, prefs, premiumFeatures, products, url or website (default: all)
+  --organizations-invited: string # One of: all, members, none or public (default: none)
+  --organizations-invited-fields: string # all or a comma-separated list of: billableMemberCount, desc, descData, displayName, idBoards, invitations, invited, logoHash, memberships, name, powerUps, prefs, premiumFeatures, products, url or website (default: all)
   --notifications: string # all or a comma-separated list of: addAdminToBoard, addAdminToOrganization, addedAttachmentToCard, addedMemberToCard, addedToBoard, addedToCard, addedToOrganization, cardDueSoon, changeCard, closeBoard, commentCard, createdCard, declinedInvitationToBoard, declinedInvitationToOrganization, invitedToBoard, invitedToOrganization, makeAdminOfBoard, makeAdminOfOrganization, memberJoinedTrello, mentionedOnCard, removedFromBoard, removedFromCard, removedFromOrganization, removedMemberFromCard, unconfirmedInvitedToBoard, unconfirmedInvitedToOrganization or updateCheckItemStateOnCard
   --notifications-entities: string #  true or false
   --notifications-display: string #  true or false
   --notifications-limit: string # a number from 1 to 1000 (default: 50)
   --notification-fields: string # all or a comma-separated list of: data, date, idMemberCreator, type or unread (default: all)
-  --notification-memberCreator: string #  true or false
-  --notification-memberCreator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
+  --notification-member-creator: string #  true or false
+  --notification-member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --notification-before: string # An id, or null
   --notification-since: string # An id, or null
   --tokens: string # One of: all or none (default: none)
   --paid-account: string #  true or false
-  --boardBackgrounds: string # One of: all, custom, default, none or premium (default: none)
-  --customBoardBackgrounds: string # One of: all or none (default: none)
-  --customStickers: string # One of: all or none (default: none)
-  --customEmoji: string # One of: all or none (default: none)
+  --board-backgrounds: string # One of: all, custom, default, none or premium (default: none)
+  --custom-board-backgrounds: string # One of: all or none (default: none)
+  --custom-stickers: string # One of: all or none (default: none)
+  --custom-emoji: string # One of: all or none (default: none)
   --fields: string # all or a comma-separated list of: avatarHash, avatarSource, bio, bioData, confirmed, email, fullName, gravatarHash, idBoards, idBoardsPinned, idOrganizations, idPremOrgsAdmin, initials, loginTypes, memberType, oneTimeMessagesDismissed, prefs, premiumFeatures, products, status, status, trophies, uploadedAvatarHash, url or username (default: all)
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "action_since" $action_since "scalar") (serialize-qp "action_before" $action_before "scalar") (serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "card_members" $card_members "scalar") (serialize-qp "card_member_fields" $card_member_fields "scalar") (serialize-qp "card_attachments" $card_attachments "scalar") (serialize-qp "card_attachment_fields" $card_attachment_fields "scalar") (serialize-qp "card_stickers" $card_stickers "scalar") (serialize-qp "boards" $boards "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "board_actions" $board_actions "scalar") (serialize-qp "board_actions_entities" $board_actions_entities "scalar") (serialize-qp "board_actions_display" $board_actions_display "scalar") (serialize-qp "board_actions_format" $board_actions_format "scalar") (serialize-qp "board_actions_since" $board_actions_since "scalar") (serialize-qp "board_actions_limit" $board_actions_limit "scalar") (serialize-qp "board_action_fields" $board_action_fields "scalar") (serialize-qp "board_lists" $board_lists "scalar") (serialize-qp "board_memberships" $board_memberships "scalar") (serialize-qp "board_organization" $board_organization "scalar") (serialize-qp "board_organization_fields" $board_organization_fields "scalar") (serialize-qp "boardsInvited" $boardsInvited "scalar") (serialize-qp "boardsInvited_fields" $boardsInvited_fields "scalar") (serialize-qp "boardStars" $boardStars "scalar") (serialize-qp "savedSearches" $savedSearches "scalar") (serialize-qp "organizations" $organizations "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "organization_paid_account" $organization_paid_account "scalar") (serialize-qp "organizationsInvited" $organizationsInvited "scalar") (serialize-qp "organizationsInvited_fields" $organizationsInvited_fields "scalar") (serialize-qp "notifications" $notifications "scalar") (serialize-qp "notifications_entities" $notifications_entities "scalar") (serialize-qp "notifications_display" $notifications_display "scalar") (serialize-qp "notifications_limit" $notifications_limit "scalar") (serialize-qp "notification_fields" $notification_fields "scalar") (serialize-qp "notification_memberCreator" $notification_memberCreator "scalar") (serialize-qp "notification_memberCreator_fields" $notification_memberCreator_fields "scalar") (serialize-qp "notification_before" $notification_before "scalar") (serialize-qp "notification_since" $notification_since "scalar") (serialize-qp "tokens" $tokens "scalar") (serialize-qp "paid_account" $paid_account "scalar") (serialize-qp "boardBackgrounds" $boardBackgrounds "scalar") (serialize-qp "customBoardBackgrounds" $customBoardBackgrounds "scalar") (serialize-qp "customStickers" $customStickers "scalar") (serialize-qp "customEmoji" $customEmoji "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)" $qp)
+  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "action_since" $action_since "scalar") (serialize-qp "action_before" $action_before "scalar") (serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "card_members" $card_members "scalar") (serialize-qp "card_member_fields" $card_member_fields "scalar") (serialize-qp "card_attachments" $card_attachments "scalar") (serialize-qp "card_attachment_fields" $card_attachment_fields "scalar") (serialize-qp "card_stickers" $card_stickers "scalar") (serialize-qp "boards" $boards "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "board_actions" $board_actions "scalar") (serialize-qp "board_actions_entities" $board_actions_entities "scalar") (serialize-qp "board_actions_display" $board_actions_display "scalar") (serialize-qp "board_actions_format" $board_actions_format "scalar") (serialize-qp "board_actions_since" $board_actions_since "scalar") (serialize-qp "board_actions_limit" $board_actions_limit "scalar") (serialize-qp "board_action_fields" $board_action_fields "scalar") (serialize-qp "board_lists" $board_lists "scalar") (serialize-qp "board_memberships" $board_memberships "scalar") (serialize-qp "board_organization" $board_organization "scalar") (serialize-qp "board_organization_fields" $board_organization_fields "scalar") (serialize-qp "boardsInvited" $boards_invited "scalar") (serialize-qp "boardsInvited_fields" $boards_invited_fields "scalar") (serialize-qp "boardStars" $board_stars "scalar") (serialize-qp "savedSearches" $saved_searches "scalar") (serialize-qp "organizations" $organizations "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "organization_paid_account" $organization_paid_account "scalar") (serialize-qp "organizationsInvited" $organizations_invited "scalar") (serialize-qp "organizationsInvited_fields" $organizations_invited_fields "scalar") (serialize-qp "notifications" $notifications "scalar") (serialize-qp "notifications_entities" $notifications_entities "scalar") (serialize-qp "notifications_display" $notifications_display "scalar") (serialize-qp "notifications_limit" $notifications_limit "scalar") (serialize-qp "notification_fields" $notification_fields "scalar") (serialize-qp "notification_memberCreator" $notification_member_creator "scalar") (serialize-qp "notification_memberCreator_fields" $notification_member_creator_fields "scalar") (serialize-qp "notification_before" $notification_before "scalar") (serialize-qp "notification_since" $notification_since "scalar") (serialize-qp "tokens" $tokens "scalar") (serialize-qp "paid_account" $paid_account "scalar") (serialize-qp "boardBackgrounds" $board_backgrounds "scalar") (serialize-qp "customBoardBackgrounds" $custom_board_backgrounds "scalar") (serialize-qp "customStickers" $custom_stickers "scalar") (serialize-qp "customEmoji" $custom_emoji "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5635,8 +5635,8 @@ export def "members list" [
 #
 # PUT /members/{idMember}
 # operationId: updateMembersByIdMember
-export def "members updateMembersByIdMember" [
-  idMember: string
+export def "members update" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5647,21 +5647,21 @@ export def "members updateMembersByIdMember" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
-  --avatarSource: string # One of: gravatar, none or upload
+  --avatar-source: string # One of: gravatar, none or upload
   --bio: string # a string with a length from 0 to 16384
-  --fullName: string # A string with a length of at least 1.  Cannot begin or end with a space.
+  --full-name: string # A string with a length of at least 1.  Cannot begin or end with a space.
   --initials: string # A string with a length from 1 to 4.  Cannot begin or end with a space
-  --prefscolorBlind: string #  true or false
-  --prefslocale: string # a string with a length from 0 to 255
-  --prefsminutesBetweenSummaries: string # -1 (disabled), 1 or 60
+  --prefs-color-blind: string #  true or false
+  --prefs-locale: string # a string with a length from 0 to 255
+  --prefs-minutes-between-summaries: string # -1 (disabled), 1 or 60
   --username: string # A string with a length of at least 3.  Only lowercase letters, underscores, and numbers are allowed.  Must be unique.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)" $qp)
-  let body = {avatarSource: $avatarSource, bio: $bio, fullName: $fullName, initials: $initials, prefs/colorBlind: $prefscolorBlind, prefs/locale: $prefslocale, prefs/minutesBetweenSummaries: $prefsminutesBetweenSummaries, username: $username} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}") $qp)
+  let body = {"avatarSource": $avatar_source, "bio": $bio, "fullName": $full_name, "initials": $initials, "prefs/colorBlind": $prefs_color_blind, "prefs/locale": $prefs_locale, "prefs/minutesBetweenSummaries": $prefs_minutes_between_summaries, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5673,7 +5673,7 @@ export def "members updateMembersByIdMember" [
 # GET /members/{idMember}/actions
 # operationId: getMembersActionsByIdMember
 export def "members-actions get" [
-  idMember: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5691,18 +5691,18 @@ export def "members-actions get" [
   --since: string # A date, null or lastView
   --before: string # A date, or null
   --page: string # Page * limit must be less than 1000 (default: 0)
-  --idModels: string # Only return actions related to these model ids
+  --id-models: string # Only return actions related to these model ids
   --member: string #  true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
-  --memberCreator: string #  true or false
-  --memberCreator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
+  --member-creator: string #  true or false
+  --member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $idModels "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $memberCreator "scalar") (serialize-qp "memberCreator_fields" $memberCreator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/actions" $qp)
+  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $id_models "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/actions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5712,8 +5712,8 @@ export def "members-actions get" [
 #
 # POST /members/{idMember}/avatar
 # operationId: addMembersAvatarByIdMember
-export def "members-avatar addMembersAvatarByIdMember" [
-  idMember: string
+export def "members-avatar create" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5730,8 +5730,8 @@ export def "members-avatar addMembersAvatarByIdMember" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/avatar" $qp)
-  let body = {file: $file} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/avatar") $qp)
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5742,8 +5742,8 @@ export def "members-avatar addMembersAvatarByIdMember" [
 #
 # PUT /members/{idMember}/avatarSource
 # operationId: updateMembersAvatarSourceByIdMember
-export def "members-avatar-source updateMembersAvatarSourceByIdMember" [
-  idMember: string
+export def "members-avatar-source update" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5760,8 +5760,8 @@ export def "members-avatar-source updateMembersAvatarSourceByIdMember" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/avatarSource" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/avatarSource") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5772,8 +5772,8 @@ export def "members-avatar-source updateMembersAvatarSourceByIdMember" [
 #
 # PUT /members/{idMember}/bio
 # operationId: updateMembersBioByIdMember
-export def "members-bio updateMembersBioByIdMember" [
-  idMember: string
+export def "members-bio update" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5790,8 +5790,8 @@ export def "members-bio updateMembersBioByIdMember" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/bio" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/bio") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5803,7 +5803,7 @@ export def "members-bio updateMembersBioByIdMember" [
 # GET /members/{idMember}/boardBackgrounds
 # operationId: getMembersBoardBackgroundsByIdMember
 export def "members-board-backgrounds list" [
-  idMember: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5819,7 +5819,7 @@ export def "members-board-backgrounds list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/boardBackgrounds" $qp)
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/boardBackgrounds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5829,8 +5829,8 @@ export def "members-board-backgrounds list" [
 #
 # POST /members/{idMember}/boardBackgrounds
 # operationId: addMembersBoardBackgroundsByIdMember
-export def "members-board-backgrounds addMembersBoardBackgroundsByIdMember" [
-  idMember: string
+export def "members-board-backgrounds create" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5849,8 +5849,8 @@ export def "members-board-backgrounds addMembersBoardBackgroundsByIdMember" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/boardBackgrounds" $qp)
-  let body = {brightness: $brightness, file: $file, tile: $tile} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/boardBackgrounds") $qp)
+  let body = {"brightness": $brightness, "file": $file, "tile": $tile} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5862,8 +5862,8 @@ export def "members-board-backgrounds addMembersBoardBackgroundsByIdMember" [
 # DELETE /members/{idMember}/boardBackgrounds/{idBoardBackground}
 # operationId: deleteMembersBoardBackgroundsByIdMemberByIdBoardBackground
 export def "members-board-backgrounds delete" [
-  idMember: string
-  idBoardBackground: string
+  id_member: string
+  id_board_background: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5878,7 +5878,7 @@ export def "members-board-backgrounds delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/boardBackgrounds/($idBoardBackground)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, id_board_background: $id_board_background} | format pattern "/members/{id_member}/boardBackgrounds/{id_board_background}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5889,8 +5889,8 @@ export def "members-board-backgrounds delete" [
 # GET /members/{idMember}/boardBackgrounds/{idBoardBackground}
 # operationId: getMembersBoardBackgroundsByIdMemberByIdBoardBackground
 export def "members-board-backgrounds get" [
-  idMember: string
-  idBoardBackground: string
+  id_member: string
+  id_board_background: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5906,7 +5906,7 @@ export def "members-board-backgrounds get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/boardBackgrounds/($idBoardBackground)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, id_board_background: $id_board_background} | format pattern "/members/{id_member}/boardBackgrounds/{id_board_background}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5916,9 +5916,9 @@ export def "members-board-backgrounds get" [
 #
 # PUT /members/{idMember}/boardBackgrounds/{idBoardBackground}
 # operationId: updateMembersBoardBackgroundsByIdMemberByIdBoardBackground
-export def "members-board-backgrounds updateMembersBoardBackgroundsByIdMemberByIdBoardBackground" [
-  idMember: string
-  idBoardBackground: string
+export def "members-board-backgrounds update" [
+  id_member: string
+  id_board_background: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5937,8 +5937,8 @@ export def "members-board-backgrounds updateMembersBoardBackgroundsByIdMemberByI
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/boardBackgrounds/($idBoardBackground)" $qp)
-  let body = {brightness: $brightness, file: $file, tile: $tile} | compact
+  let full_url = (build-url $base ({id_member: $id_member, id_board_background: $id_board_background} | format pattern "/members/{id_member}/boardBackgrounds/{id_board_background}") $qp)
+  let body = {"brightness": $brightness, "file": $file, "tile": $tile} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5950,7 +5950,7 @@ export def "members-board-backgrounds updateMembersBoardBackgroundsByIdMemberByI
 # GET /members/{idMember}/boardStars
 # operationId: getMembersBoardStarsByIdMember
 export def "members-board-stars list" [
-  idMember: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5965,7 +5965,7 @@ export def "members-board-stars list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/boardStars" $qp)
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/boardStars") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5975,8 +5975,8 @@ export def "members-board-stars list" [
 #
 # POST /members/{idMember}/boardStars
 # operationId: addMembersBoardStarsByIdMember
-export def "members-board-stars addMembersBoardStarsByIdMember" [
-  idMember: string
+export def "members-board-stars create" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5987,15 +5987,15 @@ export def "members-board-stars addMembersBoardStarsByIdMember" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
-  --idBoard: string # The id of the board to star
+  --id-board: string # The id of the board to star
   --pos: string # A position. top , bottom , or a positive number.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/boardStars" $qp)
-  let body = {idBoard: $idBoard, pos: $pos} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/boardStars") $qp)
+  let body = {"idBoard": $id_board, "pos": $pos} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6007,8 +6007,8 @@ export def "members-board-stars addMembersBoardStarsByIdMember" [
 # DELETE /members/{idMember}/boardStars/{idBoardStar}
 # operationId: deleteMembersBoardStarsByIdMemberByIdBoardStar
 export def "members-board-stars delete" [
-  idMember: string
-  idBoardStar: string
+  id_member: string
+  id_board_star: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6023,7 +6023,7 @@ export def "members-board-stars delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/boardStars/($idBoardStar)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, id_board_star: $id_board_star} | format pattern "/members/{id_member}/boardStars/{id_board_star}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6034,8 +6034,8 @@ export def "members-board-stars delete" [
 # GET /members/{idMember}/boardStars/{idBoardStar}
 # operationId: getMembersBoardStarsByIdMemberByIdBoardStar
 export def "members-board-stars get" [
-  idMember: string
-  idBoardStar: string
+  id_member: string
+  id_board_star: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6050,7 +6050,7 @@ export def "members-board-stars get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/boardStars/($idBoardStar)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, id_board_star: $id_board_star} | format pattern "/members/{id_member}/boardStars/{id_board_star}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6060,9 +6060,9 @@ export def "members-board-stars get" [
 #
 # PUT /members/{idMember}/boardStars/{idBoardStar}
 # operationId: updateMembersBoardStarsByIdMemberByIdBoardStar
-export def "members-board-stars updateMembersBoardStarsByIdMemberByIdBoardStar" [
-  idMember: string
-  idBoardStar: string
+export def "members-board-stars update" [
+  id_member: string
+  id_board_star: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6073,15 +6073,15 @@ export def "members-board-stars updateMembersBoardStarsByIdMemberByIdBoardStar" 
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
-  --idBoard: string # The id of the board to star
+  --id-board: string # The id of the board to star
   --pos: string # A position. top , bottom , or a positive number.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/boardStars/($idBoardStar)" $qp)
-  let body = {idBoard: $idBoard, pos: $pos} | compact
+  let full_url = (build-url $base ({id_member: $id_member, id_board_star: $id_board_star} | format pattern "/members/{id_member}/boardStars/{id_board_star}") $qp)
+  let body = {"idBoard": $id_board, "pos": $pos} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6092,9 +6092,9 @@ export def "members-board-stars updateMembersBoardStarsByIdMemberByIdBoardStar" 
 #
 # PUT /members/{idMember}/boardStars/{idBoardStar}/idBoard
 # operationId: updateMembersBoardStarsIdBoardByIdMemberByIdBoardStar
-export def "members-board-stars-id-board updateMembersBoardStarsIdBoardByIdMemberByIdBoardStar" [
-  idMember: string
-  idBoardStar: string
+export def "members-board-stars-id-board update" [
+  id_member: string
+  id_board_star: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6111,8 +6111,8 @@ export def "members-board-stars-id-board updateMembersBoardStarsIdBoardByIdMembe
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/boardStars/($idBoardStar)/idBoard" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_member: $id_member, id_board_star: $id_board_star} | format pattern "/members/{id_member}/boardStars/{id_board_star}/idBoard") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6123,9 +6123,9 @@ export def "members-board-stars-id-board updateMembersBoardStarsIdBoardByIdMembe
 #
 # PUT /members/{idMember}/boardStars/{idBoardStar}/pos
 # operationId: updateMembersBoardStarsPosByIdMemberByIdBoardStar
-export def "members-board-stars-pos updateMembersBoardStarsPosByIdMemberByIdBoardStar" [
-  idMember: string
-  idBoardStar: string
+export def "members-board-stars-pos update" [
+  id_member: string
+  id_board_star: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6142,8 +6142,8 @@ export def "members-board-stars-pos updateMembersBoardStarsPosByIdMemberByIdBoar
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/boardStars/($idBoardStar)/pos" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_member: $id_member, id_board_star: $id_board_star} | format pattern "/members/{id_member}/boardStars/{id_board_star}/pos") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6155,7 +6155,7 @@ export def "members-board-stars-pos updateMembersBoardStarsPosByIdMemberByIdBoar
 # GET /members/{idMember}/boards
 # operationId: getMembersBoardsByIdMember
 export def "members-boards list" [
-  idMember: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6182,7 +6182,7 @@ export def "members-boards list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "actions_format" $actions_format "scalar") (serialize-qp "actions_since" $actions_since "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "memberships" $memberships "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "lists" $lists "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/boards" $qp)
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/boards") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6193,7 +6193,7 @@ export def "members-boards list" [
 # GET /members/{idMember}/boards/{filter}
 # operationId: getMembersBoardsByIdMemberByFilter
 export def "members-boards get" [
-  idMember: string
+  id_member: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6209,7 +6209,7 @@ export def "members-boards get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/boards/($filter)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, filter: $filter} | format pattern "/members/{id_member}/boards/{filter}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6220,7 +6220,7 @@ export def "members-boards get" [
 # GET /members/{idMember}/boardsInvited
 # operationId: getMembersBoardsInvitedByIdMember
 export def "members-boards-invited list" [
-  idMember: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6236,7 +6236,7 @@ export def "members-boards-invited list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/boardsInvited" $qp)
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/boardsInvited") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6247,7 +6247,7 @@ export def "members-boards-invited list" [
 # GET /members/{idMember}/boardsInvited/{field}
 # operationId: getMembersBoardsInvitedByIdMemberByField
 export def "members-boards-invited get" [
-  idMember: string
+  id_member: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6263,7 +6263,7 @@ export def "members-boards-invited get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/boardsInvited/($field)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, field: $field} | format pattern "/members/{id_member}/boardsInvited/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6274,7 +6274,7 @@ export def "members-boards-invited get" [
 # GET /members/{idMember}/cards
 # operationId: getMembersCardsByIdMember
 export def "members-cards list" [
-  idMember: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6289,7 +6289,7 @@ export def "members-cards list" [
   --stickers: string #  true or false
   --members: string #  true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
-  --checkItemStates: string #  true or false
+  --check-item-states: string #  true or false
   --checklists: string # One of: all or none (default: none)
   --limit: string # a number from 1 to 1000
   --since: string # A date, or null
@@ -6301,8 +6301,8 @@ export def "members-cards list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $checkItemStates "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/cards" $qp)
+  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/cards") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6313,7 +6313,7 @@ export def "members-cards list" [
 # GET /members/{idMember}/cards/{filter}
 # operationId: getMembersCardsByIdMemberByFilter
 export def "members-cards get" [
-  idMember: string
+  id_member: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6329,7 +6329,7 @@ export def "members-cards get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/cards/($filter)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, filter: $filter} | format pattern "/members/{id_member}/cards/{filter}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6340,7 +6340,7 @@ export def "members-cards get" [
 # GET /members/{idMember}/customBoardBackgrounds
 # operationId: getMembersCustomBoardBackgroundsByIdMember
 export def "members-custom-board-backgrounds list" [
-  idMember: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6356,7 +6356,7 @@ export def "members-custom-board-backgrounds list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/customBoardBackgrounds" $qp)
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/customBoardBackgrounds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6366,8 +6366,8 @@ export def "members-custom-board-backgrounds list" [
 #
 # POST /members/{idMember}/customBoardBackgrounds
 # operationId: addMembersCustomBoardBackgroundsByIdMember
-export def "members-custom-board-backgrounds addMembersCustomBoardBackgroundsByIdMember" [
-  idMember: string
+export def "members-custom-board-backgrounds create" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6386,8 +6386,8 @@ export def "members-custom-board-backgrounds addMembersCustomBoardBackgroundsByI
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/customBoardBackgrounds" $qp)
-  let body = {brightness: $brightness, file: $file, tile: $tile} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/customBoardBackgrounds") $qp)
+  let body = {"brightness": $brightness, "file": $file, "tile": $tile} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6399,8 +6399,8 @@ export def "members-custom-board-backgrounds addMembersCustomBoardBackgroundsByI
 # DELETE /members/{idMember}/customBoardBackgrounds/{idBoardBackground}
 # operationId: deleteMembersCustomBoardBackgroundsByIdMemberByIdBoardBackground
 export def "members-custom-board-backgrounds delete" [
-  idMember: string
-  idBoardBackground: string
+  id_member: string
+  id_board_background: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6415,7 +6415,7 @@ export def "members-custom-board-backgrounds delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/customBoardBackgrounds/($idBoardBackground)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, id_board_background: $id_board_background} | format pattern "/members/{id_member}/customBoardBackgrounds/{id_board_background}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6426,8 +6426,8 @@ export def "members-custom-board-backgrounds delete" [
 # GET /members/{idMember}/customBoardBackgrounds/{idBoardBackground}
 # operationId: getMembersCustomBoardBackgroundsByIdMemberByIdBoardBackground
 export def "members-custom-board-backgrounds get" [
-  idMember: string
-  idBoardBackground: string
+  id_member: string
+  id_board_background: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6443,7 +6443,7 @@ export def "members-custom-board-backgrounds get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/customBoardBackgrounds/($idBoardBackground)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, id_board_background: $id_board_background} | format pattern "/members/{id_member}/customBoardBackgrounds/{id_board_background}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6453,9 +6453,9 @@ export def "members-custom-board-backgrounds get" [
 #
 # PUT /members/{idMember}/customBoardBackgrounds/{idBoardBackground}
 # operationId: updateMembersCustomBoardBackgroundsByIdMemberByIdBoardBackground
-export def "members-custom-board-backgrounds updateMembersCustomBoardBackgroundsByIdMemberByIdBoardBackground" [
-  idMember: string
-  idBoardBackground: string
+export def "members-custom-board-backgrounds update" [
+  id_member: string
+  id_board_background: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6474,8 +6474,8 @@ export def "members-custom-board-backgrounds updateMembersCustomBoardBackgrounds
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/customBoardBackgrounds/($idBoardBackground)" $qp)
-  let body = {brightness: $brightness, file: $file, tile: $tile} | compact
+  let full_url = (build-url $base ({id_member: $id_member, id_board_background: $id_board_background} | format pattern "/members/{id_member}/customBoardBackgrounds/{id_board_background}") $qp)
+  let body = {"brightness": $brightness, "file": $file, "tile": $tile} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6487,7 +6487,7 @@ export def "members-custom-board-backgrounds updateMembersCustomBoardBackgrounds
 # GET /members/{idMember}/customEmoji
 # operationId: getMembersCustomEmojiByIdMember
 export def "members-custom-emoji list" [
-  idMember: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6503,7 +6503,7 @@ export def "members-custom-emoji list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/customEmoji" $qp)
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/customEmoji") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6513,8 +6513,8 @@ export def "members-custom-emoji list" [
 #
 # POST /members/{idMember}/customEmoji
 # operationId: addMembersCustomEmojiByIdMember
-export def "members-custom-emoji addMembersCustomEmojiByIdMember" [
-  idMember: string
+export def "members-custom-emoji create" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6532,8 +6532,8 @@ export def "members-custom-emoji addMembersCustomEmojiByIdMember" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/customEmoji" $qp)
-  let body = {file: $file, name: $name} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/customEmoji") $qp)
+  let body = {"file": $file, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6545,8 +6545,8 @@ export def "members-custom-emoji addMembersCustomEmojiByIdMember" [
 # GET /members/{idMember}/customEmoji/{idCustomEmoji}
 # operationId: getMembersCustomEmojiByIdMemberByIdCustomEmoji
 export def "members-custom-emoji get" [
-  idMember: string
-  idCustomEmoji: string
+  id_member: string
+  id_custom_emoji: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6562,7 +6562,7 @@ export def "members-custom-emoji get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/customEmoji/($idCustomEmoji)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, id_custom_emoji: $id_custom_emoji} | format pattern "/members/{id_member}/customEmoji/{id_custom_emoji}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6573,7 +6573,7 @@ export def "members-custom-emoji get" [
 # GET /members/{idMember}/customStickers
 # operationId: getMembersCustomStickersByIdMember
 export def "members-custom-stickers list" [
-  idMember: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6589,7 +6589,7 @@ export def "members-custom-stickers list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/customStickers" $qp)
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/customStickers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6599,8 +6599,8 @@ export def "members-custom-stickers list" [
 #
 # POST /members/{idMember}/customStickers
 # operationId: addMembersCustomStickersByIdMember
-export def "members-custom-stickers addMembersCustomStickersByIdMember" [
-  idMember: string
+export def "members-custom-stickers create" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6617,8 +6617,8 @@ export def "members-custom-stickers addMembersCustomStickersByIdMember" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/customStickers" $qp)
-  let body = {file: $file} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/customStickers") $qp)
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6630,8 +6630,8 @@ export def "members-custom-stickers addMembersCustomStickersByIdMember" [
 # DELETE /members/{idMember}/customStickers/{idCustomSticker}
 # operationId: deleteMembersCustomStickersByIdMemberByIdCustomSticker
 export def "members-custom-stickers delete" [
-  idMember: string
-  idCustomSticker: string
+  id_member: string
+  id_custom_sticker: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6646,7 +6646,7 @@ export def "members-custom-stickers delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/customStickers/($idCustomSticker)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, id_custom_sticker: $id_custom_sticker} | format pattern "/members/{id_member}/customStickers/{id_custom_sticker}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6657,8 +6657,8 @@ export def "members-custom-stickers delete" [
 # GET /members/{idMember}/customStickers/{idCustomSticker}
 # operationId: getMembersCustomStickersByIdMemberByIdCustomSticker
 export def "members-custom-stickers get" [
-  idMember: string
-  idCustomSticker: string
+  id_member: string
+  id_custom_sticker: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6674,7 +6674,7 @@ export def "members-custom-stickers get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/customStickers/($idCustomSticker)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, id_custom_sticker: $id_custom_sticker} | format pattern "/members/{id_member}/customStickers/{id_custom_sticker}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6685,7 +6685,7 @@ export def "members-custom-stickers get" [
 # GET /members/{idMember}/deltas
 # operationId: getMembersDeltasByIdMember
 export def "members-deltas get" [
-  idMember: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6695,14 +6695,14 @@ export def "members-deltas get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --tags: string # A valid tag for subscribing
-  --ixLastUpdate: string # a number from -1 to Infinity
+  --ix-last-update: string # a number from -1 to Infinity
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "ixLastUpdate" $ixLastUpdate "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/deltas" $qp)
+  let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "ixLastUpdate" $ix_last_update "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/deltas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6712,8 +6712,8 @@ export def "members-deltas get" [
 #
 # PUT /members/{idMember}/fullName
 # operationId: updateMembersFullNameByIdMember
-export def "members-full-name updateMembersFullNameByIdMember" [
-  idMember: string
+export def "members-full-name update" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6730,8 +6730,8 @@ export def "members-full-name updateMembersFullNameByIdMember" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/fullName" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/fullName") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6742,8 +6742,8 @@ export def "members-full-name updateMembersFullNameByIdMember" [
 #
 # PUT /members/{idMember}/initials
 # operationId: updateMembersInitialsByIdMember
-export def "members-initials updateMembersInitialsByIdMember" [
-  idMember: string
+export def "members-initials update" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6760,8 +6760,8 @@ export def "members-initials updateMembersInitialsByIdMember" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/initials" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/initials") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6773,7 +6773,7 @@ export def "members-initials updateMembersInitialsByIdMember" [
 # GET /members/{idMember}/notifications
 # operationId: getMembersNotificationsByIdMember
 export def "members-notifications list" [
-  idMember: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6791,15 +6791,15 @@ export def "members-notifications list" [
   --page: string # a number from 0 to 100 (default: 0)
   --before: string # An id, or null
   --since: string # An id, or null
-  --memberCreator: string #  true or false
-  --memberCreator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
+  --member-creator: string #  true or false
+  --member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "read_filter" $read_filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "memberCreator" $memberCreator "scalar") (serialize-qp "memberCreator_fields" $memberCreator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/notifications" $qp)
+  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "read_filter" $read_filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/notifications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6810,7 +6810,7 @@ export def "members-notifications list" [
 # GET /members/{idMember}/notifications/{filter}
 # operationId: getMembersNotificationsByIdMemberByFilter
 export def "members-notifications get" [
-  idMember: string
+  id_member: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6826,7 +6826,7 @@ export def "members-notifications get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/notifications/($filter)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, filter: $filter} | format pattern "/members/{id_member}/notifications/{filter}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6836,8 +6836,8 @@ export def "members-notifications get" [
 #
 # POST /members/{idMember}/oneTimeMessagesDismissed
 # operationId: addMembersOneTimeMessagesDismissedByIdMember
-export def "members-one-time-messages-dismissed addMembersOneTimeMessagesDismissedByIdMember" [
-  idMember: string
+export def "members-one-time-messages-dismissed create" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6854,8 +6854,8 @@ export def "members-one-time-messages-dismissed addMembersOneTimeMessagesDismiss
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/oneTimeMessagesDismissed" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/oneTimeMessagesDismissed") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6867,7 +6867,7 @@ export def "members-one-time-messages-dismissed addMembersOneTimeMessagesDismiss
 # GET /members/{idMember}/organizations
 # operationId: getMembersOrganizationsByIdMember
 export def "members-organizations list" [
-  idMember: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6885,7 +6885,7 @@ export def "members-organizations list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "paid_account" $paid_account "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/organizations" $qp)
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/organizations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6896,7 +6896,7 @@ export def "members-organizations list" [
 # GET /members/{idMember}/organizations/{filter}
 # operationId: getMembersOrganizationsByIdMemberByFilter
 export def "members-organizations get" [
-  idMember: string
+  id_member: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6912,7 +6912,7 @@ export def "members-organizations get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/organizations/($filter)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, filter: $filter} | format pattern "/members/{id_member}/organizations/{filter}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6923,7 +6923,7 @@ export def "members-organizations get" [
 # GET /members/{idMember}/organizationsInvited
 # operationId: getMembersOrganizationsInvitedByIdMember
 export def "members-organizations-invited list" [
-  idMember: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6939,7 +6939,7 @@ export def "members-organizations-invited list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/organizationsInvited" $qp)
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/organizationsInvited") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6950,7 +6950,7 @@ export def "members-organizations-invited list" [
 # GET /members/{idMember}/organizationsInvited/{field}
 # operationId: getMembersOrganizationsInvitedByIdMemberByField
 export def "members-organizations-invited get" [
-  idMember: string
+  id_member: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6966,7 +6966,7 @@ export def "members-organizations-invited get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/organizationsInvited/($field)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, field: $field} | format pattern "/members/{id_member}/organizationsInvited/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6976,8 +6976,8 @@ export def "members-organizations-invited get" [
 #
 # PUT /members/{idMember}/prefs/colorBlind
 # operationId: updateMembersPrefsColorBlindByIdMember
-export def "members-prefs-color-blind updateMembersPrefsColorBlindByIdMember" [
-  idMember: string
+export def "members-prefs-color-blind update" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6994,8 +6994,8 @@ export def "members-prefs-color-blind updateMembersPrefsColorBlindByIdMember" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/prefs/colorBlind" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/prefs/colorBlind") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7006,8 +7006,8 @@ export def "members-prefs-color-blind updateMembersPrefsColorBlindByIdMember" [
 #
 # PUT /members/{idMember}/prefs/locale
 # operationId: updateMembersPrefsLocaleByIdMember
-export def "members-prefs-locale updateMembersPrefsLocaleByIdMember" [
-  idMember: string
+export def "members-prefs-locale update" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7024,8 +7024,8 @@ export def "members-prefs-locale updateMembersPrefsLocaleByIdMember" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/prefs/locale" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/prefs/locale") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7036,8 +7036,8 @@ export def "members-prefs-locale updateMembersPrefsLocaleByIdMember" [
 #
 # PUT /members/{idMember}/prefs/minutesBetweenSummaries
 # operationId: updateMembersPrefsMinutesBetweenSummariesByIdMember
-export def "members-prefs-minutes-between-summaries updateMembersPrefsMinutesBetweenSummariesByIdMember" [
-  idMember: string
+export def "members-prefs-minutes-between-summaries update" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7054,8 +7054,8 @@ export def "members-prefs-minutes-between-summaries updateMembersPrefsMinutesBet
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/prefs/minutesBetweenSummaries" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/prefs/minutesBetweenSummaries") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7067,7 +7067,7 @@ export def "members-prefs-minutes-between-summaries updateMembersPrefsMinutesBet
 # GET /members/{idMember}/savedSearches
 # operationId: getMembersSavedSearchesByIdMember
 export def "members-saved-searches list" [
-  idMember: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7082,7 +7082,7 @@ export def "members-saved-searches list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/savedSearches" $qp)
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/savedSearches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7092,8 +7092,8 @@ export def "members-saved-searches list" [
 #
 # POST /members/{idMember}/savedSearches
 # operationId: addMembersSavedSearchesByIdMember
-export def "members-saved-searches addMembersSavedSearchesByIdMember" [
-  idMember: string
+export def "members-saved-searches create" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7112,8 +7112,8 @@ export def "members-saved-searches addMembersSavedSearchesByIdMember" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/savedSearches" $qp)
-  let body = {name: $name, pos: $pos, query: $query} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/savedSearches") $qp)
+  let body = {"name": $name, "pos": $pos, "query": $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7125,8 +7125,8 @@ export def "members-saved-searches addMembersSavedSearchesByIdMember" [
 # DELETE /members/{idMember}/savedSearches/{idSavedSearch}
 # operationId: deleteMembersSavedSearchesByIdMemberByIdSavedSearch
 export def "members-saved-searches delete" [
-  idMember: string
-  idSavedSearch: string
+  id_member: string
+  id_saved_search: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7141,7 +7141,7 @@ export def "members-saved-searches delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/savedSearches/($idSavedSearch)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, id_saved_search: $id_saved_search} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7152,8 +7152,8 @@ export def "members-saved-searches delete" [
 # GET /members/{idMember}/savedSearches/{idSavedSearch}
 # operationId: getMembersSavedSearchesByIdMemberByIdSavedSearch
 export def "members-saved-searches get" [
-  idMember: string
-  idSavedSearch: string
+  id_member: string
+  id_saved_search: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7168,7 +7168,7 @@ export def "members-saved-searches get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/savedSearches/($idSavedSearch)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, id_saved_search: $id_saved_search} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7178,9 +7178,9 @@ export def "members-saved-searches get" [
 #
 # PUT /members/{idMember}/savedSearches/{idSavedSearch}
 # operationId: updateMembersSavedSearchesByIdMemberByIdSavedSearch
-export def "members-saved-searches updateMembersSavedSearchesByIdMemberByIdSavedSearch" [
-  idMember: string
-  idSavedSearch: string
+export def "members-saved-searches update" [
+  id_member: string
+  id_saved_search: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7199,8 +7199,8 @@ export def "members-saved-searches updateMembersSavedSearchesByIdMemberByIdSaved
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/savedSearches/($idSavedSearch)" $qp)
-  let body = {name: $name, pos: $pos, query: $query} | compact
+  let full_url = (build-url $base ({id_member: $id_member, id_saved_search: $id_saved_search} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}") $qp)
+  let body = {"name": $name, "pos": $pos, "query": $query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7211,9 +7211,9 @@ export def "members-saved-searches updateMembersSavedSearchesByIdMemberByIdSaved
 #
 # PUT /members/{idMember}/savedSearches/{idSavedSearch}/name
 # operationId: updateMembersSavedSearchesNameByIdMemberByIdSavedSearch
-export def "members-saved-searches-name updateMembersSavedSearchesNameByIdMemberByIdSavedSearch" [
-  idMember: string
-  idSavedSearch: string
+export def "members-saved-searches-name update" [
+  id_member: string
+  id_saved_search: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7230,8 +7230,8 @@ export def "members-saved-searches-name updateMembersSavedSearchesNameByIdMember
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/savedSearches/($idSavedSearch)/name" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_member: $id_member, id_saved_search: $id_saved_search} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}/name") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7242,9 +7242,9 @@ export def "members-saved-searches-name updateMembersSavedSearchesNameByIdMember
 #
 # PUT /members/{idMember}/savedSearches/{idSavedSearch}/pos
 # operationId: updateMembersSavedSearchesPosByIdMemberByIdSavedSearch
-export def "members-saved-searches-pos updateMembersSavedSearchesPosByIdMemberByIdSavedSearch" [
-  idMember: string
-  idSavedSearch: string
+export def "members-saved-searches-pos update" [
+  id_member: string
+  id_saved_search: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7261,8 +7261,8 @@ export def "members-saved-searches-pos updateMembersSavedSearchesPosByIdMemberBy
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/savedSearches/($idSavedSearch)/pos" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_member: $id_member, id_saved_search: $id_saved_search} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}/pos") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7273,9 +7273,9 @@ export def "members-saved-searches-pos updateMembersSavedSearchesPosByIdMemberBy
 #
 # PUT /members/{idMember}/savedSearches/{idSavedSearch}/query
 # operationId: updateMembersSavedSearchesQueryByIdMemberByIdSavedSearch
-export def "members-saved-searches-query updateMembersSavedSearchesQueryByIdMemberByIdSavedSearch" [
-  idMember: string
-  idSavedSearch: string
+export def "members-saved-searches-query update" [
+  id_member: string
+  id_saved_search: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7292,8 +7292,8 @@ export def "members-saved-searches-query updateMembersSavedSearchesQueryByIdMemb
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/savedSearches/($idSavedSearch)/query" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_member: $id_member, id_saved_search: $id_saved_search} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}/query") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7305,7 +7305,7 @@ export def "members-saved-searches-query updateMembersSavedSearchesQueryByIdMemb
 # GET /members/{idMember}/tokens
 # operationId: getMembersTokensByIdMember
 export def "members-tokens get" [
-  idMember: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7321,7 +7321,7 @@ export def "members-tokens get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/tokens" $qp)
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/tokens") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7331,8 +7331,8 @@ export def "members-tokens get" [
 #
 # PUT /members/{idMember}/username
 # operationId: updateMembersUsernameByIdMember
-export def "members-username updateMembersUsernameByIdMember" [
-  idMember: string
+export def "members-username update" [
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7349,8 +7349,8 @@ export def "members-username updateMembersUsernameByIdMember" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/username" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_member: $id_member} | format pattern "/members/{id_member}/username") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7362,7 +7362,7 @@ export def "members-username updateMembersUsernameByIdMember" [
 # GET /members/{idMember}/{field}
 # operationId: getMembersByIdMemberByField
 export def "members get" [
-  idMember: string
+  id_member: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7378,7 +7378,7 @@ export def "members get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/members/($idMember)/($field)" $qp)
+  let full_url = (build-url $base ({id_member: $id_member, field: $field} | format pattern "/members/{id_member}/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7388,7 +7388,7 @@ export def "members get" [
 #
 # POST /notifications/all/read
 # operationId: addNotificationsAllRead
-export def "notifications-all-read addNotificationsAllRead" [
+export def "notifications-all-read create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7414,7 +7414,7 @@ export def "notifications-all-read addNotificationsAllRead" [
 # GET /notifications/{idNotification}
 # operationId: getNotificationsByIdNotification
 export def "notifications list" [
-  idNotification: string
+  id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7426,8 +7426,8 @@ export def "notifications list" [
   --display: string #  true or false
   --entities: string #  true or false
   --fields: string # all or a comma-separated list of: data, date, idMemberCreator, type or unread (default: all)
-  --memberCreator: string #  true or false
-  --memberCreator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
+  --member-creator: string #  true or false
+  --member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --board: string #  true or false
   --board-fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: name)
   --list: string #  true or false
@@ -7442,8 +7442,8 @@ export def "notifications list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "display" $display "scalar") (serialize-qp "entities" $entities "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "memberCreator" $memberCreator "scalar") (serialize-qp "memberCreator_fields" $memberCreator_fields "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "list" $list "scalar") (serialize-qp "card" $card "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)" $qp)
+  let qp = [(serialize-qp "display" $display "scalar") (serialize-qp "entities" $entities "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "list" $list "scalar") (serialize-qp "card" $card "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_notification: $id_notification} | format pattern "/notifications/{id_notification}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7453,8 +7453,8 @@ export def "notifications list" [
 #
 # PUT /notifications/{idNotification}
 # operationId: updateNotificationsByIdNotification
-export def "notifications updateNotificationsByIdNotification" [
-  idNotification: string
+export def "notifications update" [
+  id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7471,8 +7471,8 @@ export def "notifications updateNotificationsByIdNotification" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)" $qp)
-  let body = {unread: $unread} | compact
+  let full_url = (build-url $base ({id_notification: $id_notification} | format pattern "/notifications/{id_notification}") $qp)
+  let body = {"unread": $unread} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7484,7 +7484,7 @@ export def "notifications updateNotificationsByIdNotification" [
 # GET /notifications/{idNotification}/board
 # operationId: getNotificationsBoardByIdNotification
 export def "notifications-board list" [
-  idNotification: string
+  id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7500,7 +7500,7 @@ export def "notifications-board list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)/board" $qp)
+  let full_url = (build-url $base ({id_notification: $id_notification} | format pattern "/notifications/{id_notification}/board") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7511,7 +7511,7 @@ export def "notifications-board list" [
 # GET /notifications/{idNotification}/board/{field}
 # operationId: getNotificationsBoardByIdNotificationByField
 export def "notifications-board get" [
-  idNotification: string
+  id_notification: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7527,7 +7527,7 @@ export def "notifications-board get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)/board/($field)" $qp)
+  let full_url = (build-url $base ({id_notification: $id_notification, field: $field} | format pattern "/notifications/{id_notification}/board/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7538,7 +7538,7 @@ export def "notifications-board get" [
 # GET /notifications/{idNotification}/card
 # operationId: getNotificationsCardByIdNotification
 export def "notifications-card list" [
-  idNotification: string
+  id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7554,7 +7554,7 @@ export def "notifications-card list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)/card" $qp)
+  let full_url = (build-url $base ({id_notification: $id_notification} | format pattern "/notifications/{id_notification}/card") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7565,7 +7565,7 @@ export def "notifications-card list" [
 # GET /notifications/{idNotification}/card/{field}
 # operationId: getNotificationsCardByIdNotificationByField
 export def "notifications-card get" [
-  idNotification: string
+  id_notification: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7581,7 +7581,7 @@ export def "notifications-card get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)/card/($field)" $qp)
+  let full_url = (build-url $base ({id_notification: $id_notification, field: $field} | format pattern "/notifications/{id_notification}/card/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7592,7 +7592,7 @@ export def "notifications-card get" [
 # GET /notifications/{idNotification}/display
 # operationId: getNotificationsDisplayByIdNotification
 export def "notifications-display get" [
-  idNotification: string
+  id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7607,7 +7607,7 @@ export def "notifications-display get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)/display" $qp)
+  let full_url = (build-url $base ({id_notification: $id_notification} | format pattern "/notifications/{id_notification}/display") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7618,7 +7618,7 @@ export def "notifications-display get" [
 # GET /notifications/{idNotification}/entities
 # operationId: getNotificationsEntitiesByIdNotification
 export def "notifications-entities get" [
-  idNotification: string
+  id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7633,7 +7633,7 @@ export def "notifications-entities get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)/entities" $qp)
+  let full_url = (build-url $base ({id_notification: $id_notification} | format pattern "/notifications/{id_notification}/entities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7644,7 +7644,7 @@ export def "notifications-entities get" [
 # GET /notifications/{idNotification}/list
 # operationId: getNotificationsListByIdNotification
 export def "notifications-list list" [
-  idNotification: string
+  id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7660,7 +7660,7 @@ export def "notifications-list list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)/list" $qp)
+  let full_url = (build-url $base ({id_notification: $id_notification} | format pattern "/notifications/{id_notification}/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7671,7 +7671,7 @@ export def "notifications-list list" [
 # GET /notifications/{idNotification}/list/{field}
 # operationId: getNotificationsListByIdNotificationByField
 export def "notifications-list get" [
-  idNotification: string
+  id_notification: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7687,7 +7687,7 @@ export def "notifications-list get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)/list/($field)" $qp)
+  let full_url = (build-url $base ({id_notification: $id_notification, field: $field} | format pattern "/notifications/{id_notification}/list/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7698,7 +7698,7 @@ export def "notifications-list get" [
 # GET /notifications/{idNotification}/member
 # operationId: getNotificationsMemberByIdNotification
 export def "notifications-member list" [
-  idNotification: string
+  id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7714,7 +7714,7 @@ export def "notifications-member list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)/member" $qp)
+  let full_url = (build-url $base ({id_notification: $id_notification} | format pattern "/notifications/{id_notification}/member") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7725,7 +7725,7 @@ export def "notifications-member list" [
 # GET /notifications/{idNotification}/member/{field}
 # operationId: getNotificationsMemberByIdNotificationByField
 export def "notifications-member get" [
-  idNotification: string
+  id_notification: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7741,7 +7741,7 @@ export def "notifications-member get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)/member/($field)" $qp)
+  let full_url = (build-url $base ({id_notification: $id_notification, field: $field} | format pattern "/notifications/{id_notification}/member/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7752,7 +7752,7 @@ export def "notifications-member get" [
 # GET /notifications/{idNotification}/memberCreator
 # operationId: getNotificationsMemberCreatorByIdNotification
 export def "notifications-member-creator list" [
-  idNotification: string
+  id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7768,7 +7768,7 @@ export def "notifications-member-creator list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)/memberCreator" $qp)
+  let full_url = (build-url $base ({id_notification: $id_notification} | format pattern "/notifications/{id_notification}/memberCreator") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7779,7 +7779,7 @@ export def "notifications-member-creator list" [
 # GET /notifications/{idNotification}/memberCreator/{field}
 # operationId: getNotificationsMemberCreatorByIdNotificationByField
 export def "notifications-member-creator get" [
-  idNotification: string
+  id_notification: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7795,7 +7795,7 @@ export def "notifications-member-creator get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)/memberCreator/($field)" $qp)
+  let full_url = (build-url $base ({id_notification: $id_notification, field: $field} | format pattern "/notifications/{id_notification}/memberCreator/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7806,7 +7806,7 @@ export def "notifications-member-creator get" [
 # GET /notifications/{idNotification}/organization
 # operationId: getNotificationsOrganizationByIdNotification
 export def "notifications-organization list" [
-  idNotification: string
+  id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7822,7 +7822,7 @@ export def "notifications-organization list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)/organization" $qp)
+  let full_url = (build-url $base ({id_notification: $id_notification} | format pattern "/notifications/{id_notification}/organization") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7833,7 +7833,7 @@ export def "notifications-organization list" [
 # GET /notifications/{idNotification}/organization/{field}
 # operationId: getNotificationsOrganizationByIdNotificationByField
 export def "notifications-organization get" [
-  idNotification: string
+  id_notification: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7849,7 +7849,7 @@ export def "notifications-organization get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)/organization/($field)" $qp)
+  let full_url = (build-url $base ({id_notification: $id_notification, field: $field} | format pattern "/notifications/{id_notification}/organization/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7859,8 +7859,8 @@ export def "notifications-organization get" [
 #
 # PUT /notifications/{idNotification}/unread
 # operationId: updateNotificationsUnreadByIdNotification
-export def "notifications-unread updateNotificationsUnreadByIdNotification" [
-  idNotification: string
+export def "notifications-unread update" [
+  id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7877,8 +7877,8 @@ export def "notifications-unread updateNotificationsUnreadByIdNotification" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)/unread" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_notification: $id_notification} | format pattern "/notifications/{id_notification}/unread") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7890,7 +7890,7 @@ export def "notifications-unread updateNotificationsUnreadByIdNotification" [
 # GET /notifications/{idNotification}/{field}
 # operationId: getNotificationsByIdNotificationByField
 export def "notifications get" [
-  idNotification: string
+  id_notification: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7906,7 +7906,7 @@ export def "notifications get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/($idNotification)/($field)" $qp)
+  let full_url = (build-url $base ({id_notification: $id_notification, field: $field} | format pattern "/notifications/{id_notification}/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7916,7 +7916,7 @@ export def "notifications get" [
 #
 # POST /organizations
 # operationId: addOrganizations
-export def "organizations addOrganizations" [
+export def "organizations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7928,16 +7928,16 @@ export def "organizations addOrganizations" [
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --desc: string # a string with a length from 0 to 16384
-  --displayName: string # A string with a length of at least 1.  Cannot begin or end with a space.
+  --display-name: string # A string with a length of at least 1.  Cannot begin or end with a space.
   --name: string # a string with a length from 0 to 16384
-  --prefsassociatedDomain: string # The google apps domain to link this org to.
-  --prefsboardVisibilityRestrictorg: string # One of: admin, none or org
-  --prefsboardVisibilityRestrictprivate: string # One of: admin, none or org
-  --prefsboardVisibilityRestrictpublic: string # One of: admin, none or org
-  --prefsexternalMembersDisabled: string #  true or false
-  --prefsgoogleAppsVersion: string # a number from 1 to 2
-  --prefsorgInviteRestrict: string # An email address with optional expansion tokens
-  --prefspermissionLevel: string # One of: private or public
+  --prefs-associated-domain: string # The google apps domain to link this org to.
+  --prefs-board-visibility-restrict-org: string # One of: admin, none or org
+  --prefs-board-visibility-restrict-private: string # One of: admin, none or org
+  --prefs-board-visibility-restrict-public: string # One of: admin, none or org
+  --prefs-external-members-disabled: string #  true or false
+  --prefs-google-apps-version: string # a number from 1 to 2
+  --prefs-org-invite-restrict: string # An email address with optional expansion tokens
+  --prefs-permission-level: string # One of: private or public
   --website: string # A URL starting with http:// or https:// or null
 ]: any -> any {
   let input = $in
@@ -7945,7 +7945,7 @@ export def "organizations addOrganizations" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/organizations" $qp)
-  let body = {desc: $desc, displayName: $displayName, name: $name, prefs/associatedDomain: $prefsassociatedDomain, prefs/boardVisibilityRestrict/org: $prefsboardVisibilityRestrictorg, prefs/boardVisibilityRestrict/private: $prefsboardVisibilityRestrictprivate, prefs/boardVisibilityRestrict/public: $prefsboardVisibilityRestrictpublic, prefs/externalMembersDisabled: $prefsexternalMembersDisabled, prefs/googleAppsVersion: $prefsgoogleAppsVersion, prefs/orgInviteRestrict: $prefsorgInviteRestrict, prefs/permissionLevel: $prefspermissionLevel, website: $website} | compact
+  let body = {"desc": $desc, "displayName": $display_name, "name": $name, "prefs/associatedDomain": $prefs_associated_domain, "prefs/boardVisibilityRestrict/org": $prefs_board_visibility_restrict_org, "prefs/boardVisibilityRestrict/private": $prefs_board_visibility_restrict_private, "prefs/boardVisibilityRestrict/public": $prefs_board_visibility_restrict_public, "prefs/externalMembersDisabled": $prefs_external_members_disabled, "prefs/googleAppsVersion": $prefs_google_apps_version, "prefs/orgInviteRestrict": $prefs_org_invite_restrict, "prefs/permissionLevel": $prefs_permission_level, "website": $website} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7957,7 +7957,7 @@ export def "organizations addOrganizations" [
 # DELETE /organizations/{idOrg}
 # operationId: deleteOrganizationsByIdOrg
 export def "organizations delete" [
-  idOrg: string
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7972,7 +7972,7 @@ export def "organizations delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)" $qp)
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7983,7 +7983,7 @@ export def "organizations delete" [
 # GET /organizations/{idOrg}
 # operationId: getOrganizationsByIdOrg
 export def "organizations list" [
-  idOrg: string
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8003,8 +8003,8 @@ export def "organizations list" [
   --members: string # One of: admins, all, none, normal or owners (default: none)
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials, username and confirmed)
   --member-activity: string # true or false ; works for premium organizations only.
-  --membersInvited: string # One of: admins, all, none, normal or owners (default: none)
-  --membersInvited-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, initials, fullName and username)
+  --members-invited: string # One of: admins, all, none, normal or owners (default: none)
+  --members-invited-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, initials, fullName and username)
   --boards: string # all or a comma-separated list of: closed, members, open, organization, pinned, public, starred or unpinned (default: none)
   --board-fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: all)
   --board-actions: string # all or a comma-separated list of: addAttachmentToCard, addChecklistToCard, addMemberToBoard, addMemberToCard, addMemberToOrganization, addToOrganizationBoard, commentCard, convertToCardFromCheckItem, copyBoard, copyCard, copyCommentCard, createBoard, createCard, createList, createOrganization, deleteAttachmentFromCard, deleteBoardInvitation, deleteCard, deleteOrganizationInvitation, disablePowerUp, emailCard, enablePowerUp, makeAdminOfBoard, makeNormalMemberOfBoard, makeNormalMemberOfOrganization, makeObserverOfBoard, memberJoinedTrello, moveCardFromBoard, moveCardToBoard, moveListFromBoard, moveListToBoard, removeChecklistFromCard, removeFromOrganizationBoard, removeMemberFromCard, unconfirmedBoardInvitation, unconfirmedOrganizationInvitation, updateBoard, updateCard, updateCard:closed, updateCard:desc, updateCard:idList, updateCard:name, updateCheckItemStateOnCard, updateChecklist, updateList, updateList:closed, updateList:name, updateMember or updateOrganization
@@ -8022,8 +8022,8 @@ export def "organizations list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "memberships" $memberships "scalar") (serialize-qp "memberships_member" $memberships_member "scalar") (serialize-qp "memberships_member_fields" $memberships_member_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "member_activity" $member_activity "scalar") (serialize-qp "membersInvited" $membersInvited "scalar") (serialize-qp "membersInvited_fields" $membersInvited_fields "scalar") (serialize-qp "boards" $boards "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "board_actions" $board_actions "scalar") (serialize-qp "board_actions_entities" $board_actions_entities "scalar") (serialize-qp "board_actions_display" $board_actions_display "scalar") (serialize-qp "board_actions_format" $board_actions_format "scalar") (serialize-qp "board_actions_since" $board_actions_since "scalar") (serialize-qp "board_actions_limit" $board_actions_limit "scalar") (serialize-qp "board_action_fields" $board_action_fields "scalar") (serialize-qp "board_lists" $board_lists "scalar") (serialize-qp "paid_account" $paid_account "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)" $qp)
+  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "memberships" $memberships "scalar") (serialize-qp "memberships_member" $memberships_member "scalar") (serialize-qp "memberships_member_fields" $memberships_member_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "member_activity" $member_activity "scalar") (serialize-qp "membersInvited" $members_invited "scalar") (serialize-qp "membersInvited_fields" $members_invited_fields "scalar") (serialize-qp "boards" $boards "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "board_actions" $board_actions "scalar") (serialize-qp "board_actions_entities" $board_actions_entities "scalar") (serialize-qp "board_actions_display" $board_actions_display "scalar") (serialize-qp "board_actions_format" $board_actions_format "scalar") (serialize-qp "board_actions_since" $board_actions_since "scalar") (serialize-qp "board_actions_limit" $board_actions_limit "scalar") (serialize-qp "board_action_fields" $board_action_fields "scalar") (serialize-qp "board_lists" $board_lists "scalar") (serialize-qp "paid_account" $paid_account "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8033,8 +8033,8 @@ export def "organizations list" [
 #
 # PUT /organizations/{idOrg}
 # operationId: updateOrganizationsByIdOrg
-export def "organizations updateOrganizationsByIdOrg" [
-  idOrg: string
+export def "organizations update" [
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8046,24 +8046,24 @@ export def "organizations updateOrganizationsByIdOrg" [
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --desc: string # a string with a length from 0 to 16384
-  --displayName: string # A string with a length of at least 1.  Cannot begin or end with a space.
+  --display-name: string # A string with a length of at least 1.  Cannot begin or end with a space.
   --name: string # a string with a length from 0 to 16384
-  --prefsassociatedDomain: string # The google apps domain to link this org to.
-  --prefsboardVisibilityRestrictorg: string # One of: admin, none or org
-  --prefsboardVisibilityRestrictprivate: string # One of: admin, none or org
-  --prefsboardVisibilityRestrictpublic: string # One of: admin, none or org
-  --prefsexternalMembersDisabled: string #  true or false
-  --prefsgoogleAppsVersion: string # a number from 1 to 2
-  --prefsorgInviteRestrict: string # An email address with optional expansion tokens
-  --prefspermissionLevel: string # One of: private or public
+  --prefs-associated-domain: string # The google apps domain to link this org to.
+  --prefs-board-visibility-restrict-org: string # One of: admin, none or org
+  --prefs-board-visibility-restrict-private: string # One of: admin, none or org
+  --prefs-board-visibility-restrict-public: string # One of: admin, none or org
+  --prefs-external-members-disabled: string #  true or false
+  --prefs-google-apps-version: string # a number from 1 to 2
+  --prefs-org-invite-restrict: string # An email address with optional expansion tokens
+  --prefs-permission-level: string # One of: private or public
   --website: string # A URL starting with http:// or https:// or null
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)" $qp)
-  let body = {desc: $desc, displayName: $displayName, name: $name, prefs/associatedDomain: $prefsassociatedDomain, prefs/boardVisibilityRestrict/org: $prefsboardVisibilityRestrictorg, prefs/boardVisibilityRestrict/private: $prefsboardVisibilityRestrictprivate, prefs/boardVisibilityRestrict/public: $prefsboardVisibilityRestrictpublic, prefs/externalMembersDisabled: $prefsexternalMembersDisabled, prefs/googleAppsVersion: $prefsgoogleAppsVersion, prefs/orgInviteRestrict: $prefsorgInviteRestrict, prefs/permissionLevel: $prefspermissionLevel, website: $website} | compact
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}") $qp)
+  let body = {"desc": $desc, "displayName": $display_name, "name": $name, "prefs/associatedDomain": $prefs_associated_domain, "prefs/boardVisibilityRestrict/org": $prefs_board_visibility_restrict_org, "prefs/boardVisibilityRestrict/private": $prefs_board_visibility_restrict_private, "prefs/boardVisibilityRestrict/public": $prefs_board_visibility_restrict_public, "prefs/externalMembersDisabled": $prefs_external_members_disabled, "prefs/googleAppsVersion": $prefs_google_apps_version, "prefs/orgInviteRestrict": $prefs_org_invite_restrict, "prefs/permissionLevel": $prefs_permission_level, "website": $website} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8075,7 +8075,7 @@ export def "organizations updateOrganizationsByIdOrg" [
 # GET /organizations/{idOrg}/actions
 # operationId: getOrganizationsActionsByIdOrg
 export def "organizations-actions get" [
-  idOrg: string
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8093,18 +8093,18 @@ export def "organizations-actions get" [
   --since: string # A date, null or lastView
   --before: string # A date, or null
   --page: string # Page * limit must be less than 1000 (default: 0)
-  --idModels: string # Only return actions related to these model ids
+  --id-models: string # Only return actions related to these model ids
   --member: string #  true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
-  --memberCreator: string #  true or false
-  --memberCreator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
+  --member-creator: string #  true or false
+  --member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $idModels "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $memberCreator "scalar") (serialize-qp "memberCreator_fields" $memberCreator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/actions" $qp)
+  let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $id_models "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/actions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8115,7 +8115,7 @@ export def "organizations-actions get" [
 # GET /organizations/{idOrg}/boards
 # operationId: getOrganizationsBoardsByIdOrg
 export def "organizations-boards list" [
-  idOrg: string
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8142,7 +8142,7 @@ export def "organizations-boards list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "actions_format" $actions_format "scalar") (serialize-qp "actions_since" $actions_since "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "memberships" $memberships "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "lists" $lists "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/boards" $qp)
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/boards") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8153,7 +8153,7 @@ export def "organizations-boards list" [
 # GET /organizations/{idOrg}/boards/{filter}
 # operationId: getOrganizationsBoardsByIdOrgByFilter
 export def "organizations-boards get" [
-  idOrg: string
+  id_org: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8169,7 +8169,7 @@ export def "organizations-boards get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/boards/($filter)" $qp)
+  let full_url = (build-url $base ({id_org: $id_org, filter: $filter} | format pattern "/organizations/{id_org}/boards/{filter}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8180,7 +8180,7 @@ export def "organizations-boards get" [
 # GET /organizations/{idOrg}/deltas
 # operationId: getOrganizationsDeltasByIdOrg
 export def "organizations-deltas get" [
-  idOrg: string
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8190,14 +8190,14 @@ export def "organizations-deltas get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --tags: string # A valid tag for subscribing
-  --ixLastUpdate: string # a number from -1 to Infinity
+  --ix-last-update: string # a number from -1 to Infinity
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "ixLastUpdate" $ixLastUpdate "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/deltas" $qp)
+  let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "ixLastUpdate" $ix_last_update "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/deltas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8207,8 +8207,8 @@ export def "organizations-deltas get" [
 #
 # PUT /organizations/{idOrg}/desc
 # operationId: updateOrganizationsDescByIdOrg
-export def "organizations-desc updateOrganizationsDescByIdOrg" [
-  idOrg: string
+export def "organizations-desc update" [
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8225,8 +8225,8 @@ export def "organizations-desc updateOrganizationsDescByIdOrg" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/desc" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/desc") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8237,8 +8237,8 @@ export def "organizations-desc updateOrganizationsDescByIdOrg" [
 #
 # PUT /organizations/{idOrg}/displayName
 # operationId: updateOrganizationsDisplayNameByIdOrg
-export def "organizations-display-name updateOrganizationsDisplayNameByIdOrg" [
-  idOrg: string
+export def "organizations-display-name update" [
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8255,8 +8255,8 @@ export def "organizations-display-name updateOrganizationsDisplayNameByIdOrg" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/displayName" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/displayName") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8268,7 +8268,7 @@ export def "organizations-display-name updateOrganizationsDisplayNameByIdOrg" [
 # DELETE /organizations/{idOrg}/logo
 # operationId: deleteOrganizationsLogoByIdOrg
 export def "organizations-logo delete" [
-  idOrg: string
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8283,7 +8283,7 @@ export def "organizations-logo delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/logo" $qp)
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/logo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8293,8 +8293,8 @@ export def "organizations-logo delete" [
 #
 # POST /organizations/{idOrg}/logo
 # operationId: addOrganizationsLogoByIdOrg
-export def "organizations-logo addOrganizationsLogoByIdOrg" [
-  idOrg: string
+export def "organizations-logo create" [
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8311,8 +8311,8 @@ export def "organizations-logo addOrganizationsLogoByIdOrg" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/logo" $qp)
-  let body = {file: $file} | compact
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/logo") $qp)
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8324,7 +8324,7 @@ export def "organizations-logo addOrganizationsLogoByIdOrg" [
 # GET /organizations/{idOrg}/members
 # operationId: getOrganizationsMembersByIdOrg
 export def "organizations-members list" [
-  idOrg: string
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8342,7 +8342,7 @@ export def "organizations-members list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "activity" $activity "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/members" $qp)
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8352,8 +8352,8 @@ export def "organizations-members list" [
 #
 # PUT /organizations/{idOrg}/members
 # operationId: updateOrganizationsMembersByIdOrg
-export def "organizations-members updateOrganizationsMembersByIdOrg" [
-  idOrg: string
+export def "organizations-members update-by-idOrg" [
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8365,15 +8365,15 @@ export def "organizations-members updateOrganizationsMembersByIdOrg" [
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --email: string # An email address
-  --fullName: string # A string with a length of at least 1.  Cannot begin or end with a space.
+  --full-name: string # A string with a length of at least 1.  Cannot begin or end with a space.
   --type: string # One of: admin, normal or observer
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/members" $qp)
-  let body = {email: $email, fullName: $fullName, type: $type} | compact
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/members") $qp)
+  let body = {"email": $email, "fullName": $full_name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8385,7 +8385,7 @@ export def "organizations-members updateOrganizationsMembersByIdOrg" [
 # GET /organizations/{idOrg}/members/{filter}
 # operationId: getOrganizationsMembersByIdOrgByFilter
 export def "organizations-members get" [
-  idOrg: string
+  id_org: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8401,7 +8401,7 @@ export def "organizations-members get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/members/($filter)" $qp)
+  let full_url = (build-url $base ({id_org: $id_org, filter: $filter} | format pattern "/organizations/{id_org}/members/{filter}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8412,8 +8412,8 @@ export def "organizations-members get" [
 # DELETE /organizations/{idOrg}/members/{idMember}
 # operationId: deleteOrganizationsMembersByIdOrgByIdMember
 export def "organizations-members delete" [
-  idOrg: string
-  idMember: string
+  id_org: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8428,7 +8428,7 @@ export def "organizations-members delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/members/($idMember)" $qp)
+  let full_url = (build-url $base ({id_org: $id_org, id_member: $id_member} | format pattern "/organizations/{id_org}/members/{id_member}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8438,9 +8438,9 @@ export def "organizations-members delete" [
 #
 # PUT /organizations/{idOrg}/members/{idMember}
 # operationId: updateOrganizationsMembersByIdOrgByIdMember
-export def "organizations-members updateOrganizationsMembersByIdOrgByIdMember" [
-  idOrg: string
-  idMember: string
+export def "organizations-members update-by-idOrg-idMember" [
+  id_org: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8452,15 +8452,15 @@ export def "organizations-members updateOrganizationsMembersByIdOrgByIdMember" [
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --email: string # An email address
-  --fullName: string # A string with a length of at least 1.  Cannot begin or end with a space.
+  --full-name: string # A string with a length of at least 1.  Cannot begin or end with a space.
   --type: string # One of: admin, normal or observer
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/members/($idMember)" $qp)
-  let body = {email: $email, fullName: $fullName, type: $type} | compact
+  let full_url = (build-url $base ({id_org: $id_org, id_member: $id_member} | format pattern "/organizations/{id_org}/members/{id_member}") $qp)
+  let body = {"email": $email, "fullName": $full_name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8472,8 +8472,8 @@ export def "organizations-members updateOrganizationsMembersByIdOrgByIdMember" [
 # DELETE /organizations/{idOrg}/members/{idMember}/all
 # operationId: deleteOrganizationsMembersAllByIdOrgByIdMember
 export def "organizations-members-all delete" [
-  idOrg: string
-  idMember: string
+  id_org: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8488,7 +8488,7 @@ export def "organizations-members-all delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/members/($idMember)/all" $qp)
+  let full_url = (build-url $base ({id_org: $id_org, id_member: $id_member} | format pattern "/organizations/{id_org}/members/{id_member}/all") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8499,8 +8499,8 @@ export def "organizations-members-all delete" [
 # GET /organizations/{idOrg}/members/{idMember}/cards
 # operationId: getOrganizationsMembersCardsByIdOrgByIdMember
 export def "organizations-members-cards get" [
-  idOrg: string
-  idMember: string
+  id_org: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8514,7 +8514,7 @@ export def "organizations-members-cards get" [
   --attachment-fields: string # all or a comma-separated list of: bytes, date, edgeColor, idMember, isUpload, mimeType, name, previews or url (default: all)
   --members: string #  true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
-  --checkItemStates: string #  true or false
+  --check-item-states: string #  true or false
   --checklists: string # One of: all or none (default: none)
   --board: string #  true or false
   --board-fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: name, desc, closed, idOrganization, pinned, url and prefs)
@@ -8527,8 +8527,8 @@ export def "organizations-members-cards get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $checkItemStates "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "list" $list "scalar") (serialize-qp "list_fields" $list_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/members/($idMember)/cards" $qp)
+  let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "list" $list "scalar") (serialize-qp "list_fields" $list_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id_org: $id_org, id_member: $id_member} | format pattern "/organizations/{id_org}/members/{id_member}/cards") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8538,9 +8538,9 @@ export def "organizations-members-cards get" [
 #
 # PUT /organizations/{idOrg}/members/{idMember}/deactivated
 # operationId: updateOrganizationsMembersDeactivatedByIdOrgByIdMember
-export def "organizations-members-deactivated updateOrganizationsMembersDeactivatedByIdOrgByIdMember" [
-  idOrg: string
-  idMember: string
+export def "organizations-members-deactivated update" [
+  id_org: string
+  id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8557,8 +8557,8 @@ export def "organizations-members-deactivated updateOrganizationsMembersDeactiva
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/members/($idMember)/deactivated" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_org: $id_org, id_member: $id_member} | format pattern "/organizations/{id_org}/members/{id_member}/deactivated") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8570,7 +8570,7 @@ export def "organizations-members-deactivated updateOrganizationsMembersDeactiva
 # GET /organizations/{idOrg}/membersInvited
 # operationId: getOrganizationsMembersInvitedByIdOrg
 export def "organizations-members-invited list" [
-  idOrg: string
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8586,7 +8586,7 @@ export def "organizations-members-invited list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/membersInvited" $qp)
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/membersInvited") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8597,7 +8597,7 @@ export def "organizations-members-invited list" [
 # GET /organizations/{idOrg}/membersInvited/{field}
 # operationId: getOrganizationsMembersInvitedByIdOrgByField
 export def "organizations-members-invited get" [
-  idOrg: string
+  id_org: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8613,7 +8613,7 @@ export def "organizations-members-invited get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/membersInvited/($field)" $qp)
+  let full_url = (build-url $base ({id_org: $id_org, field: $field} | format pattern "/organizations/{id_org}/membersInvited/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8624,7 +8624,7 @@ export def "organizations-members-invited get" [
 # GET /organizations/{idOrg}/memberships
 # operationId: getOrganizationsMembershipsByIdOrg
 export def "organizations-memberships list" [
-  idOrg: string
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8642,7 +8642,7 @@ export def "organizations-memberships list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/memberships" $qp)
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8653,8 +8653,8 @@ export def "organizations-memberships list" [
 # GET /organizations/{idOrg}/memberships/{idMembership}
 # operationId: getOrganizationsMembershipsByIdOrgByIdMembership
 export def "organizations-memberships get" [
-  idOrg: string
-  idMembership: string
+  id_org: string
+  id_membership: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8671,7 +8671,7 @@ export def "organizations-memberships get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/memberships/($idMembership)" $qp)
+  let full_url = (build-url $base ({id_org: $id_org, id_membership: $id_membership} | format pattern "/organizations/{id_org}/memberships/{id_membership}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8681,9 +8681,9 @@ export def "organizations-memberships get" [
 #
 # PUT /organizations/{idOrg}/memberships/{idMembership}
 # operationId: updateOrganizationsMembershipsByIdOrgByIdMembership
-export def "organizations-memberships updateOrganizationsMembershipsByIdOrgByIdMembership" [
-  idOrg: string
-  idMembership: string
+export def "organizations-memberships update" [
+  id_org: string
+  id_membership: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8701,8 +8701,8 @@ export def "organizations-memberships updateOrganizationsMembershipsByIdOrgByIdM
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/memberships/($idMembership)" $qp)
-  let body = {member_fields: $member_fields, type: $type} | compact
+  let full_url = (build-url $base ({id_org: $id_org, id_membership: $id_membership} | format pattern "/organizations/{id_org}/memberships/{id_membership}") $qp)
+  let body = {"member_fields": $member_fields, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8713,8 +8713,8 @@ export def "organizations-memberships updateOrganizationsMembershipsByIdOrgByIdM
 #
 # PUT /organizations/{idOrg}/name
 # operationId: updateOrganizationsNameByIdOrg
-export def "organizations-name updateOrganizationsNameByIdOrg" [
-  idOrg: string
+export def "organizations-name update" [
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8731,8 +8731,8 @@ export def "organizations-name updateOrganizationsNameByIdOrg" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/name" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/name") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8744,7 +8744,7 @@ export def "organizations-name updateOrganizationsNameByIdOrg" [
 # DELETE /organizations/{idOrg}/prefs/associatedDomain
 # operationId: deleteOrganizationsPrefsAssociatedDomainByIdOrg
 export def "organizations-prefs-associated-domain delete" [
-  idOrg: string
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8759,7 +8759,7 @@ export def "organizations-prefs-associated-domain delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/prefs/associatedDomain" $qp)
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/prefs/associatedDomain") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8769,8 +8769,8 @@ export def "organizations-prefs-associated-domain delete" [
 #
 # PUT /organizations/{idOrg}/prefs/associatedDomain
 # operationId: updateOrganizationsPrefsAssociatedDomainByIdOrg
-export def "organizations-prefs-associated-domain updateOrganizationsPrefsAssociatedDomainByIdOrg" [
-  idOrg: string
+export def "organizations-prefs-associated-domain update" [
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8787,8 +8787,8 @@ export def "organizations-prefs-associated-domain updateOrganizationsPrefsAssoci
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/prefs/associatedDomain" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/prefs/associatedDomain") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8799,8 +8799,8 @@ export def "organizations-prefs-associated-domain updateOrganizationsPrefsAssoci
 #
 # PUT /organizations/{idOrg}/prefs/boardVisibilityRestrict/org
 # operationId: updateOrganizationsPrefsBoardVisibilityRestrictOrgByIdOrg
-export def "organizations-prefs-board-visibility-restrict-org updateOrganizationsPrefsBoardVisibilityRestrictOrgByIdOrg" [
-  idOrg: string
+export def "organizations-prefs-board-visibility-restrict-org update" [
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8817,8 +8817,8 @@ export def "organizations-prefs-board-visibility-restrict-org updateOrganization
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/prefs/boardVisibilityRestrict/org" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/prefs/boardVisibilityRestrict/org") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8829,8 +8829,8 @@ export def "organizations-prefs-board-visibility-restrict-org updateOrganization
 #
 # PUT /organizations/{idOrg}/prefs/boardVisibilityRestrict/private
 # operationId: updateOrganizationsPrefsBoardVisibilityRestrictPrivateByIdOrg
-export def "organizations-prefs-board-visibility-restrict-private updateOrganizationsPrefsBoardVisibilityRestrictPrivateByIdOrg" [
-  idOrg: string
+export def "organizations-prefs-board-visibility-restrict-private update" [
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8847,8 +8847,8 @@ export def "organizations-prefs-board-visibility-restrict-private updateOrganiza
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/prefs/boardVisibilityRestrict/private" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/prefs/boardVisibilityRestrict/private") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8859,8 +8859,8 @@ export def "organizations-prefs-board-visibility-restrict-private updateOrganiza
 #
 # PUT /organizations/{idOrg}/prefs/boardVisibilityRestrict/public
 # operationId: updateOrganizationsPrefsBoardVisibilityRestrictPublicByIdOrg
-export def "organizations-prefs-board-visibility-restrict-public updateOrganizationsPrefsBoardVisibilityRestrictPublicByIdOrg" [
-  idOrg: string
+export def "organizations-prefs-board-visibility-restrict-public update" [
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8877,8 +8877,8 @@ export def "organizations-prefs-board-visibility-restrict-public updateOrganizat
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/prefs/boardVisibilityRestrict/public" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/prefs/boardVisibilityRestrict/public") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8889,8 +8889,8 @@ export def "organizations-prefs-board-visibility-restrict-public updateOrganizat
 #
 # PUT /organizations/{idOrg}/prefs/externalMembersDisabled
 # operationId: updateOrganizationsPrefsExternalMembersDisabledByIdOrg
-export def "organizations-prefs-external-members-disabled updateOrganizationsPrefsExternalMembersDisabledByIdOrg" [
-  idOrg: string
+export def "organizations-prefs-external-members-disabled update" [
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8907,8 +8907,8 @@ export def "organizations-prefs-external-members-disabled updateOrganizationsPre
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/prefs/externalMembersDisabled" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/prefs/externalMembersDisabled") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8919,8 +8919,8 @@ export def "organizations-prefs-external-members-disabled updateOrganizationsPre
 #
 # PUT /organizations/{idOrg}/prefs/googleAppsVersion
 # operationId: updateOrganizationsPrefsGoogleAppsVersionByIdOrg
-export def "organizations-prefs-google-apps-version updateOrganizationsPrefsGoogleAppsVersionByIdOrg" [
-  idOrg: string
+export def "organizations-prefs-google-apps-version update" [
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8937,8 +8937,8 @@ export def "organizations-prefs-google-apps-version updateOrganizationsPrefsGoog
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/prefs/googleAppsVersion" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/prefs/googleAppsVersion") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8950,7 +8950,7 @@ export def "organizations-prefs-google-apps-version updateOrganizationsPrefsGoog
 # DELETE /organizations/{idOrg}/prefs/orgInviteRestrict
 # operationId: deleteOrganizationsPrefsOrgInviteRestrictByIdOrg
 export def "organizations-prefs-org-invite-restrict delete" [
-  idOrg: string
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8966,7 +8966,7 @@ export def "organizations-prefs-org-invite-restrict delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "value" $value "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/prefs/orgInviteRestrict" $qp)
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/prefs/orgInviteRestrict") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8976,8 +8976,8 @@ export def "organizations-prefs-org-invite-restrict delete" [
 #
 # PUT /organizations/{idOrg}/prefs/orgInviteRestrict
 # operationId: updateOrganizationsPrefsOrgInviteRestrictByIdOrg
-export def "organizations-prefs-org-invite-restrict updateOrganizationsPrefsOrgInviteRestrictByIdOrg" [
-  idOrg: string
+export def "organizations-prefs-org-invite-restrict update" [
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8994,8 +8994,8 @@ export def "organizations-prefs-org-invite-restrict updateOrganizationsPrefsOrgI
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/prefs/orgInviteRestrict" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/prefs/orgInviteRestrict") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9006,8 +9006,8 @@ export def "organizations-prefs-org-invite-restrict updateOrganizationsPrefsOrgI
 #
 # PUT /organizations/{idOrg}/prefs/permissionLevel
 # operationId: updateOrganizationsPrefsPermissionLevelByIdOrg
-export def "organizations-prefs-permission-level updateOrganizationsPrefsPermissionLevelByIdOrg" [
-  idOrg: string
+export def "organizations-prefs-permission-level update" [
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9024,8 +9024,8 @@ export def "organizations-prefs-permission-level updateOrganizationsPrefsPermiss
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/prefs/permissionLevel" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/prefs/permissionLevel") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9036,8 +9036,8 @@ export def "organizations-prefs-permission-level updateOrganizationsPrefsPermiss
 #
 # PUT /organizations/{idOrg}/website
 # operationId: updateOrganizationsWebsiteByIdOrg
-export def "organizations-website updateOrganizationsWebsiteByIdOrg" [
-  idOrg: string
+export def "organizations-website update" [
+  id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9054,8 +9054,8 @@ export def "organizations-website updateOrganizationsWebsiteByIdOrg" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/website" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_org: $id_org} | format pattern "/organizations/{id_org}/website") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9067,7 +9067,7 @@ export def "organizations-website updateOrganizationsWebsiteByIdOrg" [
 # GET /organizations/{idOrg}/{field}
 # operationId: getOrganizationsByIdOrgByField
 export def "organizations get" [
-  idOrg: string
+  id_org: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9083,7 +9083,7 @@ export def "organizations get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($idOrg)/($field)" $qp)
+  let full_url = (build-url $base ({id_org: $id_org, field: $field} | format pattern "/organizations/{id_org}/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9103,10 +9103,10 @@ export def "search get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # a string with a length from 1 to 16384
-  --idBoards: string # A comma-separated list of objectIds, 24-character hex strings (default: mine)
-  --idOrganizations: string # A comma-separated list of objectIds, 24-character hex strings
-  --idCards: string # A comma-separated list of objectIds, 24-character hex strings
-  --modelTypes: string # all or a comma-separated list of: actions, boards, cards, members or organizations (default: all)
+  --id-boards: string # A comma-separated list of objectIds, 24-character hex strings (default: mine)
+  --id-organizations: string # A comma-separated list of objectIds, 24-character hex strings
+  --id-cards: string # A comma-separated list of objectIds, 24-character hex strings
+  --model-types: string # all or a comma-separated list of: actions, boards, cards, members or organizations (default: all)
   --board-fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: name and idOrganization)
   --boards-limit: string # a number from 1 to 1000 (default: 10)
   --card-fields: string # all or a comma-separated list of: badges, checkItemStates, closed, dateLastActivity, desc, descData, due, email, idAttachmentCover, idBoard, idChecklists, idLabels, idList, idMembers, idMembersVoted, idShort, labels, manualCoverAttachment, name, pos, shortLink, shortUrl, subscribed or url (default: all)
@@ -9127,7 +9127,7 @@ export def "search get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "idBoards" $idBoards "scalar") (serialize-qp "idOrganizations" $idOrganizations "scalar") (serialize-qp "idCards" $idCards "scalar") (serialize-qp "modelTypes" $modelTypes "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "boards_limit" $boards_limit "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "cards_limit" $cards_limit "scalar") (serialize-qp "cards_page" $cards_page "scalar") (serialize-qp "card_board" $card_board "scalar") (serialize-qp "card_list" $card_list "scalar") (serialize-qp "card_members" $card_members "scalar") (serialize-qp "card_stickers" $card_stickers "scalar") (serialize-qp "card_attachments" $card_attachments "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "organizations_limit" $organizations_limit "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "members_limit" $members_limit "scalar") (serialize-qp "partial" $partial "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "idBoards" $id_boards "scalar") (serialize-qp "idOrganizations" $id_organizations "scalar") (serialize-qp "idCards" $id_cards "scalar") (serialize-qp "modelTypes" $model_types "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "boards_limit" $boards_limit "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "cards_limit" $cards_limit "scalar") (serialize-qp "cards_page" $cards_page "scalar") (serialize-qp "card_board" $card_board "scalar") (serialize-qp "card_list" $card_list "scalar") (serialize-qp "card_members" $card_members "scalar") (serialize-qp "card_stickers" $card_stickers "scalar") (serialize-qp "card_attachments" $card_attachments "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "organizations_limit" $organizations_limit "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "members_limit" $members_limit "scalar") (serialize-qp "partial" $partial "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9149,15 +9149,15 @@ export def "search-members get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # a string with a length from 1 to 16384
   --limit: string # a number from 1 to 20 (default: 8)
-  --idBoard: string # An id, or null
-  --idOrganization: string # An id, or null
-  --onlyOrgMembers: string # A boolean
+  --id-board: string # An id, or null
+  --id-organization: string # An id, or null
+  --only-org-members: string # A boolean
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "idBoard" $idBoard "scalar") (serialize-qp "idOrganization" $idOrganization "scalar") (serialize-qp "onlyOrgMembers" $onlyOrgMembers "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "idBoard" $id_board "scalar") (serialize-qp "idOrganization" $id_organization "scalar") (serialize-qp "onlyOrgMembers" $only_org_members "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9168,7 +9168,7 @@ export def "search-members get" [
 #
 # POST /sessions
 # operationId: addSessions
-export def "sessions addSessions" [
+export def "sessions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9179,7 +9179,7 @@ export def "sessions addSessions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
-  --idBoard: string # The id of the board you&#39;re viewing.  Boards with no viewers will not get updates about members&#39; statuses.
+  --id-board: string # The id of the board you&#39;re viewing.  Boards with no viewers will not get updates about members&#39; statuses.
   --status: string # One of: active, disconnected or idle
 ]: any -> any {
   let input = $in
@@ -9187,7 +9187,7 @@ export def "sessions addSessions" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sessions" $qp)
-  let body = {idBoard: $idBoard, status: $status} | compact
+  let body = {"idBoard": $id_board, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9223,8 +9223,8 @@ export def "sessions-socket get" [
 #
 # PUT /sessions/{idSession}
 # operationId: updateSessionsByIdSession
-export def "sessions updateSessionsByIdSession" [
-  idSession: string
+export def "sessions update" [
+  id_session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9235,15 +9235,15 @@ export def "sessions updateSessionsByIdSession" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
-  --idBoard: string # The id of the board you&#39;re viewing.  Boards with no viewers will not get updates about members&#39; statuses.
+  --id-board: string # The id of the board you&#39;re viewing.  Boards with no viewers will not get updates about members&#39; statuses.
   --status: string # One of: active, disconnected or idle
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sessions/($idSession)" $qp)
-  let body = {idBoard: $idBoard, status: $status} | compact
+  let full_url = (build-url $base ({id_session: $id_session} | format pattern "/sessions/{id_session}") $qp)
+  let body = {"idBoard": $id_board, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9254,8 +9254,8 @@ export def "sessions updateSessionsByIdSession" [
 #
 # PUT /sessions/{idSession}/status
 # operationId: updateSessionsStatusByIdSession
-export def "sessions-status updateSessionsStatusByIdSession" [
-  idSession: string
+export def "sessions-status update" [
+  id_session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9272,8 +9272,8 @@ export def "sessions-status updateSessionsStatusByIdSession" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sessions/($idSession)/status" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_session: $id_session} | format pattern "/sessions/{id_session}/status") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9285,7 +9285,7 @@ export def "sessions-status updateSessionsStatusByIdSession" [
 # DELETE /tokens/{token}
 # operationId: deleteTokensByToken
 export def "tokens delete" [
-  token: string
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9300,7 +9300,7 @@ export def "tokens delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tokens/($token)" $qp)
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/tokens/{token_arg}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9311,7 +9311,7 @@ export def "tokens delete" [
 # GET /tokens/{token}
 # operationId: getTokensByToken
 export def "tokens list" [
-  token: string
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9328,7 +9328,7 @@ export def "tokens list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "webhooks" $webhooks "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tokens/($token)" $qp)
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/tokens/{token_arg}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9339,7 +9339,7 @@ export def "tokens list" [
 # GET /tokens/{token}/member
 # operationId: getTokensMemberByToken
 export def "tokens-member list" [
-  token: string
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9355,7 +9355,7 @@ export def "tokens-member list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tokens/($token)/member" $qp)
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/tokens/{token_arg}/member") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9366,7 +9366,7 @@ export def "tokens-member list" [
 # GET /tokens/{token}/member/{field}
 # operationId: getTokensMemberByTokenByField
 export def "tokens-member get" [
-  token: string
+  token_arg: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9382,7 +9382,7 @@ export def "tokens-member get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tokens/($token)/member/($field)" $qp)
+  let full_url = (build-url $base ({token_arg: $token_arg, field: $field} | format pattern "/tokens/{token_arg}/member/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9393,7 +9393,7 @@ export def "tokens-member get" [
 # GET /tokens/{token}/webhooks
 # operationId: getTokensWebhooksByToken
 export def "tokens-webhooks list" [
-  token: string
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9408,7 +9408,7 @@ export def "tokens-webhooks list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tokens/($token)/webhooks" $qp)
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/tokens/{token_arg}/webhooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9418,8 +9418,8 @@ export def "tokens-webhooks list" [
 #
 # POST /tokens/{token}/webhooks
 # operationId: addTokensWebhooksByToken
-export def "tokens-webhooks addTokensWebhooksByToken" [
-  token: string
+export def "tokens-webhooks create" [
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9430,16 +9430,16 @@ export def "tokens-webhooks addTokensWebhooksByToken" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
-  --callbackURL: string # A valid URL that is reachable with a HEAD request
+  --callback-url: string # A valid URL that is reachable with a HEAD request
   --description: string # a string with a length from 0 to 16384
-  --idModel: string # id of the model to be monitored
+  --id-model: string # id of the model to be monitored
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tokens/($token)/webhooks" $qp)
-  let body = {callbackURL: $callbackURL, description: $description, idModel: $idModel} | compact
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/tokens/{token_arg}/webhooks") $qp)
+  let body = {"callbackURL": $callback_url, "description": $description, "idModel": $id_model} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9450,8 +9450,8 @@ export def "tokens-webhooks addTokensWebhooksByToken" [
 #
 # PUT /tokens/{token}/webhooks
 # operationId: updateTokensWebhooksByToken
-export def "tokens-webhooks updateTokensWebhooksByToken" [
-  token: string
+export def "tokens-webhooks update" [
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9462,16 +9462,16 @@ export def "tokens-webhooks updateTokensWebhooksByToken" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
-  --callbackURL: string # A valid URL that is reachable with a HEAD request
+  --callback-url: string # A valid URL that is reachable with a HEAD request
   --description: string # a string with a length from 0 to 16384
-  --idModel: string # id of the model to be monitored
+  --id-model: string # id of the model to be monitored
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tokens/($token)/webhooks" $qp)
-  let body = {callbackURL: $callbackURL, description: $description, idModel: $idModel} | compact
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/tokens/{token_arg}/webhooks") $qp)
+  let body = {"callbackURL": $callback_url, "description": $description, "idModel": $id_model} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9483,8 +9483,8 @@ export def "tokens-webhooks updateTokensWebhooksByToken" [
 # DELETE /tokens/{token}/webhooks/{idWebhook}
 # operationId: deleteTokensWebhooksByTokenByIdWebhook
 export def "tokens-webhooks delete" [
-  token: string
-  idWebhook: string
+  token_arg: string
+  id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9499,7 +9499,7 @@ export def "tokens-webhooks delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tokens/($token)/webhooks/($idWebhook)" $qp)
+  let full_url = (build-url $base ({token_arg: $token_arg, id_webhook: $id_webhook} | format pattern "/tokens/{token_arg}/webhooks/{id_webhook}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9510,8 +9510,8 @@ export def "tokens-webhooks delete" [
 # GET /tokens/{token}/webhooks/{idWebhook}
 # operationId: getTokensWebhooksByTokenByIdWebhook
 export def "tokens-webhooks get" [
-  token: string
-  idWebhook: string
+  token_arg: string
+  id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9526,7 +9526,7 @@ export def "tokens-webhooks get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tokens/($token)/webhooks/($idWebhook)" $qp)
+  let full_url = (build-url $base ({token_arg: $token_arg, id_webhook: $id_webhook} | format pattern "/tokens/{token_arg}/webhooks/{id_webhook}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9537,7 +9537,7 @@ export def "tokens-webhooks get" [
 # GET /tokens/{token}/{field}
 # operationId: getTokensByTokenByField
 export def "tokens get" [
-  token: string
+  token_arg: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9553,7 +9553,7 @@ export def "tokens get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tokens/($token)/($field)" $qp)
+  let full_url = (build-url $base ({token_arg: $token_arg, field: $field} | format pattern "/tokens/{token_arg}/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9579,7 +9579,7 @@ export def "types get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/types/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/types/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9589,7 +9589,7 @@ export def "types get" [
 #
 # POST /webhooks
 # operationId: addWebhooks
-export def "webhooks addWebhooks" [
+export def "webhooks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9601,16 +9601,16 @@ export def "webhooks addWebhooks" [
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --active: string #  true or false
-  --callbackURL: string # A valid URL that is reachable with a HEAD request
+  --callback-url: string # A valid URL that is reachable with a HEAD request
   --description: string # a string with a length from 0 to 16384
-  --idModel: string # id of the model that should be hooked
+  --id-model: string # id of the model that should be hooked
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhooks" $qp)
-  let body = {active: $active, callbackURL: $callbackURL, description: $description, idModel: $idModel} | compact
+  let body = {"active": $active, "callbackURL": $callback_url, "description": $description, "idModel": $id_model} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9621,7 +9621,7 @@ export def "webhooks addWebhooks" [
 #
 # PUT /webhooks/
 # operationId: updateWebhooks
-export def "webhooks updateWebhooks" [
+export def "webhooks update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9633,16 +9633,16 @@ export def "webhooks updateWebhooks" [
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --active: string #  true or false
-  --callbackURL: string # A valid URL that is reachable with a HEAD request
+  --callback-url: string # A valid URL that is reachable with a HEAD request
   --description: string # a string with a length from 0 to 16384
-  --idModel: string # id of the model that should be hooked
+  --id-model: string # id of the model that should be hooked
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhooks/" $qp)
-  let body = {active: $active, callbackURL: $callbackURL, description: $description, idModel: $idModel} | compact
+  let body = {"active": $active, "callbackURL": $callback_url, "description": $description, "idModel": $id_model} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9654,7 +9654,7 @@ export def "webhooks updateWebhooks" [
 # DELETE /webhooks/{idWebhook}
 # operationId: deleteWebhooksByIdWebhook
 export def "webhooks delete" [
-  idWebhook: string
+  id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9669,7 +9669,7 @@ export def "webhooks delete" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/webhooks/($idWebhook)" $qp)
+  let full_url = (build-url $base ({id_webhook: $id_webhook} | format pattern "/webhooks/{id_webhook}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9680,7 +9680,7 @@ export def "webhooks delete" [
 # GET /webhooks/{idWebhook}
 # operationId: getWebhooksByIdWebhook
 export def "webhooks list" [
-  idWebhook: string
+  id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9695,7 +9695,7 @@ export def "webhooks list" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/webhooks/($idWebhook)" $qp)
+  let full_url = (build-url $base ({id_webhook: $id_webhook} | format pattern "/webhooks/{id_webhook}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9705,8 +9705,8 @@ export def "webhooks list" [
 #
 # PUT /webhooks/{idWebhook}
 # operationId: updateWebhooksByIdWebhook
-export def "webhooks updateWebhooksByIdWebhook" [
-  idWebhook: string
+export def "webhooks update-by-idWebhook" [
+  id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9718,16 +9718,16 @@ export def "webhooks updateWebhooksByIdWebhook" [
   --key: string # <a href="https://trello.com/1/appKey/generate"  target="_blank">Generate your application key</a>
   --qp-token: string # <a href="https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user"  target="_blank">Getting a token from a user</a>
   --active: string #  true or false
-  --callbackURL: string # A valid URL that is reachable with a HEAD request
+  --callback-url: string # A valid URL that is reachable with a HEAD request
   --description: string # a string with a length from 0 to 16384
-  --idModel: string # id of the model that should be hooked
+  --id-model: string # id of the model that should be hooked
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/webhooks/($idWebhook)" $qp)
-  let body = {active: $active, callbackURL: $callbackURL, description: $description, idModel: $idModel} | compact
+  let full_url = (build-url $base ({id_webhook: $id_webhook} | format pattern "/webhooks/{id_webhook}") $qp)
+  let body = {"active": $active, "callbackURL": $callback_url, "description": $description, "idModel": $id_model} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9738,8 +9738,8 @@ export def "webhooks updateWebhooksByIdWebhook" [
 #
 # PUT /webhooks/{idWebhook}/active
 # operationId: updateWebhooksActiveByIdWebhook
-export def "webhooks-active updateWebhooksActiveByIdWebhook" [
-  idWebhook: string
+export def "webhooks-active update" [
+  id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9756,8 +9756,8 @@ export def "webhooks-active updateWebhooksActiveByIdWebhook" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/webhooks/($idWebhook)/active" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_webhook: $id_webhook} | format pattern "/webhooks/{id_webhook}/active") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9768,8 +9768,8 @@ export def "webhooks-active updateWebhooksActiveByIdWebhook" [
 #
 # PUT /webhooks/{idWebhook}/callbackURL
 # operationId: updateWebhooksCallbackURLByIdWebhook
-export def "webhooks-callback-url updateWebhooksCallbackURLByIdWebhook" [
-  idWebhook: string
+export def "webhooks-callback-url update" [
+  id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9786,8 +9786,8 @@ export def "webhooks-callback-url updateWebhooksCallbackURLByIdWebhook" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/webhooks/($idWebhook)/callbackURL" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_webhook: $id_webhook} | format pattern "/webhooks/{id_webhook}/callbackURL") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9798,8 +9798,8 @@ export def "webhooks-callback-url updateWebhooksCallbackURLByIdWebhook" [
 #
 # PUT /webhooks/{idWebhook}/description
 # operationId: updateWebhooksDescriptionByIdWebhook
-export def "webhooks-description updateWebhooksDescriptionByIdWebhook" [
-  idWebhook: string
+export def "webhooks-description update" [
+  id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9816,8 +9816,8 @@ export def "webhooks-description updateWebhooksDescriptionByIdWebhook" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/webhooks/($idWebhook)/description" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_webhook: $id_webhook} | format pattern "/webhooks/{id_webhook}/description") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9828,8 +9828,8 @@ export def "webhooks-description updateWebhooksDescriptionByIdWebhook" [
 #
 # PUT /webhooks/{idWebhook}/idModel
 # operationId: updateWebhooksIdModelByIdWebhook
-export def "webhooks-id-model updateWebhooksIdModelByIdWebhook" [
-  idWebhook: string
+export def "webhooks-id-model update" [
+  id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9846,8 +9846,8 @@ export def "webhooks-id-model updateWebhooksIdModelByIdWebhook" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/webhooks/($idWebhook)/idModel" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({id_webhook: $id_webhook} | format pattern "/webhooks/{id_webhook}/idModel") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9859,7 +9859,7 @@ export def "webhooks-id-model updateWebhooksIdModelByIdWebhook" [
 # GET /webhooks/{idWebhook}/{field}
 # operationId: getWebhooksByIdWebhookByField
 export def "webhooks get" [
-  idWebhook: string
+  id_webhook: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9875,7 +9875,7 @@ export def "webhooks get" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/webhooks/($idWebhook)/($field)" $qp)
+  let full_url = (build-url $base ({id_webhook: $id_webhook, field: $field} | format pattern "/webhooks/{id_webhook}/{field}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

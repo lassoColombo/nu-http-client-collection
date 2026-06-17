@@ -124,7 +124,7 @@ export def "company-basicsearch basicCompanySearch" [
 #
 # GET /v1/company/competitor/id/{companyId}
 export def "company-competitor-id get" [
-  companyId: string
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,7 +139,7 @@ export def "company-competitor-id get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/company/competitor/id/($companyId)" $qp)
+  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/v1/company/competitor/id/{company_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -164,7 +164,7 @@ export def "company-competitor-url get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/company/competitor/url/($website)" $qp)
+  let full_url = (build-url $base ({website: $website} | format pattern "/v1/company/competitor/url/{website}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -174,7 +174,7 @@ export def "company-competitor-url get" [
 #
 # GET /v1/company/competitorpremium/id/{companyId}
 export def "company-competitorpremium-id get" [
-  companyId: string
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "company-competitorpremium-id get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagination_id" $pagination_id "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/company/competitorpremium/id/($companyId)" $qp)
+  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/v1/company/competitorpremium/id/{company_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -216,7 +216,7 @@ export def "company-competitorpremium-url get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagination_id" $pagination_id "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/company/competitorpremium/url/($website)" $qp)
+  let full_url = (build-url $base ({website: $website} | format pattern "/v1/company/competitorpremium/url/{website}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -254,7 +254,7 @@ export def "company-fuzzysearch fuzzyCompanySearch" [
 #
 # GET /v1/company/id/{companyId}
 export def "company-id get" [
-  companyId: string
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "company-id get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/company/id/($companyId)" $qp)
+  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/v1/company/id/{company_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -279,7 +279,7 @@ export def "company-id get" [
 #
 # GET /v1/company/search
 # operationId: searchCompany
-export def "company-search searchCompany" [
+export def "company-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,7 +322,7 @@ export def "company-url get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/company/url/($website)" $qp)
+  let full_url = (build-url $base ({website: $website} | format pattern "/v1/company/url/{website}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -332,7 +332,7 @@ export def "company-url get" [
 #
 # GET /v1/companypremium/id/{companyId}
 export def "companypremium-id get" [
-  companyId: string
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,7 +347,7 @@ export def "companypremium-id get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/companypremium/id/($companyId)" $qp)
+  let full_url = (build-url $base ({company_id: $company_id} | format pattern "/v1/companypremium/id/{company_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -372,7 +372,7 @@ export def "companypremium-url get" [
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/companypremium/url/($website)" $qp)
+  let full_url = (build-url $base ({website: $website} | format pattern "/v1/companypremium/url/{website}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

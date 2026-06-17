@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-management-groups-providers-microsoft-policy-insights-policy-tracked-resources-query-results ListQueryResultsForManagementGroup" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-management-groups-providers-microsoft-policy-insights-policy-tracked-resources-query-results list-query-results-for" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # POST /providers/{managementGroupsNamespace}/managementGroups/{managementGroupName}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policyTrackedResourcesResource}/queryResults
 # operationId: PolicyTrackedResources_ListQueryResultsForManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-policy-tracked-resources-query-results ListQueryResultsForManagementGroup" [
-  managementGroupsNamespace: string
-  managementGroupName: string
-  policyTrackedResourcesResource: string
+export def "providers-management-groups-providers-microsoft-policy-insights-policy-tracked-resources-query-results list-query-results-for" [
+  management_groups_namespace: string
+  management_group_name: string
+  policy_tracked_resources_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,7 +112,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-poli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/($managementGroupsNamespace)/managementGroups/($managementGroupName)/providers/Microsoft.PolicyInsights/policyTrackedResources/($policyTrackedResourcesResource)/queryResults" $qp)
+  let full_url = (build-url $base ({management_groups_namespace: $management_groups_namespace, management_group_name: $management_group_name, policy_tracked_resources_resource: $policy_tracked_resources_resource} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_name}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policy_tracked_resources_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,9 +122,9 @@ export def "providers-management-groups-providers-microsoft-policy-insights-poli
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policyTrackedResourcesResource}/queryResults
 # operationId: PolicyTrackedResources_ListQueryResultsForSubscription
-export def "subscriptions-providers-microsoft-policy-insights-policy-tracked-resources-query-results ListQueryResultsForSubscription" [
-  policyTrackedResourcesResource: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-policy-insights-policy-tracked-resources-query-results list-query-results-for" [
+  subscription_id: string
+  policy_tracked_resources_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +140,7 @@ export def "subscriptions-providers-microsoft-policy-insights-policy-tracked-res
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.PolicyInsights/policyTrackedResources/($policyTrackedResourcesResource)/queryResults" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, policy_tracked_resources_resource: $policy_tracked_resources_resource} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policy_tracked_resources_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,10 +150,10 @@ export def "subscriptions-providers-microsoft-policy-insights-policy-tracked-res
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policyTrackedResourcesResource}/queryResults
 # operationId: PolicyTrackedResources_ListQueryResultsForResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-policy-tracked-resources-query-results ListQueryResultsForResourceGroup" [
-  resourceGroupName: string
-  policyTrackedResourcesResource: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-policy-insights-policy-tracked-resources-query-results list-query-results-for" [
+  subscription_id: string
+  resource_group_name: string
+  policy_tracked_resources_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-po
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PolicyInsights/policyTrackedResources/($policyTrackedResourcesResource)/queryResults" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, policy_tracked_resources_resource: $policy_tracked_resources_resource} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policy_tracked_resources_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,9 +179,9 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-po
 #
 # POST /{resourceId}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policyTrackedResourcesResource}/queryResults
 # operationId: PolicyTrackedResources_ListQueryResultsForResource
-export def "providers-microsoft-policy-insights-policy-tracked-resources-query-results ListQueryResultsForResource" [
-  resourceId: string
-  policyTrackedResourcesResource: string
+export def "providers-microsoft-policy-insights-policy-tracked-resources-query-results list-query-results-for" [
+  resource_id: string
+  policy_tracked_resources_resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "providers-microsoft-policy-insights-policy-tracked-resources-query-r
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceId)/providers/Microsoft.PolicyInsights/policyTrackedResources/($policyTrackedResourcesResource)/queryResults" $qp)
+  let full_url = (build-url $base ({resource_id: $resource_id, policy_tracked_resources_resource: $policy_tracked_resources_resource} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policy_tracked_resources_resource}/queryResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -103,13 +103,13 @@ export def "country-code-check check" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # The 2 digit country code
-  --Response-Type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
+  --response-type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
 ]: nothing -> record<country: string, country_code: string, rates: record<parking: record<applies_to: string, value: int>, reduced: record<applies_to: string, value: int>, reduced_alt: record<applies_to: string, value: int>, standard: record<value: int>, super_reduced: record<applies_to: string, value: int>>, status: int, vat_applies: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "code" $code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/country-code-check" $qp)
-  let extra_headers = {"Response-Type": $Response_Type} | compact
+  let extra_headers = {"Response-Type": $response_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -132,13 +132,13 @@ export def "currency-conversion conversion" [
   --currency-from: string # The currency code you are converting from
   --currency-to: string # The currency code you are converting to
   --amount: int # Optional, an amount you are wanting to convert. Leave blank to just get the current rate
-  --Response-Type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
+  --response-type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
 ]: nothing -> record<amount_from: string, amount_to: string, currency_from: string, currency_to: int, rate: string, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "currency_from" $currency_from "scalar") (serialize-qp "currency_to" $currency_to "scalar") (serialize-qp "amount" $amount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/currency-conversion" $qp)
-  let extra_headers = {"Response-Type": $Response_Type} | compact
+  let extra_headers = {"Response-Type": $response_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -150,7 +150,7 @@ export def "currency-conversion conversion" [
 # POST /invoice
 # operationId: create_invoice
 # --items item shape: {description: string, price_each: int, quantity: int, vat_rate: int}
-export def "invoice invoice" [
+export def "invoice post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "invoice invoice" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Response-Type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
+  --response-type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
   business_address: string # Your business address
   business_name: string # Your business name
   --conversion-rate: int # The rate of conversion at time of supply
@@ -182,9 +182,9 @@ export def "invoice invoice" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invoice")
-  let body = {business_address: $business_address, business_name: $business_name, conversion_rate: $conversion_rate, currency_code: $currency_code, currency_code_conversion: $currency_code_conversion, customer_address: $customer_address, customer_name: $customer_name, customer_vat_number: $customer_vat_number, date: $date, discount_rate: $discount_rate, items: $items, notes: $notes, price_type: $price_type, tax_point: $tax_point, type: $type, vat_number: $vat_number, zero_rated: $zero_rated} | compact
+  let body = {"business_address": $business_address, "business_name": $business_name, "conversion_rate": $conversion_rate, "currency_code": $currency_code, "currency_code_conversion": $currency_code_conversion, "customer_address": $customer_address, "customer_name": $customer_name, "customer_vat_number": $customer_vat_number, "date": $date, "discount_rate": $discount_rate, "items": $items, "notes": $notes, "price_type": $price_type, "tax_point": $tax_point, "type": $type, "vat_number": $vat_number, "zero_rated": $zero_rated} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Response-Type": $Response_Type} | compact
+  let extra_headers = {"Response-Type": $response_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -205,12 +205,12 @@ export def "invoice delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Response-Type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
+  --response-type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/invoice/($id)")
-  let extra_headers = {"Response-Type": $Response_Type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/invoice/{id}"))
+  let extra_headers = {"Response-Type": $response_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -221,7 +221,7 @@ export def "invoice delete" [
 #
 # GET /invoice/{id}
 # operationId: get_invoice
-export def "invoice invoice-by-id" [
+export def "invoice get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -231,12 +231,12 @@ export def "invoice invoice-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Response-Type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
+  --response-type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
 ]: nothing -> record<invoice: record<business_address: string, business_name: string, conversion_rate: int, currency_code: string, currency_code_conversion: string, customer_address: string, customer_name: string, customer_vat_number: string, date: string, discount_rate: int, discount_total: int, id: int, invoice_url: string, items: list<record>, logo_url: string, notes: string, price_type: string, subtotal: int, tax_point: string, total: int, type: string, vat_number: string, vat_total: int, zero_rated: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/invoice/($id)")
-  let extra_headers = {"Response-Type": $Response_Type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/invoice/{id}"))
+  let extra_headers = {"Response-Type": $response_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -258,7 +258,7 @@ export def "invoice update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Response-Type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
+  --response-type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
   business_address: string # Your business address
   business_name: string # Your business name
   --conversion-rate: int # The rate of conversion at time of supply
@@ -279,10 +279,10 @@ export def "invoice update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/invoice/($id)")
-  let body = {business_address: $business_address, business_name: $business_name, conversion_rate: $conversion_rate, currency_code: $currency_code, currency_code_conversion: $currency_code_conversion, customer_address: $customer_address, customer_name: $customer_name, customervat_number: $customervat_number, date: $date, discount_rate: $discount_rate, items: $items, logo_url: $logo_url, notes: $notes, tax_point: $tax_point, type: $type, vat_number: $vat_number} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/invoice/{id}"))
+  let body = {"business_address": $business_address, "business_name": $business_name, "conversion_rate": $conversion_rate, "currency_code": $currency_code, "currency_code_conversion": $currency_code_conversion, "customer_address": $customer_address, "customer_name": $customer_name, "customervat_number": $customervat_number, "date": $date, "discount_rate": $discount_rate, "items": $items, "logo_url": $logo_url, "notes": $notes, "tax_point": $tax_point, "type": $type, "vat_number": $vat_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Response-Type": $Response_Type} | compact
+  let extra_headers = {"Response-Type": $response_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -303,13 +303,13 @@ export def "ip-check check" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --address: string # The IP address to search against
-  --Response-Type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
+  --response-type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
 ]: nothing -> record<country: string, country_code: string, rates: record<parking: record<applies_to: string, value: int>, reduced: record<applies_to: string, value: int>, reduced_alt: record<applies_to: string, value: int>, standard: record<value: int>, super_reduced: record<applies_to: string, value: int>>, status: int, vat_applies: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "address" $address "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ip-check" $qp)
-  let extra_headers = {"Response-Type": $Response_Type} | compact
+  let extra_headers = {"Response-Type": $response_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -329,12 +329,12 @@ export def "usage-check usage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Response-Type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
+  --response-type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
 ]: nothing -> record<requests_remaining: int, requests_used: int, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/usage-check")
-  let extra_headers = {"Response-Type": $Response_Type} | compact
+  let extra_headers = {"Response-Type": $response_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -355,13 +355,13 @@ export def "vat-number-check validate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --vatid: string # The VAT number to validate
-  --Response-Type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
+  --response-type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vatid" $vatid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vat-number-check" $qp)
-  let extra_headers = {"Response-Type": $Response_Type} | compact
+  let extra_headers = {"Response-Type": $response_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -385,13 +385,13 @@ export def "vat-price price" [
   --country-rate: string # The VAT rate to get the price for. Default: standard
   --price: int # The price you want converting
   --type: string # Optional, if the price is including VAT set the type to 'incl'. Otherwise the default is assumed as excluding VAT already, 'excl'
-  --Response-Type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
+  --response-type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
 ]: nothing -> record<country_code: string, country_rate: string, price_excl_vat: int, price_incl_vat: int, rate: int, status: int, vat: int> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "code" $code "scalar") (serialize-qp "country_rate" $country_rate "scalar") (serialize-qp "price" $price "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vat-price" $qp)
-  let extra_headers = {"Response-Type": $Response_Type} | compact
+  let extra_headers = {"Response-Type": $response_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -411,12 +411,12 @@ export def "vat-rates rates" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Response-Type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
+  --response-type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
 ]: nothing -> record<countries: table<country_code: record>, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/vat-rates")
-  let extra_headers = {"Response-Type": $Response_Type} | compact
+  let extra_headers = {"Response-Type": $response_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -103,23 +103,23 @@ export def "proxy get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Token: string
-  --Address: string
-  --Port: string
-  --Protocol: string
-  --AccessType: string
-  --ResponseTime: string
-  --IsSsl: string
-  --Uptime: string
-  --Country: string
-  --Continent: string
-  --Timezone: string
-  --LastTested: string
+  --qp-token: string
+  --address: string
+  --port: string
+  --protocol: string
+  --access-type: string
+  --response-time: string
+  --is-ssl: string
+  --uptime: string
+  --country: string
+  --continent: string
+  --timezone: string
+  --last-tested: string
   --correlation-id: string # Correlation Id header field
 ]: nothing -> record<accessType: string, address: string, isSsl: bool, isp: record<id: int, name: string>, lastTested: string, location: record<accuracyRadius: int, cityName: string, continent: record<code: string, name: string>, country: record<code: string, name: string>, latitude: float, longitude: float, postalCode: string, subdivisions: list<record>, timezone: string>, port: int, protocol: string, timings: record<connectTime: float, firstByteTime: float, responseTime: float>, uptime: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Token" $Token "scalar") (serialize-qp "Address" $Address "scalar") (serialize-qp "Port" $Port "scalar") (serialize-qp "Protocol" $Protocol "scalar") (serialize-qp "AccessType" $AccessType "scalar") (serialize-qp "ResponseTime" $ResponseTime "scalar") (serialize-qp "IsSsl" $IsSsl "scalar") (serialize-qp "Uptime" $Uptime "scalar") (serialize-qp "Country" $Country "scalar") (serialize-qp "Continent" $Continent "scalar") (serialize-qp "Timezone" $Timezone "scalar") (serialize-qp "LastTested" $LastTested "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Token" $qp_token "scalar") (serialize-qp "Address" $address "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "Protocol" $protocol "scalar") (serialize-qp "AccessType" $access_type "scalar") (serialize-qp "ResponseTime" $response_time "scalar") (serialize-qp "IsSsl" $is_ssl "scalar") (serialize-qp "Uptime" $uptime "scalar") (serialize-qp "Country" $country "scalar") (serialize-qp "Continent" $continent "scalar") (serialize-qp "Timezone" $timezone "scalar") (serialize-qp "LastTested" $last_tested "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/proxy" $qp)
   let extra_headers = {"correlation_id": $correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

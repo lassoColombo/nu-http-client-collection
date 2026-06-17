@@ -66,22 +66,22 @@ def base-url-completer [] { ["http://sdb.amazonaws.com" "https://sdb.amazonaws.c
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def Action-completer [] { ["BatchDeleteAttributes"] }
-def Version-completer [] { ["2009-04-15"] }
-def Action-completer-1 [] { ["BatchPutAttributes"] }
-def Action-completer-2 [] { ["CreateDomain"] }
-def Action-completer-3 [] { ["DeleteAttributes"] }
-def Action-completer-4 [] { ["DeleteDomain"] }
-def Action-completer-5 [] { ["DomainMetadata"] }
-def Action-completer-6 [] { ["GetAttributes"] }
-def Action-completer-7 [] { ["ListDomains"] }
-def Action-completer-8 [] { ["PutAttributes"] }
-def Action-completer-9 [] { ["Select"] }
+def action-completer [] { ["BatchDeleteAttributes"] }
+def version-completer [] { ["2009-04-15"] }
+def action-completer-1 [] { ["BatchPutAttributes"] }
+def action-completer-2 [] { ["CreateDomain"] }
+def action-completer-3 [] { ["DeleteAttributes"] }
+def action-completer-4 [] { ["DeleteDomain"] }
+def action-completer-5 [] { ["DomainMetadata"] }
+def action-completer-6 [] { ["GetAttributes"] }
+def action-completer-7 [] { ["ListDomains"] }
+def action-completer-8 [] { ["PutAttributes"] }
+def action-completer-9 [] { ["Select"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "action-batch-delete-attributes BatchDeleteAttributes" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "action-batch-delete-attributes get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -105,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /#Action=BatchDeleteAttributes
 # operationId: GET_BatchDeleteAttributes
-export def "action-batch-delete-attributes BatchDeleteAttributes" [
+export def "action-batch-delete-attributes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,21 +114,21 @@ export def "action-batch-delete-attributes BatchDeleteAttributes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --DomainName: string # The name of the domain in which the attributes are being deleted.
-  --Items: list # A list of items on which to perform the operation.
-  --Action: string@Action-completer
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --domain-name: string # The name of the domain in which the attributes are being deleted.
+  --items: list # A list of items on which to perform the operation.
+  --action: string@action-completer
+  --version: string@version-completer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "DomainName" $DomainName "scalar") (serialize-qp "Items" $Items "multi") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Items" $items "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=BatchDeleteAttributes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -139,7 +139,7 @@ export def "action-batch-delete-attributes BatchDeleteAttributes" [
 #
 # POST /#Action=BatchDeleteAttributes
 # operationId: POST_BatchDeleteAttributes
-export def "action-batch-delete-attributes BatchDeleteAttributes-1" [
+export def "action-batch-delete-attributes post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -148,21 +148,21 @@ export def "action-batch-delete-attributes BatchDeleteAttributes-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --Action: string@Action-completer
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --action: string@action-completer
+  --version: string@version-completer
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=BatchDeleteAttributes" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -174,7 +174,7 @@ export def "action-batch-delete-attributes BatchDeleteAttributes-1" [
 #
 # GET /#Action=BatchPutAttributes
 # operationId: GET_BatchPutAttributes
-export def "action-batch-put-attributes BatchPutAttributes" [
+export def "action-batch-put-attributes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,21 +183,21 @@ export def "action-batch-put-attributes BatchPutAttributes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --DomainName: string # The name of the domain in which the attributes are being stored.
-  --Items: list # A list of items on which to perform the operation.
-  --Action: string@Action-completer-1
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --domain-name: string # The name of the domain in which the attributes are being stored.
+  --items: list # A list of items on which to perform the operation.
+  --action: string@action-completer-1
+  --version: string@version-completer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "DomainName" $DomainName "scalar") (serialize-qp "Items" $Items "multi") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Items" $items "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=BatchPutAttributes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -208,7 +208,7 @@ export def "action-batch-put-attributes BatchPutAttributes" [
 #
 # POST /#Action=BatchPutAttributes
 # operationId: POST_BatchPutAttributes
-export def "action-batch-put-attributes BatchPutAttributes-1" [
+export def "action-batch-put-attributes post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,21 +217,21 @@ export def "action-batch-put-attributes BatchPutAttributes-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --Action: string@Action-completer-1
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --action: string@action-completer-1
+  --version: string@version-completer
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=BatchPutAttributes" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -243,7 +243,7 @@ export def "action-batch-put-attributes BatchPutAttributes-1" [
 #
 # GET /#Action=CreateDomain
 # operationId: GET_CreateDomain
-export def "action-create-domain CreateDomain" [
+export def "action-create-domain create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,20 +252,20 @@ export def "action-create-domain CreateDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --DomainName: string # The name of the domain to create. The name can range between 3 and 255 characters and can contain the following characters: a-z, A-Z, 0-9, '_', '-', and '.'.
-  --Action: string@Action-completer-2
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --domain-name: string # The name of the domain to create. The name can range between 3 and 255 characters and can contain the following characters: a-z, A-Z, 0-9, '_', '-', and '.'.
+  --action: string@action-completer-2
+  --version: string@version-completer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "DomainName" $DomainName "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=CreateDomain" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -276,7 +276,7 @@ export def "action-create-domain CreateDomain" [
 #
 # POST /#Action=CreateDomain
 # operationId: POST_CreateDomain
-export def "action-create-domain CreateDomain-1" [
+export def "action-create-domain create-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,21 +285,21 @@ export def "action-create-domain CreateDomain-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --Action: string@Action-completer-2
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --action: string@action-completer-2
+  --version: string@version-completer
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=CreateDomain" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -311,7 +311,7 @@ export def "action-create-domain CreateDomain-1" [
 #
 # GET /#Action=DeleteAttributes
 # operationId: GET_DeleteAttributes
-export def "action-delete-attributes DeleteAttributes" [
+export def "action-delete-attributes delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,23 +320,23 @@ export def "action-delete-attributes DeleteAttributes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --DomainName: string # The name of the domain in which to perform the operation.
-  --ItemName: string # The name of the item. Similar to rows on a spreadsheet, items represent individual objects that contain one or more value-attribute pairs.
-  --Attributes: list # A list of Attributes. Similar to columns on a spreadsheet, attributes represent categories of data that can be assigned to items.
-  --Expected: record # The update condition which, if specified, determines whether the specified attributes will be deleted or not. The update condition must be satisfied in order for this request to be processed and the attributes to be deleted.
-  --Action: string@Action-completer-3
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --domain-name: string # The name of the domain in which to perform the operation.
+  --item-name: string # The name of the item. Similar to rows on a spreadsheet, items represent individual objects that contain one or more value-attribute pairs.
+  --attributes: list # A list of Attributes. Similar to columns on a spreadsheet, attributes represent categories of data that can be assigned to items.
+  --expected: record # The update condition which, if specified, determines whether the specified attributes will be deleted or not. The update condition must be satisfied in order for this request to be processed and the attributes to be deleted.
+  --action: string@action-completer-3
+  --version: string@version-completer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "DomainName" $DomainName "scalar") (serialize-qp "ItemName" $ItemName "scalar") (serialize-qp "Attributes" $Attributes "multi") (serialize-qp "Expected" $Expected "multi") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ItemName" $item_name "scalar") (serialize-qp "Attributes" $attributes "multi") (serialize-qp "Expected" $expected "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=DeleteAttributes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -347,7 +347,7 @@ export def "action-delete-attributes DeleteAttributes" [
 #
 # POST /#Action=DeleteAttributes
 # operationId: POST_DeleteAttributes
-export def "action-delete-attributes DeleteAttributes-1" [
+export def "action-delete-attributes delete-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,21 +356,21 @@ export def "action-delete-attributes DeleteAttributes-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --Action: string@Action-completer-3
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --action: string@action-completer-3
+  --version: string@version-completer
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=DeleteAttributes" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -382,7 +382,7 @@ export def "action-delete-attributes DeleteAttributes-1" [
 #
 # GET /#Action=DeleteDomain
 # operationId: GET_DeleteDomain
-export def "action-delete-domain DeleteDomain" [
+export def "action-delete-domain delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,20 +391,20 @@ export def "action-delete-domain DeleteDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --DomainName: string # The name of the domain to delete.
-  --Action: string@Action-completer-4
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --domain-name: string # The name of the domain to delete.
+  --action: string@action-completer-4
+  --version: string@version-completer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "DomainName" $DomainName "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=DeleteDomain" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -415,7 +415,7 @@ export def "action-delete-domain DeleteDomain" [
 #
 # POST /#Action=DeleteDomain
 # operationId: POST_DeleteDomain
-export def "action-delete-domain DeleteDomain-1" [
+export def "action-delete-domain delete-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,21 +424,21 @@ export def "action-delete-domain DeleteDomain-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --Action: string@Action-completer-4
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --action: string@action-completer-4
+  --version: string@version-completer
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=DeleteDomain" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -450,7 +450,7 @@ export def "action-delete-domain DeleteDomain-1" [
 #
 # GET /#Action=DomainMetadata
 # operationId: GET_DomainMetadata
-export def "action-domain-metadata DomainMetadata" [
+export def "action-domain-metadata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -459,20 +459,20 @@ export def "action-domain-metadata DomainMetadata" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --DomainName: string # The name of the domain for which to display the metadata of.
-  --Action: string@Action-completer-5
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --domain-name: string # The name of the domain for which to display the metadata of.
+  --action: string@action-completer-5
+  --version: string@version-completer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "DomainName" $DomainName "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=DomainMetadata" $qp)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -483,7 +483,7 @@ export def "action-domain-metadata DomainMetadata" [
 #
 # POST /#Action=DomainMetadata
 # operationId: POST_DomainMetadata
-export def "action-domain-metadata DomainMetadata-1" [
+export def "action-domain-metadata post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,21 +492,21 @@ export def "action-domain-metadata DomainMetadata-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --Action: string@Action-completer-5
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --action: string@action-completer-5
+  --version: string@version-completer
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=DomainMetadata" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/xml"
@@ -518,7 +518,7 @@ export def "action-domain-metadata DomainMetadata-1" [
 #
 # GET /#Action=GetAttributes
 # operationId: GET_GetAttributes
-export def "action-get-attributes GetAttributes" [
+export def "action-get-attributes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -527,23 +527,23 @@ export def "action-get-attributes GetAttributes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --DomainName: string # The name of the domain in which to perform the operation.
-  --ItemName: string # The name of the item.
-  --AttributeNames: list # The names of the attributes.
-  --ConsistentRead: oneof<nothing, bool> # Determines whether or not strong consistency should be enforced when data is read from SimpleDB. If <code>true</code>, any data previously written to SimpleDB will be returned. Otherwise, results will be consistent eventually, and the client may not see data that was written immediately before your read.
-  --Action: string@Action-completer-6
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --domain-name: string # The name of the domain in which to perform the operation.
+  --item-name: string # The name of the item.
+  --attribute-names: list # The names of the attributes.
+  --consistent-read: oneof<nothing, bool> # Determines whether or not strong consistency should be enforced when data is read from SimpleDB. If <code>true</code>, any data previously written to SimpleDB will be returned. Otherwise, results will be consistent eventually, and the client may not see data that was written immediately before your read.
+  --action: string@action-completer-6
+  --version: string@version-completer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "DomainName" $DomainName "scalar") (serialize-qp "ItemName" $ItemName "scalar") (serialize-qp "AttributeNames" $AttributeNames "multi") (serialize-qp "ConsistentRead" $ConsistentRead "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ItemName" $item_name "scalar") (serialize-qp "AttributeNames" $attribute_names "multi") (serialize-qp "ConsistentRead" $consistent_read "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=GetAttributes" $qp)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -554,7 +554,7 @@ export def "action-get-attributes GetAttributes" [
 #
 # POST /#Action=GetAttributes
 # operationId: POST_GetAttributes
-export def "action-get-attributes GetAttributes-1" [
+export def "action-get-attributes get-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,21 +563,21 @@ export def "action-get-attributes GetAttributes-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --Action: string@Action-completer-6
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --action: string@action-completer-6
+  --version: string@version-completer
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=GetAttributes" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/xml"
@@ -589,7 +589,7 @@ export def "action-get-attributes GetAttributes-1" [
 #
 # GET /#Action=ListDomains
 # operationId: GET_ListDomains
-export def "action-list-domains ListDomains" [
+export def "action-list-domains list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -598,21 +598,21 @@ export def "action-list-domains ListDomains" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --MaxNumberOfDomains: int # The maximum number of domain names you want returned. The range is 1 to 100. The default setting is 100.
-  --NextToken: string # A string informing Amazon SimpleDB where to start the next list of domain names.
-  --Action: string@Action-completer-7
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --max-number-of-domains: int # The maximum number of domain names you want returned. The range is 1 to 100. The default setting is 100.
+  --next-token: string # A string informing Amazon SimpleDB where to start the next list of domain names.
+  --action: string@action-completer-7
+  --version: string@version-completer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "MaxNumberOfDomains" $MaxNumberOfDomains "scalar") (serialize-qp "NextToken" $NextToken "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxNumberOfDomains" $max_number_of_domains "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=ListDomains" $qp)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -623,7 +623,7 @@ export def "action-list-domains ListDomains" [
 #
 # POST /#Action=ListDomains
 # operationId: POST_ListDomains
-export def "action-list-domains ListDomains-1" [
+export def "action-list-domains list-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,23 +632,23 @@ export def "action-list-domains ListDomains-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --MaxNumberOfDomains: string # Pagination limit
-  --NextToken: string # Pagination token
-  --Action: string@Action-completer-7
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --max-number-of-domains: string # Pagination limit
+  --next-token: string # Pagination token
+  --action: string@action-completer-7
+  --version: string@version-completer
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "MaxNumberOfDomains" $MaxNumberOfDomains "scalar") (serialize-qp "NextToken" $NextToken "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxNumberOfDomains" $max_number_of_domains "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=ListDomains" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/xml"
@@ -660,7 +660,7 @@ export def "action-list-domains ListDomains-1" [
 #
 # GET /#Action=PutAttributes
 # operationId: GET_PutAttributes
-export def "action-put-attributes PutAttributes" [
+export def "action-put-attributes update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -669,23 +669,23 @@ export def "action-put-attributes PutAttributes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --DomainName: string # The name of the domain in which to perform the operation.
-  --ItemName: string # The name of the item.
-  --Attributes: list # The list of attributes.
-  --Expected: record # The update condition which, if specified, determines whether the specified attributes will be updated or not. The update condition must be satisfied in order for this request to be processed and the attributes to be updated.
-  --Action: string@Action-completer-8
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --domain-name: string # The name of the domain in which to perform the operation.
+  --item-name: string # The name of the item.
+  --attributes: list # The list of attributes.
+  --expected: record # The update condition which, if specified, determines whether the specified attributes will be updated or not. The update condition must be satisfied in order for this request to be processed and the attributes to be updated.
+  --action: string@action-completer-8
+  --version: string@version-completer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "DomainName" $DomainName "scalar") (serialize-qp "ItemName" $ItemName "scalar") (serialize-qp "Attributes" $Attributes "multi") (serialize-qp "Expected" $Expected "multi") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ItemName" $item_name "scalar") (serialize-qp "Attributes" $attributes "multi") (serialize-qp "Expected" $expected "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=PutAttributes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -696,7 +696,7 @@ export def "action-put-attributes PutAttributes" [
 #
 # POST /#Action=PutAttributes
 # operationId: POST_PutAttributes
-export def "action-put-attributes PutAttributes-1" [
+export def "action-put-attributes update-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -705,21 +705,21 @@ export def "action-put-attributes PutAttributes-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --Action: string@Action-completer-8
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --action: string@action-completer-8
+  --version: string@version-completer
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=PutAttributes" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -731,7 +731,7 @@ export def "action-put-attributes PutAttributes-1" [
 #
 # GET /#Action=Select
 # operationId: GET_Select
-export def "action-select Select" [
+export def "action-select get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -740,22 +740,22 @@ export def "action-select Select" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --SelectExpression: string # The expression used to query the domain.
-  --NextToken: string # A string informing Amazon SimpleDB where to start the next list of <code>ItemNames</code>.
-  --ConsistentRead: oneof<nothing, bool> # Determines whether or not strong consistency should be enforced when data is read from SimpleDB. If <code>true</code>, any data previously written to SimpleDB will be returned. Otherwise, results will be consistent eventually, and the client may not see data that was written immediately before your read.
-  --Action: string@Action-completer-9
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --select-expression: string # The expression used to query the domain.
+  --next-token: string # A string informing Amazon SimpleDB where to start the next list of <code>ItemNames</code>.
+  --consistent-read: oneof<nothing, bool> # Determines whether or not strong consistency should be enforced when data is read from SimpleDB. If <code>true</code>, any data previously written to SimpleDB will be returned. Otherwise, results will be consistent eventually, and the client may not see data that was written immediately before your read.
+  --action: string@action-completer-9
+  --version: string@version-completer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "SelectExpression" $SelectExpression "scalar") (serialize-qp "NextToken" $NextToken "scalar") (serialize-qp "ConsistentRead" $ConsistentRead "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "SelectExpression" $select_expression "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "ConsistentRead" $consistent_read "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=Select" $qp)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -766,7 +766,7 @@ export def "action-select Select" [
 #
 # POST /#Action=Select
 # operationId: POST_Select
-export def "action-select Select-1" [
+export def "action-select post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -775,22 +775,22 @@ export def "action-select Select-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AWSAccessKeyId: string
-  --Action: string
-  --SignatureMethod: string
-  --SignatureVersion: string
-  --Timestamp: string
-  --Version: string
-  --Signature: string
-  --NextToken: string # Pagination token
-  --Action: string@Action-completer-9
-  --Version: string@Version-completer
+  --aws-access-key-id: string
+  --action: string
+  --signature-method: string
+  --signature-version: string
+  --timestamp: string
+  --version: string
+  --signature: string
+  --next-token: string # Pagination token
+  --action: string@action-completer-9
+  --version: string@version-completer
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $AWSAccessKeyId "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "SignatureMethod" $SignatureMethod "scalar") (serialize-qp "SignatureVersion" $SignatureVersion "scalar") (serialize-qp "Timestamp" $Timestamp "scalar") (serialize-qp "Version" $Version "scalar") (serialize-qp "Signature" $Signature "scalar") (serialize-qp "NextToken" $NextToken "scalar") (serialize-qp "Action" $Action "scalar") (serialize-qp "Version" $Version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#Action=Select" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/xml"

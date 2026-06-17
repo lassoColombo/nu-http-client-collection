@@ -66,38 +66,38 @@ def base-url-completer [] { ["http://applicationinsights.us-east-1.amazonaws.com
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["EC2WindowsBarleyService.CreateApplication"] }
-def X-Amz-Target-completer-1 [] { ["EC2WindowsBarleyService.CreateComponent"] }
-def X-Amz-Target-completer-2 [] { ["EC2WindowsBarleyService.CreateLogPattern"] }
-def X-Amz-Target-completer-3 [] { ["EC2WindowsBarleyService.DeleteApplication"] }
-def X-Amz-Target-completer-4 [] { ["EC2WindowsBarleyService.DeleteComponent"] }
-def X-Amz-Target-completer-5 [] { ["EC2WindowsBarleyService.DeleteLogPattern"] }
-def X-Amz-Target-completer-6 [] { ["EC2WindowsBarleyService.DescribeApplication"] }
-def X-Amz-Target-completer-7 [] { ["EC2WindowsBarleyService.DescribeComponent"] }
-def X-Amz-Target-completer-8 [] { ["EC2WindowsBarleyService.DescribeComponentConfiguration"] }
-def X-Amz-Target-completer-9 [] { ["EC2WindowsBarleyService.DescribeComponentConfigurationRecommendation"] }
-def X-Amz-Target-completer-10 [] { ["EC2WindowsBarleyService.DescribeLogPattern"] }
-def X-Amz-Target-completer-11 [] { ["EC2WindowsBarleyService.DescribeObservation"] }
-def X-Amz-Target-completer-12 [] { ["EC2WindowsBarleyService.DescribeProblem"] }
-def X-Amz-Target-completer-13 [] { ["EC2WindowsBarleyService.DescribeProblemObservations"] }
-def X-Amz-Target-completer-14 [] { ["EC2WindowsBarleyService.ListApplications"] }
-def X-Amz-Target-completer-15 [] { ["EC2WindowsBarleyService.ListComponents"] }
-def X-Amz-Target-completer-16 [] { ["EC2WindowsBarleyService.ListConfigurationHistory"] }
-def X-Amz-Target-completer-17 [] { ["EC2WindowsBarleyService.ListLogPatternSets"] }
-def X-Amz-Target-completer-18 [] { ["EC2WindowsBarleyService.ListLogPatterns"] }
-def X-Amz-Target-completer-19 [] { ["EC2WindowsBarleyService.ListProblems"] }
-def X-Amz-Target-completer-20 [] { ["EC2WindowsBarleyService.ListTagsForResource"] }
-def X-Amz-Target-completer-21 [] { ["EC2WindowsBarleyService.TagResource"] }
-def X-Amz-Target-completer-22 [] { ["EC2WindowsBarleyService.UntagResource"] }
-def X-Amz-Target-completer-23 [] { ["EC2WindowsBarleyService.UpdateApplication"] }
-def X-Amz-Target-completer-24 [] { ["EC2WindowsBarleyService.UpdateComponent"] }
-def X-Amz-Target-completer-25 [] { ["EC2WindowsBarleyService.UpdateComponentConfiguration"] }
-def X-Amz-Target-completer-26 [] { ["EC2WindowsBarleyService.UpdateLogPattern"] }
+def x-amz-target-completer [] { ["EC2WindowsBarleyService.CreateApplication"] }
+def x-amz-target-completer-1 [] { ["EC2WindowsBarleyService.CreateComponent"] }
+def x-amz-target-completer-2 [] { ["EC2WindowsBarleyService.CreateLogPattern"] }
+def x-amz-target-completer-3 [] { ["EC2WindowsBarleyService.DeleteApplication"] }
+def x-amz-target-completer-4 [] { ["EC2WindowsBarleyService.DeleteComponent"] }
+def x-amz-target-completer-5 [] { ["EC2WindowsBarleyService.DeleteLogPattern"] }
+def x-amz-target-completer-6 [] { ["EC2WindowsBarleyService.DescribeApplication"] }
+def x-amz-target-completer-7 [] { ["EC2WindowsBarleyService.DescribeComponent"] }
+def x-amz-target-completer-8 [] { ["EC2WindowsBarleyService.DescribeComponentConfiguration"] }
+def x-amz-target-completer-9 [] { ["EC2WindowsBarleyService.DescribeComponentConfigurationRecommendation"] }
+def x-amz-target-completer-10 [] { ["EC2WindowsBarleyService.DescribeLogPattern"] }
+def x-amz-target-completer-11 [] { ["EC2WindowsBarleyService.DescribeObservation"] }
+def x-amz-target-completer-12 [] { ["EC2WindowsBarleyService.DescribeProblem"] }
+def x-amz-target-completer-13 [] { ["EC2WindowsBarleyService.DescribeProblemObservations"] }
+def x-amz-target-completer-14 [] { ["EC2WindowsBarleyService.ListApplications"] }
+def x-amz-target-completer-15 [] { ["EC2WindowsBarleyService.ListComponents"] }
+def x-amz-target-completer-16 [] { ["EC2WindowsBarleyService.ListConfigurationHistory"] }
+def x-amz-target-completer-17 [] { ["EC2WindowsBarleyService.ListLogPatternSets"] }
+def x-amz-target-completer-18 [] { ["EC2WindowsBarleyService.ListLogPatterns"] }
+def x-amz-target-completer-19 [] { ["EC2WindowsBarleyService.ListProblems"] }
+def x-amz-target-completer-20 [] { ["EC2WindowsBarleyService.ListTagsForResource"] }
+def x-amz-target-completer-21 [] { ["EC2WindowsBarleyService.TagResource"] }
+def x-amz-target-completer-22 [] { ["EC2WindowsBarleyService.UntagResource"] }
+def x-amz-target-completer-23 [] { ["EC2WindowsBarleyService.UpdateApplication"] }
+def x-amz-target-completer-24 [] { ["EC2WindowsBarleyService.UpdateComponent"] }
+def x-amz-target-completer-25 [] { ["EC2WindowsBarleyService.UpdateComponentConfiguration"] }
+def x-amz-target-completer-26 [] { ["EC2WindowsBarleyService.UpdateLogPattern"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-ec2-windows-barley-service-create-application CreateApplication" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-ec2-windows-barley-service-create-application create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.CreateApplication
 # operationId: CreateApplication
-export def "x-amz-target-ec2-windows-barley-service-create-application CreateApplication" [
+export def "x-amz-target-ec2-windows-barley-service-create-application create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,30 +130,30 @@ export def "x-amz-target-ec2-windows-barley-service-create-application CreateApp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  --ResourceGroupName: any
-  --OpsCenterEnabled: any
-  --CWEMonitorEnabled: any
-  --OpsItemSNSTopicArn: any
-  --Tags: any
-  --AutoConfigEnabled: any
-  --AutoCreate: any
-  --GroupingType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  --resource-group-name: any
+  --ops-center-enabled: any
+  --cwe-monitor-enabled: any
+  --ops-item-sns-topic-arn: any
+  --tags: any
+  --auto-config-enabled: any
+  --auto-create: any
+  --grouping-type: any
 ]: any -> record<ApplicationInfo: record<ResourceGroupName: record, LifeCycle: record, OpsItemSNSTopicArn: record, OpsCenterEnabled: record, CWEMonitorEnabled: record, Remarks: record, AutoConfigEnabled: record, DiscoveryType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.CreateApplication")
-  let body = {ResourceGroupName: $ResourceGroupName, OpsCenterEnabled: $OpsCenterEnabled, CWEMonitorEnabled: $CWEMonitorEnabled, OpsItemSNSTopicArn: $OpsItemSNSTopicArn, Tags: $Tags, AutoConfigEnabled: $AutoConfigEnabled, AutoCreate: $AutoCreate, GroupingType: $GroupingType} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "OpsCenterEnabled": $ops_center_enabled, "CWEMonitorEnabled": $cwe_monitor_enabled, "OpsItemSNSTopicArn": $ops_item_sns_topic_arn, "Tags": $tags, "AutoConfigEnabled": $auto_config_enabled, "AutoCreate": $auto_create, "GroupingType": $grouping_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -164,7 +164,7 @@ export def "x-amz-target-ec2-windows-barley-service-create-application CreateApp
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.CreateComponent
 # operationId: CreateComponent
-export def "x-amz-target-ec2-windows-barley-service-create-component CreateComponent" [
+export def "x-amz-target-ec2-windows-barley-service-create-component create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,25 +173,25 @@ export def "x-amz-target-ec2-windows-barley-service-create-component CreateCompo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  ResourceGroupName: any
-  ComponentName: any
-  ResourceList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  resource_group_name: any
+  component_name: any
+  resource_list: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.CreateComponent")
-  let body = {ResourceGroupName: $ResourceGroupName, ComponentName: $ComponentName, ResourceList: $ResourceList} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "ComponentName": $component_name, "ResourceList": $resource_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -202,7 +202,7 @@ export def "x-amz-target-ec2-windows-barley-service-create-component CreateCompo
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.CreateLogPattern
 # operationId: CreateLogPattern
-export def "x-amz-target-ec2-windows-barley-service-create-log-pattern CreateLogPattern" [
+export def "x-amz-target-ec2-windows-barley-service-create-log-pattern create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,27 +211,27 @@ export def "x-amz-target-ec2-windows-barley-service-create-log-pattern CreateLog
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  ResourceGroupName: any
-  PatternSetName: any
-  PatternName: any
-  Pattern: any
-  Rank: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  resource_group_name: any
+  pattern_set_name: any
+  pattern_name: any
+  pattern: any
+  rank: any
 ]: any -> record<LogPattern: record<PatternSetName: record, PatternName: record, Pattern: record, Rank: record>, ResourceGroupName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.CreateLogPattern")
-  let body = {ResourceGroupName: $ResourceGroupName, PatternSetName: $PatternSetName, PatternName: $PatternName, Pattern: $Pattern, Rank: $Rank} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "PatternSetName": $pattern_set_name, "PatternName": $pattern_name, "Pattern": $pattern, "Rank": $rank} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -242,7 +242,7 @@ export def "x-amz-target-ec2-windows-barley-service-create-log-pattern CreateLog
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.DeleteApplication
 # operationId: DeleteApplication
-export def "x-amz-target-ec2-windows-barley-service-delete-application DeleteApplication" [
+export def "x-amz-target-ec2-windows-barley-service-delete-application delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,23 +251,23 @@ export def "x-amz-target-ec2-windows-barley-service-delete-application DeleteApp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  ResourceGroupName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  resource_group_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.DeleteApplication")
-  let body = {ResourceGroupName: $ResourceGroupName} | compact
+  let body = {"ResourceGroupName": $resource_group_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -278,7 +278,7 @@ export def "x-amz-target-ec2-windows-barley-service-delete-application DeleteApp
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.DeleteComponent
 # operationId: DeleteComponent
-export def "x-amz-target-ec2-windows-barley-service-delete-component DeleteComponent" [
+export def "x-amz-target-ec2-windows-barley-service-delete-component delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,24 +287,24 @@ export def "x-amz-target-ec2-windows-barley-service-delete-component DeleteCompo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  ResourceGroupName: any
-  ComponentName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  resource_group_name: any
+  component_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.DeleteComponent")
-  let body = {ResourceGroupName: $ResourceGroupName, ComponentName: $ComponentName} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "ComponentName": $component_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -315,7 +315,7 @@ export def "x-amz-target-ec2-windows-barley-service-delete-component DeleteCompo
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.DeleteLogPattern
 # operationId: DeleteLogPattern
-export def "x-amz-target-ec2-windows-barley-service-delete-log-pattern DeleteLogPattern" [
+export def "x-amz-target-ec2-windows-barley-service-delete-log-pattern delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,25 +324,25 @@ export def "x-amz-target-ec2-windows-barley-service-delete-log-pattern DeleteLog
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  ResourceGroupName: any
-  PatternSetName: any
-  PatternName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  resource_group_name: any
+  pattern_set_name: any
+  pattern_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.DeleteLogPattern")
-  let body = {ResourceGroupName: $ResourceGroupName, PatternSetName: $PatternSetName, PatternName: $PatternName} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "PatternSetName": $pattern_set_name, "PatternName": $pattern_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -353,7 +353,7 @@ export def "x-amz-target-ec2-windows-barley-service-delete-log-pattern DeleteLog
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.DescribeApplication
 # operationId: DescribeApplication
-export def "x-amz-target-ec2-windows-barley-service-describe-application DescribeApplication" [
+export def "x-amz-target-ec2-windows-barley-service-describe-application post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,23 +362,23 @@ export def "x-amz-target-ec2-windows-barley-service-describe-application Describ
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  ResourceGroupName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  resource_group_name: any
 ]: any -> record<ApplicationInfo: record<ResourceGroupName: record, LifeCycle: record, OpsItemSNSTopicArn: record, OpsCenterEnabled: record, CWEMonitorEnabled: record, Remarks: record, AutoConfigEnabled: record, DiscoveryType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.DescribeApplication")
-  let body = {ResourceGroupName: $ResourceGroupName} | compact
+  let body = {"ResourceGroupName": $resource_group_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -389,7 +389,7 @@ export def "x-amz-target-ec2-windows-barley-service-describe-application Describ
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.DescribeComponent
 # operationId: DescribeComponent
-export def "x-amz-target-ec2-windows-barley-service-describe-component DescribeComponent" [
+export def "x-amz-target-ec2-windows-barley-service-describe-component post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,24 +398,24 @@ export def "x-amz-target-ec2-windows-barley-service-describe-component DescribeC
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  ResourceGroupName: any
-  ComponentName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  resource_group_name: any
+  component_name: any
 ]: any -> record<ApplicationComponent: record<ComponentName: record, ComponentRemarks: record, ResourceType: record, OsType: record, Tier: record, Monitor: record, DetectedWorkload: record>, ResourceList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.DescribeComponent")
-  let body = {ResourceGroupName: $ResourceGroupName, ComponentName: $ComponentName} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "ComponentName": $component_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -426,7 +426,7 @@ export def "x-amz-target-ec2-windows-barley-service-describe-component DescribeC
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.DescribeComponentConfiguration
 # operationId: DescribeComponentConfiguration
-export def "x-amz-target-ec2-windows-barley-service-describe-component-configuration DescribeComponentConfiguration" [
+export def "x-amz-target-ec2-windows-barley-service-describe-component-configuration post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -435,24 +435,24 @@ export def "x-amz-target-ec2-windows-barley-service-describe-component-configura
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  ResourceGroupName: any
-  ComponentName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  resource_group_name: any
+  component_name: any
 ]: any -> record<Monitor: record, Tier: record, ComponentConfiguration: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.DescribeComponentConfiguration")
-  let body = {ResourceGroupName: $ResourceGroupName, ComponentName: $ComponentName} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "ComponentName": $component_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -463,7 +463,7 @@ export def "x-amz-target-ec2-windows-barley-service-describe-component-configura
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.DescribeComponentConfigurationRecommendation
 # operationId: DescribeComponentConfigurationRecommendation
-export def "x-amz-target-ec2-windows-barley-service-describe-component-configuration-recommendation DescribeComponentConfigurationRecommendation" [
+export def "x-amz-target-ec2-windows-barley-service-describe-component-configuration-recommendation post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -472,25 +472,25 @@ export def "x-amz-target-ec2-windows-barley-service-describe-component-configura
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  ResourceGroupName: any
-  ComponentName: any
-  Tier: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  resource_group_name: any
+  component_name: any
+  tier: any
 ]: any -> record<ComponentConfiguration: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.DescribeComponentConfigurationRecommendation")
-  let body = {ResourceGroupName: $ResourceGroupName, ComponentName: $ComponentName, Tier: $Tier} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "ComponentName": $component_name, "Tier": $tier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -501,7 +501,7 @@ export def "x-amz-target-ec2-windows-barley-service-describe-component-configura
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.DescribeLogPattern
 # operationId: DescribeLogPattern
-export def "x-amz-target-ec2-windows-barley-service-describe-log-pattern DescribeLogPattern" [
+export def "x-amz-target-ec2-windows-barley-service-describe-log-pattern post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,25 +510,25 @@ export def "x-amz-target-ec2-windows-barley-service-describe-log-pattern Describ
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  ResourceGroupName: any
-  PatternSetName: any
-  PatternName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  resource_group_name: any
+  pattern_set_name: any
+  pattern_name: any
 ]: any -> record<ResourceGroupName: record, LogPattern: record<PatternSetName: record, PatternName: record, Pattern: record, Rank: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.DescribeLogPattern")
-  let body = {ResourceGroupName: $ResourceGroupName, PatternSetName: $PatternSetName, PatternName: $PatternName} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "PatternSetName": $pattern_set_name, "PatternName": $pattern_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -539,7 +539,7 @@ export def "x-amz-target-ec2-windows-barley-service-describe-log-pattern Describ
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.DescribeObservation
 # operationId: DescribeObservation
-export def "x-amz-target-ec2-windows-barley-service-describe-observation DescribeObservation" [
+export def "x-amz-target-ec2-windows-barley-service-describe-observation post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -548,23 +548,23 @@ export def "x-amz-target-ec2-windows-barley-service-describe-observation Describ
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  ObservationId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  observation_id: any
 ]: any -> record<Observation: record<Id: record, StartTime: record, EndTime: record, SourceType: record, SourceARN: record, LogGroup: record, LineTime: record, LogText: record, LogFilter: record, MetricNamespace: record, MetricName: record, Unit: record, Value: record, CloudWatchEventId: record, CloudWatchEventSource: record, CloudWatchEventDetailType: record, HealthEventArn: record, HealthService: record, HealthEventTypeCode: record, HealthEventTypeCategory: record, HealthEventDescription: record, CodeDeployDeploymentId: record, CodeDeployDeploymentGroup: record, CodeDeployState: record, CodeDeployApplication: record, CodeDeployInstanceGroupId: record, Ec2State: record, RdsEventCategories: record, RdsEventMessage: record, S3EventName: record, StatesExecutionArn: record, StatesArn: record, StatesStatus: record, StatesInput: record, EbsEvent: record, EbsResult: record, EbsCause: record, EbsRequestId: record, XRayFaultPercent: record, XRayThrottlePercent: record, XRayErrorPercent: record, XRayRequestCount: record, XRayRequestAverageLatency: record, XRayNodeName: record, XRayNodeType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.DescribeObservation")
-  let body = {ObservationId: $ObservationId} | compact
+  let body = {"ObservationId": $observation_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -575,7 +575,7 @@ export def "x-amz-target-ec2-windows-barley-service-describe-observation Describ
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.DescribeProblem
 # operationId: DescribeProblem
-export def "x-amz-target-ec2-windows-barley-service-describe-problem DescribeProblem" [
+export def "x-amz-target-ec2-windows-barley-service-describe-problem post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,23 +584,23 @@ export def "x-amz-target-ec2-windows-barley-service-describe-problem DescribePro
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  ProblemId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  problem_id: any
 ]: any -> record<Problem: record<Id: record, Title: record, Insights: record, Status: record, AffectedResource: record, StartTime: record, EndTime: record, SeverityLevel: record, ResourceGroupName: record, Feedback: record, RecurringCount: record, LastRecurrenceTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.DescribeProblem")
-  let body = {ProblemId: $ProblemId} | compact
+  let body = {"ProblemId": $problem_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -611,7 +611,7 @@ export def "x-amz-target-ec2-windows-barley-service-describe-problem DescribePro
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.DescribeProblemObservations
 # operationId: DescribeProblemObservations
-export def "x-amz-target-ec2-windows-barley-service-describe-problem-observations DescribeProblemObservations" [
+export def "x-amz-target-ec2-windows-barley-service-describe-problem-observations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -620,23 +620,23 @@ export def "x-amz-target-ec2-windows-barley-service-describe-problem-observation
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  ProblemId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  problem_id: any
 ]: any -> record<RelatedObservations: record<ObservationList: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.DescribeProblemObservations")
-  let body = {ProblemId: $ProblemId} | compact
+  let body = {"ProblemId": $problem_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -647,7 +647,7 @@ export def "x-amz-target-ec2-windows-barley-service-describe-problem-observation
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.ListApplications
 # operationId: ListApplications
-export def "x-amz-target-ec2-windows-barley-service-list-applications ListApplications" [
+export def "x-amz-target-ec2-windows-barley-service-list-applications list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,27 +656,27 @@ export def "x-amz-target-ec2-windows-barley-service-list-applications ListApplic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  --max-results: any
+  --next-token: any
 ]: any -> record<ApplicationInfoList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.ListApplications" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -687,7 +687,7 @@ export def "x-amz-target-ec2-windows-barley-service-list-applications ListApplic
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.ListComponents
 # operationId: ListComponents
-export def "x-amz-target-ec2-windows-barley-service-list-components ListComponents" [
+export def "x-amz-target-ec2-windows-barley-service-list-components list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -696,28 +696,28 @@ export def "x-amz-target-ec2-windows-barley-service-list-components ListComponen
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  ResourceGroupName: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  resource_group_name: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<ApplicationComponentList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.ListComponents" $qp)
-  let body = {ResourceGroupName: $ResourceGroupName, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -728,7 +728,7 @@ export def "x-amz-target-ec2-windows-barley-service-list-components ListComponen
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.ListConfigurationHistory
 # operationId: ListConfigurationHistory
-export def "x-amz-target-ec2-windows-barley-service-list-configuration-history ListConfigurationHistory" [
+export def "x-amz-target-ec2-windows-barley-service-list-configuration-history list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,31 +737,31 @@ export def "x-amz-target-ec2-windows-barley-service-list-configuration-history L
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  --ResourceGroupName: any
-  --StartTime: any
-  --EndTime: any
-  --EventStatus: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  --resource-group-name: any
+  --start-time: any
+  --end-time: any
+  --event-status: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<EventList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.ListConfigurationHistory" $qp)
-  let body = {ResourceGroupName: $ResourceGroupName, StartTime: $StartTime, EndTime: $EndTime, EventStatus: $EventStatus, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "StartTime": $start_time, "EndTime": $end_time, "EventStatus": $event_status, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -772,7 +772,7 @@ export def "x-amz-target-ec2-windows-barley-service-list-configuration-history L
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.ListLogPatternSets
 # operationId: ListLogPatternSets
-export def "x-amz-target-ec2-windows-barley-service-list-log-pattern-sets ListLogPatternSets" [
+export def "x-amz-target-ec2-windows-barley-service-list-log-pattern-sets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -781,28 +781,28 @@ export def "x-amz-target-ec2-windows-barley-service-list-log-pattern-sets ListLo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  ResourceGroupName: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  resource_group_name: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<ResourceGroupName: record, LogPatternSets: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.ListLogPatternSets" $qp)
-  let body = {ResourceGroupName: $ResourceGroupName, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -813,7 +813,7 @@ export def "x-amz-target-ec2-windows-barley-service-list-log-pattern-sets ListLo
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.ListLogPatterns
 # operationId: ListLogPatterns
-export def "x-amz-target-ec2-windows-barley-service-list-log-patterns ListLogPatterns" [
+export def "x-amz-target-ec2-windows-barley-service-list-log-patterns list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,29 +822,29 @@ export def "x-amz-target-ec2-windows-barley-service-list-log-patterns ListLogPat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  ResourceGroupName: any
-  --PatternSetName: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  resource_group_name: any
+  --pattern-set-name: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<ResourceGroupName: record, LogPatterns: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.ListLogPatterns" $qp)
-  let body = {ResourceGroupName: $ResourceGroupName, PatternSetName: $PatternSetName, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "PatternSetName": $pattern_set_name, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -855,7 +855,7 @@ export def "x-amz-target-ec2-windows-barley-service-list-log-patterns ListLogPat
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.ListProblems
 # operationId: ListProblems
-export def "x-amz-target-ec2-windows-barley-service-list-problems ListProblems" [
+export def "x-amz-target-ec2-windows-barley-service-list-problems list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -864,31 +864,31 @@ export def "x-amz-target-ec2-windows-barley-service-list-problems ListProblems" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  --ResourceGroupName: any
-  --StartTime: any
-  --EndTime: any
-  --MaxResults: any
-  --NextToken: any
-  --ComponentName: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  --resource-group-name: any
+  --start-time: any
+  --end-time: any
+  --max-results: any
+  --next-token: any
+  --component-name: any
 ]: any -> record<ProblemList: record, NextToken: record, ResourceGroupName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.ListProblems" $qp)
-  let body = {ResourceGroupName: $ResourceGroupName, StartTime: $StartTime, EndTime: $EndTime, MaxResults: $MaxResults, NextToken: $NextToken, ComponentName: $ComponentName} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "StartTime": $start_time, "EndTime": $end_time, "MaxResults": $max_results, "NextToken": $next_token, "ComponentName": $component_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -899,7 +899,7 @@ export def "x-amz-target-ec2-windows-barley-service-list-problems ListProblems" 
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-ec2-windows-barley-service-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-ec2-windows-barley-service-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -908,23 +908,23 @@ export def "x-amz-target-ec2-windows-barley-service-list-tags-for-resource ListT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  ResourceARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  resource_arn: any
 ]: any -> record<Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.ListTagsForResource")
-  let body = {ResourceARN: $ResourceARN} | compact
+  let body = {"ResourceARN": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -935,7 +935,7 @@ export def "x-amz-target-ec2-windows-barley-service-list-tags-for-resource ListT
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.TagResource
 # operationId: TagResource
-export def "x-amz-target-ec2-windows-barley-service-tag-resource TagResource" [
+export def "x-amz-target-ec2-windows-barley-service-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -944,24 +944,24 @@ export def "x-amz-target-ec2-windows-barley-service-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  ResourceARN: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.TagResource")
-  let body = {ResourceARN: $ResourceARN, Tags: $Tags} | compact
+  let body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -972,7 +972,7 @@ export def "x-amz-target-ec2-windows-barley-service-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-ec2-windows-barley-service-untag-resource UntagResource" [
+export def "x-amz-target-ec2-windows-barley-service-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -981,24 +981,24 @@ export def "x-amz-target-ec2-windows-barley-service-untag-resource UntagResource
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  ResourceARN: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.UntagResource")
-  let body = {ResourceARN: $ResourceARN, TagKeys: $TagKeys} | compact
+  let body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1009,7 +1009,7 @@ export def "x-amz-target-ec2-windows-barley-service-untag-resource UntagResource
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.UpdateApplication
 # operationId: UpdateApplication
-export def "x-amz-target-ec2-windows-barley-service-update-application UpdateApplication" [
+export def "x-amz-target-ec2-windows-barley-service-update-application update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1018,28 +1018,28 @@ export def "x-amz-target-ec2-windows-barley-service-update-application UpdateApp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  ResourceGroupName: any
-  --OpsCenterEnabled: any
-  --CWEMonitorEnabled: any
-  --OpsItemSNSTopicArn: any
-  --RemoveSNSTopic: any
-  --AutoConfigEnabled: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  resource_group_name: any
+  --ops-center-enabled: any
+  --cwe-monitor-enabled: any
+  --ops-item-sns-topic-arn: any
+  --remove-sns-topic: any
+  --auto-config-enabled: any
 ]: any -> record<ApplicationInfo: record<ResourceGroupName: record, LifeCycle: record, OpsItemSNSTopicArn: record, OpsCenterEnabled: record, CWEMonitorEnabled: record, Remarks: record, AutoConfigEnabled: record, DiscoveryType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.UpdateApplication")
-  let body = {ResourceGroupName: $ResourceGroupName, OpsCenterEnabled: $OpsCenterEnabled, CWEMonitorEnabled: $CWEMonitorEnabled, OpsItemSNSTopicArn: $OpsItemSNSTopicArn, RemoveSNSTopic: $RemoveSNSTopic, AutoConfigEnabled: $AutoConfigEnabled} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "OpsCenterEnabled": $ops_center_enabled, "CWEMonitorEnabled": $cwe_monitor_enabled, "OpsItemSNSTopicArn": $ops_item_sns_topic_arn, "RemoveSNSTopic": $remove_sns_topic, "AutoConfigEnabled": $auto_config_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1050,7 +1050,7 @@ export def "x-amz-target-ec2-windows-barley-service-update-application UpdateApp
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.UpdateComponent
 # operationId: UpdateComponent
-export def "x-amz-target-ec2-windows-barley-service-update-component UpdateComponent" [
+export def "x-amz-target-ec2-windows-barley-service-update-component update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1059,26 +1059,26 @@ export def "x-amz-target-ec2-windows-barley-service-update-component UpdateCompo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  ResourceGroupName: any
-  ComponentName: any
-  --NewComponentName: any
-  --ResourceList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  resource_group_name: any
+  component_name: any
+  --new-component-name: any
+  --resource-list: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.UpdateComponent")
-  let body = {ResourceGroupName: $ResourceGroupName, ComponentName: $ComponentName, NewComponentName: $NewComponentName, ResourceList: $ResourceList} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "ComponentName": $component_name, "NewComponentName": $new_component_name, "ResourceList": $resource_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1089,7 +1089,7 @@ export def "x-amz-target-ec2-windows-barley-service-update-component UpdateCompo
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.UpdateComponentConfiguration
 # operationId: UpdateComponentConfiguration
-export def "x-amz-target-ec2-windows-barley-service-update-component-configuration UpdateComponentConfiguration" [
+export def "x-amz-target-ec2-windows-barley-service-update-component-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1098,28 +1098,28 @@ export def "x-amz-target-ec2-windows-barley-service-update-component-configurati
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  ResourceGroupName: any
-  ComponentName: any
-  --Monitor: any
-  --Tier: any
-  --ComponentConfiguration: any
-  --AutoConfigEnabled: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  resource_group_name: any
+  component_name: any
+  --monitor: any
+  --tier: any
+  --component-configuration: any
+  --auto-config-enabled: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.UpdateComponentConfiguration")
-  let body = {ResourceGroupName: $ResourceGroupName, ComponentName: $ComponentName, Monitor: $Monitor, Tier: $Tier, ComponentConfiguration: $ComponentConfiguration, AutoConfigEnabled: $AutoConfigEnabled} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "ComponentName": $component_name, "Monitor": $monitor, "Tier": $tier, "ComponentConfiguration": $component_configuration, "AutoConfigEnabled": $auto_config_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1130,7 +1130,7 @@ export def "x-amz-target-ec2-windows-barley-service-update-component-configurati
 #
 # POST /#X-Amz-Target=EC2WindowsBarleyService.UpdateLogPattern
 # operationId: UpdateLogPattern
-export def "x-amz-target-ec2-windows-barley-service-update-log-pattern UpdateLogPattern" [
+export def "x-amz-target-ec2-windows-barley-service-update-log-pattern update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1139,27 +1139,27 @@ export def "x-amz-target-ec2-windows-barley-service-update-log-pattern UpdateLog
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  ResourceGroupName: any
-  PatternSetName: any
-  PatternName: any
-  --Pattern: any
-  --Rank: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  resource_group_name: any
+  pattern_set_name: any
+  pattern_name: any
+  --pattern: any
+  --rank: any
 ]: any -> record<ResourceGroupName: record, LogPattern: record<PatternSetName: record, PatternName: record, Pattern: record, Rank: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=EC2WindowsBarleyService.UpdateLogPattern")
-  let body = {ResourceGroupName: $ResourceGroupName, PatternSetName: $PatternSetName, PatternName: $PatternName, Pattern: $Pattern, Rank: $Rank} | compact
+  let body = {"ResourceGroupName": $resource_group_name, "PatternSetName": $pattern_set_name, "PatternName": $pattern_name, "Pattern": $pattern, "Rank": $rank} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

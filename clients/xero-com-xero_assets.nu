@@ -67,9 +67,9 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def status-completer [] { ["DISPOSED" "DRAFT" "REGISTERED"] }
-def orderBy-completer [] { ["AssetName" "AssetNumber" "AssetType" "DisposalDate" "DisposalPrice" "PurchaseDate" "PurchasePrice"] }
-def sortDirection-completer [] { ["asc" "desc"] }
-def assetStatus-completer [] { ["Disposed" "Draft" "Registered"] }
+def order-by-completer [] { ["AssetName" "AssetNumber" "AssetType" "DisposalDate" "DisposalPrice" "PurchaseDate" "PurchasePrice"] }
+def sort-direction-completer [] { ["asc" "desc"] }
+def asset-status-completer [] { ["Disposed" "Draft" "Registered"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -124,7 +124,7 @@ export def "asset-types get" [
 # POST /AssetTypes
 # operationId: createAssetType
 # --bookDepreciationSetting shape: {averagingMethod?: "FullMonth"|"ActualDays", bookEffectiveDateOfChangeId?: string, depreciableObjectId?: string, depreciableObjectType?: string, depreciationCalculationMethod?: "Rate"|"Life"|"None", depreciationMethod?: "NoDepreciation"|"StraightLine"|"DiminishingValue100"|"DiminishingValue150"|"DiminishingValue200"|"FullDepreciation", depreciationRate?: float, effectiveLifeYears?: int}
-export def "asset-types createAssetType" [
+export def "asset-types create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,19 +134,19 @@ export def "asset-types createAssetType" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
-  --accumulatedDepreciationAccountId: string # The account for accumulated depreciation of fixed assets of this type (format: uuid, e.g. ca4c6b39-4f4f-43e8-98da-5e1f350a6694)
-  --assetTypeId: string # Xero generated unique identifier for asset types (format: uuid, e.g. 5da209c5-5e19-4a43-b925-71b776c49ced)
-  assetTypeName: string # The name of the asset type (e.g. Computer Equipment)
-  bookDepreciationSetting: any # shape: {averagingMethod?: "FullMonth"|"ActualDays", bookEffectiveDateOfChangeId?: string, depreciableObjectId?: string, depreciableObjectType?: string, depreciationCalculationMethod?: "Rate"|"Life"|"None", depreciationMethod?: "NoDepreciation"|"StraightLine"|"DiminishingValue100"|"DiminishingValue150"|"DiminishingValue200"|"FullDepreciation", depreciationRate?: float, effectiveLifeYears?: int}
-  --depreciationExpenseAccountId: string # The expense account for the depreciation of fixed assets of this type (format: uuid, e.g. b23fc79b-d66b-44b0-a240-e138e086fcbc)
-  --fixedAssetAccountId: string # The asset account for fixed assets of this type (format: uuid, e.g. 24e260f1-bfc4-4766-ad7f-8a8ce01de879)
+  --accumulated-depreciation-account-id: string # The account for accumulated depreciation of fixed assets of this type (format: uuid, e.g. ca4c6b39-4f4f-43e8-98da-5e1f350a6694)
+  --asset-type-id: string # Xero generated unique identifier for asset types (format: uuid, e.g. 5da209c5-5e19-4a43-b925-71b776c49ced)
+  asset_type_name: string # The name of the asset type (e.g. Computer Equipment)
+  book_depreciation_setting: any # shape: {averagingMethod?: "FullMonth"|"ActualDays", bookEffectiveDateOfChangeId?: string, depreciableObjectId?: string, depreciableObjectType?: string, depreciationCalculationMethod?: "Rate"|"Life"|"None", depreciationMethod?: "NoDepreciation"|"StraightLine"|"DiminishingValue100"|"DiminishingValue150"|"DiminishingValue200"|"FullDepreciation", depreciationRate?: float, effectiveLifeYears?: int}
+  --depreciation-expense-account-id: string # The expense account for the depreciation of fixed assets of this type (format: uuid, e.g. b23fc79b-d66b-44b0-a240-e138e086fcbc)
+  --fixed-asset-account-id: string # The asset account for fixed assets of this type (format: uuid, e.g. 24e260f1-bfc4-4766-ad7f-8a8ce01de879)
   --locks: int # All asset types that have accumulated depreciation for any assets that use them are deemed ‘locked’ and cannot be removed. (e.g. 33)
 ]: any -> record<accumulatedDepreciationAccountId: string, assetTypeId: string, assetTypeName: string, bookDepreciationSetting: record<averagingMethod: string, bookEffectiveDateOfChangeId: string, depreciableObjectId: string, depreciableObjectType: string, depreciationCalculationMethod: string, depreciationMethod: string, depreciationRate: float, effectiveLifeYears: int>, depreciationExpenseAccountId: string, fixedAssetAccountId: string, locks: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/AssetTypes")
-  let body = {accumulatedDepreciationAccountId: $accumulatedDepreciationAccountId, assetTypeId: $assetTypeId, assetTypeName: $assetTypeName, bookDepreciationSetting: $bookDepreciationSetting, depreciationExpenseAccountId: $depreciationExpenseAccountId, fixedAssetAccountId: $fixedAssetAccountId, locks: $locks} | compact
+  let body = {"accumulatedDepreciationAccountId": $accumulated_depreciation_account_id, "assetTypeId": $asset_type_id, "assetTypeName": $asset_type_name, "bookDepreciationSetting": $book_depreciation_setting, "depreciationExpenseAccountId": $depreciation_expense_account_id, "fixedAssetAccountId": $fixed_asset_account_id, "locks": $locks} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -170,15 +170,15 @@ export def "assets list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Required when retrieving a collection of assets. See Asset Status Codes (e.g. DRAFT)
   --page: int # Results are paged. This specifies which page of the results to return. The default page is 1. (e.g. 1)
-  --pageSize: int # The number of records returned per page. By default the number of records returned is 10. (e.g. 5)
-  --orderBy: string@orderBy-completer # Requests can be ordered by AssetType, AssetName, AssetNumber, PurchaseDate and PurchasePrice. If the asset status is DISPOSED it also allows DisposalDate and DisposalPrice. (e.g. AssetName)
-  --sortDirection: string@sortDirection-completer # ASC or DESC (e.g. ASC)
-  --filterBy: string # A string that can be used to filter the list to only return assets containing the text. Checks it against the AssetName, AssetNumber, Description and AssetTypeName fields. (e.g. Company Car)
+  --page-size: int # The number of records returned per page. By default the number of records returned is 10. (e.g. 5)
+  --order-by: string@order-by-completer # Requests can be ordered by AssetType, AssetName, AssetNumber, PurchaseDate and PurchasePrice. If the asset status is DISPOSED it also allows DisposalDate and DisposalPrice. (e.g. AssetName)
+  --sort-direction: string@sort-direction-completer # ASC or DESC (e.g. ASC)
+  --filter-by: string # A string that can be used to filter the list to only return assets containing the text. Checks it against the AssetName, AssetNumber, Description and AssetTypeName fields. (e.g. Company Car)
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> record<items: table<accountingBookValue: float, assetId: string, assetName: string, assetNumber: string, assetStatus: string, assetTypeId: string, bookDepreciationDetail: record, bookDepreciationSetting: record, canRollback: bool, disposalDate: string, disposalPrice: float, isDeleteEnabledForDate: bool, purchaseDate: string, purchasePrice: float, serialNumber: string, warrantyExpiryDate: string>, pagination: record<itemCount: int, page: int, pageCount: int, pageSize: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "sortDirection" $sortDirection "scalar") (serialize-qp "filterBy" $filterBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "filterBy" $filter_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Assets" $qp)
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -193,7 +193,7 @@ export def "assets list" [
 # operationId: createAsset
 # --bookDepreciationDetail shape: {costLimit?: float, currentAccumDepreciationAmount?: float, currentCapitalGain?: float, currentGainLoss?: float, depreciationStartDate?: string, priorAccumDepreciationAmount?: float, residualValue?: float}
 # --bookDepreciationSetting shape: {averagingMethod?: "FullMonth"|"ActualDays", bookEffectiveDateOfChangeId?: string, depreciableObjectId?: string, depreciableObjectType?: string, depreciationCalculationMethod?: "Rate"|"Life"|"None", depreciationMethod?: "NoDepreciation"|"StraightLine"|"DiminishingValue100"|"DiminishingValue150"|"DiminishingValue200"|"FullDepreciation", depreciationRate?: float, effectiveLifeYears?: int}
-export def "assets createAsset" [
+export def "assets create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,28 +203,28 @@ export def "assets createAsset" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
-  --accountingBookValue: float # The accounting value of the asset (format: double, e.g. 0)
-  --assetId: string # The Xero-generated Id for the asset (format: uuid, e.g. 3b5b3a38-5649-495f-87a1-14a4e5918634)
-  assetName: string # The name of the asset (e.g. Awesome Truck 3)
-  --assetNumber: string # Must be unique. (e.g. FA-0013)
-  --assetStatus: string@assetStatus-completer # See Asset Status Codes. (e.g. Draft)
-  --assetTypeId: string # The Xero-generated Id for the asset type (format: uuid, e.g. 3b5b3a38-5649-495f-87a1-14a4e5918634)
-  --bookDepreciationDetail: any # shape: {costLimit?: float, currentAccumDepreciationAmount?: float, currentCapitalGain?: float, currentGainLoss?: float, depreciationStartDate?: string, priorAccumDepreciationAmount?: float, residualValue?: float}
-  --bookDepreciationSetting: any # shape: {averagingMethod?: "FullMonth"|"ActualDays", bookEffectiveDateOfChangeId?: string, depreciableObjectId?: string, depreciableObjectType?: string, depreciationCalculationMethod?: "Rate"|"Life"|"None", depreciationMethod?: "NoDepreciation"|"StraightLine"|"DiminishingValue100"|"DiminishingValue150"|"DiminishingValue200"|"FullDepreciation", depreciationRate?: float, effectiveLifeYears?: int}
-  --canRollback: oneof<nothing, bool> # Boolean to indicate whether depreciation can be rolled back for this asset individually. This is true if it doesn't have 'legacy' journal entries and if there is no lock period that would prevent this asset from rolling back. (e.g. true)
-  --disposalDate: string # The date the asset was disposed (format: date, e.g. 2020-07-01T00:00:00)
-  --disposalPrice: float # The price the asset was disposed at (format: double, e.g. 1.0000)
-  --isDeleteEnabledForDate: oneof<nothing, bool> # Boolean to indicate whether delete is enabled (e.g. true)
-  --purchaseDate: string # The date the asset was purchased YYYY-MM-DD (format: date, e.g. 2015-07-01T00:00:00)
-  --purchasePrice: float # The purchase price of the asset (format: double, e.g. 1000.0000)
-  --serialNumber: string # The asset's serial number (e.g. ca4c6b39-4f4f-43e8-98da-5e1f350a6694)
-  --warrantyExpiryDate: string # The date the asset’s warranty expires (if needed) YYYY-MM-DD (e.g. ca4c6b39-4f4f-43e8-98da-5e1f350a6694)
+  --accounting-book-value: float # The accounting value of the asset (format: double, e.g. 0)
+  --asset-id: string # The Xero-generated Id for the asset (format: uuid, e.g. 3b5b3a38-5649-495f-87a1-14a4e5918634)
+  asset_name: string # The name of the asset (e.g. Awesome Truck 3)
+  --asset-number: string # Must be unique. (e.g. FA-0013)
+  --asset-status: string@asset-status-completer # See Asset Status Codes. (e.g. Draft)
+  --asset-type-id: string # The Xero-generated Id for the asset type (format: uuid, e.g. 3b5b3a38-5649-495f-87a1-14a4e5918634)
+  --book-depreciation-detail: any # shape: {costLimit?: float, currentAccumDepreciationAmount?: float, currentCapitalGain?: float, currentGainLoss?: float, depreciationStartDate?: string, priorAccumDepreciationAmount?: float, residualValue?: float}
+  --book-depreciation-setting: any # shape: {averagingMethod?: "FullMonth"|"ActualDays", bookEffectiveDateOfChangeId?: string, depreciableObjectId?: string, depreciableObjectType?: string, depreciationCalculationMethod?: "Rate"|"Life"|"None", depreciationMethod?: "NoDepreciation"|"StraightLine"|"DiminishingValue100"|"DiminishingValue150"|"DiminishingValue200"|"FullDepreciation", depreciationRate?: float, effectiveLifeYears?: int}
+  --can-rollback: oneof<nothing, bool> # Boolean to indicate whether depreciation can be rolled back for this asset individually. This is true if it doesn't have 'legacy' journal entries and if there is no lock period that would prevent this asset from rolling back. (e.g. true)
+  --disposal-date: string # The date the asset was disposed (format: date, e.g. 2020-07-01T00:00:00)
+  --disposal-price: float # The price the asset was disposed at (format: double, e.g. 1.0000)
+  --is-delete-enabled-for-date: oneof<nothing, bool> # Boolean to indicate whether delete is enabled (e.g. true)
+  --purchase-date: string # The date the asset was purchased YYYY-MM-DD (format: date, e.g. 2015-07-01T00:00:00)
+  --purchase-price: float # The purchase price of the asset (format: double, e.g. 1000.0000)
+  --serial-number: string # The asset's serial number (e.g. ca4c6b39-4f4f-43e8-98da-5e1f350a6694)
+  --warranty-expiry-date: string # The date the asset’s warranty expires (if needed) YYYY-MM-DD (e.g. ca4c6b39-4f4f-43e8-98da-5e1f350a6694)
 ]: any -> record<accountingBookValue: float, assetId: string, assetName: string, assetNumber: string, assetStatus: string, assetTypeId: string, bookDepreciationDetail: record<costLimit: float, currentAccumDepreciationAmount: float, currentCapitalGain: float, currentGainLoss: float, depreciationStartDate: string, priorAccumDepreciationAmount: float, residualValue: float>, bookDepreciationSetting: record<averagingMethod: string, bookEffectiveDateOfChangeId: string, depreciableObjectId: string, depreciableObjectType: string, depreciationCalculationMethod: string, depreciationMethod: string, depreciationRate: float, effectiveLifeYears: int>, canRollback: bool, disposalDate: string, disposalPrice: float, isDeleteEnabledForDate: bool, purchaseDate: string, purchasePrice: float, serialNumber: string, warrantyExpiryDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Assets")
-  let body = {accountingBookValue: $accountingBookValue, assetId: $assetId, assetName: $assetName, assetNumber: $assetNumber, assetStatus: $assetStatus, assetTypeId: $assetTypeId, bookDepreciationDetail: $bookDepreciationDetail, bookDepreciationSetting: $bookDepreciationSetting, canRollback: $canRollback, disposalDate: $disposalDate, disposalPrice: $disposalPrice, isDeleteEnabledForDate: $isDeleteEnabledForDate, purchaseDate: $purchaseDate, purchasePrice: $purchasePrice, serialNumber: $serialNumber, warrantyExpiryDate: $warrantyExpiryDate} | compact
+  let body = {"accountingBookValue": $accounting_book_value, "assetId": $asset_id, "assetName": $asset_name, "assetNumber": $asset_number, "assetStatus": $asset_status, "assetTypeId": $asset_type_id, "bookDepreciationDetail": $book_depreciation_detail, "bookDepreciationSetting": $book_depreciation_setting, "canRollback": $can_rollback, "disposalDate": $disposal_date, "disposalPrice": $disposal_price, "isDeleteEnabledForDate": $is_delete_enabled_for_date, "purchaseDate": $purchase_date, "purchasePrice": $purchase_price, "serialNumber": $serial_number, "warrantyExpiryDate": $warranty_expiry_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -251,7 +251,7 @@ export def "assets get" [
 ]: nothing -> record<accountingBookValue: float, assetId: string, assetName: string, assetNumber: string, assetStatus: string, assetTypeId: string, bookDepreciationDetail: record<costLimit: float, currentAccumDepreciationAmount: float, currentCapitalGain: float, currentGainLoss: float, depreciationStartDate: string, priorAccumDepreciationAmount: float, residualValue: float>, bookDepreciationSetting: record<averagingMethod: string, bookEffectiveDateOfChangeId: string, depreciableObjectId: string, depreciableObjectType: string, depreciationCalculationMethod: string, depreciationMethod: string, depreciationRate: float, effectiveLifeYears: int>, canRollback: bool, disposalDate: string, disposalPrice: float, isDeleteEnabledForDate: bool, purchaseDate: string, purchasePrice: float, serialNumber: string, warrantyExpiryDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Assets/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Assets/{id}"))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -263,7 +263,7 @@ export def "assets get" [
 #
 # GET /Settings
 # operationId: getAssetSettings
-export def "settings get" [
+export def "settings get-asset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

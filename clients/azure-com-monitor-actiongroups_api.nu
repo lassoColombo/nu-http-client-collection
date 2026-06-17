@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoftinsights-action-groups ListBySubscriptionId" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoftinsights-action-groups list-by" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.insights/actionGroups
 # operationId: ActionGroups_ListBySubscriptionId
-export def "subscriptions-providers-microsoftinsights-action-groups ListBySubscriptionId" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoftinsights-action-groups list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "subscriptions-providers-microsoftinsights-action-groups ListBySubscr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/microsoft.insights/actionGroups" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.insights/actionGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,9 +118,9 @@ export def "subscriptions-providers-microsoftinsights-action-groups ListBySubscr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/actionGroups
 # operationId: ActionGroups_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoftinsights-action-groups ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoftinsights-action-groups list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-action-gro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.insights/actionGroups" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/actionGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,10 +144,10 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-action-gro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/actionGroups/{actionGroupName}
 # operationId: ActionGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoftinsights-action-groups Delete" [
-  resourceGroupName: string
-  actionGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoftinsights-action-groups delete" [
+  subscription_id: string
+  resource_group_name: string
+  action_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-action-gro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.insights/actionGroups/($actionGroupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, action_group_name: $action_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/actionGroups/{action_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,10 +171,10 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-action-gro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/actionGroups/{actionGroupName}
 # operationId: ActionGroups_Get
-export def "subscriptions-resource-groups-providers-microsoftinsights-action-groups Get" [
-  resourceGroupName: string
-  actionGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoftinsights-action-groups get" [
+  subscription_id: string
+  resource_group_name: string
+  action_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-action-gro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.insights/actionGroups/($actionGroupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, action_group_name: $action_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/actionGroups/{action_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -199,10 +199,10 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-action-gro
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/actionGroups/{actionGroupName}
 # operationId: ActionGroups_Update
 # --properties shape: {enabled?: bool}
-export def "subscriptions-resource-groups-providers-microsoftinsights-action-groups Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  actionGroupName: string
+export def "subscriptions-resource-groups-providers-microsoftinsights-action-groups update" [
+  subscription_id: string
+  resource_group_name: string
+  action_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,8 +219,8 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-action-gro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.insights/actionGroups/($actionGroupName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, action_group_name: $action_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/actionGroups/{action_group_name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,10 +232,10 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-action-gro
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/actionGroups/{actionGroupName}
 # operationId: ActionGroups_CreateOrUpdate
 # --properties shape: {armRoleReceivers?: list, automationRunbookReceivers?: list, azureAppPushReceivers?: list, azureFunctionReceivers?: list, emailReceivers?: list, enabled: bool, groupShortName: string, itsmReceivers?: list, logicAppReceivers?: list, smsReceivers?: list, voiceReceivers?: list, webhookReceivers?: list}
-export def "subscriptions-resource-groups-providers-microsoftinsights-action-groups CreateOrUpdate" [
-  resourceGroupName: string
-  actionGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoftinsights-action-groups create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  action_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,8 +253,8 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-action-gro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.insights/actionGroups/($actionGroupName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, action_group_name: $action_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/actionGroups/{action_group_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -265,10 +265,10 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-action-gro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/actionGroups/{actionGroupName}/subscribe
 # operationId: ActionGroups_EnableReceiver
-export def "subscriptions-resource-groups-providers-microsoftinsights-action-groups-subscribe EnableReceiver" [
-  resourceGroupName: string
-  actionGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoftinsights-action-groups-subscribe enable-receiver" [
+  subscription_id: string
+  resource_group_name: string
+  action_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,14 +278,14 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-action-gro
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  receiverName: string # The name of the receiver to resubscribe.
+  receiver_name: string # The name of the receiver to resubscribe.
 ]: any -> record<code: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.insights/actionGroups/($actionGroupName)/subscribe" $qp)
-  let body = {receiverName: $receiverName} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, action_group_name: $action_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/actionGroups/{action_group_name}/subscribe") $qp)
+  let body = {"receiverName": $receiver_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

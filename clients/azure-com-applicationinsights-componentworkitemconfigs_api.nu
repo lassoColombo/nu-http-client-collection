@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-insights-components-default-work-item-config GetDefault" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-insights-components-default-work-item-config get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/DefaultWorkItemConfig
 # operationId: WorkItemConfigurations_GetDefault
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-default-work-item-config GetDefault" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-default-work-item-config get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/DefaultWorkItemConfig" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/DefaultWorkItemConfig") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,10 +120,10 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/WorkItemConfigs
 # operationId: WorkItemConfigurations_List
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-work-item-configs List" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-work-item-configs list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,7 +137,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/WorkItemConfigs" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/WorkItemConfigs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,10 +147,10 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/WorkItemConfigs
 # operationId: WorkItemConfigurations_Create
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-work-item-configs Create" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-work-item-configs create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,17 +160,17 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --ConnectorDataConfiguration: string # Serialized JSON object for detailed properties
-  --ConnectorId: string # Unique connector id
-  --ValidateOnly: oneof<nothing, bool> # Boolean indicating validate only
-  --WorkItemProperties: record # Custom work item properties
+  --connector-data-configuration: string # Serialized JSON object for detailed properties
+  --connector-id: string # Unique connector id
+  --validate-only: oneof<nothing, bool> # Boolean indicating validate only
+  --work-item-properties: record # Custom work item properties
 ]: any -> record<ConfigDisplayName: string, ConfigProperties: string, ConnectorId: string, Id: string, IsDefault: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/WorkItemConfigs" $qp)
-  let body = {ConnectorDataConfiguration: $ConnectorDataConfiguration, ConnectorId: $ConnectorId, ValidateOnly: $ValidateOnly, WorkItemProperties: $WorkItemProperties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/WorkItemConfigs") $qp)
+  let body = {"ConnectorDataConfiguration": $connector_data_configuration, "ConnectorId": $connector_id, "ValidateOnly": $validate_only, "WorkItemProperties": $work_item_properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -181,11 +181,11 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/WorkItemConfigs/{workItemConfigId}
 # operationId: WorkItemConfigurations_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-work-item-configs Delete" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
-  workItemConfigId: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-work-item-configs delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  work_item_config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/WorkItemConfigs/($workItemConfigId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, work_item_config_id: $work_item_config_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/WorkItemConfigs/{work_item_config_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -209,11 +209,11 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/WorkItemConfigs/{workItemConfigId}
 # operationId: WorkItemConfigurations_GetItem
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-work-item-configs GetItem" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
-  workItemConfigId: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-work-item-configs get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  work_item_config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/WorkItemConfigs/($workItemConfigId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, work_item_config_id: $work_item_config_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/WorkItemConfigs/{work_item_config_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -237,11 +237,11 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/WorkItemConfigs/{workItemConfigId}
 # operationId: WorkItemConfigurations_UpdateItem
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-work-item-configs UpdateItem" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
-  workItemConfigId: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-work-item-configs update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  work_item_config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,17 +251,17 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --ConnectorDataConfiguration: string # Serialized JSON object for detailed properties
-  --ConnectorId: string # Unique connector id
-  --ValidateOnly: oneof<nothing, bool> # Boolean indicating validate only
-  --WorkItemProperties: record # Custom work item properties
+  --connector-data-configuration: string # Serialized JSON object for detailed properties
+  --connector-id: string # Unique connector id
+  --validate-only: oneof<nothing, bool> # Boolean indicating validate only
+  --work-item-properties: record # Custom work item properties
 ]: any -> record<ConfigDisplayName: string, ConfigProperties: string, ConnectorId: string, Id: string, IsDefault: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/WorkItemConfigs/($workItemConfigId)" $qp)
-  let body = {ConnectorDataConfiguration: $ConnectorDataConfiguration, ConnectorId: $ConnectorId, ValidateOnly: $ValidateOnly, WorkItemProperties: $WorkItemProperties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, work_item_config_id: $work_item_config_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/WorkItemConfigs/{work_item_config_id}") $qp)
+  let body = {"ConnectorDataConfiguration": $connector_data_configuration, "ConnectorId": $connector_id, "ValidateOnly": $validate_only, "WorkItemProperties": $work_item_properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

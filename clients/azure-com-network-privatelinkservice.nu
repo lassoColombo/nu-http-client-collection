@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-locations-auto-approved-private-link-services ListAutoApprovedPrivateLinkServices" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-locations-auto-approved-private-link-services list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,9 +93,9 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/locations/{location}/autoApprovedPrivateLinkServices
 # operationId: PrivateLinkServices_ListAutoApprovedPrivateLinkServices
-export def "subscriptions-providers-microsoft-network-locations-auto-approved-private-link-services ListAutoApprovedPrivateLinkServices" [
+export def "subscriptions-providers-microsoft-network-locations-auto-approved-private-link-services list" [
+  subscription_id: string
   location: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,7 +109,7 @@ export def "subscriptions-providers-microsoft-network-locations-auto-approved-pr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/locations/($location)/autoApprovedPrivateLinkServices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/locations/{location}/autoApprovedPrivateLinkServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,9 +119,9 @@ export def "subscriptions-providers-microsoft-network-locations-auto-approved-pr
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Network/locations/{location}/checkPrivateLinkServiceVisibility
 # operationId: PrivateLinkServices_CheckPrivateLinkServiceVisibility
-export def "subscriptions-providers-microsoft-network-locations-check-private-link-service-visibility CheckPrivateLinkServiceVisibility" [
+export def "subscriptions-providers-microsoft-network-locations-check-private-link-service-visibility check" [
+  subscription_id: string
   location: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,14 +131,14 @@ export def "subscriptions-providers-microsoft-network-locations-check-private-li
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  --privateLinkServiceAlias: string # The alias of the private link service.
+  --private-link-service-alias: string # The alias of the private link service.
 ]: any -> record<visible: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/locations/($location)/checkPrivateLinkServiceVisibility" $qp)
-  let body = {privateLinkServiceAlias: $privateLinkServiceAlias} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/locations/{location}/checkPrivateLinkServiceVisibility") $qp)
+  let body = {"privateLinkServiceAlias": $private_link_service_alias} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -149,8 +149,8 @@ export def "subscriptions-providers-microsoft-network-locations-check-private-li
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/privateLinkServices
 # operationId: PrivateLinkServices_ListBySubscription
-export def "subscriptions-providers-microsoft-network-private-link-services ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-network-private-link-services list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "subscriptions-providers-microsoft-network-private-link-services List
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/privateLinkServices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/privateLinkServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -174,10 +174,10 @@ export def "subscriptions-providers-microsoft-network-private-link-services List
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/locations/{location}/autoApprovedPrivateLinkServices
 # operationId: PrivateLinkServices_ListAutoApprovedPrivateLinkServicesByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-locations-auto-approved-private-link-services ListAutoApprovedPrivateLinkServicesByResourceGroup" [
+export def "subscriptions-resource-groups-providers-microsoft-network-locations-auto-approved-private-link-services list" [
+  subscription_id: string
+  resource_group_name: string
   location: string
-  resourceGroupName: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-locations-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/locations/($location)/autoApprovedPrivateLinkServices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location: $location} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/locations/{location}/autoApprovedPrivateLinkServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -201,10 +201,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-locations-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/locations/{location}/checkPrivateLinkServiceVisibility
 # operationId: PrivateLinkServices_CheckPrivateLinkServiceVisibilityByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-locations-check-private-link-service-visibility CheckPrivateLinkServiceVisibilityByResourceGroup" [
+export def "subscriptions-resource-groups-providers-microsoft-network-locations-check-private-link-service-visibility check" [
+  subscription_id: string
+  resource_group_name: string
   location: string
-  resourceGroupName: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,14 +214,14 @@ export def "subscriptions-resource-groups-providers-microsoft-network-locations-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  --privateLinkServiceAlias: string # The alias of the private link service.
+  --private-link-service-alias: string # The alias of the private link service.
 ]: any -> record<visible: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/locations/($location)/checkPrivateLinkServiceVisibility" $qp)
-  let body = {privateLinkServiceAlias: $privateLinkServiceAlias} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location: $location} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/locations/{location}/checkPrivateLinkServiceVisibility") $qp)
+  let body = {"privateLinkServiceAlias": $private_link_service_alias} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,9 +232,9 @@ export def "subscriptions-resource-groups-providers-microsoft-network-locations-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateLinkServices
 # operationId: PrivateLinkServices_List
-export def "subscriptions-resource-groups-providers-microsoft-network-private-link-services List" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-link-services list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateLinkServices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateLinkServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,10 +258,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-li
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateLinkServices/{serviceName}
 # operationId: PrivateLinkServices_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-private-link-services Delete" [
-  resourceGroupName: string
-  serviceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-link-services delete" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +275,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateLinkServices/($serviceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateLinkServices/{service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -285,10 +285,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-li
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateLinkServices/{serviceName}
 # operationId: PrivateLinkServices_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-private-link-services Get" [
-  resourceGroupName: string
-  serviceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-link-services get" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,7 +303,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateLinkServices/($serviceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateLinkServices/{service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -314,10 +314,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-li
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateLinkServices/{serviceName}
 # operationId: PrivateLinkServices_CreateOrUpdate
 # --properties shape: {autoApproval?: any, fqdns?: list, ipConfigurations?: list, loadBalancerFrontendIpConfigurations?: list, privateEndpointConnections?: list, visibility?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-private-link-services CreateOrUpdate" [
-  resourceGroupName: string
-  serviceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-link-services create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -337,8 +337,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateLinkServices/($serviceName)" $qp)
-  let body = {etag: $etag, properties: $properties, id: $id, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateLinkServices/{service_name}") $qp)
+  let body = {"etag": $etag, "properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -349,11 +349,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-li
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateLinkServices/{serviceName}/privateEndpointConnections/{peConnectionName}
 # operationId: PrivateLinkServices_DeletePrivateEndpointConnection
-export def "subscriptions-resource-groups-providers-microsoft-network-private-link-services-private-endpoint-connections DeletePrivateEndpointConnection" [
-  resourceGroupName: string
-  serviceName: string
-  peConnectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-link-services-private-endpoint-connections delete" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  pe_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,7 +367,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateLinkServices/($serviceName)/privateEndpointConnections/($peConnectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, pe_connection_name: $pe_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateLinkServices/{service_name}/privateEndpointConnections/{pe_connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -378,11 +378,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-li
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/privateLinkServices/{serviceName}/privateEndpointConnections/{peConnectionName}
 # operationId: PrivateLinkServices_UpdatePrivateEndpointConnection
 # --properties shape: {privateEndpoint?: any, privateLinkServiceConnectionState?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-private-link-services-private-endpoint-connections UpdatePrivateEndpointConnection" [
-  resourceGroupName: string
-  serviceName: string
-  peConnectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-private-link-services-private-endpoint-connections update" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  pe_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,8 +400,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-private-li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/privateLinkServices/($serviceName)/privateEndpointConnections/($peConnectionName)" $qp)
-  let body = {name: $name, properties: $properties, id: $id} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, pe_connection_name: $pe_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/privateLinkServices/{service_name}/privateEndpointConnections/{pe_connection_name}") $qp)
+  let body = {"name": $name, "properties": $properties, "id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

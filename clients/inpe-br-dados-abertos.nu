@@ -198,13 +198,13 @@ export def "focos resource" [
   --estado-id: int # Código do estado pelo qual será filtrado o resultado. Ver rotas auxiliares.
   --municipio-id: int # Código do município pelo qual será filtrado o resultado. Ver rotas auxiliares.
   --satelite: list # Nome do satélte pelo qual será filtrado o resultado. Ver rotas auxiliares.
-  --X-Fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pais_id" $pais_id "scalar") (serialize-qp "estado_id" $estado_id "scalar") (serialize-qp "municipio_id" $municipio_id "scalar") (serialize-qp "satelite" $satelite "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/focos/" $qp)
-  let extra_headers = {"X-Fields": $X_Fields} | compact
+  let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

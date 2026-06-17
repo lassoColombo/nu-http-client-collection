@@ -104,13 +104,13 @@ export def "create-notification-configuration post-createNotificationConfigurati
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  configurationDetails: record # shape: {active?: bool, apiVersion?: int, description?: string, eventConfigs?: list, hmacSignatureKey?: string, notificationId?: int, notifyPassword?: string, notifyURL?: string, notifyUsername?: string, sslProtocol?: "TLSv12"|"TLSv13"}
+  configuration_details: record # shape: {active?: bool, apiVersion?: int, description?: string, eventConfigs?: list, hmacSignatureKey?: string, notificationId?: int, notifyPassword?: string, notifyURL?: string, notifyUsername?: string, sslProtocol?: "TLSv12"|"TLSv13"}
 ]: any -> record<configurationDetails: record<active: bool, apiVersion: int, description: string, eventConfigs: list<record>, hmacSignatureKey: string, notificationId: int, notifyPassword: string, notifyURL: string, notifyUsername: string, sslProtocol: string>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createNotificationConfiguration")
-  let body = {configurationDetails: $configurationDetails} | compact
+  let body = {"configurationDetails": $configuration_details} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -130,13 +130,13 @@ export def "delete-notification-configurations post-deleteNotificationConfigurat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  notificationIds: list # A list of IDs of the notification subscription configurations to be deleted.
+  notification_ids: list # A list of IDs of the notification subscription configurations to be deleted.
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteNotificationConfigurations")
-  let body = {notificationIds: $notificationIds} | compact
+  let body = {"notificationIds": $notification_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -156,13 +156,13 @@ export def "get-notification-configuration post-getNotificationConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  notificationId: int # The ID of the notification subscription configuration whose details are to be retrieved. (format: int64)
+  notification_id: int # The ID of the notification subscription configuration whose details are to be retrieved. (format: int64)
 ]: any -> record<configurationDetails: record<active: bool, apiVersion: int, description: string, eventConfigs: list<record>, hmacSignatureKey: string, notificationId: int, notifyPassword: string, notifyURL: string, notifyUsername: string, sslProtocol: string>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getNotificationConfiguration")
-  let body = {notificationId: $notificationId} | compact
+  let body = {"notificationId": $notification_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -207,14 +207,14 @@ export def "test-notification-configuration post-testNotificationConfiguration" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --eventTypes: list # The event types to test.  If left blank, then all of the configured event types will be tested. >Permitted values: `ACCOUNT_HOLDER_CREATED`, `ACCOUNT_CREATED`, `ACCOUNT_UPDATED`, `ACCOUNT_HOLDER_UPDATED`, `ACCOUNT_HOLDER_STATUS_CHANGE`, `ACCOUNT_HOLDER_STORE_STATUS_CHANGE` `ACCOUNT_HOLDER_VERIFICATION`, `ACCOUNT_HOLDER_LIMIT_REACHED`, `ACCOUNT_HOLDER_PAYOUT`, `PAYMENT_FAILURE`, `SCHEDULED_REFUNDS`, `REPORT_AVAILABLE`, `TRANSFER_FUNDS`, `BENEFICIARY_SETUP`, `COMPENSATE_NEGATIVE_BALANCE`.
-  notificationId: int # The ID of the notification subscription configuration to be tested. (format: int64)
+  --event-types: list # The event types to test.  If left blank, then all of the configured event types will be tested. >Permitted values: `ACCOUNT_HOLDER_CREATED`, `ACCOUNT_CREATED`, `ACCOUNT_UPDATED`, `ACCOUNT_HOLDER_UPDATED`, `ACCOUNT_HOLDER_STATUS_CHANGE`, `ACCOUNT_HOLDER_STORE_STATUS_CHANGE` `ACCOUNT_HOLDER_VERIFICATION`, `ACCOUNT_HOLDER_LIMIT_REACHED`, `ACCOUNT_HOLDER_PAYOUT`, `PAYMENT_FAILURE`, `SCHEDULED_REFUNDS`, `REPORT_AVAILABLE`, `TRANSFER_FUNDS`, `BENEFICIARY_SETUP`, `COMPENSATE_NEGATIVE_BALANCE`.
+  notification_id: int # The ID of the notification subscription configuration to be tested. (format: int64)
 ]: any -> record<errorMessages: list<string>, eventTypes: list<string>, exchangeMessages: table<messageCode: string, messageDescription: string>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, notificationId: int, okMessages: list<string>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/testNotificationConfiguration")
-  let body = {eventTypes: $eventTypes, notificationId: $notificationId} | compact
+  let body = {"eventTypes": $event_types, "notificationId": $notification_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -235,13 +235,13 @@ export def "update-notification-configuration post-updateNotificationConfigurati
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  configurationDetails: record # shape: {active?: bool, apiVersion?: int, description?: string, eventConfigs?: list, hmacSignatureKey?: string, notificationId?: int, notifyPassword?: string, notifyURL?: string, notifyUsername?: string, sslProtocol?: "TLSv12"|"TLSv13"}
+  configuration_details: record # shape: {active?: bool, apiVersion?: int, description?: string, eventConfigs?: list, hmacSignatureKey?: string, notificationId?: int, notifyPassword?: string, notifyURL?: string, notifyUsername?: string, sslProtocol?: "TLSv12"|"TLSv13"}
 ]: any -> record<configurationDetails: record<active: bool, apiVersion: int, description: string, eventConfigs: list<record>, hmacSignatureKey: string, notificationId: int, notifyPassword: string, notifyURL: string, notifyUsername: string, sslProtocol: string>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/updateNotificationConfiguration")
-  let body = {configurationDetails: $configurationDetails} | compact
+  let body = {"configurationDetails": $configuration_details} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

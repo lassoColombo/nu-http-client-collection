@@ -115,7 +115,7 @@ export def "batch-qrcode post" [
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/batch/qrcode")
-  let body = {items: $items, output: $output} | compact
+  let body = {"items": $items, "output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/gzip")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -163,7 +163,7 @@ export def "images post" [
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/images")
-  let body = {image: $image} | compact
+  let body = {"image": $image} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -187,7 +187,7 @@ export def "images delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/images/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -210,7 +210,7 @@ export def "images get" [
 ]: nothing -> record<created: string, id: string, size: int, source: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/images/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -240,7 +240,7 @@ export def "qrcode post" [
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode")
-  let body = {data: $data, image: $image, output: $output, size: $size, style: $style} | compact
+  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -271,7 +271,7 @@ export def "qrcode-contact post" [
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode/contact")
-  let body = {data: $data, image: $image, output: $output, size: $size, style: $style} | compact
+  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -302,7 +302,7 @@ export def "qrcode-crypto post" [
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode/crypto")
-  let body = {data: $data, image: $image, output: $output, size: $size, style: $style} | compact
+  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -333,7 +333,7 @@ export def "qrcode-email post" [
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode/email")
-  let body = {data: $data, image: $image, output: $output, size: $size, style: $style} | compact
+  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -364,7 +364,7 @@ export def "qrcode-geo post" [
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode/geo")
-  let body = {data: $data, image: $image, output: $output, size: $size, style: $style} | compact
+  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -395,7 +395,7 @@ export def "qrcode-phone post" [
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode/phone")
-  let body = {data: $data, image: $image, output: $output, size: $size, style: $style} | compact
+  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -426,7 +426,7 @@ export def "qrcode-sms post" [
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode/sms")
-  let body = {data: $data, image: $image, output: $output, size: $size, style: $style} | compact
+  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -457,7 +457,7 @@ export def "qrcode-text post" [
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode/text")
-  let body = {data: $data, image: $image, output: $output, size: $size, style: $style} | compact
+  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -488,7 +488,7 @@ export def "qrcode-wifi post" [
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qrcode/wifi")
-  let body = {data: $data, image: $image, output: $output, size: $size, style: $style} | compact
+  let body = {"data": $data, "image": $image, "output": $output, "size": $size, "style": $style} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

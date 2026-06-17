@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-feed retrieveNearEarthObjectFeed" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-feed retrieve-near-earth-object" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /rest/v1/feed
 # operationId: retrieveNearEarthObjectFeed
-export def "rest-feed retrieveNearEarthObjectFeed" [
+export def "rest-feed retrieve-near-earth-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -118,7 +118,7 @@ export def "rest-feed retrieveNearEarthObjectFeed" [
 #
 # GET /rest/v1/feed/today
 # operationId: retrieveNEOFeedToday
-export def "rest-feed-today retrieveNEOFeedToday" [
+export def "rest-feed-today retrieve-neo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "rest-neo-browse browseNearEarthObjects" [
 #
 # GET /rest/v1/neo/sentry
 # operationId: retrieveSentryRiskData
-export def "rest-neo-sentry retrieveSentryRiskData" [
+export def "rest-neo-sentry list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "rest-neo-sentry retrieveSentryRiskData" [
 #
 # GET /rest/v1/neo/sentry/{asteroid_id}
 # operationId: retrieveSentryRiskDataById
-export def "rest-neo-sentry retrieveSentryRiskDataById" [
+export def "rest-neo-sentry retrieve-sentry-risk-data" [
   asteroid_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,7 +206,7 @@ export def "rest-neo-sentry retrieveSentryRiskDataById" [
 ]: nothing -> record<Palermo_scale_max: string, absolute_magnitude: string, average_lunar_distance: float, designation: string, estimated_diameter: string, fullname: string, impact_probability: string, is_active_sentry_object: bool, last_obs: string, last_obs_jd: string, palermo_scale_ave: string, potential_impacts: string, removal_date: string, sentryId: string, torino_scale: string, v_infinity: string, year_range_max: string, year_range_min: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/v1/neo/sentry/($asteroid_id)")
+  let full_url = (build-url $base ({asteroid_id: $asteroid_id} | format pattern "/rest/v1/neo/sentry/{asteroid_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -216,7 +216,7 @@ export def "rest-neo-sentry retrieveSentryRiskDataById" [
 #
 # GET /rest/v1/neo/{asteroid_id}
 # operationId: retrieveNearEarthObjectById
-export def "rest-neo retrieveNearEarthObjectById" [
+export def "rest-neo retrieve-near-earth-object" [
   asteroid_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -229,7 +229,7 @@ export def "rest-neo retrieveNearEarthObjectById" [
 ]: nothing -> record<absolute_magnitude_h: float, close_approach_data: table<close_approach_date: string, close_approach_date_full: string, epoch_date_close_approach: int, miss_distance: record, orbiting_body: string, relative_velocity: record>, designation: string, estimated_diameter: record<feet: record<estimated_diameter_max: float, estimated_diameter_min: float>, kilometers: record<estimated_diameter_max: float, estimated_diameter_min: float>, meters: record<estimated_diameter_max: float, estimated_diameter_min: float>, miles: record<estimated_diameter_max: float, estimated_diameter_min: float>>, is_potentially_hazardous_asteroid: bool, is_sentry_object: bool, name: string, name_limited: string, nasa_jpl_url: string, neo_reference_id: string, orbital_data: record<aphelion_distance: string, ascending_node_longitude: string, data_arc_in_days: int, eccentricity: string, epoch_osculation: string, equinox: string, first_observation_date: string, inclination: string, jupiter_tisserand_invariant: string, last_observation_date: string, mean_anomaly: string, mean_motion: string, minimum_orbit_intersection: string, observations_used: int, orbit_class: record<orbit_class_description: string, orbit_class_range: string, orbit_class_type: string>, orbit_determination_date: string, orbit_id: string, orbit_uncertainty: string, orbital_period: string, perihelion_argument: string, perihelion_distance: string, perihelion_time: string, semi_major_axis: string>, sentry_data: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/v1/neo/($asteroid_id)")
+  let full_url = (build-url $base ({asteroid_id: $asteroid_id} | format pattern "/rest/v1/neo/{asteroid_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -239,7 +239,7 @@ export def "rest-neo retrieveNearEarthObjectById" [
 #
 # GET /rest/v1/stats
 # operationId: retrieveCurrentNeoStatistics
-export def "rest-stats retrieveCurrentNeoStatistics" [
+export def "rest-stats retrieve-current-neo-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -112,7 +112,7 @@ export def "adminappsapprove approve" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.apps.approve")
-  let body = {app_id: $app_id, request_id: $request_id, team_id: $team_id} | compact
+  let body = {"app_id": $app_id, "request_id": $request_id, "team_id": $team_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -201,7 +201,7 @@ export def "adminappsrestrict restrict" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.apps.restrict")
-  let body = {app_id: $app_id, request_id: $request_id, team_id: $team_id} | compact
+  let body = {"app_id": $app_id, "request_id": $request_id, "team_id": $team_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -260,7 +260,7 @@ export def "adminconversationsarchive archive" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.archive")
-  let body = {channel_id: $channel_id} | compact
+  let body = {"channel_id": $channel_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -290,7 +290,7 @@ export def "adminconversationsconvert-to-private convertToPrivate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.convertToPrivate")
-  let body = {channel_id: $channel_id} | compact
+  let body = {"channel_id": $channel_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -324,7 +324,7 @@ export def "adminconversationscreate create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.create")
-  let body = {description: $description, is_private: $is_private, name: $name, org_wide: $org_wide, team_id: $team_id} | compact
+  let body = {"description": $description, "is_private": $is_private, "name": $name, "org_wide": $org_wide, "team_id": $team_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -354,7 +354,7 @@ export def "adminconversationsdelete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.delete")
-  let body = {channel_id: $channel_id} | compact
+  let body = {"channel_id": $channel_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -385,7 +385,7 @@ export def "adminconversationsdisconnect-shared disconnectShared" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.disconnectShared")
-  let body = {channel_id: $channel_id, leaving_team_ids: $leaving_team_ids} | compact
+  let body = {"channel_id": $channel_id, "leaving_team_ids": $leaving_team_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -399,7 +399,7 @@ export def "adminconversationsdisconnect-shared disconnectShared" [
 # GET /admin.conversations.ekm.listOriginalConnectedChannelInfo
 # Docs: https://api.slack.com/methods/admin.conversations.ekm.listOriginalConnectedChannelInfo — API method documentation
 # operationId: admin_conversations_ekm_listOriginalConnectedChannelInfo
-export def "adminconversationsekmlist-original-connected-channel-info listOriginalConnectedChannelInfo" [
+export def "adminconversationsekmlist-original-connected-channel-info list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -503,7 +503,7 @@ export def "adminconversationsinvite invite" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.invite")
-  let body = {channel_id: $channel_id, user_ids: $user_ids} | compact
+  let body = {"channel_id": $channel_id, "user_ids": $user_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -534,7 +534,7 @@ export def "adminconversationsrename rename" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.rename")
-  let body = {channel_id: $channel_id, name: $name} | compact
+  let body = {"channel_id": $channel_id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -548,7 +548,7 @@ export def "adminconversationsrename rename" [
 # POST /admin.conversations.restrictAccess.addGroup
 # Docs: https://api.slack.com/methods/admin.conversations.restrictAccess.addGroup — API method documentation
 # operationId: admin_conversations_restrictAccess_addGroup
-export def "adminconversationsrestrict-accessadd-group addGroup" [
+export def "adminconversationsrestrict-accessadd-group create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,7 +566,7 @@ export def "adminconversationsrestrict-accessadd-group addGroup" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.restrictAccess.addGroup")
-  let body = {channel_id: $channel_id, group_id: $group_id, team_id: $team_id, token: $body_token} | compact
+  let body = {"channel_id": $channel_id, "group_id": $group_id, "team_id": $team_id, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -578,7 +578,7 @@ export def "adminconversationsrestrict-accessadd-group addGroup" [
 # GET /admin.conversations.restrictAccess.listGroups
 # Docs: https://api.slack.com/methods/admin.conversations.restrictAccess.listGroups — API method documentation
 # operationId: admin_conversations_restrictAccess_listGroups
-export def "adminconversationsrestrict-accesslist-groups listGroups" [
+export def "adminconversationsrestrict-accesslist-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -605,7 +605,7 @@ export def "adminconversationsrestrict-accesslist-groups listGroups" [
 # POST /admin.conversations.restrictAccess.removeGroup
 # Docs: https://api.slack.com/methods/admin.conversations.restrictAccess.removeGroup — API method documentation
 # operationId: admin_conversations_restrictAccess_removeGroup
-export def "adminconversationsrestrict-accessremove-group removeGroup" [
+export def "adminconversationsrestrict-accessremove-group delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -623,7 +623,7 @@ export def "adminconversationsrestrict-accessremove-group removeGroup" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.restrictAccess.removeGroup")
-  let body = {channel_id: $channel_id, group_id: $group_id, team_id: $team_id, token: $body_token} | compact
+  let body = {"channel_id": $channel_id, "group_id": $group_id, "team_id": $team_id, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -686,7 +686,7 @@ export def "adminconversationsset-conversation-prefs setConversationPrefs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.setConversationPrefs")
-  let body = {channel_id: $channel_id, prefs: $prefs} | compact
+  let body = {"channel_id": $channel_id, "prefs": $prefs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -719,7 +719,7 @@ export def "adminconversationsset-teams setTeams" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.setTeams")
-  let body = {channel_id: $channel_id, org_channel: $org_channel, target_team_ids: $target_team_ids, team_id: $team_id} | compact
+  let body = {"channel_id": $channel_id, "org_channel": $org_channel, "target_team_ids": $target_team_ids, "team_id": $team_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -749,7 +749,7 @@ export def "adminconversationsunarchive unarchive" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.conversations.unarchive")
-  let body = {channel_id: $channel_id} | compact
+  let body = {"channel_id": $channel_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -780,7 +780,7 @@ export def "adminemojiadd add" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.emoji.add")
-  let body = {name: $name, token: $body_token, url: $body_url} | compact
+  let body = {"name": $name, "token": $body_token, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -792,7 +792,7 @@ export def "adminemojiadd add" [
 # POST /admin.emoji.addAlias
 # Docs: https://api.slack.com/methods/admin.emoji.addAlias — API method documentation
 # operationId: admin_emoji_addAlias
-export def "adminemojiadd-alias addAlias" [
+export def "adminemojiadd-alias create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -809,7 +809,7 @@ export def "adminemojiadd-alias addAlias" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.emoji.addAlias")
-  let body = {alias_for: $alias_for, name: $name, token: $body_token} | compact
+  let body = {"alias_for": $alias_for, "name": $name, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -864,7 +864,7 @@ export def "adminemojiremove remove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.emoji.remove")
-  let body = {name: $name, token: $body_token} | compact
+  let body = {"name": $name, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -893,7 +893,7 @@ export def "adminemojirename rename" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.emoji.rename")
-  let body = {name: $name, new_name: $new_name, token: $body_token} | compact
+  let body = {"name": $name, "new_name": $new_name, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -922,7 +922,7 @@ export def "admininvite-requestsapprove approve" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.inviteRequests.approve")
-  let body = {invite_request_id: $invite_request_id, team_id: $team_id} | compact
+  let body = {"invite_request_id": $invite_request_id, "team_id": $team_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1013,7 +1013,7 @@ export def "admininvite-requestsdeny deny" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.inviteRequests.deny")
-  let body = {invite_request_id: $invite_request_id, team_id: $team_id} | compact
+  let body = {"invite_request_id": $invite_request_id, "team_id": $team_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1104,7 +1104,7 @@ export def "adminteamscreate create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.teams.create")
-  let body = {team_description: $team_description, team_discoverability: $team_discoverability, team_domain: $team_domain, team_name: $team_name} | compact
+  let body = {"team_description": $team_description, "team_discoverability": $team_discoverability, "team_domain": $team_domain, "team_name": $team_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1220,7 +1220,7 @@ export def "adminteamssettingsset-default-channels setDefaultChannels" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.teams.settings.setDefaultChannels")
-  let body = {channel_ids: $channel_ids, team_id: $team_id, token: $body_token} | compact
+  let body = {"channel_ids": $channel_ids, "team_id": $team_id, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1249,7 +1249,7 @@ export def "adminteamssettingsset-description setDescription" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.teams.settings.setDescription")
-  let body = {description: $description, team_id: $team_id} | compact
+  let body = {"description": $description, "team_id": $team_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1280,7 +1280,7 @@ export def "adminteamssettingsset-discoverability setDiscoverability" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.teams.settings.setDiscoverability")
-  let body = {discoverability: $discoverability, team_id: $team_id} | compact
+  let body = {"discoverability": $discoverability, "team_id": $team_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1311,7 +1311,7 @@ export def "adminteamssettingsset-icon setIcon" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.teams.settings.setIcon")
-  let body = {image_url: $image_url, team_id: $team_id, token: $body_token} | compact
+  let body = {"image_url": $image_url, "team_id": $team_id, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1340,7 +1340,7 @@ export def "adminteamssettingsset-name setName" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.teams.settings.setName")
-  let body = {name: $name, team_id: $team_id} | compact
+  let body = {"name": $name, "team_id": $team_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1354,7 +1354,7 @@ export def "adminteamssettingsset-name setName" [
 # POST /admin.usergroups.addChannels
 # Docs: https://api.slack.com/methods/admin.usergroups.addChannels — API method documentation
 # operationId: admin_usergroups_addChannels
-export def "adminusergroupsadd-channels addChannels" [
+export def "adminusergroupsadd-channels create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1372,7 +1372,7 @@ export def "adminusergroupsadd-channels addChannels" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.usergroups.addChannels")
-  let body = {channel_ids: $channel_ids, team_id: $team_id, usergroup_id: $usergroup_id} | compact
+  let body = {"channel_ids": $channel_ids, "team_id": $team_id, "usergroup_id": $usergroup_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1386,7 +1386,7 @@ export def "adminusergroupsadd-channels addChannels" [
 # POST /admin.usergroups.addTeams
 # Docs: https://api.slack.com/methods/admin.usergroups.addTeams — API method documentation
 # operationId: admin_usergroups_addTeams
-export def "adminusergroupsadd-teams addTeams" [
+export def "adminusergroupsadd-teams create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1404,7 +1404,7 @@ export def "adminusergroupsadd-teams addTeams" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.usergroups.addTeams")
-  let body = {auto_provision: $auto_provision, team_ids: $team_ids, usergroup_id: $usergroup_id} | compact
+  let body = {"auto_provision": $auto_provision, "team_ids": $team_ids, "usergroup_id": $usergroup_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1418,7 +1418,7 @@ export def "adminusergroupsadd-teams addTeams" [
 # GET /admin.usergroups.listChannels
 # Docs: https://api.slack.com/methods/admin.usergroups.listChannels — API method documentation
 # operationId: admin_usergroups_listChannels
-export def "adminusergroupslist-channels listChannels" [
+export def "adminusergroupslist-channels list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1448,7 +1448,7 @@ export def "adminusergroupslist-channels listChannels" [
 # POST /admin.usergroups.removeChannels
 # Docs: https://api.slack.com/methods/admin.usergroups.removeChannels — API method documentation
 # operationId: admin_usergroups_removeChannels
-export def "adminusergroupsremove-channels removeChannels" [
+export def "adminusergroupsremove-channels delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1465,7 +1465,7 @@ export def "adminusergroupsremove-channels removeChannels" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.usergroups.removeChannels")
-  let body = {channel_ids: $channel_ids, usergroup_id: $usergroup_id} | compact
+  let body = {"channel_ids": $channel_ids, "usergroup_id": $usergroup_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1499,7 +1499,7 @@ export def "adminusersassign assign" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.assign")
-  let body = {channel_ids: $channel_ids, is_restricted: $is_restricted, is_ultra_restricted: $is_ultra_restricted, team_id: $team_id, user_id: $user_id} | compact
+  let body = {"channel_ids": $channel_ids, "is_restricted": $is_restricted, "is_ultra_restricted": $is_ultra_restricted, "team_id": $team_id, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1537,7 +1537,7 @@ export def "adminusersinvite invite" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.invite")
-  let body = {channel_ids: $channel_ids, custom_message: $custom_message, email: $email, guest_expiration_ts: $guest_expiration_ts, is_restricted: $is_restricted, is_ultra_restricted: $is_ultra_restricted, real_name: $real_name, resend: $resend, team_id: $team_id} | compact
+  let body = {"channel_ids": $channel_ids, "custom_message": $custom_message, "email": $email, "guest_expiration_ts": $guest_expiration_ts, "is_restricted": $is_restricted, "is_ultra_restricted": $is_ultra_restricted, "real_name": $real_name, "resend": $resend, "team_id": $team_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1598,7 +1598,7 @@ export def "adminusersremove remove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.remove")
-  let body = {team_id: $team_id, user_id: $user_id} | compact
+  let body = {"team_id": $team_id, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1629,7 +1629,7 @@ export def "adminuserssessioninvalidate invalidate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.session.invalidate")
-  let body = {session_id: $session_id, team_id: $team_id} | compact
+  let body = {"session_id": $session_id, "team_id": $team_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1661,7 +1661,7 @@ export def "adminuserssessionreset reset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.session.reset")
-  let body = {mobile_only: $mobile_only, user_id: $user_id, web_only: $web_only} | compact
+  let body = {"mobile_only": $mobile_only, "user_id": $user_id, "web_only": $web_only} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1692,7 +1692,7 @@ export def "adminusersset-admin setAdmin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.setAdmin")
-  let body = {team_id: $team_id, user_id: $user_id} | compact
+  let body = {"team_id": $team_id, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1724,7 +1724,7 @@ export def "adminusersset-expiration setExpiration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.setExpiration")
-  let body = {expiration_ts: $expiration_ts, team_id: $team_id, user_id: $user_id} | compact
+  let body = {"expiration_ts": $expiration_ts, "team_id": $team_id, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1755,7 +1755,7 @@ export def "adminusersset-owner setOwner" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.setOwner")
-  let body = {team_id: $team_id, user_id: $user_id} | compact
+  let body = {"team_id": $team_id, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1786,7 +1786,7 @@ export def "adminusersset-regular setRegular" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin.users.setRegular")
-  let body = {team_id: $team_id, user_id: $user_id} | compact
+  let body = {"team_id": $team_id, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2143,7 +2143,7 @@ export def "callsadd add" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls.add")
-  let body = {created_by: $created_by, date_start: $date_start, desktop_app_join_url: $desktop_app_join_url, external_display_id: $external_display_id, external_unique_id: $external_unique_id, join_url: $join_url, title: $title, users: $users} | compact
+  let body = {"created_by": $created_by, "date_start": $date_start, "desktop_app_join_url": $desktop_app_join_url, "external_display_id": $external_display_id, "external_unique_id": $external_unique_id, "join_url": $join_url, "title": $title, "users": $users} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2174,7 +2174,7 @@ export def "callsend end" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls.end")
-  let body = {duration: $duration, id: $id} | compact
+  let body = {"duration": $duration, "id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2233,7 +2233,7 @@ export def "callsparticipantsadd add" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls.participants.add")
-  let body = {id: $id, users: $users} | compact
+  let body = {"id": $id, "users": $users} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2264,7 +2264,7 @@ export def "callsparticipantsremove remove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls.participants.remove")
-  let body = {id: $id, users: $users} | compact
+  let body = {"id": $id, "users": $users} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2297,7 +2297,7 @@ export def "callsupdate update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls.update")
-  let body = {desktop_app_join_url: $desktop_app_join_url, id: $id, join_url: $join_url, title: $title} | compact
+  let body = {"desktop_app_join_url": $desktop_app_join_url, "id": $id, "join_url": $join_url, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2329,7 +2329,7 @@ export def "chatdelete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat.delete")
-  let body = {as_user: $as_user, channel: $channel, ts: $ts} | compact
+  let body = {"as_user": $as_user, "channel": $channel, "ts": $ts} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2343,7 +2343,7 @@ export def "chatdelete delete" [
 # POST /chat.deleteScheduledMessage
 # Docs: https://api.slack.com/methods/chat.deleteScheduledMessage — API method documentation
 # operationId: chat_deleteScheduledMessage
-export def "chatdelete-scheduled-message post" [
+export def "chatdelete-scheduled-message delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2361,7 +2361,7 @@ export def "chatdelete-scheduled-message post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat.deleteScheduledMessage")
-  let body = {as_user: $as_user, channel: $channel, scheduled_message_id: $scheduled_message_id} | compact
+  let body = {"as_user": $as_user, "channel": $channel, "scheduled_message_id": $scheduled_message_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2419,7 +2419,7 @@ export def "chatme-message meMessage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat.meMessage")
-  let body = {channel: $channel, text: $text} | compact
+  let body = {"channel": $channel, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2433,7 +2433,7 @@ export def "chatme-message meMessage" [
 # POST /chat.postEphemeral
 # Docs: https://api.slack.com/methods/chat.postEphemeral — API method documentation
 # operationId: chat_postEphemeral
-export def "chatpost-ephemeral post" [
+export def "chatpost-ephemeral create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2460,7 +2460,7 @@ export def "chatpost-ephemeral post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat.postEphemeral")
-  let body = {as_user: $as_user, attachments: $attachments, blocks: $blocks, channel: $channel, icon_emoji: $icon_emoji, icon_url: $icon_url, link_names: $link_names, parse: $parse, text: $text, thread_ts: $thread_ts, user: $user, username: $username} | compact
+  let body = {"as_user": $as_user, "attachments": $attachments, "blocks": $blocks, "channel": $channel, "icon_emoji": $icon_emoji, "icon_url": $icon_url, "link_names": $link_names, "parse": $parse, "text": $text, "thread_ts": $thread_ts, "user": $user, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2474,7 +2474,7 @@ export def "chatpost-ephemeral post" [
 # POST /chat.postMessage
 # Docs: https://api.slack.com/methods/chat.postMessage — API method documentation
 # operationId: chat_postMessage
-export def "chatpost-message post" [
+export def "chatpost-message create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2504,7 +2504,7 @@ export def "chatpost-message post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat.postMessage")
-  let body = {as_user: $as_user, attachments: $attachments, blocks: $blocks, channel: $channel, icon_emoji: $icon_emoji, icon_url: $icon_url, link_names: $link_names, mrkdwn: $mrkdwn, parse: $parse, reply_broadcast: $reply_broadcast, text: $text, thread_ts: $thread_ts, unfurl_links: $unfurl_links, unfurl_media: $unfurl_media, username: $username} | compact
+  let body = {"as_user": $as_user, "attachments": $attachments, "blocks": $blocks, "channel": $channel, "icon_emoji": $icon_emoji, "icon_url": $icon_url, "link_names": $link_names, "mrkdwn": $mrkdwn, "parse": $parse, "reply_broadcast": $reply_broadcast, "text": $text, "thread_ts": $thread_ts, "unfurl_links": $unfurl_links, "unfurl_media": $unfurl_media, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2545,7 +2545,7 @@ export def "chatschedule-message scheduleMessage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat.scheduleMessage")
-  let body = {as_user: $as_user, attachments: $attachments, blocks: $blocks, channel: $channel, link_names: $link_names, parse: $parse, post_at: $post_at, reply_broadcast: $reply_broadcast, text: $text, thread_ts: $thread_ts, unfurl_links: $unfurl_links, unfurl_media: $unfurl_media} | compact
+  let body = {"as_user": $as_user, "attachments": $attachments, "blocks": $blocks, "channel": $channel, "link_names": $link_names, "parse": $parse, "post_at": $post_at, "reply_broadcast": $reply_broadcast, "text": $text, "thread_ts": $thread_ts, "unfurl_links": $unfurl_links, "unfurl_media": $unfurl_media} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2612,7 +2612,7 @@ export def "chatunfurl unfurl" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat.unfurl")
-  let body = {channel: $channel, ts: $ts, unfurls: $unfurls, user_auth_message: $user_auth_message, user_auth_required: $user_auth_required, user_auth_url: $user_auth_url} | compact
+  let body = {"channel": $channel, "ts": $ts, "unfurls": $unfurls, "user_auth_message": $user_auth_message, "user_auth_required": $user_auth_required, "user_auth_url": $user_auth_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2649,7 +2649,7 @@ export def "chatupdate update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat.update")
-  let body = {as_user: $as_user, attachments: $attachments, blocks: $blocks, channel: $channel, link_names: $link_names, parse: $parse, text: $text, ts: $ts} | compact
+  let body = {"as_user": $as_user, "attachments": $attachments, "blocks": $blocks, "channel": $channel, "link_names": $link_names, "parse": $parse, "text": $text, "ts": $ts} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2679,7 +2679,7 @@ export def "conversationsarchive archive" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.archive")
-  let body = {channel: $channel} | compact
+  let body = {"channel": $channel} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2709,7 +2709,7 @@ export def "conversationsclose close" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.close")
-  let body = {channel: $channel} | compact
+  let body = {"channel": $channel} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2740,7 +2740,7 @@ export def "conversationscreate create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.create")
-  let body = {is_private: $is_private, name: $name} | compact
+  let body = {"is_private": $is_private, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2830,7 +2830,7 @@ export def "conversationsinvite invite" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.invite")
-  let body = {channel: $channel, users: $users} | compact
+  let body = {"channel": $channel, "users": $users} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2860,7 +2860,7 @@ export def "conversationsjoin join" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.join")
-  let body = {channel: $channel} | compact
+  let body = {"channel": $channel} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2891,7 +2891,7 @@ export def "conversationskick kick" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.kick")
-  let body = {channel: $channel, user: $user} | compact
+  let body = {"channel": $channel, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2921,7 +2921,7 @@ export def "conversationsleave leave" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.leave")
-  let body = {channel: $channel} | compact
+  let body = {"channel": $channel} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2981,7 +2981,7 @@ export def "conversationsmark mark" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.mark")
-  let body = {channel: $channel, ts: $ts} | compact
+  let body = {"channel": $channel, "ts": $ts} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3041,7 +3041,7 @@ export def "conversationsopen open" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.open")
-  let body = {channel: $channel, return_im: $return_im, users: $users} | compact
+  let body = {"channel": $channel, "return_im": $return_im, "users": $users} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3072,7 +3072,7 @@ export def "conversationsrename rename" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.rename")
-  let body = {channel: $channel, name: $name} | compact
+  let body = {"channel": $channel, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3135,7 +3135,7 @@ export def "conversationsset-purpose setPurpose" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.setPurpose")
-  let body = {channel: $channel, purpose: $purpose} | compact
+  let body = {"channel": $channel, "purpose": $purpose} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3166,7 +3166,7 @@ export def "conversationsset-topic setTopic" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.setTopic")
-  let body = {channel: $channel, topic: $topic} | compact
+  let body = {"channel": $channel, "topic": $topic} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3196,7 +3196,7 @@ export def "conversationsunarchive unarchive" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversations.unarchive")
-  let body = {channel: $channel} | compact
+  let body = {"channel": $channel} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3333,7 +3333,7 @@ export def "dndset-snooze setSnooze" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dnd.setSnooze")
-  let body = {num_minutes: $num_minutes, token: $body_token} | compact
+  let body = {"num_minutes": $num_minutes, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3413,7 +3413,7 @@ export def "filescommentsdelete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files.comments.delete")
-  let body = {file: $file, id: $id} | compact
+  let body = {"file": $file, "id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3443,7 +3443,7 @@ export def "filesdelete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files.delete")
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3541,7 +3541,7 @@ export def "filesremoteadd add" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files.remote.add")
-  let body = {external_id: $external_id, external_url: $external_url, filetype: $filetype, indexable_file_contents: $indexable_file_contents, preview_image: $preview_image, title: $title, token: $body_token} | compact
+  let body = {"external_id": $external_id, "external_url": $external_url, "filetype": $filetype, "indexable_file_contents": $indexable_file_contents, "preview_image": $preview_image, "title": $title, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3627,7 +3627,7 @@ export def "filesremoteremove remove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files.remote.remove")
-  let body = {external_id: $external_id, file: $file, token: $body_token} | compact
+  let body = {"external_id": $external_id, "file": $file, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3689,7 +3689,7 @@ export def "filesremoteupdate update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files.remote.update")
-  let body = {external_id: $external_id, external_url: $external_url, file: $file, filetype: $filetype, indexable_file_contents: $indexable_file_contents, preview_image: $preview_image, title: $title, token: $body_token} | compact
+  let body = {"external_id": $external_id, "external_url": $external_url, "file": $file, "filetype": $filetype, "indexable_file_contents": $indexable_file_contents, "preview_image": $preview_image, "title": $title, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3701,7 +3701,7 @@ export def "filesremoteupdate update" [
 # POST /files.revokePublicURL
 # Docs: https://api.slack.com/methods/files.revokePublicURL — API method documentation
 # operationId: files_revokePublicURL
-export def "filesrevoke-public-url revokePublicURL" [
+export def "filesrevoke-public-url delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3717,7 +3717,7 @@ export def "filesrevoke-public-url revokePublicURL" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files.revokePublicURL")
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3747,7 +3747,7 @@ export def "filesshared-public-url sharedPublicURL" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files.sharedPublicURL")
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3784,7 +3784,7 @@ export def "filesupload upload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files.upload")
-  let body = {channels: $channels, content: $content, file: $file, filename: $filename, filetype: $filetype, initial_comment: $initial_comment, thread_ts: $thread_ts, title: $title, token: $body_token} | compact
+  let body = {"channels": $channels, "content": $content, "file": $file, "filename": $filename, "filetype": $filetype, "initial_comment": $initial_comment, "thread_ts": $thread_ts, "title": $title, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3927,7 +3927,7 @@ export def "pinsadd add" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pins.add")
-  let body = {channel: $channel, timestamp: $timestamp} | compact
+  let body = {"channel": $channel, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3984,7 +3984,7 @@ export def "pinsremove remove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pins.remove")
-  let body = {channel: $channel, timestamp: $timestamp} | compact
+  let body = {"channel": $channel, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4016,7 +4016,7 @@ export def "reactionsadd add" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reactions.add")
-  let body = {channel: $channel, name: $name, timestamp: $timestamp} | compact
+  let body = {"channel": $channel, "name": $name, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4111,7 +4111,7 @@ export def "reactionsremove remove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reactions.remove")
-  let body = {channel: $channel, file: $file, file_comment: $file_comment, name: $name, timestamp: $timestamp} | compact
+  let body = {"channel": $channel, "file": $file, "file_comment": $file_comment, "name": $name, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4143,7 +4143,7 @@ export def "remindersadd add" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reminders.add")
-  let body = {text: $text, time: $time, user: $user} | compact
+  let body = {"text": $text, "time": $time, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4173,7 +4173,7 @@ export def "reminderscomplete complete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reminders.complete")
-  let body = {reminder: $reminder} | compact
+  let body = {"reminder": $reminder} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4203,7 +4203,7 @@ export def "remindersdelete delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reminders.delete")
-  let body = {reminder: $reminder} | compact
+  let body = {"reminder": $reminder} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4345,7 +4345,7 @@ export def "starsadd add" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stars.add")
-  let body = {channel: $channel, file: $file, file_comment: $file_comment, timestamp: $timestamp} | compact
+  let body = {"channel": $channel, "file": $file, "file_comment": $file_comment, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4407,7 +4407,7 @@ export def "starsremove remove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stars.remove")
-  let body = {channel: $channel, file: $file, file_comment: $file_comment, timestamp: $timestamp} | compact
+  let body = {"channel": $channel, "file": $file, "file_comment": $file_comment, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4578,7 +4578,7 @@ export def "usergroupscreate create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/usergroups.create")
-  let body = {channels: $channels, description: $description, handle: $handle, include_count: $include_count, name: $name} | compact
+  let body = {"channels": $channels, "description": $description, "handle": $handle, "include_count": $include_count, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4609,7 +4609,7 @@ export def "usergroupsdisable disable" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/usergroups.disable")
-  let body = {include_count: $include_count, usergroup: $usergroup} | compact
+  let body = {"include_count": $include_count, "usergroup": $usergroup} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4640,7 +4640,7 @@ export def "usergroupsenable enable" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/usergroups.enable")
-  let body = {include_count: $include_count, usergroup: $usergroup} | compact
+  let body = {"include_count": $include_count, "usergroup": $usergroup} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4703,7 +4703,7 @@ export def "usergroupsupdate update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/usergroups.update")
-  let body = {channels: $channels, description: $description, handle: $handle, include_count: $include_count, name: $name, usergroup: $usergroup} | compact
+  let body = {"channels": $channels, "description": $description, "handle": $handle, "include_count": $include_count, "name": $name, "usergroup": $usergroup} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4762,7 +4762,7 @@ export def "usergroupsusersupdate update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/usergroups.users.update")
-  let body = {include_count: $include_count, usergroup: $usergroup, users: $users} | compact
+  let body = {"include_count": $include_count, "usergroup": $usergroup, "users": $users} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4806,7 +4806,7 @@ export def "usersconversations conversations" [
 # POST /users.deletePhoto
 # Docs: https://api.slack.com/methods/users.deletePhoto — API method documentation
 # operationId: users_deletePhoto
-export def "usersdelete-photo post" [
+export def "usersdelete-photo delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4821,7 +4821,7 @@ export def "usersdelete-photo post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users.deletePhoto")
-  let body = {token: $body_token} | compact
+  let body = {"token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5011,7 +5011,7 @@ export def "usersprofileset set" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users.profile.set")
-  let body = {name: $name, profile: $profile, user: $user, value: $value} | compact
+  let body = {"name": $name, "profile": $profile, "user": $user, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5070,7 +5070,7 @@ export def "usersset-photo setPhoto" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users.setPhoto")
-  let body = {crop_w: $crop_w, crop_x: $crop_x, crop_y: $crop_y, image: $image, token: $body_token} | compact
+  let body = {"crop_w": $crop_w, "crop_x": $crop_x, "crop_y": $crop_y, "image": $image, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5098,7 +5098,7 @@ export def "usersset-presence setPresence" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users.setPresence")
-  let body = {presence: $presence} | compact
+  let body = {"presence": $presence} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"token": $hdr_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5289,7 +5289,7 @@ export def "workflowsstep-failed stepFailed" [
 # GET /workflows.updateStep
 # Docs: https://api.slack.com/methods/workflows.updateStep — API method documentation
 # operationId: workflows_updateStep
-export def "workflowsupdate-step updateStep" [
+export def "workflowsupdate-step update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

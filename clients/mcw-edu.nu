@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "agr-affected-genomic-models get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "agr-affected-genomic-models get-affected-genomic-models-using-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,8 +92,8 @@ export def commands []: nothing -> table {
 #
 # GET /agr/affectedGenomicModels/{taxonId}
 # operationId: getAffectedGenomicModelsUsingGET
-export def "agr-affected-genomic-models get" [
-  taxonId: string
+export def "agr-affected-genomic-models get-affected-genomic-models-using-get" [
+  taxon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,7 +105,7 @@ export def "agr-affected-genomic-models get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/agr/affectedGenomicModels/($taxonId)")
+  let full_url = (build-url $base ({taxon_id: $taxon_id} | format pattern "/agr/affectedGenomicModels/{taxon_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -115,8 +115,8 @@ export def "agr-affected-genomic-models get" [
 #
 # GET /agr/alleles/{taxonId}
 # operationId: getAllelesForTaxonUsingGET
-export def "agr-alleles get" [
-  taxonId: string
+export def "agr-alleles get-alleles-for-taxon-using-get" [
+  taxon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,7 +128,7 @@ export def "agr-alleles get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/agr/alleles/($taxonId)")
+  let full_url = (build-url $base ({taxon_id: $taxon_id} | format pattern "/agr/alleles/{taxon_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -138,8 +138,8 @@ export def "agr-alleles get" [
 #
 # GET /agr/expression/{taxonId}
 # operationId: getExpressionForTaxonUsingGET
-export def "agr-expression get" [
-  taxonId: string
+export def "agr-expression get-expression-for-taxon-using-get" [
+  taxon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,7 +151,7 @@ export def "agr-expression get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/agr/expression/($taxonId)")
+  let full_url = (build-url $base ({taxon_id: $taxon_id} | format pattern "/agr/expression/{taxon_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -161,8 +161,8 @@ export def "agr-expression get" [
 #
 # GET /agr/phenotypes/{taxonId}
 # operationId: getPhenotypesForTaxonUsingGET
-export def "agr-phenotypes get" [
-  taxonId: string
+export def "agr-phenotypes get-phenotypes-for-taxon-using-get" [
+  taxon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +174,7 @@ export def "agr-phenotypes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/agr/phenotypes/($taxonId)")
+  let full_url = (build-url $base ({taxon_id: $taxon_id} | format pattern "/agr/phenotypes/{taxon_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -184,8 +184,8 @@ export def "agr-phenotypes get" [
 #
 # GET /agr/variants/{taxonId}
 # operationId: getVariantsForTaxonUsingGET
-export def "agr-variants get" [
-  taxonId: string
+export def "agr-variants get-variants-for-taxon-using-get" [
+  taxon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "agr-variants get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/agr/variants/($taxonId)")
+  let full_url = (build-url $base ({taxon_id: $taxon_id} | format pattern "/agr/variants/{taxon_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,8 +207,8 @@ export def "agr-variants get" [
 #
 # GET /agr/{taxonId}
 # operationId: getGenesForLatestAssemblyUsingGET
-export def "agr get" [
-  taxonId: string
+export def "agr get-genes-for-latest-assembly-using-get" [
+  taxon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "agr get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/agr/($taxonId)")
+  let full_url = (build-url $base ({taxon_id: $taxon_id} | format pattern "/agr/{taxon_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,7 +230,7 @@ export def "agr get" [
 #
 # POST /annotations/
 # operationId: getAnnotationsUsingPOST
-export def "annotations post" [
+export def "annotations get-annotations-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,16 +239,16 @@ export def "annotations post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --evidenceCodes: list
+  --evidence-codes: list
   --ids: list
-  --speciesTypeKeys: list
-  --termAcc: string
+  --species-type-keys: list
+  --term-acc: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/annotations/")
-  let body = {evidenceCodes: $evidenceCodes, ids: $ids, speciesTypeKeys: $speciesTypeKeys, termAcc: $termAcc} | compact
+  let body = {"evidenceCodes": $evidence_codes, "ids": $ids, "speciesTypeKeys": $species_type_keys, "termAcc": $term_acc} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -259,8 +259,8 @@ export def "annotations post" [
 #
 # GET /annotations/accId/{rgdId}
 # operationId: getTermAccIdsUsingGET
-export def "annotations-acc-id get" [
-  rgdId: int
+export def "annotations-acc-id get-term-acc-using-get" [
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,7 +272,7 @@ export def "annotations-acc-id get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/annotations/accId/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/annotations/accId/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -283,8 +283,8 @@ export def "annotations-acc-id get" [
 # GET /annotations/count/{accId}/{includeChildren}
 # operationId: getAnnotationCountByAccIdUsingGET
 export def "annotations-count get-by-accId-includeChildren" [
-  accId: string
-  includeChildren: bool
+  acc_id: string
+  include_children: bool
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,7 +296,7 @@ export def "annotations-count get-by-accId-includeChildren" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/annotations/count/($accId)/($includeChildren)")
+  let full_url = (build-url $base ({acc_id: $acc_id, include_children: $include_children} | format pattern "/annotations/count/{acc_id}/{include_children}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -307,9 +307,9 @@ export def "annotations-count get-by-accId-includeChildren" [
 # GET /annotations/count/{accId}/{speciesTypeKey}/{includeChildren}
 # operationId: getAnnotationCountByAccIdAndSpeciesUsingGET
 export def "annotations-count get-by-accId-speciesTypeKey-includeChildren" [
-  accId: string
-  speciesTypeKey: int
-  includeChildren: bool
+  acc_id: string
+  species_type_key: int
+  include_children: bool
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,7 +321,7 @@ export def "annotations-count get-by-accId-speciesTypeKey-includeChildren" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/annotations/count/($accId)/($speciesTypeKey)/($includeChildren)")
+  let full_url = (build-url $base ({acc_id: $acc_id, species_type_key: $species_type_key, include_children: $include_children} | format pattern "/annotations/count/{acc_id}/{species_type_key}/{include_children}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -332,10 +332,10 @@ export def "annotations-count get-by-accId-speciesTypeKey-includeChildren" [
 # GET /annotations/count/{accId}/{speciesTypeKey}/{includeChildren}/{objectType}
 # operationId: getAnnotationCountByAccIdAndObjectTypeUsingGET
 export def "annotations-count get-by-accId-speciesTypeKey-includeChildren-objectType" [
-  accId: string
-  speciesTypeKey: int
-  includeChildren: bool
-  objectType: int
+  acc_id: string
+  species_type_key: int
+  include_children: bool
+  object_type: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,7 +347,7 @@ export def "annotations-count get-by-accId-speciesTypeKey-includeChildren-object
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/annotations/count/($accId)/($speciesTypeKey)/($includeChildren)/($objectType)")
+  let full_url = (build-url $base ({acc_id: $acc_id, species_type_key: $species_type_key, include_children: $include_children, object_type: $object_type} | format pattern "/annotations/count/{acc_id}/{species_type_key}/{include_children}/{object_type}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -357,8 +357,8 @@ export def "annotations-count get-by-accId-speciesTypeKey-includeChildren-object
 #
 # GET /annotations/reference/{refRgdId}
 # operationId: getAnnotsByRefrerenceUsingGET
-export def "annotations-reference get" [
-  refRgdId: int
+export def "annotations-reference get-annots" [
+  ref_rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "annotations-reference get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/annotations/reference/($refRgdId)")
+  let full_url = (build-url $base ({ref_rgd_id: $ref_rgd_id} | format pattern "/annotations/reference/{ref_rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -381,7 +381,7 @@ export def "annotations-reference get" [
 # GET /annotations/rgdId/{rgdId}
 # operationId: getAnnotationsByRgdIdUsingGET
 export def "annotations-rgd-id list" [
-  rgdId: int
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,7 +393,7 @@ export def "annotations-rgd-id list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/annotations/rgdId/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/annotations/rgdId/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -404,8 +404,8 @@ export def "annotations-rgd-id list" [
 # GET /annotations/rgdId/{rgdId}/{ontologyPrefix}
 # operationId: getAnnotationsByRgdIdAndOntologyUsingGET
 export def "annotations-rgd-id get" [
-  rgdId: int
-  ontologyPrefix: string
+  rgd_id: int
+  ontology_prefix: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,7 +417,7 @@ export def "annotations-rgd-id get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/annotations/rgdId/($rgdId)/($ontologyPrefix)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id, ontology_prefix: $ontology_prefix} | format pattern "/annotations/rgdId/{rgd_id}/{ontology_prefix}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -427,9 +427,9 @@ export def "annotations-rgd-id get" [
 #
 # GET /annotations/{accId}/{rgdId}
 # operationId: getAnnotationsByAccIdAndRgdIdUsingGET
-export def "annotations list" [
-  accId: string
-  rgdId: int
+export def "annotations get" [
+  acc_id: string
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,7 +441,7 @@ export def "annotations list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/annotations/($accId)/($rgdId)")
+  let full_url = (build-url $base ({acc_id: $acc_id, rgd_id: $rgd_id} | format pattern "/annotations/{acc_id}/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -451,10 +451,10 @@ export def "annotations list" [
 #
 # GET /annotations/{accId}/{speciesTypeKey}/{includeChildren}
 # operationId: getAnnotationsUsingGET
-export def "annotations get" [
-  accId: string
-  speciesTypeKey: int
-  includeChildren: bool
+export def "annotations get-annotations-using-get" [
+  acc_id: string
+  species_type_key: int
+  include_children: bool
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,7 +466,7 @@ export def "annotations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/annotations/($accId)/($speciesTypeKey)/($includeChildren)")
+  let full_url = (build-url $base ({acc_id: $acc_id, species_type_key: $species_type_key, include_children: $include_children} | format pattern "/annotations/{acc_id}/{species_type_key}/{include_children}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -476,7 +476,7 @@ export def "annotations get" [
 #
 # POST /enrichment/annotatedGenes
 # operationId: getEnrichmentDataUsingPOST
-export def "enrichment-annotated-genes post" [
+export def "enrichment-annotated-genes get-enrichment-data-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,15 +485,15 @@ export def "enrichment-annotated-genes post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accId: string
-  --geneSymbols: list
+  --acc-id: string
+  --gene-symbols: list
   --species: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enrichment/annotatedGenes")
-  let body = {accId: $accId, geneSymbols: $geneSymbols, species: $species} | compact
+  let body = {"accId": $acc_id, "geneSymbols": $gene_symbols, "species": $species} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -504,7 +504,7 @@ export def "enrichment-annotated-genes post" [
 #
 # POST /enrichment/data
 # operationId: getEnrichmentDataUsingPOST_1
-export def "enrichment-data post-by-" [
+export def "enrichment-data get-enrichment-data-using-post-by-" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -521,7 +521,7 @@ export def "enrichment-data post-by-" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enrichment/data")
-  let body = {aspect: $aspect, genes: $genes, species: $species} | compact
+  let body = {"aspect": $aspect, "genes": $genes, "species": $species} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -533,8 +533,8 @@ export def "enrichment-data post-by-" [
 # GET /genes/affyId/{affyId}/{speciesTypeKey}
 # operationId: getGenesByAffyIdUsingGET
 export def "genes-affy-id get" [
-  affyId: string
-  speciesTypeKey: int
+  affy_id: string
+  species_type_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,7 +546,7 @@ export def "genes-affy-id get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/genes/affyId/($affyId)/($speciesTypeKey)")
+  let full_url = (build-url $base ({affy_id: $affy_id, species_type_key: $species_type_key} | format pattern "/genes/affyId/{affy_id}/{species_type_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -557,8 +557,8 @@ export def "genes-affy-id get" [
 # GET /genes/alias/{aliasSymbol}/{speciesTypeKey}
 # operationId: getGenesByAliasSymbolUsingGET
 export def "genes-alias get" [
-  aliasSymbol: string
-  speciesTypeKey: int
+  alias_symbol: string
+  species_type_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,7 +570,7 @@ export def "genes-alias get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/genes/alias/($aliasSymbol)/($speciesTypeKey)")
+  let full_url = (build-url $base ({alias_symbol: $alias_symbol, species_type_key: $species_type_key} | format pattern "/genes/alias/{alias_symbol}/{species_type_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -580,8 +580,8 @@ export def "genes-alias get" [
 #
 # GET /genes/allele/{rgdId}
 # operationId: getGeneAllelesUsingGET
-export def "genes-allele get" [
-  rgdId: int
+export def "genes-allele get-gene-alleles-using-get" [
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,7 +593,7 @@ export def "genes-allele get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/genes/allele/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/genes/allele/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -603,7 +603,7 @@ export def "genes-allele get" [
 #
 # POST /genes/annotation
 # operationId: getAnnotatedGenesUsingPOST
-export def "genes-annotation post" [
+export def "genes-annotation get-annotated-genes-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -612,15 +612,15 @@ export def "genes-annotation post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accId: string
-  --evidenceCodes: list
-  --speciesTypeKeys: list
+  --acc-id: string
+  --evidence-codes: list
+  --species-type-keys: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/genes/annotation")
-  let body = {accId: $accId, evidenceCodes: $evidenceCodes, speciesTypeKeys: $speciesTypeKeys} | compact
+  let body = {"accId": $acc_id, "evidenceCodes": $evidence_codes, "speciesTypeKeys": $species_type_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -631,8 +631,8 @@ export def "genes-annotation post" [
 #
 # GET /genes/annotation/{accId}
 # operationId: getAllAnnotatedGenesUsingGET
-export def "genes-annotation list" [
-  accId: string
+export def "genes-annotation get-all-annotated-genes-using-get" [
+  acc_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,7 +644,7 @@ export def "genes-annotation list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/genes/annotation/($accId)")
+  let full_url = (build-url $base ({acc_id: $acc_id} | format pattern "/genes/annotation/{acc_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -654,9 +654,9 @@ export def "genes-annotation list" [
 #
 # GET /genes/annotation/{accId}/{speciesTypeKey}
 # operationId: getGenesAnnotatedUsingGET
-export def "genes-annotation get" [
-  accId: string
-  speciesTypeKey: int
+export def "genes-annotation get-genes-annotated-using-get" [
+  acc_id: string
+  species_type_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,7 +668,7 @@ export def "genes-annotation get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/genes/annotation/($accId)/($speciesTypeKey)")
+  let full_url = (build-url $base ({acc_id: $acc_id, species_type_key: $species_type_key} | format pattern "/genes/annotation/{acc_id}/{species_type_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -680,7 +680,7 @@ export def "genes-annotation get" [
 # operationId: getGenesByKeywordUsingGET
 export def "genes-keyword get" [
   keyword: string
-  speciesTypeKey: int
+  species_type_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,7 +692,7 @@ export def "genes-keyword get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/genes/keyword/($keyword)/($speciesTypeKey)")
+  let full_url = (build-url $base ({keyword: $keyword, species_type_key: $species_type_key} | format pattern "/genes/keyword/{keyword}/{species_type_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -703,7 +703,7 @@ export def "genes-keyword get" [
 # GET /genes/map/{mapKey}
 # operationId: getGeneByMapKeyUsingGET
 export def "genes-map get" [
-  mapKey: int
+  map_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,7 +715,7 @@ export def "genes-map get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/genes/map/($mapKey)")
+  let full_url = (build-url $base ({map_key: $map_key} | format pattern "/genes/map/{map_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -729,7 +729,7 @@ export def "genes-mapped get" [
   chr: string
   start: int
   stop: int
-  mapKey: int
+  map_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,7 +741,7 @@ export def "genes-mapped get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/genes/mapped/($chr)/($start)/($stop)/($mapKey)")
+  let full_url = (build-url $base ({chr: $chr, start: $start, stop: $stop, map_key: $map_key} | format pattern "/genes/mapped/{chr}/{start}/{stop}/{map_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -751,7 +751,7 @@ export def "genes-mapped get" [
 #
 # POST /genes/orthologs
 # operationId: getOrthologsByListUsingPOST
-export def "genes-orthologs post" [
+export def "genes-orthologs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -760,14 +760,14 @@ export def "genes-orthologs post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rgdIds: list
-  --speciesTypeKeys: list
+  --rgd-ids: list
+  --species-type-keys: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/genes/orthologs")
-  let body = {rgdIds: $rgdIds, speciesTypeKeys: $speciesTypeKeys} | compact
+  let body = {"rgdIds": $rgd_ids, "speciesTypeKeys": $species_type_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -778,8 +778,8 @@ export def "genes-orthologs post" [
 #
 # GET /genes/orthologs/{rgdId}
 # operationId: getGeneOrthologsUsingGET
-export def "genes-orthologs get" [
-  rgdId: int
+export def "genes-orthologs get-gene-orthologs-using-get" [
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -791,7 +791,7 @@ export def "genes-orthologs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/genes/orthologs/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/genes/orthologs/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -801,11 +801,11 @@ export def "genes-orthologs get" [
 #
 # GET /genes/region/{chr}/{start}/{stop}/{mapKey}
 # operationId: getGenesInRegionUsingGET
-export def "genes-region get" [
+export def "genes-region get-genes-in-region-using-get" [
   chr: string
   start: int
   stop: int
-  mapKey: int
+  map_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -817,7 +817,7 @@ export def "genes-region get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/genes/region/($chr)/($start)/($stop)/($mapKey)")
+  let full_url = (build-url $base ({chr: $chr, start: $start, stop: $stop, map_key: $map_key} | format pattern "/genes/region/{chr}/{start}/{stop}/{map_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -828,7 +828,7 @@ export def "genes-region get" [
 # GET /genes/species/{speciesTypeKey}
 # operationId: getGenesBySpeciesUsingGET
 export def "genes-species get" [
-  speciesTypeKey: int
+  species_type_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -840,7 +840,7 @@ export def "genes-species get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/genes/species/($speciesTypeKey)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key} | format pattern "/genes/species/{species_type_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -854,7 +854,7 @@ export def "genes get-by-chr-start-stop-mapKey" [
   chr: string
   start: int
   stop: int
-  mapKey: int
+  map_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -866,7 +866,7 @@ export def "genes get-by-chr-start-stop-mapKey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/genes/($chr)/($start)/($stop)/($mapKey)")
+  let full_url = (build-url $base ({chr: $chr, start: $start, stop: $stop, map_key: $map_key} | format pattern "/genes/{chr}/{start}/{stop}/{map_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -877,7 +877,7 @@ export def "genes get-by-chr-start-stop-mapKey" [
 # GET /genes/{rgdId}
 # operationId: getGeneByRgdIdUsingGET
 export def "genes get-by-rgdId" [
-  rgdId: int
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -889,7 +889,7 @@ export def "genes get-by-rgdId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/genes/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/genes/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -901,7 +901,7 @@ export def "genes get-by-rgdId" [
 # operationId: getGeneBySymbolUsingGET
 export def "genes get-by-symbol-speciesTypeKey" [
   symbol: string
-  speciesTypeKey: int
+  species_type_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,7 +913,7 @@ export def "genes get-by-symbol-speciesTypeKey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/genes/($symbol)/($speciesTypeKey)")
+  let full_url = (build-url $base ({symbol: $symbol, species_type_key: $species_type_key} | format pattern "/genes/{symbol}/{species_type_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -923,7 +923,7 @@ export def "genes get-by-symbol-speciesTypeKey" [
 #
 # GET /lookup/geneTypes
 # operationId: getGeneTypesUsingGET
-export def "lookup-gene-types get" [
+export def "lookup-gene-types get-gene-types-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -945,7 +945,7 @@ export def "lookup-gene-types get" [
 #
 # POST /lookup/id/map/EnsemblGene
 # operationId: getEnsemblGeneMappingUsingPOST
-export def "lookup-id-map-ensembl-gene post" [
+export def "lookup-id-map-ensembl-gene get-ensembl-gene-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -954,13 +954,13 @@ export def "lookup-id-map-ensembl-gene post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rgdIds: list
+  --rgd-ids: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/EnsemblGene")
-  let body = {rgdIds: $rgdIds} | compact
+  let body = {"rgdIds": $rgd_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -971,8 +971,8 @@ export def "lookup-id-map-ensembl-gene post" [
 #
 # GET /lookup/id/map/EnsemblGene/{rgdId}
 # operationId: getEnsemblGeneMappingUsingGET
-export def "lookup-id-map-ensembl-gene get" [
-  rgdId: int
+export def "lookup-id-map-ensembl-gene get-ensembl-gene-mapping-using-get" [
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -984,7 +984,7 @@ export def "lookup-id-map-ensembl-gene get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lookup/id/map/EnsemblGene/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/lookup/id/map/EnsemblGene/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -994,7 +994,7 @@ export def "lookup-id-map-ensembl-gene get" [
 #
 # POST /lookup/id/map/EnsemblProtein
 # operationId: getEnsemblProteinMappingUsingPOST
-export def "lookup-id-map-ensembl-protein post" [
+export def "lookup-id-map-ensembl-protein get-ensembl-protein-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1003,13 +1003,13 @@ export def "lookup-id-map-ensembl-protein post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rgdIds: list
+  --rgd-ids: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/EnsemblProtein")
-  let body = {rgdIds: $rgdIds} | compact
+  let body = {"rgdIds": $rgd_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1020,8 +1020,8 @@ export def "lookup-id-map-ensembl-protein post" [
 #
 # GET /lookup/id/map/EnsemblProtein/{rgdId}
 # operationId: getEnsemblProteinMappingUsingGET
-export def "lookup-id-map-ensembl-protein get" [
-  rgdId: int
+export def "lookup-id-map-ensembl-protein get-ensembl-protein-mapping-using-get" [
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1033,7 +1033,7 @@ export def "lookup-id-map-ensembl-protein get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lookup/id/map/EnsemblProtein/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/lookup/id/map/EnsemblProtein/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1043,7 +1043,7 @@ export def "lookup-id-map-ensembl-protein get" [
 #
 # POST /lookup/id/map/EnsemblTranscript
 # operationId: getEnsemblTranscriptMappingUsingPOST
-export def "lookup-id-map-ensembl-transcript post" [
+export def "lookup-id-map-ensembl-transcript get-ensembl-transcript-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,13 +1052,13 @@ export def "lookup-id-map-ensembl-transcript post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rgdIds: list
+  --rgd-ids: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/EnsemblTranscript")
-  let body = {rgdIds: $rgdIds} | compact
+  let body = {"rgdIds": $rgd_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1069,8 +1069,8 @@ export def "lookup-id-map-ensembl-transcript post" [
 #
 # GET /lookup/id/map/EnsemblTranscript/{rgdId}
 # operationId: getEnsemblTranscriptMappingUsingGET
-export def "lookup-id-map-ensembl-transcript get" [
-  rgdId: int
+export def "lookup-id-map-ensembl-transcript get-ensembl-transcript-mapping-using-get" [
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1082,7 +1082,7 @@ export def "lookup-id-map-ensembl-transcript get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lookup/id/map/EnsemblTranscript/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/lookup/id/map/EnsemblTranscript/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1092,7 +1092,7 @@ export def "lookup-id-map-ensembl-transcript get" [
 #
 # POST /lookup/id/map/GTEx
 # operationId: getGTEXMappingUsingPOST
-export def "lookup-id-map-gt-ex post" [
+export def "lookup-id-map-gt-ex get-gtex-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1101,13 +1101,13 @@ export def "lookup-id-map-gt-ex post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rgdIds: list
+  --rgd-ids: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/GTEx")
-  let body = {rgdIds: $rgdIds} | compact
+  let body = {"rgdIds": $rgd_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1118,8 +1118,8 @@ export def "lookup-id-map-gt-ex post" [
 #
 # GET /lookup/id/map/GTEx/{rgdId}
 # operationId: getGTEXMappingUsingGET
-export def "lookup-id-map-gt-ex get" [
-  rgdId: int
+export def "lookup-id-map-gt-ex get-gtex-mapping-using-get" [
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1131,7 +1131,7 @@ export def "lookup-id-map-gt-ex get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lookup/id/map/GTEx/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/lookup/id/map/GTEx/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1141,7 +1141,7 @@ export def "lookup-id-map-gt-ex get" [
 #
 # POST /lookup/id/map/GenBankNucleotide
 # operationId: getGenBankNucleotideMappingUsingPOST
-export def "lookup-id-map-gen-bank-nucleotide post" [
+export def "lookup-id-map-gen-bank-nucleotide get-gen-bank-nucleotide-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1150,13 +1150,13 @@ export def "lookup-id-map-gen-bank-nucleotide post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rgdIds: list
+  --rgd-ids: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/GenBankNucleotide")
-  let body = {rgdIds: $rgdIds} | compact
+  let body = {"rgdIds": $rgd_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1167,8 +1167,8 @@ export def "lookup-id-map-gen-bank-nucleotide post" [
 #
 # GET /lookup/id/map/GenBankNucleotide/{rgdId}
 # operationId: getGenBankNucleotideMappingUsingGET
-export def "lookup-id-map-gen-bank-nucleotide get" [
-  rgdId: int
+export def "lookup-id-map-gen-bank-nucleotide get-gen-bank-nucleotide-mapping-using-get" [
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1180,7 +1180,7 @@ export def "lookup-id-map-gen-bank-nucleotide get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lookup/id/map/GenBankNucleotide/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/lookup/id/map/GenBankNucleotide/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1190,7 +1190,7 @@ export def "lookup-id-map-gen-bank-nucleotide get" [
 #
 # POST /lookup/id/map/GenBankProtein
 # operationId: getGenBankProteinMappingUsingPOST
-export def "lookup-id-map-gen-bank-protein post" [
+export def "lookup-id-map-gen-bank-protein get-gen-bank-protein-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1199,13 +1199,13 @@ export def "lookup-id-map-gen-bank-protein post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rgdIds: list
+  --rgd-ids: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/GenBankProtein")
-  let body = {rgdIds: $rgdIds} | compact
+  let body = {"rgdIds": $rgd_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1216,8 +1216,8 @@ export def "lookup-id-map-gen-bank-protein post" [
 #
 # GET /lookup/id/map/GenBankProtein/{rgdId}
 # operationId: getGenBankProteinMappingUsingGET
-export def "lookup-id-map-gen-bank-protein get" [
-  rgdId: int
+export def "lookup-id-map-gen-bank-protein get-gen-bank-protein-mapping-using-get" [
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1229,7 +1229,7 @@ export def "lookup-id-map-gen-bank-protein get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lookup/id/map/GenBankProtein/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/lookup/id/map/GenBankProtein/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1239,7 +1239,7 @@ export def "lookup-id-map-gen-bank-protein get" [
 #
 # POST /lookup/id/map/HGNC
 # operationId: getHGNCMappingUsingPOST
-export def "lookup-id-map-hgnc post" [
+export def "lookup-id-map-hgnc get-hgnc-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1248,13 +1248,13 @@ export def "lookup-id-map-hgnc post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rgdIds: list
+  --rgd-ids: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/HGNC")
-  let body = {rgdIds: $rgdIds} | compact
+  let body = {"rgdIds": $rgd_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1265,8 +1265,8 @@ export def "lookup-id-map-hgnc post" [
 #
 # GET /lookup/id/map/HGNC/{rgdId}
 # operationId: getHGNCMappingUsingGET
-export def "lookup-id-map-hgnc get" [
-  rgdId: int
+export def "lookup-id-map-hgnc get-hgnc-mapping-using-get" [
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1278,7 +1278,7 @@ export def "lookup-id-map-hgnc get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lookup/id/map/HGNC/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/lookup/id/map/HGNC/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1288,7 +1288,7 @@ export def "lookup-id-map-hgnc get" [
 #
 # POST /lookup/id/map/MGI
 # operationId: getMGIMappingUsingPOST
-export def "lookup-id-map-mgi post" [
+export def "lookup-id-map-mgi get-mgi-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1297,13 +1297,13 @@ export def "lookup-id-map-mgi post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rgdIds: list
+  --rgd-ids: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/MGI")
-  let body = {rgdIds: $rgdIds} | compact
+  let body = {"rgdIds": $rgd_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1314,8 +1314,8 @@ export def "lookup-id-map-mgi post" [
 #
 # GET /lookup/id/map/MGI/{rgdId}
 # operationId: getMGIMappingUsingGET
-export def "lookup-id-map-mgi get" [
-  rgdId: int
+export def "lookup-id-map-mgi get-mgi-mapping-using-get" [
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1327,7 +1327,7 @@ export def "lookup-id-map-mgi get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lookup/id/map/MGI/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/lookup/id/map/MGI/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1337,7 +1337,7 @@ export def "lookup-id-map-mgi get" [
 #
 # POST /lookup/id/map/NCBIGene
 # operationId: getNCBIGeneMappingUsingPOST
-export def "lookup-id-map-ncbi-gene post" [
+export def "lookup-id-map-ncbi-gene get-ncbi-gene-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1346,13 +1346,13 @@ export def "lookup-id-map-ncbi-gene post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rgdIds: list
+  --rgd-ids: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/NCBIGene")
-  let body = {rgdIds: $rgdIds} | compact
+  let body = {"rgdIds": $rgd_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1363,8 +1363,8 @@ export def "lookup-id-map-ncbi-gene post" [
 #
 # GET /lookup/id/map/NCBIGene/{rgdId}
 # operationId: getNCBIGeneMappingUsingGET
-export def "lookup-id-map-ncbi-gene get" [
-  rgdId: int
+export def "lookup-id-map-ncbi-gene get-ncbi-gene-mapping-using-get" [
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1376,7 +1376,7 @@ export def "lookup-id-map-ncbi-gene get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lookup/id/map/NCBIGene/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/lookup/id/map/NCBIGene/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1386,7 +1386,7 @@ export def "lookup-id-map-ncbi-gene get" [
 #
 # POST /lookup/id/map/UniProt
 # operationId: getUniProtMappingUsingPOST
-export def "lookup-id-map-uni-prot post" [
+export def "lookup-id-map-uni-prot get-uni-prot-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1395,13 +1395,13 @@ export def "lookup-id-map-uni-prot post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rgdIds: list
+  --rgd-ids: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/UniProt")
-  let body = {rgdIds: $rgdIds} | compact
+  let body = {"rgdIds": $rgd_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1412,8 +1412,8 @@ export def "lookup-id-map-uni-prot post" [
 #
 # GET /lookup/id/map/UniProt/{rgdId}
 # operationId: getUniProtMappingUsingGET
-export def "lookup-id-map-uni-prot get" [
-  rgdId: int
+export def "lookup-id-map-uni-prot get-uni-prot-mapping-using-get" [
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1425,7 +1425,7 @@ export def "lookup-id-map-uni-prot get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lookup/id/map/UniProt/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/lookup/id/map/UniProt/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1435,8 +1435,8 @@ export def "lookup-id-map-uni-prot get" [
 #
 # GET /lookup/maps/{speciesTypeKey}
 # operationId: getMapsUsingGET
-export def "lookup-maps get" [
-  speciesTypeKey: int
+export def "lookup-maps get-maps-using-get" [
+  species_type_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1448,7 +1448,7 @@ export def "lookup-maps get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lookup/maps/($speciesTypeKey)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key} | format pattern "/lookup/maps/{species_type_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1458,7 +1458,7 @@ export def "lookup-maps get" [
 #
 # GET /lookup/speciesTypeKeys
 # operationId: getSpeciesTypesUsingGET
-export def "lookup-species-type-keys get" [
+export def "lookup-species-type-keys get-species-types-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1480,8 +1480,8 @@ export def "lookup-species-type-keys get" [
 #
 # GET /lookup/standardUnit/{accId}
 # operationId: getMapsUsingGET_1
-export def "lookup-standard-unit get-by-accId" [
-  accId: string
+export def "lookup-standard-unit get-maps-using-get-by-accId" [
+  acc_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1493,7 +1493,7 @@ export def "lookup-standard-unit get-by-accId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lookup/standardUnit/($accId)")
+  let full_url = (build-url $base ({acc_id: $acc_id} | format pattern "/lookup/standardUnit/{acc_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1505,7 +1505,7 @@ export def "lookup-standard-unit get-by-accId" [
 # operationId: getChromosomeByAssemblyUsingGET
 export def "maps-chr get" [
   chromosome: string
-  mapKey: int
+  map_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1517,7 +1517,7 @@ export def "maps-chr get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/maps/chr/($chromosome)/($mapKey)")
+  let full_url = (build-url $base ({chromosome: $chromosome, map_key: $map_key} | format pattern "/maps/chr/{chromosome}/{map_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1527,8 +1527,8 @@ export def "maps-chr get" [
 #
 # GET /maps/chr/{mapKey}
 # operationId: getChromosomesByAssemblyUsingGET
-export def "maps-chr list" [
-  mapKey: int
+export def "maps-chr get-chromosomes" [
+  map_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1540,7 +1540,7 @@ export def "maps-chr list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/maps/chr/($mapKey)")
+  let full_url = (build-url $base ({map_key: $map_key} | format pattern "/maps/chr/{map_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1551,7 +1551,7 @@ export def "maps-chr list" [
 # GET /maps/{speciesTypeKey}
 # operationId: getMapsBySpeciesUsingGET
 export def "maps get" [
-  speciesTypeKey: int
+  species_type_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1563,7 +1563,7 @@ export def "maps get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/maps/($speciesTypeKey)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key} | format pattern "/maps/{species_type_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1573,8 +1573,8 @@ export def "maps get" [
 #
 # GET /ontology/ont/{accId}
 # operationId: getOntDagsUsingGET
-export def "ontology-ont get" [
-  accId: string
+export def "ontology-ont get-ont-dags-using-get" [
+  acc_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1586,7 +1586,7 @@ export def "ontology-ont get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ontology/ont/($accId)")
+  let full_url = (build-url $base ({acc_id: $acc_id} | format pattern "/ontology/ont/{acc_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1597,8 +1597,8 @@ export def "ontology-ont get" [
 # GET /ontology/term/{accId1}/{accId2}
 # operationId: isDescendantOfUsingGET
 export def "ontology-term isDescendantOfUsingGET" [
-  accId1: string
-  accId2: string
+  acc_id1: string
+  acc_id2: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1610,7 +1610,7 @@ export def "ontology-term isDescendantOfUsingGET" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ontology/term/($accId1)/($accId2)")
+  let full_url = (build-url $base ({acc_id1: $acc_id1, acc_id2: $acc_id2} | format pattern "/ontology/term/{acc_id1}/{acc_id2}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1620,8 +1620,8 @@ export def "ontology-term isDescendantOfUsingGET" [
 #
 # GET /ontology/term/{accId}
 # operationId: getTermUsingGET
-export def "ontology-term get" [
-  accId: string
+export def "ontology-term get-term-using-get" [
+  acc_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1633,7 +1633,7 @@ export def "ontology-term get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ontology/term/($accId)")
+  let full_url = (build-url $base ({acc_id: $acc_id} | format pattern "/ontology/term/{acc_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1643,8 +1643,8 @@ export def "ontology-term get" [
 #
 # GET /pathways/diagrams/search/{searchString}
 # operationId: searchPathwaysUsingGET
-export def "pathways-diagrams-search searchPathwaysUsingGET" [
-  searchString: string
+export def "pathways-diagrams-search list-pathways-using-get" [
+  search_string: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1656,7 +1656,7 @@ export def "pathways-diagrams-search searchPathwaysUsingGET" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pathways/diagrams/search/($searchString)")
+  let full_url = (build-url $base ({search_string: $search_string} | format pattern "/pathways/diagrams/search/{search_string}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1666,7 +1666,7 @@ export def "pathways-diagrams-search searchPathwaysUsingGET" [
 #
 # GET /pathways/diagramsForCategory/{category}
 # operationId: getPathwaysWithDiagramsForCategoryUsingGET
-export def "pathways-diagrams-for-category get" [
+export def "pathways-diagrams-for-category get-pathways-with-diagrams-for-using-get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1679,7 +1679,7 @@ export def "pathways-diagrams-for-category get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pathways/diagramsForCategory/($category)")
+  let full_url = (build-url $base ({category: $category} | format pattern "/pathways/diagramsForCategory/{category}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1689,10 +1689,10 @@ export def "pathways-diagrams-for-category get" [
 #
 # GET /phenotype/phenominer/chart/{speciesTypeKey}/{refRgdId}/{termString}
 # operationId: getChartInfoUsingGET
-export def "phenotype-phenominer-chart get" [
-  speciesTypeKey: int
-  refRgdId: int
-  termString: string
+export def "phenotype-phenominer-chart get-chart-info-using-get" [
+  species_type_key: int
+  ref_rgd_id: int
+  term_string: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1704,7 +1704,7 @@ export def "phenotype-phenominer-chart get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/phenotype/phenominer/chart/($speciesTypeKey)/($refRgdId)/($termString)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, ref_rgd_id: $ref_rgd_id, term_string: $term_string} | format pattern "/phenotype/phenominer/chart/{species_type_key}/{ref_rgd_id}/{term_string}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1714,9 +1714,9 @@ export def "phenotype-phenominer-chart get" [
 #
 # GET /phenotype/phenominer/chart/{speciesTypeKey}/{termString}
 # operationId: getChartInfoUsingGET_1
-export def "phenotype-phenominer-chart get-by-speciesTypeKey-termString" [
-  speciesTypeKey: int
-  termString: string
+export def "phenotype-phenominer-chart get-chart-info-using-get-by-speciesTypeKey-termString" [
+  species_type_key: int
+  term_string: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1728,7 +1728,7 @@ export def "phenotype-phenominer-chart get-by-speciesTypeKey-termString" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/phenotype/phenominer/chart/($speciesTypeKey)/($termString)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, term_string: $term_string} | format pattern "/phenotype/phenominer/chart/{species_type_key}/{term_string}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1742,7 +1742,7 @@ export def "qtls-mapped get" [
   chr: string
   start: int
   stop: int
-  mapKey: int
+  map_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1754,7 +1754,7 @@ export def "qtls-mapped get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/qtls/mapped/($chr)/($start)/($stop)/($mapKey)")
+  let full_url = (build-url $base ({chr: $chr, start: $start, stop: $stop, map_key: $map_key} | format pattern "/qtls/mapped/{chr}/{start}/{stop}/{map_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1764,11 +1764,11 @@ export def "qtls-mapped get" [
 #
 # GET /qtls/{chr}/{start}/{stop}/{mapKey}
 # operationId: getQtlListByPositionUsingGET
-export def "qtls get-by-chr-start-stop-mapKey" [
+export def "qtls get-qtl-list" [
   chr: string
   start: int
   stop: int
-  mapKey: int
+  map_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1780,7 +1780,7 @@ export def "qtls get-by-chr-start-stop-mapKey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/qtls/($chr)/($start)/($stop)/($mapKey)")
+  let full_url = (build-url $base ({chr: $chr, start: $start, stop: $stop, map_key: $map_key} | format pattern "/qtls/{chr}/{start}/{stop}/{map_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1790,8 +1790,8 @@ export def "qtls get-by-chr-start-stop-mapKey" [
 #
 # GET /qtls/{rgdId}
 # operationId: getQTLByRgdIdUsingGET
-export def "qtls get-by-rgdId" [
-  rgdId: int
+export def "qtls get" [
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1803,7 +1803,7 @@ export def "qtls get-by-rgdId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/qtls/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/qtls/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1817,7 +1817,7 @@ export def "sslps-mapped get" [
   chr: string
   start: int
   stop: int
-  mapKey: int
+  map_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1829,7 +1829,7 @@ export def "sslps-mapped get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sslps/mapped/($chr)/($start)/($stop)/($mapKey)")
+  let full_url = (build-url $base ({chr: $chr, start: $start, stop: $stop, map_key: $map_key} | format pattern "/sslps/mapped/{chr}/{start}/{stop}/{map_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1839,9 +1839,9 @@ export def "sslps-mapped get" [
 #
 # GET /stats/count/activeObject/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getActiveObjectCountUsingGET
-export def "stats-count-active-object get" [
-  speciesTypeKey: int
-  dateYYYYMMDD: string
+export def "stats-count-active-object get-active-object-count-using-get" [
+  species_type_key: int
+  date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1853,7 +1853,7 @@ export def "stats-count-active-object get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/count/activeObject/($speciesTypeKey)/($dateYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_yyyymmdd: $date_yyyymmdd} | format pattern "/stats/count/activeObject/{species_type_key}/{date_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1863,9 +1863,9 @@ export def "stats-count-active-object get" [
 #
 # GET /stats/count/geneType/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getGeneTypeCountUsingGET
-export def "stats-count-gene-type get" [
-  speciesTypeKey: int
-  dateYYYYMMDD: string
+export def "stats-count-gene-type get-gene-type-count-using-get" [
+  species_type_key: int
+  date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1877,7 +1877,7 @@ export def "stats-count-gene-type get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/count/geneType/($speciesTypeKey)/($dateYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_yyyymmdd: $date_yyyymmdd} | format pattern "/stats/count/geneType/{species_type_key}/{date_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1887,9 +1887,9 @@ export def "stats-count-gene-type get" [
 #
 # GET /stats/count/objectStatus/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getObjectStatusCountUsingGET
-export def "stats-count-object-status get" [
-  speciesTypeKey: int
-  dateYYYYMMDD: string
+export def "stats-count-object-status get-object-status-count-using-get" [
+  species_type_key: int
+  date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1901,7 +1901,7 @@ export def "stats-count-object-status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/count/objectStatus/($speciesTypeKey)/($dateYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_yyyymmdd: $date_yyyymmdd} | format pattern "/stats/count/objectStatus/{species_type_key}/{date_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1911,9 +1911,9 @@ export def "stats-count-object-status get" [
 #
 # GET /stats/count/objectWithRefSeq/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getObjectsWithRefSeqCountUsingGET
-export def "stats-count-object-with-ref-seq get" [
-  speciesTypeKey: int
-  dateYYYYMMDD: string
+export def "stats-count-object-with-ref-seq get-objects-with-ref-seq-count-using-get" [
+  species_type_key: int
+  date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1925,7 +1925,7 @@ export def "stats-count-object-with-ref-seq get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/count/objectWithRefSeq/($speciesTypeKey)/($dateYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_yyyymmdd: $date_yyyymmdd} | format pattern "/stats/count/objectWithRefSeq/{species_type_key}/{date_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1935,9 +1935,9 @@ export def "stats-count-object-with-ref-seq get" [
 #
 # GET /stats/count/objectWithReference/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getObjectsWithReferenceCountUsingGET
-export def "stats-count-object-with-reference get" [
-  speciesTypeKey: int
-  dateYYYYMMDD: string
+export def "stats-count-object-with-reference get-objects-with-reference-count-using-get" [
+  species_type_key: int
+  date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1949,7 +1949,7 @@ export def "stats-count-object-with-reference get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/count/objectWithReference/($speciesTypeKey)/($dateYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_yyyymmdd: $date_yyyymmdd} | format pattern "/stats/count/objectWithReference/{species_type_key}/{date_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1959,10 +1959,10 @@ export def "stats-count-object-with-reference get" [
 #
 # GET /stats/count/objectWithXdb/{speciesTypeKey}/{objectKey}/{dateYYYYMMDD}
 # operationId: getObjectsWithXDBsCountUsingGET
-export def "stats-count-object-with-xdb get" [
-  speciesTypeKey: int
-  objectKey: int
-  dateYYYYMMDD: string
+export def "stats-count-object-with-xdb get-objects-with-xd-bs-count-using-get" [
+  species_type_key: int
+  object_key: int
+  date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1974,7 +1974,7 @@ export def "stats-count-object-with-xdb get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/count/objectWithXdb/($speciesTypeKey)/($objectKey)/($dateYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, object_key: $object_key, date_yyyymmdd: $date_yyyymmdd} | format pattern "/stats/count/objectWithXdb/{species_type_key}/{object_key}/{date_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1984,9 +1984,9 @@ export def "stats-count-object-with-xdb get" [
 #
 # GET /stats/count/proteinInteraction/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getProteinInteractionCountUsingGET
-export def "stats-count-protein-interaction get" [
-  speciesTypeKey: int
-  dateYYYYMMDD: string
+export def "stats-count-protein-interaction get-protein-interaction-count-using-get" [
+  species_type_key: int
+  date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1998,7 +1998,7 @@ export def "stats-count-protein-interaction get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/count/proteinInteraction/($speciesTypeKey)/($dateYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_yyyymmdd: $date_yyyymmdd} | format pattern "/stats/count/proteinInteraction/{species_type_key}/{date_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2008,9 +2008,9 @@ export def "stats-count-protein-interaction get" [
 #
 # GET /stats/count/qtlInheritanceType/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getQtlInheritanceTypeCountUsingGET
-export def "stats-count-qtl-inheritance-type get" [
-  speciesTypeKey: int
-  dateYYYYMMDD: string
+export def "stats-count-qtl-inheritance-type get-qtl-inheritance-type-count-using-get" [
+  species_type_key: int
+  date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2022,7 +2022,7 @@ export def "stats-count-qtl-inheritance-type get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/count/qtlInheritanceType/($speciesTypeKey)/($dateYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_yyyymmdd: $date_yyyymmdd} | format pattern "/stats/count/qtlInheritanceType/{species_type_key}/{date_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2032,9 +2032,9 @@ export def "stats-count-qtl-inheritance-type get" [
 #
 # GET /stats/count/retiredObject/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getRetiredObjectCountUsingGET
-export def "stats-count-retired-object get" [
-  speciesTypeKey: int
-  dateYYYYMMDD: string
+export def "stats-count-retired-object get-retired-object-count-using-get" [
+  species_type_key: int
+  date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2046,7 +2046,7 @@ export def "stats-count-retired-object get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/count/retiredObject/($speciesTypeKey)/($dateYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_yyyymmdd: $date_yyyymmdd} | format pattern "/stats/count/retiredObject/{species_type_key}/{date_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2056,9 +2056,9 @@ export def "stats-count-retired-object get" [
 #
 # GET /stats/count/strainType/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getStrainTypeCountUsingGET
-export def "stats-count-strain-type get" [
-  speciesTypeKey: int
-  dateYYYYMMDD: string
+export def "stats-count-strain-type get-strain-type-count-using-get" [
+  species_type_key: int
+  date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2070,7 +2070,7 @@ export def "stats-count-strain-type get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/count/strainType/($speciesTypeKey)/($dateYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_yyyymmdd: $date_yyyymmdd} | format pattern "/stats/count/strainType/{species_type_key}/{date_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2080,9 +2080,9 @@ export def "stats-count-strain-type get" [
 #
 # GET /stats/count/withdrawnObject/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getWithdrawnObjectCountUsingGET
-export def "stats-count-withdrawn-object get" [
-  speciesTypeKey: int
-  dateYYYYMMDD: string
+export def "stats-count-withdrawn-object get-withdrawn-object-count-using-get" [
+  species_type_key: int
+  date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2094,7 +2094,7 @@ export def "stats-count-withdrawn-object get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/count/withdrawnObject/($speciesTypeKey)/($dateYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_yyyymmdd: $date_yyyymmdd} | format pattern "/stats/count/withdrawnObject/{species_type_key}/{date_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2104,9 +2104,9 @@ export def "stats-count-withdrawn-object get" [
 #
 # GET /stats/count/xdb/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getXdbsCountUsingGET
-export def "stats-count-xdb get" [
-  speciesTypeKey: int
-  dateYYYYMMDD: string
+export def "stats-count-xdb get-xdbs-count-using-get" [
+  species_type_key: int
+  date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2118,7 +2118,7 @@ export def "stats-count-xdb get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/count/xdb/($speciesTypeKey)/($dateYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_yyyymmdd: $date_yyyymmdd} | format pattern "/stats/count/xdb/{species_type_key}/{date_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2128,10 +2128,10 @@ export def "stats-count-xdb get" [
 #
 # GET /stats/diff/activeObject/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getActiveObjectDiffUsingGET
-export def "stats-diff-active-object get" [
-  speciesTypeKey: int
-  dateFromYYYYMMDD: string
-  dateToYYYYMMDD: string
+export def "stats-diff-active-object get-active-object-diff-using-get" [
+  species_type_key: int
+  date_from_yyyymmdd: string
+  date_to_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2143,7 +2143,7 @@ export def "stats-diff-active-object get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/diff/activeObject/($speciesTypeKey)/($dateFromYYYYMMDD)/($dateToYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_from_yyyymmdd: $date_from_yyyymmdd, date_to_yyyymmdd: $date_to_yyyymmdd} | format pattern "/stats/diff/activeObject/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2153,10 +2153,10 @@ export def "stats-diff-active-object get" [
 #
 # GET /stats/diff/geneType/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getGeneTypeDiffUsingGET
-export def "stats-diff-gene-type get" [
-  speciesTypeKey: int
-  dateFromYYYYMMDD: string
-  dateToYYYYMMDD: string
+export def "stats-diff-gene-type get-gene-type-diff-using-get" [
+  species_type_key: int
+  date_from_yyyymmdd: string
+  date_to_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2168,7 +2168,7 @@ export def "stats-diff-gene-type get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/diff/geneType/($speciesTypeKey)/($dateFromYYYYMMDD)/($dateToYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_from_yyyymmdd: $date_from_yyyymmdd, date_to_yyyymmdd: $date_to_yyyymmdd} | format pattern "/stats/diff/geneType/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2178,10 +2178,10 @@ export def "stats-diff-gene-type get" [
 #
 # GET /stats/diff/objectStatus/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getObjectStatusDiffUsingGET
-export def "stats-diff-object-status get" [
-  speciesTypeKey: int
-  dateFromYYYYMMDD: string
-  dateToYYYYMMDD: string
+export def "stats-diff-object-status get-object-status-diff-using-get" [
+  species_type_key: int
+  date_from_yyyymmdd: string
+  date_to_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2193,7 +2193,7 @@ export def "stats-diff-object-status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/diff/objectStatus/($speciesTypeKey)/($dateFromYYYYMMDD)/($dateToYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_from_yyyymmdd: $date_from_yyyymmdd, date_to_yyyymmdd: $date_to_yyyymmdd} | format pattern "/stats/diff/objectStatus/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2203,10 +2203,10 @@ export def "stats-diff-object-status get" [
 #
 # GET /stats/diff/objectWithRefSeq/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getObjectsWithRefSeqDiffUsingGET
-export def "stats-diff-object-with-ref-seq get" [
-  speciesTypeKey: int
-  dateFromYYYYMMDD: string
-  dateToYYYYMMDD: string
+export def "stats-diff-object-with-ref-seq get-objects-with-ref-seq-diff-using-get" [
+  species_type_key: int
+  date_from_yyyymmdd: string
+  date_to_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2218,7 +2218,7 @@ export def "stats-diff-object-with-ref-seq get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/diff/objectWithRefSeq/($speciesTypeKey)/($dateFromYYYYMMDD)/($dateToYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_from_yyyymmdd: $date_from_yyyymmdd, date_to_yyyymmdd: $date_to_yyyymmdd} | format pattern "/stats/diff/objectWithRefSeq/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2228,10 +2228,10 @@ export def "stats-diff-object-with-ref-seq get" [
 #
 # GET /stats/diff/objectWithReference/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getObjectsWithReferenceDiffUsingGET
-export def "stats-diff-object-with-reference get" [
-  speciesTypeKey: int
-  dateFromYYYYMMDD: string
-  dateToYYYYMMDD: string
+export def "stats-diff-object-with-reference get-objects-with-reference-diff-using-get" [
+  species_type_key: int
+  date_from_yyyymmdd: string
+  date_to_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2243,7 +2243,7 @@ export def "stats-diff-object-with-reference get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/diff/objectWithReference/($speciesTypeKey)/($dateFromYYYYMMDD)/($dateToYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_from_yyyymmdd: $date_from_yyyymmdd, date_to_yyyymmdd: $date_to_yyyymmdd} | format pattern "/stats/diff/objectWithReference/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2253,11 +2253,11 @@ export def "stats-diff-object-with-reference get" [
 #
 # GET /stats/diff/objectWithXdb/{speciesTypeKey}/{objectKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getObjectsWithXDBsDiffUsingGET
-export def "stats-diff-object-with-xdb get" [
-  speciesTypeKey: int
-  objectKey: int
-  dateFromYYYYMMDD: string
-  dateToYYYYMMDD: string
+export def "stats-diff-object-with-xdb get-objects-with-xd-bs-diff-using-get" [
+  species_type_key: int
+  object_key: int
+  date_from_yyyymmdd: string
+  date_to_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2269,7 +2269,7 @@ export def "stats-diff-object-with-xdb get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/diff/objectWithXdb/($speciesTypeKey)/($objectKey)/($dateFromYYYYMMDD)/($dateToYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, object_key: $object_key, date_from_yyyymmdd: $date_from_yyyymmdd, date_to_yyyymmdd: $date_to_yyyymmdd} | format pattern "/stats/diff/objectWithXdb/{species_type_key}/{object_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2279,10 +2279,10 @@ export def "stats-diff-object-with-xdb get" [
 #
 # GET /stats/diff/proteinInteraction/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getProteinInteractionDiffUsingGET
-export def "stats-diff-protein-interaction get" [
-  speciesTypeKey: int
-  dateFromYYYYMMDD: string
-  dateToYYYYMMDD: string
+export def "stats-diff-protein-interaction get-protein-interaction-diff-using-get" [
+  species_type_key: int
+  date_from_yyyymmdd: string
+  date_to_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2294,7 +2294,7 @@ export def "stats-diff-protein-interaction get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/diff/proteinInteraction/($speciesTypeKey)/($dateFromYYYYMMDD)/($dateToYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_from_yyyymmdd: $date_from_yyyymmdd, date_to_yyyymmdd: $date_to_yyyymmdd} | format pattern "/stats/diff/proteinInteraction/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2304,10 +2304,10 @@ export def "stats-diff-protein-interaction get" [
 #
 # GET /stats/diff/qtlInheritanceType/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getQtlInheritanceTypeDiffUsingGET
-export def "stats-diff-qtl-inheritance-type get" [
-  speciesTypeKey: int
-  dateFromYYYYMMDD: string
-  dateToYYYYMMDD: string
+export def "stats-diff-qtl-inheritance-type get-qtl-inheritance-type-diff-using-get" [
+  species_type_key: int
+  date_from_yyyymmdd: string
+  date_to_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2319,7 +2319,7 @@ export def "stats-diff-qtl-inheritance-type get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/diff/qtlInheritanceType/($speciesTypeKey)/($dateFromYYYYMMDD)/($dateToYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_from_yyyymmdd: $date_from_yyyymmdd, date_to_yyyymmdd: $date_to_yyyymmdd} | format pattern "/stats/diff/qtlInheritanceType/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2329,10 +2329,10 @@ export def "stats-diff-qtl-inheritance-type get" [
 #
 # GET /stats/diff/retiredObject/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getRetiredObjectDiffUsingGET
-export def "stats-diff-retired-object get" [
-  speciesTypeKey: int
-  dateFromYYYYMMDD: string
-  dateToYYYYMMDD: string
+export def "stats-diff-retired-object get-retired-object-diff-using-get" [
+  species_type_key: int
+  date_from_yyyymmdd: string
+  date_to_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2344,7 +2344,7 @@ export def "stats-diff-retired-object get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/diff/retiredObject/($speciesTypeKey)/($dateFromYYYYMMDD)/($dateToYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_from_yyyymmdd: $date_from_yyyymmdd, date_to_yyyymmdd: $date_to_yyyymmdd} | format pattern "/stats/diff/retiredObject/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2354,10 +2354,10 @@ export def "stats-diff-retired-object get" [
 #
 # GET /stats/diff/strainType/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getStrainTypeDiffUsingGET
-export def "stats-diff-strain-type get" [
-  speciesTypeKey: int
-  dateFromYYYYMMDD: string
-  dateToYYYYMMDD: string
+export def "stats-diff-strain-type get-strain-type-diff-using-get" [
+  species_type_key: int
+  date_from_yyyymmdd: string
+  date_to_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2369,7 +2369,7 @@ export def "stats-diff-strain-type get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/diff/strainType/($speciesTypeKey)/($dateFromYYYYMMDD)/($dateToYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_from_yyyymmdd: $date_from_yyyymmdd, date_to_yyyymmdd: $date_to_yyyymmdd} | format pattern "/stats/diff/strainType/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2379,10 +2379,10 @@ export def "stats-diff-strain-type get" [
 #
 # GET /stats/diff/withdrawnObject/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getWithdrawnObjectDiffUsingGET
-export def "stats-diff-withdrawn-object get" [
-  speciesTypeKey: int
-  dateFromYYYYMMDD: string
-  dateToYYYYMMDD: string
+export def "stats-diff-withdrawn-object get-withdrawn-object-diff-using-get" [
+  species_type_key: int
+  date_from_yyyymmdd: string
+  date_to_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2394,7 +2394,7 @@ export def "stats-diff-withdrawn-object get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/diff/withdrawnObject/($speciesTypeKey)/($dateFromYYYYMMDD)/($dateToYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_from_yyyymmdd: $date_from_yyyymmdd, date_to_yyyymmdd: $date_to_yyyymmdd} | format pattern "/stats/diff/withdrawnObject/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2404,10 +2404,10 @@ export def "stats-diff-withdrawn-object get" [
 #
 # GET /stats/diff/xdb/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getXdbsDiffUsingGET
-export def "stats-diff-xdb get" [
-  speciesTypeKey: int
-  dateFromYYYYMMDD: string
-  dateToYYYYMMDD: string
+export def "stats-diff-xdb get-xdbs-diff-using-get" [
+  species_type_key: int
+  date_from_yyyymmdd: string
+  date_to_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2419,7 +2419,7 @@ export def "stats-diff-xdb get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/diff/xdb/($speciesTypeKey)/($dateFromYYYYMMDD)/($dateToYYYYMMDD)")
+  let full_url = (build-url $base ({species_type_key: $species_type_key, date_from_yyyymmdd: $date_from_yyyymmdd, date_to_yyyymmdd: $date_to_yyyymmdd} | format pattern "/stats/diff/xdb/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2429,9 +2429,9 @@ export def "stats-diff-xdb get" [
 #
 # GET /stats/term/{accId}/{filterAccId}
 # operationId: getTermStatsUsingGET
-export def "stats-term get" [
-  accId: string
-  filterAccId: string
+export def "stats-term get-term-stats-using-get" [
+  acc_id: string
+  filter_acc_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2443,7 +2443,7 @@ export def "stats-term get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/term/($accId)/($filterAccId)")
+  let full_url = (build-url $base ({acc_id: $acc_id, filter_acc_id: $filter_acc_id} | format pattern "/stats/term/{acc_id}/{filter_acc_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2453,7 +2453,7 @@ export def "stats-term get" [
 #
 # GET /strains/all
 # operationId: getAllStrainsUsingGET
-export def "strains-all get" [
+export def "strains-all get-all-strains-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2479,7 +2479,7 @@ export def "strains get-by-chr-start-stop-mapKey" [
   chr: string
   start: int
   stop: int
-  mapKey: int
+  map_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2491,7 +2491,7 @@ export def "strains get-by-chr-start-stop-mapKey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/strains/($chr)/($start)/($stop)/($mapKey)")
+  let full_url = (build-url $base ({chr: $chr, start: $start, stop: $stop, map_key: $map_key} | format pattern "/strains/{chr}/{start}/{stop}/{map_key}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2502,7 +2502,7 @@ export def "strains get-by-chr-start-stop-mapKey" [
 # GET /strains/{rgdId}
 # operationId: getStrainByRgdIdUsingGET
 export def "strains get-by-rgdId" [
-  rgdId: int
+  rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2514,7 +2514,7 @@ export def "strains get-by-rgdId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/strains/($rgdId)")
+  let full_url = (build-url $base ({rgd_id: $rgd_id} | format pattern "/strains/{rgd_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

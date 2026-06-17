@@ -148,7 +148,7 @@ export def "setup-connection delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/connection/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/connection/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,7 +170,7 @@ export def "setup-connection get" [
 ]: nothing -> record<headers: table<key: string, value: string>, id: string, key: string, name: string, namespace: record<id: string, name: string, slug: string>, parameters: table<key: string, value: string>, token: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/connection/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/connection/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -234,7 +234,7 @@ export def "setup-connection-role delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/connection_role/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/connection_role/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,7 +256,7 @@ export def "setup-connection-role get" [
 ]: nothing -> record<connection: table<headers: list, id: string, key: string, name: string, namespace: record, parameters: list, token: string, url: string>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, webhook: table<headers: list, id: string, name: string, namespace: record, parameters: list, path: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/connection_role/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/connection_role/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -320,7 +320,7 @@ export def "setup-data-type delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/data_type/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/data_type/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -342,7 +342,7 @@ export def "setup-data-type get" [
 ]: nothing -> record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/data_type/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/data_type/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -406,7 +406,7 @@ export def "setup-flow delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/flow/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/flow/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -428,7 +428,7 @@ export def "setup-flow get" [
 ]: nothing -> record<active: bool, connection_role: record<connection: list<record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, webhook: list<record>>, custom_data_type: record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record>, event: record, id: string, name: string, namespace: record<id: string, name: string, slug: string>, notify_request: bool, notify_response: bool, response_translator: record<custom_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, source_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, style: string, target_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, transformation: string, type: string>, translator: record<custom_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, source_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, style: string, target_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, transformation: string, type: string>, webhook: record<headers: list<record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, parameters: list<record>, path: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/flow/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/flow/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -492,7 +492,7 @@ export def "setup-namespace delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/namespace/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/namespace/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -514,7 +514,7 @@ export def "setup-namespace get" [
 ]: nothing -> record<id: string, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/namespace/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/namespace/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -578,7 +578,7 @@ export def "setup-observer delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/observer/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/observer/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -600,7 +600,7 @@ export def "setup-observer get" [
 ]: nothing -> record<data_type: record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, triggers: string, type: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/observer/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/observer/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -664,7 +664,7 @@ export def "setup-scheduler delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/scheduler/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/scheduler/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -686,7 +686,7 @@ export def "setup-scheduler get" [
 ]: nothing -> record<activated: bool, expression: string, id: string, name: string, namespace: record<id: string, name: string, slug: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/scheduler/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/scheduler/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -750,7 +750,7 @@ export def "setup-schema delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/schema/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/schema/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -772,7 +772,7 @@ export def "setup-schema get" [
 ]: nothing -> record<id: string, namespace: record<id: string, name: string, slug: string>, schema: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/schema/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/schema/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -836,7 +836,7 @@ export def "setup-translator delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/translator/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/translator/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -858,7 +858,7 @@ export def "setup-translator get" [
 ]: nothing -> record<custom_data_type: record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, source_data_type: record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record>, style: string, target_data_type: record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record>, transformation: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/translator/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/translator/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -922,7 +922,7 @@ export def "setup-webhook delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/webhook/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/webhook/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -944,7 +944,7 @@ export def "setup-webhook get" [
 ]: nothing -> record<headers: table<key: string, value: string>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, parameters: table<key: string, value: string>, path: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/setup/webhook/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/setup/webhook/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

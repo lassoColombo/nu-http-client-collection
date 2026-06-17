@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "modelsjson Api::V1::Modelsindex" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "modelsjson get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/models.json
 # operationId: Api::V1::Models#index
-export def "modelsjson Api::V1::Modelsindex" [
+export def "modelsjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,7 +117,7 @@ export def "modelsjson Api::V1::Modelsindex" [
 #
 # POST /api/v1/models.json
 # operationId: Api::V1::Models#create
-export def "modelsjson Api::V1::Modelscreate" [
+export def "modelsjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,29 +127,29 @@ export def "modelsjson Api::V1::Modelscreate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   vendor_id: string # Vendor ID
-  modelmodel: string # Model
-  --modelshape: string # Shape
-  --modelresolution: string # Resolution
-  --modelonvif: string # ONVIF
-  --modelpsia: string # PSIA
-  --modelptz: string # PTZ
-  --modelinfrared: string # Infrared
-  --modelvarifocal: string # Varifocal
-  --modelsd-card: string # SD Card
-  --modelupnp: string # UPnP
-  --modelaudio-in: string # UPnP
-  --modelaudio-out: string # UPnP
-  --modeldefault-username: string # Default Username
-  --modeldefault-password: string # Default Password
-  --modeljpeg-url: string # JPEG URL
-  --modelh264-url: string # H264 URL
-  --modelmjpeg-url: string # MJPEG URL
+  model_model: string # Model
+  --model-shape: string # Shape
+  --model-resolution: string # Resolution
+  --model-onvif: string # ONVIF
+  --model-psia: string # PSIA
+  --model-ptz: string # PTZ
+  --model-infrared: string # Infrared
+  --model-varifocal: string # Varifocal
+  --model-sd-card: string # SD Card
+  --model-upnp: string # UPnP
+  --model-audio-in: string # UPnP
+  --model-audio-out: string # UPnP
+  --model-default-username: string # Default Username
+  --model-default-password: string # Default Password
+  --model-jpeg-url: string # JPEG URL
+  --model-h264-url: string # H264 URL
+  --model-mjpeg-url: string # MJPEG URL
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/models.json")
-  let body = {vendor_id: $vendor_id, model[model]: $modelmodel, model[shape]: $modelshape, model[resolution]: $modelresolution, model[onvif]: $modelonvif, model[psia]: $modelpsia, model[ptz]: $modelptz, model[infrared]: $modelinfrared, model[varifocal]: $modelvarifocal, model[sd_card]: $modelsd_card, model[upnp]: $modelupnp, model[audio_in]: $modelaudio_in, model[audio_out]: $modelaudio_out, model[default_username]: $modeldefault_username, model[default_password]: $modeldefault_password, model[jpeg_url]: $modeljpeg_url, model[h264_url]: $modelh264_url, model[mjpeg_url]: $modelmjpeg_url} | compact
+  let body = {"vendor_id": $vendor_id, "model[model]": $model_model, "model[shape]": $model_shape, "model[resolution]": $model_resolution, "model[onvif]": $model_onvif, "model[psia]": $model_psia, "model[ptz]": $model_ptz, "model[infrared]": $model_infrared, "model[varifocal]": $model_varifocal, "model[sd_card]": $model_sd_card, "model[upnp]": $model_upnp, "model[audio_in]": $model_audio_in, "model[audio_out]": $model_audio_out, "model[default_username]": $model_default_username, "model[default_password]": $model_default_password, "model[jpeg_url]": $model_jpeg_url, "model[h264_url]": $model_h264_url, "model[mjpeg_url]": $model_mjpeg_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -160,7 +160,7 @@ export def "modelsjson Api::V1::Modelscreate" [
 #
 # GET /api/v1/models/search.json
 # operationId: Api::V1::Models#search
-export def "models-searchjson Api::V1::Modelssearch" [
+export def "models-searchjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,23 +170,23 @@ export def "models-searchjson Api::V1::Modelssearch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number
-  --qmodel-cont: string # Model
-  --qmanufacturer-name-cont: string # Vendor
-  --qshape-eq: string # Shape
-  --qresolution-eq: string # Resolution
-  --qonvif-true: string # ONVIF
-  --qpsia-true: string # PSIA
-  --qptz-true: string # PTZ
-  --qinfrared-true: string # Infrared
-  --qvarifocal-true: string # Varifocal
-  --qsd-card-true: string # SD Card
-  --qupnp-true: string # UPnP
-  --qaudio-in-true: string # Audio In
-  --qaudio-out-true: string # Audio Out
+  --q-model-cont: string # Model
+  --q-manufacturer-name-cont: string # Vendor
+  --q-shape-eq: string # Shape
+  --q-resolution-eq: string # Resolution
+  --q-onvif-true: string # ONVIF
+  --q-psia-true: string # PSIA
+  --q-ptz-true: string # PTZ
+  --q-infrared-true: string # Infrared
+  --q-varifocal-true: string # Varifocal
+  --q-sd-card-true: string # SD Card
+  --q-upnp-true: string # UPnP
+  --q-audio-in-true: string # Audio In
+  --q-audio-out-true: string # Audio Out
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "q[model_cont]" $qmodel_cont "scalar") (serialize-qp "q[manufacturer_name_cont]" $qmanufacturer_name_cont "scalar") (serialize-qp "q[shape_eq]" $qshape_eq "scalar") (serialize-qp "q[resolution_eq]" $qresolution_eq "scalar") (serialize-qp "q[onvif_true]" $qonvif_true "scalar") (serialize-qp "q[psia_true]" $qpsia_true "scalar") (serialize-qp "q[ptz_true]" $qptz_true "scalar") (serialize-qp "q[infrared_true]" $qinfrared_true "scalar") (serialize-qp "q[varifocal_true]" $qvarifocal_true "scalar") (serialize-qp "q[sd_card_true]" $qsd_card_true "scalar") (serialize-qp "q[upnp_true]" $qupnp_true "scalar") (serialize-qp "q[audio_in_true]" $qaudio_in_true "scalar") (serialize-qp "q[audio_out_true]" $qaudio_out_true "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "q[model_cont]" $q_model_cont "scalar") (serialize-qp "q[manufacturer_name_cont]" $q_manufacturer_name_cont "scalar") (serialize-qp "q[shape_eq]" $q_shape_eq "scalar") (serialize-qp "q[resolution_eq]" $q_resolution_eq "scalar") (serialize-qp "q[onvif_true]" $q_onvif_true "scalar") (serialize-qp "q[psia_true]" $q_psia_true "scalar") (serialize-qp "q[ptz_true]" $q_ptz_true "scalar") (serialize-qp "q[infrared_true]" $q_infrared_true "scalar") (serialize-qp "q[varifocal_true]" $q_varifocal_true "scalar") (serialize-qp "q[sd_card_true]" $q_sd_card_true "scalar") (serialize-qp "q[upnp_true]" $q_upnp_true "scalar") (serialize-qp "q[audio_in_true]" $q_audio_in_true "scalar") (serialize-qp "q[audio_out_true]" $q_audio_out_true "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/models/search.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -197,7 +197,7 @@ export def "models-searchjson Api::V1::Modelssearch" [
 #
 # GET /api/v1/models/{id}.json
 # operationId: Api::V1::Models#show
-export def "models Api::V1::Modelsshow" [
+export def "models get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -210,7 +210,7 @@ export def "models Api::V1::Modelsshow" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/models/($id).json")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/models/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,29 +230,29 @@ export def "models patch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   vendor_id: string # Vendor ID
-  --modelmodel: string # Model
-  --modelshape: string # Shape
-  --modelresolution: string # Resolution
-  --modelonvif: string # ONVIF
-  --modelpsia: string # PSIA
-  --modelptz: string # PTZ
-  --modelinfrared: string # Infrared
-  --modelvarifocal: string # Varifocal
-  --modelsd-card: string # SD Card
-  --modelupnp: string # UPnP
-  --modelaudio-in: string # Audio In
-  --modelaudio-out: string # Audio Out
-  --modeldefault-username: string # Default Username
-  --modeldefault-password: string # Default Password
-  --modeljpeg-url: string # JPEG URL
-  --modelh264-url: string # H264 URL
-  --modelmjpeg-url: string # MJPEG URL
+  --model-model: string # Model
+  --model-shape: string # Shape
+  --model-resolution: string # Resolution
+  --model-onvif: string # ONVIF
+  --model-psia: string # PSIA
+  --model-ptz: string # PTZ
+  --model-infrared: string # Infrared
+  --model-varifocal: string # Varifocal
+  --model-sd-card: string # SD Card
+  --model-upnp: string # UPnP
+  --model-audio-in: string # Audio In
+  --model-audio-out: string # Audio Out
+  --model-default-username: string # Default Username
+  --model-default-password: string # Default Password
+  --model-jpeg-url: string # JPEG URL
+  --model-h264-url: string # H264 URL
+  --model-mjpeg-url: string # MJPEG URL
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/models/($id).json")
-  let body = {vendor_id: $vendor_id, model[model]: $modelmodel, model[shape]: $modelshape, model[resolution]: $modelresolution, model[onvif]: $modelonvif, model[psia]: $modelpsia, model[ptz]: $modelptz, model[infrared]: $modelinfrared, model[varifocal]: $modelvarifocal, model[sd_card]: $modelsd_card, model[upnp]: $modelupnp, model[audio_in]: $modelaudio_in, model[audio_out]: $modelaudio_out, model[default_username]: $modeldefault_username, model[default_password]: $modeldefault_password, model[jpeg_url]: $modeljpeg_url, model[h264_url]: $modelh264_url, model[mjpeg_url]: $modelmjpeg_url} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/models/{id}.json"))
+  let body = {"vendor_id": $vendor_id, "model[model]": $model_model, "model[shape]": $model_shape, "model[resolution]": $model_resolution, "model[onvif]": $model_onvif, "model[psia]": $model_psia, "model[ptz]": $model_ptz, "model[infrared]": $model_infrared, "model[varifocal]": $model_varifocal, "model[sd_card]": $model_sd_card, "model[upnp]": $model_upnp, "model[audio_in]": $model_audio_in, "model[audio_out]": $model_audio_out, "model[default_username]": $model_default_username, "model[default_password]": $model_default_password, "model[jpeg_url]": $model_jpeg_url, "model[h264_url]": $model_h264_url, "model[mjpeg_url]": $model_mjpeg_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -273,29 +273,29 @@ export def "models put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   vendor_id: string # Vendor ID
-  --modelmodel: string # Model
-  --modelshape: string # Shape
-  --modelresolution: string # Resolution
-  --modelonvif: string # ONVIF
-  --modelpsia: string # PSIA
-  --modelptz: string # PTZ
-  --modelinfrared: string # Infrared
-  --modelvarifocal: string # Varifocal
-  --modelsd-card: string # SD Card
-  --modelupnp: string # UPnP
-  --modelaudio-in: string # Audio In
-  --modelaudio-out: string # Audio Out
-  --modeldefault-username: string # Default Username
-  --modeldefault-password: string # Default Password
-  --modeljpeg-url: string # JPEG URL
-  --modelh264-url: string # H264 URL
-  --modelmjpeg-url: string # MJPEG URL
+  --model-model: string # Model
+  --model-shape: string # Shape
+  --model-resolution: string # Resolution
+  --model-onvif: string # ONVIF
+  --model-psia: string # PSIA
+  --model-ptz: string # PTZ
+  --model-infrared: string # Infrared
+  --model-varifocal: string # Varifocal
+  --model-sd-card: string # SD Card
+  --model-upnp: string # UPnP
+  --model-audio-in: string # Audio In
+  --model-audio-out: string # Audio Out
+  --model-default-username: string # Default Username
+  --model-default-password: string # Default Password
+  --model-jpeg-url: string # JPEG URL
+  --model-h264-url: string # H264 URL
+  --model-mjpeg-url: string # MJPEG URL
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/models/($id).json")
-  let body = {vendor_id: $vendor_id, model[model]: $modelmodel, model[shape]: $modelshape, model[resolution]: $modelresolution, model[onvif]: $modelonvif, model[psia]: $modelpsia, model[ptz]: $modelptz, model[infrared]: $modelinfrared, model[varifocal]: $modelvarifocal, model[sd_card]: $modelsd_card, model[upnp]: $modelupnp, model[audio_in]: $modelaudio_in, model[audio_out]: $modelaudio_out, model[default_username]: $modeldefault_username, model[default_password]: $modeldefault_password, model[jpeg_url]: $modeljpeg_url, model[h264_url]: $modelh264_url, model[mjpeg_url]: $modelmjpeg_url} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/models/{id}.json"))
+  let body = {"vendor_id": $vendor_id, "model[model]": $model_model, "model[shape]": $model_shape, "model[resolution]": $model_resolution, "model[onvif]": $model_onvif, "model[psia]": $model_psia, "model[ptz]": $model_ptz, "model[infrared]": $model_infrared, "model[varifocal]": $model_varifocal, "model[sd_card]": $model_sd_card, "model[upnp]": $model_upnp, "model[audio_in]": $model_audio_in, "model[audio_out]": $model_audio_out, "model[default_username]": $model_default_username, "model[default_password]": $model_default_password, "model[jpeg_url]": $model_jpeg_url, "model[h264_url]": $model_h264_url, "model[mjpeg_url]": $model_mjpeg_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -306,7 +306,7 @@ export def "models put" [
 #
 # GET /api/v1/recorders.json
 # operationId: Api::V1::Recorders#index
-export def "recordersjson Api::V1::Recordersindex" [
+export def "recordersjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "recordersjson Api::V1::Recordersindex" [
 #
 # POST /api/v1/recorders.json
 # operationId: Api::V1::Recorders#create
-export def "recordersjson Api::V1::Recorderscreate" [
+export def "recordersjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,43 +341,43 @@ export def "recordersjson Api::V1::Recorderscreate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   vendor_id: string # Vendor ID
-  recordermodel: string # Model
-  recordername: string # Name
-  recorderrecorder_type: string # Type
-  --recorderresolution: string # Resolution
-  --recorderonvif: string # ONVIF
-  --recorderpsia: string # PSIA
-  --recorderptz: string # PTZ
-  --recorderdiscontinued: string # Discontinued
-  --recordersupport-3rdparty: string # 3rd pparty Camera Support
-  --recordersd-card: string # SD Card
-  --recorderupnp: string # UPnP
-  --recorderhot-swap: string # Hot Swap
-  --recorderhdmi: string # HDMI Support
-  --recorderdigital-io: string # Digital I/O
-  --recorderaudio-in: string # Audio In
-  --recorderaudio-out: string # Audio Out
-  --recorderinput-channels: string # Input Channels
-  --recorderplayback-channels: string # Playback Channels
-  --recorderusb: string # USB Ports
-  --recordersdhc: string # SD Card (GB)
-  --recordermobile-access: string # Mobile Access
-  --recorderalarms: string # Alarms
-  --recorderraid-support: string # Raid Support
-  --recorderstorage: string # Internal Storage
-  --recorderadditional-information: string # Additional Information
-  --recorderdefault-username: string # Default Username
-  --recorderdefault-password: string # Default Password
-  --recorderjpeg-url: string # JPEG URL
-  --recorderh264-url: string # H264 URL
-  --recordermjpeg-url: string # MJPEG URL
-  --recorderofficial-url: string # Official URL
+  recorder_model: string # Model
+  recorder_name: string # Name
+  recorder_recorder_type: string # Type
+  --recorder-resolution: string # Resolution
+  --recorder-onvif: string # ONVIF
+  --recorder-psia: string # PSIA
+  --recorder-ptz: string # PTZ
+  --recorder-discontinued: string # Discontinued
+  --recorder-support-3rdparty: string # 3rd pparty Camera Support
+  --recorder-sd-card: string # SD Card
+  --recorder-upnp: string # UPnP
+  --recorder-hot-swap: string # Hot Swap
+  --recorder-hdmi: string # HDMI Support
+  --recorder-digital-io: string # Digital I/O
+  --recorder-audio-in: string # Audio In
+  --recorder-audio-out: string # Audio Out
+  --recorder-input-channels: string # Input Channels
+  --recorder-playback-channels: string # Playback Channels
+  --recorder-usb: string # USB Ports
+  --recorder-sdhc: string # SD Card (GB)
+  --recorder-mobile-access: string # Mobile Access
+  --recorder-alarms: string # Alarms
+  --recorder-raid-support: string # Raid Support
+  --recorder-storage: string # Internal Storage
+  --recorder-additional-information: string # Additional Information
+  --recorder-default-username: string # Default Username
+  --recorder-default-password: string # Default Password
+  --recorder-jpeg-url: string # JPEG URL
+  --recorder-h264-url: string # H264 URL
+  --recorder-mjpeg-url: string # MJPEG URL
+  --recorder-official-url: string # Official URL
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/recorders.json")
-  let body = {vendor_id: $vendor_id, recorder[model]: $recordermodel, recorder[name]: $recordername, recorder[recorder_type]: $recorderrecorder_type, recorder[resolution]: $recorderresolution, recorder[onvif]: $recorderonvif, recorder[psia]: $recorderpsia, recorder[ptz]: $recorderptz, recorder[discontinued]: $recorderdiscontinued, recorder[support_3rdparty]: $recordersupport_3rdparty, recorder[sd_card]: $recordersd_card, recorder[upnp]: $recorderupnp, recorder[hot_swap]: $recorderhot_swap, recorder[hdmi]: $recorderhdmi, recorder[digital_io]: $recorderdigital_io, recorder[audio_in]: $recorderaudio_in, recorder[audio_out]: $recorderaudio_out, recorder[input_channels]: $recorderinput_channels, recorder[playback_channels]: $recorderplayback_channels, recorder[usb]: $recorderusb, recorder[sdhc]: $recordersdhc, recorder[mobile_access]: $recordermobile_access, recorder[alarms]: $recorderalarms, recorder[raid_support]: $recorderraid_support, recorder[storage]: $recorderstorage, recorder[additional_information]: $recorderadditional_information, recorder[default_username]: $recorderdefault_username, recorder[default_password]: $recorderdefault_password, recorder[jpeg_url]: $recorderjpeg_url, recorder[h264_url]: $recorderh264_url, recorder[mjpeg_url]: $recordermjpeg_url, recorder[official_url]: $recorderofficial_url} | compact
+  let body = {"vendor_id": $vendor_id, "recorder[model]": $recorder_model, "recorder[name]": $recorder_name, "recorder[recorder_type]": $recorder_recorder_type, "recorder[resolution]": $recorder_resolution, "recorder[onvif]": $recorder_onvif, "recorder[psia]": $recorder_psia, "recorder[ptz]": $recorder_ptz, "recorder[discontinued]": $recorder_discontinued, "recorder[support_3rdparty]": $recorder_support_3rdparty, "recorder[sd_card]": $recorder_sd_card, "recorder[upnp]": $recorder_upnp, "recorder[hot_swap]": $recorder_hot_swap, "recorder[hdmi]": $recorder_hdmi, "recorder[digital_io]": $recorder_digital_io, "recorder[audio_in]": $recorder_audio_in, "recorder[audio_out]": $recorder_audio_out, "recorder[input_channels]": $recorder_input_channels, "recorder[playback_channels]": $recorder_playback_channels, "recorder[usb]": $recorder_usb, "recorder[sdhc]": $recorder_sdhc, "recorder[mobile_access]": $recorder_mobile_access, "recorder[alarms]": $recorder_alarms, "recorder[raid_support]": $recorder_raid_support, "recorder[storage]": $recorder_storage, "recorder[additional_information]": $recorder_additional_information, "recorder[default_username]": $recorder_default_username, "recorder[default_password]": $recorder_default_password, "recorder[jpeg_url]": $recorder_jpeg_url, "recorder[h264_url]": $recorder_h264_url, "recorder[mjpeg_url]": $recorder_mjpeg_url, "recorder[official_url]": $recorder_official_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -388,7 +388,7 @@ export def "recordersjson Api::V1::Recorderscreate" [
 #
 # GET /api/v1/recorders/search.json
 # operationId: Api::V1::Recorders#search
-export def "recorders-searchjson Api::V1::Recorderssearch" [
+export def "recorders-searchjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,28 +398,28 @@ export def "recorders-searchjson Api::V1::Recorderssearch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number
-  --qmodel-cont: string # Model
-  --qvendor-name-cont: string # Vendor
-  --qsdhc-eq: string # SD Card (GB)
-  --qtype-eq: string # Type
-  --qresolution-eq: string # Resolution
-  --qinput-channels-eq: string # Input Channels
-  --qplayback-channels-eq: string # Playback Channels
-  --qonvif-true: string # ONVIF
-  --qpsia-true: string # PSIA
-  --qptz-true: string # PTZ
-  --qsd-card-true: string # SD Card
-  --qupnp-true: string # UPnP
-  --qaudio-in-true: string # Audio In
-  --qaudio-out-true: string # Audio Out
-  --qhdmi-true: string # HDMI Support
-  --qhot-swap-true: string # Hot Swap
-  --qsupport-3rdparty-true: string # 3rd pparty Camera Support
-  --qdigital-io-true: string # Digital I/O
+  --q-model-cont: string # Model
+  --q-vendor-name-cont: string # Vendor
+  --q-sdhc-eq: string # SD Card (GB)
+  --q-type-eq: string # Type
+  --q-resolution-eq: string # Resolution
+  --q-input-channels-eq: string # Input Channels
+  --q-playback-channels-eq: string # Playback Channels
+  --q-onvif-true: string # ONVIF
+  --q-psia-true: string # PSIA
+  --q-ptz-true: string # PTZ
+  --q-sd-card-true: string # SD Card
+  --q-upnp-true: string # UPnP
+  --q-audio-in-true: string # Audio In
+  --q-audio-out-true: string # Audio Out
+  --q-hdmi-true: string # HDMI Support
+  --q-hot-swap-true: string # Hot Swap
+  --q-support-3rdparty-true: string # 3rd pparty Camera Support
+  --q-digital-io-true: string # Digital I/O
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "q[model_cont]" $qmodel_cont "scalar") (serialize-qp "q[vendor_name_cont]" $qvendor_name_cont "scalar") (serialize-qp "q[sdhc_eq]" $qsdhc_eq "scalar") (serialize-qp "q[type_eq]" $qtype_eq "scalar") (serialize-qp "q[resolution_eq]" $qresolution_eq "scalar") (serialize-qp "q[input_channels_eq]" $qinput_channels_eq "scalar") (serialize-qp "q[playback_channels_eq]" $qplayback_channels_eq "scalar") (serialize-qp "q[onvif_true]" $qonvif_true "scalar") (serialize-qp "q[psia_true]" $qpsia_true "scalar") (serialize-qp "q[ptz_true]" $qptz_true "scalar") (serialize-qp "q[sd_card_true]" $qsd_card_true "scalar") (serialize-qp "q[upnp_true]" $qupnp_true "scalar") (serialize-qp "q[audio_in_true]" $qaudio_in_true "scalar") (serialize-qp "q[audio_out_true]" $qaudio_out_true "scalar") (serialize-qp "q[hdmi_true]" $qhdmi_true "scalar") (serialize-qp "q[hot_swap_true]" $qhot_swap_true "scalar") (serialize-qp "q[support_3rdparty_true]" $qsupport_3rdparty_true "scalar") (serialize-qp "q[digital_io_true]" $qdigital_io_true "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "q[model_cont]" $q_model_cont "scalar") (serialize-qp "q[vendor_name_cont]" $q_vendor_name_cont "scalar") (serialize-qp "q[sdhc_eq]" $q_sdhc_eq "scalar") (serialize-qp "q[type_eq]" $q_type_eq "scalar") (serialize-qp "q[resolution_eq]" $q_resolution_eq "scalar") (serialize-qp "q[input_channels_eq]" $q_input_channels_eq "scalar") (serialize-qp "q[playback_channels_eq]" $q_playback_channels_eq "scalar") (serialize-qp "q[onvif_true]" $q_onvif_true "scalar") (serialize-qp "q[psia_true]" $q_psia_true "scalar") (serialize-qp "q[ptz_true]" $q_ptz_true "scalar") (serialize-qp "q[sd_card_true]" $q_sd_card_true "scalar") (serialize-qp "q[upnp_true]" $q_upnp_true "scalar") (serialize-qp "q[audio_in_true]" $q_audio_in_true "scalar") (serialize-qp "q[audio_out_true]" $q_audio_out_true "scalar") (serialize-qp "q[hdmi_true]" $q_hdmi_true "scalar") (serialize-qp "q[hot_swap_true]" $q_hot_swap_true "scalar") (serialize-qp "q[support_3rdparty_true]" $q_support_3rdparty_true "scalar") (serialize-qp "q[digital_io_true]" $q_digital_io_true "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/recorders/search.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -430,7 +430,7 @@ export def "recorders-searchjson Api::V1::Recorderssearch" [
 #
 # GET /api/v1/recorders/{id}.json
 # operationId: Api::V1::Recorders#show
-export def "recorders Api::V1::Recordersshow" [
+export def "recorders get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,7 +443,7 @@ export def "recorders Api::V1::Recordersshow" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/recorders/($id).json")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/recorders/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -463,43 +463,43 @@ export def "recorders patch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   vendor_id: string # Vendor ID
-  recordermodel: string # Model
-  recordername: string # Name
-  recorderrecorder_type: string # Type
-  --recorderresolution: string # Resolution
-  --recorderonvif: string # ONVIF
-  --recorderpsia: string # PSIA
-  --recorderptz: string # PTZ
-  --recorderdiscontinued: string # Discontinued
-  --recordersupport-3rdparty: string # 3rd pparty Camera Support
-  --recordersd-card: string # SD Card
-  --recorderupnp: string # UPnP
-  --recorderhot-swap: string # Hot Swap
-  --recorderhdmi: string # HDMI Support
-  --recorderdigital-io: string # Digital I/O
-  --recorderaudio-in: string # Audio In
-  --recorderaudio-out: string # Audio Out
-  --recorderinput-channels: string # Input Channels
-  --recorderplayback-channels: string # Playback Channels
-  --recorderusb: string # USB Ports
-  --recordersdhc: string # SD Card (GB)
-  --recordermobile-access: string # Mobile Access
-  --recorderalarms: string # Alarms
-  --recorderraid-support: string # Raid Support
-  --recorderstorage: string # Internal Storage
-  --recorderadditional-information: string # Additional Information
-  --recorderdefault-username: string # Default Username
-  --recorderdefault-password: string # Default Password
-  --recorderjpeg-url: string # JPEG URL
-  --recorderh264-url: string # H264 URL
-  --recordermjpeg-url: string # MJPEG URL
-  --recorderofficial-url: string # Official URL
+  recorder_model: string # Model
+  recorder_name: string # Name
+  recorder_recorder_type: string # Type
+  --recorder-resolution: string # Resolution
+  --recorder-onvif: string # ONVIF
+  --recorder-psia: string # PSIA
+  --recorder-ptz: string # PTZ
+  --recorder-discontinued: string # Discontinued
+  --recorder-support-3rdparty: string # 3rd pparty Camera Support
+  --recorder-sd-card: string # SD Card
+  --recorder-upnp: string # UPnP
+  --recorder-hot-swap: string # Hot Swap
+  --recorder-hdmi: string # HDMI Support
+  --recorder-digital-io: string # Digital I/O
+  --recorder-audio-in: string # Audio In
+  --recorder-audio-out: string # Audio Out
+  --recorder-input-channels: string # Input Channels
+  --recorder-playback-channels: string # Playback Channels
+  --recorder-usb: string # USB Ports
+  --recorder-sdhc: string # SD Card (GB)
+  --recorder-mobile-access: string # Mobile Access
+  --recorder-alarms: string # Alarms
+  --recorder-raid-support: string # Raid Support
+  --recorder-storage: string # Internal Storage
+  --recorder-additional-information: string # Additional Information
+  --recorder-default-username: string # Default Username
+  --recorder-default-password: string # Default Password
+  --recorder-jpeg-url: string # JPEG URL
+  --recorder-h264-url: string # H264 URL
+  --recorder-mjpeg-url: string # MJPEG URL
+  --recorder-official-url: string # Official URL
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/recorders/($id).json")
-  let body = {vendor_id: $vendor_id, recorder[model]: $recordermodel, recorder[name]: $recordername, recorder[recorder_type]: $recorderrecorder_type, recorder[resolution]: $recorderresolution, recorder[onvif]: $recorderonvif, recorder[psia]: $recorderpsia, recorder[ptz]: $recorderptz, recorder[discontinued]: $recorderdiscontinued, recorder[support_3rdparty]: $recordersupport_3rdparty, recorder[sd_card]: $recordersd_card, recorder[upnp]: $recorderupnp, recorder[hot_swap]: $recorderhot_swap, recorder[hdmi]: $recorderhdmi, recorder[digital_io]: $recorderdigital_io, recorder[audio_in]: $recorderaudio_in, recorder[audio_out]: $recorderaudio_out, recorder[input_channels]: $recorderinput_channels, recorder[playback_channels]: $recorderplayback_channels, recorder[usb]: $recorderusb, recorder[sdhc]: $recordersdhc, recorder[mobile_access]: $recordermobile_access, recorder[alarms]: $recorderalarms, recorder[raid_support]: $recorderraid_support, recorder[storage]: $recorderstorage, recorder[additional_information]: $recorderadditional_information, recorder[default_username]: $recorderdefault_username, recorder[default_password]: $recorderdefault_password, recorder[jpeg_url]: $recorderjpeg_url, recorder[h264_url]: $recorderh264_url, recorder[mjpeg_url]: $recordermjpeg_url, recorder[official_url]: $recorderofficial_url} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/recorders/{id}.json"))
+  let body = {"vendor_id": $vendor_id, "recorder[model]": $recorder_model, "recorder[name]": $recorder_name, "recorder[recorder_type]": $recorder_recorder_type, "recorder[resolution]": $recorder_resolution, "recorder[onvif]": $recorder_onvif, "recorder[psia]": $recorder_psia, "recorder[ptz]": $recorder_ptz, "recorder[discontinued]": $recorder_discontinued, "recorder[support_3rdparty]": $recorder_support_3rdparty, "recorder[sd_card]": $recorder_sd_card, "recorder[upnp]": $recorder_upnp, "recorder[hot_swap]": $recorder_hot_swap, "recorder[hdmi]": $recorder_hdmi, "recorder[digital_io]": $recorder_digital_io, "recorder[audio_in]": $recorder_audio_in, "recorder[audio_out]": $recorder_audio_out, "recorder[input_channels]": $recorder_input_channels, "recorder[playback_channels]": $recorder_playback_channels, "recorder[usb]": $recorder_usb, "recorder[sdhc]": $recorder_sdhc, "recorder[mobile_access]": $recorder_mobile_access, "recorder[alarms]": $recorder_alarms, "recorder[raid_support]": $recorder_raid_support, "recorder[storage]": $recorder_storage, "recorder[additional_information]": $recorder_additional_information, "recorder[default_username]": $recorder_default_username, "recorder[default_password]": $recorder_default_password, "recorder[jpeg_url]": $recorder_jpeg_url, "recorder[h264_url]": $recorder_h264_url, "recorder[mjpeg_url]": $recorder_mjpeg_url, "recorder[official_url]": $recorder_official_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -520,43 +520,43 @@ export def "recorders put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   vendor_id: string # Vendor ID
-  recordermodel: string # Model
-  recordername: string # Name
-  recorderrecorder_type: string # Type
-  --recorderresolution: string # Resolution
-  --recorderonvif: string # ONVIF
-  --recorderpsia: string # PSIA
-  --recorderptz: string # PTZ
-  --recorderdiscontinued: string # Discontinued
-  --recordersupport-3rdparty: string # 3rd pparty Camera Support
-  --recordersd-card: string # SD Card
-  --recorderupnp: string # UPnP
-  --recorderhot-swap: string # Hot Swap
-  --recorderhdmi: string # HDMI Support
-  --recorderdigital-io: string # Digital I/O
-  --recorderaudio-in: string # Audio In
-  --recorderaudio-out: string # Audio Out
-  --recorderinput-channels: string # Input Channels
-  --recorderplayback-channels: string # Playback Channels
-  --recorderusb: string # USB Ports
-  --recordersdhc: string # SD Card (GB)
-  --recordermobile-access: string # Mobile Access
-  --recorderalarms: string # Alarms
-  --recorderraid-support: string # Raid Support
-  --recorderstorage: string # Internal Storage
-  --recorderadditional-information: string # Additional Information
-  --recorderdefault-username: string # Default Username
-  --recorderdefault-password: string # Default Password
-  --recorderjpeg-url: string # JPEG URL
-  --recorderh264-url: string # H264 URL
-  --recordermjpeg-url: string # MJPEG URL
-  --recorderofficial-url: string # Official URL
+  recorder_model: string # Model
+  recorder_name: string # Name
+  recorder_recorder_type: string # Type
+  --recorder-resolution: string # Resolution
+  --recorder-onvif: string # ONVIF
+  --recorder-psia: string # PSIA
+  --recorder-ptz: string # PTZ
+  --recorder-discontinued: string # Discontinued
+  --recorder-support-3rdparty: string # 3rd pparty Camera Support
+  --recorder-sd-card: string # SD Card
+  --recorder-upnp: string # UPnP
+  --recorder-hot-swap: string # Hot Swap
+  --recorder-hdmi: string # HDMI Support
+  --recorder-digital-io: string # Digital I/O
+  --recorder-audio-in: string # Audio In
+  --recorder-audio-out: string # Audio Out
+  --recorder-input-channels: string # Input Channels
+  --recorder-playback-channels: string # Playback Channels
+  --recorder-usb: string # USB Ports
+  --recorder-sdhc: string # SD Card (GB)
+  --recorder-mobile-access: string # Mobile Access
+  --recorder-alarms: string # Alarms
+  --recorder-raid-support: string # Raid Support
+  --recorder-storage: string # Internal Storage
+  --recorder-additional-information: string # Additional Information
+  --recorder-default-username: string # Default Username
+  --recorder-default-password: string # Default Password
+  --recorder-jpeg-url: string # JPEG URL
+  --recorder-h264-url: string # H264 URL
+  --recorder-mjpeg-url: string # MJPEG URL
+  --recorder-official-url: string # Official URL
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/recorders/($id).json")
-  let body = {vendor_id: $vendor_id, recorder[model]: $recordermodel, recorder[name]: $recordername, recorder[recorder_type]: $recorderrecorder_type, recorder[resolution]: $recorderresolution, recorder[onvif]: $recorderonvif, recorder[psia]: $recorderpsia, recorder[ptz]: $recorderptz, recorder[discontinued]: $recorderdiscontinued, recorder[support_3rdparty]: $recordersupport_3rdparty, recorder[sd_card]: $recordersd_card, recorder[upnp]: $recorderupnp, recorder[hot_swap]: $recorderhot_swap, recorder[hdmi]: $recorderhdmi, recorder[digital_io]: $recorderdigital_io, recorder[audio_in]: $recorderaudio_in, recorder[audio_out]: $recorderaudio_out, recorder[input_channels]: $recorderinput_channels, recorder[playback_channels]: $recorderplayback_channels, recorder[usb]: $recorderusb, recorder[sdhc]: $recordersdhc, recorder[mobile_access]: $recordermobile_access, recorder[alarms]: $recorderalarms, recorder[raid_support]: $recorderraid_support, recorder[storage]: $recorderstorage, recorder[additional_information]: $recorderadditional_information, recorder[default_username]: $recorderdefault_username, recorder[default_password]: $recorderdefault_password, recorder[jpeg_url]: $recorderjpeg_url, recorder[h264_url]: $recorderh264_url, recorder[mjpeg_url]: $recordermjpeg_url, recorder[official_url]: $recorderofficial_url} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/recorders/{id}.json"))
+  let body = {"vendor_id": $vendor_id, "recorder[model]": $recorder_model, "recorder[name]": $recorder_name, "recorder[recorder_type]": $recorder_recorder_type, "recorder[resolution]": $recorder_resolution, "recorder[onvif]": $recorder_onvif, "recorder[psia]": $recorder_psia, "recorder[ptz]": $recorder_ptz, "recorder[discontinued]": $recorder_discontinued, "recorder[support_3rdparty]": $recorder_support_3rdparty, "recorder[sd_card]": $recorder_sd_card, "recorder[upnp]": $recorder_upnp, "recorder[hot_swap]": $recorder_hot_swap, "recorder[hdmi]": $recorder_hdmi, "recorder[digital_io]": $recorder_digital_io, "recorder[audio_in]": $recorder_audio_in, "recorder[audio_out]": $recorder_audio_out, "recorder[input_channels]": $recorder_input_channels, "recorder[playback_channels]": $recorder_playback_channels, "recorder[usb]": $recorder_usb, "recorder[sdhc]": $recorder_sdhc, "recorder[mobile_access]": $recorder_mobile_access, "recorder[alarms]": $recorder_alarms, "recorder[raid_support]": $recorder_raid_support, "recorder[storage]": $recorder_storage, "recorder[additional_information]": $recorder_additional_information, "recorder[default_username]": $recorder_default_username, "recorder[default_password]": $recorder_default_password, "recorder[jpeg_url]": $recorder_jpeg_url, "recorder[h264_url]": $recorder_h264_url, "recorder[mjpeg_url]": $recorder_mjpeg_url, "recorder[official_url]": $recorder_official_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -567,7 +567,7 @@ export def "recorders put" [
 #
 # GET /api/v1/vendors.json
 # operationId: Api::V1::Vendors#index
-export def "vendorsjson Api::V1::Vendorsindex" [
+export def "vendorsjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -592,7 +592,7 @@ export def "vendorsjson Api::V1::Vendorsindex" [
 #
 # POST /api/v1/vendors.json
 # operationId: Api::V1::Vendors#create
-export def "vendorsjson Api::V1::Vendorscreate" [
+export def "vendorsjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,16 +601,16 @@ export def "vendorsjson Api::V1::Vendorscreate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  vendorname: string # Name
-  --vendorinfo: string # Info.
-  --vendorurl: string # Website
-  --vendormac: string # MAC
+  vendor_name: string # Name
+  --vendor-info: string # Info.
+  --vendor-url: string # Website
+  --vendor-mac: string # MAC
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/vendors.json")
-  let body = {vendor[name]: $vendorname, vendor[info]: $vendorinfo, vendor[url]: $vendorurl, vendor[mac]: $vendormac} | compact
+  let body = {"vendor[name]": $vendor_name, "vendor[info]": $vendor_info, "vendor[url]": $vendor_url, "vendor[mac]": $vendor_mac} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -621,7 +621,7 @@ export def "vendorsjson Api::V1::Vendorscreate" [
 #
 # GET /api/v1/vendors/{id}.json
 # operationId: Api::V1::Vendors#show
-export def "vendors Api::V1::Vendorsshow" [
+export def "vendors get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -636,7 +636,7 @@ export def "vendors Api::V1::Vendorsshow" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/vendors/($id).json" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/vendors/{id}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -655,16 +655,16 @@ export def "vendors patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --vendorname: string # Name
-  --vendorinfo: string # Info.
-  --vendorurl: string # Website
-  --vendormac: string # MAC
+  --vendor-name: string # Name
+  --vendor-info: string # Info.
+  --vendor-url: string # Website
+  --vendor-mac: string # MAC
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/vendors/($id).json")
-  let body = {vendor[name]: $vendorname, vendor[info]: $vendorinfo, vendor[url]: $vendorurl, vendor[mac]: $vendormac} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/vendors/{id}.json"))
+  let body = {"vendor[name]": $vendor_name, "vendor[info]": $vendor_info, "vendor[url]": $vendor_url, "vendor[mac]": $vendor_mac} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -684,16 +684,16 @@ export def "vendors put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --vendorname: string # Name
-  --vendorinfo: string # Info.
-  --vendorurl: string # Website
-  --vendormac: string # MAC
+  --vendor-name: string # Name
+  --vendor-info: string # Info.
+  --vendor-url: string # Website
+  --vendor-mac: string # MAC
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/vendors/($id).json")
-  let body = {vendor[name]: $vendorname, vendor[info]: $vendorinfo, vendor[url]: $vendorurl, vendor[mac]: $vendormac} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/vendors/{id}.json"))
+  let body = {"vendor[name]": $vendor_name, "vendor[info]": $vendor_info, "vendor[url]": $vendor_url, "vendor[mac]": $vendor_mac} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

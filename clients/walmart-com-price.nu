@@ -65,9 +65,9 @@ def base-url-completer [] { ["https://marketplace.walmartapis.com" "https://sand
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def feedType-completer [] { ["CPT_SELLER_ELIGIBILITY" "price"] }
+def feed-type-completer [] { ["CPT_SELLER_ELIGIBILITY" "price"] }
 def accept-completer [] { ["application/json" "application/xml"] }
-def replaceAll-completer [] { ["false" "true"] }
+def replace-all-completer [] { ["false" "true"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -106,20 +106,20 @@ export def "cppreference optCapProgramInPrice" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --WM-SECACCESS-TOKEN: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
-  --WM-CONSUMERCHANNELTYPE: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --WM-QOSCORRELATION-ID: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --WM-SVCNAME: string # Walmart Service Name (e.g. Walmart Service Name)
-  --subsidyEnrolled: oneof<nothing, bool> # A Boolean parameter that allows all sellers to completely enroll in or out of the Competitive Price Adjustment program
-  --subsidyPreference: oneof<nothing, bool> # A Boolean parameter that determines whether offer level subsidy setting override seller level subsidy setting
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
+  --subsidy-enrolled: oneof<nothing, bool> # A Boolean parameter that allows all sellers to completely enroll in or out of the Competitive Price Adjustment program
+  --subsidy-preference: oneof<nothing, bool> # A Boolean parameter that determines whether offer level subsidy setting override seller level subsidy setting
 ]: any -> record<martId: string, statusInfo: record<subsidyEnrolled: bool, subsidyPreference: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/cppreference")
-  let body = {subsidyEnrolled: $subsidyEnrolled, subsidyPreference: $subsidyPreference} | compact
+  let body = {"subsidyEnrolled": $subsidy_enrolled, "subsidyPreference": $subsidy_preference} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $WM_SECACCESS_TOKEN, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID, "WM_SVC.NAME": $WM_SVCNAME} | compact
+  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -140,21 +140,21 @@ export def "feeds priceBulkUploads" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --feedType: string@feedType-completer # The feed Type
-  --WM-SECACCESS-TOKEN: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
-  --WM-CONSUMERCHANNELTYPE: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --WM-QOSCORRELATION-ID: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --WM-SVCNAME: string # Walmart Service Name (e.g. Walmart Service Name)
+  --feed-type: string@feed-type-completer # The feed Type
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
   file: string # Feed file to upload (format: binary)
 ]: any -> record<additionalAttributes: record, errors: record, feedId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "feedType" $feedType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "feedType" $feed_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/feeds" $qp)
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $WM_SECACCESS_TOKEN, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID, "WM_SVC.NAME": $WM_SVCNAME} | compact
+  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -166,7 +166,7 @@ export def "feeds priceBulkUploads" [
 # PUT /v3/price
 # operationId: updatePrice
 # --pricing item shape: {comparisonPrice?: record, comparisonPriceType?: "BASE", currentPrice: record, currentPriceType: "BASE"|"REDUCED"|"CLEARANCE", effectiveDate?: string, expirationDate?: string, priceDisplayCodes?: "CART"|"CHECKOUT", processMode?: "UPSERT"|"DELETE", promoId?: string}
-export def "price updatePrice" [
+export def "price update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,23 +176,23 @@ export def "price updatePrice" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --WM-SECACCESS-TOKEN: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
-  --WM-CONSUMERCHANNELTYPE: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --WM-QOSCORRELATION-ID: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --WM-SVCNAME: string # Walmart Service Name (e.g. Walmart Service Name)
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
   --definitions: record
-  --offerId: string # This is applicable only for promotions
+  --offer-id: string # This is applicable only for promotions
   pricing: list # item shape: {comparisonPrice?: record, comparisonPriceType?: "BASE", currentPrice: record, currentPriceType: "BASE"|"REDUCED"|"CLEARANCE", effectiveDate?: string, expirationDate?: string, priceDisplayCodes?: "CART"|"CHECKOUT", processMode?: "UPSERT"|"DELETE", promoId?: string}
-  --replaceAll: string@replaceAll-completer # This is applicable only for promotions
+  --replace-all: string@replace-all-completer # This is applicable only for promotions
   sku: string
 ]: any -> record<errors: table<category: string, causes: list, code: string, component: string, description: string, errorIdentifiers: record, field: string, gatewayErrorCategory: string, info: string, serviceName: string, severity: string, type: string>, mart: string, message: string, sku: string, statusCode: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/price")
-  let body = {definitions: $definitions, offerId: $offerId, pricing: $pricing, replaceAll: $replaceAll, sku: $sku} | compact
+  let body = {"definitions": $definitions, "offerId": $offer_id, "pricing": $pricing, "replaceAll": $replace_all, "sku": $sku} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $WM_SECACCESS_TOKEN, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID, "WM_SVC.NAME": $WM_SVCNAME} | compact
+  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-storage-cache-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-storage-cache-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.StorageCache/operations
 # operationId: Operations_List
-export def "providers-microsoft-storage-cache-operations List" [
+export def "providers-microsoft-storage-cache-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-storage-cache-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.StorageCache/caches
 # operationId: Caches_List
-export def "subscriptions-providers-microsoft-storage-cache-caches List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-storage-cache-caches list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "subscriptions-providers-microsoft-storage-cache-caches List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.StorageCache/caches" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.StorageCache/caches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,8 +142,8 @@ export def "subscriptions-providers-microsoft-storage-cache-caches List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.StorageCache/skus
 # operationId: Skus_List
-export def "subscriptions-providers-microsoft-storage-cache-skus List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-storage-cache-skus list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,7 +157,7 @@ export def "subscriptions-providers-microsoft-storage-cache-skus List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.StorageCache/skus" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.StorageCache/skus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -167,8 +167,8 @@ export def "subscriptions-providers-microsoft-storage-cache-skus List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.StorageCache/usageModels
 # operationId: UsageModels_List
-export def "subscriptions-providers-microsoft-storage-cache-usage-models List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-storage-cache-usage-models list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "subscriptions-providers-microsoft-storage-cache-usage-models List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.StorageCache/usageModels" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.StorageCache/usageModels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -192,9 +192,9 @@ export def "subscriptions-providers-microsoft-storage-cache-usage-models List" [
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches
 # operationId: Caches_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.StorageCache/caches" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StorageCache/caches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -218,10 +218,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}
 # operationId: Caches_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches Delete" [
-  resourceGroupName: string
-  cacheName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches delete" [
+  subscription_id: string
+  resource_group_name: string
+  cache_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.StorageCache/caches/($cacheName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cache_name: $cache_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StorageCache/caches/{cache_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -245,10 +245,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}
 # operationId: Caches_Get
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches Get" [
-  resourceGroupName: string
-  cacheName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches get" [
+  subscription_id: string
+  resource_group_name: string
+  cache_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.StorageCache/caches/($cacheName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cache_name: $cache_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StorageCache/caches/{cache_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -274,10 +274,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 # operationId: Caches_Update
 # --properties shape: {cacheSizeGB?: int, health?: any, provisioningState?: "Succeeded"|"Failed"|"Cancelled"|"Creating"|"Deleting"|"Updating", subnet?: string, upgradeStatus?: record}
 # --sku shape: {name?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches Update" [
-  resourceGroupName: string
-  subscriptionId: string
-  cacheName: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches update" [
+  subscription_id: string
+  resource_group_name: string
+  cache_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,8 +298,8 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.StorageCache/caches/($cacheName)" $qp)
-  let body = {id: $id, location: $location, name: $name, properties: $properties, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cache_name: $cache_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StorageCache/caches/{cache_name}") $qp)
+  let body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -312,10 +312,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 # operationId: Caches_CreateOrUpdate
 # --properties shape: {cacheSizeGB?: int, health?: any, provisioningState?: "Succeeded"|"Failed"|"Cancelled"|"Creating"|"Deleting"|"Updating", subnet?: string, upgradeStatus?: record}
 # --sku shape: {name?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches CreateOrUpdate" [
-  resourceGroupName: string
-  subscriptionId: string
-  cacheName: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  cache_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,8 +336,8 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.StorageCache/caches/($cacheName)" $qp)
-  let body = {id: $id, location: $location, name: $name, properties: $properties, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cache_name: $cache_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StorageCache/caches/{cache_name}") $qp)
+  let body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -348,10 +348,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}/flush
 # operationId: Caches_Flush
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-flush Flush" [
-  resourceGroupName: string
-  subscriptionId: string
-  cacheName: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-flush post" [
+  subscription_id: string
+  resource_group_name: string
+  cache_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +365,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.StorageCache/caches/($cacheName)/flush" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cache_name: $cache_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StorageCache/caches/{cache_name}/flush") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -375,10 +375,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}/start
 # operationId: Caches_Start
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-start Start" [
-  resourceGroupName: string
-  subscriptionId: string
-  cacheName: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-start start" [
+  subscription_id: string
+  resource_group_name: string
+  cache_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,7 +392,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.StorageCache/caches/($cacheName)/start" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cache_name: $cache_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StorageCache/caches/{cache_name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -402,10 +402,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}/stop
 # operationId: Caches_Stop
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-stop Stop" [
-  resourceGroupName: string
-  subscriptionId: string
-  cacheName: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-stop stop" [
+  subscription_id: string
+  resource_group_name: string
+  cache_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,7 +419,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.StorageCache/caches/($cacheName)/stop" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cache_name: $cache_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StorageCache/caches/{cache_name}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -429,10 +429,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}/storageTargets
 # operationId: StorageTargets_ListByCache
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-storage-targets ListByCache" [
-  resourceGroupName: string
-  subscriptionId: string
-  cacheName: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-storage-targets list-by" [
+  subscription_id: string
+  resource_group_name: string
+  cache_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,7 +446,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.StorageCache/caches/($cacheName)/storageTargets" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cache_name: $cache_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StorageCache/caches/{cache_name}/storageTargets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -456,11 +456,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}/storageTargets/{storageTargetName}
 # operationId: StorageTargets_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-storage-targets Delete" [
-  resourceGroupName: string
-  subscriptionId: string
-  cacheName: string
-  storageTargetName: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-storage-targets delete" [
+  subscription_id: string
+  resource_group_name: string
+  cache_name: string
+  storage_target_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -474,7 +474,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.StorageCache/caches/($cacheName)/storageTargets/($storageTargetName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cache_name: $cache_name, storage_target_name: $storage_target_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StorageCache/caches/{cache_name}/storageTargets/{storage_target_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -484,11 +484,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}/storageTargets/{storageTargetName}
 # operationId: StorageTargets_Get
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-storage-targets Get" [
-  resourceGroupName: string
-  subscriptionId: string
-  cacheName: string
-  storageTargetName: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-storage-targets get" [
+  subscription_id: string
+  resource_group_name: string
+  cache_name: string
+  storage_target_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,7 +502,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.StorageCache/caches/($cacheName)/storageTargets/($storageTargetName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cache_name: $cache_name, storage_target_name: $storage_target_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StorageCache/caches/{cache_name}/storageTargets/{storage_target_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -514,11 +514,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 # Discriminator (request): targetType
 # operationId: StorageTargets_CreateOrUpdate
 # --properties shape: {clfs?: record, junctions?: list, nfs3?: record, provisioningState?: "Succeeded"|"Failed"|"Cancelled"|"Creating"|"Deleting"|"Updating", targetType?: "nfs3"|"clfs"|"unknown", unknown?: record}
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-storage-targets CreateOrUpdate" [
-  resourceGroupName: string
-  subscriptionId: string
-  cacheName: string
-  storageTargetName: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-storage-targets create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  cache_name: string
+  storage_target_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -535,8 +535,8 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.StorageCache/caches/($cacheName)/storageTargets/($storageTargetName)" $qp)
-  let body = {name: $name, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cache_name: $cache_name, storage_target_name: $storage_target_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StorageCache/caches/{cache_name}/storageTargets/{storage_target_name}") $qp)
+  let body = {"name": $name, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -547,10 +547,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}/upgrade
 # operationId: Caches_UpgradeFirmware
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-upgrade UpgradeFirmware" [
-  resourceGroupName: string
-  subscriptionId: string
-  cacheName: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-upgrade post" [
+  subscription_id: string
+  resource_group_name: string
+  cache_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,7 +564,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.StorageCache/caches/($cacheName)/upgrade" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cache_name: $cache_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StorageCache/caches/{cache_name}/upgrade") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

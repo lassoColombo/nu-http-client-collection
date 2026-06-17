@@ -207,7 +207,7 @@ export def "circuits-circuit-terminations create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/circuits/circuit-terminations/")
-  let body = {cable: $cable, circuit: $circuit, connection_status: $connection_status, description: $description, port_speed: $port_speed, pp_info: $pp_info, site: $site, term_side: $term_side, upstream_speed: $upstream_speed, xconnect_id: $xconnect_id} | compact
+  let body = {"cable": $cable, "circuit": $circuit, "connection_status": $connection_status, "description": $description, "port_speed": $port_speed, "pp_info": $pp_info, "site": $site, "term_side": $term_side, "upstream_speed": $upstream_speed, "xconnect_id": $xconnect_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -230,7 +230,7 @@ export def "circuits-circuit-terminations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/circuit-terminations/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/circuit-terminations/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,7 +253,7 @@ export def "circuits-circuit-terminations read" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, circuit: record<cid: string, id: int, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, id: int, port_speed: int, pp_info: string, site: record<id: int, name: string, slug: string, url: string>, term_side: string, upstream_speed: int, xconnect_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/circuit-terminations/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/circuit-terminations/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -287,8 +287,8 @@ export def "circuits-circuit-terminations patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/circuit-terminations/($id)/")
-  let body = {cable: $cable, circuit: $circuit, connection_status: $connection_status, description: $description, port_speed: $port_speed, pp_info: $pp_info, site: $site, term_side: $term_side, upstream_speed: $upstream_speed, xconnect_id: $xconnect_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/circuit-terminations/{id}/"))
+  let body = {"cable": $cable, "circuit": $circuit, "connection_status": $connection_status, "description": $description, "port_speed": $port_speed, "pp_info": $pp_info, "site": $site, "term_side": $term_side, "upstream_speed": $upstream_speed, "xconnect_id": $xconnect_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -323,8 +323,8 @@ export def "circuits-circuit-terminations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/circuit-terminations/($id)/")
-  let body = {cable: $cable, circuit: $circuit, connection_status: $connection_status, description: $description, port_speed: $port_speed, pp_info: $pp_info, site: $site, term_side: $term_side, upstream_speed: $upstream_speed, xconnect_id: $xconnect_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/circuit-terminations/{id}/"))
+  let body = {"cable": $cable, "circuit": $circuit, "connection_status": $connection_status, "description": $description, "port_speed": $port_speed, "pp_info": $pp_info, "site": $site, "term_side": $term_side, "upstream_speed": $upstream_speed, "xconnect_id": $xconnect_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -403,7 +403,7 @@ export def "circuits-circuit-types create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/circuits/circuit-types/")
-  let body = {description: $description, name: $name, slug: $slug} | compact
+  let body = {"description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -426,7 +426,7 @@ export def "circuits-circuit-types delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/circuit-types/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/circuit-types/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -449,7 +449,7 @@ export def "circuits-circuit-types read" [
 ]: nothing -> record<circuit_count: int, description: string, id: int, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/circuit-types/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/circuit-types/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -475,8 +475,8 @@ export def "circuits-circuit-types patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/circuit-types/($id)/")
-  let body = {description: $description, name: $name, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/circuit-types/{id}/"))
+  let body = {"description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -503,8 +503,8 @@ export def "circuits-circuit-types update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/circuit-types/($id)/")
-  let body = {description: $description, name: $name, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/circuit-types/{id}/"))
+  let body = {"description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -627,7 +627,7 @@ export def "circuits-circuits create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/circuits/circuits/")
-  let body = {cid: $cid, comments: $comments, commit_rate: $commit_rate, custom_fields: $custom_fields, description: $description, install_date: $install_date, provider: $provider, status: $status, tags: $tags, tenant: $tenant, type: $type} | compact
+  let body = {"cid": $cid, "comments": $comments, "commit_rate": $commit_rate, "custom_fields": $custom_fields, "description": $description, "install_date": $install_date, "provider": $provider, "status": $status, "tags": $tags, "tenant": $tenant, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -650,7 +650,7 @@ export def "circuits-circuits delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/circuits/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/circuits/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -673,7 +673,7 @@ export def "circuits-circuits read" [
 ]: nothing -> record<cid: string, comments: string, commit_rate: int, created: string, custom_fields: record, description: string, id: int, install_date: string, last_updated: string, provider: record<circuit_count: int, id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, termination_a: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, termination_z: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, type: record<circuit_count: int, id: int, name: string, slug: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/circuits/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/circuits/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -707,8 +707,8 @@ export def "circuits-circuits patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/circuits/($id)/")
-  let body = {cid: $cid, comments: $comments, commit_rate: $commit_rate, custom_fields: $custom_fields, description: $description, install_date: $install_date, provider: $provider, status: $status, tags: $tags, tenant: $tenant, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/circuits/{id}/"))
+  let body = {"cid": $cid, "comments": $comments, "commit_rate": $commit_rate, "custom_fields": $custom_fields, "description": $description, "install_date": $install_date, "provider": $provider, "status": $status, "tags": $tags, "tenant": $tenant, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -743,8 +743,8 @@ export def "circuits-circuits update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/circuits/($id)/")
-  let body = {cid: $cid, comments: $comments, commit_rate: $commit_rate, custom_fields: $custom_fields, description: $description, install_date: $install_date, provider: $provider, status: $status, tags: $tags, tenant: $tenant, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/circuits/{id}/"))
+  let body = {"cid": $cid, "comments": $comments, "commit_rate": $commit_rate, "custom_fields": $custom_fields, "description": $description, "install_date": $install_date, "provider": $provider, "status": $status, "tags": $tags, "tenant": $tenant, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -862,7 +862,7 @@ export def "circuits-providers create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/circuits/providers/")
-  let body = {account: $account, admin_contact: $admin_contact, asn: $asn, comments: $comments, custom_fields: $custom_fields, name: $name, noc_contact: $noc_contact, portal_url: $portal_url, slug: $slug, tags: $tags} | compact
+  let body = {"account": $account, "admin_contact": $admin_contact, "asn": $asn, "comments": $comments, "custom_fields": $custom_fields, "name": $name, "noc_contact": $noc_contact, "portal_url": $portal_url, "slug": $slug, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -885,7 +885,7 @@ export def "circuits-providers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/providers/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/providers/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -908,7 +908,7 @@ export def "circuits-providers read" [
 ]: nothing -> record<account: string, admin_contact: string, asn: int, circuit_count: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, name: string, noc_contact: string, portal_url: string, slug: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/providers/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/providers/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -941,8 +941,8 @@ export def "circuits-providers patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/providers/($id)/")
-  let body = {account: $account, admin_contact: $admin_contact, asn: $asn, comments: $comments, custom_fields: $custom_fields, name: $name, noc_contact: $noc_contact, portal_url: $portal_url, slug: $slug, tags: $tags} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/providers/{id}/"))
+  let body = {"account": $account, "admin_contact": $admin_contact, "asn": $asn, "comments": $comments, "custom_fields": $custom_fields, "name": $name, "noc_contact": $noc_contact, "portal_url": $portal_url, "slug": $slug, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -976,8 +976,8 @@ export def "circuits-providers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/providers/($id)/")
-  let body = {account: $account, admin_contact: $admin_contact, asn: $asn, comments: $comments, custom_fields: $custom_fields, name: $name, noc_contact: $noc_contact, portal_url: $portal_url, slug: $slug, tags: $tags} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/providers/{id}/"))
+  let body = {"account": $account, "admin_contact": $admin_contact, "asn": $asn, "comments": $comments, "custom_fields": $custom_fields, "name": $name, "noc_contact": $noc_contact, "portal_url": $portal_url, "slug": $slug, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1001,7 +1001,7 @@ export def "circuits-providers-graphs graphs" [
 ]: nothing -> record<account: string, admin_contact: string, asn: int, circuit_count: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, name: string, noc_contact: string, portal_url: string, slug: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/circuits/providers/($id)/graphs/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/circuits/providers/{id}/graphs/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1098,7 +1098,7 @@ export def "dcim-cables create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/cables/")
-  let body = {color: $color, label: $label, length: $length, length_unit: $length_unit, status: $status, termination_a_id: $termination_a_id, termination_a_type: $termination_a_type, termination_b_id: $termination_b_id, termination_b_type: $termination_b_type, type: $type} | compact
+  let body = {"color": $color, "label": $label, "length": $length, "length_unit": $length_unit, "status": $status, "termination_a_id": $termination_a_id, "termination_a_type": $termination_a_type, "termination_b_id": $termination_b_id, "termination_b_type": $termination_b_type, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1121,7 +1121,7 @@ export def "dcim-cables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/cables/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/cables/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1144,7 +1144,7 @@ export def "dcim-cables read" [
 ]: nothing -> record<color: string, id: int, label: string, length: int, length_unit: record<label: string, value: string>, status: record<label: string, value: string>, termination_a: record, termination_a_id: int, termination_a_type: string, termination_b: record, termination_b_id: int, termination_b_type: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/cables/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/cables/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1177,8 +1177,8 @@ export def "dcim-cables patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/cables/($id)/")
-  let body = {color: $color, label: $label, length: $length, length_unit: $length_unit, status: $status, termination_a_id: $termination_a_id, termination_a_type: $termination_a_type, termination_b_id: $termination_b_id, termination_b_type: $termination_b_type, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/cables/{id}/"))
+  let body = {"color": $color, "label": $label, "length": $length, "length_unit": $length_unit, "status": $status, "termination_a_id": $termination_a_id, "termination_a_type": $termination_a_type, "termination_b_id": $termination_b_id, "termination_b_type": $termination_b_type, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1212,8 +1212,8 @@ export def "dcim-cables update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/cables/($id)/")
-  let body = {color: $color, label: $label, length: $length, length_unit: $length_unit, status: $status, termination_a_id: $termination_a_id, termination_a_type: $termination_a_type, termination_b_id: $termination_b_id, termination_b_type: $termination_b_type, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/cables/{id}/"))
+  let body = {"color": $color, "label": $label, "length": $length, "length_unit": $length_unit, "status": $status, "termination_a_id": $termination_a_id, "termination_a_type": $termination_a_type, "termination_b_id": $termination_b_id, "termination_b_type": $termination_b_type, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1350,7 +1350,7 @@ export def "dcim-console-port-templates create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/console-port-templates/")
-  let body = {device_type: $device_type, name: $name, type: $type} | compact
+  let body = {"device_type": $device_type, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1373,7 +1373,7 @@ export def "dcim-console-port-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-port-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1396,7 +1396,7 @@ export def "dcim-console-port-templates read" [
 ]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-port-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1422,8 +1422,8 @@ export def "dcim-console-port-templates patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-port-templates/($id)/")
-  let body = {device_type: $device_type, name: $name, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-port-templates/{id}/"))
+  let body = {"device_type": $device_type, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1450,8 +1450,8 @@ export def "dcim-console-port-templates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-port-templates/($id)/")
-  let body = {device_type: $device_type, name: $name, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-port-templates/{id}/"))
+  let body = {"device_type": $device_type, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1554,7 +1554,7 @@ export def "dcim-console-ports create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/console-ports/")
-  let body = {cable: $cable, connection_status: $connection_status, description: $description, device: $device, name: $name, tags: $tags, type: $type} | compact
+  let body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "name": $name, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1577,7 +1577,7 @@ export def "dcim-console-ports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-ports/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1600,7 +1600,7 @@ export def "dcim-console-ports read" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-ports/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1631,8 +1631,8 @@ export def "dcim-console-ports patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-ports/($id)/")
-  let body = {cable: $cable, connection_status: $connection_status, description: $description, device: $device, name: $name, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-ports/{id}/"))
+  let body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "name": $name, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1664,8 +1664,8 @@ export def "dcim-console-ports update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-ports/($id)/")
-  let body = {cable: $cable, connection_status: $connection_status, description: $description, device: $device, name: $name, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-ports/{id}/"))
+  let body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "name": $name, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1689,7 +1689,7 @@ export def "dcim-console-ports-trace trace" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-ports/($id)/trace/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-ports/{id}/trace/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1761,7 +1761,7 @@ export def "dcim-console-server-port-templates create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/console-server-port-templates/")
-  let body = {device_type: $device_type, name: $name, type: $type} | compact
+  let body = {"device_type": $device_type, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1784,7 +1784,7 @@ export def "dcim-console-server-port-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-server-port-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-server-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1807,7 +1807,7 @@ export def "dcim-console-server-port-templates read" [
 ]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-server-port-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-server-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1833,8 +1833,8 @@ export def "dcim-console-server-port-templates patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-server-port-templates/($id)/")
-  let body = {device_type: $device_type, name: $name, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-server-port-templates/{id}/"))
+  let body = {"device_type": $device_type, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1861,8 +1861,8 @@ export def "dcim-console-server-port-templates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-server-port-templates/($id)/")
-  let body = {device_type: $device_type, name: $name, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-server-port-templates/{id}/"))
+  let body = {"device_type": $device_type, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1965,7 +1965,7 @@ export def "dcim-console-server-ports create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/console-server-ports/")
-  let body = {cable: $cable, connection_status: $connection_status, description: $description, device: $device, name: $name, tags: $tags, type: $type} | compact
+  let body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "name": $name, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1988,7 +1988,7 @@ export def "dcim-console-server-ports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-server-ports/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-server-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2011,7 +2011,7 @@ export def "dcim-console-server-ports read" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-server-ports/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-server-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2042,8 +2042,8 @@ export def "dcim-console-server-ports patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-server-ports/($id)/")
-  let body = {cable: $cable, connection_status: $connection_status, description: $description, device: $device, name: $name, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-server-ports/{id}/"))
+  let body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "name": $name, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2075,8 +2075,8 @@ export def "dcim-console-server-ports update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-server-ports/($id)/")
-  let body = {cable: $cable, connection_status: $connection_status, description: $description, device: $device, name: $name, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-server-ports/{id}/"))
+  let body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "name": $name, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2100,7 +2100,7 @@ export def "dcim-console-server-ports-trace trace" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/console-server-ports/($id)/trace/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/console-server-ports/{id}/trace/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2169,7 +2169,7 @@ export def "dcim-device-bay-templates create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/device-bay-templates/")
-  let body = {device_type: $device_type, name: $name} | compact
+  let body = {"device_type": $device_type, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2192,7 +2192,7 @@ export def "dcim-device-bay-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/device-bay-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/device-bay-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2215,7 +2215,7 @@ export def "dcim-device-bay-templates read" [
 ]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/device-bay-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/device-bay-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2240,8 +2240,8 @@ export def "dcim-device-bay-templates patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/device-bay-templates/($id)/")
-  let body = {device_type: $device_type, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/device-bay-templates/{id}/"))
+  let body = {"device_type": $device_type, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2267,8 +2267,8 @@ export def "dcim-device-bay-templates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/device-bay-templates/($id)/")
-  let body = {device_type: $device_type, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/device-bay-templates/{id}/"))
+  let body = {"device_type": $device_type, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2363,7 +2363,7 @@ export def "dcim-device-bays create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/device-bays/")
-  let body = {description: $description, device: $device, installed_device: $installed_device, name: $name, tags: $tags} | compact
+  let body = {"description": $description, "device": $device, "installed_device": $installed_device, "name": $name, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2386,7 +2386,7 @@ export def "dcim-device-bays delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/device-bays/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/device-bays/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2409,7 +2409,7 @@ export def "dcim-device-bays read" [
 ]: nothing -> record<description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, installed_device: record<display_name: string, id: int, name: string, url: string>, name: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/device-bays/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/device-bays/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2437,8 +2437,8 @@ export def "dcim-device-bays patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/device-bays/($id)/")
-  let body = {description: $description, device: $device, installed_device: $installed_device, name: $name, tags: $tags} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/device-bays/{id}/"))
+  let body = {"description": $description, "device": $device, "installed_device": $installed_device, "name": $name, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2467,8 +2467,8 @@ export def "dcim-device-bays update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/device-bays/($id)/")
-  let body = {description: $description, device: $device, installed_device: $installed_device, name: $name, tags: $tags} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/device-bays/{id}/"))
+  let body = {"description": $description, "device": $device, "installed_device": $installed_device, "name": $name, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2560,7 +2560,7 @@ export def "dcim-device-roles create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/device-roles/")
-  let body = {color: $color, description: $description, name: $name, slug: $slug, vm_role: $vm_role} | compact
+  let body = {"color": $color, "description": $description, "name": $name, "slug": $slug, "vm_role": $vm_role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2583,7 +2583,7 @@ export def "dcim-device-roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/device-roles/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/device-roles/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2606,7 +2606,7 @@ export def "dcim-device-roles read" [
 ]: nothing -> record<color: string, description: string, device_count: int, id: int, name: string, slug: string, virtualmachine_count: int, vm_role: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/device-roles/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/device-roles/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2634,8 +2634,8 @@ export def "dcim-device-roles patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/device-roles/($id)/")
-  let body = {color: $color, description: $description, name: $name, slug: $slug, vm_role: $vm_role} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/device-roles/{id}/"))
+  let body = {"color": $color, "description": $description, "name": $name, "slug": $slug, "vm_role": $vm_role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2664,8 +2664,8 @@ export def "dcim-device-roles update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/device-roles/($id)/")
-  let body = {color: $color, description: $description, name: $name, slug: $slug, vm_role: $vm_role} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/device-roles/{id}/"))
+  let body = {"color": $color, "description": $description, "name": $name, "slug": $slug, "vm_role": $vm_role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2789,7 +2789,7 @@ export def "dcim-device-types create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/device-types/")
-  let body = {comments: $comments, custom_fields: $custom_fields, is_full_depth: $is_full_depth, manufacturer: $manufacturer, model: $model, part_number: $part_number, slug: $slug, subdevice_role: $subdevice_role, tags: $tags, u_height: $u_height} | compact
+  let body = {"comments": $comments, "custom_fields": $custom_fields, "is_full_depth": $is_full_depth, "manufacturer": $manufacturer, "model": $model, "part_number": $part_number, "slug": $slug, "subdevice_role": $subdevice_role, "tags": $tags, "u_height": $u_height} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2812,7 +2812,7 @@ export def "dcim-device-types delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/device-types/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/device-types/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2835,7 +2835,7 @@ export def "dcim-device-types read" [
 ]: nothing -> record<comments: string, created: string, custom_fields: record, device_count: int, display_name: string, front_image: string, id: int, is_full_depth: bool, last_updated: string, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, part_number: string, rear_image: string, slug: string, subdevice_role: record<label: string, value: string>, tags: list<string>, u_height: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/device-types/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/device-types/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2868,8 +2868,8 @@ export def "dcim-device-types patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/device-types/($id)/")
-  let body = {comments: $comments, custom_fields: $custom_fields, is_full_depth: $is_full_depth, manufacturer: $manufacturer, model: $model, part_number: $part_number, slug: $slug, subdevice_role: $subdevice_role, tags: $tags, u_height: $u_height} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/device-types/{id}/"))
+  let body = {"comments": $comments, "custom_fields": $custom_fields, "is_full_depth": $is_full_depth, "manufacturer": $manufacturer, "model": $model, "part_number": $part_number, "slug": $slug, "subdevice_role": $subdevice_role, "tags": $tags, "u_height": $u_height} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2903,8 +2903,8 @@ export def "dcim-device-types update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/device-types/($id)/")
-  let body = {comments: $comments, custom_fields: $custom_fields, is_full_depth: $is_full_depth, manufacturer: $manufacturer, model: $model, part_number: $part_number, slug: $slug, subdevice_role: $subdevice_role, tags: $tags, u_height: $u_height} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/device-types/{id}/"))
+  let body = {"comments": $comments, "custom_fields": $custom_fields, "is_full_depth": $is_full_depth, "manufacturer": $manufacturer, "model": $model, "part_number": $part_number, "slug": $slug, "subdevice_role": $subdevice_role, "tags": $tags, "u_height": $u_height} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3096,7 +3096,7 @@ export def "dcim-devices create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/devices/")
-  let body = {asset_tag: $asset_tag, cluster: $cluster, comments: $comments, custom_fields: $custom_fields, device_role: $device_role, device_type: $device_type, face: $face, local_context_data: $local_context_data, name: $name, parent_device: $parent_device, platform: $platform, position: $position, primary_ip4: $primary_ip4, primary_ip6: $primary_ip6, rack: $rack, serial: $serial, site: $site, status: $status, tags: $tags, tenant: $tenant, vc_position: $vc_position, vc_priority: $vc_priority, virtual_chassis: $virtual_chassis} | compact
+  let body = {"asset_tag": $asset_tag, "cluster": $cluster, "comments": $comments, "custom_fields": $custom_fields, "device_role": $device_role, "device_type": $device_type, "face": $face, "local_context_data": $local_context_data, "name": $name, "parent_device": $parent_device, "platform": $platform, "position": $position, "primary_ip4": $primary_ip4, "primary_ip6": $primary_ip6, "rack": $rack, "serial": $serial, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vc_position": $vc_position, "vc_priority": $vc_priority, "virtual_chassis": $virtual_chassis} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3119,7 +3119,7 @@ export def "dcim-devices delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/devices/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/devices/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3142,7 +3142,7 @@ export def "dcim-devices read" [
 ]: nothing -> record<asset_tag: string, cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, device_role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, display_name: string, face: record<label: string, value: string>, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record<display_name: string, id: int, name: string, url: string>, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, position: int, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vc_position: int, vc_priority: int, virtual_chassis: record<id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/devices/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/devices/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3189,8 +3189,8 @@ export def "dcim-devices patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/devices/($id)/")
-  let body = {asset_tag: $asset_tag, cluster: $cluster, comments: $comments, custom_fields: $custom_fields, device_role: $device_role, device_type: $device_type, face: $face, local_context_data: $local_context_data, name: $name, parent_device: $parent_device, platform: $platform, position: $position, primary_ip4: $primary_ip4, primary_ip6: $primary_ip6, rack: $rack, serial: $serial, site: $site, status: $status, tags: $tags, tenant: $tenant, vc_position: $vc_position, vc_priority: $vc_priority, virtual_chassis: $virtual_chassis} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/devices/{id}/"))
+  let body = {"asset_tag": $asset_tag, "cluster": $cluster, "comments": $comments, "custom_fields": $custom_fields, "device_role": $device_role, "device_type": $device_type, "face": $face, "local_context_data": $local_context_data, "name": $name, "parent_device": $parent_device, "platform": $platform, "position": $position, "primary_ip4": $primary_ip4, "primary_ip6": $primary_ip6, "rack": $rack, "serial": $serial, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vc_position": $vc_position, "vc_priority": $vc_priority, "virtual_chassis": $virtual_chassis} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3238,8 +3238,8 @@ export def "dcim-devices update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/devices/($id)/")
-  let body = {asset_tag: $asset_tag, cluster: $cluster, comments: $comments, custom_fields: $custom_fields, device_role: $device_role, device_type: $device_type, face: $face, local_context_data: $local_context_data, name: $name, parent_device: $parent_device, platform: $platform, position: $position, primary_ip4: $primary_ip4, primary_ip6: $primary_ip6, rack: $rack, serial: $serial, site: $site, status: $status, tags: $tags, tenant: $tenant, vc_position: $vc_position, vc_priority: $vc_priority, virtual_chassis: $virtual_chassis} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/devices/{id}/"))
+  let body = {"asset_tag": $asset_tag, "cluster": $cluster, "comments": $comments, "custom_fields": $custom_fields, "device_role": $device_role, "device_type": $device_type, "face": $face, "local_context_data": $local_context_data, "name": $name, "parent_device": $parent_device, "platform": $platform, "position": $position, "primary_ip4": $primary_ip4, "primary_ip6": $primary_ip6, "rack": $rack, "serial": $serial, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vc_position": $vc_position, "vc_priority": $vc_priority, "virtual_chassis": $virtual_chassis} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3263,7 +3263,7 @@ export def "dcim-devices-graphs graphs" [
 ]: nothing -> record<asset_tag: string, cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, device_role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, display_name: string, face: record<label: string, value: string>, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record<display_name: string, id: int, name: string, url: string>, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, position: int, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vc_position: int, vc_priority: int, virtual_chassis: record<id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/devices/($id)/graphs/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/devices/{id}/graphs/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3288,7 +3288,7 @@ export def "dcim-devices-napalm napalm" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "method" $method "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dcim/devices/($id)/napalm/" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/devices/{id}/napalm/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3362,7 +3362,7 @@ export def "dcim-front-port-templates create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/front-port-templates/")
-  let body = {device_type: $device_type, name: $name, rear_port: $rear_port, rear_port_position: $rear_port_position, type: $type} | compact
+  let body = {"device_type": $device_type, "name": $name, "rear_port": $rear_port, "rear_port_position": $rear_port_position, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3385,7 +3385,7 @@ export def "dcim-front-port-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/front-port-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/front-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3408,7 +3408,7 @@ export def "dcim-front-port-templates read" [
 ]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/front-port-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/front-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3436,8 +3436,8 @@ export def "dcim-front-port-templates patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/front-port-templates/($id)/")
-  let body = {device_type: $device_type, name: $name, rear_port: $rear_port, rear_port_position: $rear_port_position, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/front-port-templates/{id}/"))
+  let body = {"device_type": $device_type, "name": $name, "rear_port": $rear_port, "rear_port_position": $rear_port_position, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3466,8 +3466,8 @@ export def "dcim-front-port-templates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/front-port-templates/($id)/")
-  let body = {device_type: $device_type, name: $name, rear_port: $rear_port, rear_port_position: $rear_port_position, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/front-port-templates/{id}/"))
+  let body = {"device_type": $device_type, "name": $name, "rear_port": $rear_port, "rear_port_position": $rear_port_position, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3569,7 +3569,7 @@ export def "dcim-front-ports create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/front-ports/")
-  let body = {cable: $cable, description: $description, device: $device, name: $name, rear_port: $rear_port, rear_port_position: $rear_port_position, tags: $tags, type: $type} | compact
+  let body = {"cable": $cable, "description": $description, "device": $device, "name": $name, "rear_port": $rear_port, "rear_port_position": $rear_port_position, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3592,7 +3592,7 @@ export def "dcim-front-ports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/front-ports/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/front-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3615,7 +3615,7 @@ export def "dcim-front-ports read" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/front-ports/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/front-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3647,8 +3647,8 @@ export def "dcim-front-ports patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/front-ports/($id)/")
-  let body = {cable: $cable, description: $description, device: $device, name: $name, rear_port: $rear_port, rear_port_position: $rear_port_position, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/front-ports/{id}/"))
+  let body = {"cable": $cable, "description": $description, "device": $device, "name": $name, "rear_port": $rear_port, "rear_port_position": $rear_port_position, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3681,8 +3681,8 @@ export def "dcim-front-ports update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/front-ports/($id)/")
-  let body = {cable: $cable, description: $description, device: $device, name: $name, rear_port: $rear_port, rear_port_position: $rear_port_position, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/front-ports/{id}/"))
+  let body = {"cable": $cable, "description": $description, "device": $device, "name": $name, "rear_port": $rear_port, "rear_port_position": $rear_port_position, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3706,7 +3706,7 @@ export def "dcim-front-ports-trace trace" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/front-ports/($id)/trace/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/front-ports/{id}/trace/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3809,7 +3809,7 @@ export def "dcim-interface-templates create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/interface-templates/")
-  let body = {device_type: $device_type, mgmt_only: $mgmt_only, name: $name, type: $type} | compact
+  let body = {"device_type": $device_type, "mgmt_only": $mgmt_only, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3832,7 +3832,7 @@ export def "dcim-interface-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/interface-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/interface-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3855,7 +3855,7 @@ export def "dcim-interface-templates read" [
 ]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, mgmt_only: bool, name: string, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/interface-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/interface-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3882,8 +3882,8 @@ export def "dcim-interface-templates patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/interface-templates/($id)/")
-  let body = {device_type: $device_type, mgmt_only: $mgmt_only, name: $name, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/interface-templates/{id}/"))
+  let body = {"device_type": $device_type, "mgmt_only": $mgmt_only, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3911,8 +3911,8 @@ export def "dcim-interface-templates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/interface-templates/($id)/")
-  let body = {device_type: $device_type, mgmt_only: $mgmt_only, name: $name, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/interface-templates/{id}/"))
+  let body = {"device_type": $device_type, "mgmt_only": $mgmt_only, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4046,7 +4046,7 @@ export def "dcim-interfaces create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/interfaces/")
-  let body = {cable: $cable, connection_status: $connection_status, description: $description, device: $device, enabled: $enabled, lag: $lag, mac_address: $mac_address, mgmt_only: $mgmt_only, mode: $mode, mtu: $mtu, name: $name, tagged_vlans: $tagged_vlans, tags: $tags, type: $type, untagged_vlan: $untagged_vlan} | compact
+  let body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "enabled": $enabled, "lag": $lag, "mac_address": $mac_address, "mgmt_only": $mgmt_only, "mode": $mode, "mtu": $mtu, "name": $name, "tagged_vlans": $tagged_vlans, "tags": $tags, "type": $type, "untagged_vlan": $untagged_vlan} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4069,7 +4069,7 @@ export def "dcim-interfaces delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/interfaces/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/interfaces/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4092,7 +4092,7 @@ export def "dcim-interfaces read" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/interfaces/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/interfaces/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4131,8 +4131,8 @@ export def "dcim-interfaces patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/interfaces/($id)/")
-  let body = {cable: $cable, connection_status: $connection_status, description: $description, device: $device, enabled: $enabled, lag: $lag, mac_address: $mac_address, mgmt_only: $mgmt_only, mode: $mode, mtu: $mtu, name: $name, tagged_vlans: $tagged_vlans, tags: $tags, type: $type, untagged_vlan: $untagged_vlan} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/interfaces/{id}/"))
+  let body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "enabled": $enabled, "lag": $lag, "mac_address": $mac_address, "mgmt_only": $mgmt_only, "mode": $mode, "mtu": $mtu, "name": $name, "tagged_vlans": $tagged_vlans, "tags": $tags, "type": $type, "untagged_vlan": $untagged_vlan} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4172,8 +4172,8 @@ export def "dcim-interfaces update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/interfaces/($id)/")
-  let body = {cable: $cable, connection_status: $connection_status, description: $description, device: $device, enabled: $enabled, lag: $lag, mac_address: $mac_address, mgmt_only: $mgmt_only, mode: $mode, mtu: $mtu, name: $name, tagged_vlans: $tagged_vlans, tags: $tags, type: $type, untagged_vlan: $untagged_vlan} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/interfaces/{id}/"))
+  let body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "enabled": $enabled, "lag": $lag, "mac_address": $mac_address, "mgmt_only": $mgmt_only, "mode": $mode, "mtu": $mtu, "name": $name, "tagged_vlans": $tagged_vlans, "tags": $tags, "type": $type, "untagged_vlan": $untagged_vlan} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4197,7 +4197,7 @@ export def "dcim-interfaces-graphs graphs" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/interfaces/($id)/graphs/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/interfaces/{id}/graphs/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4220,7 +4220,7 @@ export def "dcim-interfaces-trace trace" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/interfaces/($id)/trace/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/interfaces/{id}/trace/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4337,7 +4337,7 @@ export def "dcim-inventory-items create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/inventory-items/")
-  let body = {asset_tag: $asset_tag, description: $description, device: $device, discovered: $discovered, manufacturer: $manufacturer, name: $name, parent: $parent, part_id: $part_id, serial: $serial, tags: $tags} | compact
+  let body = {"asset_tag": $asset_tag, "description": $description, "device": $device, "discovered": $discovered, "manufacturer": $manufacturer, "name": $name, "parent": $parent, "part_id": $part_id, "serial": $serial, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4360,7 +4360,7 @@ export def "dcim-inventory-items delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/inventory-items/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/inventory-items/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4383,7 +4383,7 @@ export def "dcim-inventory-items read" [
 ]: nothing -> record<asset_tag: string, description: string, device: record<display_name: string, id: int, name: string, url: string>, discovered: bool, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, parent: int, part_id: string, serial: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/inventory-items/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/inventory-items/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4416,8 +4416,8 @@ export def "dcim-inventory-items patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/inventory-items/($id)/")
-  let body = {asset_tag: $asset_tag, description: $description, device: $device, discovered: $discovered, manufacturer: $manufacturer, name: $name, parent: $parent, part_id: $part_id, serial: $serial, tags: $tags} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/inventory-items/{id}/"))
+  let body = {"asset_tag": $asset_tag, "description": $description, "device": $device, "discovered": $discovered, "manufacturer": $manufacturer, "name": $name, "parent": $parent, "part_id": $part_id, "serial": $serial, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4451,8 +4451,8 @@ export def "dcim-inventory-items update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/inventory-items/($id)/")
-  let body = {asset_tag: $asset_tag, description: $description, device: $device, discovered: $discovered, manufacturer: $manufacturer, name: $name, parent: $parent, part_id: $part_id, serial: $serial, tags: $tags} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/inventory-items/{id}/"))
+  let body = {"asset_tag": $asset_tag, "description": $description, "device": $device, "discovered": $discovered, "manufacturer": $manufacturer, "name": $name, "parent": $parent, "part_id": $part_id, "serial": $serial, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4541,7 +4541,7 @@ export def "dcim-manufacturers create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/manufacturers/")
-  let body = {description: $description, name: $name, slug: $slug} | compact
+  let body = {"description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4564,7 +4564,7 @@ export def "dcim-manufacturers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/manufacturers/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/manufacturers/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4587,7 +4587,7 @@ export def "dcim-manufacturers read" [
 ]: nothing -> record<description: string, devicetype_count: int, id: int, inventoryitem_count: int, name: string, platform_count: int, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/manufacturers/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/manufacturers/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4613,8 +4613,8 @@ export def "dcim-manufacturers patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/manufacturers/($id)/")
-  let body = {description: $description, name: $name, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/manufacturers/{id}/"))
+  let body = {"description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4641,8 +4641,8 @@ export def "dcim-manufacturers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/manufacturers/($id)/")
-  let body = {description: $description, name: $name, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/manufacturers/{id}/"))
+  let body = {"description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4748,7 +4748,7 @@ export def "dcim-platforms create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/platforms/")
-  let body = {description: $description, manufacturer: $manufacturer, name: $name, napalm_args: $napalm_args, napalm_driver: $napalm_driver, slug: $slug} | compact
+  let body = {"description": $description, "manufacturer": $manufacturer, "name": $name, "napalm_args": $napalm_args, "napalm_driver": $napalm_driver, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4771,7 +4771,7 @@ export def "dcim-platforms delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/platforms/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/platforms/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4794,7 +4794,7 @@ export def "dcim-platforms read" [
 ]: nothing -> record<description: string, device_count: int, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, napalm_args: string, napalm_driver: string, slug: string, virtualmachine_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/platforms/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/platforms/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4823,8 +4823,8 @@ export def "dcim-platforms patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/platforms/($id)/")
-  let body = {description: $description, manufacturer: $manufacturer, name: $name, napalm_args: $napalm_args, napalm_driver: $napalm_driver, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/platforms/{id}/"))
+  let body = {"description": $description, "manufacturer": $manufacturer, "name": $name, "napalm_args": $napalm_args, "napalm_driver": $napalm_driver, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4854,8 +4854,8 @@ export def "dcim-platforms update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/platforms/($id)/")
-  let body = {description: $description, manufacturer: $manufacturer, name: $name, napalm_args: $napalm_args, napalm_driver: $napalm_driver, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/platforms/{id}/"))
+  let body = {"description": $description, "manufacturer": $manufacturer, "name": $name, "napalm_args": $napalm_args, "napalm_driver": $napalm_driver, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5019,7 +5019,7 @@ export def "dcim-power-feeds create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/power-feeds/")
-  let body = {amperage: $amperage, comments: $comments, custom_fields: $custom_fields, max_utilization: $max_utilization, name: $name, phase: $phase, power_panel: $power_panel, rack: $rack, status: $status, supply: $supply, tags: $tags, type: $type, voltage: $voltage} | compact
+  let body = {"amperage": $amperage, "comments": $comments, "custom_fields": $custom_fields, "max_utilization": $max_utilization, "name": $name, "phase": $phase, "power_panel": $power_panel, "rack": $rack, "status": $status, "supply": $supply, "tags": $tags, "type": $type, "voltage": $voltage} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5042,7 +5042,7 @@ export def "dcim-power-feeds delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-feeds/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-feeds/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5065,7 +5065,7 @@ export def "dcim-power-feeds read" [
 ]: nothing -> record<amperage: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, max_utilization: int, name: string, phase: record<label: string, value: string>, power_panel: record<id: int, name: string, powerfeed_count: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, status: record<label: string, value: string>, supply: record<label: string, value: string>, tags: list<string>, type: record<label: string, value: string>, voltage: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-feeds/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-feeds/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5101,8 +5101,8 @@ export def "dcim-power-feeds patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-feeds/($id)/")
-  let body = {amperage: $amperage, comments: $comments, custom_fields: $custom_fields, max_utilization: $max_utilization, name: $name, phase: $phase, power_panel: $power_panel, rack: $rack, status: $status, supply: $supply, tags: $tags, type: $type, voltage: $voltage} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-feeds/{id}/"))
+  let body = {"amperage": $amperage, "comments": $comments, "custom_fields": $custom_fields, "max_utilization": $max_utilization, "name": $name, "phase": $phase, "power_panel": $power_panel, "rack": $rack, "status": $status, "supply": $supply, "tags": $tags, "type": $type, "voltage": $voltage} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5139,8 +5139,8 @@ export def "dcim-power-feeds update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-feeds/($id)/")
-  let body = {amperage: $amperage, comments: $comments, custom_fields: $custom_fields, max_utilization: $max_utilization, name: $name, phase: $phase, power_panel: $power_panel, rack: $rack, status: $status, supply: $supply, tags: $tags, type: $type, voltage: $voltage} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-feeds/{id}/"))
+  let body = {"amperage": $amperage, "comments": $comments, "custom_fields": $custom_fields, "max_utilization": $max_utilization, "name": $name, "phase": $phase, "power_panel": $power_panel, "rack": $rack, "status": $status, "supply": $supply, "tags": $tags, "type": $type, "voltage": $voltage} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5217,7 +5217,7 @@ export def "dcim-power-outlet-templates create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/power-outlet-templates/")
-  let body = {device_type: $device_type, feed_leg: $feed_leg, name: $name, power_port: $power_port, type: $type} | compact
+  let body = {"device_type": $device_type, "feed_leg": $feed_leg, "name": $name, "power_port": $power_port, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5240,7 +5240,7 @@ export def "dcim-power-outlet-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-outlet-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-outlet-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5263,7 +5263,7 @@ export def "dcim-power-outlet-templates read" [
 ]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<id: int, name: string, url: string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-outlet-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-outlet-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5291,8 +5291,8 @@ export def "dcim-power-outlet-templates patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-outlet-templates/($id)/")
-  let body = {device_type: $device_type, feed_leg: $feed_leg, name: $name, power_port: $power_port, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-outlet-templates/{id}/"))
+  let body = {"device_type": $device_type, "feed_leg": $feed_leg, "name": $name, "power_port": $power_port, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5321,8 +5321,8 @@ export def "dcim-power-outlet-templates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-outlet-templates/($id)/")
-  let body = {device_type: $device_type, feed_leg: $feed_leg, name: $name, power_port: $power_port, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-outlet-templates/{id}/"))
+  let body = {"device_type": $device_type, "feed_leg": $feed_leg, "name": $name, "power_port": $power_port, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5429,7 +5429,7 @@ export def "dcim-power-outlets create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/power-outlets/")
-  let body = {cable: $cable, connection_status: $connection_status, description: $description, device: $device, feed_leg: $feed_leg, name: $name, power_port: $power_port, tags: $tags, type: $type} | compact
+  let body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "feed_leg": $feed_leg, "name": $name, "power_port": $power_port, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5452,7 +5452,7 @@ export def "dcim-power-outlets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-outlets/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-outlets/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5475,7 +5475,7 @@ export def "dcim-power-outlets read" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-outlets/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-outlets/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5508,8 +5508,8 @@ export def "dcim-power-outlets patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-outlets/($id)/")
-  let body = {cable: $cable, connection_status: $connection_status, description: $description, device: $device, feed_leg: $feed_leg, name: $name, power_port: $power_port, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-outlets/{id}/"))
+  let body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "feed_leg": $feed_leg, "name": $name, "power_port": $power_port, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5543,8 +5543,8 @@ export def "dcim-power-outlets update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-outlets/($id)/")
-  let body = {cable: $cable, connection_status: $connection_status, description: $description, device: $device, feed_leg: $feed_leg, name: $name, power_port: $power_port, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-outlets/{id}/"))
+  let body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "feed_leg": $feed_leg, "name": $name, "power_port": $power_port, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5568,7 +5568,7 @@ export def "dcim-power-outlets-trace trace" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-outlets/($id)/trace/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-outlets/{id}/trace/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5646,7 +5646,7 @@ export def "dcim-power-panels create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/power-panels/")
-  let body = {name: $name, rack_group: $rack_group, site: $site} | compact
+  let body = {"name": $name, "rack_group": $rack_group, "site": $site} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5669,7 +5669,7 @@ export def "dcim-power-panels delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-panels/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-panels/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5692,7 +5692,7 @@ export def "dcim-power-panels read" [
 ]: nothing -> record<id: int, name: string, powerfeed_count: int, rack_group: record<id: int, name: string, rack_count: int, slug: string, url: string>, site: record<id: int, name: string, slug: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-panels/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-panels/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5718,8 +5718,8 @@ export def "dcim-power-panels patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-panels/($id)/")
-  let body = {name: $name, rack_group: $rack_group, site: $site} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-panels/{id}/"))
+  let body = {"name": $name, "rack_group": $rack_group, "site": $site} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5746,8 +5746,8 @@ export def "dcim-power-panels update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-panels/($id)/")
-  let body = {name: $name, rack_group: $rack_group, site: $site} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-panels/{id}/"))
+  let body = {"name": $name, "rack_group": $rack_group, "site": $site} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5834,7 +5834,7 @@ export def "dcim-power-port-templates create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/power-port-templates/")
-  let body = {allocated_draw: $allocated_draw, device_type: $device_type, maximum_draw: $maximum_draw, name: $name, type: $type} | compact
+  let body = {"allocated_draw": $allocated_draw, "device_type": $device_type, "maximum_draw": $maximum_draw, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5857,7 +5857,7 @@ export def "dcim-power-port-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-port-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5880,7 +5880,7 @@ export def "dcim-power-port-templates read" [
 ]: nothing -> record<allocated_draw: int, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, maximum_draw: int, name: string, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-port-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5908,8 +5908,8 @@ export def "dcim-power-port-templates patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-port-templates/($id)/")
-  let body = {allocated_draw: $allocated_draw, device_type: $device_type, maximum_draw: $maximum_draw, name: $name, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-port-templates/{id}/"))
+  let body = {"allocated_draw": $allocated_draw, "device_type": $device_type, "maximum_draw": $maximum_draw, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5938,8 +5938,8 @@ export def "dcim-power-port-templates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-port-templates/($id)/")
-  let body = {allocated_draw: $allocated_draw, device_type: $device_type, maximum_draw: $maximum_draw, name: $name, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-port-templates/{id}/"))
+  let body = {"allocated_draw": $allocated_draw, "device_type": $device_type, "maximum_draw": $maximum_draw, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6056,7 +6056,7 @@ export def "dcim-power-ports create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/power-ports/")
-  let body = {allocated_draw: $allocated_draw, cable: $cable, connection_status: $connection_status, description: $description, device: $device, maximum_draw: $maximum_draw, name: $name, tags: $tags, type: $type} | compact
+  let body = {"allocated_draw": $allocated_draw, "cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "maximum_draw": $maximum_draw, "name": $name, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6079,7 +6079,7 @@ export def "dcim-power-ports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-ports/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6102,7 +6102,7 @@ export def "dcim-power-ports read" [
 ]: nothing -> record<allocated_draw: int, cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, maximum_draw: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-ports/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6135,8 +6135,8 @@ export def "dcim-power-ports patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-ports/($id)/")
-  let body = {allocated_draw: $allocated_draw, cable: $cable, connection_status: $connection_status, description: $description, device: $device, maximum_draw: $maximum_draw, name: $name, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-ports/{id}/"))
+  let body = {"allocated_draw": $allocated_draw, "cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "maximum_draw": $maximum_draw, "name": $name, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6170,8 +6170,8 @@ export def "dcim-power-ports update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-ports/($id)/")
-  let body = {allocated_draw: $allocated_draw, cable: $cable, connection_status: $connection_status, description: $description, device: $device, maximum_draw: $maximum_draw, name: $name, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-ports/{id}/"))
+  let body = {"allocated_draw": $allocated_draw, "cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "maximum_draw": $maximum_draw, "name": $name, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6195,7 +6195,7 @@ export def "dcim-power-ports-trace trace" [
 ]: nothing -> record<allocated_draw: int, cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, maximum_draw: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/power-ports/($id)/trace/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/power-ports/{id}/trace/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6297,7 +6297,7 @@ export def "dcim-rack-groups create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/rack-groups/")
-  let body = {description: $description, name: $name, parent: $parent, site: $site, slug: $slug} | compact
+  let body = {"description": $description, "name": $name, "parent": $parent, "site": $site, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6320,7 +6320,7 @@ export def "dcim-rack-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rack-groups/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rack-groups/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6343,7 +6343,7 @@ export def "dcim-rack-groups read" [
 ]: nothing -> record<description: string, id: int, name: string, parent: record<id: int, name: string, rack_count: int, slug: string, url: string>, rack_count: int, site: record<id: int, name: string, slug: string, url: string>, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rack-groups/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rack-groups/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6371,8 +6371,8 @@ export def "dcim-rack-groups patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rack-groups/($id)/")
-  let body = {description: $description, name: $name, parent: $parent, site: $site, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rack-groups/{id}/"))
+  let body = {"description": $description, "name": $name, "parent": $parent, "site": $site, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6401,8 +6401,8 @@ export def "dcim-rack-groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rack-groups/($id)/")
-  let body = {description: $description, name: $name, parent: $parent, site: $site, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rack-groups/{id}/"))
+  let body = {"description": $description, "name": $name, "parent": $parent, "site": $site, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6491,7 +6491,7 @@ export def "dcim-rack-reservations create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/rack-reservations/")
-  let body = {description: $description, rack: $rack, tenant: $tenant, units: $units, user: $user} | compact
+  let body = {"description": $description, "rack": $rack, "tenant": $tenant, "units": $units, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6514,7 +6514,7 @@ export def "dcim-rack-reservations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rack-reservations/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rack-reservations/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6537,7 +6537,7 @@ export def "dcim-rack-reservations read" [
 ]: nothing -> record<created: string, description: string, id: int, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, tenant: record<id: int, name: string, slug: string, url: string>, units: list<int>, user: record<id: int, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rack-reservations/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rack-reservations/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6565,8 +6565,8 @@ export def "dcim-rack-reservations patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rack-reservations/($id)/")
-  let body = {description: $description, rack: $rack, tenant: $tenant, units: $units, user: $user} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rack-reservations/{id}/"))
+  let body = {"description": $description, "rack": $rack, "tenant": $tenant, "units": $units, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6595,8 +6595,8 @@ export def "dcim-rack-reservations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rack-reservations/($id)/")
-  let body = {description: $description, rack: $rack, tenant: $tenant, units: $units, user: $user} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rack-reservations/{id}/"))
+  let body = {"description": $description, "rack": $rack, "tenant": $tenant, "units": $units, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6686,7 +6686,7 @@ export def "dcim-rack-roles create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/rack-roles/")
-  let body = {color: $color, description: $description, name: $name, slug: $slug} | compact
+  let body = {"color": $color, "description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6709,7 +6709,7 @@ export def "dcim-rack-roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rack-roles/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rack-roles/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6732,7 +6732,7 @@ export def "dcim-rack-roles read" [
 ]: nothing -> record<color: string, description: string, id: int, name: string, rack_count: int, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rack-roles/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rack-roles/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6759,8 +6759,8 @@ export def "dcim-rack-roles patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rack-roles/($id)/")
-  let body = {color: $color, description: $description, name: $name, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rack-roles/{id}/"))
+  let body = {"color": $color, "description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6788,8 +6788,8 @@ export def "dcim-rack-roles update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rack-roles/($id)/")
-  let body = {color: $color, description: $description, name: $name, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rack-roles/{id}/"))
+  let body = {"color": $color, "description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6954,7 +6954,7 @@ export def "dcim-racks create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/racks/")
-  let body = {asset_tag: $asset_tag, comments: $comments, custom_fields: $custom_fields, desc_units: $desc_units, facility_id: $facility_id, group: $group, name: $name, outer_depth: $outer_depth, outer_unit: $outer_unit, outer_width: $outer_width, role: $role, serial: $serial, site: $site, status: $status, tags: $tags, tenant: $tenant, type: $type, u_height: $u_height, width: $width} | compact
+  let body = {"asset_tag": $asset_tag, "comments": $comments, "custom_fields": $custom_fields, "desc_units": $desc_units, "facility_id": $facility_id, "group": $group, "name": $name, "outer_depth": $outer_depth, "outer_unit": $outer_unit, "outer_width": $outer_width, "role": $role, "serial": $serial, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "type": $type, "u_height": $u_height, "width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6977,7 +6977,7 @@ export def "dcim-racks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/racks/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/racks/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7000,7 +7000,7 @@ export def "dcim-racks read" [
 ]: nothing -> record<asset_tag: string, comments: string, created: string, custom_fields: record, desc_units: bool, device_count: int, display_name: string, facility_id: string, group: record<id: int, name: string, rack_count: int, slug: string, url: string>, id: int, last_updated: string, name: string, outer_depth: int, outer_unit: record<label: string, value: string>, outer_width: int, powerfeed_count: int, role: record<id: int, name: string, rack_count: int, slug: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<label: string, value: string>, u_height: int, width: record<label: string, value: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/racks/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/racks/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7042,8 +7042,8 @@ export def "dcim-racks patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/racks/($id)/")
-  let body = {asset_tag: $asset_tag, comments: $comments, custom_fields: $custom_fields, desc_units: $desc_units, facility_id: $facility_id, group: $group, name: $name, outer_depth: $outer_depth, outer_unit: $outer_unit, outer_width: $outer_width, role: $role, serial: $serial, site: $site, status: $status, tags: $tags, tenant: $tenant, type: $type, u_height: $u_height, width: $width} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/racks/{id}/"))
+  let body = {"asset_tag": $asset_tag, "comments": $comments, "custom_fields": $custom_fields, "desc_units": $desc_units, "facility_id": $facility_id, "group": $group, "name": $name, "outer_depth": $outer_depth, "outer_unit": $outer_unit, "outer_width": $outer_width, "role": $role, "serial": $serial, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "type": $type, "u_height": $u_height, "width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7086,8 +7086,8 @@ export def "dcim-racks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/racks/($id)/")
-  let body = {asset_tag: $asset_tag, comments: $comments, custom_fields: $custom_fields, desc_units: $desc_units, facility_id: $facility_id, group: $group, name: $name, outer_depth: $outer_depth, outer_unit: $outer_unit, outer_width: $outer_width, role: $role, serial: $serial, site: $site, status: $status, tags: $tags, tenant: $tenant, type: $type, u_height: $u_height, width: $width} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/racks/{id}/"))
+  let body = {"asset_tag": $asset_tag, "comments": $comments, "custom_fields": $custom_fields, "desc_units": $desc_units, "facility_id": $facility_id, "group": $group, "name": $name, "outer_depth": $outer_depth, "outer_unit": $outer_unit, "outer_width": $outer_width, "role": $role, "serial": $serial, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "type": $type, "u_height": $u_height, "width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7121,7 +7121,7 @@ export def "dcim-racks-elevation elevation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "face" $face "scalar") (serialize-qp "render" $render "scalar") (serialize-qp "unit_width" $unit_width "scalar") (serialize-qp "unit_height" $unit_height "scalar") (serialize-qp "legend_width" $legend_width "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "expand_devices" $expand_devices "scalar") (serialize-qp "include_images" $include_images "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dcim/racks/($id)/elevation/" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/racks/{id}/elevation/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7200,7 +7200,7 @@ export def "dcim-rear-port-templates create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/rear-port-templates/")
-  let body = {device_type: $device_type, name: $name, positions: $positions, type: $type} | compact
+  let body = {"device_type": $device_type, "name": $name, "positions": $positions, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7223,7 +7223,7 @@ export def "dcim-rear-port-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rear-port-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rear-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7246,7 +7246,7 @@ export def "dcim-rear-port-templates read" [
 ]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, positions: int, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rear-port-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rear-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7273,8 +7273,8 @@ export def "dcim-rear-port-templates patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rear-port-templates/($id)/")
-  let body = {device_type: $device_type, name: $name, positions: $positions, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rear-port-templates/{id}/"))
+  let body = {"device_type": $device_type, "name": $name, "positions": $positions, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7302,8 +7302,8 @@ export def "dcim-rear-port-templates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rear-port-templates/($id)/")
-  let body = {device_type: $device_type, name: $name, positions: $positions, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rear-port-templates/{id}/"))
+  let body = {"device_type": $device_type, "name": $name, "positions": $positions, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7410,7 +7410,7 @@ export def "dcim-rear-ports create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/rear-ports/")
-  let body = {cable: $cable, description: $description, device: $device, name: $name, positions: $positions, tags: $tags, type: $type} | compact
+  let body = {"cable": $cable, "description": $description, "device": $device, "name": $name, "positions": $positions, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7433,7 +7433,7 @@ export def "dcim-rear-ports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rear-ports/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rear-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7456,7 +7456,7 @@ export def "dcim-rear-ports read" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, positions: int, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rear-ports/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rear-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7487,8 +7487,8 @@ export def "dcim-rear-ports patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rear-ports/($id)/")
-  let body = {cable: $cable, description: $description, device: $device, name: $name, positions: $positions, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rear-ports/{id}/"))
+  let body = {"cable": $cable, "description": $description, "device": $device, "name": $name, "positions": $positions, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7520,8 +7520,8 @@ export def "dcim-rear-ports update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rear-ports/($id)/")
-  let body = {cable: $cable, description: $description, device: $device, name: $name, positions: $positions, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rear-ports/{id}/"))
+  let body = {"cable": $cable, "description": $description, "device": $device, "name": $name, "positions": $positions, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7545,7 +7545,7 @@ export def "dcim-rear-ports-trace trace" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, positions: int, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/rear-ports/($id)/trace/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/rear-ports/{id}/trace/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7638,7 +7638,7 @@ export def "dcim-regions create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/regions/")
-  let body = {description: $description, name: $name, parent: $parent, slug: $slug} | compact
+  let body = {"description": $description, "name": $name, "parent": $parent, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7661,7 +7661,7 @@ export def "dcim-regions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/regions/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/regions/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7684,7 +7684,7 @@ export def "dcim-regions read" [
 ]: nothing -> record<description: string, id: int, name: string, parent: record<id: int, name: string, site_count: int, slug: string, url: string>, site_count: int, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/regions/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/regions/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7711,8 +7711,8 @@ export def "dcim-regions patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/regions/($id)/")
-  let body = {description: $description, name: $name, parent: $parent, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/regions/{id}/"))
+  let body = {"description": $description, "name": $name, "parent": $parent, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7740,8 +7740,8 @@ export def "dcim-regions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/regions/($id)/")
-  let body = {description: $description, name: $name, parent: $parent, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/regions/{id}/"))
+  let body = {"description": $description, "name": $name, "parent": $parent, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7916,7 +7916,7 @@ export def "dcim-sites create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/sites/")
-  let body = {asn: $asn, comments: $comments, contact_email: $contact_email, contact_name: $contact_name, contact_phone: $contact_phone, custom_fields: $custom_fields, description: $description, facility: $facility, latitude: $latitude, longitude: $longitude, name: $name, physical_address: $physical_address, region: $region, shipping_address: $shipping_address, slug: $slug, status: $status, tags: $tags, tenant: $tenant, time_zone: $time_zone} | compact
+  let body = {"asn": $asn, "comments": $comments, "contact_email": $contact_email, "contact_name": $contact_name, "contact_phone": $contact_phone, "custom_fields": $custom_fields, "description": $description, "facility": $facility, "latitude": $latitude, "longitude": $longitude, "name": $name, "physical_address": $physical_address, "region": $region, "shipping_address": $shipping_address, "slug": $slug, "status": $status, "tags": $tags, "tenant": $tenant, "time_zone": $time_zone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7939,7 +7939,7 @@ export def "dcim-sites delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/sites/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/sites/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7962,7 +7962,7 @@ export def "dcim-sites read" [
 ]: nothing -> record<asn: int, circuit_count: int, comments: string, contact_email: string, contact_name: string, contact_phone: string, created: string, custom_fields: record, description: string, device_count: int, facility: string, id: int, last_updated: string, latitude: string, longitude: string, name: string, physical_address: string, prefix_count: int, rack_count: int, region: record<id: int, name: string, site_count: int, slug: string, url: string>, shipping_address: string, slug: string, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, time_zone: string, virtualmachine_count: int, vlan_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/sites/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/sites/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8004,8 +8004,8 @@ export def "dcim-sites patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/sites/($id)/")
-  let body = {asn: $asn, comments: $comments, contact_email: $contact_email, contact_name: $contact_name, contact_phone: $contact_phone, custom_fields: $custom_fields, description: $description, facility: $facility, latitude: $latitude, longitude: $longitude, name: $name, physical_address: $physical_address, region: $region, shipping_address: $shipping_address, slug: $slug, status: $status, tags: $tags, tenant: $tenant, time_zone: $time_zone} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/sites/{id}/"))
+  let body = {"asn": $asn, "comments": $comments, "contact_email": $contact_email, "contact_name": $contact_name, "contact_phone": $contact_phone, "custom_fields": $custom_fields, "description": $description, "facility": $facility, "latitude": $latitude, "longitude": $longitude, "name": $name, "physical_address": $physical_address, "region": $region, "shipping_address": $shipping_address, "slug": $slug, "status": $status, "tags": $tags, "tenant": $tenant, "time_zone": $time_zone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8048,8 +8048,8 @@ export def "dcim-sites update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/sites/($id)/")
-  let body = {asn: $asn, comments: $comments, contact_email: $contact_email, contact_name: $contact_name, contact_phone: $contact_phone, custom_fields: $custom_fields, description: $description, facility: $facility, latitude: $latitude, longitude: $longitude, name: $name, physical_address: $physical_address, region: $region, shipping_address: $shipping_address, slug: $slug, status: $status, tags: $tags, tenant: $tenant, time_zone: $time_zone} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/sites/{id}/"))
+  let body = {"asn": $asn, "comments": $comments, "contact_email": $contact_email, "contact_name": $contact_name, "contact_phone": $contact_phone, "custom_fields": $custom_fields, "description": $description, "facility": $facility, "latitude": $latitude, "longitude": $longitude, "name": $name, "physical_address": $physical_address, "region": $region, "shipping_address": $shipping_address, "slug": $slug, "status": $status, "tags": $tags, "tenant": $tenant, "time_zone": $time_zone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8073,7 +8073,7 @@ export def "dcim-sites-graphs graphs" [
 ]: nothing -> record<asn: int, circuit_count: int, comments: string, contact_email: string, contact_name: string, contact_phone: string, created: string, custom_fields: record, description: string, device_count: int, facility: string, id: int, last_updated: string, latitude: string, longitude: string, name: string, physical_address: string, prefix_count: int, rack_count: int, region: record<id: int, name: string, site_count: int, slug: string, url: string>, shipping_address: string, slug: string, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, time_zone: string, virtualmachine_count: int, vlan_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/sites/($id)/graphs/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/sites/{id}/graphs/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8155,7 +8155,7 @@ export def "dcim-virtual-chassis create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/virtual-chassis/")
-  let body = {domain: $domain, master: $master, tags: $tags} | compact
+  let body = {"domain": $domain, "master": $master, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8178,7 +8178,7 @@ export def "dcim-virtual-chassis delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/virtual-chassis/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/virtual-chassis/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8201,7 +8201,7 @@ export def "dcim-virtual-chassis read" [
 ]: nothing -> record<domain: string, id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/virtual-chassis/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/virtual-chassis/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8227,8 +8227,8 @@ export def "dcim-virtual-chassis patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/virtual-chassis/($id)/")
-  let body = {domain: $domain, master: $master, tags: $tags} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/virtual-chassis/{id}/"))
+  let body = {"domain": $domain, "master": $master, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8255,8 +8255,8 @@ export def "dcim-virtual-chassis update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dcim/virtual-chassis/($id)/")
-  let body = {domain: $domain, master: $master, tags: $tags} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/dcim/virtual-chassis/{id}/"))
+  let body = {"domain": $domain, "master": $master, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8300,7 +8300,7 @@ export def "extras-custom-field-choices read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/_custom_field_choices/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/_custom_field_choices/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8412,7 +8412,7 @@ export def "extras-config-contexts create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/extras/config-contexts/")
-  let body = {cluster_groups: $cluster_groups, clusters: $clusters, data: $data, description: $description, is_active: $is_active, name: $name, platforms: $platforms, regions: $regions, roles: $roles, sites: $sites, tags: $tags, tenant_groups: $tenant_groups, tenants: $tenants, weight: $weight} | compact
+  let body = {"cluster_groups": $cluster_groups, "clusters": $clusters, "data": $data, "description": $description, "is_active": $is_active, "name": $name, "platforms": $platforms, "regions": $regions, "roles": $roles, "sites": $sites, "tags": $tags, "tenant_groups": $tenant_groups, "tenants": $tenants, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8435,7 +8435,7 @@ export def "extras-config-contexts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/config-contexts/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/config-contexts/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8458,7 +8458,7 @@ export def "extras-config-contexts read" [
 ]: nothing -> record<cluster_groups: table<cluster_count: int, id: int, name: string, slug: string, url: string>, clusters: table<id: int, name: string, url: string, virtualmachine_count: int>, data: string, description: string, id: int, is_active: bool, name: string, platforms: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, regions: table<id: int, name: string, site_count: int, slug: string, url: string>, roles: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, sites: table<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant_groups: table<id: int, name: string, slug: string, tenant_count: int, url: string>, tenants: table<id: int, name: string, slug: string, url: string>, weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/config-contexts/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/config-contexts/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8495,8 +8495,8 @@ export def "extras-config-contexts patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/config-contexts/($id)/")
-  let body = {cluster_groups: $cluster_groups, clusters: $clusters, data: $data, description: $description, is_active: $is_active, name: $name, platforms: $platforms, regions: $regions, roles: $roles, sites: $sites, tags: $tags, tenant_groups: $tenant_groups, tenants: $tenants, weight: $weight} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/config-contexts/{id}/"))
+  let body = {"cluster_groups": $cluster_groups, "clusters": $clusters, "data": $data, "description": $description, "is_active": $is_active, "name": $name, "platforms": $platforms, "regions": $regions, "roles": $roles, "sites": $sites, "tags": $tags, "tenant_groups": $tenant_groups, "tenants": $tenants, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8534,8 +8534,8 @@ export def "extras-config-contexts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/config-contexts/($id)/")
-  let body = {cluster_groups: $cluster_groups, clusters: $clusters, data: $data, description: $description, is_active: $is_active, name: $name, platforms: $platforms, regions: $regions, roles: $roles, sites: $sites, tags: $tags, tenant_groups: $tenant_groups, tenants: $tenants, weight: $weight} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/config-contexts/{id}/"))
+  let body = {"cluster_groups": $cluster_groups, "clusters": $clusters, "data": $data, "description": $description, "is_active": $is_active, "name": $name, "platforms": $platforms, "regions": $regions, "roles": $roles, "sites": $sites, "tags": $tags, "tenant_groups": $tenant_groups, "tenants": $tenants, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8611,7 +8611,7 @@ export def "extras-export-templates create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/extras/export-templates/")
-  let body = {content_type: $content_type, description: $description, file_extension: $file_extension, mime_type: $mime_type, name: $name, template_code: $template_code, template_language: $template_language} | compact
+  let body = {"content_type": $content_type, "description": $description, "file_extension": $file_extension, "mime_type": $mime_type, "name": $name, "template_code": $template_code, "template_language": $template_language} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8634,7 +8634,7 @@ export def "extras-export-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/export-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/export-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8657,7 +8657,7 @@ export def "extras-export-templates read" [
 ]: nothing -> record<content_type: string, description: string, file_extension: string, id: int, mime_type: string, name: string, template_code: string, template_language: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/export-templates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/export-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8687,8 +8687,8 @@ export def "extras-export-templates patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/export-templates/($id)/")
-  let body = {content_type: $content_type, description: $description, file_extension: $file_extension, mime_type: $mime_type, name: $name, template_code: $template_code, template_language: $template_language} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/export-templates/{id}/"))
+  let body = {"content_type": $content_type, "description": $description, "file_extension": $file_extension, "mime_type": $mime_type, "name": $name, "template_code": $template_code, "template_language": $template_language} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8719,8 +8719,8 @@ export def "extras-export-templates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/export-templates/($id)/")
-  let body = {content_type: $content_type, description: $description, file_extension: $file_extension, mime_type: $mime_type, name: $name, template_code: $template_code, template_language: $template_language} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/export-templates/{id}/"))
+  let body = {"content_type": $content_type, "description": $description, "file_extension": $file_extension, "mime_type": $mime_type, "name": $name, "template_code": $template_code, "template_language": $template_language} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8795,7 +8795,7 @@ export def "extras-graphs create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/extras/graphs/")
-  let body = {link: $link, name: $name, source: $body_source, template_language: $template_language, type: $type, weight: $weight} | compact
+  let body = {"link": $link, "name": $name, "source": $body_source, "template_language": $template_language, "type": $type, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8818,7 +8818,7 @@ export def "extras-graphs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/graphs/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/graphs/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8841,7 +8841,7 @@ export def "extras-graphs read" [
 ]: nothing -> record<id: int, link: string, name: string, source: string, template_language: string, type: string, weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/graphs/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/graphs/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8870,8 +8870,8 @@ export def "extras-graphs patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/graphs/($id)/")
-  let body = {link: $link, name: $name, source: $body_source, template_language: $template_language, type: $type, weight: $weight} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/graphs/{id}/"))
+  let body = {"link": $link, "name": $name, "source": $body_source, "template_language": $template_language, "type": $type, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8901,8 +8901,8 @@ export def "extras-graphs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/graphs/($id)/")
-  let body = {link: $link, name: $name, source: $body_source, template_language: $template_language, type: $type, weight: $weight} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/graphs/{id}/"))
+  let body = {"link": $link, "name": $name, "source": $body_source, "template_language": $template_language, "type": $type, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8956,7 +8956,7 @@ export def "extras-image-attachments create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/extras/image-attachments/")
-  let body = {content_type: $content_type, image_height: $image_height, image_width: $image_width, name: $name, object_id: $object_id} | compact
+  let body = {"content_type": $content_type, "image_height": $image_height, "image_width": $image_width, "name": $name, "object_id": $object_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8979,7 +8979,7 @@ export def "extras-image-attachments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/image-attachments/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/image-attachments/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9002,7 +9002,7 @@ export def "extras-image-attachments read" [
 ]: nothing -> record<content_type: string, created: string, id: int, image: string, image_height: int, image_width: int, name: string, object_id: int, parent: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/image-attachments/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/image-attachments/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9030,8 +9030,8 @@ export def "extras-image-attachments patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/image-attachments/($id)/")
-  let body = {content_type: $content_type, image_height: $image_height, image_width: $image_width, name: $name, object_id: $object_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/image-attachments/{id}/"))
+  let body = {"content_type": $content_type, "image_height": $image_height, "image_width": $image_width, "name": $name, "object_id": $object_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9060,8 +9060,8 @@ export def "extras-image-attachments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/image-attachments/($id)/")
-  let body = {content_type: $content_type, image_height: $image_height, image_width: $image_width, name: $name, object_id: $object_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/image-attachments/{id}/"))
+  let body = {"content_type": $content_type, "image_height": $image_height, "image_width": $image_width, "name": $name, "object_id": $object_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9151,7 +9151,7 @@ export def "extras-object-changes read" [
 ]: nothing -> record<action: record<label: string, value: string>, changed_object: record, changed_object_id: int, changed_object_type: string, id: int, object_data: string, request_id: string, time: string, user: record<id: int, username: string>, user_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/object-changes/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/object-changes/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9196,7 +9196,7 @@ export def "extras-reports read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/reports/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/reports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9219,7 +9219,7 @@ export def "extras-reports-run run" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/reports/($id)/run/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/reports/{id}/run/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9262,7 +9262,7 @@ export def "extras-scripts read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/scripts/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/scripts/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9351,7 +9351,7 @@ export def "extras-tags create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/extras/tags/")
-  let body = {color: $color, description: $description, name: $name, slug: $slug} | compact
+  let body = {"color": $color, "description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9374,7 +9374,7 @@ export def "extras-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/tags/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/tags/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9397,7 +9397,7 @@ export def "extras-tags read" [
 ]: nothing -> record<color: string, description: string, id: int, name: string, slug: string, tagged_items: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/tags/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/tags/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9424,8 +9424,8 @@ export def "extras-tags patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/tags/($id)/")
-  let body = {color: $color, description: $description, name: $name, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/tags/{id}/"))
+  let body = {"color": $color, "description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9453,8 +9453,8 @@ export def "extras-tags update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/extras/tags/($id)/")
-  let body = {color: $color, description: $description, name: $name, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/extras/tags/{id}/"))
+  let body = {"color": $color, "description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9536,7 +9536,7 @@ export def "ipam-aggregates create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/aggregates/")
-  let body = {custom_fields: $custom_fields, date_added: $date_added, description: $description, prefix: $prefix, rir: $rir, tags: $tags} | compact
+  let body = {"custom_fields": $custom_fields, "date_added": $date_added, "description": $description, "prefix": $prefix, "rir": $rir, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9559,7 +9559,7 @@ export def "ipam-aggregates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/aggregates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/aggregates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9582,7 +9582,7 @@ export def "ipam-aggregates read" [
 ]: nothing -> record<created: string, custom_fields: record, date_added: string, description: string, family: record<label: string, value: int>, id: int, last_updated: string, prefix: string, rir: record<aggregate_count: int, id: int, name: string, slug: string, url: string>, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/aggregates/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/aggregates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9611,8 +9611,8 @@ export def "ipam-aggregates patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/aggregates/($id)/")
-  let body = {custom_fields: $custom_fields, date_added: $date_added, description: $description, prefix: $prefix, rir: $rir, tags: $tags} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/aggregates/{id}/"))
+  let body = {"custom_fields": $custom_fields, "date_added": $date_added, "description": $description, "prefix": $prefix, "rir": $rir, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9642,8 +9642,8 @@ export def "ipam-aggregates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/aggregates/($id)/")
-  let body = {custom_fields: $custom_fields, date_added: $date_added, description: $description, prefix: $prefix, rir: $rir, tags: $tags} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/aggregates/{id}/"))
+  let body = {"custom_fields": $custom_fields, "date_added": $date_added, "description": $description, "prefix": $prefix, "rir": $rir, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9760,7 +9760,7 @@ export def "ipam-ip-addresses create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/ip-addresses/")
-  let body = {address: $address, custom_fields: $custom_fields, description: $description, dns_name: $dns_name, interface: $interface, nat_inside: $nat_inside, nat_outside: $nat_outside, role: $role, status: $status, tags: $tags, tenant: $tenant, vrf: $vrf} | compact
+  let body = {"address": $address, "custom_fields": $custom_fields, "description": $description, "dns_name": $dns_name, "interface": $interface, "nat_inside": $nat_inside, "nat_outside": $nat_outside, "role": $role, "status": $status, "tags": $tags, "tenant": $tenant, "vrf": $vrf} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9783,7 +9783,7 @@ export def "ipam-ip-addresses delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/ip-addresses/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/ip-addresses/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9806,7 +9806,7 @@ export def "ipam-ip-addresses read" [
 ]: nothing -> record<address: string, created: string, custom_fields: record, description: string, dns_name: string, family: record<label: string, value: int>, id: int, interface: record<device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string, virtual_machine: record<id: int, name: string, url: string>>, last_updated: string, nat_inside: record<address: string, family: string, id: int, url: string>, nat_outside: record<address: string, family: string, id: int, url: string>, role: record<label: string, value: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/ip-addresses/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/ip-addresses/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9841,8 +9841,8 @@ export def "ipam-ip-addresses patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/ip-addresses/($id)/")
-  let body = {address: $address, custom_fields: $custom_fields, description: $description, dns_name: $dns_name, interface: $interface, nat_inside: $nat_inside, nat_outside: $nat_outside, role: $role, status: $status, tags: $tags, tenant: $tenant, vrf: $vrf} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/ip-addresses/{id}/"))
+  let body = {"address": $address, "custom_fields": $custom_fields, "description": $description, "dns_name": $dns_name, "interface": $interface, "nat_inside": $nat_inside, "nat_outside": $nat_outside, "role": $role, "status": $status, "tags": $tags, "tenant": $tenant, "vrf": $vrf} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9878,8 +9878,8 @@ export def "ipam-ip-addresses update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/ip-addresses/($id)/")
-  let body = {address: $address, custom_fields: $custom_fields, description: $description, dns_name: $dns_name, interface: $interface, nat_inside: $nat_inside, nat_outside: $nat_outside, role: $role, status: $status, tags: $tags, tenant: $tenant, vrf: $vrf} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/ip-addresses/{id}/"))
+  let body = {"address": $address, "custom_fields": $custom_fields, "description": $description, "dns_name": $dns_name, "interface": $interface, "nat_inside": $nat_inside, "nat_outside": $nat_outside, "role": $role, "status": $status, "tags": $tags, "tenant": $tenant, "vrf": $vrf} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9990,7 +9990,7 @@ export def "ipam-prefixes create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/prefixes/")
-  let body = {custom_fields: $custom_fields, description: $description, is_pool: $is_pool, prefix: $prefix, role: $role, site: $site, status: $status, tags: $tags, tenant: $tenant, vlan: $vlan, vrf: $vrf} | compact
+  let body = {"custom_fields": $custom_fields, "description": $description, "is_pool": $is_pool, "prefix": $prefix, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vlan": $vlan, "vrf": $vrf} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10013,7 +10013,7 @@ export def "ipam-prefixes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/prefixes/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/prefixes/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10036,7 +10036,7 @@ export def "ipam-prefixes read" [
 ]: nothing -> record<created: string, custom_fields: record, description: string, family: record<label: string, value: int>, id: int, is_pool: bool, last_updated: string, prefix: string, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/prefixes/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/prefixes/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10070,8 +10070,8 @@ export def "ipam-prefixes patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/prefixes/($id)/")
-  let body = {custom_fields: $custom_fields, description: $description, is_pool: $is_pool, prefix: $prefix, role: $role, site: $site, status: $status, tags: $tags, tenant: $tenant, vlan: $vlan, vrf: $vrf} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/prefixes/{id}/"))
+  let body = {"custom_fields": $custom_fields, "description": $description, "is_pool": $is_pool, "prefix": $prefix, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vlan": $vlan, "vrf": $vrf} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10106,8 +10106,8 @@ export def "ipam-prefixes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/prefixes/($id)/")
-  let body = {custom_fields: $custom_fields, description: $description, is_pool: $is_pool, prefix: $prefix, role: $role, site: $site, status: $status, tags: $tags, tenant: $tenant, vlan: $vlan, vrf: $vrf} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/prefixes/{id}/"))
+  let body = {"custom_fields": $custom_fields, "description": $description, "is_pool": $is_pool, "prefix": $prefix, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vlan": $vlan, "vrf": $vrf} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10131,7 +10131,7 @@ export def "ipam-prefixes-available-ips read" [
 ]: nothing -> table<address: string, family: int, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/prefixes/($id)/available-ips/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/prefixes/{id}/available-ips/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10156,7 +10156,7 @@ export def "ipam-prefixes-available-ips create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/prefixes/($id)/available-ips/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/prefixes/{id}/available-ips/"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10180,7 +10180,7 @@ export def "ipam-prefixes-available-prefixes read" [
 ]: nothing -> table<family: int, prefix: string, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/prefixes/($id)/available-prefixes/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/prefixes/{id}/available-prefixes/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10215,8 +10215,8 @@ export def "ipam-prefixes-available-prefixes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/prefixes/($id)/available-prefixes/")
-  let body = {custom_fields: $custom_fields, description: $description, is_pool: $is_pool, prefix: $prefix, role: $role, site: $site, status: $status, tags: $tags, tenant: $tenant, vlan: $vlan, vrf: $vrf} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/prefixes/{id}/available-prefixes/"))
+  let body = {"custom_fields": $custom_fields, "description": $description, "is_pool": $is_pool, "prefix": $prefix, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vlan": $vlan, "vrf": $vrf} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10307,7 +10307,7 @@ export def "ipam-rirs create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/rirs/")
-  let body = {description: $description, is_private: $is_private, name: $name, slug: $slug} | compact
+  let body = {"description": $description, "is_private": $is_private, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10330,7 +10330,7 @@ export def "ipam-rirs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/rirs/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/rirs/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10353,7 +10353,7 @@ export def "ipam-rirs read" [
 ]: nothing -> record<aggregate_count: int, description: string, id: int, is_private: bool, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/rirs/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/rirs/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10380,8 +10380,8 @@ export def "ipam-rirs patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/rirs/($id)/")
-  let body = {description: $description, is_private: $is_private, name: $name, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/rirs/{id}/"))
+  let body = {"description": $description, "is_private": $is_private, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10409,8 +10409,8 @@ export def "ipam-rirs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/rirs/($id)/")
-  let body = {description: $description, is_private: $is_private, name: $name, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/rirs/{id}/"))
+  let body = {"description": $description, "is_private": $is_private, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10490,7 +10490,7 @@ export def "ipam-roles create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/roles/")
-  let body = {description: $description, name: $name, slug: $slug, weight: $weight} | compact
+  let body = {"description": $description, "name": $name, "slug": $slug, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10513,7 +10513,7 @@ export def "ipam-roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/roles/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/roles/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10536,7 +10536,7 @@ export def "ipam-roles read" [
 ]: nothing -> record<description: string, id: int, name: string, prefix_count: int, slug: string, vlan_count: int, weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/roles/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/roles/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10563,8 +10563,8 @@ export def "ipam-roles patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/roles/($id)/")
-  let body = {description: $description, name: $name, slug: $slug, weight: $weight} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/roles/{id}/"))
+  let body = {"description": $description, "name": $name, "slug": $slug, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10592,8 +10592,8 @@ export def "ipam-roles update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/roles/($id)/")
-  let body = {description: $description, name: $name, slug: $slug, weight: $weight} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/roles/{id}/"))
+  let body = {"description": $description, "name": $name, "slug": $slug, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10692,7 +10692,7 @@ export def "ipam-services create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/services/")
-  let body = {custom_fields: $custom_fields, description: $description, device: $device, ipaddresses: $ipaddresses, name: $name, port: $port, protocol: $protocol, tags: $tags, virtual_machine: $virtual_machine} | compact
+  let body = {"custom_fields": $custom_fields, "description": $description, "device": $device, "ipaddresses": $ipaddresses, "name": $name, "port": $port, "protocol": $protocol, "tags": $tags, "virtual_machine": $virtual_machine} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10715,7 +10715,7 @@ export def "ipam-services delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/services/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/services/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10738,7 +10738,7 @@ export def "ipam-services read" [
 ]: nothing -> record<created: string, custom_fields: record, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, ipaddresses: table<address: string, family: string, id: int, url: string>, last_updated: string, name: string, port: int, protocol: record<label: string, value: string>, tags: list<string>, virtual_machine: record<id: int, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/services/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/services/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10770,8 +10770,8 @@ export def "ipam-services patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/services/($id)/")
-  let body = {custom_fields: $custom_fields, description: $description, device: $device, ipaddresses: $ipaddresses, name: $name, port: $port, protocol: $protocol, tags: $tags, virtual_machine: $virtual_machine} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/services/{id}/"))
+  let body = {"custom_fields": $custom_fields, "description": $description, "device": $device, "ipaddresses": $ipaddresses, "name": $name, "port": $port, "protocol": $protocol, "tags": $tags, "virtual_machine": $virtual_machine} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10804,8 +10804,8 @@ export def "ipam-services update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/services/($id)/")
-  let body = {custom_fields: $custom_fields, description: $description, device: $device, ipaddresses: $ipaddresses, name: $name, port: $port, protocol: $protocol, tags: $tags, virtual_machine: $virtual_machine} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/services/{id}/"))
+  let body = {"custom_fields": $custom_fields, "description": $description, "device": $device, "ipaddresses": $ipaddresses, "name": $name, "port": $port, "protocol": $protocol, "tags": $tags, "virtual_machine": $virtual_machine} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10903,7 +10903,7 @@ export def "ipam-vlan-groups create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/vlan-groups/")
-  let body = {description: $description, name: $name, site: $site, slug: $slug} | compact
+  let body = {"description": $description, "name": $name, "site": $site, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10926,7 +10926,7 @@ export def "ipam-vlan-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/vlan-groups/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/vlan-groups/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10949,7 +10949,7 @@ export def "ipam-vlan-groups read" [
 ]: nothing -> record<description: string, id: int, name: string, site: record<id: int, name: string, slug: string, url: string>, slug: string, vlan_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/vlan-groups/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/vlan-groups/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10976,8 +10976,8 @@ export def "ipam-vlan-groups patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/vlan-groups/($id)/")
-  let body = {description: $description, name: $name, site: $site, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/vlan-groups/{id}/"))
+  let body = {"description": $description, "name": $name, "site": $site, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11005,8 +11005,8 @@ export def "ipam-vlan-groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/vlan-groups/($id)/")
-  let body = {description: $description, name: $name, site: $site, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/vlan-groups/{id}/"))
+  let body = {"description": $description, "name": $name, "site": $site, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11122,7 +11122,7 @@ export def "ipam-vlans create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/vlans/")
-  let body = {custom_fields: $custom_fields, description: $description, group: $group, name: $name, role: $role, site: $site, status: $status, tags: $tags, tenant: $tenant, vid: $vid} | compact
+  let body = {"custom_fields": $custom_fields, "description": $description, "group": $group, "name": $name, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vid": $vid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11145,7 +11145,7 @@ export def "ipam-vlans delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/vlans/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/vlans/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11168,7 +11168,7 @@ export def "ipam-vlans read" [
 ]: nothing -> record<created: string, custom_fields: record, description: string, display_name: string, group: record<id: int, name: string, slug: string, url: string, vlan_count: int>, id: int, last_updated: string, name: string, prefix_count: int, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vid: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/vlans/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/vlans/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11201,8 +11201,8 @@ export def "ipam-vlans patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/vlans/($id)/")
-  let body = {custom_fields: $custom_fields, description: $description, group: $group, name: $name, role: $role, site: $site, status: $status, tags: $tags, tenant: $tenant, vid: $vid} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/vlans/{id}/"))
+  let body = {"custom_fields": $custom_fields, "description": $description, "group": $group, "name": $name, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vid": $vid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11236,8 +11236,8 @@ export def "ipam-vlans update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/vlans/($id)/")
-  let body = {custom_fields: $custom_fields, description: $description, group: $group, name: $name, role: $role, site: $site, status: $status, tags: $tags, tenant: $tenant, vid: $vid} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/vlans/{id}/"))
+  let body = {"custom_fields": $custom_fields, "description": $description, "group": $group, "name": $name, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vid": $vid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11337,7 +11337,7 @@ export def "ipam-vrfs create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/vrfs/")
-  let body = {custom_fields: $custom_fields, description: $description, enforce_unique: $enforce_unique, name: $name, rd: $rd, tags: $tags, tenant: $tenant} | compact
+  let body = {"custom_fields": $custom_fields, "description": $description, "enforce_unique": $enforce_unique, "name": $name, "rd": $rd, "tags": $tags, "tenant": $tenant} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11360,7 +11360,7 @@ export def "ipam-vrfs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/vrfs/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/vrfs/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11383,7 +11383,7 @@ export def "ipam-vrfs read" [
 ]: nothing -> record<created: string, custom_fields: record, description: string, display_name: string, enforce_unique: bool, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rd: string, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/vrfs/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/vrfs/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11413,8 +11413,8 @@ export def "ipam-vrfs patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/vrfs/($id)/")
-  let body = {custom_fields: $custom_fields, description: $description, enforce_unique: $enforce_unique, name: $name, rd: $rd, tags: $tags, tenant: $tenant} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/vrfs/{id}/"))
+  let body = {"custom_fields": $custom_fields, "description": $description, "enforce_unique": $enforce_unique, "name": $name, "rd": $rd, "tags": $tags, "tenant": $tenant} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11445,8 +11445,8 @@ export def "ipam-vrfs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ipam/vrfs/($id)/")
-  let body = {custom_fields: $custom_fields, description: $description, enforce_unique: $enforce_unique, name: $name, rd: $rd, tags: $tags, tenant: $tenant} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ipam/vrfs/{id}/"))
+  let body = {"custom_fields": $custom_fields, "description": $description, "enforce_unique": $enforce_unique, "name": $name, "rd": $rd, "tags": $tags, "tenant": $tenant} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11569,7 +11569,7 @@ export def "secrets-secret-roles create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secrets/secret-roles/")
-  let body = {description: $description, name: $name, slug: $slug} | compact
+  let body = {"description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11592,7 +11592,7 @@ export def "secrets-secret-roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/secrets/secret-roles/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/secrets/secret-roles/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11615,7 +11615,7 @@ export def "secrets-secret-roles read" [
 ]: nothing -> record<description: string, id: int, name: string, secret_count: int, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/secrets/secret-roles/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/secrets/secret-roles/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11641,8 +11641,8 @@ export def "secrets-secret-roles patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/secrets/secret-roles/($id)/")
-  let body = {description: $description, name: $name, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/secrets/secret-roles/{id}/"))
+  let body = {"description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11669,8 +11669,8 @@ export def "secrets-secret-roles update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/secrets/secret-roles/($id)/")
-  let body = {description: $description, name: $name, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/secrets/secret-roles/{id}/"))
+  let body = {"description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11757,7 +11757,7 @@ export def "secrets-secrets create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secrets/secrets/")
-  let body = {custom_fields: $custom_fields, device: $device, name: $name, plaintext: $plaintext, role: $role, tags: $tags} | compact
+  let body = {"custom_fields": $custom_fields, "device": $device, "name": $name, "plaintext": $plaintext, "role": $role, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11780,7 +11780,7 @@ export def "secrets-secrets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/secrets/secrets/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/secrets/secrets/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11802,7 +11802,7 @@ export def "secrets-secrets read" [
 ]: nothing -> record<created: string, custom_fields: record, device: record<display_name: string, id: int, name: string, url: string>, hash: string, id: int, last_updated: string, name: string, plaintext: string, role: record<id: int, name: string, secret_count: int, slug: string, url: string>, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/secrets/secrets/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/secrets/secrets/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11831,8 +11831,8 @@ export def "secrets-secrets patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/secrets/secrets/($id)/")
-  let body = {custom_fields: $custom_fields, device: $device, name: $name, plaintext: $plaintext, role: $role, tags: $tags} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/secrets/secrets/{id}/"))
+  let body = {"custom_fields": $custom_fields, "device": $device, "name": $name, "plaintext": $plaintext, "role": $role, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11862,8 +11862,8 @@ export def "secrets-secrets update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/secrets/secrets/($id)/")
-  let body = {custom_fields: $custom_fields, device: $device, name: $name, plaintext: $plaintext, role: $role, tags: $tags} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/secrets/secrets/{id}/"))
+  let body = {"custom_fields": $custom_fields, "device": $device, "name": $name, "plaintext": $plaintext, "role": $role, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11957,7 +11957,7 @@ export def "tenancy-tenant-groups create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tenancy/tenant-groups/")
-  let body = {description: $description, name: $name, parent: $parent, slug: $slug} | compact
+  let body = {"description": $description, "name": $name, "parent": $parent, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11980,7 +11980,7 @@ export def "tenancy-tenant-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tenancy/tenant-groups/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/tenancy/tenant-groups/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12003,7 +12003,7 @@ export def "tenancy-tenant-groups read" [
 ]: nothing -> record<description: string, id: int, name: string, parent: record<id: int, name: string, slug: string, tenant_count: int, url: string>, slug: string, tenant_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tenancy/tenant-groups/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/tenancy/tenant-groups/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12030,8 +12030,8 @@ export def "tenancy-tenant-groups patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tenancy/tenant-groups/($id)/")
-  let body = {description: $description, name: $name, parent: $parent, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/tenancy/tenant-groups/{id}/"))
+  let body = {"description": $description, "name": $name, "parent": $parent, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12059,8 +12059,8 @@ export def "tenancy-tenant-groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tenancy/tenant-groups/($id)/")
-  let body = {description: $description, name: $name, parent: $parent, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/tenancy/tenant-groups/{id}/"))
+  let body = {"description": $description, "name": $name, "parent": $parent, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12155,7 +12155,7 @@ export def "tenancy-tenants create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tenancy/tenants/")
-  let body = {comments: $comments, custom_fields: $custom_fields, description: $description, group: $group, name: $name, slug: $slug, tags: $tags} | compact
+  let body = {"comments": $comments, "custom_fields": $custom_fields, "description": $description, "group": $group, "name": $name, "slug": $slug, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12178,7 +12178,7 @@ export def "tenancy-tenants delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tenancy/tenants/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/tenancy/tenants/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12201,7 +12201,7 @@ export def "tenancy-tenants read" [
 ]: nothing -> record<circuit_count: int, cluster_count: int, comments: string, created: string, custom_fields: record, description: string, device_count: int, group: record<id: int, name: string, slug: string, tenant_count: int, url: string>, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rack_count: int, site_count: int, slug: string, tags: list<string>, virtualmachine_count: int, vlan_count: int, vrf_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tenancy/tenants/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/tenancy/tenants/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12231,8 +12231,8 @@ export def "tenancy-tenants patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tenancy/tenants/($id)/")
-  let body = {comments: $comments, custom_fields: $custom_fields, description: $description, group: $group, name: $name, slug: $slug, tags: $tags} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/tenancy/tenants/{id}/"))
+  let body = {"comments": $comments, "custom_fields": $custom_fields, "description": $description, "group": $group, "name": $name, "slug": $slug, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12263,8 +12263,8 @@ export def "tenancy-tenants update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tenancy/tenants/($id)/")
-  let body = {comments: $comments, custom_fields: $custom_fields, description: $description, group: $group, name: $name, slug: $slug, tags: $tags} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/tenancy/tenants/{id}/"))
+  let body = {"comments": $comments, "custom_fields": $custom_fields, "description": $description, "group": $group, "name": $name, "slug": $slug, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12353,7 +12353,7 @@ export def "virtualization-cluster-groups create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/virtualization/cluster-groups/")
-  let body = {description: $description, name: $name, slug: $slug} | compact
+  let body = {"description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12376,7 +12376,7 @@ export def "virtualization-cluster-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/cluster-groups/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/cluster-groups/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12399,7 +12399,7 @@ export def "virtualization-cluster-groups read" [
 ]: nothing -> record<cluster_count: int, description: string, id: int, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/cluster-groups/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/cluster-groups/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12425,8 +12425,8 @@ export def "virtualization-cluster-groups patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/cluster-groups/($id)/")
-  let body = {description: $description, name: $name, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/cluster-groups/{id}/"))
+  let body = {"description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12453,8 +12453,8 @@ export def "virtualization-cluster-groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/cluster-groups/($id)/")
-  let body = {description: $description, name: $name, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/cluster-groups/{id}/"))
+  let body = {"description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12543,7 +12543,7 @@ export def "virtualization-cluster-types create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/virtualization/cluster-types/")
-  let body = {description: $description, name: $name, slug: $slug} | compact
+  let body = {"description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12566,7 +12566,7 @@ export def "virtualization-cluster-types delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/cluster-types/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/cluster-types/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12589,7 +12589,7 @@ export def "virtualization-cluster-types read" [
 ]: nothing -> record<cluster_count: int, description: string, id: int, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/cluster-types/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/cluster-types/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12615,8 +12615,8 @@ export def "virtualization-cluster-types patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/cluster-types/($id)/")
-  let body = {description: $description, name: $name, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/cluster-types/{id}/"))
+  let body = {"description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12643,8 +12643,8 @@ export def "virtualization-cluster-types update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/cluster-types/($id)/")
-  let body = {description: $description, name: $name, slug: $slug} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/cluster-types/{id}/"))
+  let body = {"description": $description, "name": $name, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12750,7 +12750,7 @@ export def "virtualization-clusters create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/virtualization/clusters/")
-  let body = {comments: $comments, custom_fields: $custom_fields, group: $group, name: $name, site: $site, tags: $tags, tenant: $tenant, type: $type} | compact
+  let body = {"comments": $comments, "custom_fields": $custom_fields, "group": $group, "name": $name, "site": $site, "tags": $tags, "tenant": $tenant, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12773,7 +12773,7 @@ export def "virtualization-clusters delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/clusters/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/clusters/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12796,7 +12796,7 @@ export def "virtualization-clusters read" [
 ]: nothing -> record<comments: string, created: string, custom_fields: record, device_count: int, group: record<cluster_count: int, id: int, name: string, slug: string, url: string>, id: int, last_updated: string, name: string, site: record<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<cluster_count: int, id: int, name: string, slug: string, url: string>, virtualmachine_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/clusters/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/clusters/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12827,8 +12827,8 @@ export def "virtualization-clusters patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/clusters/($id)/")
-  let body = {comments: $comments, custom_fields: $custom_fields, group: $group, name: $name, site: $site, tags: $tags, tenant: $tenant, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/clusters/{id}/"))
+  let body = {"comments": $comments, "custom_fields": $custom_fields, "group": $group, "name": $name, "site": $site, "tags": $tags, "tenant": $tenant, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12860,8 +12860,8 @@ export def "virtualization-clusters update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/clusters/($id)/")
-  let body = {comments: $comments, custom_fields: $custom_fields, group: $group, name: $name, site: $site, tags: $tags, tenant: $tenant, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/clusters/{id}/"))
+  let body = {"comments": $comments, "custom_fields": $custom_fields, "group": $group, "name": $name, "site": $site, "tags": $tags, "tenant": $tenant, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12959,7 +12959,7 @@ export def "virtualization-interfaces create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/virtualization/interfaces/")
-  let body = {description: $description, enabled: $enabled, mac_address: $mac_address, mode: $mode, mtu: $mtu, name: $name, tagged_vlans: $tagged_vlans, tags: $tags, type: $type, untagged_vlan: $untagged_vlan, virtual_machine: $virtual_machine} | compact
+  let body = {"description": $description, "enabled": $enabled, "mac_address": $mac_address, "mode": $mode, "mtu": $mtu, "name": $name, "tagged_vlans": $tagged_vlans, "tags": $tags, "type": $type, "untagged_vlan": $untagged_vlan, "virtual_machine": $virtual_machine} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12982,7 +12982,7 @@ export def "virtualization-interfaces delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/interfaces/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/interfaces/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13005,7 +13005,7 @@ export def "virtualization-interfaces read" [
 ]: nothing -> record<description: string, enabled: bool, id: int, mac_address: string, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, virtual_machine: record<id: int, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/interfaces/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/interfaces/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13039,8 +13039,8 @@ export def "virtualization-interfaces patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/interfaces/($id)/")
-  let body = {description: $description, enabled: $enabled, mac_address: $mac_address, mode: $mode, mtu: $mtu, name: $name, tagged_vlans: $tagged_vlans, tags: $tags, type: $type, untagged_vlan: $untagged_vlan, virtual_machine: $virtual_machine} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/interfaces/{id}/"))
+  let body = {"description": $description, "enabled": $enabled, "mac_address": $mac_address, "mode": $mode, "mtu": $mtu, "name": $name, "tagged_vlans": $tagged_vlans, "tags": $tags, "type": $type, "untagged_vlan": $untagged_vlan, "virtual_machine": $virtual_machine} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13075,8 +13075,8 @@ export def "virtualization-interfaces update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/interfaces/($id)/")
-  let body = {description: $description, enabled: $enabled, mac_address: $mac_address, mode: $mode, mtu: $mtu, name: $name, tagged_vlans: $tagged_vlans, tags: $tags, type: $type, untagged_vlan: $untagged_vlan, virtual_machine: $virtual_machine} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/interfaces/{id}/"))
+  let body = {"description": $description, "enabled": $enabled, "mac_address": $mac_address, "mode": $mode, "mtu": $mtu, "name": $name, "tagged_vlans": $tagged_vlans, "tags": $tags, "type": $type, "untagged_vlan": $untagged_vlan, "virtual_machine": $virtual_machine} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13232,7 +13232,7 @@ export def "virtualization-virtual-machines create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/virtualization/virtual-machines/")
-  let body = {cluster: $cluster, comments: $comments, custom_fields: $custom_fields, disk: $disk, local_context_data: $local_context_data, memory: $memory, name: $name, platform: $platform, primary_ip4: $primary_ip4, primary_ip6: $primary_ip6, role: $role, status: $status, tags: $tags, tenant: $tenant, vcpus: $vcpus} | compact
+  let body = {"cluster": $cluster, "comments": $comments, "custom_fields": $custom_fields, "disk": $disk, "local_context_data": $local_context_data, "memory": $memory, "name": $name, "platform": $platform, "primary_ip4": $primary_ip4, "primary_ip6": $primary_ip6, "role": $role, "status": $status, "tags": $tags, "tenant": $tenant, "vcpus": $vcpus} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13255,7 +13255,7 @@ export def "virtualization-virtual-machines delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/virtual-machines/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/virtual-machines/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13278,7 +13278,7 @@ export def "virtualization-virtual-machines read" [
 ]: nothing -> record<cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, disk: int, id: int, last_updated: string, local_context_data: string, memory: int, name: string, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vcpus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/virtual-machines/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/virtual-machines/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13316,8 +13316,8 @@ export def "virtualization-virtual-machines patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/virtual-machines/($id)/")
-  let body = {cluster: $cluster, comments: $comments, custom_fields: $custom_fields, disk: $disk, local_context_data: $local_context_data, memory: $memory, name: $name, platform: $platform, primary_ip4: $primary_ip4, primary_ip6: $primary_ip6, role: $role, status: $status, tags: $tags, tenant: $tenant, vcpus: $vcpus} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/virtual-machines/{id}/"))
+  let body = {"cluster": $cluster, "comments": $comments, "custom_fields": $custom_fields, "disk": $disk, "local_context_data": $local_context_data, "memory": $memory, "name": $name, "platform": $platform, "primary_ip4": $primary_ip4, "primary_ip6": $primary_ip6, "role": $role, "status": $status, "tags": $tags, "tenant": $tenant, "vcpus": $vcpus} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13356,8 +13356,8 @@ export def "virtualization-virtual-machines update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/virtualization/virtual-machines/($id)/")
-  let body = {cluster: $cluster, comments: $comments, custom_fields: $custom_fields, disk: $disk, local_context_data: $local_context_data, memory: $memory, name: $name, platform: $platform, primary_ip4: $primary_ip4, primary_ip6: $primary_ip6, role: $role, status: $status, tags: $tags, tenant: $tenant, vcpus: $vcpus} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/virtualization/virtual-machines/{id}/"))
+  let body = {"cluster": $cluster, "comments": $comments, "custom_fields": $custom_fields, "disk": $disk, "local_context_data": $local_context_data, "memory": $memory, "name": $name, "platform": $platform, "primary_ip4": $primary_ip4, "primary_ip6": $primary_ip6, "role": $role, "status": $status, "tags": $tags, "tenant": $tenant, "vcpus": $vcpus} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

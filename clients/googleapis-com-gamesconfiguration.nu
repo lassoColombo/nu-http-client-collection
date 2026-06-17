@@ -68,9 +68,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def xgafv-completer [] { ["1" "2"] }
 def alt-completer [] { ["json" "media" "proto"] }
-def achievementType-completer [] { ["ACHIEVEMENT_TYPE_UNSPECIFIED" "INCREMENTAL" "STANDARD"] }
-def initialState-completer [] { ["HIDDEN" "INITIAL_STATE_UNSPECIFIED" "REVEALED"] }
-def scoreOrder-completer [] { ["LARGER_IS_BETTER" "SCORE_ORDER_UNSPECIFIED" "SMALLER_IS_BETTER"] }
+def achievement-type-completer [] { ["ACHIEVEMENT_TYPE_UNSPECIFIED" "INCREMENTAL" "STANDARD"] }
+def initial-state-completer [] { ["HIDDEN" "INITIAL_STATE_UNSPECIFIED" "REVEALED"] }
+def score-order-completer [] { ["LARGER_IS_BETTER" "SCORE_ORDER_UNSPECIFIED" "SMALLER_IS_BETTER"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -100,7 +100,7 @@ export def commands []: nothing -> table {
 # DELETE /games/v1configuration/achievements/{achievementId}
 # operationId: gamesConfiguration.achievementConfigurations.delete
 export def "games-v1configuration-achievements gamesConfigurationachievementConfigurationsdelete" [
-  achievementId: string
+  achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,15 +116,15 @@ export def "games-v1configuration-achievements gamesConfigurationachievementConf
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/games/v1configuration/achievements/($achievementId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({achievement_id: $achievement_id} | format pattern "/games/v1configuration/achievements/{achievement_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -135,7 +135,7 @@ export def "games-v1configuration-achievements gamesConfigurationachievementConf
 # GET /games/v1configuration/achievements/{achievementId}
 # operationId: gamesConfiguration.achievementConfigurations.get
 export def "games-v1configuration-achievements gamesConfigurationachievementConfigurationsget" [
-  achievementId: string
+  achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,15 +151,15 @@ export def "games-v1configuration-achievements gamesConfigurationachievementConf
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<achievementType: string, draft: record<description: record<kind: string, translations: list>, iconUrl: string, kind: string, name: record<kind: string, translations: list>, pointValue: int, sortRank: int>, id: string, initialState: string, kind: string, published: record<description: record<kind: string, translations: list>, iconUrl: string, kind: string, name: record<kind: string, translations: list>, pointValue: int, sortRank: int>, stepsToUnlock: int, token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/games/v1configuration/achievements/($achievementId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({achievement_id: $achievement_id} | format pattern "/games/v1configuration/achievements/{achievement_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -172,7 +172,7 @@ export def "games-v1configuration-achievements gamesConfigurationachievementConf
 # --draft shape: {description?: record, iconUrl?: string, kind?: string, name?: record, pointValue?: int, sortRank?: int}
 # --published shape: {description?: record, iconUrl?: string, kind?: string, name?: record, pointValue?: int, sortRank?: int}
 export def "games-v1configuration-achievements gamesConfigurationachievementConfigurationsupdate" [
-  achievementId: string
+  achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,25 +188,25 @@ export def "games-v1configuration-achievements gamesConfigurationachievementConf
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --achievementType: string@achievementType-completer # The type of the achievement.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --achievement-type: string@achievement-type-completer # The type of the achievement.
   --draft: record # An achievement configuration detail. — shape: {description?: record, iconUrl?: string, kind?: string, name?: record, pointValue?: int, sortRank?: int}
   --id: string # The ID of the achievement.
-  --initialState: string@initialState-completer # The initial state of the achievement.
+  --initial-state: string@initial-state-completer # The initial state of the achievement.
   --kind: string # Uniquely identifies the type of this resource. Value is always the fixed string `gamesConfiguration#achievementConfiguration`.
   --published: record # An achievement configuration detail. — shape: {description?: record, iconUrl?: string, kind?: string, name?: record, pointValue?: int, sortRank?: int}
-  --stepsToUnlock: int # Steps to unlock. Only applicable to incremental achievements. (format: int32)
+  --steps-to-unlock: int # Steps to unlock. Only applicable to incremental achievements. (format: int32)
   --body-token: string # The token for this resource.
 ]: any -> record<achievementType: string, draft: record<description: record<kind: string, translations: list>, iconUrl: string, kind: string, name: record<kind: string, translations: list>, pointValue: int, sortRank: int>, id: string, initialState: string, kind: string, published: record<description: record<kind: string, translations: list>, iconUrl: string, kind: string, name: record<kind: string, translations: list>, pointValue: int, sortRank: int>, stepsToUnlock: int, token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/games/v1configuration/achievements/($achievementId)" $qp)
-  let body = {achievementType: $achievementType, draft: $draft, id: $id, initialState: $initialState, kind: $kind, published: $published, stepsToUnlock: $stepsToUnlock, token: $body_token} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({achievement_id: $achievement_id} | format pattern "/games/v1configuration/achievements/{achievement_id}") $qp)
+  let body = {"achievementType": $achievement_type, "draft": $draft, "id": $id, "initialState": $initial_state, "kind": $kind, "published": $published, "stepsToUnlock": $steps_to_unlock, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -218,7 +218,7 @@ export def "games-v1configuration-achievements gamesConfigurationachievementConf
 # GET /games/v1configuration/applications/{applicationId}/achievements
 # operationId: gamesConfiguration.achievementConfigurations.list
 export def "games-v1configuration-applications-achievements gamesConfigurationachievementConfigurationslist" [
-  applicationId: string
+  application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,17 +234,17 @@ export def "games-v1configuration-applications-achievements gamesConfigurationac
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --maxResults: int # The maximum number of resource configurations to return in the response, used for paging. For any response, the actual number of resources returned may be less than the specified `maxResults`.
-  --pageToken: string # The token returned by the previous request.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --max-results: int # The maximum number of resource configurations to return in the response, used for paging. For any response, the actual number of resources returned may be less than the specified `maxResults`.
+  --page-token: string # The token returned by the previous request.
 ]: nothing -> record<items: table<achievementType: string, draft: record, id: string, initialState: string, kind: string, published: record, stepsToUnlock: int, token: string>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/games/v1configuration/applications/($applicationId)/achievements" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/games/v1configuration/applications/{application_id}/achievements") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -257,7 +257,7 @@ export def "games-v1configuration-applications-achievements gamesConfigurationac
 # --draft shape: {description?: record, iconUrl?: string, kind?: string, name?: record, pointValue?: int, sortRank?: int}
 # --published shape: {description?: record, iconUrl?: string, kind?: string, name?: record, pointValue?: int, sortRank?: int}
 export def "games-v1configuration-applications-achievements gamesConfigurationachievementConfigurationsinsert" [
-  applicationId: string
+  application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,25 +273,25 @@ export def "games-v1configuration-applications-achievements gamesConfigurationac
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --achievementType: string@achievementType-completer # The type of the achievement.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --achievement-type: string@achievement-type-completer # The type of the achievement.
   --draft: record # An achievement configuration detail. — shape: {description?: record, iconUrl?: string, kind?: string, name?: record, pointValue?: int, sortRank?: int}
   --id: string # The ID of the achievement.
-  --initialState: string@initialState-completer # The initial state of the achievement.
+  --initial-state: string@initial-state-completer # The initial state of the achievement.
   --kind: string # Uniquely identifies the type of this resource. Value is always the fixed string `gamesConfiguration#achievementConfiguration`.
   --published: record # An achievement configuration detail. — shape: {description?: record, iconUrl?: string, kind?: string, name?: record, pointValue?: int, sortRank?: int}
-  --stepsToUnlock: int # Steps to unlock. Only applicable to incremental achievements. (format: int32)
+  --steps-to-unlock: int # Steps to unlock. Only applicable to incremental achievements. (format: int32)
   --body-token: string # The token for this resource.
 ]: any -> record<achievementType: string, draft: record<description: record<kind: string, translations: list>, iconUrl: string, kind: string, name: record<kind: string, translations: list>, pointValue: int, sortRank: int>, id: string, initialState: string, kind: string, published: record<description: record<kind: string, translations: list>, iconUrl: string, kind: string, name: record<kind: string, translations: list>, pointValue: int, sortRank: int>, stepsToUnlock: int, token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/games/v1configuration/applications/($applicationId)/achievements" $qp)
-  let body = {achievementType: $achievementType, draft: $draft, id: $id, initialState: $initialState, kind: $kind, published: $published, stepsToUnlock: $stepsToUnlock, token: $body_token} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/games/v1configuration/applications/{application_id}/achievements") $qp)
+  let body = {"achievementType": $achievement_type, "draft": $draft, "id": $id, "initialState": $initial_state, "kind": $kind, "published": $published, "stepsToUnlock": $steps_to_unlock, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -303,7 +303,7 @@ export def "games-v1configuration-applications-achievements gamesConfigurationac
 # GET /games/v1configuration/applications/{applicationId}/leaderboards
 # operationId: gamesConfiguration.leaderboardConfigurations.list
 export def "games-v1configuration-applications-leaderboards gamesConfigurationleaderboardConfigurationslist" [
-  applicationId: string
+  application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,17 +319,17 @@ export def "games-v1configuration-applications-leaderboards gamesConfigurationle
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --maxResults: int # The maximum number of resource configurations to return in the response, used for paging. For any response, the actual number of resources returned may be less than the specified `maxResults`.
-  --pageToken: string # The token returned by the previous request.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --max-results: int # The maximum number of resource configurations to return in the response, used for paging. For any response, the actual number of resources returned may be less than the specified `maxResults`.
+  --page-token: string # The token returned by the previous request.
 ]: nothing -> record<items: table<draft: record, id: string, kind: string, published: record, scoreMax: string, scoreMin: string, scoreOrder: string, token: string>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/games/v1configuration/applications/($applicationId)/leaderboards" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/games/v1configuration/applications/{application_id}/leaderboards") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -342,7 +342,7 @@ export def "games-v1configuration-applications-leaderboards gamesConfigurationle
 # --draft shape: {iconUrl?: string, kind?: string, name?: record, scoreFormat?: record, sortRank?: int}
 # --published shape: {iconUrl?: string, kind?: string, name?: record, scoreFormat?: record, sortRank?: int}
 export def "games-v1configuration-applications-leaderboards gamesConfigurationleaderboardConfigurationsinsert" [
-  applicationId: string
+  application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,25 +358,25 @@ export def "games-v1configuration-applications-leaderboards gamesConfigurationle
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --draft: record # A leaderboard configuration detail. — shape: {iconUrl?: string, kind?: string, name?: record, scoreFormat?: record, sortRank?: int}
   --id: string # The ID of the leaderboard.
   --kind: string # Uniquely identifies the type of this resource. Value is always the fixed string `gamesConfiguration#leaderboardConfiguration`.
   --published: record # A leaderboard configuration detail. — shape: {iconUrl?: string, kind?: string, name?: record, scoreFormat?: record, sortRank?: int}
-  --scoreMax: string # Maximum score that can be posted to this leaderboard. (format: int64)
-  --scoreMin: string # Minimum score that can be posted to this leaderboard. (format: int64)
-  --scoreOrder: string@scoreOrder-completer
+  --score-max: string # Maximum score that can be posted to this leaderboard. (format: int64)
+  --score-min: string # Minimum score that can be posted to this leaderboard. (format: int64)
+  --score-order: string@score-order-completer
   --body-token: string # The token for this resource.
 ]: any -> record<draft: record<iconUrl: string, kind: string, name: record<kind: string, translations: list>, scoreFormat: record<currencyCode: string, numDecimalPlaces: int, numberFormatType: string, suffix: record>, sortRank: int>, id: string, kind: string, published: record<iconUrl: string, kind: string, name: record<kind: string, translations: list>, scoreFormat: record<currencyCode: string, numDecimalPlaces: int, numberFormatType: string, suffix: record>, sortRank: int>, scoreMax: string, scoreMin: string, scoreOrder: string, token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/games/v1configuration/applications/($applicationId)/leaderboards" $qp)
-  let body = {draft: $draft, id: $id, kind: $kind, published: $published, scoreMax: $scoreMax, scoreMin: $scoreMin, scoreOrder: $scoreOrder, token: $body_token} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/games/v1configuration/applications/{application_id}/leaderboards") $qp)
+  let body = {"draft": $draft, "id": $id, "kind": $kind, "published": $published, "scoreMax": $score_max, "scoreMin": $score_min, "scoreOrder": $score_order, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -388,7 +388,7 @@ export def "games-v1configuration-applications-leaderboards gamesConfigurationle
 # DELETE /games/v1configuration/leaderboards/{leaderboardId}
 # operationId: gamesConfiguration.leaderboardConfigurations.delete
 export def "games-v1configuration-leaderboards gamesConfigurationleaderboardConfigurationsdelete" [
-  leaderboardId: string
+  leaderboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,15 +404,15 @@ export def "games-v1configuration-leaderboards gamesConfigurationleaderboardConf
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/games/v1configuration/leaderboards/($leaderboardId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({leaderboard_id: $leaderboard_id} | format pattern "/games/v1configuration/leaderboards/{leaderboard_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -423,7 +423,7 @@ export def "games-v1configuration-leaderboards gamesConfigurationleaderboardConf
 # GET /games/v1configuration/leaderboards/{leaderboardId}
 # operationId: gamesConfiguration.leaderboardConfigurations.get
 export def "games-v1configuration-leaderboards gamesConfigurationleaderboardConfigurationsget" [
-  leaderboardId: string
+  leaderboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,15 +439,15 @@ export def "games-v1configuration-leaderboards gamesConfigurationleaderboardConf
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<draft: record<iconUrl: string, kind: string, name: record<kind: string, translations: list>, scoreFormat: record<currencyCode: string, numDecimalPlaces: int, numberFormatType: string, suffix: record>, sortRank: int>, id: string, kind: string, published: record<iconUrl: string, kind: string, name: record<kind: string, translations: list>, scoreFormat: record<currencyCode: string, numDecimalPlaces: int, numberFormatType: string, suffix: record>, sortRank: int>, scoreMax: string, scoreMin: string, scoreOrder: string, token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/games/v1configuration/leaderboards/($leaderboardId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({leaderboard_id: $leaderboard_id} | format pattern "/games/v1configuration/leaderboards/{leaderboard_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -460,7 +460,7 @@ export def "games-v1configuration-leaderboards gamesConfigurationleaderboardConf
 # --draft shape: {iconUrl?: string, kind?: string, name?: record, scoreFormat?: record, sortRank?: int}
 # --published shape: {iconUrl?: string, kind?: string, name?: record, scoreFormat?: record, sortRank?: int}
 export def "games-v1configuration-leaderboards gamesConfigurationleaderboardConfigurationsupdate" [
-  leaderboardId: string
+  leaderboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,25 +476,25 @@ export def "games-v1configuration-leaderboards gamesConfigurationleaderboardConf
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --draft: record # A leaderboard configuration detail. — shape: {iconUrl?: string, kind?: string, name?: record, scoreFormat?: record, sortRank?: int}
   --id: string # The ID of the leaderboard.
   --kind: string # Uniquely identifies the type of this resource. Value is always the fixed string `gamesConfiguration#leaderboardConfiguration`.
   --published: record # A leaderboard configuration detail. — shape: {iconUrl?: string, kind?: string, name?: record, scoreFormat?: record, sortRank?: int}
-  --scoreMax: string # Maximum score that can be posted to this leaderboard. (format: int64)
-  --scoreMin: string # Minimum score that can be posted to this leaderboard. (format: int64)
-  --scoreOrder: string@scoreOrder-completer
+  --score-max: string # Maximum score that can be posted to this leaderboard. (format: int64)
+  --score-min: string # Minimum score that can be posted to this leaderboard. (format: int64)
+  --score-order: string@score-order-completer
   --body-token: string # The token for this resource.
 ]: any -> record<draft: record<iconUrl: string, kind: string, name: record<kind: string, translations: list>, scoreFormat: record<currencyCode: string, numDecimalPlaces: int, numberFormatType: string, suffix: record>, sortRank: int>, id: string, kind: string, published: record<iconUrl: string, kind: string, name: record<kind: string, translations: list>, scoreFormat: record<currencyCode: string, numDecimalPlaces: int, numberFormatType: string, suffix: record>, sortRank: int>, scoreMax: string, scoreMin: string, scoreOrder: string, token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/games/v1configuration/leaderboards/($leaderboardId)" $qp)
-  let body = {draft: $draft, id: $id, kind: $kind, published: $published, scoreMax: $scoreMax, scoreMin: $scoreMin, scoreOrder: $scoreOrder, token: $body_token} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({leaderboard_id: $leaderboard_id} | format pattern "/games/v1configuration/leaderboards/{leaderboard_id}") $qp)
+  let body = {"draft": $draft, "id": $id, "kind": $kind, "published": $published, "scoreMax": $score_max, "scoreMin": $score_min, "scoreOrder": $score_order, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -65,13 +65,13 @@ def base-url-completer [] { ["http://localhost//api.ote-godaddy.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def marketId-completer [] { ["da-DK" "de-AT" "de-CH" "de-DE" "el-GR" "en-AE" "en-AU" "en-CA" "en-GB" "en-HK" "en-IE" "en-IL" "en-IN" "en-MY" "en-NZ" "en-PH" "en-PK" "en-SG" "en-US" "en-ZA" "es-AR" "es-CL" "es-CO" "es-ES" "es-MX" "es-PE" "es-US" "es-VE" "fi-FI" "fr-BE" "fr-CA" "fr-CH" "fr-FR" "hi-IN" "id-ID" "it-CH" "it-IT" "ja-JP" "ko-KR" "mr-IN" "nb-NO" "nl-BE" "nl-NL" "pl-PL" "pt-BR" "pt-PT" "ru-RU" "sv-SE" "ta-IN" "th-TH" "tr-TR" "uk-UA" "vi-VN" "zh-HK" "zh-SG" "zh-TW"] }
+def market-id-completer [] { ["da-DK" "de-AT" "de-CH" "de-DE" "el-GR" "en-AE" "en-AU" "en-CA" "en-GB" "en-HK" "en-IE" "en-IL" "en-IN" "en-MY" "en-NZ" "en-PH" "en-PK" "en-SG" "en-US" "en-ZA" "es-AR" "es-CL" "es-CO" "es-ES" "es-MX" "es-PE" "es-US" "es-VE" "fi-FI" "fr-BE" "fr-CA" "fr-CH" "fr-FR" "hi-IN" "id-ID" "it-CH" "it-IT" "ja-JP" "ko-KR" "mr-IN" "nb-NO" "nl-BE" "nl-NL" "pl-PL" "pt-BR" "pt-PT" "ru-RU" "sv-SE" "ta-IN" "th-TH" "tr-TR" "uk-UA" "vi-VN" "zh-HK" "zh-SG" "zh-TW"] }
 def accept-completer [] { ["application/javascript" "application/json" "application/xml" "text/javascript" "text/xml"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shoppers-subaccount createSubaccount" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shoppers-subaccount create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/shoppers/subaccount
 # operationId: createSubaccount
-export def "shoppers-subaccount createSubaccount" [
+export def "shoppers-subaccount create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,17 +106,17 @@ export def "shoppers-subaccount createSubaccount" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   email: string # format: email
-  --externalId: int
-  --marketId: string@marketId-completer # format: bcp-47, default: en-US
-  nameFirst: string
-  nameLast: string
+  --external-id: int
+  --market-id: string@market-id-completer # format: bcp-47, default: en-US
+  name_first: string
+  name_last: string
   password: string # format: shopper-password
 ]: any -> record<customerId: string, shopperId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/shoppers/subaccount")
-  let body = {email: $email, externalId: $externalId, marketId: $marketId, nameFirst: $nameFirst, nameLast: $nameLast, password: $password} | compact
+  let body = {"email": $email, "externalId": $external_id, "marketId": $market_id, "nameFirst": $name_first, "nameLast": $name_last, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -128,7 +128,7 @@ export def "shoppers-subaccount createSubaccount" [
 # DELETE /v1/shoppers/{shopperId}
 # operationId: delete
 export def "shoppers delete" [
-  shopperId: string
+  shopper_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,12 +137,12 @@ export def "shoppers delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auditClientIp: string # The client IP of the user who originated the request leading to this call.
+  --audit-client-ip: string # The client IP of the user who originated the request leading to this call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "auditClientIp" $auditClientIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/shoppers/($shopperId)" $qp)
+  let qp = [(serialize-qp "auditClientIp" $audit_client_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({shopper_id: $shopper_id} | format pattern "/v1/shoppers/{shopper_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -153,7 +153,7 @@ export def "shoppers delete" [
 # GET /v1/shoppers/{shopperId}
 # operationId: get
 export def "shoppers get" [
-  shopperId: string
+  shopper_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "shoppers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includes" $includes "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/shoppers/($shopperId)" $qp)
+  let full_url = (build-url $base ({shopper_id: $shopper_id} | format pattern "/v1/shoppers/{shopper_id}") $qp)
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,7 +179,7 @@ export def "shoppers get" [
 # POST /v1/shoppers/{shopperId}
 # operationId: update
 export def "shoppers update" [
-  shopperId: string
+  shopper_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,16 +190,16 @@ export def "shoppers update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --email: string # format: email
-  --externalId: int
-  --marketId: string@marketId-completer # format: bcp-47
-  --nameFirst: string
-  --nameLast: string
+  --external-id: int
+  --market-id: string@market-id-completer # format: bcp-47
+  --name-first: string
+  --name-last: string
 ]: any -> record<customerId: string, shopperId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/shoppers/($shopperId)")
-  let body = {email: $email, externalId: $externalId, marketId: $marketId, nameFirst: $nameFirst, nameLast: $nameLast} | compact
+  let full_url = (build-url $base ({shopper_id: $shopper_id} | format pattern "/v1/shoppers/{shopper_id}"))
+  let body = {"email": $email, "externalId": $external_id, "marketId": $market_id, "nameFirst": $name_first, "nameLast": $name_last} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -211,7 +211,7 @@ export def "shoppers update" [
 # PUT /v1/shoppers/{shopperId}/factors/password
 # operationId: changePassword
 export def "shoppers-factors-password changePassword" [
-  shopperId: string
+  shopper_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,8 +225,8 @@ export def "shoppers-factors-password changePassword" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/shoppers/($shopperId)/factors/password")
-  let body = {secret: $secret} | compact
+  let full_url = (build-url $base ({shopper_id: $shopper_id} | format pattern "/v1/shoppers/{shopper_id}/factors/password"))
+  let body = {"secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -238,7 +238,7 @@ export def "shoppers-factors-password changePassword" [
 # GET /v1/shoppers/{shopperId}/status
 # operationId: getStatus
 export def "shoppers-status get" [
-  shopperId: string
+  shopper_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,12 +248,12 @@ export def "shoppers-status get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --auditClientIp: string # The client IP of the user who originated the request leading to this call.
+  --audit-client-ip: string # The client IP of the user who originated the request leading to this call.
 ]: nothing -> record<billingState: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "auditClientIp" $auditClientIp "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/shoppers/($shopperId)/status" $qp)
+  let qp = [(serialize-qp "auditClientIp" $audit_client_ip "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({shopper_id: $shopper_id} | format pattern "/v1/shoppers/{shopper_id}/status") $qp)
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

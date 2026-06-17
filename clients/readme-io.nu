@@ -118,7 +118,7 @@ export def "projects get" [
 #
 # GET /api-specification
 # operationId: getAPISpecification
-export def "api-specification get" [
+export def "api-specification get-pi" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,13 +127,13 @@ export def "api-specification get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --perPage: int # Number of items to include in pagination (up to 100, defaults to 10) (default: 10)
+  --per-page: int # Number of items to include in pagination (up to 100, defaults to 10) (default: 10)
   --page: int # Used to specify further pages (starts at 1) (default: 1)
   --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (e.g. v3.0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "perPage" $perPage "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "perPage" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api-specification" $qp)
   let extra_headers = {"x-readme-version": $x_readme_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -146,7 +146,7 @@ export def "api-specification get" [
 #
 # POST /api-specification
 # operationId: uploadAPISpecification
-export def "api-specification uploadAPISpecification" [
+export def "api-specification upload-pi" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "api-specification uploadAPISpecification" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-specification")
-  let body = {spec: $spec} | compact
+  let body = {"spec": $spec} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-readme-version": $x_readme_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -175,7 +175,7 @@ export def "api-specification uploadAPISpecification" [
 #
 # DELETE /api-specification/{id}
 # operationId: deleteAPISpecification
-export def "api-specification delete" [
+export def "api-specification delete-pi" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -188,7 +188,7 @@ export def "api-specification delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-specification/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api-specification/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,7 +198,7 @@ export def "api-specification delete" [
 #
 # PUT /api-specification/{id}
 # operationId: updateAPISpecification
-export def "api-specification updateAPISpecification" [
+export def "api-specification update-pi" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -213,8 +213,8 @@ export def "api-specification updateAPISpecification" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-specification/($id)")
-  let body = {spec: $spec} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api-specification/{id}"))
+  let body = {"spec": $spec} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -225,7 +225,7 @@ export def "api-specification updateAPISpecification" [
 #
 # GET /categories/{slug}
 # operationId: getCategory
-export def "categories get" [
+export def "categories get-category" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -239,7 +239,7 @@ export def "categories get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/categories/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/categories/{slug}"))
   let extra_headers = {"x-readme-version": $x_readme_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -251,7 +251,7 @@ export def "categories get" [
 #
 # GET /categories/{slug}/docs
 # operationId: getCategoryDocs
-export def "categories-docs get" [
+export def "categories-docs get-category" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -265,7 +265,7 @@ export def "categories-docs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/categories/($slug)/docs")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/categories/{slug}/docs"))
   let extra_headers = {"x-readme-version": $x_readme_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -286,12 +286,12 @@ export def "changelogs list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --perPage: int # Number of items to include in pagination (up to 100, defaults to 10) (default: 10)
+  --per-page: int # Number of items to include in pagination (up to 100, defaults to 10) (default: 10)
   --page: int # Used to specify further pages (starts at 1) (default: 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "perPage" $perPage "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "perPage" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/changelogs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -302,7 +302,7 @@ export def "changelogs list" [
 #
 # POST /changelogs
 # operationId: createChangelog
-export def "changelogs createChangelog" [
+export def "changelogs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,7 +320,7 @@ export def "changelogs createChangelog" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/changelogs")
-  let body = {body: $body_body, hidden: $hidden, title: $title, type: $type} | compact
+  let body = {"body": $body_body, "hidden": $hidden, "title": $title, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -344,7 +344,7 @@ export def "changelogs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/changelogs/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/changelogs/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -367,7 +367,7 @@ export def "changelogs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/changelogs/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/changelogs/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -377,7 +377,7 @@ export def "changelogs get" [
 #
 # PUT /changelogs/{slug}
 # operationId: updateChangelog
-export def "changelogs updateChangelog" [
+export def "changelogs update" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -395,8 +395,8 @@ export def "changelogs updateChangelog" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/changelogs/($slug)")
-  let body = {body: $body_body, hidden: $hidden, title: $title, type: $type} | compact
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/changelogs/{slug}"))
+  let body = {"body": $body_body, "hidden": $hidden, "title": $title, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -416,12 +416,12 @@ export def "custompages list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --perPage: int # Number of items to include in pagination (up to 100, defaults to 10) (default: 10)
+  --per-page: int # Number of items to include in pagination (up to 100, defaults to 10) (default: 10)
   --page: int # Used to specify further pages (starts at 1) (default: 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "perPage" $perPage "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "perPage" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/custompages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -432,7 +432,7 @@ export def "custompages list" [
 #
 # POST /custompages
 # operationId: createCustomPage
-export def "custompages createCustomPage" [
+export def "custompages create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -451,7 +451,7 @@ export def "custompages createCustomPage" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/custompages")
-  let body = {body: $body_body, hidden: $hidden, html: $html, htmlmode: $htmlmode, title: $title} | compact
+  let body = {"body": $body_body, "hidden": $hidden, "html": $html, "htmlmode": $htmlmode, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -475,7 +475,7 @@ export def "custompages delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/custompages/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/custompages/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -498,7 +498,7 @@ export def "custompages get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/custompages/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/custompages/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -508,7 +508,7 @@ export def "custompages get" [
 #
 # PUT /custompages/{slug}
 # operationId: updateCustomPage
-export def "custompages updateCustomPage" [
+export def "custompages update" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -527,8 +527,8 @@ export def "custompages updateCustomPage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/custompages/($slug)")
-  let body = {body: $body_body, hidden: $hidden, html: $html, htmlmode: $htmlmode, title: $title} | compact
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/custompages/{slug}"))
+  let body = {"body": $body_body, "hidden": $hidden, "html": $html, "htmlmode": $htmlmode, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -539,7 +539,7 @@ export def "custompages updateCustomPage" [
 #
 # POST /docs
 # operationId: createDoc
-export def "docs createDoc" [
+export def "docs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,7 +552,7 @@ export def "docs createDoc" [
   --body-body: string # Body content of the page, formatted in ReadMe or Github flavored Markdown. Accepts long page content, for example, greater than 100k characters
   category: string # Category ID of the page, which you can get through https://docs.readme.com/developers/reference/categories#getcategory 
   --hidden: oneof<nothing, bool> # Visibility of the page (default: true)
-  --parentDoc: string # For a subpage, specify the parent doc ID, which you can get through https://docs.readme.com/developers/reference/docs#getdoc
+  --parent-doc: string # For a subpage, specify the parent doc ID, which you can get through https://docs.readme.com/developers/reference/docs#getdoc
   title: string # Title of the page
   --type: string@type-completer-1 # Type of the page. The available types all show up under the /docs/ URL path of your docs project (also known as the "guides" section). Can be "basic" (most common), "error" (page desribing an API error), or "link" (page that redirects to an external link)
 ]: any -> any {
@@ -560,7 +560,7 @@ export def "docs createDoc" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/docs")
-  let body = {body: $body_body, category: $category, hidden: $hidden, parentDoc: $parentDoc, title: $title, type: $type} | compact
+  let body = {"body": $body_body, "category": $category, "hidden": $hidden, "parentDoc": $parent_doc, "title": $title, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-readme-version": $x_readme_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -573,7 +573,7 @@ export def "docs createDoc" [
 #
 # POST /docs/search
 # operationId: searchDocs
-export def "docs-search searchDocs" [
+export def "docs-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -614,7 +614,7 @@ export def "docs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/docs/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/docs/{slug}"))
   let extra_headers = {"x-readme-version": $x_readme_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -640,7 +640,7 @@ export def "docs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/docs/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/docs/{slug}"))
   let extra_headers = {"x-readme-version": $x_readme_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -652,7 +652,7 @@ export def "docs get" [
 #
 # PUT /docs/{slug}
 # operationId: updateDoc
-export def "docs updateDoc" [
+export def "docs update" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -666,15 +666,15 @@ export def "docs updateDoc" [
   --body-body: string # Body content of the page, formatted in ReadMe or Github flavored Markdown. Accepts long page content, for example, greater than 100k characters
   category: string # Category ID of the page, which you can get through https://docs.readme.com/developers/reference/categories#getcategory 
   --hidden: oneof<nothing, bool> # Visibility of the page (default: true)
-  --parentDoc: string # For a subpage, specify the parent doc ID, which you can get through https://docs.readme.com/developers/reference/docs#getdoc
+  --parent-doc: string # For a subpage, specify the parent doc ID, which you can get through https://docs.readme.com/developers/reference/docs#getdoc
   title: string # Title of the page
   --type: string@type-completer-1 # Type of the page. The available types all show up under the /docs/ URL path of your docs project (also known as the "guides" section). Can be "basic" (most common), "error" (page desribing an API error), or "link" (page that redirects to an external link)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/docs/($slug)")
-  let body = {body: $body_body, category: $category, hidden: $hidden, parentDoc: $parentDoc, title: $title, type: $type} | compact
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/docs/{slug}"))
+  let body = {"body": $body_body, "category": $category, "hidden": $hidden, "parentDoc": $parent_doc, "title": $title, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-readme-version": $x_readme_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -711,7 +711,7 @@ export def "errors get" [
 # DEPRECATED
 # operationId: uploadSwagger
 @deprecated
-export def "swagger uploadSwagger" [
+export def "swagger upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,7 +726,7 @@ export def "swagger uploadSwagger" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/swagger")
-  let body = {swagger: $swagger} | compact
+  let body = {"swagger": $swagger} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -752,7 +752,7 @@ export def "swagger delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/swagger/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/swagger/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -764,7 +764,7 @@ export def "swagger delete" [
 # DEPRECATED
 # operationId: updateSwagger
 @deprecated
-export def "swagger updateSwagger" [
+export def "swagger update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -779,8 +779,8 @@ export def "swagger updateSwagger" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/swagger/($id)")
-  let body = {swagger: $swagger} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/swagger/{id}"))
+  let body = {"swagger": $swagger} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -813,7 +813,7 @@ export def "version list" [
 #
 # POST /version
 # operationId: createVersion
-export def "version createVersion" [
+export def "version create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -834,7 +834,7 @@ export def "version createVersion" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/version")
-  let body = {codename: $codename, from: $body_from, is_beta: $is_beta, is_deprecated: $is_deprecated, is_hidden: $is_hidden, is_stable: $is_stable, version: $version} | compact
+  let body = {"codename": $codename, "from": $body_from, "is_beta": $is_beta, "is_deprecated": $is_deprecated, "is_hidden": $is_hidden, "is_stable": $is_stable, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -846,7 +846,7 @@ export def "version createVersion" [
 # DELETE /version/{versionId}
 # operationId: deleteVersion
 export def "version delete" [
-  versionId: string
+  version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -858,7 +858,7 @@ export def "version delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/version/($versionId)")
+  let full_url = (build-url $base ({version_id: $version_id} | format pattern "/version/{version_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -869,7 +869,7 @@ export def "version delete" [
 # GET /version/{versionId}
 # operationId: getVersion
 export def "version get" [
-  versionId: string
+  version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,7 +881,7 @@ export def "version get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/version/($versionId)")
+  let full_url = (build-url $base ({version_id: $version_id} | format pattern "/version/{version_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -891,8 +891,8 @@ export def "version get" [
 #
 # PUT /version/{versionId}
 # operationId: updateVersion
-export def "version updateVersion" [
-  versionId: string
+export def "version update" [
+  version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -912,8 +912,8 @@ export def "version updateVersion" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/version/($versionId)")
-  let body = {codename: $codename, from: $body_from, is_beta: $is_beta, is_deprecated: $is_deprecated, is_hidden: $is_hidden, is_stable: $is_stable, version: $version} | compact
+  let full_url = (build-url $base ({version_id: $version_id} | format pattern "/version/{version_id}"))
+  let body = {"codename": $codename, "from": $body_from, "is_beta": $is_beta, "is_deprecated": $is_deprecated, "is_hidden": $is_hidden, "is_stable": $is_stable, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

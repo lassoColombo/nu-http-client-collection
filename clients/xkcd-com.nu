@@ -113,7 +113,7 @@ export def "info0json list" [
 #
 # GET /{comicId}/info.0.json
 export def "info0json get" [
-  comicId: float
+  comic_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -125,7 +125,7 @@ export def "info0json get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($comicId)/info.0.json")
+  let full_url = (build-url $base ({comic_id: $comic_id} | format pattern "/{comic_id}/info.0.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

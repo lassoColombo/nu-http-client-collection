@@ -102,12 +102,12 @@ export def "data-ip-geolocation-full ipGeolocationWithConfidenceAreaAndHazardRep
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --ip: string # IPv4 IP address in a string or numeric format. If omitted, the caller’s IP address is assumed  (e.g. 193.114.112.122)
-  --localityLanguage: string # Preferred language for locality names in ISO 639-1 format, such as 'en' for English, 'es' for Spanish etc. Please note: 147 common world languages are supported, full list here, but not all languages are available for every location. If requested language is not available for a requested location it will default to English, if no English is available, the native, local names will be provided  (e.g. en)
+  --locality-language: string # Preferred language for locality names in ISO 639-1 format, such as 'en' for English, 'es' for Spanish etc. Please note: 147 common world languages are supported, full list here, but not all languages are available for every location. If requested language is not available for a requested location it will default to English, if no English is available, the native, local names will be provided  (e.g. en)
   --key: string # Your API key  (e.g. {{API KEY}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ip" $ip "scalar") (serialize-qp "localityLanguage" $localityLanguage "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ip" $ip "scalar") (serialize-qp "localityLanguage" $locality_language "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/data/ip-geolocation-full" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -128,12 +128,12 @@ export def "data-ip-geolocation-with-confidence ipGeolocationWithConfidenceAreaA
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --ip: string # IPv4 IP address in a string or numeric format. If omitted, the caller’s IP address is assumed  (e.g. 193.114.112.122)
-  --localityLanguage: string # Preferred language for locality names in ISO 639-1 format, such as 'en' for English, 'es' for Spanish etc. Please note: 147 common world languages are supported, full list here, but not all languages are available for every location. If requested language is not available for a requested location it will default to English, if no English is available, the native, local names will be provided  (e.g. en)
+  --locality-language: string # Preferred language for locality names in ISO 639-1 format, such as 'en' for English, 'es' for Spanish etc. Please note: 147 common world languages are supported, full list here, but not all languages are available for every location. If requested language is not available for a requested location it will default to English, if no English is available, the native, local names will be provided  (e.g. en)
   --key: string # Your API key  (e.g. {{API KEY}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ip" $ip "scalar") (serialize-qp "localityLanguage" $localityLanguage "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ip" $ip "scalar") (serialize-qp "localityLanguage" $locality_language "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/data/ip-geolocation-with-confidence" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

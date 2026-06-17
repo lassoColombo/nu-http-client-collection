@@ -107,16 +107,16 @@ export def "cripc-certificate cripc" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cripc/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
+  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -138,16 +138,16 @@ export def "cvipc-certificate cvipc" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cvipc/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
+  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -169,16 +169,16 @@ export def "egipc-certificate egipc" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/egipc/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
+  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,16 +200,16 @@ export def "gicer-certificate gicer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/gicer/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
+  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -231,16 +231,16 @@ export def "hlipc-certificate hlipc" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hlipc/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
+  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -262,16 +262,16 @@ export def "hmipc-certificate hmipc" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hmipc/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
+  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -293,16 +293,16 @@ export def "miipc-certificate miipc" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/miipc/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
+  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -324,16 +324,16 @@ export def "mripc-certificate mripc" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mripc/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
+  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -355,16 +355,16 @@ export def "pripc-certificate pripc" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pripc/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
+  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -386,16 +386,16 @@ export def "twipc-certificate twipc" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificateParameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
-  --consentArtifact: any # shape: {consent: record, signature: record}
+  --certificate-parameters: record # shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
+  --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer # The format of the certificate in response.
-  txnId: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
+  txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/twipc/certificate")
-  let body = {certificateParameters: $certificateParameters, consentArtifact: $consentArtifact, format: $format, txnId: $txnId} | compact
+  let body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shopping-activities ListActivities" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shopping-activities list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /shopping/activities
 # operationId: ListActivities
-export def "shopping-activities ListActivities" [
+export def "shopping-activities list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -118,7 +118,7 @@ export def "shopping-activities ListActivities" [
 #
 # GET /shopping/activities/by-square
 # operationId: ListActivitiesBySquare
-export def "shopping-activities-by-square ListActivitiesBySquare" [
+export def "shopping-activities-by-square list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,8 +145,8 @@ export def "shopping-activities-by-square ListActivitiesBySquare" [
 #
 # GET /shopping/activities/{activityId}
 # operationId: GETActivity
-export def "shopping-activities GETActivity" [
-  activityId: string
+export def "shopping-activities get-activity" [
+  activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "shopping-activities GETActivity" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shopping/activities/($activityId)")
+  let full_url = (build-url $base ({activity_id: $activity_id} | format pattern "/shopping/activities/{activity_id}"))
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

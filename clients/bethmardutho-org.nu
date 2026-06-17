@@ -104,7 +104,7 @@ export def "lexeme get" [
 ]: nothing -> record<categoryType: string, etymologies: any, glosses: any, kaylo: any, lexeme: any, root: any, syriac: string, words: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lexeme/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/lexeme/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -126,7 +126,7 @@ export def "word get" [
 ]: nothing -> table<eastern: string, gender: string, glosses: record, hasSeyame: bool, isEnclitic: bool, isLexicalForm: bool, isTheoretical: bool, kaylo: string, lexeme: any, number: string, person: string, state: string, suffixGender: any, suffixNumber: any, suffixPerson: any, suffixType: string, syriac: string, tense: string, western: string, word: record<id: int, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/word/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/word/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -101,12 +101,12 @@ export def "rest-service-auth-v1-login login" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userName: string # the username of the user to get the token for
+  --user-name: string # the username of the user to get the token for
   --password: string # the password for the user to get the token for
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userName" $userName "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service/auth-v1/login" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -139,7 +139,7 @@ export def "rest-service-auth-v1-login loginPost" [
 #
 # GET /rest-service/projects-v1
 # operationId: getAllProjects
-export def "rest-service-projects-v1 list" [
+export def "rest-service-projects-v1 get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -148,11 +148,11 @@ export def "rest-service-projects-v1 list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --excludeAllowedReviewers: oneof<nothing, bool> # if set to true, user data (e.g. allowedReviewers) which is expensive  to compute, will not be included in the response data. Defaults to false so allowedReviewers are included in the response. (default: false)
+  --exclude-allowed-reviewers: oneof<nothing, bool> # if set to true, user data (e.g. allowedReviewers) which is expensive  to compute, will not be included in the response data. Defaults to false so allowedReviewers are included in the response. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "excludeAllowedReviewers" $excludeAllowedReviewers "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "excludeAllowedReviewers" $exclude_allowed_reviewers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service/projects-v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -173,12 +173,12 @@ export def "rest-service-projects-v1 get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --excludeAllowedReviewers: oneof<nothing, bool> # default: false
+  --exclude-allowed-reviewers: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "excludeAllowedReviewers" $excludeAllowedReviewers "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service/projects-v1/($key)" $qp)
+  let qp = [(serialize-qp "excludeAllowedReviewers" $exclude_allowed_reviewers "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest-service/projects-v1/{key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,7 +188,7 @@ export def "rest-service-projects-v1 get" [
 #
 # GET /rest-service/repositories-v1
 # operationId: getAllRepositories
-export def "rest-service-repositories-v1 list" [
+export def "rest-service-repositories-v1 get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,8 +217,8 @@ export def "rest-service-repositories-v1 list" [
 # GET /rest-service/repositories-v1/browse/{repository}/{path}
 # operationId: browse
 export def "rest-service-repositories-v1-browse browse" [
-  path: string
   repository: string
+  path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "rest-service-repositories-v1-browse browse" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/repositories-v1/browse/($repository)/($path)")
+  let full_url = (build-url $base ({repository: $repository, path: $path} | format pattern "/rest-service/repositories-v1/browse/{repository}/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -254,7 +254,7 @@ export def "rest-service-repositories-v1-change change" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/repositories-v1/change/($repository)/($revision)")
+  let full_url = (build-url $base ({repository: $repository, revision: $revision} | format pattern "/rest-service/repositories-v1/change/{repository}/{revision}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -265,8 +265,8 @@ export def "rest-service-repositories-v1-change change" [
 # GET /rest-service/repositories-v1/changes/{repository}/{path}
 # operationId: changes
 export def "rest-service-repositories-v1-changes changes" [
-  path: string
   repository: string
+  path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,16 +275,16 @@ export def "rest-service-repositories-v1-changes changes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --oldestCsid: string # only return change sets after this change set. If omitted there is no restriction.
-  --includeOldest: oneof<nothing, bool> # include the change set with id "from" in the change sets returned.
-  --newestCsid: string # only return change sets before this change set. If omitted there is no restriction.
-  --includeNewest: oneof<nothing, bool> # include the change set with id "to" in the change sets returned.
+  --oldest-csid: string # only return change sets after this change set. If omitted there is no restriction.
+  --include-oldest: oneof<nothing, bool> # include the change set with id "from" in the change sets returned.
+  --newest-csid: string # only return change sets before this change set. If omitted there is no restriction.
+  --include-newest: oneof<nothing, bool> # include the change set with id "to" in the change sets returned.
   --max: int # return only the newest change sets, to a maximum of maxChangesets. (format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "oldestCsid" $oldestCsid "scalar") (serialize-qp "includeOldest" $includeOldest "scalar") (serialize-qp "newestCsid" $newestCsid "scalar") (serialize-qp "includeNewest" $includeNewest "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service/repositories-v1/changes/($repository)/($path)" $qp)
+  let qp = [(serialize-qp "oldestCsid" $oldest_csid "scalar") (serialize-qp "includeOldest" $include_oldest "scalar") (serialize-qp "newestCsid" $newest_csid "scalar") (serialize-qp "includeNewest" $include_newest "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({repository: $repository, path: $path} | format pattern "/rest-service/repositories-v1/changes/{repository}/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -295,9 +295,9 @@ export def "rest-service-repositories-v1-changes changes" [
 # GET /rest-service/repositories-v1/content/{repository}/{revision}/{path}
 # operationId: getContents
 export def "rest-service-repositories-v1-content get" [
-  path: string
   repository: string
   revision: string
+  path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,7 +309,7 @@ export def "rest-service-repositories-v1-content get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/repositories-v1/content/($repository)/($revision)/($path)")
+  let full_url = (build-url $base ({repository: $repository, revision: $revision, path: $path} | format pattern "/rest-service/repositories-v1/content/{repository}/{revision}/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -320,9 +320,9 @@ export def "rest-service-repositories-v1-content get" [
 # GET /rest-service/repositories-v1/history/{repository}/{revision}/{path}
 # operationId: history
 export def "rest-service-repositories-v1-history history" [
-  path: string
   repository: string
   revision: string
+  path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "rest-service-repositories-v1-history history" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/repositories-v1/history/($repository)/($revision)/($path)")
+  let full_url = (build-url $base ({repository: $repository, revision: $revision, path: $path} | format pattern "/rest-service/repositories-v1/history/{repository}/{revision}/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -343,7 +343,7 @@ export def "rest-service-repositories-v1-history history" [
 # GET /rest-service/repositories-v1/{repository}
 #
 # operationId: getRepositoryDetails
-export def "rest-service-repositories-v1 get" [
+export def "rest-service-repositories-v1 get-details" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -356,7 +356,7 @@ export def "rest-service-repositories-v1 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/repositories-v1/($repository)")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service/repositories-v1/{repository}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -366,7 +366,7 @@ export def "rest-service-repositories-v1 get" [
 #
 # GET /rest-service/repositories-v1/{repository}/svn
 # operationId: getSvnRepositoryDetails
-export def "rest-service-repositories-v1-svn get" [
+export def "rest-service-repositories-v1-svn get-svn-details" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -379,7 +379,7 @@ export def "rest-service-repositories-v1-svn get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/repositories-v1/($repository)/svn")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service/repositories-v1/{repository}/svn"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -389,9 +389,9 @@ export def "rest-service-repositories-v1-svn get" [
 #
 # operationId: details
 export def "rest-service-repositories-v1 details" [
-  path: string
   repository: string
   revision: string
+  path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,7 +403,7 @@ export def "rest-service-repositories-v1 details" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/repositories-v1/($repository)/($revision)/($path)")
+  let full_url = (build-url $base ({repository: $repository, revision: $revision, path: $path} | format pattern "/rest-service/repositories-v1/{repository}/{revision}/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -412,7 +412,7 @@ export def "rest-service-repositories-v1 details" [
 # GET /rest-service/reviews-v1
 #
 # operationId: getAllReviews
-export def "rest-service-reviews-v1 list" [
+export def "rest-service-reviews-v1 get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -435,7 +435,7 @@ export def "rest-service-reviews-v1 list" [
 # POST /rest-service/reviews-v1
 #
 # operationId: createReview
-export def "rest-service-reviews-v1 createReview" [
+export def "rest-service-reviews-v1 create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -457,7 +457,7 @@ export def "rest-service-reviews-v1 createReview" [
 #
 # GET /rest-service/reviews-v1/details
 # operationId: getAllDetailedReviews
-export def "rest-service-reviews-v1-details list" [
+export def "rest-service-reviews-v1-details get-all-detailed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,7 +481,7 @@ export def "rest-service-reviews-v1-details list" [
 #
 # GET /rest-service/reviews-v1/filter
 # operationId: getCustomFilterReviews
-export def "rest-service-reviews-v1-filter list" [
+export def "rest-service-reviews-v1-filter get-custom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,16 +496,16 @@ export def "rest-service-reviews-v1-filter list" [
   --creator: string # reviews created by this user.
   --states: string # comma-separated list of amy of the following strings: (Draft,  Approval, Review, Summarize, Closed, Dead, Rejected, Unknown).
   --reviewer: string # reviews reviewed by this user.
-  --orRoles: oneof<nothing, bool> # whether the value of , ,   and  should be OR'd  () or AND'd ()  together.
+  --or-roles: oneof<nothing, bool> # whether the value of , ,   and  should be OR'd  () or AND'd ()  together.
   --complete: oneof<nothing, bool> # reviews that the specified reviewer has completed.
-  --allReviewersComplete: oneof<nothing, bool> # Reviews that all reviewers have completed.
+  --all-reviewers-complete: oneof<nothing, bool> # Reviews that all reviewers have completed.
   --project: string # reviews for the specified project.
-  --fromDate: int # reviews with last activity date after the specified timestamp, in milliseconds. Inclusive. (format: int64)
-  --toDate: int # reviews with last activity date before the specified timestamp, in milliseconds. Inclusive. (format: int64)
+  --from-date: int # reviews with last activity date after the specified timestamp, in milliseconds. Inclusive. (format: int64)
+  --to-date: int # reviews with last activity date before the specified timestamp, in milliseconds. Inclusive. (format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "moderator" $moderator "scalar") (serialize-qp "creator" $creator "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "reviewer" $reviewer "scalar") (serialize-qp "orRoles" $orRoles "scalar") (serialize-qp "complete" $complete "scalar") (serialize-qp "allReviewersComplete" $allReviewersComplete "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "fromDate" $fromDate "scalar") (serialize-qp "toDate" $toDate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "moderator" $moderator "scalar") (serialize-qp "creator" $creator "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "reviewer" $reviewer "scalar") (serialize-qp "orRoles" $or_roles "scalar") (serialize-qp "complete" $complete "scalar") (serialize-qp "allReviewersComplete" $all_reviewers_complete "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service/reviews-v1/filter" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -516,7 +516,7 @@ export def "rest-service-reviews-v1-filter list" [
 #
 # POST /rest-service/reviews-v1/filter
 # operationId: postCustomFilterReviews
-export def "rest-service-reviews-v1-filter post" [
+export def "rest-service-reviews-v1-filter create-custom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +538,7 @@ export def "rest-service-reviews-v1-filter post" [
 #
 # GET /rest-service/reviews-v1/filter/details
 # operationId: getDetailedCustomFilterReviews
-export def "rest-service-reviews-v1-filter-details list" [
+export def "rest-service-reviews-v1-filter-details get-detailed-custom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,16 +553,16 @@ export def "rest-service-reviews-v1-filter-details list" [
   --creator: string # reviews created by this user.
   --states: string # comma-separated list of amy of the following strings: (Draft,  Approval, Review, Summarize, Closed, Dead, Rejected, Unknown).
   --reviewer: string # reviews reviewed by this user.
-  --orRoles: oneof<nothing, bool> # whether the value of , ,   and  should be OR'd  () or AND'd ()  together.
+  --or-roles: oneof<nothing, bool> # whether the value of , ,   and  should be OR'd  () or AND'd ()  together.
   --complete: oneof<nothing, bool> # reviews that the specified reviewer has completed.
-  --allReviewersComplete: oneof<nothing, bool> # Reviews that all reviewers have completed.
+  --all-reviewers-complete: oneof<nothing, bool> # Reviews that all reviewers have completed.
   --project: string # reviews for the specified project.
-  --fromDate: int # reviews with last activity date after the specified timestamp, in milliseconds. Inclusive. (format: int64)
-  --toDate: int # reviews with last activity date before the specified timestamp, in milliseconds. Inclusive. (format: int64)
+  --from-date: int # reviews with last activity date after the specified timestamp, in milliseconds. Inclusive. (format: int64)
+  --to-date: int # reviews with last activity date before the specified timestamp, in milliseconds. Inclusive. (format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "moderator" $moderator "scalar") (serialize-qp "creator" $creator "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "reviewer" $reviewer "scalar") (serialize-qp "orRoles" $orRoles "scalar") (serialize-qp "complete" $complete "scalar") (serialize-qp "allReviewersComplete" $allReviewersComplete "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "fromDate" $fromDate "scalar") (serialize-qp "toDate" $toDate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "moderator" $moderator "scalar") (serialize-qp "creator" $creator "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "reviewer" $reviewer "scalar") (serialize-qp "orRoles" $or_roles "scalar") (serialize-qp "complete" $complete "scalar") (serialize-qp "allReviewersComplete" $all_reviewers_complete "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service/reviews-v1/filter/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -573,7 +573,7 @@ export def "rest-service-reviews-v1-filter-details list" [
 #
 # POST /rest-service/reviews-v1/filter/details
 # operationId: postDetailedCustomFilterReviews
-export def "rest-service-reviews-v1-filter-details post" [
+export def "rest-service-reviews-v1-filter-details create-detailed-custom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -595,7 +595,7 @@ export def "rest-service-reviews-v1-filter-details post" [
 #
 # GET /rest-service/reviews-v1/filter/{filter}
 # operationId: getFilteredReviewsForUser
-export def "rest-service-reviews-v1-filter get" [
+export def "rest-service-reviews-v1-filter get-filtered-reviews-for-user" [
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -608,7 +608,7 @@ export def "rest-service-reviews-v1-filter get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/filter/($filter)")
+  let full_url = (build-url $base ({filter: $filter} | format pattern "/rest-service/reviews-v1/filter/{filter}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -618,7 +618,7 @@ export def "rest-service-reviews-v1-filter get" [
 #
 # GET /rest-service/reviews-v1/filter/{filter}/details
 # operationId: getDetailedFilteredReviewsForUser
-export def "rest-service-reviews-v1-filter-details get" [
+export def "rest-service-reviews-v1-filter-details get-detailed-filtered-reviews-for-user" [
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -631,7 +631,7 @@ export def "rest-service-reviews-v1-filter-details get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/filter/($filter)/details")
+  let full_url = (build-url $base ({filter: $filter} | format pattern "/rest-service/reviews-v1/filter/{filter}/details"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -654,7 +654,7 @@ export def "rest-service-reviews-v1-metrics get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/metrics/($version)")
+  let full_url = (build-url $base ({version: $version} | format pattern "/rest-service/reviews-v1/metrics/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -664,7 +664,7 @@ export def "rest-service-reviews-v1-metrics get" [
 #
 # GET /rest-service/reviews-v1/search/{repository}
 # operationId: getReviewsForPath
-export def "rest-service-reviews-v1-search get" [
+export def "rest-service-reviews-v1-search get-reviews-for-path" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -679,7 +679,7 @@ export def "rest-service-reviews-v1-search get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service/reviews-v1/search/($repository)" $qp)
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service/reviews-v1/search/{repository}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -689,7 +689,7 @@ export def "rest-service-reviews-v1-search get" [
 #
 # GET /rest-service/reviews-v1/search/{repository}/details
 # operationId: getReviewsDetailsForPath
-export def "rest-service-reviews-v1-search-details get" [
+export def "rest-service-reviews-v1-search-details get-reviews-details-for-path" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -704,7 +704,7 @@ export def "rest-service-reviews-v1-search-details get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service/reviews-v1/search/($repository)/details" $qp)
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service/reviews-v1/search/{repository}/details") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -749,7 +749,7 @@ export def "rest-service-reviews-v1 delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -772,7 +772,7 @@ export def "rest-service-reviews-v1 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -782,7 +782,7 @@ export def "rest-service-reviews-v1 get" [
 #
 # GET /rest-service/reviews-v1/{id}/actions
 # operationId: getAvailableActions
-export def "rest-service-reviews-v1-actions get" [
+export def "rest-service-reviews-v1-actions get-available" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -795,7 +795,7 @@ export def "rest-service-reviews-v1-actions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/actions")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/actions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -804,7 +804,7 @@ export def "rest-service-reviews-v1-actions get" [
 # POST /rest-service/reviews-v1/{id}/addChangeset
 #
 # operationId: addChangesetToReview
-export def "rest-service-reviews-v1-add-changeset addChangesetToReview" [
+export def "rest-service-reviews-v1-add-changeset create-changeset-to" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -817,7 +817,7 @@ export def "rest-service-reviews-v1-add-changeset addChangesetToReview" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/addChangeset")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/addChangeset"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -826,7 +826,7 @@ export def "rest-service-reviews-v1-add-changeset addChangesetToReview" [
 # POST /rest-service/reviews-v1/{id}/addFile
 #
 # operationId: addFile
-export def "rest-service-reviews-v1-add-file addFile" [
+export def "rest-service-reviews-v1-add-file create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -839,7 +839,7 @@ export def "rest-service-reviews-v1-add-file addFile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/addFile")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/addFile"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -849,7 +849,7 @@ export def "rest-service-reviews-v1-add-file addFile" [
 #
 # POST /rest-service/reviews-v1/{id}/addPatch
 # operationId: addPatchReview0
-export def "rest-service-reviews-v1-add-patch addPatchReview0" [
+export def "rest-service-reviews-v1-add-patch create-patch-review0" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -862,7 +862,7 @@ export def "rest-service-reviews-v1-add-patch addPatchReview0" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/addPatch")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/addPatch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -872,7 +872,7 @@ export def "rest-service-reviews-v1-add-patch addPatchReview0" [
 #
 # POST /rest-service/reviews-v1/{id}/close
 # operationId: closeReviewWithComment
-export def "rest-service-reviews-v1-close closeReviewWithComment" [
+export def "rest-service-reviews-v1-close close-review-with-comment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -885,7 +885,7 @@ export def "rest-service-reviews-v1-close closeReviewWithComment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/close")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/close"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -895,7 +895,7 @@ export def "rest-service-reviews-v1-close closeReviewWithComment" [
 #
 # GET /rest-service/reviews-v1/{id}/comments
 # operationId: getAllComments
-export def "rest-service-reviews-v1-comments list" [
+export def "rest-service-reviews-v1-comments get-all" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,7 +910,7 @@ export def "rest-service-reviews-v1-comments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/comments" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -920,7 +920,7 @@ export def "rest-service-reviews-v1-comments list" [
 #
 # POST /rest-service/reviews-v1/{id}/comments
 # operationId: addGeneralComment
-export def "rest-service-reviews-v1-comments addGeneralComment" [
+export def "rest-service-reviews-v1-comments create-general" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -933,7 +933,7 @@ export def "rest-service-reviews-v1-comments addGeneralComment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/comments")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -957,7 +957,7 @@ export def "rest-service-reviews-v1-comments-general get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/comments/general" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/comments/general") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -980,7 +980,7 @@ export def "rest-service-reviews-v1-comments-mark-all-as-read markAllCommentsAsR
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/comments/markAllAsRead")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/comments/markAllAsRead"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1004,7 +1004,7 @@ export def "rest-service-reviews-v1-comments-versioned get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/comments/versioned" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/comments/versioned") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1014,9 +1014,9 @@ export def "rest-service-reviews-v1-comments-versioned get" [
 #
 # DELETE /rest-service/reviews-v1/{id}/comments/{cId}
 # operationId: removeComment
-export def "rest-service-reviews-v1-comments removeComment" [
+export def "rest-service-reviews-v1-comments delete" [
   id: string
-  cId: string
+  c_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1028,7 +1028,7 @@ export def "rest-service-reviews-v1-comments removeComment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/comments/($cId)")
+  let full_url = (build-url $base ({id: $id, c_id: $c_id} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1040,7 +1040,7 @@ export def "rest-service-reviews-v1-comments removeComment" [
 # operationId: getComment
 export def "rest-service-reviews-v1-comments get" [
   id: string
-  cId: string
+  c_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1054,7 +1054,7 @@ export def "rest-service-reviews-v1-comments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/comments/($cId)" $qp)
+  let full_url = (build-url $base ({id: $id, c_id: $c_id} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1064,9 +1064,9 @@ export def "rest-service-reviews-v1-comments get" [
 #
 # POST /rest-service/reviews-v1/{id}/comments/{cId}
 # operationId: updateComment
-export def "rest-service-reviews-v1-comments updateComment" [
+export def "rest-service-reviews-v1-comments update" [
   id: string
-  cId: string
+  c_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1078,7 +1078,7 @@ export def "rest-service-reviews-v1-comments updateComment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/comments/($cId)")
+  let full_url = (build-url $base ({id: $id, c_id: $c_id} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1090,7 +1090,7 @@ export def "rest-service-reviews-v1-comments updateComment" [
 # operationId: markCommentAsLeaveUnread
 export def "rest-service-reviews-v1-comments-mark-as-leave-unread markCommentAsLeaveUnread" [
   id: string
-  cId: string
+  c_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1102,7 +1102,7 @@ export def "rest-service-reviews-v1-comments-mark-as-leave-unread markCommentAsL
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/comments/($cId)/markAsLeaveUnread")
+  let full_url = (build-url $base ({id: $id, c_id: $c_id} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/markAsLeaveUnread"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1114,7 +1114,7 @@ export def "rest-service-reviews-v1-comments-mark-as-leave-unread markCommentAsL
 # operationId: markCommentAsRead
 export def "rest-service-reviews-v1-comments-mark-as-read markCommentAsRead" [
   id: string
-  cId: string
+  c_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1126,7 +1126,7 @@ export def "rest-service-reviews-v1-comments-mark-as-read markCommentAsRead" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/comments/($cId)/markAsRead")
+  let full_url = (build-url $base ({id: $id, c_id: $c_id} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/markAsRead"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1138,7 +1138,7 @@ export def "rest-service-reviews-v1-comments-mark-as-read markCommentAsRead" [
 # operationId: getReplies
 export def "rest-service-reviews-v1-comments-replies get" [
   id: string
-  cId: string
+  c_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1152,7 +1152,7 @@ export def "rest-service-reviews-v1-comments-replies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/comments/($cId)/replies" $qp)
+  let full_url = (build-url $base ({id: $id, c_id: $c_id} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/replies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1162,9 +1162,9 @@ export def "rest-service-reviews-v1-comments-replies get" [
 #
 # POST /rest-service/reviews-v1/{id}/comments/{cId}/replies
 # operationId: addReply
-export def "rest-service-reviews-v1-comments-replies addReply" [
+export def "rest-service-reviews-v1-comments-replies create-reply" [
   id: string
-  cId: string
+  c_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1176,7 +1176,7 @@ export def "rest-service-reviews-v1-comments-replies addReply" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/comments/($cId)/replies")
+  let full_url = (build-url $base ({id: $id, c_id: $c_id} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/replies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1186,10 +1186,10 @@ export def "rest-service-reviews-v1-comments-replies addReply" [
 #
 # DELETE /rest-service/reviews-v1/{id}/comments/{cId}/replies/{rId}
 # operationId: removeReply
-export def "rest-service-reviews-v1-comments-replies removeReply" [
+export def "rest-service-reviews-v1-comments-replies delete-reply" [
   id: string
-  rId: string
-  cId: string
+  c_id: string
+  r_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1201,7 +1201,7 @@ export def "rest-service-reviews-v1-comments-replies removeReply" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/comments/($cId)/replies/($rId)")
+  let full_url = (build-url $base ({id: $id, c_id: $c_id, r_id: $r_id} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/replies/{r_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1211,10 +1211,10 @@ export def "rest-service-reviews-v1-comments-replies removeReply" [
 #
 # POST /rest-service/reviews-v1/{id}/comments/{cId}/replies/{rId}
 # operationId: updateReply
-export def "rest-service-reviews-v1-comments-replies updateReply" [
+export def "rest-service-reviews-v1-comments-replies update-reply" [
   id: string
-  rId: string
-  cId: string
+  c_id: string
+  r_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1226,7 +1226,7 @@ export def "rest-service-reviews-v1-comments-replies updateReply" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/comments/($cId)/replies/($rId)")
+  let full_url = (build-url $base ({id: $id, c_id: $c_id, r_id: $r_id} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/replies/{r_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1246,12 +1246,12 @@ export def "rest-service-reviews-v1-complete completeReview" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ignoreWarnings: oneof<nothing, bool> # if {@code ignoreWarnings==true} then condition failure warnings will be ignored (default: true)
+  --ignore-warnings: oneof<nothing, bool> # if {@code ignoreWarnings==true} then condition failure warnings will be ignored (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ignoreWarnings" $ignoreWarnings "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/complete" $qp)
+  let qp = [(serialize-qp "ignoreWarnings" $ignore_warnings "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/complete") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1261,7 +1261,7 @@ export def "rest-service-reviews-v1-complete completeReview" [
 #
 # GET /rest-service/reviews-v1/{id}/details
 # operationId: getDetailedReview
-export def "rest-service-reviews-v1-details get" [
+export def "rest-service-reviews-v1-details get-detailed" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1274,7 +1274,7 @@ export def "rest-service-reviews-v1-details get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/details")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/details"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1284,7 +1284,7 @@ export def "rest-service-reviews-v1-details get" [
 #
 # GET /rest-service/reviews-v1/{id}/patch
 # operationId: getReviewPatches
-export def "rest-service-reviews-v1-patch get" [
+export def "rest-service-reviews-v1-patch get-review-patches" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1297,7 +1297,7 @@ export def "rest-service-reviews-v1-patch get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/patch")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/patch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1307,7 +1307,7 @@ export def "rest-service-reviews-v1-patch get" [
 #
 # POST /rest-service/reviews-v1/{id}/patch
 # operationId: addPatchToReview
-export def "rest-service-reviews-v1-patch addPatchToReview" [
+export def "rest-service-reviews-v1-patch create-patch-to" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1320,7 +1320,7 @@ export def "rest-service-reviews-v1-patch addPatchToReview" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/patch")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/patch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1330,9 +1330,9 @@ export def "rest-service-reviews-v1-patch addPatchToReview" [
 #
 # DELETE /rest-service/reviews-v1/{id}/patch/{patchId}
 # operationId: removePatch
-export def "rest-service-reviews-v1-patch removePatch" [
-  patchId: int
+export def "rest-service-reviews-v1-patch delete" [
   id: string
+  patch_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1344,7 +1344,7 @@ export def "rest-service-reviews-v1-patch removePatch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/patch/($patchId)")
+  let full_url = (build-url $base ({id: $id, patch_id: $patch_id} | format pattern "/rest-service/reviews-v1/{id}/patch/{patch_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1354,7 +1354,7 @@ export def "rest-service-reviews-v1-patch removePatch" [
 #
 # POST /rest-service/reviews-v1/{id}/publish
 # operationId: publishAllComments
-export def "rest-service-reviews-v1-publish publishAllComments" [
+export def "rest-service-reviews-v1-publish publish-all-comments" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1367,7 +1367,7 @@ export def "rest-service-reviews-v1-publish publishAllComments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/publish")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/publish"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1377,9 +1377,9 @@ export def "rest-service-reviews-v1-publish publishAllComments" [
 #
 # POST /rest-service/reviews-v1/{id}/publish/{cId}
 # operationId: publishComment
-export def "rest-service-reviews-v1-publish publishComment" [
+export def "rest-service-reviews-v1-publish publish-comment" [
   id: string
-  cId: string
+  c_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1391,7 +1391,7 @@ export def "rest-service-reviews-v1-publish publishComment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/publish/($cId)")
+  let full_url = (build-url $base ({id: $id, c_id: $c_id} | format pattern "/rest-service/reviews-v1/{id}/publish/{c_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1414,7 +1414,7 @@ export def "rest-service-reviews-v1-remind remindIncompleteReviewers" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/remind")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/remind"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1437,7 +1437,7 @@ export def "rest-service-reviews-v1-reviewers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/reviewers")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/reviewers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1447,7 +1447,7 @@ export def "rest-service-reviews-v1-reviewers get" [
 #
 # POST /rest-service/reviews-v1/{id}/reviewers
 # operationId: addReviewers
-export def "rest-service-reviews-v1-reviewers addReviewers" [
+export def "rest-service-reviews-v1-reviewers create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1460,7 +1460,7 @@ export def "rest-service-reviews-v1-reviewers addReviewers" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/reviewers")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/reviewers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1483,7 +1483,7 @@ export def "rest-service-reviews-v1-reviewers-completed get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/reviewers/completed")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/reviewers/completed"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1506,7 +1506,7 @@ export def "rest-service-reviews-v1-reviewers-uncompleted get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/reviewers/uncompleted")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/reviewers/uncompleted"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1516,7 +1516,7 @@ export def "rest-service-reviews-v1-reviewers-uncompleted get" [
 #
 # DELETE /rest-service/reviews-v1/{id}/reviewers/{username}
 # operationId: removeReviewer
-export def "rest-service-reviews-v1-reviewers removeReviewer" [
+export def "rest-service-reviews-v1-reviewers delete" [
   id: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1530,7 +1530,7 @@ export def "rest-service-reviews-v1-reviewers removeReviewer" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/reviewers/($username)")
+  let full_url = (build-url $base ({id: $id, username: $username} | format pattern "/rest-service/reviews-v1/{id}/reviewers/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1540,7 +1540,7 @@ export def "rest-service-reviews-v1-reviewers removeReviewer" [
 #
 # GET /rest-service/reviews-v1/{id}/reviewitems
 # operationId: getReviewItemsForReview
-export def "rest-service-reviews-v1-reviewitems list" [
+export def "rest-service-reviews-v1-reviewitems get-review-items-for" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1553,7 +1553,7 @@ export def "rest-service-reviews-v1-reviewitems list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/reviewitems")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/reviewitems"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1563,7 +1563,7 @@ export def "rest-service-reviews-v1-reviewitems list" [
 #
 # POST /rest-service/reviews-v1/{id}/reviewitems
 # operationId: addFisheyeReviewItem
-export def "rest-service-reviews-v1-reviewitems addFisheyeReviewItem" [
+export def "rest-service-reviews-v1-reviewitems create-fisheye" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1576,7 +1576,7 @@ export def "rest-service-reviews-v1-reviewitems addFisheyeReviewItem" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/reviewitems")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/reviewitems"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1586,7 +1586,7 @@ export def "rest-service-reviews-v1-reviewitems addFisheyeReviewItem" [
 #
 # POST /rest-service/reviews-v1/{id}/reviewitems/details
 # operationId: addReviewItem
-export def "rest-service-reviews-v1-reviewitems-details addReviewItem" [
+export def "rest-service-reviews-v1-reviewitems-details create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1599,7 +1599,7 @@ export def "rest-service-reviews-v1-reviewitems-details addReviewItem" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/reviewitems/details")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/details"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1609,7 +1609,7 @@ export def "rest-service-reviews-v1-reviewitems-details addReviewItem" [
 #
 # POST /rest-service/reviews-v1/{id}/reviewitems/revisions
 # operationId: addReviewItems
-export def "rest-service-reviews-v1-reviewitems-revisions addReviewItems" [
+export def "rest-service-reviews-v1-reviewitems-revisions create-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1622,7 +1622,7 @@ export def "rest-service-reviews-v1-reviewitems-revisions addReviewItems" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/reviewitems/revisions")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/revisions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1632,9 +1632,9 @@ export def "rest-service-reviews-v1-reviewitems-revisions addReviewItems" [
 #
 # DELETE /rest-service/reviews-v1/{id}/reviewitems/{riId}
 # operationId: removeReviewItem
-export def "rest-service-reviews-v1-reviewitems removeReviewItem" [
-  riId: string
+export def "rest-service-reviews-v1-reviewitems delete" [
   id: string
+  ri_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1646,7 +1646,7 @@ export def "rest-service-reviews-v1-reviewitems removeReviewItem" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/reviewitems/($riId)")
+  let full_url = (build-url $base ({id: $id, ri_id: $ri_id} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1657,8 +1657,8 @@ export def "rest-service-reviews-v1-reviewitems removeReviewItem" [
 # GET /rest-service/reviews-v1/{id}/reviewitems/{riId}
 # operationId: getReviewItem
 export def "rest-service-reviews-v1-reviewitems get" [
-  riId: string
   id: string
+  ri_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1670,7 +1670,7 @@ export def "rest-service-reviews-v1-reviewitems get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/reviewitems/($riId)")
+  let full_url = (build-url $base ({id: $id, ri_id: $ri_id} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1680,8 +1680,8 @@ export def "rest-service-reviews-v1-reviewitems get" [
 #
 # operationId: getReviewItemsComments
 export def "rest-service-reviews-v1-reviewitems-comments get" [
-  riId: string
   id: string
+  ri_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1695,7 +1695,7 @@ export def "rest-service-reviews-v1-reviewitems-comments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/reviewitems/($riId)/comments" $qp)
+  let full_url = (build-url $base ({id: $id, ri_id: $ri_id} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1705,9 +1705,9 @@ export def "rest-service-reviews-v1-reviewitems-comments get" [
 #
 # POST /rest-service/reviews-v1/{id}/reviewitems/{riId}/comments
 # operationId: addVersionedComment
-export def "rest-service-reviews-v1-reviewitems-comments addVersionedComment" [
-  riId: string
+export def "rest-service-reviews-v1-reviewitems-comments create-versioned" [
   id: string
+  ri_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1719,7 +1719,7 @@ export def "rest-service-reviews-v1-reviewitems-comments addVersionedComment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/reviewitems/($riId)/comments")
+  let full_url = (build-url $base ({id: $id, ri_id: $ri_id} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1730,8 +1730,8 @@ export def "rest-service-reviews-v1-reviewitems-comments addVersionedComment" [
 # PUT /rest-service/reviews-v1/{id}/reviewitems/{riId}/details
 # operationId: setReviewItem
 export def "rest-service-reviews-v1-reviewitems-details setReviewItem" [
-  riId: string
   id: string
+  ri_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1743,7 +1743,7 @@ export def "rest-service-reviews-v1-reviewitems-details setReviewItem" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/reviewitems/($riId)/details")
+  let full_url = (build-url $base ({id: $id, ri_id: $ri_id} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}/details"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1753,9 +1753,9 @@ export def "rest-service-reviews-v1-reviewitems-details setReviewItem" [
 #
 # DELETE /rest-service/reviews-v1/{id}/reviewitems/{riId}/revisions
 # operationId: removeReviewItemRevisions
-export def "rest-service-reviews-v1-reviewitems-revisions removeReviewItemRevisions" [
-  riId: string
+export def "rest-service-reviews-v1-reviewitems-revisions delete" [
   id: string
+  ri_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1769,7 +1769,7 @@ export def "rest-service-reviews-v1-reviewitems-revisions removeReviewItemRevisi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/reviewitems/($riId)/revisions" $qp)
+  let full_url = (build-url $base ({id: $id, ri_id: $ri_id} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}/revisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1779,9 +1779,9 @@ export def "rest-service-reviews-v1-reviewitems-revisions removeReviewItemRevisi
 #
 # POST /rest-service/reviews-v1/{id}/reviewitems/{riId}/revisions
 # operationId: addReviewItemRevisions
-export def "rest-service-reviews-v1-reviewitems-revisions addReviewItemRevisions" [
-  riId: string
+export def "rest-service-reviews-v1-reviewitems-revisions create-by-id-riId" [
   id: string
+  ri_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1795,7 +1795,7 @@ export def "rest-service-reviews-v1-reviewitems-revisions addReviewItemRevisions
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/reviewitems/($riId)/revisions" $qp)
+  let full_url = (build-url $base ({id: $id, ri_id: $ri_id} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}/revisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1805,7 +1805,7 @@ export def "rest-service-reviews-v1-reviewitems-revisions addReviewItemRevisions
 #
 # POST /rest-service/reviews-v1/{id}/transition
 # operationId: changeState
-export def "rest-service-reviews-v1-transition changeState" [
+export def "rest-service-reviews-v1-transition changes-tate" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1816,12 +1816,12 @@ export def "rest-service-reviews-v1-transition changeState" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --action: string # the string representation of the action to perform. Valid actions are:    Note:
-  --ignoreWarnings: oneof<nothing, bool> # if  then condition failure warnings will be ignored (default: true)
+  --ignore-warnings: oneof<nothing, bool> # if  then condition failure warnings will be ignored (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "ignoreWarnings" $ignoreWarnings "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/transition" $qp)
+  let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "ignoreWarnings" $ignore_warnings "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/transition") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1831,7 +1831,7 @@ export def "rest-service-reviews-v1-transition changeState" [
 #
 # GET /rest-service/reviews-v1/{id}/transitions
 # operationId: getAvailableTransitions
-export def "rest-service-reviews-v1-transitions get" [
+export def "rest-service-reviews-v1-transitions get-available" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1844,7 +1844,7 @@ export def "rest-service-reviews-v1-transitions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/transitions")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/transitions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1864,12 +1864,12 @@ export def "rest-service-reviews-v1-uncomplete uncompleteReview" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ignoreWarnings: oneof<nothing, bool> # if {@code ignoreWarnings==true} then condition failure warnings will be ignored (default: true)
+  --ignore-warnings: oneof<nothing, bool> # if {@code ignoreWarnings==true} then condition failure warnings will be ignored (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ignoreWarnings" $ignoreWarnings "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service/reviews-v1/($id)/uncomplete" $qp)
+  let qp = [(serialize-qp "ignoreWarnings" $ignore_warnings "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest-service/reviews-v1/{id}/uncomplete") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1879,7 +1879,7 @@ export def "rest-service-reviews-v1-uncomplete uncompleteReview" [
 #
 # GET /rest-service/search-v1/reviews
 # operationId: getReviewsForTerm
-export def "rest-service-search-v1-reviews get" [
+export def "rest-service-search-v1-reviews get-reviews-for-term" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1889,11 +1889,11 @@ export def "rest-service-search-v1-reviews get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --term: string # a search term.
-  --maxReturn: string # the maximum number of reviews to return.
+  --max-return: string # the maximum number of reviews to return.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "term" $term "scalar") (serialize-qp "maxReturn" $maxReturn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "term" $term "scalar") (serialize-qp "maxReturn" $max_return "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service/search-v1/reviews" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1904,7 +1904,7 @@ export def "rest-service-search-v1-reviews get" [
 #
 # GET /rest-service/search-v1/reviewsForIssue
 # operationId: getReviewsForIssueKey
-export def "rest-service-search-v1-reviews-for-issue get" [
+export def "rest-service-search-v1-reviews-for-issue get-reviews-for-issue-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1913,12 +1913,12 @@ export def "rest-service-search-v1-reviews-for-issue get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jiraKey: string # a Jira issue key (e.g. "FOO-3453")
-  --maxReturn: string # the maximum number of reviews to return.
+  --jira-key: string # a Jira issue key (e.g. "FOO-3453")
+  --max-return: string # the maximum number of reviews to return.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jiraKey" $jiraKey "scalar") (serialize-qp "maxReturn" $maxReturn "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jiraKey" $jira_key "scalar") (serialize-qp "maxReturn" $max_return "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service/search-v1/reviewsForIssue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1953,7 +1953,7 @@ export def "rest-service-users-v1 get" [
 #
 # GET /rest-service/users-v1/{repository}/{username}
 # operationId: getMappedUser
-export def "rest-service-users-v1 get-by-repository-username" [
+export def "rest-service-users-v1 get-mapped" [
   repository: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1967,7 +1967,7 @@ export def "rest-service-users-v1 get-by-repository-username" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/users-v1/($repository)/($username)")
+  let full_url = (build-url $base ({repository: $repository, username: $username} | format pattern "/rest-service/users-v1/{repository}/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1977,7 +1977,7 @@ export def "rest-service-users-v1 get-by-repository-username" [
 #
 # GET /rest-service/users-v1/{username}
 # operationId: getUserProfile
-export def "rest-service-users-v1 get-by-username" [
+export def "rest-service-users-v1 get-user-profile" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1990,7 +1990,7 @@ export def "rest-service-users-v1 get-by-username" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service/users-v1/($username)")
+  let full_url = (build-url $base ({username: $username} | format pattern "/rest-service/users-v1/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

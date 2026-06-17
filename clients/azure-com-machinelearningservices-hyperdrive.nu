@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hyperdrive-v10-runs CreateExperiment" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hyperdrive-v10-runs create-experiment" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # POST /hyperdrive/v1.0/{armScope}/runs
 # operationId: HyperparameterTuning_CreateExperiment
-export def "hyperdrive-v10-runs CreateExperiment" [
-  armScope: string
+export def "hyperdrive-v10-runs create-experiment" [
+  arm_scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,8 +108,8 @@ export def "hyperdrive-v10-runs CreateExperiment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/hyperdrive/v1.0/($armScope)/runs")
-  let body = {config: $config} | compact
+  let full_url = (build-url $base ({arm_scope: $arm_scope} | format pattern "/hyperdrive/v1.0/{arm_scope}/runs"))
+  let body = {"config": $config} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -121,9 +121,9 @@ export def "hyperdrive-v10-runs CreateExperiment" [
 #
 # POST /hyperdrive/v1.0/{armScope}/runs/{runId}/cancel
 # operationId: HyperparameterTuning_CancelExperiment
-export def "hyperdrive-v10-runs-cancel CancelExperiment" [
-  armScope: string
-  runId: string
+export def "hyperdrive-v10-runs-cancel cancel-experiment" [
+  arm_scope: string
+  run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,12 +132,12 @@ export def "hyperdrive-v10-runs-cancel CancelExperiment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RunHistoryHost: string # The host for run location.
+  --run-history-host: string # The host for run location.
 ]: nothing -> record<code: int, result: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/hyperdrive/v1.0/($armScope)/runs/($runId)/cancel")
-  let extra_headers = {"RunHistoryHost": $RunHistoryHost} | compact
+  let full_url = (build-url $base ({arm_scope: $arm_scope, run_id: $run_id} | format pattern "/hyperdrive/v1.0/{arm_scope}/runs/{run_id}/cancel"))
+  let extra_headers = {"RunHistoryHost": $run_history_host} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -108,7 +108,7 @@ export def "adult-content post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/adult_content")
-  let body = {async: $async, image_url: $image_url} | compact
+  let body = {"async": $async, "image_url": $image_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -119,7 +119,7 @@ export def "adult-content post" [
 #
 # GET /adult_content/{taskId}
 export def "adult-content get" [
-  taskId: string
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,7 +131,7 @@ export def "adult-content get" [
 ]: nothing -> record<answer: float, image_url: string, this_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/adult_content/($taskId)")
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/adult_content/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -157,7 +157,7 @@ export def "artistic-image post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/artistic_image")
-  let body = {async: $async, image_url: $image_url, style_url: $style_url} | compact
+  let body = {"async": $async, "image_url": $image_url, "style_url": $style_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -168,7 +168,7 @@ export def "artistic-image post" [
 #
 # GET /artistic_image/{taskId}
 export def "artistic-image get" [
-  taskId: string
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +180,7 @@ export def "artistic-image get" [
 ]: nothing -> record<answer: float, image_url: string, this_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/artistic_image/($taskId)")
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/artistic_image/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -205,7 +205,7 @@ export def "detect-object post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/detect_object")
-  let body = {async: $async, image_url: $image_url} | compact
+  let body = {"async": $async, "image_url": $image_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -216,7 +216,7 @@ export def "detect-object post" [
 #
 # GET /detect_object/{taskId}
 export def "detect-object get" [
-  taskId: string
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "detect-object get" [
 ]: nothing -> record<answer: float, image_url: string, this_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/detect_object/($taskId)")
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/detect_object/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,7 +253,7 @@ export def "face post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/face")
-  let body = {async: $async, image_url: $image_url} | compact
+  let body = {"async": $async, "image_url": $image_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -264,7 +264,7 @@ export def "face post" [
 #
 # GET /face/{taskId}
 export def "face get" [
-  taskId: string
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "face get" [
 ]: nothing -> record<answer: float, image_url: string, this_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/face/($taskId)")
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/face/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -301,7 +301,7 @@ export def "face-age post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/face_age")
-  let body = {async: $async, image_url: $image_url} | compact
+  let body = {"async": $async, "image_url": $image_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -312,7 +312,7 @@ export def "face-age post" [
 #
 # GET /face_age/{taskId}
 export def "face-age get" [
-  taskId: string
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "face-age get" [
 ]: nothing -> record<answer: float, image_url: string, this_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/face_age/($taskId)")
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/face_age/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

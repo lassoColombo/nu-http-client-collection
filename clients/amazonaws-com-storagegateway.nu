@@ -66,101 +66,101 @@ def base-url-completer [] { ["http://storagegateway.us-east-1.amazonaws.com" "ht
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["StorageGateway_20130630.ActivateGateway"] }
-def X-Amz-Target-completer-1 [] { ["StorageGateway_20130630.AddCache"] }
-def X-Amz-Target-completer-2 [] { ["StorageGateway_20130630.AddTagsToResource"] }
-def X-Amz-Target-completer-3 [] { ["StorageGateway_20130630.AddUploadBuffer"] }
-def X-Amz-Target-completer-4 [] { ["StorageGateway_20130630.AddWorkingStorage"] }
-def X-Amz-Target-completer-5 [] { ["StorageGateway_20130630.AssignTapePool"] }
-def X-Amz-Target-completer-6 [] { ["StorageGateway_20130630.AssociateFileSystem"] }
-def X-Amz-Target-completer-7 [] { ["StorageGateway_20130630.AttachVolume"] }
-def X-Amz-Target-completer-8 [] { ["StorageGateway_20130630.CancelArchival"] }
-def X-Amz-Target-completer-9 [] { ["StorageGateway_20130630.CancelRetrieval"] }
-def X-Amz-Target-completer-10 [] { ["StorageGateway_20130630.CreateCachediSCSIVolume"] }
-def X-Amz-Target-completer-11 [] { ["StorageGateway_20130630.CreateNFSFileShare"] }
-def X-Amz-Target-completer-12 [] { ["StorageGateway_20130630.CreateSMBFileShare"] }
-def X-Amz-Target-completer-13 [] { ["StorageGateway_20130630.CreateSnapshot"] }
-def X-Amz-Target-completer-14 [] { ["StorageGateway_20130630.CreateSnapshotFromVolumeRecoveryPoint"] }
-def X-Amz-Target-completer-15 [] { ["StorageGateway_20130630.CreateStorediSCSIVolume"] }
-def X-Amz-Target-completer-16 [] { ["StorageGateway_20130630.CreateTapePool"] }
-def X-Amz-Target-completer-17 [] { ["StorageGateway_20130630.CreateTapeWithBarcode"] }
-def X-Amz-Target-completer-18 [] { ["StorageGateway_20130630.CreateTapes"] }
-def X-Amz-Target-completer-19 [] { ["StorageGateway_20130630.DeleteAutomaticTapeCreationPolicy"] }
-def X-Amz-Target-completer-20 [] { ["StorageGateway_20130630.DeleteBandwidthRateLimit"] }
-def X-Amz-Target-completer-21 [] { ["StorageGateway_20130630.DeleteChapCredentials"] }
-def X-Amz-Target-completer-22 [] { ["StorageGateway_20130630.DeleteFileShare"] }
-def X-Amz-Target-completer-23 [] { ["StorageGateway_20130630.DeleteGateway"] }
-def X-Amz-Target-completer-24 [] { ["StorageGateway_20130630.DeleteSnapshotSchedule"] }
-def X-Amz-Target-completer-25 [] { ["StorageGateway_20130630.DeleteTape"] }
-def X-Amz-Target-completer-26 [] { ["StorageGateway_20130630.DeleteTapeArchive"] }
-def X-Amz-Target-completer-27 [] { ["StorageGateway_20130630.DeleteTapePool"] }
-def X-Amz-Target-completer-28 [] { ["StorageGateway_20130630.DeleteVolume"] }
-def X-Amz-Target-completer-29 [] { ["StorageGateway_20130630.DescribeAvailabilityMonitorTest"] }
-def X-Amz-Target-completer-30 [] { ["StorageGateway_20130630.DescribeBandwidthRateLimit"] }
-def X-Amz-Target-completer-31 [] { ["StorageGateway_20130630.DescribeBandwidthRateLimitSchedule"] }
-def X-Amz-Target-completer-32 [] { ["StorageGateway_20130630.DescribeCache"] }
-def X-Amz-Target-completer-33 [] { ["StorageGateway_20130630.DescribeCachediSCSIVolumes"] }
-def X-Amz-Target-completer-34 [] { ["StorageGateway_20130630.DescribeChapCredentials"] }
-def X-Amz-Target-completer-35 [] { ["StorageGateway_20130630.DescribeFileSystemAssociations"] }
-def X-Amz-Target-completer-36 [] { ["StorageGateway_20130630.DescribeGatewayInformation"] }
-def X-Amz-Target-completer-37 [] { ["StorageGateway_20130630.DescribeMaintenanceStartTime"] }
-def X-Amz-Target-completer-38 [] { ["StorageGateway_20130630.DescribeNFSFileShares"] }
-def X-Amz-Target-completer-39 [] { ["StorageGateway_20130630.DescribeSMBFileShares"] }
-def X-Amz-Target-completer-40 [] { ["StorageGateway_20130630.DescribeSMBSettings"] }
-def X-Amz-Target-completer-41 [] { ["StorageGateway_20130630.DescribeSnapshotSchedule"] }
-def X-Amz-Target-completer-42 [] { ["StorageGateway_20130630.DescribeStorediSCSIVolumes"] }
-def X-Amz-Target-completer-43 [] { ["StorageGateway_20130630.DescribeTapeArchives"] }
-def X-Amz-Target-completer-44 [] { ["StorageGateway_20130630.DescribeTapeRecoveryPoints"] }
-def X-Amz-Target-completer-45 [] { ["StorageGateway_20130630.DescribeTapes"] }
-def X-Amz-Target-completer-46 [] { ["StorageGateway_20130630.DescribeUploadBuffer"] }
-def X-Amz-Target-completer-47 [] { ["StorageGateway_20130630.DescribeVTLDevices"] }
-def X-Amz-Target-completer-48 [] { ["StorageGateway_20130630.DescribeWorkingStorage"] }
-def X-Amz-Target-completer-49 [] { ["StorageGateway_20130630.DetachVolume"] }
-def X-Amz-Target-completer-50 [] { ["StorageGateway_20130630.DisableGateway"] }
-def X-Amz-Target-completer-51 [] { ["StorageGateway_20130630.DisassociateFileSystem"] }
-def X-Amz-Target-completer-52 [] { ["StorageGateway_20130630.JoinDomain"] }
-def X-Amz-Target-completer-53 [] { ["StorageGateway_20130630.ListAutomaticTapeCreationPolicies"] }
-def X-Amz-Target-completer-54 [] { ["StorageGateway_20130630.ListFileShares"] }
-def X-Amz-Target-completer-55 [] { ["StorageGateway_20130630.ListFileSystemAssociations"] }
-def X-Amz-Target-completer-56 [] { ["StorageGateway_20130630.ListGateways"] }
-def X-Amz-Target-completer-57 [] { ["StorageGateway_20130630.ListLocalDisks"] }
-def X-Amz-Target-completer-58 [] { ["StorageGateway_20130630.ListTagsForResource"] }
-def X-Amz-Target-completer-59 [] { ["StorageGateway_20130630.ListTapePools"] }
-def X-Amz-Target-completer-60 [] { ["StorageGateway_20130630.ListTapes"] }
-def X-Amz-Target-completer-61 [] { ["StorageGateway_20130630.ListVolumeInitiators"] }
-def X-Amz-Target-completer-62 [] { ["StorageGateway_20130630.ListVolumeRecoveryPoints"] }
-def X-Amz-Target-completer-63 [] { ["StorageGateway_20130630.ListVolumes"] }
-def X-Amz-Target-completer-64 [] { ["StorageGateway_20130630.NotifyWhenUploaded"] }
-def X-Amz-Target-completer-65 [] { ["StorageGateway_20130630.RefreshCache"] }
-def X-Amz-Target-completer-66 [] { ["StorageGateway_20130630.RemoveTagsFromResource"] }
-def X-Amz-Target-completer-67 [] { ["StorageGateway_20130630.ResetCache"] }
-def X-Amz-Target-completer-68 [] { ["StorageGateway_20130630.RetrieveTapeArchive"] }
-def X-Amz-Target-completer-69 [] { ["StorageGateway_20130630.RetrieveTapeRecoveryPoint"] }
-def X-Amz-Target-completer-70 [] { ["StorageGateway_20130630.SetLocalConsolePassword"] }
-def X-Amz-Target-completer-71 [] { ["StorageGateway_20130630.SetSMBGuestPassword"] }
-def X-Amz-Target-completer-72 [] { ["StorageGateway_20130630.ShutdownGateway"] }
-def X-Amz-Target-completer-73 [] { ["StorageGateway_20130630.StartAvailabilityMonitorTest"] }
-def X-Amz-Target-completer-74 [] { ["StorageGateway_20130630.StartGateway"] }
-def X-Amz-Target-completer-75 [] { ["StorageGateway_20130630.UpdateAutomaticTapeCreationPolicy"] }
-def X-Amz-Target-completer-76 [] { ["StorageGateway_20130630.UpdateBandwidthRateLimit"] }
-def X-Amz-Target-completer-77 [] { ["StorageGateway_20130630.UpdateBandwidthRateLimitSchedule"] }
-def X-Amz-Target-completer-78 [] { ["StorageGateway_20130630.UpdateChapCredentials"] }
-def X-Amz-Target-completer-79 [] { ["StorageGateway_20130630.UpdateFileSystemAssociation"] }
-def X-Amz-Target-completer-80 [] { ["StorageGateway_20130630.UpdateGatewayInformation"] }
-def X-Amz-Target-completer-81 [] { ["StorageGateway_20130630.UpdateGatewaySoftwareNow"] }
-def X-Amz-Target-completer-82 [] { ["StorageGateway_20130630.UpdateMaintenanceStartTime"] }
-def X-Amz-Target-completer-83 [] { ["StorageGateway_20130630.UpdateNFSFileShare"] }
-def X-Amz-Target-completer-84 [] { ["StorageGateway_20130630.UpdateSMBFileShare"] }
-def X-Amz-Target-completer-85 [] { ["StorageGateway_20130630.UpdateSMBFileShareVisibility"] }
-def X-Amz-Target-completer-86 [] { ["StorageGateway_20130630.UpdateSMBLocalGroups"] }
-def X-Amz-Target-completer-87 [] { ["StorageGateway_20130630.UpdateSMBSecurityStrategy"] }
-def X-Amz-Target-completer-88 [] { ["StorageGateway_20130630.UpdateSnapshotSchedule"] }
-def X-Amz-Target-completer-89 [] { ["StorageGateway_20130630.UpdateVTLDeviceType"] }
+def x-amz-target-completer [] { ["StorageGateway_20130630.ActivateGateway"] }
+def x-amz-target-completer-1 [] { ["StorageGateway_20130630.AddCache"] }
+def x-amz-target-completer-2 [] { ["StorageGateway_20130630.AddTagsToResource"] }
+def x-amz-target-completer-3 [] { ["StorageGateway_20130630.AddUploadBuffer"] }
+def x-amz-target-completer-4 [] { ["StorageGateway_20130630.AddWorkingStorage"] }
+def x-amz-target-completer-5 [] { ["StorageGateway_20130630.AssignTapePool"] }
+def x-amz-target-completer-6 [] { ["StorageGateway_20130630.AssociateFileSystem"] }
+def x-amz-target-completer-7 [] { ["StorageGateway_20130630.AttachVolume"] }
+def x-amz-target-completer-8 [] { ["StorageGateway_20130630.CancelArchival"] }
+def x-amz-target-completer-9 [] { ["StorageGateway_20130630.CancelRetrieval"] }
+def x-amz-target-completer-10 [] { ["StorageGateway_20130630.CreateCachediSCSIVolume"] }
+def x-amz-target-completer-11 [] { ["StorageGateway_20130630.CreateNFSFileShare"] }
+def x-amz-target-completer-12 [] { ["StorageGateway_20130630.CreateSMBFileShare"] }
+def x-amz-target-completer-13 [] { ["StorageGateway_20130630.CreateSnapshot"] }
+def x-amz-target-completer-14 [] { ["StorageGateway_20130630.CreateSnapshotFromVolumeRecoveryPoint"] }
+def x-amz-target-completer-15 [] { ["StorageGateway_20130630.CreateStorediSCSIVolume"] }
+def x-amz-target-completer-16 [] { ["StorageGateway_20130630.CreateTapePool"] }
+def x-amz-target-completer-17 [] { ["StorageGateway_20130630.CreateTapeWithBarcode"] }
+def x-amz-target-completer-18 [] { ["StorageGateway_20130630.CreateTapes"] }
+def x-amz-target-completer-19 [] { ["StorageGateway_20130630.DeleteAutomaticTapeCreationPolicy"] }
+def x-amz-target-completer-20 [] { ["StorageGateway_20130630.DeleteBandwidthRateLimit"] }
+def x-amz-target-completer-21 [] { ["StorageGateway_20130630.DeleteChapCredentials"] }
+def x-amz-target-completer-22 [] { ["StorageGateway_20130630.DeleteFileShare"] }
+def x-amz-target-completer-23 [] { ["StorageGateway_20130630.DeleteGateway"] }
+def x-amz-target-completer-24 [] { ["StorageGateway_20130630.DeleteSnapshotSchedule"] }
+def x-amz-target-completer-25 [] { ["StorageGateway_20130630.DeleteTape"] }
+def x-amz-target-completer-26 [] { ["StorageGateway_20130630.DeleteTapeArchive"] }
+def x-amz-target-completer-27 [] { ["StorageGateway_20130630.DeleteTapePool"] }
+def x-amz-target-completer-28 [] { ["StorageGateway_20130630.DeleteVolume"] }
+def x-amz-target-completer-29 [] { ["StorageGateway_20130630.DescribeAvailabilityMonitorTest"] }
+def x-amz-target-completer-30 [] { ["StorageGateway_20130630.DescribeBandwidthRateLimit"] }
+def x-amz-target-completer-31 [] { ["StorageGateway_20130630.DescribeBandwidthRateLimitSchedule"] }
+def x-amz-target-completer-32 [] { ["StorageGateway_20130630.DescribeCache"] }
+def x-amz-target-completer-33 [] { ["StorageGateway_20130630.DescribeCachediSCSIVolumes"] }
+def x-amz-target-completer-34 [] { ["StorageGateway_20130630.DescribeChapCredentials"] }
+def x-amz-target-completer-35 [] { ["StorageGateway_20130630.DescribeFileSystemAssociations"] }
+def x-amz-target-completer-36 [] { ["StorageGateway_20130630.DescribeGatewayInformation"] }
+def x-amz-target-completer-37 [] { ["StorageGateway_20130630.DescribeMaintenanceStartTime"] }
+def x-amz-target-completer-38 [] { ["StorageGateway_20130630.DescribeNFSFileShares"] }
+def x-amz-target-completer-39 [] { ["StorageGateway_20130630.DescribeSMBFileShares"] }
+def x-amz-target-completer-40 [] { ["StorageGateway_20130630.DescribeSMBSettings"] }
+def x-amz-target-completer-41 [] { ["StorageGateway_20130630.DescribeSnapshotSchedule"] }
+def x-amz-target-completer-42 [] { ["StorageGateway_20130630.DescribeStorediSCSIVolumes"] }
+def x-amz-target-completer-43 [] { ["StorageGateway_20130630.DescribeTapeArchives"] }
+def x-amz-target-completer-44 [] { ["StorageGateway_20130630.DescribeTapeRecoveryPoints"] }
+def x-amz-target-completer-45 [] { ["StorageGateway_20130630.DescribeTapes"] }
+def x-amz-target-completer-46 [] { ["StorageGateway_20130630.DescribeUploadBuffer"] }
+def x-amz-target-completer-47 [] { ["StorageGateway_20130630.DescribeVTLDevices"] }
+def x-amz-target-completer-48 [] { ["StorageGateway_20130630.DescribeWorkingStorage"] }
+def x-amz-target-completer-49 [] { ["StorageGateway_20130630.DetachVolume"] }
+def x-amz-target-completer-50 [] { ["StorageGateway_20130630.DisableGateway"] }
+def x-amz-target-completer-51 [] { ["StorageGateway_20130630.DisassociateFileSystem"] }
+def x-amz-target-completer-52 [] { ["StorageGateway_20130630.JoinDomain"] }
+def x-amz-target-completer-53 [] { ["StorageGateway_20130630.ListAutomaticTapeCreationPolicies"] }
+def x-amz-target-completer-54 [] { ["StorageGateway_20130630.ListFileShares"] }
+def x-amz-target-completer-55 [] { ["StorageGateway_20130630.ListFileSystemAssociations"] }
+def x-amz-target-completer-56 [] { ["StorageGateway_20130630.ListGateways"] }
+def x-amz-target-completer-57 [] { ["StorageGateway_20130630.ListLocalDisks"] }
+def x-amz-target-completer-58 [] { ["StorageGateway_20130630.ListTagsForResource"] }
+def x-amz-target-completer-59 [] { ["StorageGateway_20130630.ListTapePools"] }
+def x-amz-target-completer-60 [] { ["StorageGateway_20130630.ListTapes"] }
+def x-amz-target-completer-61 [] { ["StorageGateway_20130630.ListVolumeInitiators"] }
+def x-amz-target-completer-62 [] { ["StorageGateway_20130630.ListVolumeRecoveryPoints"] }
+def x-amz-target-completer-63 [] { ["StorageGateway_20130630.ListVolumes"] }
+def x-amz-target-completer-64 [] { ["StorageGateway_20130630.NotifyWhenUploaded"] }
+def x-amz-target-completer-65 [] { ["StorageGateway_20130630.RefreshCache"] }
+def x-amz-target-completer-66 [] { ["StorageGateway_20130630.RemoveTagsFromResource"] }
+def x-amz-target-completer-67 [] { ["StorageGateway_20130630.ResetCache"] }
+def x-amz-target-completer-68 [] { ["StorageGateway_20130630.RetrieveTapeArchive"] }
+def x-amz-target-completer-69 [] { ["StorageGateway_20130630.RetrieveTapeRecoveryPoint"] }
+def x-amz-target-completer-70 [] { ["StorageGateway_20130630.SetLocalConsolePassword"] }
+def x-amz-target-completer-71 [] { ["StorageGateway_20130630.SetSMBGuestPassword"] }
+def x-amz-target-completer-72 [] { ["StorageGateway_20130630.ShutdownGateway"] }
+def x-amz-target-completer-73 [] { ["StorageGateway_20130630.StartAvailabilityMonitorTest"] }
+def x-amz-target-completer-74 [] { ["StorageGateway_20130630.StartGateway"] }
+def x-amz-target-completer-75 [] { ["StorageGateway_20130630.UpdateAutomaticTapeCreationPolicy"] }
+def x-amz-target-completer-76 [] { ["StorageGateway_20130630.UpdateBandwidthRateLimit"] }
+def x-amz-target-completer-77 [] { ["StorageGateway_20130630.UpdateBandwidthRateLimitSchedule"] }
+def x-amz-target-completer-78 [] { ["StorageGateway_20130630.UpdateChapCredentials"] }
+def x-amz-target-completer-79 [] { ["StorageGateway_20130630.UpdateFileSystemAssociation"] }
+def x-amz-target-completer-80 [] { ["StorageGateway_20130630.UpdateGatewayInformation"] }
+def x-amz-target-completer-81 [] { ["StorageGateway_20130630.UpdateGatewaySoftwareNow"] }
+def x-amz-target-completer-82 [] { ["StorageGateway_20130630.UpdateMaintenanceStartTime"] }
+def x-amz-target-completer-83 [] { ["StorageGateway_20130630.UpdateNFSFileShare"] }
+def x-amz-target-completer-84 [] { ["StorageGateway_20130630.UpdateSMBFileShare"] }
+def x-amz-target-completer-85 [] { ["StorageGateway_20130630.UpdateSMBFileShareVisibility"] }
+def x-amz-target-completer-86 [] { ["StorageGateway_20130630.UpdateSMBLocalGroups"] }
+def x-amz-target-completer-87 [] { ["StorageGateway_20130630.UpdateSMBSecurityStrategy"] }
+def x-amz-target-completer-88 [] { ["StorageGateway_20130630.UpdateSnapshotSchedule"] }
+def x-amz-target-completer-89 [] { ["StorageGateway_20130630.UpdateVTLDeviceType"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-storage-gateway-20130630activate-gateway ActivateGateway" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-storage-gateway-20130630activate-gateway post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -184,7 +184,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.ActivateGateway
 # operationId: ActivateGateway
-export def "x-amz-target-storage-gateway-20130630activate-gateway ActivateGateway" [
+export def "x-amz-target-storage-gateway-20130630activate-gateway post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,30 +193,30 @@ export def "x-amz-target-storage-gateway-20130630activate-gateway ActivateGatewa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  ActivationKey: any
-  GatewayName: any
-  GatewayTimezone: any
-  GatewayRegion: any
-  --GatewayType: any
-  --TapeDriveType: any
-  --MediumChangerType: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  activation_key: any
+  gateway_name: any
+  gateway_timezone: any
+  gateway_region: any
+  --gateway-type: any
+  --tape-drive-type: any
+  --medium-changer-type: any
+  --tags: any
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.ActivateGateway")
-  let body = {ActivationKey: $ActivationKey, GatewayName: $GatewayName, GatewayTimezone: $GatewayTimezone, GatewayRegion: $GatewayRegion, GatewayType: $GatewayType, TapeDriveType: $TapeDriveType, MediumChangerType: $MediumChangerType, Tags: $Tags} | compact
+  let body = {"ActivationKey": $activation_key, "GatewayName": $gateway_name, "GatewayTimezone": $gateway_timezone, "GatewayRegion": $gateway_region, "GatewayType": $gateway_type, "TapeDriveType": $tape_drive_type, "MediumChangerType": $medium_changer_type, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -227,7 +227,7 @@ export def "x-amz-target-storage-gateway-20130630activate-gateway ActivateGatewa
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.AddCache
 # operationId: AddCache
-export def "x-amz-target-storage-gateway-20130630add-cache AddCache" [
+export def "x-amz-target-storage-gateway-20130630add-cache create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,24 +236,24 @@ export def "x-amz-target-storage-gateway-20130630add-cache AddCache" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  DiskIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  disk_ids: any
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.AddCache")
-  let body = {GatewayARN: $GatewayARN, DiskIds: $DiskIds} | compact
+  let body = {"GatewayARN": $gateway_arn, "DiskIds": $disk_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -264,7 +264,7 @@ export def "x-amz-target-storage-gateway-20130630add-cache AddCache" [
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.AddTagsToResource
 # operationId: AddTagsToResource
-export def "x-amz-target-storage-gateway-20130630add-tags-to-resource AddTagsToResource" [
+export def "x-amz-target-storage-gateway-20130630add-tags-to-resource create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,24 +273,24 @@ export def "x-amz-target-storage-gateway-20130630add-tags-to-resource AddTagsToR
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  ResourceARN: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  resource_arn: any
+  tags: any
 ]: any -> record<ResourceARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.AddTagsToResource")
-  let body = {ResourceARN: $ResourceARN, Tags: $Tags} | compact
+  let body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -301,7 +301,7 @@ export def "x-amz-target-storage-gateway-20130630add-tags-to-resource AddTagsToR
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.AddUploadBuffer
 # operationId: AddUploadBuffer
-export def "x-amz-target-storage-gateway-20130630add-upload-buffer AddUploadBuffer" [
+export def "x-amz-target-storage-gateway-20130630add-upload-buffer create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -310,24 +310,24 @@ export def "x-amz-target-storage-gateway-20130630add-upload-buffer AddUploadBuff
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  DiskIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  disk_ids: any
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.AddUploadBuffer")
-  let body = {GatewayARN: $GatewayARN, DiskIds: $DiskIds} | compact
+  let body = {"GatewayARN": $gateway_arn, "DiskIds": $disk_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -338,7 +338,7 @@ export def "x-amz-target-storage-gateway-20130630add-upload-buffer AddUploadBuff
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.AddWorkingStorage
 # operationId: AddWorkingStorage
-export def "x-amz-target-storage-gateway-20130630add-working-storage AddWorkingStorage" [
+export def "x-amz-target-storage-gateway-20130630add-working-storage create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,24 +347,24 @@ export def "x-amz-target-storage-gateway-20130630add-working-storage AddWorkingS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  DiskIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  disk_ids: any
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.AddWorkingStorage")
-  let body = {GatewayARN: $GatewayARN, DiskIds: $DiskIds} | compact
+  let body = {"GatewayARN": $gateway_arn, "DiskIds": $disk_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -375,7 +375,7 @@ export def "x-amz-target-storage-gateway-20130630add-working-storage AddWorkingS
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.AssignTapePool
 # operationId: AssignTapePool
-export def "x-amz-target-storage-gateway-20130630assign-tape-pool AssignTapePool" [
+export def "x-amz-target-storage-gateway-20130630assign-tape-pool post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,25 +384,25 @@ export def "x-amz-target-storage-gateway-20130630assign-tape-pool AssignTapePool
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  TapeARN: any
-  PoolId: any
-  --BypassGovernanceRetention: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  tape_arn: any
+  pool_id: any
+  --bypass-governance-retention: any
 ]: any -> record<TapeARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.AssignTapePool")
-  let body = {TapeARN: $TapeARN, PoolId: $PoolId, BypassGovernanceRetention: $BypassGovernanceRetention} | compact
+  let body = {"TapeARN": $tape_arn, "PoolId": $pool_id, "BypassGovernanceRetention": $bypass_governance_retention} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -414,7 +414,7 @@ export def "x-amz-target-storage-gateway-20130630assign-tape-pool AssignTapePool
 # POST /#X-Amz-Target=StorageGateway_20130630.AssociateFileSystem
 # operationId: AssociateFileSystem
 # --CacheAttributes shape: {CacheStaleTimeoutInSeconds?: any}
-export def "x-amz-target-storage-gateway-20130630associate-file-system AssociateFileSystem" [
+export def "x-amz-target-storage-gateway-20130630associate-file-system post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,31 +423,31 @@ export def "x-amz-target-storage-gateway-20130630associate-file-system Associate
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  UserName: any
-  Password: any
-  ClientToken: any
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  LocationARN: any
-  --Tags: any
-  --AuditDestinationARN: any
-  --CacheAttributes: record # The refresh cache information for the file share or FSx file systems. — shape: {CacheStaleTimeoutInSeconds?: any}
-  --EndpointNetworkConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  user_name: any
+  password: any
+  client_token: any
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  location_arn: any
+  --tags: any
+  --audit-destination-arn: any
+  --cache-attributes: record # The refresh cache information for the file share or FSx file systems. — shape: {CacheStaleTimeoutInSeconds?: any}
+  --endpoint-network-configuration: any
 ]: any -> record<FileSystemAssociationARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.AssociateFileSystem")
-  let body = {UserName: $UserName, Password: $Password, ClientToken: $ClientToken, GatewayARN: $GatewayARN, LocationARN: $LocationARN, Tags: $Tags, AuditDestinationARN: $AuditDestinationARN, CacheAttributes: $CacheAttributes, EndpointNetworkConfiguration: $EndpointNetworkConfiguration} | compact
+  let body = {"UserName": $user_name, "Password": $password, "ClientToken": $client_token, "GatewayARN": $gateway_arn, "LocationARN": $location_arn, "Tags": $tags, "AuditDestinationARN": $audit_destination_arn, "CacheAttributes": $cache_attributes, "EndpointNetworkConfiguration": $endpoint_network_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -458,7 +458,7 @@ export def "x-amz-target-storage-gateway-20130630associate-file-system Associate
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.AttachVolume
 # operationId: AttachVolume
-export def "x-amz-target-storage-gateway-20130630attach-volume AttachVolume" [
+export def "x-amz-target-storage-gateway-20130630attach-volume attach" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -467,27 +467,27 @@ export def "x-amz-target-storage-gateway-20130630attach-volume AttachVolume" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  GatewayARN: any
-  --TargetName: any
-  VolumeARN: any
-  NetworkInterfaceId: any
-  --DiskId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  gateway_arn: any
+  --target-name: any
+  volume_arn: any
+  network_interface_id: any
+  --disk-id: any
 ]: any -> record<VolumeARN: record, TargetARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.AttachVolume")
-  let body = {GatewayARN: $GatewayARN, TargetName: $TargetName, VolumeARN: $VolumeARN, NetworkInterfaceId: $NetworkInterfaceId, DiskId: $DiskId} | compact
+  let body = {"GatewayARN": $gateway_arn, "TargetName": $target_name, "VolumeARN": $volume_arn, "NetworkInterfaceId": $network_interface_id, "DiskId": $disk_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -498,7 +498,7 @@ export def "x-amz-target-storage-gateway-20130630attach-volume AttachVolume" [
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.CancelArchival
 # operationId: CancelArchival
-export def "x-amz-target-storage-gateway-20130630cancel-archival CancelArchival" [
+export def "x-amz-target-storage-gateway-20130630cancel-archival cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,24 +507,24 @@ export def "x-amz-target-storage-gateway-20130630cancel-archival CancelArchival"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  TapeARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  tape_arn: any
 ]: any -> record<TapeARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.CancelArchival")
-  let body = {GatewayARN: $GatewayARN, TapeARN: $TapeARN} | compact
+  let body = {"GatewayARN": $gateway_arn, "TapeARN": $tape_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -535,7 +535,7 @@ export def "x-amz-target-storage-gateway-20130630cancel-archival CancelArchival"
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.CancelRetrieval
 # operationId: CancelRetrieval
-export def "x-amz-target-storage-gateway-20130630cancel-retrieval CancelRetrieval" [
+export def "x-amz-target-storage-gateway-20130630cancel-retrieval cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -544,24 +544,24 @@ export def "x-amz-target-storage-gateway-20130630cancel-retrieval CancelRetrieva
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  TapeARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  tape_arn: any
 ]: any -> record<TapeARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.CancelRetrieval")
-  let body = {GatewayARN: $GatewayARN, TapeARN: $TapeARN} | compact
+  let body = {"GatewayARN": $gateway_arn, "TapeARN": $tape_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -572,7 +572,7 @@ export def "x-amz-target-storage-gateway-20130630cancel-retrieval CancelRetrieva
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.CreateCachediSCSIVolume
 # operationId: CreateCachediSCSIVolume
-export def "x-amz-target-storage-gateway-20130630create-cachedi-scsi-volume CreateCachediSCSIVolume" [
+export def "x-amz-target-storage-gateway-20130630create-cachedi-scsi-volume create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,32 +581,32 @@ export def "x-amz-target-storage-gateway-20130630create-cachedi-scsi-volume Crea
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  VolumeSizeInBytes: any
-  --SnapshotId: any
-  TargetName: any
-  --SourceVolumeARN: any
-  NetworkInterfaceId: any
-  ClientToken: any
-  --KMSEncrypted: any
-  --KMSKey: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  volume_size_in_bytes: any
+  --snapshot-id: any
+  target_name: any
+  --source-volume-arn: any
+  network_interface_id: any
+  client_token: any
+  --kms-encrypted: any
+  --kms-key: any
+  --tags: any
 ]: any -> record<VolumeARN: record, TargetARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.CreateCachediSCSIVolume")
-  let body = {GatewayARN: $GatewayARN, VolumeSizeInBytes: $VolumeSizeInBytes, SnapshotId: $SnapshotId, TargetName: $TargetName, SourceVolumeARN: $SourceVolumeARN, NetworkInterfaceId: $NetworkInterfaceId, ClientToken: $ClientToken, KMSEncrypted: $KMSEncrypted, KMSKey: $KMSKey, Tags: $Tags} | compact
+  let body = {"GatewayARN": $gateway_arn, "VolumeSizeInBytes": $volume_size_in_bytes, "SnapshotId": $snapshot_id, "TargetName": $target_name, "SourceVolumeARN": $source_volume_arn, "NetworkInterfaceId": $network_interface_id, "ClientToken": $client_token, "KMSEncrypted": $kms_encrypted, "KMSKey": $kms_key, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -617,7 +617,7 @@ export def "x-amz-target-storage-gateway-20130630create-cachedi-scsi-volume Crea
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.CreateNFSFileShare
 # operationId: CreateNFSFileShare
-export def "x-amz-target-storage-gateway-20130630create-nfs-file-share CreateNFSFileShare" [
+export def "x-amz-target-storage-gateway-20130630create-nfs-file-share create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -626,43 +626,43 @@ export def "x-amz-target-storage-gateway-20130630create-nfs-file-share CreateNFS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  ClientToken: any
-  --NFSFileShareDefaults: any
-  GatewayARN: any
-  --KMSEncrypted: any
-  --KMSKey: any
-  Role: any
-  LocationARN: any
-  --DefaultStorageClass: any
-  --ObjectACL: any
-  --ClientList: any
-  --Squash: any
-  --ReadOnly: any
-  --GuessMIMETypeEnabled: any
-  --RequesterPays: any
-  --Tags: any
-  --FileShareName: any
-  --CacheAttributes: any
-  --NotificationPolicy: any
-  --VPCEndpointDNSName: any
-  --BucketRegion: any
-  --AuditDestinationARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  client_token: any
+  --nfs-file-share-defaults: any
+  gateway_arn: any
+  --kms-encrypted: any
+  --kms-key: any
+  role: any
+  location_arn: any
+  --default-storage-class: any
+  --object-acl: any
+  --client-list: any
+  --squash: any
+  --read-only: any
+  --guess-mime-type-enabled: any
+  --requester-pays: any
+  --tags: any
+  --file-share-name: any
+  --cache-attributes: any
+  --notification-policy: any
+  --vpc-endpoint-dns-name: any
+  --bucket-region: any
+  --audit-destination-arn: any
 ]: any -> record<FileShareARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.CreateNFSFileShare")
-  let body = {ClientToken: $ClientToken, NFSFileShareDefaults: $NFSFileShareDefaults, GatewayARN: $GatewayARN, KMSEncrypted: $KMSEncrypted, KMSKey: $KMSKey, Role: $Role, LocationARN: $LocationARN, DefaultStorageClass: $DefaultStorageClass, ObjectACL: $ObjectACL, ClientList: $ClientList, Squash: $Squash, ReadOnly: $ReadOnly, GuessMIMETypeEnabled: $GuessMIMETypeEnabled, RequesterPays: $RequesterPays, Tags: $Tags, FileShareName: $FileShareName, CacheAttributes: $CacheAttributes, NotificationPolicy: $NotificationPolicy, VPCEndpointDNSName: $VPCEndpointDNSName, BucketRegion: $BucketRegion, AuditDestinationARN: $AuditDestinationARN} | compact
+  let body = {"ClientToken": $client_token, "NFSFileShareDefaults": $nfs_file_share_defaults, "GatewayARN": $gateway_arn, "KMSEncrypted": $kms_encrypted, "KMSKey": $kms_key, "Role": $role, "LocationARN": $location_arn, "DefaultStorageClass": $default_storage_class, "ObjectACL": $object_acl, "ClientList": $client_list, "Squash": $squash, "ReadOnly": $read_only, "GuessMIMETypeEnabled": $guess_mime_type_enabled, "RequesterPays": $requester_pays, "Tags": $tags, "FileShareName": $file_share_name, "CacheAttributes": $cache_attributes, "NotificationPolicy": $notification_policy, "VPCEndpointDNSName": $vpc_endpoint_dns_name, "BucketRegion": $bucket_region, "AuditDestinationARN": $audit_destination_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -673,7 +673,7 @@ export def "x-amz-target-storage-gateway-20130630create-nfs-file-share CreateNFS
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.CreateSMBFileShare
 # operationId: CreateSMBFileShare
-export def "x-amz-target-storage-gateway-20130630create-smb-file-share CreateSMBFileShare" [
+export def "x-amz-target-storage-gateway-20130630create-smb-file-share create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -682,48 +682,48 @@ export def "x-amz-target-storage-gateway-20130630create-smb-file-share CreateSMB
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  ClientToken: any
-  GatewayARN: any
-  --KMSEncrypted: any
-  --KMSKey: any
-  Role: any
-  LocationARN: any
-  --DefaultStorageClass: any
-  --ObjectACL: any
-  --ReadOnly: any
-  --GuessMIMETypeEnabled: any
-  --RequesterPays: any
-  --SMBACLEnabled: any
-  --AccessBasedEnumeration: any
-  --AdminUserList: any
-  --ValidUserList: any
-  --InvalidUserList: any
-  --AuditDestinationARN: any
-  --Authentication: any
-  --CaseSensitivity: any
-  --Tags: any
-  --FileShareName: any
-  --CacheAttributes: any
-  --NotificationPolicy: any
-  --VPCEndpointDNSName: any
-  --BucketRegion: any
-  --OplocksEnabled: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  client_token: any
+  gateway_arn: any
+  --kms-encrypted: any
+  --kms-key: any
+  role: any
+  location_arn: any
+  --default-storage-class: any
+  --object-acl: any
+  --read-only: any
+  --guess-mime-type-enabled: any
+  --requester-pays: any
+  --smbacl-enabled: any
+  --access-based-enumeration: any
+  --admin-user-list: any
+  --valid-user-list: any
+  --invalid-user-list: any
+  --audit-destination-arn: any
+  --authentication: any
+  --case-sensitivity: any
+  --tags: any
+  --file-share-name: any
+  --cache-attributes: any
+  --notification-policy: any
+  --vpc-endpoint-dns-name: any
+  --bucket-region: any
+  --oplocks-enabled: any
 ]: any -> record<FileShareARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.CreateSMBFileShare")
-  let body = {ClientToken: $ClientToken, GatewayARN: $GatewayARN, KMSEncrypted: $KMSEncrypted, KMSKey: $KMSKey, Role: $Role, LocationARN: $LocationARN, DefaultStorageClass: $DefaultStorageClass, ObjectACL: $ObjectACL, ReadOnly: $ReadOnly, GuessMIMETypeEnabled: $GuessMIMETypeEnabled, RequesterPays: $RequesterPays, SMBACLEnabled: $SMBACLEnabled, AccessBasedEnumeration: $AccessBasedEnumeration, AdminUserList: $AdminUserList, ValidUserList: $ValidUserList, InvalidUserList: $InvalidUserList, AuditDestinationARN: $AuditDestinationARN, Authentication: $Authentication, CaseSensitivity: $CaseSensitivity, Tags: $Tags, FileShareName: $FileShareName, CacheAttributes: $CacheAttributes, NotificationPolicy: $NotificationPolicy, VPCEndpointDNSName: $VPCEndpointDNSName, BucketRegion: $BucketRegion, OplocksEnabled: $OplocksEnabled} | compact
+  let body = {"ClientToken": $client_token, "GatewayARN": $gateway_arn, "KMSEncrypted": $kms_encrypted, "KMSKey": $kms_key, "Role": $role, "LocationARN": $location_arn, "DefaultStorageClass": $default_storage_class, "ObjectACL": $object_acl, "ReadOnly": $read_only, "GuessMIMETypeEnabled": $guess_mime_type_enabled, "RequesterPays": $requester_pays, "SMBACLEnabled": $smbacl_enabled, "AccessBasedEnumeration": $access_based_enumeration, "AdminUserList": $admin_user_list, "ValidUserList": $valid_user_list, "InvalidUserList": $invalid_user_list, "AuditDestinationARN": $audit_destination_arn, "Authentication": $authentication, "CaseSensitivity": $case_sensitivity, "Tags": $tags, "FileShareName": $file_share_name, "CacheAttributes": $cache_attributes, "NotificationPolicy": $notification_policy, "VPCEndpointDNSName": $vpc_endpoint_dns_name, "BucketRegion": $bucket_region, "OplocksEnabled": $oplocks_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -734,7 +734,7 @@ export def "x-amz-target-storage-gateway-20130630create-smb-file-share CreateSMB
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.CreateSnapshot
 # operationId: CreateSnapshot
-export def "x-amz-target-storage-gateway-20130630create-snapshot CreateSnapshot" [
+export def "x-amz-target-storage-gateway-20130630create-snapshot create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -743,25 +743,25 @@ export def "x-amz-target-storage-gateway-20130630create-snapshot CreateSnapshot"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  VolumeARN: any
-  SnapshotDescription: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  volume_arn: any
+  snapshot_description: any
+  --tags: any
 ]: any -> record<VolumeARN: record, SnapshotId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.CreateSnapshot")
-  let body = {VolumeARN: $VolumeARN, SnapshotDescription: $SnapshotDescription, Tags: $Tags} | compact
+  let body = {"VolumeARN": $volume_arn, "SnapshotDescription": $snapshot_description, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -772,7 +772,7 @@ export def "x-amz-target-storage-gateway-20130630create-snapshot CreateSnapshot"
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.CreateSnapshotFromVolumeRecoveryPoint
 # operationId: CreateSnapshotFromVolumeRecoveryPoint
-export def "x-amz-target-storage-gateway-20130630create-snapshot-from-volume-recovery-point CreateSnapshotFromVolumeRecoveryPoint" [
+export def "x-amz-target-storage-gateway-20130630create-snapshot-from-volume-recovery-point create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -781,25 +781,25 @@ export def "x-amz-target-storage-gateway-20130630create-snapshot-from-volume-rec
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  VolumeARN: any
-  SnapshotDescription: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  volume_arn: any
+  snapshot_description: any
+  --tags: any
 ]: any -> record<SnapshotId: record, VolumeARN: record, VolumeRecoveryPointTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.CreateSnapshotFromVolumeRecoveryPoint")
-  let body = {VolumeARN: $VolumeARN, SnapshotDescription: $SnapshotDescription, Tags: $Tags} | compact
+  let body = {"VolumeARN": $volume_arn, "SnapshotDescription": $snapshot_description, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -810,7 +810,7 @@ export def "x-amz-target-storage-gateway-20130630create-snapshot-from-volume-rec
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.CreateStorediSCSIVolume
 # operationId: CreateStorediSCSIVolume
-export def "x-amz-target-storage-gateway-20130630create-storedi-scsi-volume CreateStorediSCSIVolume" [
+export def "x-amz-target-storage-gateway-20130630create-storedi-scsi-volume create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -819,31 +819,31 @@ export def "x-amz-target-storage-gateway-20130630create-storedi-scsi-volume Crea
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  DiskId: any
-  --SnapshotId: any
-  PreserveExistingData: any
-  TargetName: any
-  NetworkInterfaceId: any
-  --KMSEncrypted: any
-  --KMSKey: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  disk_id: any
+  --snapshot-id: any
+  preserve_existing_data: any
+  target_name: any
+  network_interface_id: any
+  --kms-encrypted: any
+  --kms-key: any
+  --tags: any
 ]: any -> record<VolumeARN: record, VolumeSizeInBytes: record, TargetARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.CreateStorediSCSIVolume")
-  let body = {GatewayARN: $GatewayARN, DiskId: $DiskId, SnapshotId: $SnapshotId, PreserveExistingData: $PreserveExistingData, TargetName: $TargetName, NetworkInterfaceId: $NetworkInterfaceId, KMSEncrypted: $KMSEncrypted, KMSKey: $KMSKey, Tags: $Tags} | compact
+  let body = {"GatewayARN": $gateway_arn, "DiskId": $disk_id, "SnapshotId": $snapshot_id, "PreserveExistingData": $preserve_existing_data, "TargetName": $target_name, "NetworkInterfaceId": $network_interface_id, "KMSEncrypted": $kms_encrypted, "KMSKey": $kms_key, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -854,7 +854,7 @@ export def "x-amz-target-storage-gateway-20130630create-storedi-scsi-volume Crea
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.CreateTapePool
 # operationId: CreateTapePool
-export def "x-amz-target-storage-gateway-20130630create-tape-pool CreateTapePool" [
+export def "x-amz-target-storage-gateway-20130630create-tape-pool create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -863,27 +863,27 @@ export def "x-amz-target-storage-gateway-20130630create-tape-pool CreateTapePool
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  PoolName: any
-  StorageClass: any
-  --RetentionLockType: any
-  --RetentionLockTimeInDays: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  pool_name: any
+  storage_class: any
+  --retention-lock-type: any
+  --retention-lock-time-in-days: any
+  --tags: any
 ]: any -> record<PoolARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.CreateTapePool")
-  let body = {PoolName: $PoolName, StorageClass: $StorageClass, RetentionLockType: $RetentionLockType, RetentionLockTimeInDays: $RetentionLockTimeInDays, Tags: $Tags} | compact
+  let body = {"PoolName": $pool_name, "StorageClass": $storage_class, "RetentionLockType": $retention_lock_type, "RetentionLockTimeInDays": $retention_lock_time_in_days, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -894,7 +894,7 @@ export def "x-amz-target-storage-gateway-20130630create-tape-pool CreateTapePool
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.CreateTapeWithBarcode
 # operationId: CreateTapeWithBarcode
-export def "x-amz-target-storage-gateway-20130630create-tape-with-barcode CreateTapeWithBarcode" [
+export def "x-amz-target-storage-gateway-20130630create-tape-with-barcode create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -903,30 +903,30 @@ export def "x-amz-target-storage-gateway-20130630create-tape-with-barcode Create
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  GatewayARN: any
-  TapeSizeInBytes: any
-  TapeBarcode: any
-  --KMSEncrypted: any
-  --KMSKey: any
-  --PoolId: any
-  --Worm: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  gateway_arn: any
+  tape_size_in_bytes: any
+  tape_barcode: any
+  --kms-encrypted: any
+  --kms-key: any
+  --pool-id: any
+  --worm: any
+  --tags: any
 ]: any -> record<TapeARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.CreateTapeWithBarcode")
-  let body = {GatewayARN: $GatewayARN, TapeSizeInBytes: $TapeSizeInBytes, TapeBarcode: $TapeBarcode, KMSEncrypted: $KMSEncrypted, KMSKey: $KMSKey, PoolId: $PoolId, Worm: $Worm, Tags: $Tags} | compact
+  let body = {"GatewayARN": $gateway_arn, "TapeSizeInBytes": $tape_size_in_bytes, "TapeBarcode": $tape_barcode, "KMSEncrypted": $kms_encrypted, "KMSKey": $kms_key, "PoolId": $pool_id, "Worm": $worm, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -937,7 +937,7 @@ export def "x-amz-target-storage-gateway-20130630create-tape-with-barcode Create
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.CreateTapes
 # operationId: CreateTapes
-export def "x-amz-target-storage-gateway-20130630create-tapes CreateTapes" [
+export def "x-amz-target-storage-gateway-20130630create-tapes create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -946,32 +946,32 @@ export def "x-amz-target-storage-gateway-20130630create-tapes CreateTapes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  GatewayARN: any
-  TapeSizeInBytes: any
-  ClientToken: any
-  NumTapesToCreate: any
-  TapeBarcodePrefix: any
-  --KMSEncrypted: any
-  --KMSKey: any
-  --PoolId: any
-  --Worm: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  gateway_arn: any
+  tape_size_in_bytes: any
+  client_token: any
+  num_tapes_to_create: any
+  tape_barcode_prefix: any
+  --kms-encrypted: any
+  --kms-key: any
+  --pool-id: any
+  --worm: any
+  --tags: any
 ]: any -> record<TapeARNs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.CreateTapes")
-  let body = {GatewayARN: $GatewayARN, TapeSizeInBytes: $TapeSizeInBytes, ClientToken: $ClientToken, NumTapesToCreate: $NumTapesToCreate, TapeBarcodePrefix: $TapeBarcodePrefix, KMSEncrypted: $KMSEncrypted, KMSKey: $KMSKey, PoolId: $PoolId, Worm: $Worm, Tags: $Tags} | compact
+  let body = {"GatewayARN": $gateway_arn, "TapeSizeInBytes": $tape_size_in_bytes, "ClientToken": $client_token, "NumTapesToCreate": $num_tapes_to_create, "TapeBarcodePrefix": $tape_barcode_prefix, "KMSEncrypted": $kms_encrypted, "KMSKey": $kms_key, "PoolId": $pool_id, "Worm": $worm, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -982,7 +982,7 @@ export def "x-amz-target-storage-gateway-20130630create-tapes CreateTapes" [
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DeleteAutomaticTapeCreationPolicy
 # operationId: DeleteAutomaticTapeCreationPolicy
-export def "x-amz-target-storage-gateway-20130630delete-automatic-tape-creation-policy DeleteAutomaticTapeCreationPolicy" [
+export def "x-amz-target-storage-gateway-20130630delete-automatic-tape-creation-policy delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -991,23 +991,23 @@ export def "x-amz-target-storage-gateway-20130630delete-automatic-tape-creation-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DeleteAutomaticTapeCreationPolicy")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1018,7 +1018,7 @@ export def "x-amz-target-storage-gateway-20130630delete-automatic-tape-creation-
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DeleteBandwidthRateLimit
 # operationId: DeleteBandwidthRateLimit
-export def "x-amz-target-storage-gateway-20130630delete-bandwidth-rate-limit DeleteBandwidthRateLimit" [
+export def "x-amz-target-storage-gateway-20130630delete-bandwidth-rate-limit delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1027,24 +1027,24 @@ export def "x-amz-target-storage-gateway-20130630delete-bandwidth-rate-limit Del
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  BandwidthType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  bandwidth_type: any
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DeleteBandwidthRateLimit")
-  let body = {GatewayARN: $GatewayARN, BandwidthType: $BandwidthType} | compact
+  let body = {"GatewayARN": $gateway_arn, "BandwidthType": $bandwidth_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1055,7 +1055,7 @@ export def "x-amz-target-storage-gateway-20130630delete-bandwidth-rate-limit Del
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DeleteChapCredentials
 # operationId: DeleteChapCredentials
-export def "x-amz-target-storage-gateway-20130630delete-chap-credentials DeleteChapCredentials" [
+export def "x-amz-target-storage-gateway-20130630delete-chap-credentials delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1064,24 +1064,24 @@ export def "x-amz-target-storage-gateway-20130630delete-chap-credentials DeleteC
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  TargetARN: any
-  InitiatorName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  target_arn: any
+  initiator_name: any
 ]: any -> record<TargetARN: record, InitiatorName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DeleteChapCredentials")
-  let body = {TargetARN: $TargetARN, InitiatorName: $InitiatorName} | compact
+  let body = {"TargetARN": $target_arn, "InitiatorName": $initiator_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1092,7 +1092,7 @@ export def "x-amz-target-storage-gateway-20130630delete-chap-credentials DeleteC
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DeleteFileShare
 # operationId: DeleteFileShare
-export def "x-amz-target-storage-gateway-20130630delete-file-share DeleteFileShare" [
+export def "x-amz-target-storage-gateway-20130630delete-file-share delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1101,24 +1101,24 @@ export def "x-amz-target-storage-gateway-20130630delete-file-share DeleteFileSha
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  FileShareARN: any
-  --ForceDelete: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  file_share_arn: any
+  --force-delete: any
 ]: any -> record<FileShareARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DeleteFileShare")
-  let body = {FileShareARN: $FileShareARN, ForceDelete: $ForceDelete} | compact
+  let body = {"FileShareARN": $file_share_arn, "ForceDelete": $force_delete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1129,7 +1129,7 @@ export def "x-amz-target-storage-gateway-20130630delete-file-share DeleteFileSha
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DeleteGateway
 # operationId: DeleteGateway
-export def "x-amz-target-storage-gateway-20130630delete-gateway DeleteGateway" [
+export def "x-amz-target-storage-gateway-20130630delete-gateway delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1138,23 +1138,23 @@ export def "x-amz-target-storage-gateway-20130630delete-gateway DeleteGateway" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DeleteGateway")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1165,7 +1165,7 @@ export def "x-amz-target-storage-gateway-20130630delete-gateway DeleteGateway" [
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DeleteSnapshotSchedule
 # operationId: DeleteSnapshotSchedule
-export def "x-amz-target-storage-gateway-20130630delete-snapshot-schedule DeleteSnapshotSchedule" [
+export def "x-amz-target-storage-gateway-20130630delete-snapshot-schedule delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1174,23 +1174,23 @@ export def "x-amz-target-storage-gateway-20130630delete-snapshot-schedule Delete
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  VolumeARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  volume_arn: any
 ]: any -> record<VolumeARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DeleteSnapshotSchedule")
-  let body = {VolumeARN: $VolumeARN} | compact
+  let body = {"VolumeARN": $volume_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1201,7 +1201,7 @@ export def "x-amz-target-storage-gateway-20130630delete-snapshot-schedule Delete
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DeleteTape
 # operationId: DeleteTape
-export def "x-amz-target-storage-gateway-20130630delete-tape DeleteTape" [
+export def "x-amz-target-storage-gateway-20130630delete-tape delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1210,25 +1210,25 @@ export def "x-amz-target-storage-gateway-20130630delete-tape DeleteTape" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  GatewayARN: any
-  TapeARN: any
-  --BypassGovernanceRetention: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  gateway_arn: any
+  tape_arn: any
+  --bypass-governance-retention: any
 ]: any -> record<TapeARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DeleteTape")
-  let body = {GatewayARN: $GatewayARN, TapeARN: $TapeARN, BypassGovernanceRetention: $BypassGovernanceRetention} | compact
+  let body = {"GatewayARN": $gateway_arn, "TapeARN": $tape_arn, "BypassGovernanceRetention": $bypass_governance_retention} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1239,7 +1239,7 @@ export def "x-amz-target-storage-gateway-20130630delete-tape DeleteTape" [
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DeleteTapeArchive
 # operationId: DeleteTapeArchive
-export def "x-amz-target-storage-gateway-20130630delete-tape-archive DeleteTapeArchive" [
+export def "x-amz-target-storage-gateway-20130630delete-tape-archive delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1248,24 +1248,24 @@ export def "x-amz-target-storage-gateway-20130630delete-tape-archive DeleteTapeA
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  TapeARN: any
-  --BypassGovernanceRetention: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  tape_arn: any
+  --bypass-governance-retention: any
 ]: any -> record<TapeARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DeleteTapeArchive")
-  let body = {TapeARN: $TapeARN, BypassGovernanceRetention: $BypassGovernanceRetention} | compact
+  let body = {"TapeARN": $tape_arn, "BypassGovernanceRetention": $bypass_governance_retention} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1276,7 +1276,7 @@ export def "x-amz-target-storage-gateway-20130630delete-tape-archive DeleteTapeA
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DeleteTapePool
 # operationId: DeleteTapePool
-export def "x-amz-target-storage-gateway-20130630delete-tape-pool DeleteTapePool" [
+export def "x-amz-target-storage-gateway-20130630delete-tape-pool delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1285,23 +1285,23 @@ export def "x-amz-target-storage-gateway-20130630delete-tape-pool DeleteTapePool
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  PoolARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  pool_arn: any
 ]: any -> record<PoolARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DeleteTapePool")
-  let body = {PoolARN: $PoolARN} | compact
+  let body = {"PoolARN": $pool_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1312,7 +1312,7 @@ export def "x-amz-target-storage-gateway-20130630delete-tape-pool DeleteTapePool
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DeleteVolume
 # operationId: DeleteVolume
-export def "x-amz-target-storage-gateway-20130630delete-volume DeleteVolume" [
+export def "x-amz-target-storage-gateway-20130630delete-volume delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1321,23 +1321,23 @@ export def "x-amz-target-storage-gateway-20130630delete-volume DeleteVolume" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  VolumeARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  volume_arn: any
 ]: any -> record<VolumeARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DeleteVolume")
-  let body = {VolumeARN: $VolumeARN} | compact
+  let body = {"VolumeARN": $volume_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1348,7 +1348,7 @@ export def "x-amz-target-storage-gateway-20130630delete-volume DeleteVolume" [
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeAvailabilityMonitorTest
 # operationId: DescribeAvailabilityMonitorTest
-export def "x-amz-target-storage-gateway-20130630describe-availability-monitor-test DescribeAvailabilityMonitorTest" [
+export def "x-amz-target-storage-gateway-20130630describe-availability-monitor-test test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1357,23 +1357,23 @@ export def "x-amz-target-storage-gateway-20130630describe-availability-monitor-t
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string, Status: record, StartTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeAvailabilityMonitorTest")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1384,7 +1384,7 @@ export def "x-amz-target-storage-gateway-20130630describe-availability-monitor-t
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeBandwidthRateLimit
 # operationId: DescribeBandwidthRateLimit
-export def "x-amz-target-storage-gateway-20130630describe-bandwidth-rate-limit DescribeBandwidthRateLimit" [
+export def "x-amz-target-storage-gateway-20130630describe-bandwidth-rate-limit post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1393,23 +1393,23 @@ export def "x-amz-target-storage-gateway-20130630describe-bandwidth-rate-limit D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string, AverageUploadRateLimitInBitsPerSec: record, AverageDownloadRateLimitInBitsPerSec: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeBandwidthRateLimit")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1420,7 +1420,7 @@ export def "x-amz-target-storage-gateway-20130630describe-bandwidth-rate-limit D
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeBandwidthRateLimitSchedule
 # operationId: DescribeBandwidthRateLimitSchedule
-export def "x-amz-target-storage-gateway-20130630describe-bandwidth-rate-limit-schedule DescribeBandwidthRateLimitSchedule" [
+export def "x-amz-target-storage-gateway-20130630describe-bandwidth-rate-limit-schedule post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1429,23 +1429,23 @@ export def "x-amz-target-storage-gateway-20130630describe-bandwidth-rate-limit-s
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string, BandwidthRateLimitIntervals: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeBandwidthRateLimitSchedule")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1456,7 +1456,7 @@ export def "x-amz-target-storage-gateway-20130630describe-bandwidth-rate-limit-s
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeCache
 # operationId: DescribeCache
-export def "x-amz-target-storage-gateway-20130630describe-cache DescribeCache" [
+export def "x-amz-target-storage-gateway-20130630describe-cache post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1465,23 +1465,23 @@ export def "x-amz-target-storage-gateway-20130630describe-cache DescribeCache" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string, DiskIds: record, CacheAllocatedInBytes: record, CacheUsedPercentage: record, CacheDirtyPercentage: record, CacheHitPercentage: record, CacheMissPercentage: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeCache")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1492,7 +1492,7 @@ export def "x-amz-target-storage-gateway-20130630describe-cache DescribeCache" [
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeCachediSCSIVolumes
 # operationId: DescribeCachediSCSIVolumes
-export def "x-amz-target-storage-gateway-20130630describe-cachedi-scsi-volumes DescribeCachediSCSIVolumes" [
+export def "x-amz-target-storage-gateway-20130630describe-cachedi-scsi-volumes post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1501,23 +1501,23 @@ export def "x-amz-target-storage-gateway-20130630describe-cachedi-scsi-volumes D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  VolumeARNs: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  volume_ar_ns: any
 ]: any -> record<CachediSCSIVolumes: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeCachediSCSIVolumes")
-  let body = {VolumeARNs: $VolumeARNs} | compact
+  let body = {"VolumeARNs": $volume_ar_ns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1528,7 +1528,7 @@ export def "x-amz-target-storage-gateway-20130630describe-cachedi-scsi-volumes D
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeChapCredentials
 # operationId: DescribeChapCredentials
-export def "x-amz-target-storage-gateway-20130630describe-chap-credentials DescribeChapCredentials" [
+export def "x-amz-target-storage-gateway-20130630describe-chap-credentials post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1537,23 +1537,23 @@ export def "x-amz-target-storage-gateway-20130630describe-chap-credentials Descr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  TargetARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  target_arn: any
 ]: any -> record<ChapCredentials: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeChapCredentials")
-  let body = {TargetARN: $TargetARN} | compact
+  let body = {"TargetARN": $target_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1564,7 +1564,7 @@ export def "x-amz-target-storage-gateway-20130630describe-chap-credentials Descr
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeFileSystemAssociations
 # operationId: DescribeFileSystemAssociations
-export def "x-amz-target-storage-gateway-20130630describe-file-system-associations DescribeFileSystemAssociations" [
+export def "x-amz-target-storage-gateway-20130630describe-file-system-associations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1573,23 +1573,23 @@ export def "x-amz-target-storage-gateway-20130630describe-file-system-associatio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  FileSystemAssociationARNList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  file_system_association_arn_list: any
 ]: any -> record<FileSystemAssociationInfoList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeFileSystemAssociations")
-  let body = {FileSystemAssociationARNList: $FileSystemAssociationARNList} | compact
+  let body = {"FileSystemAssociationARNList": $file_system_association_arn_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1600,7 +1600,7 @@ export def "x-amz-target-storage-gateway-20130630describe-file-system-associatio
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeGatewayInformation
 # operationId: DescribeGatewayInformation
-export def "x-amz-target-storage-gateway-20130630describe-gateway-information DescribeGatewayInformation" [
+export def "x-amz-target-storage-gateway-20130630describe-gateway-information post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1609,23 +1609,23 @@ export def "x-amz-target-storage-gateway-20130630describe-gateway-information De
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string, GatewayId: record, GatewayName: record, GatewayTimezone: record, GatewayState: record, GatewayNetworkInterfaces: record, GatewayType: record, NextUpdateAvailabilityDate: record, LastSoftwareUpdate: record, Ec2InstanceId: record, Ec2InstanceRegion: record, Tags: record, VPCEndpoint: record, CloudWatchLogGroupARN: record, HostEnvironment: record, EndpointType: record, SoftwareUpdatesEndDate: record, DeprecationDate: record, GatewayCapacity: record, SupportedGatewayCapacities: record, HostEnvironmentId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeGatewayInformation")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1636,7 +1636,7 @@ export def "x-amz-target-storage-gateway-20130630describe-gateway-information De
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeMaintenanceStartTime
 # operationId: DescribeMaintenanceStartTime
-export def "x-amz-target-storage-gateway-20130630describe-maintenance-start-time DescribeMaintenanceStartTime" [
+export def "x-amz-target-storage-gateway-20130630describe-maintenance-start-time post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1645,23 +1645,23 @@ export def "x-amz-target-storage-gateway-20130630describe-maintenance-start-time
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string, HourOfDay: record, MinuteOfHour: record, DayOfWeek: record, DayOfMonth: record, Timezone: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeMaintenanceStartTime")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1672,7 +1672,7 @@ export def "x-amz-target-storage-gateway-20130630describe-maintenance-start-time
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeNFSFileShares
 # operationId: DescribeNFSFileShares
-export def "x-amz-target-storage-gateway-20130630describe-nfs-file-shares DescribeNFSFileShares" [
+export def "x-amz-target-storage-gateway-20130630describe-nfs-file-shares post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1681,23 +1681,23 @@ export def "x-amz-target-storage-gateway-20130630describe-nfs-file-shares Descri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  FileShareARNList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  file_share_arn_list: any
 ]: any -> record<NFSFileShareInfoList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeNFSFileShares")
-  let body = {FileShareARNList: $FileShareARNList} | compact
+  let body = {"FileShareARNList": $file_share_arn_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1708,7 +1708,7 @@ export def "x-amz-target-storage-gateway-20130630describe-nfs-file-shares Descri
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeSMBFileShares
 # operationId: DescribeSMBFileShares
-export def "x-amz-target-storage-gateway-20130630describe-smb-file-shares DescribeSMBFileShares" [
+export def "x-amz-target-storage-gateway-20130630describe-smb-file-shares post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1717,23 +1717,23 @@ export def "x-amz-target-storage-gateway-20130630describe-smb-file-shares Descri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  FileShareARNList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  file_share_arn_list: any
 ]: any -> record<SMBFileShareInfoList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeSMBFileShares")
-  let body = {FileShareARNList: $FileShareARNList} | compact
+  let body = {"FileShareARNList": $file_share_arn_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1744,7 +1744,7 @@ export def "x-amz-target-storage-gateway-20130630describe-smb-file-shares Descri
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeSMBSettings
 # operationId: DescribeSMBSettings
-export def "x-amz-target-storage-gateway-20130630describe-smb-settings DescribeSMBSettings" [
+export def "x-amz-target-storage-gateway-20130630describe-smb-settings post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1753,23 +1753,23 @@ export def "x-amz-target-storage-gateway-20130630describe-smb-settings DescribeS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string, DomainName: record, ActiveDirectoryStatus: record, SMBGuestPasswordSet: record, SMBSecurityStrategy: record, FileSharesVisible: record, SMBLocalGroups: record<GatewayAdmins: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeSMBSettings")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1780,7 +1780,7 @@ export def "x-amz-target-storage-gateway-20130630describe-smb-settings DescribeS
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeSnapshotSchedule
 # operationId: DescribeSnapshotSchedule
-export def "x-amz-target-storage-gateway-20130630describe-snapshot-schedule DescribeSnapshotSchedule" [
+export def "x-amz-target-storage-gateway-20130630describe-snapshot-schedule post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1789,23 +1789,23 @@ export def "x-amz-target-storage-gateway-20130630describe-snapshot-schedule Desc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  VolumeARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  volume_arn: any
 ]: any -> record<VolumeARN: record, StartAt: record, RecurrenceInHours: record, Description: record, Timezone: record, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeSnapshotSchedule")
-  let body = {VolumeARN: $VolumeARN} | compact
+  let body = {"VolumeARN": $volume_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1816,7 +1816,7 @@ export def "x-amz-target-storage-gateway-20130630describe-snapshot-schedule Desc
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeStorediSCSIVolumes
 # operationId: DescribeStorediSCSIVolumes
-export def "x-amz-target-storage-gateway-20130630describe-storedi-scsi-volumes DescribeStorediSCSIVolumes" [
+export def "x-amz-target-storage-gateway-20130630describe-storedi-scsi-volumes post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1825,23 +1825,23 @@ export def "x-amz-target-storage-gateway-20130630describe-storedi-scsi-volumes D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  VolumeARNs: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  volume_ar_ns: any
 ]: any -> record<StorediSCSIVolumes: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeStorediSCSIVolumes")
-  let body = {VolumeARNs: $VolumeARNs} | compact
+  let body = {"VolumeARNs": $volume_ar_ns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1852,7 +1852,7 @@ export def "x-amz-target-storage-gateway-20130630describe-storedi-scsi-volumes D
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeTapeArchives
 # operationId: DescribeTapeArchives
-export def "x-amz-target-storage-gateway-20130630describe-tape-archives DescribeTapeArchives" [
+export def "x-amz-target-storage-gateway-20130630describe-tape-archives post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1861,28 +1861,28 @@ export def "x-amz-target-storage-gateway-20130630describe-tape-archives Describe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  --TapeARNs: any
-  --Marker: any
-  --Limit: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  --tape-ar-ns: any
+  --marker: any
+  --limit: any
 ]: any -> record<TapeArchives: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeTapeArchives" $qp)
-  let body = {TapeARNs: $TapeARNs, Marker: $Marker, Limit: $Limit} | compact
+  let body = {"TapeARNs": $tape_ar_ns, "Marker": $marker, "Limit": $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1893,7 +1893,7 @@ export def "x-amz-target-storage-gateway-20130630describe-tape-archives Describe
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeTapeRecoveryPoints
 # operationId: DescribeTapeRecoveryPoints
-export def "x-amz-target-storage-gateway-20130630describe-tape-recovery-points DescribeTapeRecoveryPoints" [
+export def "x-amz-target-storage-gateway-20130630describe-tape-recovery-points post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1902,28 +1902,28 @@ export def "x-amz-target-storage-gateway-20130630describe-tape-recovery-points D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  --Marker: any
-  --Limit: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --marker: any
+  --limit: any
 ]: any -> record<GatewayARN: string, TapeRecoveryPointInfos: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeTapeRecoveryPoints" $qp)
-  let body = {GatewayARN: $GatewayARN, Marker: $Marker, Limit: $Limit} | compact
+  let body = {"GatewayARN": $gateway_arn, "Marker": $marker, "Limit": $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1934,7 +1934,7 @@ export def "x-amz-target-storage-gateway-20130630describe-tape-recovery-points D
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeTapes
 # operationId: DescribeTapes
-export def "x-amz-target-storage-gateway-20130630describe-tapes DescribeTapes" [
+export def "x-amz-target-storage-gateway-20130630describe-tapes post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1943,29 +1943,29 @@ export def "x-amz-target-storage-gateway-20130630describe-tapes DescribeTapes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  --TapeARNs: any
-  --Marker: any
-  --Limit: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --tape-ar-ns: any
+  --marker: any
+  --limit: any
 ]: any -> record<Tapes: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeTapes" $qp)
-  let body = {GatewayARN: $GatewayARN, TapeARNs: $TapeARNs, Marker: $Marker, Limit: $Limit} | compact
+  let body = {"GatewayARN": $gateway_arn, "TapeARNs": $tape_ar_ns, "Marker": $marker, "Limit": $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1976,7 +1976,7 @@ export def "x-amz-target-storage-gateway-20130630describe-tapes DescribeTapes" [
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeUploadBuffer
 # operationId: DescribeUploadBuffer
-export def "x-amz-target-storage-gateway-20130630describe-upload-buffer DescribeUploadBuffer" [
+export def "x-amz-target-storage-gateway-20130630describe-upload-buffer post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1985,23 +1985,23 @@ export def "x-amz-target-storage-gateway-20130630describe-upload-buffer Describe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string, DiskIds: record, UploadBufferUsedInBytes: record, UploadBufferAllocatedInBytes: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeUploadBuffer")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2012,7 +2012,7 @@ export def "x-amz-target-storage-gateway-20130630describe-upload-buffer Describe
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeVTLDevices
 # operationId: DescribeVTLDevices
-export def "x-amz-target-storage-gateway-20130630describe-vtl-devices DescribeVTLDevices" [
+export def "x-amz-target-storage-gateway-20130630describe-vtl-devices post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2021,29 +2021,29 @@ export def "x-amz-target-storage-gateway-20130630describe-vtl-devices DescribeVT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  --VTLDeviceARNs: any
-  --Marker: any
-  --Limit: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --vtl-device-ar-ns: any
+  --marker: any
+  --limit: any
 ]: any -> record<GatewayARN: string, VTLDevices: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeVTLDevices" $qp)
-  let body = {GatewayARN: $GatewayARN, VTLDeviceARNs: $VTLDeviceARNs, Marker: $Marker, Limit: $Limit} | compact
+  let body = {"GatewayARN": $gateway_arn, "VTLDeviceARNs": $vtl_device_ar_ns, "Marker": $marker, "Limit": $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2054,7 +2054,7 @@ export def "x-amz-target-storage-gateway-20130630describe-vtl-devices DescribeVT
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DescribeWorkingStorage
 # operationId: DescribeWorkingStorage
-export def "x-amz-target-storage-gateway-20130630describe-working-storage DescribeWorkingStorage" [
+export def "x-amz-target-storage-gateway-20130630describe-working-storage post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2063,23 +2063,23 @@ export def "x-amz-target-storage-gateway-20130630describe-working-storage Descri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string, DiskIds: record, WorkingStorageUsedInBytes: record, WorkingStorageAllocatedInBytes: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DescribeWorkingStorage")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2090,7 +2090,7 @@ export def "x-amz-target-storage-gateway-20130630describe-working-storage Descri
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DetachVolume
 # operationId: DetachVolume
-export def "x-amz-target-storage-gateway-20130630detach-volume DetachVolume" [
+export def "x-amz-target-storage-gateway-20130630detach-volume post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2099,24 +2099,24 @@ export def "x-amz-target-storage-gateway-20130630detach-volume DetachVolume" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-49
-  VolumeARN: any
-  --ForceDetach: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-49
+  volume_arn: any
+  --force-detach: any
 ]: any -> record<VolumeARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DetachVolume")
-  let body = {VolumeARN: $VolumeARN, ForceDetach: $ForceDetach} | compact
+  let body = {"VolumeARN": $volume_arn, "ForceDetach": $force_detach} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2127,7 +2127,7 @@ export def "x-amz-target-storage-gateway-20130630detach-volume DetachVolume" [
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DisableGateway
 # operationId: DisableGateway
-export def "x-amz-target-storage-gateway-20130630disable-gateway DisableGateway" [
+export def "x-amz-target-storage-gateway-20130630disable-gateway disable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2136,23 +2136,23 @@ export def "x-amz-target-storage-gateway-20130630disable-gateway DisableGateway"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-50
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-50
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DisableGateway")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2163,7 +2163,7 @@ export def "x-amz-target-storage-gateway-20130630disable-gateway DisableGateway"
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.DisassociateFileSystem
 # operationId: DisassociateFileSystem
-export def "x-amz-target-storage-gateway-20130630disassociate-file-system DisassociateFileSystem" [
+export def "x-amz-target-storage-gateway-20130630disassociate-file-system post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2172,24 +2172,24 @@ export def "x-amz-target-storage-gateway-20130630disassociate-file-system Disass
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-51
-  FileSystemAssociationARN: any
-  --ForceDelete: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-51
+  file_system_association_arn: any
+  --force-delete: any
 ]: any -> record<FileSystemAssociationARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.DisassociateFileSystem")
-  let body = {FileSystemAssociationARN: $FileSystemAssociationARN, ForceDelete: $ForceDelete} | compact
+  let body = {"FileSystemAssociationARN": $file_system_association_arn, "ForceDelete": $force_delete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2200,7 +2200,7 @@ export def "x-amz-target-storage-gateway-20130630disassociate-file-system Disass
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.JoinDomain
 # operationId: JoinDomain
-export def "x-amz-target-storage-gateway-20130630join-domain JoinDomain" [
+export def "x-amz-target-storage-gateway-20130630join-domain post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2209,29 +2209,29 @@ export def "x-amz-target-storage-gateway-20130630join-domain JoinDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-52
-  GatewayARN: any
-  DomainName: any
-  --OrganizationalUnit: any
-  --DomainControllers: any
-  --TimeoutInSeconds: any
-  UserName: any
-  Password: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-52
+  gateway_arn: any
+  domain_name: any
+  --organizational-unit: any
+  --domain-controllers: any
+  --timeout-in-seconds: any
+  user_name: any
+  password: any
 ]: any -> record<GatewayARN: record, ActiveDirectoryStatus: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.JoinDomain")
-  let body = {GatewayARN: $GatewayARN, DomainName: $DomainName, OrganizationalUnit: $OrganizationalUnit, DomainControllers: $DomainControllers, TimeoutInSeconds: $TimeoutInSeconds, UserName: $UserName, Password: $Password} | compact
+  let body = {"GatewayARN": $gateway_arn, "DomainName": $domain_name, "OrganizationalUnit": $organizational_unit, "DomainControllers": $domain_controllers, "TimeoutInSeconds": $timeout_in_seconds, "UserName": $user_name, "Password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2242,7 +2242,7 @@ export def "x-amz-target-storage-gateway-20130630join-domain JoinDomain" [
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.ListAutomaticTapeCreationPolicies
 # operationId: ListAutomaticTapeCreationPolicies
-export def "x-amz-target-storage-gateway-20130630list-automatic-tape-creation-policies ListAutomaticTapeCreationPolicies" [
+export def "x-amz-target-storage-gateway-20130630list-automatic-tape-creation-policies list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2251,23 +2251,23 @@ export def "x-amz-target-storage-gateway-20130630list-automatic-tape-creation-po
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-53
-  --GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-53
+  --gateway-arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<AutomaticTapeCreationPolicyInfos: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.ListAutomaticTapeCreationPolicies")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2278,7 +2278,7 @@ export def "x-amz-target-storage-gateway-20130630list-automatic-tape-creation-po
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.ListFileShares
 # operationId: ListFileShares
-export def "x-amz-target-storage-gateway-20130630list-file-shares ListFileShares" [
+export def "x-amz-target-storage-gateway-20130630list-file-shares list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2287,28 +2287,28 @@ export def "x-amz-target-storage-gateway-20130630list-file-shares ListFileShares
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-54
-  --GatewayARN: any
-  --Limit: any
-  --Marker: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-54
+  --gateway-arn: any
+  --limit: any
+  --marker: any
 ]: any -> record<Marker: record, NextMarker: record, FileShareInfoList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.ListFileShares" $qp)
-  let body = {GatewayARN: $GatewayARN, Limit: $Limit, Marker: $Marker} | compact
+  let body = {"GatewayARN": $gateway_arn, "Limit": $limit, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2319,7 +2319,7 @@ export def "x-amz-target-storage-gateway-20130630list-file-shares ListFileShares
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.ListFileSystemAssociations
 # operationId: ListFileSystemAssociations
-export def "x-amz-target-storage-gateway-20130630list-file-system-associations ListFileSystemAssociations" [
+export def "x-amz-target-storage-gateway-20130630list-file-system-associations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2328,28 +2328,28 @@ export def "x-amz-target-storage-gateway-20130630list-file-system-associations L
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-55
-  --GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  --Limit: any
-  --Marker: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-55
+  --gateway-arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --limit: any
+  --marker: any
 ]: any -> record<Marker: record, NextMarker: record, FileSystemAssociationSummaryList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.ListFileSystemAssociations" $qp)
-  let body = {GatewayARN: $GatewayARN, Limit: $Limit, Marker: $Marker} | compact
+  let body = {"GatewayARN": $gateway_arn, "Limit": $limit, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2360,7 +2360,7 @@ export def "x-amz-target-storage-gateway-20130630list-file-system-associations L
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.ListGateways
 # operationId: ListGateways
-export def "x-amz-target-storage-gateway-20130630list-gateways ListGateways" [
+export def "x-amz-target-storage-gateway-20130630list-gateways list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2369,27 +2369,27 @@ export def "x-amz-target-storage-gateway-20130630list-gateways ListGateways" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-56
-  --Marker: any
-  --Limit: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-56
+  --marker: any
+  --limit: any
 ]: any -> record<Gateways: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.ListGateways" $qp)
-  let body = {Marker: $Marker, Limit: $Limit} | compact
+  let body = {"Marker": $marker, "Limit": $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2400,7 +2400,7 @@ export def "x-amz-target-storage-gateway-20130630list-gateways ListGateways" [
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.ListLocalDisks
 # operationId: ListLocalDisks
-export def "x-amz-target-storage-gateway-20130630list-local-disks ListLocalDisks" [
+export def "x-amz-target-storage-gateway-20130630list-local-disks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2409,23 +2409,23 @@ export def "x-amz-target-storage-gateway-20130630list-local-disks ListLocalDisks
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-57
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-57
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string, Disks: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.ListLocalDisks")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2436,7 +2436,7 @@ export def "x-amz-target-storage-gateway-20130630list-local-disks ListLocalDisks
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-storage-gateway-20130630list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-storage-gateway-20130630list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2445,28 +2445,28 @@ export def "x-amz-target-storage-gateway-20130630list-tags-for-resource ListTags
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-58
-  ResourceARN: any
-  --Marker: any
-  --Limit: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-58
+  resource_arn: any
+  --marker: any
+  --limit: any
 ]: any -> record<ResourceARN: record, Marker: record, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.ListTagsForResource" $qp)
-  let body = {ResourceARN: $ResourceARN, Marker: $Marker, Limit: $Limit} | compact
+  let body = {"ResourceARN": $resource_arn, "Marker": $marker, "Limit": $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2477,7 +2477,7 @@ export def "x-amz-target-storage-gateway-20130630list-tags-for-resource ListTags
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.ListTapePools
 # operationId: ListTapePools
-export def "x-amz-target-storage-gateway-20130630list-tape-pools ListTapePools" [
+export def "x-amz-target-storage-gateway-20130630list-tape-pools list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2486,28 +2486,28 @@ export def "x-amz-target-storage-gateway-20130630list-tape-pools ListTapePools" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-59
-  --PoolARNs: any
-  --Marker: any
-  --Limit: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-59
+  --pool-ar-ns: any
+  --marker: any
+  --limit: any
 ]: any -> record<PoolInfos: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.ListTapePools" $qp)
-  let body = {PoolARNs: $PoolARNs, Marker: $Marker, Limit: $Limit} | compact
+  let body = {"PoolARNs": $pool_ar_ns, "Marker": $marker, "Limit": $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2518,7 +2518,7 @@ export def "x-amz-target-storage-gateway-20130630list-tape-pools ListTapePools" 
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.ListTapes
 # operationId: ListTapes
-export def "x-amz-target-storage-gateway-20130630list-tapes ListTapes" [
+export def "x-amz-target-storage-gateway-20130630list-tapes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2527,28 +2527,28 @@ export def "x-amz-target-storage-gateway-20130630list-tapes ListTapes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-60
-  --TapeARNs: list # The Amazon Resource Name (ARN) of each of the tapes you want to list. If you don't specify a tape ARN, the response lists all tapes in both your VTL and VTS.
-  --Marker: any
-  --Limit: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-60
+  --tape-ar-ns: list # The Amazon Resource Name (ARN) of each of the tapes you want to list. If you don't specify a tape ARN, the response lists all tapes in both your VTL and VTS.
+  --marker: any
+  --limit: any
 ]: any -> record<TapeInfos: table<TapeARN: record, TapeBarcode: record, TapeSizeInBytes: record, TapeStatus: record, GatewayARN: record, PoolId: record, RetentionStartDate: record, PoolEntryDate: record>, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.ListTapes" $qp)
-  let body = {TapeARNs: $TapeARNs, Marker: $Marker, Limit: $Limit} | compact
+  let body = {"TapeARNs": $tape_ar_ns, "Marker": $marker, "Limit": $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2559,7 +2559,7 @@ export def "x-amz-target-storage-gateway-20130630list-tapes ListTapes" [
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.ListVolumeInitiators
 # operationId: ListVolumeInitiators
-export def "x-amz-target-storage-gateway-20130630list-volume-initiators ListVolumeInitiators" [
+export def "x-amz-target-storage-gateway-20130630list-volume-initiators list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2568,23 +2568,23 @@ export def "x-amz-target-storage-gateway-20130630list-volume-initiators ListVolu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-61
-  VolumeARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-61
+  volume_arn: any
 ]: any -> record<Initiators: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.ListVolumeInitiators")
-  let body = {VolumeARN: $VolumeARN} | compact
+  let body = {"VolumeARN": $volume_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2595,7 +2595,7 @@ export def "x-amz-target-storage-gateway-20130630list-volume-initiators ListVolu
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.ListVolumeRecoveryPoints
 # operationId: ListVolumeRecoveryPoints
-export def "x-amz-target-storage-gateway-20130630list-volume-recovery-points ListVolumeRecoveryPoints" [
+export def "x-amz-target-storage-gateway-20130630list-volume-recovery-points list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2604,23 +2604,23 @@ export def "x-amz-target-storage-gateway-20130630list-volume-recovery-points Lis
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-62
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-62
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string, VolumeRecoveryPointInfos: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.ListVolumeRecoveryPoints")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2631,7 +2631,7 @@ export def "x-amz-target-storage-gateway-20130630list-volume-recovery-points Lis
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.ListVolumes
 # operationId: ListVolumes
-export def "x-amz-target-storage-gateway-20130630list-volumes ListVolumes" [
+export def "x-amz-target-storage-gateway-20130630list-volumes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2640,28 +2640,28 @@ export def "x-amz-target-storage-gateway-20130630list-volumes ListVolumes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-63
-  --GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  --Marker: any
-  --Limit: any
+  --limit: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-63
+  --gateway-arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --marker: any
+  --limit: any
 ]: any -> record<GatewayARN: string, Marker: record, VolumeInfos: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.ListVolumes" $qp)
-  let body = {GatewayARN: $GatewayARN, Marker: $Marker, Limit: $Limit} | compact
+  let body = {"GatewayARN": $gateway_arn, "Marker": $marker, "Limit": $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2672,7 +2672,7 @@ export def "x-amz-target-storage-gateway-20130630list-volumes ListVolumes" [
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.NotifyWhenUploaded
 # operationId: NotifyWhenUploaded
-export def "x-amz-target-storage-gateway-20130630notify-when-uploaded NotifyWhenUploaded" [
+export def "x-amz-target-storage-gateway-20130630notify-when-uploaded post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2681,23 +2681,23 @@ export def "x-amz-target-storage-gateway-20130630notify-when-uploaded NotifyWhen
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-64
-  FileShareARN: string # The Amazon Resource Name (ARN) of the file share.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-64
+  file_share_arn: string # The Amazon Resource Name (ARN) of the file share.
 ]: any -> record<FileShareARN: string, NotificationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.NotifyWhenUploaded")
-  let body = {FileShareARN: $FileShareARN} | compact
+  let body = {"FileShareARN": $file_share_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2708,7 +2708,7 @@ export def "x-amz-target-storage-gateway-20130630notify-when-uploaded NotifyWhen
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.RefreshCache
 # operationId: RefreshCache
-export def "x-amz-target-storage-gateway-20130630refresh-cache RefreshCache" [
+export def "x-amz-target-storage-gateway-20130630refresh-cache refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2717,25 +2717,25 @@ export def "x-amz-target-storage-gateway-20130630refresh-cache RefreshCache" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-65
-  FileShareARN: any
-  --FolderList: any
-  --Recursive: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-65
+  file_share_arn: any
+  --folder-list: any
+  --recursive: any
 ]: any -> record<FileShareARN: string, NotificationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.RefreshCache")
-  let body = {FileShareARN: $FileShareARN, FolderList: $FolderList, Recursive: $Recursive} | compact
+  let body = {"FileShareARN": $file_share_arn, "FolderList": $folder_list, "Recursive": $recursive} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2746,7 +2746,7 @@ export def "x-amz-target-storage-gateway-20130630refresh-cache RefreshCache" [
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.RemoveTagsFromResource
 # operationId: RemoveTagsFromResource
-export def "x-amz-target-storage-gateway-20130630remove-tags-from-resource RemoveTagsFromResource" [
+export def "x-amz-target-storage-gateway-20130630remove-tags-from-resource delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2755,24 +2755,24 @@ export def "x-amz-target-storage-gateway-20130630remove-tags-from-resource Remov
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-66
-  ResourceARN: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-66
+  resource_arn: any
+  tag_keys: any
 ]: any -> record<ResourceARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.RemoveTagsFromResource")
-  let body = {ResourceARN: $ResourceARN, TagKeys: $TagKeys} | compact
+  let body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2783,7 +2783,7 @@ export def "x-amz-target-storage-gateway-20130630remove-tags-from-resource Remov
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.ResetCache
 # operationId: ResetCache
-export def "x-amz-target-storage-gateway-20130630reset-cache ResetCache" [
+export def "x-amz-target-storage-gateway-20130630reset-cache reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2792,23 +2792,23 @@ export def "x-amz-target-storage-gateway-20130630reset-cache ResetCache" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-67
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-67
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.ResetCache")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2819,7 +2819,7 @@ export def "x-amz-target-storage-gateway-20130630reset-cache ResetCache" [
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.RetrieveTapeArchive
 # operationId: RetrieveTapeArchive
-export def "x-amz-target-storage-gateway-20130630retrieve-tape-archive RetrieveTapeArchive" [
+export def "x-amz-target-storage-gateway-20130630retrieve-tape-archive retrieve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2828,24 +2828,24 @@ export def "x-amz-target-storage-gateway-20130630retrieve-tape-archive RetrieveT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-68
-  TapeARN: any
-  GatewayARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-68
+  tape_arn: any
+  gateway_arn: any
 ]: any -> record<TapeARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.RetrieveTapeArchive")
-  let body = {TapeARN: $TapeARN, GatewayARN: $GatewayARN} | compact
+  let body = {"TapeARN": $tape_arn, "GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2856,7 +2856,7 @@ export def "x-amz-target-storage-gateway-20130630retrieve-tape-archive RetrieveT
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.RetrieveTapeRecoveryPoint
 # operationId: RetrieveTapeRecoveryPoint
-export def "x-amz-target-storage-gateway-20130630retrieve-tape-recovery-point RetrieveTapeRecoveryPoint" [
+export def "x-amz-target-storage-gateway-20130630retrieve-tape-recovery-point retrieve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2865,24 +2865,24 @@ export def "x-amz-target-storage-gateway-20130630retrieve-tape-recovery-point Re
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-69
-  TapeARN: any
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-69
+  tape_arn: any
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<TapeARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.RetrieveTapeRecoveryPoint")
-  let body = {TapeARN: $TapeARN, GatewayARN: $GatewayARN} | compact
+  let body = {"TapeARN": $tape_arn, "GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2893,7 +2893,7 @@ export def "x-amz-target-storage-gateway-20130630retrieve-tape-recovery-point Re
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.SetLocalConsolePassword
 # operationId: SetLocalConsolePassword
-export def "x-amz-target-storage-gateway-20130630set-local-console-password SetLocalConsolePassword" [
+export def "x-amz-target-storage-gateway-20130630set-local-console-password post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2902,24 +2902,24 @@ export def "x-amz-target-storage-gateway-20130630set-local-console-password SetL
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-70
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  LocalConsolePassword: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-70
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  local_console_password: any
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.SetLocalConsolePassword")
-  let body = {GatewayARN: $GatewayARN, LocalConsolePassword: $LocalConsolePassword} | compact
+  let body = {"GatewayARN": $gateway_arn, "LocalConsolePassword": $local_console_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2930,7 +2930,7 @@ export def "x-amz-target-storage-gateway-20130630set-local-console-password SetL
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.SetSMBGuestPassword
 # operationId: SetSMBGuestPassword
-export def "x-amz-target-storage-gateway-20130630set-smb-guest-password SetSMBGuestPassword" [
+export def "x-amz-target-storage-gateway-20130630set-smb-guest-password post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2939,24 +2939,24 @@ export def "x-amz-target-storage-gateway-20130630set-smb-guest-password SetSMBGu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-71
-  GatewayARN: any
-  Password: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-71
+  gateway_arn: any
+  password: any
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.SetSMBGuestPassword")
-  let body = {GatewayARN: $GatewayARN, Password: $Password} | compact
+  let body = {"GatewayARN": $gateway_arn, "Password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2967,7 +2967,7 @@ export def "x-amz-target-storage-gateway-20130630set-smb-guest-password SetSMBGu
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.ShutdownGateway
 # operationId: ShutdownGateway
-export def "x-amz-target-storage-gateway-20130630shutdown-gateway ShutdownGateway" [
+export def "x-amz-target-storage-gateway-20130630shutdown-gateway post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2976,23 +2976,23 @@ export def "x-amz-target-storage-gateway-20130630shutdown-gateway ShutdownGatewa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-72
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-72
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.ShutdownGateway")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3003,7 +3003,7 @@ export def "x-amz-target-storage-gateway-20130630shutdown-gateway ShutdownGatewa
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.StartAvailabilityMonitorTest
 # operationId: StartAvailabilityMonitorTest
-export def "x-amz-target-storage-gateway-20130630start-availability-monitor-test StartAvailabilityMonitorTest" [
+export def "x-amz-target-storage-gateway-20130630start-availability-monitor-test start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3012,23 +3012,23 @@ export def "x-amz-target-storage-gateway-20130630start-availability-monitor-test
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-73
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-73
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.StartAvailabilityMonitorTest")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3039,7 +3039,7 @@ export def "x-amz-target-storage-gateway-20130630start-availability-monitor-test
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.StartGateway
 # operationId: StartGateway
-export def "x-amz-target-storage-gateway-20130630start-gateway StartGateway" [
+export def "x-amz-target-storage-gateway-20130630start-gateway start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3048,23 +3048,23 @@ export def "x-amz-target-storage-gateway-20130630start-gateway StartGateway" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-74
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-74
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.StartGateway")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3075,7 +3075,7 @@ export def "x-amz-target-storage-gateway-20130630start-gateway StartGateway" [
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.UpdateAutomaticTapeCreationPolicy
 # operationId: UpdateAutomaticTapeCreationPolicy
-export def "x-amz-target-storage-gateway-20130630update-automatic-tape-creation-policy UpdateAutomaticTapeCreationPolicy" [
+export def "x-amz-target-storage-gateway-20130630update-automatic-tape-creation-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3084,24 +3084,24 @@ export def "x-amz-target-storage-gateway-20130630update-automatic-tape-creation-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-75
-  AutomaticTapeCreationRules: any
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-75
+  automatic_tape_creation_rules: any
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.UpdateAutomaticTapeCreationPolicy")
-  let body = {AutomaticTapeCreationRules: $AutomaticTapeCreationRules, GatewayARN: $GatewayARN} | compact
+  let body = {"AutomaticTapeCreationRules": $automatic_tape_creation_rules, "GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3112,7 +3112,7 @@ export def "x-amz-target-storage-gateway-20130630update-automatic-tape-creation-
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.UpdateBandwidthRateLimit
 # operationId: UpdateBandwidthRateLimit
-export def "x-amz-target-storage-gateway-20130630update-bandwidth-rate-limit UpdateBandwidthRateLimit" [
+export def "x-amz-target-storage-gateway-20130630update-bandwidth-rate-limit update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3121,25 +3121,25 @@ export def "x-amz-target-storage-gateway-20130630update-bandwidth-rate-limit Upd
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-76
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  --AverageUploadRateLimitInBitsPerSec: any
-  --AverageDownloadRateLimitInBitsPerSec: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-76
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --average-upload-rate-limit-in-bits-per-sec: any
+  --average-download-rate-limit-in-bits-per-sec: any
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.UpdateBandwidthRateLimit")
-  let body = {GatewayARN: $GatewayARN, AverageUploadRateLimitInBitsPerSec: $AverageUploadRateLimitInBitsPerSec, AverageDownloadRateLimitInBitsPerSec: $AverageDownloadRateLimitInBitsPerSec} | compact
+  let body = {"GatewayARN": $gateway_arn, "AverageUploadRateLimitInBitsPerSec": $average_upload_rate_limit_in_bits_per_sec, "AverageDownloadRateLimitInBitsPerSec": $average_download_rate_limit_in_bits_per_sec} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3150,7 +3150,7 @@ export def "x-amz-target-storage-gateway-20130630update-bandwidth-rate-limit Upd
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.UpdateBandwidthRateLimitSchedule
 # operationId: UpdateBandwidthRateLimitSchedule
-export def "x-amz-target-storage-gateway-20130630update-bandwidth-rate-limit-schedule UpdateBandwidthRateLimitSchedule" [
+export def "x-amz-target-storage-gateway-20130630update-bandwidth-rate-limit-schedule update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3159,24 +3159,24 @@ export def "x-amz-target-storage-gateway-20130630update-bandwidth-rate-limit-sch
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-77
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  BandwidthRateLimitIntervals: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-77
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  bandwidth_rate_limit_intervals: any
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.UpdateBandwidthRateLimitSchedule")
-  let body = {GatewayARN: $GatewayARN, BandwidthRateLimitIntervals: $BandwidthRateLimitIntervals} | compact
+  let body = {"GatewayARN": $gateway_arn, "BandwidthRateLimitIntervals": $bandwidth_rate_limit_intervals} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3187,7 +3187,7 @@ export def "x-amz-target-storage-gateway-20130630update-bandwidth-rate-limit-sch
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.UpdateChapCredentials
 # operationId: UpdateChapCredentials
-export def "x-amz-target-storage-gateway-20130630update-chap-credentials UpdateChapCredentials" [
+export def "x-amz-target-storage-gateway-20130630update-chap-credentials update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3196,26 +3196,26 @@ export def "x-amz-target-storage-gateway-20130630update-chap-credentials UpdateC
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-78
-  TargetARN: any
-  SecretToAuthenticateInitiator: any
-  InitiatorName: any
-  --SecretToAuthenticateTarget: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-78
+  target_arn: any
+  secret_to_authenticate_initiator: any
+  initiator_name: any
+  --secret-to-authenticate-target: any
 ]: any -> record<TargetARN: record, InitiatorName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.UpdateChapCredentials")
-  let body = {TargetARN: $TargetARN, SecretToAuthenticateInitiator: $SecretToAuthenticateInitiator, InitiatorName: $InitiatorName, SecretToAuthenticateTarget: $SecretToAuthenticateTarget} | compact
+  let body = {"TargetARN": $target_arn, "SecretToAuthenticateInitiator": $secret_to_authenticate_initiator, "InitiatorName": $initiator_name, "SecretToAuthenticateTarget": $secret_to_authenticate_target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3227,7 +3227,7 @@ export def "x-amz-target-storage-gateway-20130630update-chap-credentials UpdateC
 # POST /#X-Amz-Target=StorageGateway_20130630.UpdateFileSystemAssociation
 # operationId: UpdateFileSystemAssociation
 # --CacheAttributes shape: {CacheStaleTimeoutInSeconds?: any}
-export def "x-amz-target-storage-gateway-20130630update-file-system-association UpdateFileSystemAssociation" [
+export def "x-amz-target-storage-gateway-20130630update-file-system-association update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3236,27 +3236,27 @@ export def "x-amz-target-storage-gateway-20130630update-file-system-association 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-79
-  FileSystemAssociationARN: any
-  --UserName: any
-  --Password: any
-  --AuditDestinationARN: any
-  --CacheAttributes: record # The refresh cache information for the file share or FSx file systems. — shape: {CacheStaleTimeoutInSeconds?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-79
+  file_system_association_arn: any
+  --user-name: any
+  --password: any
+  --audit-destination-arn: any
+  --cache-attributes: record # The refresh cache information for the file share or FSx file systems. — shape: {CacheStaleTimeoutInSeconds?: any}
 ]: any -> record<FileSystemAssociationARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.UpdateFileSystemAssociation")
-  let body = {FileSystemAssociationARN: $FileSystemAssociationARN, UserName: $UserName, Password: $Password, AuditDestinationARN: $AuditDestinationARN, CacheAttributes: $CacheAttributes} | compact
+  let body = {"FileSystemAssociationARN": $file_system_association_arn, "UserName": $user_name, "Password": $password, "AuditDestinationARN": $audit_destination_arn, "CacheAttributes": $cache_attributes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3267,7 +3267,7 @@ export def "x-amz-target-storage-gateway-20130630update-file-system-association 
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.UpdateGatewayInformation
 # operationId: UpdateGatewayInformation
-export def "x-amz-target-storage-gateway-20130630update-gateway-information UpdateGatewayInformation" [
+export def "x-amz-target-storage-gateway-20130630update-gateway-information update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3276,27 +3276,27 @@ export def "x-amz-target-storage-gateway-20130630update-gateway-information Upda
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-80
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  --GatewayName: string # The name you configured for your gateway.
-  --GatewayTimezone: any
-  --CloudWatchLogGroupARN: any
-  --GatewayCapacity: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-80
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --gateway-name: string # The name you configured for your gateway.
+  --gateway-timezone: any
+  --cloud-watch-log-group-arn: any
+  --gateway-capacity: any
 ]: any -> record<GatewayARN: string, GatewayName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.UpdateGatewayInformation")
-  let body = {GatewayARN: $GatewayARN, GatewayName: $GatewayName, GatewayTimezone: $GatewayTimezone, CloudWatchLogGroupARN: $CloudWatchLogGroupARN, GatewayCapacity: $GatewayCapacity} | compact
+  let body = {"GatewayARN": $gateway_arn, "GatewayName": $gateway_name, "GatewayTimezone": $gateway_timezone, "CloudWatchLogGroupARN": $cloud_watch_log_group_arn, "GatewayCapacity": $gateway_capacity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3307,7 +3307,7 @@ export def "x-amz-target-storage-gateway-20130630update-gateway-information Upda
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.UpdateGatewaySoftwareNow
 # operationId: UpdateGatewaySoftwareNow
-export def "x-amz-target-storage-gateway-20130630update-gateway-software-now UpdateGatewaySoftwareNow" [
+export def "x-amz-target-storage-gateway-20130630update-gateway-software-now update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3316,23 +3316,23 @@ export def "x-amz-target-storage-gateway-20130630update-gateway-software-now Upd
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-81
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-81
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.UpdateGatewaySoftwareNow")
-  let body = {GatewayARN: $GatewayARN} | compact
+  let body = {"GatewayARN": $gateway_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3343,7 +3343,7 @@ export def "x-amz-target-storage-gateway-20130630update-gateway-software-now Upd
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.UpdateMaintenanceStartTime
 # operationId: UpdateMaintenanceStartTime
-export def "x-amz-target-storage-gateway-20130630update-maintenance-start-time UpdateMaintenanceStartTime" [
+export def "x-amz-target-storage-gateway-20130630update-maintenance-start-time update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3352,27 +3352,27 @@ export def "x-amz-target-storage-gateway-20130630update-maintenance-start-time U
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-82
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  HourOfDay: any
-  MinuteOfHour: any
-  --DayOfWeek: any
-  --DayOfMonth: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-82
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  hour_of_day: any
+  minute_of_hour: any
+  --day-of-week: any
+  --day-of-month: any
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.UpdateMaintenanceStartTime")
-  let body = {GatewayARN: $GatewayARN, HourOfDay: $HourOfDay, MinuteOfHour: $MinuteOfHour, DayOfWeek: $DayOfWeek, DayOfMonth: $DayOfMonth} | compact
+  let body = {"GatewayARN": $gateway_arn, "HourOfDay": $hour_of_day, "MinuteOfHour": $minute_of_hour, "DayOfWeek": $day_of_week, "DayOfMonth": $day_of_month} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3383,7 +3383,7 @@ export def "x-amz-target-storage-gateway-20130630update-maintenance-start-time U
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.UpdateNFSFileShare
 # operationId: UpdateNFSFileShare
-export def "x-amz-target-storage-gateway-20130630update-nfs-file-share UpdateNFSFileShare" [
+export def "x-amz-target-storage-gateway-20130630update-nfs-file-share update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3392,37 +3392,37 @@ export def "x-amz-target-storage-gateway-20130630update-nfs-file-share UpdateNFS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-83
-  FileShareARN: any
-  --KMSEncrypted: any
-  --KMSKey: any
-  --NFSFileShareDefaults: any
-  --DefaultStorageClass: any
-  --ObjectACL: any
-  --ClientList: any
-  --Squash: any
-  --ReadOnly: any
-  --GuessMIMETypeEnabled: any
-  --RequesterPays: any
-  --FileShareName: any
-  --CacheAttributes: any
-  --NotificationPolicy: any
-  --AuditDestinationARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-83
+  file_share_arn: any
+  --kms-encrypted: any
+  --kms-key: any
+  --nfs-file-share-defaults: any
+  --default-storage-class: any
+  --object-acl: any
+  --client-list: any
+  --squash: any
+  --read-only: any
+  --guess-mime-type-enabled: any
+  --requester-pays: any
+  --file-share-name: any
+  --cache-attributes: any
+  --notification-policy: any
+  --audit-destination-arn: any
 ]: any -> record<FileShareARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.UpdateNFSFileShare")
-  let body = {FileShareARN: $FileShareARN, KMSEncrypted: $KMSEncrypted, KMSKey: $KMSKey, NFSFileShareDefaults: $NFSFileShareDefaults, DefaultStorageClass: $DefaultStorageClass, ObjectACL: $ObjectACL, ClientList: $ClientList, Squash: $Squash, ReadOnly: $ReadOnly, GuessMIMETypeEnabled: $GuessMIMETypeEnabled, RequesterPays: $RequesterPays, FileShareName: $FileShareName, CacheAttributes: $CacheAttributes, NotificationPolicy: $NotificationPolicy, AuditDestinationARN: $AuditDestinationARN} | compact
+  let body = {"FileShareARN": $file_share_arn, "KMSEncrypted": $kms_encrypted, "KMSKey": $kms_key, "NFSFileShareDefaults": $nfs_file_share_defaults, "DefaultStorageClass": $default_storage_class, "ObjectACL": $object_acl, "ClientList": $client_list, "Squash": $squash, "ReadOnly": $read_only, "GuessMIMETypeEnabled": $guess_mime_type_enabled, "RequesterPays": $requester_pays, "FileShareName": $file_share_name, "CacheAttributes": $cache_attributes, "NotificationPolicy": $notification_policy, "AuditDestinationARN": $audit_destination_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3433,7 +3433,7 @@ export def "x-amz-target-storage-gateway-20130630update-nfs-file-share UpdateNFS
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.UpdateSMBFileShare
 # operationId: UpdateSMBFileShare
-export def "x-amz-target-storage-gateway-20130630update-smb-file-share UpdateSMBFileShare" [
+export def "x-amz-target-storage-gateway-20130630update-smb-file-share update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3442,41 +3442,41 @@ export def "x-amz-target-storage-gateway-20130630update-smb-file-share UpdateSMB
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-84
-  FileShareARN: any
-  --KMSEncrypted: any
-  --KMSKey: any
-  --DefaultStorageClass: any
-  --ObjectACL: any
-  --ReadOnly: any
-  --GuessMIMETypeEnabled: any
-  --RequesterPays: any
-  --SMBACLEnabled: any
-  --AccessBasedEnumeration: any
-  --AdminUserList: any
-  --ValidUserList: any
-  --InvalidUserList: any
-  --AuditDestinationARN: any
-  --CaseSensitivity: any
-  --FileShareName: any
-  --CacheAttributes: any
-  --NotificationPolicy: any
-  --OplocksEnabled: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-84
+  file_share_arn: any
+  --kms-encrypted: any
+  --kms-key: any
+  --default-storage-class: any
+  --object-acl: any
+  --read-only: any
+  --guess-mime-type-enabled: any
+  --requester-pays: any
+  --smbacl-enabled: any
+  --access-based-enumeration: any
+  --admin-user-list: any
+  --valid-user-list: any
+  --invalid-user-list: any
+  --audit-destination-arn: any
+  --case-sensitivity: any
+  --file-share-name: any
+  --cache-attributes: any
+  --notification-policy: any
+  --oplocks-enabled: any
 ]: any -> record<FileShareARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.UpdateSMBFileShare")
-  let body = {FileShareARN: $FileShareARN, KMSEncrypted: $KMSEncrypted, KMSKey: $KMSKey, DefaultStorageClass: $DefaultStorageClass, ObjectACL: $ObjectACL, ReadOnly: $ReadOnly, GuessMIMETypeEnabled: $GuessMIMETypeEnabled, RequesterPays: $RequesterPays, SMBACLEnabled: $SMBACLEnabled, AccessBasedEnumeration: $AccessBasedEnumeration, AdminUserList: $AdminUserList, ValidUserList: $ValidUserList, InvalidUserList: $InvalidUserList, AuditDestinationARN: $AuditDestinationARN, CaseSensitivity: $CaseSensitivity, FileShareName: $FileShareName, CacheAttributes: $CacheAttributes, NotificationPolicy: $NotificationPolicy, OplocksEnabled: $OplocksEnabled} | compact
+  let body = {"FileShareARN": $file_share_arn, "KMSEncrypted": $kms_encrypted, "KMSKey": $kms_key, "DefaultStorageClass": $default_storage_class, "ObjectACL": $object_acl, "ReadOnly": $read_only, "GuessMIMETypeEnabled": $guess_mime_type_enabled, "RequesterPays": $requester_pays, "SMBACLEnabled": $smbacl_enabled, "AccessBasedEnumeration": $access_based_enumeration, "AdminUserList": $admin_user_list, "ValidUserList": $valid_user_list, "InvalidUserList": $invalid_user_list, "AuditDestinationARN": $audit_destination_arn, "CaseSensitivity": $case_sensitivity, "FileShareName": $file_share_name, "CacheAttributes": $cache_attributes, "NotificationPolicy": $notification_policy, "OplocksEnabled": $oplocks_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3487,7 +3487,7 @@ export def "x-amz-target-storage-gateway-20130630update-smb-file-share UpdateSMB
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.UpdateSMBFileShareVisibility
 # operationId: UpdateSMBFileShareVisibility
-export def "x-amz-target-storage-gateway-20130630update-smb-file-share-visibility UpdateSMBFileShareVisibility" [
+export def "x-amz-target-storage-gateway-20130630update-smb-file-share-visibility update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3496,24 +3496,24 @@ export def "x-amz-target-storage-gateway-20130630update-smb-file-share-visibilit
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-85
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  FileSharesVisible: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-85
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  file_shares_visible: any
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.UpdateSMBFileShareVisibility")
-  let body = {GatewayARN: $GatewayARN, FileSharesVisible: $FileSharesVisible} | compact
+  let body = {"GatewayARN": $gateway_arn, "FileSharesVisible": $file_shares_visible} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3524,7 +3524,7 @@ export def "x-amz-target-storage-gateway-20130630update-smb-file-share-visibilit
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.UpdateSMBLocalGroups
 # operationId: UpdateSMBLocalGroups
-export def "x-amz-target-storage-gateway-20130630update-smb-local-groups UpdateSMBLocalGroups" [
+export def "x-amz-target-storage-gateway-20130630update-smb-local-groups update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3533,24 +3533,24 @@ export def "x-amz-target-storage-gateway-20130630update-smb-local-groups UpdateS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-86
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  SMBLocalGroups: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-86
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  smb_local_groups: any
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.UpdateSMBLocalGroups")
-  let body = {GatewayARN: $GatewayARN, SMBLocalGroups: $SMBLocalGroups} | compact
+  let body = {"GatewayARN": $gateway_arn, "SMBLocalGroups": $smb_local_groups} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3561,7 +3561,7 @@ export def "x-amz-target-storage-gateway-20130630update-smb-local-groups UpdateS
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.UpdateSMBSecurityStrategy
 # operationId: UpdateSMBSecurityStrategy
-export def "x-amz-target-storage-gateway-20130630update-smb-security-strategy UpdateSMBSecurityStrategy" [
+export def "x-amz-target-storage-gateway-20130630update-smb-security-strategy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3570,24 +3570,24 @@ export def "x-amz-target-storage-gateway-20130630update-smb-security-strategy Up
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-87
-  GatewayARN: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
-  SMBSecurityStrategy: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-87
+  gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the <a>ListGateways</a> operation to return a list of gateways for your account and Amazon Web Services Region.
+  smb_security_strategy: any
 ]: any -> record<GatewayARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.UpdateSMBSecurityStrategy")
-  let body = {GatewayARN: $GatewayARN, SMBSecurityStrategy: $SMBSecurityStrategy} | compact
+  let body = {"GatewayARN": $gateway_arn, "SMBSecurityStrategy": $smb_security_strategy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3598,7 +3598,7 @@ export def "x-amz-target-storage-gateway-20130630update-smb-security-strategy Up
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.UpdateSnapshotSchedule
 # operationId: UpdateSnapshotSchedule
-export def "x-amz-target-storage-gateway-20130630update-snapshot-schedule UpdateSnapshotSchedule" [
+export def "x-amz-target-storage-gateway-20130630update-snapshot-schedule update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3607,27 +3607,27 @@ export def "x-amz-target-storage-gateway-20130630update-snapshot-schedule Update
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-88
-  VolumeARN: any
-  StartAt: any
-  RecurrenceInHours: any
-  --Description: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-88
+  volume_arn: any
+  start_at: any
+  recurrence_in_hours: any
+  --description: any
+  --tags: any
 ]: any -> record<VolumeARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.UpdateSnapshotSchedule")
-  let body = {VolumeARN: $VolumeARN, StartAt: $StartAt, RecurrenceInHours: $RecurrenceInHours, Description: $Description, Tags: $Tags} | compact
+  let body = {"VolumeARN": $volume_arn, "StartAt": $start_at, "RecurrenceInHours": $recurrence_in_hours, "Description": $description, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3638,7 +3638,7 @@ export def "x-amz-target-storage-gateway-20130630update-snapshot-schedule Update
 #
 # POST /#X-Amz-Target=StorageGateway_20130630.UpdateVTLDeviceType
 # operationId: UpdateVTLDeviceType
-export def "x-amz-target-storage-gateway-20130630update-vtl-device-type UpdateVTLDeviceType" [
+export def "x-amz-target-storage-gateway-20130630update-vtl-device-type update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3647,24 +3647,24 @@ export def "x-amz-target-storage-gateway-20130630update-vtl-device-type UpdateVT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-89
-  VTLDeviceARN: any
-  DeviceType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-89
+  vtl_device_arn: any
+  device_type: any
 ]: any -> record<VTLDeviceARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StorageGateway_20130630.UpdateVTLDeviceType")
-  let body = {VTLDeviceARN: $VTLDeviceARN, DeviceType: $DeviceType} | compact
+  let body = {"VTLDeviceARN": $vtl_device_arn, "DeviceType": $device_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

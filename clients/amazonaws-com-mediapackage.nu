@@ -71,7 +71,7 @@ def origination-completer [] { ["ALLOW" "DENY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "channels-configure-logs ConfigureLogs" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "channels-configure-logs logs" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +97,7 @@ export def commands []: nothing -> table {
 # operationId: ConfigureLogs
 # --egressAccessLogs shape: {LogGroupName?: any}
 # --ingressAccessLogs shape: {LogGroupName?: any}
-export def "channels-configure-logs ConfigureLogs" [
+export def "channels-configure-logs logs" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -107,23 +107,23 @@ export def "channels-configure-logs ConfigureLogs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --egressAccessLogs: record # Configure egress access logging. — shape: {LogGroupName?: any}
-  --ingressAccessLogs: record # Configure ingress access logging. — shape: {LogGroupName?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --egress-access-logs: record # Configure egress access logging. — shape: {LogGroupName?: any}
+  --ingress-access-logs: record # Configure ingress access logging. — shape: {LogGroupName?: any}
 ]: any -> record<Arn: record, CreatedAt: record, Description: record, EgressAccessLogs: record<LogGroupName: record>, HlsIngest: record<IngestEndpoints: record>, Id: record, IngressAccessLogs: record<LogGroupName: record>, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($id)/configure_logs")
-  let body = {egressAccessLogs: $egressAccessLogs, ingressAccessLogs: $ingressAccessLogs} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/channels/{id}/configure_logs"))
+  let body = {"egressAccessLogs": $egress_access_logs, "ingressAccessLogs": $ingress_access_logs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -134,7 +134,7 @@ export def "channels-configure-logs ConfigureLogs" [
 #
 # POST /channels
 # operationId: CreateChannel
-export def "channels CreateChannel" [
+export def "channels create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,13 +143,13 @@ export def "channels CreateChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --description: string # A short text description of the Channel.
   id: string # The ID of the Channel. The ID must be unique within the region and it cannot be changed after a Channel is created.
   --tags: record # A collection of tags associated with a resource
@@ -158,9 +158,9 @@ export def "channels CreateChannel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channels")
-  let body = {description: $description, id: $id, tags: $tags} | compact
+  let body = {"description": $description, "id": $id, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -171,7 +171,7 @@ export def "channels CreateChannel" [
 #
 # GET /channels
 # operationId: ListChannels
-export def "channels ListChannels" [
+export def "channels list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,23 +180,23 @@ export def "channels ListChannels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: int # Upper bound on number of records to return.
-  --nextToken: string # A token used to resume pagination from the end of a previous request.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: int # Upper bound on number of records to return.
+  --next-token: string # A token used to resume pagination from the end of a previous request.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Channels: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -208,7 +208,7 @@ export def "channels ListChannels" [
 # POST /harvest_jobs
 # operationId: CreateHarvestJob
 # --s3Destination shape: {BucketName?: any, ManifestKey?: any, RoleArn?: any}
-export def "harvest-jobs CreateHarvestJob" [
+export def "harvest-jobs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,26 +217,26 @@ export def "harvest-jobs CreateHarvestJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  endTime: string # The end of the time-window which will be harvested
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  end_time: string # The end of the time-window which will be harvested
   id: string # The ID of the HarvestJob. The ID must be unique within the region and it cannot be changed after the HarvestJob is submitted
-  originEndpointId: string # The ID of the OriginEndpoint that the HarvestJob will harvest from. This cannot be changed after the HarvestJob is submitted.
-  s3Destination: record # Configuration parameters for where in an S3 bucket to place the harvested content — shape: {BucketName?: any, ManifestKey?: any, RoleArn?: any}
-  startTime: string # The start of the time-window which will be harvested
+  origin_endpoint_id: string # The ID of the OriginEndpoint that the HarvestJob will harvest from. This cannot be changed after the HarvestJob is submitted.
+  s3_destination: record # Configuration parameters for where in an S3 bucket to place the harvested content — shape: {BucketName?: any, ManifestKey?: any, RoleArn?: any}
+  start_time: string # The start of the time-window which will be harvested
 ]: any -> record<Arn: record, ChannelId: record, CreatedAt: record, EndTime: record, Id: record, OriginEndpointId: record, S3Destination: record<BucketName: record, ManifestKey: record, RoleArn: record>, StartTime: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/harvest_jobs")
-  let body = {endTime: $endTime, id: $id, originEndpointId: $originEndpointId, s3Destination: $s3Destination, startTime: $startTime} | compact
+  let body = {"endTime": $end_time, "id": $id, "originEndpointId": $origin_endpoint_id, "s3Destination": $s3_destination, "startTime": $start_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -247,7 +247,7 @@ export def "harvest-jobs CreateHarvestJob" [
 #
 # GET /harvest_jobs
 # operationId: ListHarvestJobs
-export def "harvest-jobs ListHarvestJobs" [
+export def "harvest-jobs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,25 +256,25 @@ export def "harvest-jobs ListHarvestJobs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --includeChannelId: string # When specified, the request will return only HarvestJobs associated with the given Channel ID.
-  --includeStatus: string # When specified, the request will return only HarvestJobs in the given status.
-  --maxResults: int # The upper bound on the number of records to return.
-  --nextToken: string # A token used to resume pagination from the end of a previous request.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --include-channel-id: string # When specified, the request will return only HarvestJobs associated with the given Channel ID.
+  --include-status: string # When specified, the request will return only HarvestJobs in the given status.
+  --max-results: int # The upper bound on the number of records to return.
+  --next-token: string # A token used to resume pagination from the end of a previous request.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<HarvestJobs: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includeChannelId" $includeChannelId "scalar") (serialize-qp "includeStatus" $includeStatus "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "includeChannelId" $include_channel_id "scalar") (serialize-qp "includeStatus" $include_status "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/harvest_jobs" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -290,7 +290,7 @@ export def "harvest-jobs ListHarvestJobs" [
 # --dashPackage shape: {AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeIframeOnlyStream?: any, ManifestLayout?: any, ManifestWindowSeconds?: any, MinBufferTimeSeconds?: any, MinUpdatePeriodSeconds?: any, PeriodTriggers?: any, Profile?: any, SegmentDurationSeconds?: any, SegmentTemplateFormat?: any, StreamSelection?: any, SuggestedPresentationDelaySeconds?: any, UtcTiming?: any, UtcTimingUri?: any}
 # --hlsPackage shape: {AdMarkers?: any, AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeDvbSubtitles?: any, IncludeIframeOnlyStream?: any, PlaylistType?: any, PlaylistWindowSeconds?: any, ProgramDateTimeIntervalSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any, UseAudioRenditionGroup?: any}
 # --mssPackage shape: {Encryption?: any, ManifestWindowSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any}
-export def "origin-endpoints CreateOriginEndpoint" [
+export def "origin-endpoints create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,35 +299,35 @@ export def "origin-endpoints CreateOriginEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --authorization: record # CDN Authorization credentials — shape: {CdnIdentifierSecret?: any, SecretsRoleArn?: any}
-  channelId: string # The ID of the Channel that the OriginEndpoint will be associated with. This cannot be changed after the OriginEndpoint is created.
-  --cmafPackage: record # A Common Media Application Format (CMAF) packaging configuration. — shape: {Encryption?: any, HlsManifests?: any, SegmentDurationSeconds?: any, SegmentPrefix?: any, StreamSelection?: any}
-  --dashPackage: record # A Dynamic Adaptive Streaming over HTTP (DASH) packaging configuration. — shape: {AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeIframeOnlyStream?: any, ManifestLayout?: any, ManifestWindowSeconds?: any, MinBufferTimeSeconds?: any, MinUpdatePeriodSeconds?: any, PeriodTriggers?: any, Profile?: any, SegmentDurationSeconds?: any, SegmentTemplateFormat?: any, StreamSelection?: any, SuggestedPresentationDelaySeconds?: any, UtcTiming?: any, UtcTimingUri?: any}
+  channel_id: string # The ID of the Channel that the OriginEndpoint will be associated with. This cannot be changed after the OriginEndpoint is created.
+  --cmaf-package: record # A Common Media Application Format (CMAF) packaging configuration. — shape: {Encryption?: any, HlsManifests?: any, SegmentDurationSeconds?: any, SegmentPrefix?: any, StreamSelection?: any}
+  --dash-package: record # A Dynamic Adaptive Streaming over HTTP (DASH) packaging configuration. — shape: {AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeIframeOnlyStream?: any, ManifestLayout?: any, ManifestWindowSeconds?: any, MinBufferTimeSeconds?: any, MinUpdatePeriodSeconds?: any, PeriodTriggers?: any, Profile?: any, SegmentDurationSeconds?: any, SegmentTemplateFormat?: any, StreamSelection?: any, SuggestedPresentationDelaySeconds?: any, UtcTiming?: any, UtcTimingUri?: any}
   --description: string # A short text description of the OriginEndpoint.
-  --hlsPackage: record # An HTTP Live Streaming (HLS) packaging configuration. — shape: {AdMarkers?: any, AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeDvbSubtitles?: any, IncludeIframeOnlyStream?: any, PlaylistType?: any, PlaylistWindowSeconds?: any, ProgramDateTimeIntervalSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any, UseAudioRenditionGroup?: any}
+  --hls-package: record # An HTTP Live Streaming (HLS) packaging configuration. — shape: {AdMarkers?: any, AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeDvbSubtitles?: any, IncludeIframeOnlyStream?: any, PlaylistType?: any, PlaylistWindowSeconds?: any, ProgramDateTimeIntervalSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any, UseAudioRenditionGroup?: any}
   id: string # The ID of the OriginEndpoint.  The ID must be unique within the region and it cannot be changed after the OriginEndpoint is created.
-  --manifestName: string # A short string that will be used as the filename of the OriginEndpoint URL (defaults to "index").
-  --mssPackage: record # A Microsoft Smooth Streaming (MSS) packaging configuration. — shape: {Encryption?: any, ManifestWindowSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any}
+  --manifest-name: string # A short string that will be used as the filename of the OriginEndpoint URL (defaults to "index").
+  --mss-package: record # A Microsoft Smooth Streaming (MSS) packaging configuration. — shape: {Encryption?: any, ManifestWindowSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any}
   --origination: string@origination-completer # Control whether origination of video is allowed for this OriginEndpoint. If set to ALLOW, the OriginEndpoint may by requested, pursuant to any other form of access control. If set to DENY, the OriginEndpoint may not be requested. This can be helpful for Live to VOD harvesting, or for temporarily disabling origination
-  --startoverWindowSeconds: int # Maximum duration (seconds) of content to retain for startover playback. If not specified, startover playback will be disabled for the OriginEndpoint.
+  --startover-window-seconds: int # Maximum duration (seconds) of content to retain for startover playback. If not specified, startover playback will be disabled for the OriginEndpoint.
   --tags: record # A collection of tags associated with a resource
-  --timeDelaySeconds: int # Amount of delay (seconds) to enforce on the playback of live content. If not specified, there will be no time delay in effect for the OriginEndpoint.
+  --time-delay-seconds: int # Amount of delay (seconds) to enforce on the playback of live content. If not specified, there will be no time delay in effect for the OriginEndpoint.
   --whitelist: list # A list of source IP CIDR blocks that will be allowed to access the OriginEndpoint.
 ]: any -> record<Arn: record, Authorization: record<CdnIdentifierSecret: record, SecretsRoleArn: record>, ChannelId: record, CmafPackage: record<Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, HlsManifests: record, SegmentDurationSeconds: record, SegmentPrefix: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, CreatedAt: record, DashPackage: record<AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, IncludeIframeOnlyStream: record, ManifestLayout: record, ManifestWindowSeconds: record, MinBufferTimeSeconds: record, MinUpdatePeriodSeconds: record, PeriodTriggers: record, Profile: record, SegmentDurationSeconds: record, SegmentTemplateFormat: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, SuggestedPresentationDelaySeconds: record, UtcTiming: record, UtcTimingUri: record>, Description: record, HlsPackage: record<AdMarkers: record, AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, RepeatExtXKey: record, SpekeKeyProvider: record>, IncludeDvbSubtitles: record, IncludeIframeOnlyStream: record, PlaylistType: record, PlaylistWindowSeconds: record, ProgramDateTimeIntervalSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, UseAudioRenditionGroup: record>, Id: record, ManifestName: record, MssPackage: record<Encryption: record<SpekeKeyProvider: record>, ManifestWindowSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, Origination: record, StartoverWindowSeconds: record, Tags: record, TimeDelaySeconds: record, Url: record, Whitelist: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/origin_endpoints")
-  let body = {authorization: $authorization, channelId: $channelId, cmafPackage: $cmafPackage, dashPackage: $dashPackage, description: $description, hlsPackage: $hlsPackage, id: $id, manifestName: $manifestName, mssPackage: $mssPackage, origination: $origination, startoverWindowSeconds: $startoverWindowSeconds, tags: $tags, timeDelaySeconds: $timeDelaySeconds, whitelist: $whitelist} | compact
+  let body = {"authorization": $authorization, "channelId": $channel_id, "cmafPackage": $cmaf_package, "dashPackage": $dash_package, "description": $description, "hlsPackage": $hls_package, "id": $id, "manifestName": $manifest_name, "mssPackage": $mss_package, "origination": $origination, "startoverWindowSeconds": $startover_window_seconds, "tags": $tags, "timeDelaySeconds": $time_delay_seconds, "whitelist": $whitelist} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -338,7 +338,7 @@ export def "origin-endpoints CreateOriginEndpoint" [
 #
 # GET /origin_endpoints
 # operationId: ListOriginEndpoints
-export def "origin-endpoints ListOriginEndpoints" [
+export def "origin-endpoints list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,24 +347,24 @@ export def "origin-endpoints ListOriginEndpoints" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --channelId: string # When specified, the request will return only OriginEndpoints associated with the given Channel ID.
-  --maxResults: int # The upper bound on the number of records to return.
-  --nextToken: string # A token used to resume pagination from the end of a previous request.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --channel-id: string # When specified, the request will return only OriginEndpoints associated with the given Channel ID.
+  --max-results: int # The upper bound on the number of records to return.
+  --next-token: string # A token used to resume pagination from the end of a previous request.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<NextToken: record, OriginEndpoints: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "channelId" $channelId "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "channelId" $channel_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/origin_endpoints" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -375,7 +375,7 @@ export def "origin-endpoints ListOriginEndpoints" [
 #
 # DELETE /channels/{id}
 # operationId: DeleteChannel
-export def "channels DeleteChannel" [
+export def "channels delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -385,18 +385,18 @@ export def "channels DeleteChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/channels/{id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -407,7 +407,7 @@ export def "channels DeleteChannel" [
 #
 # GET /channels/{id}
 # operationId: DescribeChannel
-export def "channels DescribeChannel" [
+export def "channels get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -417,18 +417,18 @@ export def "channels DescribeChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, CreatedAt: record, Description: record, EgressAccessLogs: record<LogGroupName: record>, HlsIngest: record<IngestEndpoints: record>, Id: record, IngressAccessLogs: record<LogGroupName: record>, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/channels/{id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -439,7 +439,7 @@ export def "channels DescribeChannel" [
 #
 # PUT /channels/{id}
 # operationId: UpdateChannel
-export def "channels UpdateChannel" [
+export def "channels update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -449,22 +449,22 @@ export def "channels UpdateChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --description: string # A short text description of the Channel.
 ]: any -> record<Arn: record, CreatedAt: record, Description: record, EgressAccessLogs: record<LogGroupName: record>, HlsIngest: record<IngestEndpoints: record>, Id: record, IngressAccessLogs: record<LogGroupName: record>, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($id)")
-  let body = {description: $description} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/channels/{id}"))
+  let body = {"description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -475,7 +475,7 @@ export def "channels UpdateChannel" [
 #
 # DELETE /origin_endpoints/{id}
 # operationId: DeleteOriginEndpoint
-export def "origin-endpoints DeleteOriginEndpoint" [
+export def "origin-endpoints delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -485,18 +485,18 @@ export def "origin-endpoints DeleteOriginEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/origin_endpoints/($id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/origin_endpoints/{id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -507,7 +507,7 @@ export def "origin-endpoints DeleteOriginEndpoint" [
 #
 # GET /origin_endpoints/{id}
 # operationId: DescribeOriginEndpoint
-export def "origin-endpoints DescribeOriginEndpoint" [
+export def "origin-endpoints get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -517,18 +517,18 @@ export def "origin-endpoints DescribeOriginEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, Authorization: record<CdnIdentifierSecret: record, SecretsRoleArn: record>, ChannelId: record, CmafPackage: record<Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, HlsManifests: record, SegmentDurationSeconds: record, SegmentPrefix: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, CreatedAt: record, DashPackage: record<AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, IncludeIframeOnlyStream: record, ManifestLayout: record, ManifestWindowSeconds: record, MinBufferTimeSeconds: record, MinUpdatePeriodSeconds: record, PeriodTriggers: record, Profile: record, SegmentDurationSeconds: record, SegmentTemplateFormat: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, SuggestedPresentationDelaySeconds: record, UtcTiming: record, UtcTimingUri: record>, Description: record, HlsPackage: record<AdMarkers: record, AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, RepeatExtXKey: record, SpekeKeyProvider: record>, IncludeDvbSubtitles: record, IncludeIframeOnlyStream: record, PlaylistType: record, PlaylistWindowSeconds: record, ProgramDateTimeIntervalSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, UseAudioRenditionGroup: record>, Id: record, ManifestName: record, MssPackage: record<Encryption: record<SpekeKeyProvider: record>, ManifestWindowSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, Origination: record, StartoverWindowSeconds: record, Tags: record, TimeDelaySeconds: record, Url: record, Whitelist: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/origin_endpoints/($id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/origin_endpoints/{id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -544,7 +544,7 @@ export def "origin-endpoints DescribeOriginEndpoint" [
 # --dashPackage shape: {AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeIframeOnlyStream?: any, ManifestLayout?: any, ManifestWindowSeconds?: any, MinBufferTimeSeconds?: any, MinUpdatePeriodSeconds?: any, PeriodTriggers?: any, Profile?: any, SegmentDurationSeconds?: any, SegmentTemplateFormat?: any, StreamSelection?: any, SuggestedPresentationDelaySeconds?: any, UtcTiming?: any, UtcTimingUri?: any}
 # --hlsPackage shape: {AdMarkers?: any, AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeDvbSubtitles?: any, IncludeIframeOnlyStream?: any, PlaylistType?: any, PlaylistWindowSeconds?: any, ProgramDateTimeIntervalSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any, UseAudioRenditionGroup?: any}
 # --mssPackage shape: {Encryption?: any, ManifestWindowSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any}
-export def "origin-endpoints UpdateOriginEndpoint" [
+export def "origin-endpoints update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,32 +554,32 @@ export def "origin-endpoints UpdateOriginEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --authorization: record # CDN Authorization credentials — shape: {CdnIdentifierSecret?: any, SecretsRoleArn?: any}
-  --cmafPackage: record # A Common Media Application Format (CMAF) packaging configuration. — shape: {Encryption?: any, HlsManifests?: any, SegmentDurationSeconds?: any, SegmentPrefix?: any, StreamSelection?: any}
-  --dashPackage: record # A Dynamic Adaptive Streaming over HTTP (DASH) packaging configuration. — shape: {AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeIframeOnlyStream?: any, ManifestLayout?: any, ManifestWindowSeconds?: any, MinBufferTimeSeconds?: any, MinUpdatePeriodSeconds?: any, PeriodTriggers?: any, Profile?: any, SegmentDurationSeconds?: any, SegmentTemplateFormat?: any, StreamSelection?: any, SuggestedPresentationDelaySeconds?: any, UtcTiming?: any, UtcTimingUri?: any}
+  --cmaf-package: record # A Common Media Application Format (CMAF) packaging configuration. — shape: {Encryption?: any, HlsManifests?: any, SegmentDurationSeconds?: any, SegmentPrefix?: any, StreamSelection?: any}
+  --dash-package: record # A Dynamic Adaptive Streaming over HTTP (DASH) packaging configuration. — shape: {AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeIframeOnlyStream?: any, ManifestLayout?: any, ManifestWindowSeconds?: any, MinBufferTimeSeconds?: any, MinUpdatePeriodSeconds?: any, PeriodTriggers?: any, Profile?: any, SegmentDurationSeconds?: any, SegmentTemplateFormat?: any, StreamSelection?: any, SuggestedPresentationDelaySeconds?: any, UtcTiming?: any, UtcTimingUri?: any}
   --description: string # A short text description of the OriginEndpoint.
-  --hlsPackage: record # An HTTP Live Streaming (HLS) packaging configuration. — shape: {AdMarkers?: any, AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeDvbSubtitles?: any, IncludeIframeOnlyStream?: any, PlaylistType?: any, PlaylistWindowSeconds?: any, ProgramDateTimeIntervalSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any, UseAudioRenditionGroup?: any}
-  --manifestName: string # A short string that will be appended to the end of the Endpoint URL.
-  --mssPackage: record # A Microsoft Smooth Streaming (MSS) packaging configuration. — shape: {Encryption?: any, ManifestWindowSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any}
+  --hls-package: record # An HTTP Live Streaming (HLS) packaging configuration. — shape: {AdMarkers?: any, AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeDvbSubtitles?: any, IncludeIframeOnlyStream?: any, PlaylistType?: any, PlaylistWindowSeconds?: any, ProgramDateTimeIntervalSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any, UseAudioRenditionGroup?: any}
+  --manifest-name: string # A short string that will be appended to the end of the Endpoint URL.
+  --mss-package: record # A Microsoft Smooth Streaming (MSS) packaging configuration. — shape: {Encryption?: any, ManifestWindowSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any}
   --origination: string@origination-completer # Control whether origination of video is allowed for this OriginEndpoint. If set to ALLOW, the OriginEndpoint may by requested, pursuant to any other form of access control. If set to DENY, the OriginEndpoint may not be requested. This can be helpful for Live to VOD harvesting, or for temporarily disabling origination
-  --startoverWindowSeconds: int # Maximum duration (in seconds) of content to retain for startover playback. If not specified, startover playback will be disabled for the OriginEndpoint.
-  --timeDelaySeconds: int # Amount of delay (in seconds) to enforce on the playback of live content. If not specified, there will be no time delay in effect for the OriginEndpoint.
+  --startover-window-seconds: int # Maximum duration (in seconds) of content to retain for startover playback. If not specified, startover playback will be disabled for the OriginEndpoint.
+  --time-delay-seconds: int # Amount of delay (in seconds) to enforce on the playback of live content. If not specified, there will be no time delay in effect for the OriginEndpoint.
   --whitelist: list # A list of source IP CIDR blocks that will be allowed to access the OriginEndpoint.
 ]: any -> record<Arn: record, Authorization: record<CdnIdentifierSecret: record, SecretsRoleArn: record>, ChannelId: record, CmafPackage: record<Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, HlsManifests: record, SegmentDurationSeconds: record, SegmentPrefix: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, CreatedAt: record, DashPackage: record<AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, IncludeIframeOnlyStream: record, ManifestLayout: record, ManifestWindowSeconds: record, MinBufferTimeSeconds: record, MinUpdatePeriodSeconds: record, PeriodTriggers: record, Profile: record, SegmentDurationSeconds: record, SegmentTemplateFormat: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, SuggestedPresentationDelaySeconds: record, UtcTiming: record, UtcTimingUri: record>, Description: record, HlsPackage: record<AdMarkers: record, AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, RepeatExtXKey: record, SpekeKeyProvider: record>, IncludeDvbSubtitles: record, IncludeIframeOnlyStream: record, PlaylistType: record, PlaylistWindowSeconds: record, ProgramDateTimeIntervalSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, UseAudioRenditionGroup: record>, Id: record, ManifestName: record, MssPackage: record<Encryption: record<SpekeKeyProvider: record>, ManifestWindowSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, Origination: record, StartoverWindowSeconds: record, Tags: record, TimeDelaySeconds: record, Url: record, Whitelist: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/origin_endpoints/($id)")
-  let body = {authorization: $authorization, cmafPackage: $cmafPackage, dashPackage: $dashPackage, description: $description, hlsPackage: $hlsPackage, manifestName: $manifestName, mssPackage: $mssPackage, origination: $origination, startoverWindowSeconds: $startoverWindowSeconds, timeDelaySeconds: $timeDelaySeconds, whitelist: $whitelist} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/origin_endpoints/{id}"))
+  let body = {"authorization": $authorization, "cmafPackage": $cmaf_package, "dashPackage": $dash_package, "description": $description, "hlsPackage": $hls_package, "manifestName": $manifest_name, "mssPackage": $mss_package, "origination": $origination, "startoverWindowSeconds": $startover_window_seconds, "timeDelaySeconds": $time_delay_seconds, "whitelist": $whitelist} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -590,7 +590,7 @@ export def "origin-endpoints UpdateOriginEndpoint" [
 #
 # GET /harvest_jobs/{id}
 # operationId: DescribeHarvestJob
-export def "harvest-jobs DescribeHarvestJob" [
+export def "harvest-jobs get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -600,18 +600,18 @@ export def "harvest-jobs DescribeHarvestJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, ChannelId: record, CreatedAt: record, EndTime: record, Id: record, OriginEndpointId: record, S3Destination: record<BucketName: record, ManifestKey: record, RoleArn: record>, StartTime: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/harvest_jobs/($id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/harvest_jobs/{id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -621,7 +621,7 @@ export def "harvest-jobs DescribeHarvestJob" [
 # GET /tags/{resource-arn}
 #
 # operationId: ListTagsForResource
-export def "tags ListTagsForResource" [
+export def "tags list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -631,18 +631,18 @@ export def "tags ListTagsForResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($resource_arn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -652,7 +652,7 @@ export def "tags ListTagsForResource" [
 # POST /tags/{resource-arn}
 #
 # operationId: TagResource
-export def "tags TagResource" [
+export def "tags tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -662,22 +662,22 @@ export def "tags TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   tags: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($resource_arn)")
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -690,7 +690,7 @@ export def "tags TagResource" [
 # DEPRECATED
 # operationId: RotateChannelCredentials
 @deprecated
-export def "channels-credentials RotateChannelCredentials" [
+export def "channels-credentials put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -700,18 +700,18 @@ export def "channels-credentials RotateChannelCredentials" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, CreatedAt: record, Description: record, EgressAccessLogs: record<LogGroupName: record>, HlsIngest: record<IngestEndpoints: record>, Id: record, IngressAccessLogs: record<LogGroupName: record>, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($id)/credentials")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/channels/{id}/credentials"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -722,7 +722,7 @@ export def "channels-credentials RotateChannelCredentials" [
 #
 # PUT /channels/{id}/ingest_endpoints/{ingest_endpoint_id}/credentials
 # operationId: RotateIngestEndpointCredentials
-export def "channels-ingest-endpoints-credentials RotateIngestEndpointCredentials" [
+export def "channels-ingest-endpoints-credentials put" [
   id: string
   ingest_endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -733,18 +733,18 @@ export def "channels-ingest-endpoints-credentials RotateIngestEndpointCredential
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, CreatedAt: record, Description: record, EgressAccessLogs: record<LogGroupName: record>, HlsIngest: record<IngestEndpoints: record>, Id: record, IngressAccessLogs: record<LogGroupName: record>, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($id)/ingest_endpoints/($ingest_endpoint_id)/credentials")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({id: $id, ingest_endpoint_id: $ingest_endpoint_id} | format pattern "/channels/{id}/ingest_endpoints/{ingest_endpoint_id}/credentials"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -754,7 +754,7 @@ export def "channels-ingest-endpoints-credentials RotateIngestEndpointCredential
 # DELETE /tags/{resource-arn}#tagKeys
 #
 # operationId: UntagResource
-export def "tags UntagResource" [
+export def "tags untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -764,20 +764,20 @@ export def "tags UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tagKeys: list # The key(s) of tag to be deleted
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --tag-keys: list # The key(s) of tag to be deleted
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tagKeys" $tagKeys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($resource_arn)#tagKeys" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}#tagKeys") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -65,13 +65,13 @@ def base-url-completer [] { ["https://osdb.openlinksw.com/osdb"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def osdb:output-type-completer [] { ["display_rdf" "generate_rdf" "url_only"] }
+def osdb-output-type-completer [] { ["display_rdf" "generate_rdf" "url_only"] }
 def accept-completer [] { ["*/*" "application/json"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "actions listActions" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "actions list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,8 +95,8 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/actions/{serviceId}
 # operationId: listActions
-export def "actions listActions" [
-  serviceId: string
+export def "actions list" [
+  service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "actions listActions" [
 ]: nothing -> record<api: string, method: string, response: table<action_id: string, description: string, entry_point: record>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/actions/($serviceId)")
+  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/v1/actions/{service_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,8 +119,8 @@ export def "actions listActions" [
 # GET /api/v1/actions/{serviceId}/{actionId}
 # operationId: describeAction
 export def "actions describeAction" [
-  serviceId: string
-  actionId: string
+  service_id: string
+  action_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "actions describeAction" [
 ]: nothing -> record<api: string, method: string, response: record<action_id: string, description: string, entry_point: record<content_types: list, description: string, encoding_types: list, http_method: string, name: string, parameters: list, url: string, url_template: string>>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/actions/($serviceId)/($actionId)")
+  let full_url = (build-url $base ({service_id: $service_id, action_id: $action_id} | format pattern "/api/v1/actions/{service_id}/{action_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,9 +142,9 @@ export def "actions describeAction" [
 #
 # POST /api/v1/actions/{serviceId}/{actionId}/exec
 # operationId: executeAction
-export def "actions-exec executeAction" [
-  serviceId: string
-  actionId: string
+export def "actions-exec exec-ute" [
+  service_id: string
+  action_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,17 +156,17 @@ export def "actions-exec executeAction" [
   --accept: string@accept-completer # Response content type
   --action-specific-property1: string # An example action specific property. There may be 0, 1 or more action specific properties, each holding an action specific parameter value.
   --action-specific-property2: string # An example action specific property. There may be 0, 1 or more action specific properties, each holding an action specific parameter value.
-  --osdb:body-data-encoding: string # The media type of the data associated with osdb:body_data_raw or osdb:body_data_src_url. In the case of osdb:body_data_raw, this is the media type before base64 encoding.
-  --osdb:body-data-raw: string # Input data for the action (e.g. CSV data). The data must be base64 encoded by the client. Alternatively, clients can use osdb:body_data_src_url to supply the input data via a web-accessible document. (format: byte)
-  --osdb:body-data-src-url: string # URL of a resource containing input data for the action (e.g. CSV data). Clients can instead use osdb:body_data_raw to supply the input data directly. (format: uri)
-  --osdb:output-type: string@osdb:output-type-completer # An OSDB-specific parameter controlling the action output type. If omitted, the native action output is returned.
-  --osdb:response-format: string # Preferred response MIME type. This must be an output MIME type supported natively by the action or, if 'osdb:output_type' is set to 'generate_rdf', a Virtuoso Sponger output format. i.e. 'application/ld+json', 'text/turtle' or 'application/rdf+xml'.
+  --osdb-body-data-encoding: string # The media type of the data associated with osdb:body_data_raw or osdb:body_data_src_url. In the case of osdb:body_data_raw, this is the media type before base64 encoding.
+  --osdb-body-data-raw: string # Input data for the action (e.g. CSV data). The data must be base64 encoded by the client. Alternatively, clients can use osdb:body_data_src_url to supply the input data via a web-accessible document. (format: byte)
+  --osdb-body-data-src-url: string # URL of a resource containing input data for the action (e.g. CSV data). Clients can instead use osdb:body_data_raw to supply the input data directly. (format: uri)
+  --osdb-output-type: string@osdb-output-type-completer # An OSDB-specific parameter controlling the action output type. If omitted, the native action output is returned.
+  --osdb-response-format: string # Preferred response MIME type. This must be an output MIME type supported natively by the action or, if 'osdb:output_type' is set to 'generate_rdf', a Virtuoso Sponger output format. i.e. 'application/ld+json', 'text/turtle' or 'application/rdf+xml'.
 ]: any -> record<api: string, method: string, response: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/actions/($serviceId)/($actionId)/exec")
-  let body = {action_specific_property1: $action_specific_property1, action_specific_property2: $action_specific_property2, osdb:body_data_encoding: $osdb:body_data_encoding, osdb:body_data_raw: $osdb:body_data_raw, osdb:body_data_src_url: $osdb:body_data_src_url, osdb:output_type: $osdb:output_type, osdb:response_format: $osdb:response_format} | compact
+  let full_url = (build-url $base ({service_id: $service_id, action_id: $action_id} | format pattern "/api/v1/actions/{service_id}/{action_id}/exec"))
+  let body = {"action_specific_property1": $action_specific_property1, "action_specific_property2": $action_specific_property2, "osdb:body_data_encoding": $osdb_body_data_encoding, "osdb:body_data_raw": $osdb_body_data_raw, "osdb:body_data_src_url": $osdb_body_data_src_url, "osdb:output_type": $osdb_output_type, "osdb:response_format": $osdb_response_format} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -178,8 +178,8 @@ export def "actions-exec executeAction" [
 # GET /api/v1/actions/{serviceId}/{actionId}/help
 # operationId: actionHelp
 export def "actions-help actionHelp" [
-  serviceId: string
-  actionId: string
+  service_id: string
+  action_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "actions-help actionHelp" [
 ]: nothing -> record<api: string, method: string, response: record<action_id: string, help_text: string, service_id: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/actions/($serviceId)/($actionId)/help")
+  let full_url = (build-url $base ({service_id: $service_id, action_id: $action_id} | format pattern "/api/v1/actions/{service_id}/{action_id}/help"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -201,7 +201,7 @@ export def "actions-help actionHelp" [
 #
 # GET /api/v1/login
 # operationId: login
-export def "login login" [
+export def "login get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "login login" [
 #
 # GET /api/v1/logout
 # operationId: logout
-export def "logout logout" [
+export def "logout get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "logout logout" [
 #
 # GET /api/v1/services
 # operationId: listServices
-export def "services listServices" [
+export def "services list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +283,7 @@ export def "services loadService" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/services")
-  let body = {service_description_url: $service_description_url, service_moniker: $service_moniker} | compact
+  let body = {"service_description_url": $service_description_url, "service_moniker": $service_moniker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -295,7 +295,7 @@ export def "services loadService" [
 # DELETE /api/v1/services/{serviceId}
 # operationId: unloadService
 export def "services unloadService" [
-  serviceId: string
+  service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,7 +307,7 @@ export def "services unloadService" [
 ]: nothing -> record<api: string, method: string, response: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/services/($serviceId)")
+  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/v1/services/{service_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,7 +318,7 @@ export def "services unloadService" [
 # GET /api/v1/services/{serviceId}
 # operationId: describeService
 export def "services describeService" [
-  serviceId: string
+  service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,7 +330,7 @@ export def "services describeService" [
 ]: nothing -> record<api: string, method: string, response: record<description: string, import_source_uri: string, service_id: string, service_name: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/services/($serviceId)")
+  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/api/v1/services/{service_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

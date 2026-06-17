@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ardef Get-Card-Type-Information" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ardef post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # POST /ardef
 # operationId: Get Card Type Information 
-export def "ardef Get-Card-Type-Information" [
+export def "ardef post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,7 +109,7 @@ export def "ardef Get-Card-Type-Information" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ardef")
-  let body = {card_number: $card_number, merchant_id: $merchant_id} | compact
+  let body = {"card_number": $card_number, "merchant_id": $merchant_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -121,7 +121,7 @@ export def "ardef Get-Card-Type-Information" [
 # POST /auth
 # operationId: Authorization
 # --customer shape: {billing_addr1?: string, billing_addr2?: string, billing_city?: string, billing_country?: string, billing_country_code?: string, billing_state?: string, billing_zip?: string, billing_zip4?: string, customer_email?: string, customer_firm_name?: string, customer_first_name?: string, customer_last_name?: string, customer_phone?: string, shipping_addresses?: list}
-export def "auth Authorization" [
+export def "auth post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "auth Authorization" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth")
-  let body = {amt_convenience_fee: $amt_convenience_fee, amt_fbo: $amt_fbo, amt_tax: $amt_tax, amt_tran: $amt_tran, amt_tran_fee: $amt_tran_fee, auth_code: $auth_code, avs_address: $avs_address, avs_zip: $avs_zip, card_id: $card_id, card_number: $card_number, card_swipe: $card_swipe, cardholder_name: $cardholder_name, cavv_3ds: $cavv_3ds, client_ip: $client_ip, customer: $customer, customer_code: $customer_code, customer_email: $customer_email, customer_id: $customer_id, cvv2: $cvv2, dba_name: $dba_name, dba_suffix: $dba_suffix, dda_number: $dda_number, developer_id: $developer_id, duplicate_seconds: $duplicate_seconds, echo_fields: $echo_fields, email_address: $email_address, email_receipt: $email_receipt, emv_tran_id: $emv_tran_id, exp_date: $exp_date, fbo_id: $fbo_id, line_items: $line_items, loc_id: $loc_id, mc_ucaf_data: $mc_ucaf_data, mc_ucaf_ind: $mc_ucaf_ind, merch_ref_num: $merch_ref_num, merchant_id: $merchant_id, moto_ecomm_ind: $moto_ecomm_ind, partial_auth: $partial_auth, payload_apple_pay: $payload_apple_pay, payload_google_pay: $payload_google_pay, pg_id: $pg_id, profile_id: $profile_id, purchase_id: $purchase_id, report_data: $report_data, retry_attempt: $retry_attempt, retry_id: $retry_id, session_id: $session_id, subscription_id: $subscription_id, tokenize: $tokenize, tr_number: $tr_number, tran_currency: $tran_currency, type_id: $type_id, user_id: $user_id, vendor_id: $vendor_id, xid_3ds: $xid_3ds} | compact
+  let body = {"amt_convenience_fee": $amt_convenience_fee, "amt_fbo": $amt_fbo, "amt_tax": $amt_tax, "amt_tran": $amt_tran, "amt_tran_fee": $amt_tran_fee, "auth_code": $auth_code, "avs_address": $avs_address, "avs_zip": $avs_zip, "card_id": $card_id, "card_number": $card_number, "card_swipe": $card_swipe, "cardholder_name": $cardholder_name, "cavv_3ds": $cavv_3ds, "client_ip": $client_ip, "customer": $customer, "customer_code": $customer_code, "customer_email": $customer_email, "customer_id": $customer_id, "cvv2": $cvv2, "dba_name": $dba_name, "dba_suffix": $dba_suffix, "dda_number": $dda_number, "developer_id": $developer_id, "duplicate_seconds": $duplicate_seconds, "echo_fields": $echo_fields, "email_address": $email_address, "email_receipt": $email_receipt, "emv_tran_id": $emv_tran_id, "exp_date": $exp_date, "fbo_id": $fbo_id, "line_items": $line_items, "loc_id": $loc_id, "mc_ucaf_data": $mc_ucaf_data, "mc_ucaf_ind": $mc_ucaf_ind, "merch_ref_num": $merch_ref_num, "merchant_id": $merchant_id, "moto_ecomm_ind": $moto_ecomm_ind, "partial_auth": $partial_auth, "payload_apple_pay": $payload_apple_pay, "payload_google_pay": $payload_google_pay, "pg_id": $pg_id, "profile_id": $profile_id, "purchase_id": $purchase_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "subscription_id": $subscription_id, "tokenize": $tokenize, "tr_number": $tr_number, "tran_currency": $tran_currency, "type_id": $type_id, "user_id": $user_id, "vendor_id": $vendor_id, "xid_3ds": $xid_3ds} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -201,7 +201,7 @@ export def "auth Authorization" [
 #
 # POST /batchClose
 # operationId: Batch Close
-export def "batch-close Batch-Close" [
+export def "batch-close post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "batch-close Batch-Close" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/batchClose")
-  let body = {developer_id: $developer_id, echo_fields: $echo_fields, loc_id: $loc_id, merchant_id: $merchant_id, profile_id: $profile_id, report_data: $report_data, retry_attempt: $retry_attempt, retry_id: $retry_id, session_id: $session_id, tran_currency: $tran_currency, user_id: $user_id} | compact
+  let body = {"developer_id": $developer_id, "echo_fields": $echo_fields, "loc_id": $loc_id, "merchant_id": $merchant_id, "profile_id": $profile_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "tran_currency": $tran_currency, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -237,8 +237,8 @@ export def "batch-close Batch-Close" [
 #
 # POST /capture/{pgIdOrig}
 # operationId: Capture
-export def "capture Capture" [
-  pgIdOrig: string
+export def "capture post" [
+  pg_id_orig: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,8 +263,8 @@ export def "capture Capture" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/capture/($pgIdOrig)")
-  let body = {amt_tran: $amt_tran, developer_id: $developer_id, echo_fields: $echo_fields, loc_id: $loc_id, merchant_id: $merchant_id, profile_id: $profile_id, report_data: $report_data, retry_attempt: $retry_attempt, retry_id: $retry_id, session_id: $session_id, user_id: $user_id, vendor_id: $vendor_id} | compact
+  let full_url = (build-url $base ({pg_id_orig: $pg_id_orig} | format pattern "/capture/{pg_id_orig}"))
+  let body = {"amt_tran": $amt_tran, "developer_id": $developer_id, "echo_fields": $echo_fields, "loc_id": $loc_id, "merchant_id": $merchant_id, "profile_id": $profile_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "user_id": $user_id, "vendor_id": $vendor_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -276,7 +276,7 @@ export def "capture Capture" [
 # POST /credit
 # operationId: Credit
 # --customer shape: {billing_addr1?: string, billing_addr2?: string, billing_city?: string, billing_country?: string, billing_country_code?: string, billing_state?: string, billing_zip?: string, billing_zip4?: string, customer_email?: string, customer_firm_name?: string, customer_first_name?: string, customer_last_name?: string, customer_phone?: string, shipping_addresses?: list}
-export def "credit Credit" [
+export def "credit post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "credit Credit" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit")
-  let body = {amt_convenience_fee: $amt_convenience_fee, amt_fbo: $amt_fbo, amt_tax: $amt_tax, amt_tran: $amt_tran, amt_tran_fee: $amt_tran_fee, auth_code: $auth_code, avs_address: $avs_address, avs_zip: $avs_zip, card_id: $card_id, card_number: $card_number, card_swipe: $card_swipe, cardholder_name: $cardholder_name, cavv_3ds: $cavv_3ds, client_ip: $client_ip, customer: $customer, customer_code: $customer_code, customer_email: $customer_email, customer_id: $customer_id, cvv2: $cvv2, dba_name: $dba_name, dba_suffix: $dba_suffix, dda_number: $dda_number, developer_id: $developer_id, duplicate_seconds: $duplicate_seconds, echo_fields: $echo_fields, email_address: $email_address, email_receipt: $email_receipt, emv_tran_id: $emv_tran_id, exp_date: $exp_date, fbo_id: $fbo_id, line_items: $line_items, loc_id: $loc_id, mc_ucaf_data: $mc_ucaf_data, mc_ucaf_ind: $mc_ucaf_ind, merch_ref_num: $merch_ref_num, merchant_id: $merchant_id, moto_ecomm_ind: $moto_ecomm_ind, partial_auth: $partial_auth, payload_apple_pay: $payload_apple_pay, payload_google_pay: $payload_google_pay, pg_id: $pg_id, profile_id: $profile_id, purchase_id: $purchase_id, report_data: $report_data, retry_attempt: $retry_attempt, retry_id: $retry_id, session_id: $session_id, subscription_id: $subscription_id, tokenize: $tokenize, tr_number: $tr_number, tran_currency: $tran_currency, type_id: $type_id, user_id: $user_id, vendor_id: $vendor_id, xid_3ds: $xid_3ds} | compact
+  let body = {"amt_convenience_fee": $amt_convenience_fee, "amt_fbo": $amt_fbo, "amt_tax": $amt_tax, "amt_tran": $amt_tran, "amt_tran_fee": $amt_tran_fee, "auth_code": $auth_code, "avs_address": $avs_address, "avs_zip": $avs_zip, "card_id": $card_id, "card_number": $card_number, "card_swipe": $card_swipe, "cardholder_name": $cardholder_name, "cavv_3ds": $cavv_3ds, "client_ip": $client_ip, "customer": $customer, "customer_code": $customer_code, "customer_email": $customer_email, "customer_id": $customer_id, "cvv2": $cvv2, "dba_name": $dba_name, "dba_suffix": $dba_suffix, "dda_number": $dda_number, "developer_id": $developer_id, "duplicate_seconds": $duplicate_seconds, "echo_fields": $echo_fields, "email_address": $email_address, "email_receipt": $email_receipt, "emv_tran_id": $emv_tran_id, "exp_date": $exp_date, "fbo_id": $fbo_id, "line_items": $line_items, "loc_id": $loc_id, "mc_ucaf_data": $mc_ucaf_data, "mc_ucaf_ind": $mc_ucaf_ind, "merch_ref_num": $merch_ref_num, "merchant_id": $merchant_id, "moto_ecomm_ind": $moto_ecomm_ind, "partial_auth": $partial_auth, "payload_apple_pay": $payload_apple_pay, "payload_google_pay": $payload_google_pay, "pg_id": $pg_id, "profile_id": $profile_id, "purchase_id": $purchase_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "subscription_id": $subscription_id, "tokenize": $tokenize, "tr_number": $tr_number, "tran_currency": $tran_currency, "type_id": $type_id, "user_id": $user_id, "vendor_id": $vendor_id, "xid_3ds": $xid_3ds} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -356,8 +356,8 @@ export def "credit Credit" [
 #
 # POST /emailReceipt/{pgId}
 # operationId: Send Receipt
-export def "email-receipt Send-Receipt" [
-  pgId: string
+export def "email-receipt post" [
+  pg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,8 +375,8 @@ export def "email-receipt Send-Receipt" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/emailReceipt/($pgId)")
-  let body = {developer_id: $developer_id, email_address: $email_address, logo_url: $logo_url, merchant_id: $merchant_id, vendor_id: $vendor_id} | compact
+  let full_url = (build-url $base ({pg_id: $pg_id} | format pattern "/emailReceipt/{pg_id}"))
+  let body = {"developer_id": $developer_id, "email_address": $email_address, "logo_url": $logo_url, "merchant_id": $merchant_id, "vendor_id": $vendor_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -387,7 +387,7 @@ export def "email-receipt Send-Receipt" [
 #
 # POST /expireToken
 # operationId: Expire
-export def "expire-token Expire" [
+export def "expire-token post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,7 +413,7 @@ export def "expire-token Expire" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/expireToken")
-  let body = {card_id: $card_id, developer_id: $developer_id, echo_fields: $echo_fields, loc_id: $loc_id, merchant_id: $merchant_id, profile_id: $profile_id, report_data: $report_data, retry_attempt: $retry_attempt, retry_id: $retry_id, session_id: $session_id, user_id: $user_id, vendor_id: $vendor_id} | compact
+  let body = {"card_id": $card_id, "developer_id": $developer_id, "echo_fields": $echo_fields, "loc_id": $loc_id, "merchant_id": $merchant_id, "profile_id": $profile_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "user_id": $user_id, "vendor_id": $vendor_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -425,7 +425,7 @@ export def "expire-token Expire" [
 # POST /force
 # operationId: Force
 # --customer shape: {billing_addr1?: string, billing_addr2?: string, billing_city?: string, billing_country?: string, billing_country_code?: string, billing_state?: string, billing_zip?: string, billing_zip4?: string, customer_email?: string, customer_firm_name?: string, customer_first_name?: string, customer_last_name?: string, customer_phone?: string, shipping_addresses?: list}
-export def "force Force" [
+export def "force post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -494,7 +494,7 @@ export def "force Force" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/force")
-  let body = {amt_convenience_fee: $amt_convenience_fee, amt_fbo: $amt_fbo, amt_tax: $amt_tax, amt_tran: $amt_tran, amt_tran_fee: $amt_tran_fee, auth_code: $auth_code, avs_address: $avs_address, avs_zip: $avs_zip, card_id: $card_id, card_number: $card_number, card_swipe: $card_swipe, cardholder_name: $cardholder_name, cavv_3ds: $cavv_3ds, client_ip: $client_ip, customer: $customer, customer_code: $customer_code, customer_email: $customer_email, customer_id: $customer_id, cvv2: $cvv2, dba_name: $dba_name, dba_suffix: $dba_suffix, dda_number: $dda_number, developer_id: $developer_id, duplicate_seconds: $duplicate_seconds, echo_fields: $echo_fields, email_address: $email_address, email_receipt: $email_receipt, emv_tran_id: $emv_tran_id, exp_date: $exp_date, fbo_id: $fbo_id, line_items: $line_items, loc_id: $loc_id, mc_ucaf_data: $mc_ucaf_data, mc_ucaf_ind: $mc_ucaf_ind, merch_ref_num: $merch_ref_num, merchant_id: $merchant_id, moto_ecomm_ind: $moto_ecomm_ind, partial_auth: $partial_auth, payload_apple_pay: $payload_apple_pay, payload_google_pay: $payload_google_pay, pg_id: $pg_id, profile_id: $profile_id, purchase_id: $purchase_id, report_data: $report_data, retry_attempt: $retry_attempt, retry_id: $retry_id, session_id: $session_id, subscription_id: $subscription_id, tokenize: $tokenize, tr_number: $tr_number, tran_currency: $tran_currency, type_id: $type_id, user_id: $user_id, vendor_id: $vendor_id, xid_3ds: $xid_3ds} | compact
+  let body = {"amt_convenience_fee": $amt_convenience_fee, "amt_fbo": $amt_fbo, "amt_tax": $amt_tax, "amt_tran": $amt_tran, "amt_tran_fee": $amt_tran_fee, "auth_code": $auth_code, "avs_address": $avs_address, "avs_zip": $avs_zip, "card_id": $card_id, "card_number": $card_number, "card_swipe": $card_swipe, "cardholder_name": $cardholder_name, "cavv_3ds": $cavv_3ds, "client_ip": $client_ip, "customer": $customer, "customer_code": $customer_code, "customer_email": $customer_email, "customer_id": $customer_id, "cvv2": $cvv2, "dba_name": $dba_name, "dba_suffix": $dba_suffix, "dda_number": $dda_number, "developer_id": $developer_id, "duplicate_seconds": $duplicate_seconds, "echo_fields": $echo_fields, "email_address": $email_address, "email_receipt": $email_receipt, "emv_tran_id": $emv_tran_id, "exp_date": $exp_date, "fbo_id": $fbo_id, "line_items": $line_items, "loc_id": $loc_id, "mc_ucaf_data": $mc_ucaf_data, "mc_ucaf_ind": $mc_ucaf_ind, "merch_ref_num": $merch_ref_num, "merchant_id": $merchant_id, "moto_ecomm_ind": $moto_ecomm_ind, "partial_auth": $partial_auth, "payload_apple_pay": $payload_apple_pay, "payload_google_pay": $payload_google_pay, "pg_id": $pg_id, "profile_id": $profile_id, "purchase_id": $purchase_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "subscription_id": $subscription_id, "tokenize": $tokenize, "tr_number": $tr_number, "tran_currency": $tran_currency, "type_id": $type_id, "user_id": $user_id, "vendor_id": $vendor_id, "xid_3ds": $xid_3ds} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -505,8 +505,8 @@ export def "force Force" [
 #
 # POST /recharge/{pgIdOrig}
 # operationId: Recharge
-export def "recharge Recharge" [
-  pgIdOrig: string
+export def "recharge post" [
+  pg_id_orig: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,8 +530,8 @@ export def "recharge Recharge" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recharge/($pgIdOrig)")
-  let body = {amt_tran: $amt_tran, developer_id: $developer_id, echo_fields: $echo_fields, loc_id: $loc_id, merchant_id: $merchant_id, profile_id: $profile_id, report_data: $report_data, retry_attempt: $retry_attempt, retry_id: $retry_id, session_id: $session_id, user_id: $user_id} | compact
+  let full_url = (build-url $base ({pg_id_orig: $pg_id_orig} | format pattern "/recharge/{pg_id_orig}"))
+  let body = {"amt_tran": $amt_tran, "developer_id": $developer_id, "echo_fields": $echo_fields, "loc_id": $loc_id, "merchant_id": $merchant_id, "profile_id": $profile_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -542,8 +542,8 @@ export def "recharge Recharge" [
 #
 # POST /refund/{pgIdOrig}
 # operationId: Refund
-export def "refund Refund" [
-  pgIdOrig: string
+export def "refund post" [
+  pg_id_orig: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -568,8 +568,8 @@ export def "refund Refund" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/refund/($pgIdOrig)")
-  let body = {amt_tran: $amt_tran, developer_id: $developer_id, echo_fields: $echo_fields, loc_id: $loc_id, merchant_id: $merchant_id, profile_id: $profile_id, report_data: $report_data, retry_attempt: $retry_attempt, retry_id: $retry_id, session_id: $session_id, user_id: $user_id, vendor_id: $vendor_id} | compact
+  let full_url = (build-url $base ({pg_id_orig: $pg_id_orig} | format pattern "/refund/{pg_id_orig}"))
+  let body = {"amt_tran": $amt_tran, "developer_id": $developer_id, "echo_fields": $echo_fields, "loc_id": $loc_id, "merchant_id": $merchant_id, "profile_id": $profile_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "user_id": $user_id, "vendor_id": $vendor_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -581,7 +581,7 @@ export def "refund Refund" [
 # POST /sale
 # operationId: Sale
 # --customer shape: {billing_addr1?: string, billing_addr2?: string, billing_city?: string, billing_country?: string, billing_country_code?: string, billing_state?: string, billing_zip?: string, billing_zip4?: string, customer_email?: string, customer_firm_name?: string, customer_first_name?: string, customer_last_name?: string, customer_phone?: string, shipping_addresses?: list}
-export def "sale Sale" [
+export def "sale post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -650,7 +650,7 @@ export def "sale Sale" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sale")
-  let body = {amt_convenience_fee: $amt_convenience_fee, amt_fbo: $amt_fbo, amt_tax: $amt_tax, amt_tran: $amt_tran, amt_tran_fee: $amt_tran_fee, auth_code: $auth_code, avs_address: $avs_address, avs_zip: $avs_zip, card_id: $card_id, card_number: $card_number, card_swipe: $card_swipe, cardholder_name: $cardholder_name, cavv_3ds: $cavv_3ds, client_ip: $client_ip, customer: $customer, customer_code: $customer_code, customer_email: $customer_email, customer_id: $customer_id, cvv2: $cvv2, dba_name: $dba_name, dba_suffix: $dba_suffix, dda_number: $dda_number, developer_id: $developer_id, duplicate_seconds: $duplicate_seconds, echo_fields: $echo_fields, email_address: $email_address, email_receipt: $email_receipt, emv_tran_id: $emv_tran_id, exp_date: $exp_date, fbo_id: $fbo_id, line_items: $line_items, loc_id: $loc_id, mc_ucaf_data: $mc_ucaf_data, mc_ucaf_ind: $mc_ucaf_ind, merch_ref_num: $merch_ref_num, merchant_id: $merchant_id, moto_ecomm_ind: $moto_ecomm_ind, partial_auth: $partial_auth, payload_apple_pay: $payload_apple_pay, payload_google_pay: $payload_google_pay, pg_id: $pg_id, profile_id: $profile_id, purchase_id: $purchase_id, report_data: $report_data, retry_attempt: $retry_attempt, retry_id: $retry_id, session_id: $session_id, subscription_id: $subscription_id, tokenize: $tokenize, tr_number: $tr_number, tran_currency: $tran_currency, type_id: $type_id, user_id: $user_id, vendor_id: $vendor_id, xid_3ds: $xid_3ds} | compact
+  let body = {"amt_convenience_fee": $amt_convenience_fee, "amt_fbo": $amt_fbo, "amt_tax": $amt_tax, "amt_tran": $amt_tran, "amt_tran_fee": $amt_tran_fee, "auth_code": $auth_code, "avs_address": $avs_address, "avs_zip": $avs_zip, "card_id": $card_id, "card_number": $card_number, "card_swipe": $card_swipe, "cardholder_name": $cardholder_name, "cavv_3ds": $cavv_3ds, "client_ip": $client_ip, "customer": $customer, "customer_code": $customer_code, "customer_email": $customer_email, "customer_id": $customer_id, "cvv2": $cvv2, "dba_name": $dba_name, "dba_suffix": $dba_suffix, "dda_number": $dda_number, "developer_id": $developer_id, "duplicate_seconds": $duplicate_seconds, "echo_fields": $echo_fields, "email_address": $email_address, "email_receipt": $email_receipt, "emv_tran_id": $emv_tran_id, "exp_date": $exp_date, "fbo_id": $fbo_id, "line_items": $line_items, "loc_id": $loc_id, "mc_ucaf_data": $mc_ucaf_data, "mc_ucaf_ind": $mc_ucaf_ind, "merch_ref_num": $merch_ref_num, "merchant_id": $merchant_id, "moto_ecomm_ind": $moto_ecomm_ind, "partial_auth": $partial_auth, "payload_apple_pay": $payload_apple_pay, "payload_google_pay": $payload_google_pay, "pg_id": $pg_id, "profile_id": $profile_id, "purchase_id": $purchase_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "subscription_id": $subscription_id, "tokenize": $tokenize, "tr_number": $tr_number, "tran_currency": $tran_currency, "type_id": $type_id, "user_id": $user_id, "vendor_id": $vendor_id, "xid_3ds": $xid_3ds} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -661,7 +661,7 @@ export def "sale Sale" [
 #
 # POST /tokenize
 # operationId: Tokenize
-export def "tokenize Tokenize" [
+export def "tokenize post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -702,7 +702,7 @@ export def "tokenize Tokenize" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tokenize")
-  let body = {avs_address: $avs_address, avs_zip: $avs_zip, card_id: $card_id, card_number: $card_number, card_swipe: $card_swipe, cardholder_name: $cardholder_name, client_ip: $client_ip, cvv2: $cvv2, dda_number: $dda_number, developer_id: $developer_id, echo_fields: $echo_fields, email_address: $email_address, exp_date: $exp_date, loc_id: $loc_id, merchant_id: $merchant_id, payload_apple_pay: $payload_apple_pay, payload_google_pay: $payload_google_pay, profile_id: $profile_id, report_data: $report_data, retry_attempt: $retry_attempt, retry_id: $retry_id, session_id: $session_id, single_use: $single_use, tr_number: $tr_number, type_id: $type_id, user_id: $user_id, vendor_id: $vendor_id} | compact
+  let body = {"avs_address": $avs_address, "avs_zip": $avs_zip, "card_id": $card_id, "card_number": $card_number, "card_swipe": $card_swipe, "cardholder_name": $cardholder_name, "client_ip": $client_ip, "cvv2": $cvv2, "dda_number": $dda_number, "developer_id": $developer_id, "echo_fields": $echo_fields, "email_address": $email_address, "exp_date": $exp_date, "loc_id": $loc_id, "merchant_id": $merchant_id, "payload_apple_pay": $payload_apple_pay, "payload_google_pay": $payload_google_pay, "profile_id": $profile_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "single_use": $single_use, "tr_number": $tr_number, "type_id": $type_id, "user_id": $user_id, "vendor_id": $vendor_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -714,7 +714,7 @@ export def "tokenize Tokenize" [
 # POST /verify
 # operationId: Verify
 # --customer shape: {billing_addr1?: string, billing_addr2?: string, billing_city?: string, billing_country?: string, billing_country_code?: string, billing_state?: string, billing_zip?: string, billing_zip4?: string, customer_email?: string, customer_firm_name?: string, customer_first_name?: string, customer_last_name?: string, customer_phone?: string, shipping_addresses?: list}
-export def "verify Verify" [
+export def "verify post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -758,7 +758,7 @@ export def "verify Verify" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/verify")
-  let body = {avs_address: $avs_address, avs_zip: $avs_zip, card_id: $card_id, card_number: $card_number, card_swipe: $card_swipe, cardholder_name: $cardholder_name, client_ip: $client_ip, customer: $customer, customer_code: $customer_code, cvv2: $cvv2, dda_number: $dda_number, developer_id: $developer_id, echo_fields: $echo_fields, email_address: $email_address, exp_date: $exp_date, loc_id: $loc_id, merch_ref_num: $merch_ref_num, merchant_id: $merchant_id, moto_ecomm_ind: $moto_ecomm_ind, payload_apple_pay: $payload_apple_pay, payload_google_pay: $payload_google_pay, profile_id: $profile_id, report_data: $report_data, retry_attempt: $retry_attempt, retry_id: $retry_id, session_id: $session_id, tokenize: $tokenize, tr_number: $tr_number, type_id: $type_id, user_id: $user_id} | compact
+  let body = {"avs_address": $avs_address, "avs_zip": $avs_zip, "card_id": $card_id, "card_number": $card_number, "card_swipe": $card_swipe, "cardholder_name": $cardholder_name, "client_ip": $client_ip, "customer": $customer, "customer_code": $customer_code, "cvv2": $cvv2, "dda_number": $dda_number, "developer_id": $developer_id, "echo_fields": $echo_fields, "email_address": $email_address, "exp_date": $exp_date, "loc_id": $loc_id, "merch_ref_num": $merch_ref_num, "merchant_id": $merchant_id, "moto_ecomm_ind": $moto_ecomm_ind, "payload_apple_pay": $payload_apple_pay, "payload_google_pay": $payload_google_pay, "profile_id": $profile_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "tokenize": $tokenize, "tr_number": $tr_number, "type_id": $type_id, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -769,8 +769,8 @@ export def "verify Verify" [
 #
 # POST /void/{pgIdOrig}
 # operationId: Void
-export def "void Void" [
-  pgIdOrig: string
+export def "void post" [
+  pg_id_orig: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -794,8 +794,8 @@ export def "void Void" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/void/($pgIdOrig)")
-  let body = {developer_id: $developer_id, echo_fields: $echo_fields, loc_id: $loc_id, merchant_id: $merchant_id, profile_id: $profile_id, report_data: $report_data, retry_attempt: $retry_attempt, retry_id: $retry_id, session_id: $session_id, user_id: $user_id, vendor_id: $vendor_id} | compact
+  let full_url = (build-url $base ({pg_id_orig: $pg_id_orig} | format pattern "/void/{pg_id_orig}"))
+  let body = {"developer_id": $developer_id, "echo_fields": $echo_fields, "loc_id": $loc_id, "merchant_id": $merchant_id, "profile_id": $profile_id, "report_data": $report_data, "retry_attempt": $retry_attempt, "retry_id": $retry_id, "session_id": $session_id, "user_id": $user_id, "vendor_id": $vendor_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

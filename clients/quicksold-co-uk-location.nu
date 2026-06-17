@@ -106,7 +106,7 @@ export def "wgs84-to-osgb36 wgs84ToOsgb36UsingGET" [
 ]: nothing -> record<data: record, error: string, errors: record, message: string, path: string, status: int, timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/wgs84ToOsgb36/($latitude)/($longitude)")
+  let full_url = (build-url $base ({latitude: $latitude, longitude: $longitude} | format pattern "/v1/wgs84ToOsgb36/{latitude}/{longitude}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

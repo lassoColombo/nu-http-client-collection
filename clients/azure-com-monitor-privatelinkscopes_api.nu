@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoftinsights-private-link-scopes List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoftinsights-private-link-scopes list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.insights/privateLinkScopes
 # operationId: PrivateLinkScopes_List
-export def "subscriptions-providers-microsoftinsights-private-link-scopes List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoftinsights-private-link-scopes list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "subscriptions-providers-microsoftinsights-private-link-scopes List" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/microsoft.insights/privateLinkScopes" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.insights/privateLinkScopes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,10 +118,10 @@ export def "subscriptions-providers-microsoftinsights-private-link-scopes List" 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/privateEndpointConnections
 # operationId: PrivateEndpointConnections_ListByPrivateLinkScope
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-endpoint-connections ListByPrivateLinkScope" [
-  subscriptionId: string
-  resourceGroupName: string
-  scopeName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-endpoint-connections list-by" [
+  subscription_id: string
+  resource_group_name: string
+  scope_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,7 +135,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/privateLinkScopes/($scopeName)/privateEndpointConnections" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, scope_name: $scope_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/privateLinkScopes/{scope_name}/privateEndpointConnections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -145,11 +145,11 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/privateEndpointConnections/{privateEndpointConnectionName}
 # operationId: PrivateEndpointConnections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-endpoint-connections Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  scopeName: string
-  privateEndpointConnectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-endpoint-connections delete" [
+  subscription_id: string
+  resource_group_name: string
+  scope_name: string
+  private_endpoint_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/privateLinkScopes/($scopeName)/privateEndpointConnections/($privateEndpointConnectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, scope_name: $scope_name, private_endpoint_connection_name: $private_endpoint_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/privateLinkScopes/{scope_name}/privateEndpointConnections/{private_endpoint_connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,11 +173,11 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/privateEndpointConnections/{privateEndpointConnectionName}
 # operationId: PrivateEndpointConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-endpoint-connections Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  scopeName: string
-  privateEndpointConnectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-endpoint-connections get" [
+  subscription_id: string
+  resource_group_name: string
+  scope_name: string
+  private_endpoint_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/privateLinkScopes/($scopeName)/privateEndpointConnections/($privateEndpointConnectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, scope_name: $scope_name, private_endpoint_connection_name: $private_endpoint_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/privateLinkScopes/{scope_name}/privateEndpointConnections/{private_endpoint_connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,11 +202,11 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/privateEndpointConnections/{privateEndpointConnectionName}
 # operationId: PrivateEndpointConnections_CreateOrUpdate
 # --properties shape: {privateEndpoint?: record, privateLinkServiceConnectionState?: record}
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-endpoint-connections CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  scopeName: string
-  privateEndpointConnectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-endpoint-connections create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  scope_name: string
+  private_endpoint_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,8 +223,8 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/privateLinkScopes/($scopeName)/privateEndpointConnections/($privateEndpointConnectionName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, scope_name: $scope_name, private_endpoint_connection_name: $private_endpoint_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/privateLinkScopes/{scope_name}/privateEndpointConnections/{private_endpoint_connection_name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -235,10 +235,10 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/privateLinkResources
 # operationId: PrivateLinkResources_ListByPrivateLinkScope
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-link-resources ListByPrivateLinkScope" [
-  subscriptionId: string
-  resourceGroupName: string
-  scopeName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-link-resources list-by" [
+  subscription_id: string
+  resource_group_name: string
+  scope_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/privateLinkScopes/($scopeName)/privateLinkResources" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, scope_name: $scope_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/privateLinkScopes/{scope_name}/privateLinkResources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,11 +262,11 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/privateLinkResources/{groupName}
 # operationId: PrivateLinkResources_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-link-resources Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  scopeName: string
-  groupName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-link-resources get" [
+  subscription_id: string
+  resource_group_name: string
+  scope_name: string
+  group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/privateLinkScopes/($scopeName)/privateLinkResources/($groupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, scope_name: $scope_name, group_name: $group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/privateLinkScopes/{scope_name}/privateLinkResources/{group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -290,10 +290,10 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/scopedResources
 # operationId: PrivateLinkScopedResources_ListByPrivateLinkScope
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-scoped-resources ListByPrivateLinkScope" [
-  subscriptionId: string
-  resourceGroupName: string
-  scopeName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-scoped-resources list-by" [
+  subscription_id: string
+  resource_group_name: string
+  scope_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,7 +307,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/privateLinkScopes/($scopeName)/scopedResources" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, scope_name: $scope_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/privateLinkScopes/{scope_name}/scopedResources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -317,10 +317,10 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/scopedResources/{name}
 # operationId: PrivateLinkScopedResources_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-scoped-resources Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  scopeName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-scoped-resources delete" [
+  subscription_id: string
+  resource_group_name: string
+  scope_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,7 +335,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/privateLinkScopes/($scopeName)/scopedResources/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, scope_name: $scope_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/privateLinkScopes/{scope_name}/scopedResources/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -345,10 +345,10 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/scopedResources/{name}
 # operationId: PrivateLinkScopedResources_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-scoped-resources Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  scopeName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-scoped-resources get" [
+  subscription_id: string
+  resource_group_name: string
+  scope_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -363,7 +363,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/privateLinkScopes/($scopeName)/scopedResources/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, scope_name: $scope_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/privateLinkScopes/{scope_name}/scopedResources/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -374,10 +374,10 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/scopedResources/{name}
 # operationId: PrivateLinkScopedResources_CreateOrUpdate
 # --properties shape: {linkedResourceId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-scoped-resources CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  scopeName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-scoped-resources create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  scope_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -395,8 +395,8 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/privateLinkScopes/($scopeName)/scopedResources/($name)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, scope_name: $scope_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/privateLinkScopes/{scope_name}/scopedResources/{name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -407,9 +407,9 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/privateLinkScopes
 # operationId: PrivateLinkScopes_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoftinsights-private-link-scopes ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoftinsights-private-link-scopes list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,7 +423,7 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-private-li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.insights/privateLinkScopes" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/privateLinkScopes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -433,10 +433,10 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-private-li
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/privateLinkScopes/{scopeName}
 # operationId: PrivateLinkScopes_Delete
-export def "subscriptions-resource-groups-providers-microsoftinsights-private-link-scopes Delete" [
-  resourceGroupName: string
-  subscriptionId: string
-  scopeName: string
+export def "subscriptions-resource-groups-providers-microsoftinsights-private-link-scopes delete" [
+  subscription_id: string
+  resource_group_name: string
+  scope_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +450,7 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-private-li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.insights/privateLinkScopes/($scopeName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, scope_name: $scope_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/privateLinkScopes/{scope_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -460,10 +460,10 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-private-li
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/privateLinkScopes/{scopeName}
 # operationId: PrivateLinkScopes_Get
-export def "subscriptions-resource-groups-providers-microsoftinsights-private-link-scopes Get" [
-  resourceGroupName: string
-  subscriptionId: string
-  scopeName: string
+export def "subscriptions-resource-groups-providers-microsoftinsights-private-link-scopes get" [
+  subscription_id: string
+  resource_group_name: string
+  scope_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -477,7 +477,7 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-private-li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.insights/privateLinkScopes/($scopeName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, scope_name: $scope_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/privateLinkScopes/{scope_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -487,10 +487,10 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-private-li
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/privateLinkScopes/{scopeName}
 # operationId: PrivateLinkScopes_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoftinsights-private-link-scopes UpdateTags" [
-  resourceGroupName: string
-  subscriptionId: string
-  scopeName: string
+export def "subscriptions-resource-groups-providers-microsoftinsights-private-link-scopes update-tags" [
+  subscription_id: string
+  resource_group_name: string
+  scope_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -506,8 +506,8 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-private-li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.insights/privateLinkScopes/($scopeName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, scope_name: $scope_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/privateLinkScopes/{scope_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -518,10 +518,10 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-private-li
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/privateLinkScopes/{scopeName}
 # operationId: PrivateLinkScopes_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoftinsights-private-link-scopes CreateOrUpdate" [
-  resourceGroupName: string
-  subscriptionId: string
-  scopeName: string
+export def "subscriptions-resource-groups-providers-microsoftinsights-private-link-scopes create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  scope_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,8 +539,8 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-private-li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.insights/privateLinkScopes/($scopeName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, scope_name: $scope_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/privateLinkScopes/{scope_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

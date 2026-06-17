@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-security-device-security-groups List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-security-device-security-groups list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /{resourceId}/providers/Microsoft.Security/deviceSecurityGroups
 # operationId: DeviceSecurityGroups_List
-export def "providers-microsoft-security-device-security-groups List" [
-  resourceId: string
+export def "providers-microsoft-security-device-security-groups list" [
+  resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "providers-microsoft-security-device-security-groups List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceId)/providers/Microsoft.Security/deviceSecurityGroups" $qp)
+  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/{resource_id}/providers/Microsoft.Security/deviceSecurityGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,9 +118,9 @@ export def "providers-microsoft-security-device-security-groups List" [
 #
 # DELETE /{resourceId}/providers/Microsoft.Security/deviceSecurityGroups/{deviceSecurityGroupName}
 # operationId: DeviceSecurityGroups_Delete
-export def "providers-microsoft-security-device-security-groups Delete" [
-  resourceId: string
-  deviceSecurityGroupName: string
+export def "providers-microsoft-security-device-security-groups delete" [
+  resource_id: string
+  device_security_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "providers-microsoft-security-device-security-groups Delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceId)/providers/Microsoft.Security/deviceSecurityGroups/($deviceSecurityGroupName)" $qp)
+  let full_url = (build-url $base ({resource_id: $resource_id, device_security_group_name: $device_security_group_name} | format pattern "/{resource_id}/providers/Microsoft.Security/deviceSecurityGroups/{device_security_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,9 +144,9 @@ export def "providers-microsoft-security-device-security-groups Delete" [
 #
 # GET /{resourceId}/providers/Microsoft.Security/deviceSecurityGroups/{deviceSecurityGroupName}
 # operationId: DeviceSecurityGroups_Get
-export def "providers-microsoft-security-device-security-groups Get" [
-  resourceId: string
-  deviceSecurityGroupName: string
+export def "providers-microsoft-security-device-security-groups get" [
+  resource_id: string
+  device_security_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "providers-microsoft-security-device-security-groups Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceId)/providers/Microsoft.Security/deviceSecurityGroups/($deviceSecurityGroupName)" $qp)
+  let full_url = (build-url $base ({resource_id: $resource_id, device_security_group_name: $device_security_group_name} | format pattern "/{resource_id}/providers/Microsoft.Security/deviceSecurityGroups/{device_security_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,9 +170,9 @@ export def "providers-microsoft-security-device-security-groups Get" [
 #
 # PUT /{resourceId}/providers/Microsoft.Security/deviceSecurityGroups/{deviceSecurityGroupName}
 # operationId: DeviceSecurityGroups_CreateOrUpdate
-export def "providers-microsoft-security-device-security-groups CreateOrUpdate" [
-  resourceId: string
-  deviceSecurityGroupName: string
+export def "providers-microsoft-security-device-security-groups create-or-update" [
+  resource_id: string
+  device_security_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "providers-microsoft-security-device-security-groups CreateOrUpdate" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceId)/providers/Microsoft.Security/deviceSecurityGroups/($deviceSecurityGroupName)" $qp)
+  let full_url = (build-url $base ({resource_id: $resource_id, device_security_group_name: $device_security_group_name} | format pattern "/{resource_id}/providers/Microsoft.Security/deviceSecurityGroups/{device_security_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

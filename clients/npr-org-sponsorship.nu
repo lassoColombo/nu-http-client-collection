@@ -102,16 +102,16 @@ export def "ads get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --forceResult: oneof<nothing, bool> # Whether to force a synchronous call to our external sponsorship provider; the default behavior is asynchronous.
-  --adCount: int # How many sponsorship units to request in one call; if left unspecified, the default behavior is to return only 1. (format: int32)
-  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
-  --X-Advertising-ID: string # A device-specific advertising identifier, if possible. Apple's IDFA is an example.
+  --force-result: oneof<nothing, bool> # Whether to force a synchronous call to our external sponsorship provider; the default behavior is asynchronous.
+  --ad-count: int # How many sponsorship units to request in one call; if left unspecified, the default behavior is to return only 1. (format: int32)
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --x-advertising-id: string # A device-specific advertising identifier, if possible. Apple's IDFA is an example.
 ]: nothing -> record<Ad: record<InLine: record<AdSystem: string, AdTitle: string, Category: string, Creatives: list, Description: string, Extensions: list, Impression: list>, id: string>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "forceResult" $forceResult "scalar") (serialize-qp "adCount" $adCount "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "forceResult" $force_result "scalar") (serialize-qp "adCount" $ad_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/ads" $qp)
-  let extra_headers = {"Authorization": $Authorization, "X-Advertising-ID": $X_Advertising_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Advertising-ID": $x_advertising_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -124,7 +124,7 @@ export def "ads get" [
 # operationId: receiveAdTracking
 # --attributes shape: {ipAddress?: string, userAgent?: string}
 # --items item shape: {attributes: any, errors: list, href: string, items: list, links: record, version: string}
-export def "ads receiveAdTracking" [
+export def "ads receive-ad-tracking" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,8 +133,8 @@ export def "ads receiveAdTracking" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
-  --X-Advertising-ID: string # A device-specific advertising identifier, if possible. Apple's IDFA is an example.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --x-advertising-id: string # A device-specific advertising identifier, if possible. Apple's IDFA is an example.
   attributes: any # All information relevant to a user who has requested sponsorship or submitted tracking information — shape: {ipAddress?: string, userAgent?: string}
   errors: list # A list of encountered errors, ignored on POST, PUT
   href: string # A URL representation of the resource; should generally be ignored by clients unless noted otherwise
@@ -146,9 +146,9 @@ export def "ads receiveAdTracking" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/ads")
-  let body = {attributes: $attributes, errors: $errors, href: $href, items: $items, links: $links, version: $version} | compact
+  let body = {"attributes": $attributes, "errors": $errors, "href": $href, "items": $items, "links": $links, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-Advertising-ID": $X_Advertising_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-Advertising-ID": $x_advertising_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

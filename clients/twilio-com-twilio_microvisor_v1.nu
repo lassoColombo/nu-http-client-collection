@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps ListApp" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/Apps
 # operationId: ListApp
-export def "apps ListApp" [
+export def "apps list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,13 +102,13 @@ export def "apps ListApp" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<apps: table<account_sid: string, date_created: string, date_updated: string, hash: string, links: record, sid: string, unique_name: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Apps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -119,8 +119,8 @@ export def "apps ListApp" [
 #
 # GET /v1/Apps/{AppSid}/Manifest
 # operationId: FetchAppManifest
-export def "apps-manifest FetchAppManifest" [
-  AppSid: string
+export def "apps-manifest get" [
+  app_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "apps-manifest FetchAppManifest" [
 ]: nothing -> record<app_sid: string, encoded_bytes: string, hash: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Apps/($AppSid)/Manifest")
+  let full_url = (build-url $base ({app_sid: $app_sid} | format pattern "/v1/Apps/{app_sid}/Manifest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,8 +142,8 @@ export def "apps-manifest FetchAppManifest" [
 #
 # DELETE /v1/Apps/{Sid}
 # operationId: DeleteApp
-export def "apps DeleteApp" [
-  Sid: string
+export def "apps delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,7 +155,7 @@ export def "apps DeleteApp" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Apps/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Apps/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -165,8 +165,8 @@ export def "apps DeleteApp" [
 #
 # GET /v1/Apps/{Sid}
 # operationId: FetchApp
-export def "apps FetchApp" [
-  Sid: string
+export def "apps get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "apps FetchApp" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, hash: string, links: record, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Apps/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Apps/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,7 +188,7 @@ export def "apps FetchApp" [
 #
 # GET /v1/Configs
 # operationId: ListAccountConfig
-export def "configs ListAccountConfig" [
+export def "configs list-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,13 +197,13 @@ export def "configs ListAccountConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<configs: table<date_updated: string, key: string, url: string, value: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Configs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -214,7 +214,7 @@ export def "configs ListAccountConfig" [
 #
 # POST /v1/Configs
 # operationId: CreateAccountConfig
-export def "configs CreateAccountConfig" [
+export def "configs create-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,14 +223,14 @@ export def "configs CreateAccountConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Key: string # The config key; up to 100 characters.
-  Value: string # The config value; up to 4096 characters.
+  key: string # The config key; up to 100 characters.
+  value: string # The config value; up to 4096 characters.
 ]: any -> record<date_updated: string, key: string, url: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
   let full_url = (build-url $base "/v1/Configs")
-  let body = {Key: $Key, Value: $Value} | compact
+  let body = {"Key": $key, "Value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -241,8 +241,8 @@ export def "configs CreateAccountConfig" [
 #
 # DELETE /v1/Configs/{Key}
 # operationId: DeleteAccountConfig
-export def "configs DeleteAccountConfig" [
-  Key: string
+export def "configs delete-account" [
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "configs DeleteAccountConfig" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Configs/($Key)")
+  let full_url = (build-url $base ({key: $key} | format pattern "/v1/Configs/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -264,8 +264,8 @@ export def "configs DeleteAccountConfig" [
 #
 # GET /v1/Configs/{Key}
 # operationId: FetchAccountConfig
-export def "configs FetchAccountConfig" [
-  Key: string
+export def "configs get-account" [
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,7 +277,7 @@ export def "configs FetchAccountConfig" [
 ]: nothing -> record<date_updated: string, key: string, url: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Configs/($Key)")
+  let full_url = (build-url $base ({key: $key} | format pattern "/v1/Configs/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -287,8 +287,8 @@ export def "configs FetchAccountConfig" [
 #
 # POST /v1/Configs/{Key}
 # operationId: UpdateAccountConfig
-export def "configs UpdateAccountConfig" [
-  Key: string
+export def "configs update-account" [
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -297,13 +297,13 @@ export def "configs UpdateAccountConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Value: string # The config value; up to 4096 characters.
+  value: string # The config value; up to 4096 characters.
 ]: any -> record<date_updated: string, key: string, url: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Configs/($Key)")
-  let body = {Value: $Value} | compact
+  let full_url = (build-url $base ({key: $key} | format pattern "/v1/Configs/{key}"))
+  let body = {"Value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -314,7 +314,7 @@ export def "configs UpdateAccountConfig" [
 #
 # GET /v1/Devices
 # operationId: ListDevice
-export def "devices ListDevice" [
+export def "devices list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,13 +323,13 @@ export def "devices ListDevice" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<devices: table<account_sid: string, app: any, date_created: string, date_updated: string, links: record, logging: any, sid: string, unique_name: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Devices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -340,8 +340,8 @@ export def "devices ListDevice" [
 #
 # GET /v1/Devices/{DeviceSid}/Configs
 # operationId: ListDeviceConfig
-export def "devices-configs ListDeviceConfig" [
-  DeviceSid: string
+export def "devices-configs list" [
+  device_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,14 +350,14 @@ export def "devices-configs ListDeviceConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<configs: table<date_updated: string, device_sid: string, key: string, url: string, value: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Devices/($DeviceSid)/Configs" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({device_sid: $device_sid} | format pattern "/v1/Devices/{device_sid}/Configs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -367,8 +367,8 @@ export def "devices-configs ListDeviceConfig" [
 #
 # POST /v1/Devices/{DeviceSid}/Configs
 # operationId: CreateDeviceConfig
-export def "devices-configs CreateDeviceConfig" [
-  DeviceSid: string
+export def "devices-configs create" [
+  device_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,14 +377,14 @@ export def "devices-configs CreateDeviceConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Key: string # The config key; up to 100 characters.
-  Value: string # The config value; up to 4096 characters.
+  key: string # The config key; up to 100 characters.
+  value: string # The config value; up to 4096 characters.
 ]: any -> record<date_updated: string, device_sid: string, key: string, url: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Devices/($DeviceSid)/Configs")
-  let body = {Key: $Key, Value: $Value} | compact
+  let full_url = (build-url $base ({device_sid: $device_sid} | format pattern "/v1/Devices/{device_sid}/Configs"))
+  let body = {"Key": $key, "Value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -395,9 +395,9 @@ export def "devices-configs CreateDeviceConfig" [
 #
 # DELETE /v1/Devices/{DeviceSid}/Configs/{Key}
 # operationId: DeleteDeviceConfig
-export def "devices-configs DeleteDeviceConfig" [
-  DeviceSid: string
-  Key: string
+export def "devices-configs delete" [
+  device_sid: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -409,7 +409,7 @@ export def "devices-configs DeleteDeviceConfig" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Devices/($DeviceSid)/Configs/($Key)")
+  let full_url = (build-url $base ({device_sid: $device_sid, key: $key} | format pattern "/v1/Devices/{device_sid}/Configs/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -419,9 +419,9 @@ export def "devices-configs DeleteDeviceConfig" [
 #
 # GET /v1/Devices/{DeviceSid}/Configs/{Key}
 # operationId: FetchDeviceConfig
-export def "devices-configs FetchDeviceConfig" [
-  DeviceSid: string
-  Key: string
+export def "devices-configs get" [
+  device_sid: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -433,7 +433,7 @@ export def "devices-configs FetchDeviceConfig" [
 ]: nothing -> record<date_updated: string, device_sid: string, key: string, url: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Devices/($DeviceSid)/Configs/($Key)")
+  let full_url = (build-url $base ({device_sid: $device_sid, key: $key} | format pattern "/v1/Devices/{device_sid}/Configs/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -443,9 +443,9 @@ export def "devices-configs FetchDeviceConfig" [
 #
 # POST /v1/Devices/{DeviceSid}/Configs/{Key}
 # operationId: UpdateDeviceConfig
-export def "devices-configs UpdateDeviceConfig" [
-  DeviceSid: string
-  Key: string
+export def "devices-configs update" [
+  device_sid: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,13 +454,13 @@ export def "devices-configs UpdateDeviceConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Value: string # The config value; up to 4096 characters.
+  value: string # The config value; up to 4096 characters.
 ]: any -> record<date_updated: string, device_sid: string, key: string, url: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Devices/($DeviceSid)/Configs/($Key)")
-  let body = {Value: $Value} | compact
+  let full_url = (build-url $base ({device_sid: $device_sid, key: $key} | format pattern "/v1/Devices/{device_sid}/Configs/{key}"))
+  let body = {"Value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -471,8 +471,8 @@ export def "devices-configs UpdateDeviceConfig" [
 #
 # GET /v1/Devices/{DeviceSid}/Secrets
 # operationId: ListDeviceSecret
-export def "devices-secrets ListDeviceSecret" [
-  DeviceSid: string
+export def "devices-secrets list" [
+  device_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,14 +481,14 @@ export def "devices-secrets ListDeviceSecret" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, secrets: table<date_rotated: string, device_sid: string, key: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Devices/($DeviceSid)/Secrets" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({device_sid: $device_sid} | format pattern "/v1/Devices/{device_sid}/Secrets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -498,8 +498,8 @@ export def "devices-secrets ListDeviceSecret" [
 #
 # POST /v1/Devices/{DeviceSid}/Secrets
 # operationId: CreateDeviceSecret
-export def "devices-secrets CreateDeviceSecret" [
-  DeviceSid: string
+export def "devices-secrets create" [
+  device_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,14 +508,14 @@ export def "devices-secrets CreateDeviceSecret" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Key: string # The secret key; up to 100 characters.
-  Value: string # The secret value; up to 4096 characters.
+  key: string # The secret key; up to 100 characters.
+  value: string # The secret value; up to 4096 characters.
 ]: any -> record<date_rotated: string, device_sid: string, key: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Devices/($DeviceSid)/Secrets")
-  let body = {Key: $Key, Value: $Value} | compact
+  let full_url = (build-url $base ({device_sid: $device_sid} | format pattern "/v1/Devices/{device_sid}/Secrets"))
+  let body = {"Key": $key, "Value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -526,9 +526,9 @@ export def "devices-secrets CreateDeviceSecret" [
 #
 # DELETE /v1/Devices/{DeviceSid}/Secrets/{Key}
 # operationId: DeleteDeviceSecret
-export def "devices-secrets DeleteDeviceSecret" [
-  DeviceSid: string
-  Key: string
+export def "devices-secrets delete" [
+  device_sid: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "devices-secrets DeleteDeviceSecret" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Devices/($DeviceSid)/Secrets/($Key)")
+  let full_url = (build-url $base ({device_sid: $device_sid, key: $key} | format pattern "/v1/Devices/{device_sid}/Secrets/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -550,9 +550,9 @@ export def "devices-secrets DeleteDeviceSecret" [
 #
 # GET /v1/Devices/{DeviceSid}/Secrets/{Key}
 # operationId: FetchDeviceSecret
-export def "devices-secrets FetchDeviceSecret" [
-  DeviceSid: string
-  Key: string
+export def "devices-secrets get" [
+  device_sid: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,7 +564,7 @@ export def "devices-secrets FetchDeviceSecret" [
 ]: nothing -> record<date_rotated: string, device_sid: string, key: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Devices/($DeviceSid)/Secrets/($Key)")
+  let full_url = (build-url $base ({device_sid: $device_sid, key: $key} | format pattern "/v1/Devices/{device_sid}/Secrets/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -574,9 +574,9 @@ export def "devices-secrets FetchDeviceSecret" [
 #
 # POST /v1/Devices/{DeviceSid}/Secrets/{Key}
 # operationId: UpdateDeviceSecret
-export def "devices-secrets UpdateDeviceSecret" [
-  DeviceSid: string
-  Key: string
+export def "devices-secrets update" [
+  device_sid: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -585,13 +585,13 @@ export def "devices-secrets UpdateDeviceSecret" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Value: string # The secret value; up to 4096 characters.
+  value: string # The secret value; up to 4096 characters.
 ]: any -> record<date_rotated: string, device_sid: string, key: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Devices/($DeviceSid)/Secrets/($Key)")
-  let body = {Value: $Value} | compact
+  let full_url = (build-url $base ({device_sid: $device_sid, key: $key} | format pattern "/v1/Devices/{device_sid}/Secrets/{key}"))
+  let body = {"Value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -602,8 +602,8 @@ export def "devices-secrets UpdateDeviceSecret" [
 #
 # GET /v1/Devices/{Sid}
 # operationId: FetchDevice
-export def "devices FetchDevice" [
-  Sid: string
+export def "devices get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -615,7 +615,7 @@ export def "devices FetchDevice" [
 ]: nothing -> record<account_sid: string, app: any, date_created: string, date_updated: string, links: record, logging: any, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Devices/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Devices/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -625,8 +625,8 @@ export def "devices FetchDevice" [
 #
 # POST /v1/Devices/{Sid}
 # operationId: UpdateDevice
-export def "devices UpdateDevice" [
-  Sid: string
+export def "devices update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -635,15 +635,15 @@ export def "devices UpdateDevice" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --LoggingEnabled: oneof<nothing, bool> # A Boolean flag specifying whether to enable application logging. Logs will be enabled or extended for 24 hours.
-  --TargetApp: string # The SID or unique name of the App to be targeted to the Device.
-  --UniqueName: string # A unique and addressable name to be assigned to this Device by the developer. It may be used in place of the Device SID.
+  --logging-enabled: oneof<nothing, bool> # A Boolean flag specifying whether to enable application logging. Logs will be enabled or extended for 24 hours.
+  --target-app: string # The SID or unique name of the App to be targeted to the Device.
+  --unique-name: string # A unique and addressable name to be assigned to this Device by the developer. It may be used in place of the Device SID.
 ]: any -> record<account_sid: string, app: any, date_created: string, date_updated: string, links: record, logging: any, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Devices/($Sid)")
-  let body = {LoggingEnabled: $LoggingEnabled, TargetApp: $TargetApp, UniqueName: $UniqueName} | compact
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Devices/{sid}"))
+  let body = {"LoggingEnabled": $logging_enabled, "TargetApp": $target_app, "UniqueName": $unique_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -654,7 +654,7 @@ export def "devices UpdateDevice" [
 #
 # GET /v1/Secrets
 # operationId: ListAccountSecret
-export def "secrets ListAccountSecret" [
+export def "secrets list-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,13 +663,13 @@ export def "secrets ListAccountSecret" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, secrets: table<date_rotated: string, key: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Secrets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -680,7 +680,7 @@ export def "secrets ListAccountSecret" [
 #
 # POST /v1/Secrets
 # operationId: CreateAccountSecret
-export def "secrets CreateAccountSecret" [
+export def "secrets create-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,14 +689,14 @@ export def "secrets CreateAccountSecret" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Key: string # The secret key; up to 100 characters.
-  Value: string # The secret value; up to 4096 characters.
+  key: string # The secret key; up to 100 characters.
+  value: string # The secret value; up to 4096 characters.
 ]: any -> record<date_rotated: string, key: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
   let full_url = (build-url $base "/v1/Secrets")
-  let body = {Key: $Key, Value: $Value} | compact
+  let body = {"Key": $key, "Value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -707,8 +707,8 @@ export def "secrets CreateAccountSecret" [
 #
 # DELETE /v1/Secrets/{Key}
 # operationId: DeleteAccountSecret
-export def "secrets DeleteAccountSecret" [
-  Key: string
+export def "secrets delete-account" [
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -720,7 +720,7 @@ export def "secrets DeleteAccountSecret" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Secrets/($Key)")
+  let full_url = (build-url $base ({key: $key} | format pattern "/v1/Secrets/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -730,8 +730,8 @@ export def "secrets DeleteAccountSecret" [
 #
 # GET /v1/Secrets/{Key}
 # operationId: FetchAccountSecret
-export def "secrets FetchAccountSecret" [
-  Key: string
+export def "secrets get-account" [
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -743,7 +743,7 @@ export def "secrets FetchAccountSecret" [
 ]: nothing -> record<date_rotated: string, key: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Secrets/($Key)")
+  let full_url = (build-url $base ({key: $key} | format pattern "/v1/Secrets/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -753,8 +753,8 @@ export def "secrets FetchAccountSecret" [
 #
 # POST /v1/Secrets/{Key}
 # operationId: UpdateAccountSecret
-export def "secrets UpdateAccountSecret" [
-  Key: string
+export def "secrets update-account" [
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -763,13 +763,13 @@ export def "secrets UpdateAccountSecret" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Value: string # The secret value; up to 4096 characters.
+  value: string # The secret value; up to 4096 characters.
 ]: any -> record<date_rotated: string, key: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://microvisor.twilio.com")
-  let full_url = (build-url $base $"/v1/Secrets/($Key)")
-  let body = {Value: $Value} | compact
+  let full_url = (build-url $base ({key: $key} | format pattern "/v1/Secrets/{key}"))
+  let body = {"Value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

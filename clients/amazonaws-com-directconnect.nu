@@ -66,74 +66,74 @@ def base-url-completer [] { ["http://directconnect.us-east-1.amazonaws.com" "htt
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["OvertureService.AcceptDirectConnectGatewayAssociationProposal"] }
-def X-Amz-Target-completer-1 [] { ["OvertureService.AllocateConnectionOnInterconnect"] }
-def X-Amz-Target-completer-2 [] { ["OvertureService.AllocateHostedConnection"] }
-def X-Amz-Target-completer-3 [] { ["OvertureService.AllocatePrivateVirtualInterface"] }
-def X-Amz-Target-completer-4 [] { ["OvertureService.AllocatePublicVirtualInterface"] }
-def X-Amz-Target-completer-5 [] { ["OvertureService.AllocateTransitVirtualInterface"] }
-def X-Amz-Target-completer-6 [] { ["OvertureService.AssociateConnectionWithLag"] }
-def X-Amz-Target-completer-7 [] { ["OvertureService.AssociateHostedConnection"] }
-def X-Amz-Target-completer-8 [] { ["OvertureService.AssociateMacSecKey"] }
-def X-Amz-Target-completer-9 [] { ["OvertureService.AssociateVirtualInterface"] }
-def X-Amz-Target-completer-10 [] { ["OvertureService.ConfirmConnection"] }
-def X-Amz-Target-completer-11 [] { ["OvertureService.ConfirmCustomerAgreement"] }
-def X-Amz-Target-completer-12 [] { ["OvertureService.ConfirmPrivateVirtualInterface"] }
-def X-Amz-Target-completer-13 [] { ["OvertureService.ConfirmPublicVirtualInterface"] }
-def X-Amz-Target-completer-14 [] { ["OvertureService.ConfirmTransitVirtualInterface"] }
-def X-Amz-Target-completer-15 [] { ["OvertureService.CreateBGPPeer"] }
-def X-Amz-Target-completer-16 [] { ["OvertureService.CreateConnection"] }
-def X-Amz-Target-completer-17 [] { ["OvertureService.CreateDirectConnectGateway"] }
-def X-Amz-Target-completer-18 [] { ["OvertureService.CreateDirectConnectGatewayAssociation"] }
-def X-Amz-Target-completer-19 [] { ["OvertureService.CreateDirectConnectGatewayAssociationProposal"] }
-def X-Amz-Target-completer-20 [] { ["OvertureService.CreateInterconnect"] }
-def X-Amz-Target-completer-21 [] { ["OvertureService.CreateLag"] }
-def X-Amz-Target-completer-22 [] { ["OvertureService.CreatePrivateVirtualInterface"] }
-def X-Amz-Target-completer-23 [] { ["OvertureService.CreatePublicVirtualInterface"] }
-def X-Amz-Target-completer-24 [] { ["OvertureService.CreateTransitVirtualInterface"] }
-def X-Amz-Target-completer-25 [] { ["OvertureService.DeleteBGPPeer"] }
-def X-Amz-Target-completer-26 [] { ["OvertureService.DeleteConnection"] }
-def X-Amz-Target-completer-27 [] { ["OvertureService.DeleteDirectConnectGateway"] }
-def X-Amz-Target-completer-28 [] { ["OvertureService.DeleteDirectConnectGatewayAssociation"] }
-def X-Amz-Target-completer-29 [] { ["OvertureService.DeleteDirectConnectGatewayAssociationProposal"] }
-def X-Amz-Target-completer-30 [] { ["OvertureService.DeleteInterconnect"] }
-def X-Amz-Target-completer-31 [] { ["OvertureService.DeleteLag"] }
-def X-Amz-Target-completer-32 [] { ["OvertureService.DeleteVirtualInterface"] }
-def X-Amz-Target-completer-33 [] { ["OvertureService.DescribeConnectionLoa"] }
-def X-Amz-Target-completer-34 [] { ["OvertureService.DescribeConnections"] }
-def X-Amz-Target-completer-35 [] { ["OvertureService.DescribeConnectionsOnInterconnect"] }
-def X-Amz-Target-completer-36 [] { ["OvertureService.DescribeCustomerMetadata"] }
-def X-Amz-Target-completer-37 [] { ["OvertureService.DescribeDirectConnectGatewayAssociationProposals"] }
-def X-Amz-Target-completer-38 [] { ["OvertureService.DescribeDirectConnectGatewayAssociations"] }
-def X-Amz-Target-completer-39 [] { ["OvertureService.DescribeDirectConnectGatewayAttachments"] }
-def X-Amz-Target-completer-40 [] { ["OvertureService.DescribeDirectConnectGateways"] }
-def X-Amz-Target-completer-41 [] { ["OvertureService.DescribeHostedConnections"] }
-def X-Amz-Target-completer-42 [] { ["OvertureService.DescribeInterconnectLoa"] }
-def X-Amz-Target-completer-43 [] { ["OvertureService.DescribeInterconnects"] }
-def X-Amz-Target-completer-44 [] { ["OvertureService.DescribeLags"] }
-def X-Amz-Target-completer-45 [] { ["OvertureService.DescribeLoa"] }
-def X-Amz-Target-completer-46 [] { ["OvertureService.DescribeLocations"] }
-def X-Amz-Target-completer-47 [] { ["OvertureService.DescribeRouterConfiguration"] }
-def X-Amz-Target-completer-48 [] { ["OvertureService.DescribeTags"] }
-def X-Amz-Target-completer-49 [] { ["OvertureService.DescribeVirtualGateways"] }
-def X-Amz-Target-completer-50 [] { ["OvertureService.DescribeVirtualInterfaces"] }
-def X-Amz-Target-completer-51 [] { ["OvertureService.DisassociateConnectionFromLag"] }
-def X-Amz-Target-completer-52 [] { ["OvertureService.DisassociateMacSecKey"] }
-def X-Amz-Target-completer-53 [] { ["OvertureService.ListVirtualInterfaceTestHistory"] }
-def X-Amz-Target-completer-54 [] { ["OvertureService.StartBgpFailoverTest"] }
-def X-Amz-Target-completer-55 [] { ["OvertureService.StopBgpFailoverTest"] }
-def X-Amz-Target-completer-56 [] { ["OvertureService.TagResource"] }
-def X-Amz-Target-completer-57 [] { ["OvertureService.UntagResource"] }
-def X-Amz-Target-completer-58 [] { ["OvertureService.UpdateConnection"] }
-def X-Amz-Target-completer-59 [] { ["OvertureService.UpdateDirectConnectGateway"] }
-def X-Amz-Target-completer-60 [] { ["OvertureService.UpdateDirectConnectGatewayAssociation"] }
-def X-Amz-Target-completer-61 [] { ["OvertureService.UpdateLag"] }
-def X-Amz-Target-completer-62 [] { ["OvertureService.UpdateVirtualInterfaceAttributes"] }
+def x-amz-target-completer [] { ["OvertureService.AcceptDirectConnectGatewayAssociationProposal"] }
+def x-amz-target-completer-1 [] { ["OvertureService.AllocateConnectionOnInterconnect"] }
+def x-amz-target-completer-2 [] { ["OvertureService.AllocateHostedConnection"] }
+def x-amz-target-completer-3 [] { ["OvertureService.AllocatePrivateVirtualInterface"] }
+def x-amz-target-completer-4 [] { ["OvertureService.AllocatePublicVirtualInterface"] }
+def x-amz-target-completer-5 [] { ["OvertureService.AllocateTransitVirtualInterface"] }
+def x-amz-target-completer-6 [] { ["OvertureService.AssociateConnectionWithLag"] }
+def x-amz-target-completer-7 [] { ["OvertureService.AssociateHostedConnection"] }
+def x-amz-target-completer-8 [] { ["OvertureService.AssociateMacSecKey"] }
+def x-amz-target-completer-9 [] { ["OvertureService.AssociateVirtualInterface"] }
+def x-amz-target-completer-10 [] { ["OvertureService.ConfirmConnection"] }
+def x-amz-target-completer-11 [] { ["OvertureService.ConfirmCustomerAgreement"] }
+def x-amz-target-completer-12 [] { ["OvertureService.ConfirmPrivateVirtualInterface"] }
+def x-amz-target-completer-13 [] { ["OvertureService.ConfirmPublicVirtualInterface"] }
+def x-amz-target-completer-14 [] { ["OvertureService.ConfirmTransitVirtualInterface"] }
+def x-amz-target-completer-15 [] { ["OvertureService.CreateBGPPeer"] }
+def x-amz-target-completer-16 [] { ["OvertureService.CreateConnection"] }
+def x-amz-target-completer-17 [] { ["OvertureService.CreateDirectConnectGateway"] }
+def x-amz-target-completer-18 [] { ["OvertureService.CreateDirectConnectGatewayAssociation"] }
+def x-amz-target-completer-19 [] { ["OvertureService.CreateDirectConnectGatewayAssociationProposal"] }
+def x-amz-target-completer-20 [] { ["OvertureService.CreateInterconnect"] }
+def x-amz-target-completer-21 [] { ["OvertureService.CreateLag"] }
+def x-amz-target-completer-22 [] { ["OvertureService.CreatePrivateVirtualInterface"] }
+def x-amz-target-completer-23 [] { ["OvertureService.CreatePublicVirtualInterface"] }
+def x-amz-target-completer-24 [] { ["OvertureService.CreateTransitVirtualInterface"] }
+def x-amz-target-completer-25 [] { ["OvertureService.DeleteBGPPeer"] }
+def x-amz-target-completer-26 [] { ["OvertureService.DeleteConnection"] }
+def x-amz-target-completer-27 [] { ["OvertureService.DeleteDirectConnectGateway"] }
+def x-amz-target-completer-28 [] { ["OvertureService.DeleteDirectConnectGatewayAssociation"] }
+def x-amz-target-completer-29 [] { ["OvertureService.DeleteDirectConnectGatewayAssociationProposal"] }
+def x-amz-target-completer-30 [] { ["OvertureService.DeleteInterconnect"] }
+def x-amz-target-completer-31 [] { ["OvertureService.DeleteLag"] }
+def x-amz-target-completer-32 [] { ["OvertureService.DeleteVirtualInterface"] }
+def x-amz-target-completer-33 [] { ["OvertureService.DescribeConnectionLoa"] }
+def x-amz-target-completer-34 [] { ["OvertureService.DescribeConnections"] }
+def x-amz-target-completer-35 [] { ["OvertureService.DescribeConnectionsOnInterconnect"] }
+def x-amz-target-completer-36 [] { ["OvertureService.DescribeCustomerMetadata"] }
+def x-amz-target-completer-37 [] { ["OvertureService.DescribeDirectConnectGatewayAssociationProposals"] }
+def x-amz-target-completer-38 [] { ["OvertureService.DescribeDirectConnectGatewayAssociations"] }
+def x-amz-target-completer-39 [] { ["OvertureService.DescribeDirectConnectGatewayAttachments"] }
+def x-amz-target-completer-40 [] { ["OvertureService.DescribeDirectConnectGateways"] }
+def x-amz-target-completer-41 [] { ["OvertureService.DescribeHostedConnections"] }
+def x-amz-target-completer-42 [] { ["OvertureService.DescribeInterconnectLoa"] }
+def x-amz-target-completer-43 [] { ["OvertureService.DescribeInterconnects"] }
+def x-amz-target-completer-44 [] { ["OvertureService.DescribeLags"] }
+def x-amz-target-completer-45 [] { ["OvertureService.DescribeLoa"] }
+def x-amz-target-completer-46 [] { ["OvertureService.DescribeLocations"] }
+def x-amz-target-completer-47 [] { ["OvertureService.DescribeRouterConfiguration"] }
+def x-amz-target-completer-48 [] { ["OvertureService.DescribeTags"] }
+def x-amz-target-completer-49 [] { ["OvertureService.DescribeVirtualGateways"] }
+def x-amz-target-completer-50 [] { ["OvertureService.DescribeVirtualInterfaces"] }
+def x-amz-target-completer-51 [] { ["OvertureService.DisassociateConnectionFromLag"] }
+def x-amz-target-completer-52 [] { ["OvertureService.DisassociateMacSecKey"] }
+def x-amz-target-completer-53 [] { ["OvertureService.ListVirtualInterfaceTestHistory"] }
+def x-amz-target-completer-54 [] { ["OvertureService.StartBgpFailoverTest"] }
+def x-amz-target-completer-55 [] { ["OvertureService.StopBgpFailoverTest"] }
+def x-amz-target-completer-56 [] { ["OvertureService.TagResource"] }
+def x-amz-target-completer-57 [] { ["OvertureService.UntagResource"] }
+def x-amz-target-completer-58 [] { ["OvertureService.UpdateConnection"] }
+def x-amz-target-completer-59 [] { ["OvertureService.UpdateDirectConnectGateway"] }
+def x-amz-target-completer-60 [] { ["OvertureService.UpdateDirectConnectGatewayAssociation"] }
+def x-amz-target-completer-61 [] { ["OvertureService.UpdateLag"] }
+def x-amz-target-completer-62 [] { ["OvertureService.UpdateVirtualInterfaceAttributes"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-overture-service-accept-direct-connect-gateway-association-proposal AcceptDirectConnectGatewayAssociationProposal" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-overture-service-accept-direct-connect-gateway-association-proposal post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=OvertureService.AcceptDirectConnectGatewayAssociationProposal
 # operationId: AcceptDirectConnectGatewayAssociationProposal
-export def "x-amz-target-overture-service-accept-direct-connect-gateway-association-proposal AcceptDirectConnectGatewayAssociationProposal" [
+export def "x-amz-target-overture-service-accept-direct-connect-gateway-association-proposal post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,26 +166,26 @@ export def "x-amz-target-overture-service-accept-direct-connect-gateway-associat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  directConnectGatewayId: any
-  proposalId: any
-  associatedGatewayOwnerAccount: any
-  --overrideAllowedPrefixesToDirectConnectGateway: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  direct_connect_gateway_id: any
+  proposal_id: any
+  associated_gateway_owner_account: any
+  --override-allowed-prefixes-to-direct-connect-gateway: any
 ]: any -> record<directConnectGatewayAssociation: record<directConnectGatewayId: record, directConnectGatewayOwnerAccount: record, associationState: record, stateChangeError: record, associatedGateway: record<id: record, type: record, ownerAccount: record, region: record>, associationId: record, allowedPrefixesToDirectConnectGateway: record, virtualGatewayId: record, virtualGatewayRegion: record, virtualGatewayOwnerAccount: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.AcceptDirectConnectGatewayAssociationProposal")
-  let body = {directConnectGatewayId: $directConnectGatewayId, proposalId: $proposalId, associatedGatewayOwnerAccount: $associatedGatewayOwnerAccount, overrideAllowedPrefixesToDirectConnectGateway: $overrideAllowedPrefixesToDirectConnectGateway} | compact
+  let body = {"directConnectGatewayId": $direct_connect_gateway_id, "proposalId": $proposal_id, "associatedGatewayOwnerAccount": $associated_gateway_owner_account, "overrideAllowedPrefixesToDirectConnectGateway": $override_allowed_prefixes_to_direct_connect_gateway} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -198,7 +198,7 @@ export def "x-amz-target-overture-service-accept-direct-connect-gateway-associat
 # DEPRECATED
 # operationId: AllocateConnectionOnInterconnect
 @deprecated
-export def "x-amz-target-overture-service-allocate-connection-on-interconnect AllocateConnectionOnInterconnect" [
+export def "x-amz-target-overture-service-allocate-connection-on-interconnect post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,27 +207,27 @@ export def "x-amz-target-overture-service-allocate-connection-on-interconnect Al
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
   bandwidth: any
-  connectionName: any
-  ownerAccount: any
-  interconnectId: any
+  connection_name: any
+  owner_account: any
+  interconnect_id: any
   vlan: any
 ]: any -> record<ownerAccount: record, connectionId: record, connectionName: record, connectionState: record, region: record, location: record, bandwidth: record, vlan: record, partnerName: record, loaIssueTime: record, lagId: record, awsDevice: record, jumboFrameCapable: record, awsDeviceV2: record, awsLogicalDeviceId: record, hasLogicalRedundancy: record, tags: record, providerName: record, macSecCapable: record, portEncryptionStatus: record, encryptionMode: record, macSecKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.AllocateConnectionOnInterconnect")
-  let body = {bandwidth: $bandwidth, connectionName: $connectionName, ownerAccount: $ownerAccount, interconnectId: $interconnectId, vlan: $vlan} | compact
+  let body = {"bandwidth": $bandwidth, "connectionName": $connection_name, "ownerAccount": $owner_account, "interconnectId": $interconnect_id, "vlan": $vlan} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -238,7 +238,7 @@ export def "x-amz-target-overture-service-allocate-connection-on-interconnect Al
 #
 # POST /#X-Amz-Target=OvertureService.AllocateHostedConnection
 # operationId: AllocateHostedConnection
-export def "x-amz-target-overture-service-allocate-hosted-connection AllocateHostedConnection" [
+export def "x-amz-target-overture-service-allocate-hosted-connection post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,18 +247,18 @@ export def "x-amz-target-overture-service-allocate-hosted-connection AllocateHos
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  connectionId: any
-  ownerAccount: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  connection_id: any
+  owner_account: any
   bandwidth: any
-  connectionName: any
+  connection_name: any
   vlan: any
   --tags: any
 ]: any -> record<ownerAccount: record, connectionId: record, connectionName: record, connectionState: record, region: record, location: record, bandwidth: record, vlan: record, partnerName: record, loaIssueTime: record, lagId: record, awsDevice: record, jumboFrameCapable: record, awsDeviceV2: record, awsLogicalDeviceId: record, hasLogicalRedundancy: record, tags: record, providerName: record, macSecCapable: record, portEncryptionStatus: record, encryptionMode: record, macSecKeys: record> {
@@ -266,9 +266,9 @@ export def "x-amz-target-overture-service-allocate-hosted-connection AllocateHos
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.AllocateHostedConnection")
-  let body = {connectionId: $connectionId, ownerAccount: $ownerAccount, bandwidth: $bandwidth, connectionName: $connectionName, vlan: $vlan, tags: $tags} | compact
+  let body = {"connectionId": $connection_id, "ownerAccount": $owner_account, "bandwidth": $bandwidth, "connectionName": $connection_name, "vlan": $vlan, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -279,7 +279,7 @@ export def "x-amz-target-overture-service-allocate-hosted-connection AllocateHos
 #
 # POST /#X-Amz-Target=OvertureService.AllocatePrivateVirtualInterface
 # operationId: AllocatePrivateVirtualInterface
-export def "x-amz-target-overture-service-allocate-private-virtual-interface AllocatePrivateVirtualInterface" [
+export def "x-amz-target-overture-service-allocate-private-virtual-interface post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,25 +288,25 @@ export def "x-amz-target-overture-service-allocate-private-virtual-interface All
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  connectionId: any
-  ownerAccount: any
-  newPrivateVirtualInterfaceAllocation: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  connection_id: any
+  owner_account: any
+  new_private_virtual_interface_allocation: any
 ]: any -> record<ownerAccount: record, virtualInterfaceId: record, location: record, connectionId: record, virtualInterfaceType: record, virtualInterfaceName: record, vlan: record, asn: record, amazonSideAsn: record, authKey: record, amazonAddress: record, customerAddress: record, addressFamily: record, virtualInterfaceState: record, customerRouterConfig: record, mtu: record, jumboFrameCapable: record, virtualGatewayId: record, directConnectGatewayId: record, routeFilterPrefixes: record, bgpPeers: record, region: record, awsDeviceV2: record, awsLogicalDeviceId: record, tags: record, siteLinkEnabled: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.AllocatePrivateVirtualInterface")
-  let body = {connectionId: $connectionId, ownerAccount: $ownerAccount, newPrivateVirtualInterfaceAllocation: $newPrivateVirtualInterfaceAllocation} | compact
+  let body = {"connectionId": $connection_id, "ownerAccount": $owner_account, "newPrivateVirtualInterfaceAllocation": $new_private_virtual_interface_allocation} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -317,7 +317,7 @@ export def "x-amz-target-overture-service-allocate-private-virtual-interface All
 #
 # POST /#X-Amz-Target=OvertureService.AllocatePublicVirtualInterface
 # operationId: AllocatePublicVirtualInterface
-export def "x-amz-target-overture-service-allocate-public-virtual-interface AllocatePublicVirtualInterface" [
+export def "x-amz-target-overture-service-allocate-public-virtual-interface post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,25 +326,25 @@ export def "x-amz-target-overture-service-allocate-public-virtual-interface Allo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  connectionId: any
-  ownerAccount: any
-  newPublicVirtualInterfaceAllocation: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  connection_id: any
+  owner_account: any
+  new_public_virtual_interface_allocation: any
 ]: any -> record<ownerAccount: record, virtualInterfaceId: record, location: record, connectionId: record, virtualInterfaceType: record, virtualInterfaceName: record, vlan: record, asn: record, amazonSideAsn: record, authKey: record, amazonAddress: record, customerAddress: record, addressFamily: record, virtualInterfaceState: record, customerRouterConfig: record, mtu: record, jumboFrameCapable: record, virtualGatewayId: record, directConnectGatewayId: record, routeFilterPrefixes: record, bgpPeers: record, region: record, awsDeviceV2: record, awsLogicalDeviceId: record, tags: record, siteLinkEnabled: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.AllocatePublicVirtualInterface")
-  let body = {connectionId: $connectionId, ownerAccount: $ownerAccount, newPublicVirtualInterfaceAllocation: $newPublicVirtualInterfaceAllocation} | compact
+  let body = {"connectionId": $connection_id, "ownerAccount": $owner_account, "newPublicVirtualInterfaceAllocation": $new_public_virtual_interface_allocation} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -355,7 +355,7 @@ export def "x-amz-target-overture-service-allocate-public-virtual-interface Allo
 #
 # POST /#X-Amz-Target=OvertureService.AllocateTransitVirtualInterface
 # operationId: AllocateTransitVirtualInterface
-export def "x-amz-target-overture-service-allocate-transit-virtual-interface AllocateTransitVirtualInterface" [
+export def "x-amz-target-overture-service-allocate-transit-virtual-interface post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,25 +364,25 @@ export def "x-amz-target-overture-service-allocate-transit-virtual-interface All
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  connectionId: any
-  ownerAccount: any
-  newTransitVirtualInterfaceAllocation: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  connection_id: any
+  owner_account: any
+  new_transit_virtual_interface_allocation: any
 ]: any -> record<virtualInterface: record<ownerAccount: record, virtualInterfaceId: record, location: record, connectionId: record, virtualInterfaceType: record, virtualInterfaceName: record, vlan: record, asn: record, amazonSideAsn: record, authKey: record, amazonAddress: record, customerAddress: record, addressFamily: record, virtualInterfaceState: record, customerRouterConfig: record, mtu: record, jumboFrameCapable: record, virtualGatewayId: record, directConnectGatewayId: record, routeFilterPrefixes: record, bgpPeers: record, region: record, awsDeviceV2: record, awsLogicalDeviceId: record, tags: record, siteLinkEnabled: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.AllocateTransitVirtualInterface")
-  let body = {connectionId: $connectionId, ownerAccount: $ownerAccount, newTransitVirtualInterfaceAllocation: $newTransitVirtualInterfaceAllocation} | compact
+  let body = {"connectionId": $connection_id, "ownerAccount": $owner_account, "newTransitVirtualInterfaceAllocation": $new_transit_virtual_interface_allocation} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -393,7 +393,7 @@ export def "x-amz-target-overture-service-allocate-transit-virtual-interface All
 #
 # POST /#X-Amz-Target=OvertureService.AssociateConnectionWithLag
 # operationId: AssociateConnectionWithLag
-export def "x-amz-target-overture-service-associate-connection-with-lag AssociateConnectionWithLag" [
+export def "x-amz-target-overture-service-associate-connection-with-lag post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,24 +402,24 @@ export def "x-amz-target-overture-service-associate-connection-with-lag Associat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  connectionId: any
-  lagId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  connection_id: any
+  lag_id: any
 ]: any -> record<ownerAccount: record, connectionId: record, connectionName: record, connectionState: record, region: record, location: record, bandwidth: record, vlan: record, partnerName: record, loaIssueTime: record, lagId: record, awsDevice: record, jumboFrameCapable: record, awsDeviceV2: record, awsLogicalDeviceId: record, hasLogicalRedundancy: record, tags: record, providerName: record, macSecCapable: record, portEncryptionStatus: record, encryptionMode: record, macSecKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.AssociateConnectionWithLag")
-  let body = {connectionId: $connectionId, lagId: $lagId} | compact
+  let body = {"connectionId": $connection_id, "lagId": $lag_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -430,7 +430,7 @@ export def "x-amz-target-overture-service-associate-connection-with-lag Associat
 #
 # POST /#X-Amz-Target=OvertureService.AssociateHostedConnection
 # operationId: AssociateHostedConnection
-export def "x-amz-target-overture-service-associate-hosted-connection AssociateHostedConnection" [
+export def "x-amz-target-overture-service-associate-hosted-connection post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,24 +439,24 @@ export def "x-amz-target-overture-service-associate-hosted-connection AssociateH
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  connectionId: any
-  parentConnectionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  connection_id: any
+  parent_connection_id: any
 ]: any -> record<ownerAccount: record, connectionId: record, connectionName: record, connectionState: record, region: record, location: record, bandwidth: record, vlan: record, partnerName: record, loaIssueTime: record, lagId: record, awsDevice: record, jumboFrameCapable: record, awsDeviceV2: record, awsLogicalDeviceId: record, hasLogicalRedundancy: record, tags: record, providerName: record, macSecCapable: record, portEncryptionStatus: record, encryptionMode: record, macSecKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.AssociateHostedConnection")
-  let body = {connectionId: $connectionId, parentConnectionId: $parentConnectionId} | compact
+  let body = {"connectionId": $connection_id, "parentConnectionId": $parent_connection_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -467,7 +467,7 @@ export def "x-amz-target-overture-service-associate-hosted-connection AssociateH
 #
 # POST /#X-Amz-Target=OvertureService.AssociateMacSecKey
 # operationId: AssociateMacSecKey
-export def "x-amz-target-overture-service-associate-mac-sec-key AssociateMacSecKey" [
+export def "x-amz-target-overture-service-associate-mac-sec-key post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,16 +476,16 @@ export def "x-amz-target-overture-service-associate-mac-sec-key AssociateMacSecK
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  connectionId: any
-  --secretARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  connection_id: any
+  --secret-arn: any
   --ckn: any
   --cak: any
 ]: any -> record<connectionId: record, macSecKeys: record> {
@@ -493,9 +493,9 @@ export def "x-amz-target-overture-service-associate-mac-sec-key AssociateMacSecK
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.AssociateMacSecKey")
-  let body = {connectionId: $connectionId, secretARN: $secretARN, ckn: $ckn, cak: $cak} | compact
+  let body = {"connectionId": $connection_id, "secretARN": $secret_arn, "ckn": $ckn, "cak": $cak} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -506,7 +506,7 @@ export def "x-amz-target-overture-service-associate-mac-sec-key AssociateMacSecK
 #
 # POST /#X-Amz-Target=OvertureService.AssociateVirtualInterface
 # operationId: AssociateVirtualInterface
-export def "x-amz-target-overture-service-associate-virtual-interface AssociateVirtualInterface" [
+export def "x-amz-target-overture-service-associate-virtual-interface post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -515,24 +515,24 @@ export def "x-amz-target-overture-service-associate-virtual-interface AssociateV
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  virtualInterfaceId: any
-  connectionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  virtual_interface_id: any
+  connection_id: any
 ]: any -> record<ownerAccount: record, virtualInterfaceId: record, location: record, connectionId: record, virtualInterfaceType: record, virtualInterfaceName: record, vlan: record, asn: record, amazonSideAsn: record, authKey: record, amazonAddress: record, customerAddress: record, addressFamily: record, virtualInterfaceState: record, customerRouterConfig: record, mtu: record, jumboFrameCapable: record, virtualGatewayId: record, directConnectGatewayId: record, routeFilterPrefixes: record, bgpPeers: record, region: record, awsDeviceV2: record, awsLogicalDeviceId: record, tags: record, siteLinkEnabled: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.AssociateVirtualInterface")
-  let body = {virtualInterfaceId: $virtualInterfaceId, connectionId: $connectionId} | compact
+  let body = {"virtualInterfaceId": $virtual_interface_id, "connectionId": $connection_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -543,7 +543,7 @@ export def "x-amz-target-overture-service-associate-virtual-interface AssociateV
 #
 # POST /#X-Amz-Target=OvertureService.ConfirmConnection
 # operationId: ConfirmConnection
-export def "x-amz-target-overture-service-confirm-connection ConfirmConnection" [
+export def "x-amz-target-overture-service-confirm-connection post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,23 +552,23 @@ export def "x-amz-target-overture-service-confirm-connection ConfirmConnection" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  connectionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  connection_id: any
 ]: any -> record<connectionState: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.ConfirmConnection")
-  let body = {connectionId: $connectionId} | compact
+  let body = {"connectionId": $connection_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -579,7 +579,7 @@ export def "x-amz-target-overture-service-confirm-connection ConfirmConnection" 
 #
 # POST /#X-Amz-Target=OvertureService.ConfirmCustomerAgreement
 # operationId: ConfirmCustomerAgreement
-export def "x-amz-target-overture-service-confirm-customer-agreement ConfirmCustomerAgreement" [
+export def "x-amz-target-overture-service-confirm-customer-agreement post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,23 +588,23 @@ export def "x-amz-target-overture-service-confirm-customer-agreement ConfirmCust
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  --agreementName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  --agreement-name: any
 ]: any -> record<status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.ConfirmCustomerAgreement")
-  let body = {agreementName: $agreementName} | compact
+  let body = {"agreementName": $agreement_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -615,7 +615,7 @@ export def "x-amz-target-overture-service-confirm-customer-agreement ConfirmCust
 #
 # POST /#X-Amz-Target=OvertureService.ConfirmPrivateVirtualInterface
 # operationId: ConfirmPrivateVirtualInterface
-export def "x-amz-target-overture-service-confirm-private-virtual-interface ConfirmPrivateVirtualInterface" [
+export def "x-amz-target-overture-service-confirm-private-virtual-interface post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -624,25 +624,25 @@ export def "x-amz-target-overture-service-confirm-private-virtual-interface Conf
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  virtualInterfaceId: any
-  --virtualGatewayId: any
-  --directConnectGatewayId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  virtual_interface_id: any
+  --virtual-gateway-id: any
+  --direct-connect-gateway-id: any
 ]: any -> record<virtualInterfaceState: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.ConfirmPrivateVirtualInterface")
-  let body = {virtualInterfaceId: $virtualInterfaceId, virtualGatewayId: $virtualGatewayId, directConnectGatewayId: $directConnectGatewayId} | compact
+  let body = {"virtualInterfaceId": $virtual_interface_id, "virtualGatewayId": $virtual_gateway_id, "directConnectGatewayId": $direct_connect_gateway_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -653,7 +653,7 @@ export def "x-amz-target-overture-service-confirm-private-virtual-interface Conf
 #
 # POST /#X-Amz-Target=OvertureService.ConfirmPublicVirtualInterface
 # operationId: ConfirmPublicVirtualInterface
-export def "x-amz-target-overture-service-confirm-public-virtual-interface ConfirmPublicVirtualInterface" [
+export def "x-amz-target-overture-service-confirm-public-virtual-interface post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -662,23 +662,23 @@ export def "x-amz-target-overture-service-confirm-public-virtual-interface Confi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  virtualInterfaceId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  virtual_interface_id: any
 ]: any -> record<virtualInterfaceState: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.ConfirmPublicVirtualInterface")
-  let body = {virtualInterfaceId: $virtualInterfaceId} | compact
+  let body = {"virtualInterfaceId": $virtual_interface_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -689,7 +689,7 @@ export def "x-amz-target-overture-service-confirm-public-virtual-interface Confi
 #
 # POST /#X-Amz-Target=OvertureService.ConfirmTransitVirtualInterface
 # operationId: ConfirmTransitVirtualInterface
-export def "x-amz-target-overture-service-confirm-transit-virtual-interface ConfirmTransitVirtualInterface" [
+export def "x-amz-target-overture-service-confirm-transit-virtual-interface post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -698,24 +698,24 @@ export def "x-amz-target-overture-service-confirm-transit-virtual-interface Conf
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  virtualInterfaceId: any
-  directConnectGatewayId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  virtual_interface_id: any
+  direct_connect_gateway_id: any
 ]: any -> record<virtualInterfaceState: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.ConfirmTransitVirtualInterface")
-  let body = {virtualInterfaceId: $virtualInterfaceId, directConnectGatewayId: $directConnectGatewayId} | compact
+  let body = {"virtualInterfaceId": $virtual_interface_id, "directConnectGatewayId": $direct_connect_gateway_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -726,7 +726,7 @@ export def "x-amz-target-overture-service-confirm-transit-virtual-interface Conf
 #
 # POST /#X-Amz-Target=OvertureService.CreateBGPPeer
 # operationId: CreateBGPPeer
-export def "x-amz-target-overture-service-create-bgp-peer CreateBGPPeer" [
+export def "x-amz-target-overture-service-create-bgp-peer create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -735,24 +735,24 @@ export def "x-amz-target-overture-service-create-bgp-peer CreateBGPPeer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  --virtualInterfaceId: any
-  --newBGPPeer: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  --virtual-interface-id: any
+  --new-bgp-peer: any
 ]: any -> record<virtualInterface: record<ownerAccount: record, virtualInterfaceId: record, location: record, connectionId: record, virtualInterfaceType: record, virtualInterfaceName: record, vlan: record, asn: record, amazonSideAsn: record, authKey: record, amazonAddress: record, customerAddress: record, addressFamily: record, virtualInterfaceState: record, customerRouterConfig: record, mtu: record, jumboFrameCapable: record, virtualGatewayId: record, directConnectGatewayId: record, routeFilterPrefixes: record, bgpPeers: record, region: record, awsDeviceV2: record, awsLogicalDeviceId: record, tags: record, siteLinkEnabled: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.CreateBGPPeer")
-  let body = {virtualInterfaceId: $virtualInterfaceId, newBGPPeer: $newBGPPeer} | compact
+  let body = {"virtualInterfaceId": $virtual_interface_id, "newBGPPeer": $new_bgp_peer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -763,7 +763,7 @@ export def "x-amz-target-overture-service-create-bgp-peer CreateBGPPeer" [
 #
 # POST /#X-Amz-Target=OvertureService.CreateConnection
 # operationId: CreateConnection
-export def "x-amz-target-overture-service-create-connection CreateConnection" [
+export def "x-amz-target-overture-service-create-connection create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,29 +772,29 @@ export def "x-amz-target-overture-service-create-connection CreateConnection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
   location: any
   bandwidth: any
-  connectionName: any
-  --lagId: any
+  connection_name: any
+  --lag-id: any
   --tags: any
-  --providerName: any
-  --requestMACSec: any
+  --provider-name: any
+  --request-mac-sec: any
 ]: any -> record<ownerAccount: record, connectionId: record, connectionName: record, connectionState: record, region: record, location: record, bandwidth: record, vlan: record, partnerName: record, loaIssueTime: record, lagId: record, awsDevice: record, jumboFrameCapable: record, awsDeviceV2: record, awsLogicalDeviceId: record, hasLogicalRedundancy: record, tags: record, providerName: record, macSecCapable: record, portEncryptionStatus: record, encryptionMode: record, macSecKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.CreateConnection")
-  let body = {location: $location, bandwidth: $bandwidth, connectionName: $connectionName, lagId: $lagId, tags: $tags, providerName: $providerName, requestMACSec: $requestMACSec} | compact
+  let body = {"location": $location, "bandwidth": $bandwidth, "connectionName": $connection_name, "lagId": $lag_id, "tags": $tags, "providerName": $provider_name, "requestMACSec": $request_mac_sec} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -805,7 +805,7 @@ export def "x-amz-target-overture-service-create-connection CreateConnection" [
 #
 # POST /#X-Amz-Target=OvertureService.CreateDirectConnectGateway
 # operationId: CreateDirectConnectGateway
-export def "x-amz-target-overture-service-create-direct-connect-gateway CreateDirectConnectGateway" [
+export def "x-amz-target-overture-service-create-direct-connect-gateway create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -814,24 +814,24 @@ export def "x-amz-target-overture-service-create-direct-connect-gateway CreateDi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  directConnectGatewayName: any
-  --amazonSideAsn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  direct_connect_gateway_name: any
+  --amazon-side-asn: any
 ]: any -> record<directConnectGateway: record<directConnectGatewayId: record, directConnectGatewayName: record, amazonSideAsn: record, ownerAccount: record, directConnectGatewayState: record, stateChangeError: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.CreateDirectConnectGateway")
-  let body = {directConnectGatewayName: $directConnectGatewayName, amazonSideAsn: $amazonSideAsn} | compact
+  let body = {"directConnectGatewayName": $direct_connect_gateway_name, "amazonSideAsn": $amazon_side_asn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -842,7 +842,7 @@ export def "x-amz-target-overture-service-create-direct-connect-gateway CreateDi
 #
 # POST /#X-Amz-Target=OvertureService.CreateDirectConnectGatewayAssociation
 # operationId: CreateDirectConnectGatewayAssociation
-export def "x-amz-target-overture-service-create-direct-connect-gateway-association CreateDirectConnectGatewayAssociation" [
+export def "x-amz-target-overture-service-create-direct-connect-gateway-association create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -851,26 +851,26 @@ export def "x-amz-target-overture-service-create-direct-connect-gateway-associat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  directConnectGatewayId: any
-  --gatewayId: any
-  --addAllowedPrefixesToDirectConnectGateway: any
-  --virtualGatewayId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  direct_connect_gateway_id: any
+  --gateway-id: any
+  --add-allowed-prefixes-to-direct-connect-gateway: any
+  --virtual-gateway-id: any
 ]: any -> record<directConnectGatewayAssociation: record<directConnectGatewayId: record, directConnectGatewayOwnerAccount: record, associationState: record, stateChangeError: record, associatedGateway: record<id: record, type: record, ownerAccount: record, region: record>, associationId: record, allowedPrefixesToDirectConnectGateway: record, virtualGatewayId: record, virtualGatewayRegion: record, virtualGatewayOwnerAccount: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.CreateDirectConnectGatewayAssociation")
-  let body = {directConnectGatewayId: $directConnectGatewayId, gatewayId: $gatewayId, addAllowedPrefixesToDirectConnectGateway: $addAllowedPrefixesToDirectConnectGateway, virtualGatewayId: $virtualGatewayId} | compact
+  let body = {"directConnectGatewayId": $direct_connect_gateway_id, "gatewayId": $gateway_id, "addAllowedPrefixesToDirectConnectGateway": $add_allowed_prefixes_to_direct_connect_gateway, "virtualGatewayId": $virtual_gateway_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -881,7 +881,7 @@ export def "x-amz-target-overture-service-create-direct-connect-gateway-associat
 #
 # POST /#X-Amz-Target=OvertureService.CreateDirectConnectGatewayAssociationProposal
 # operationId: CreateDirectConnectGatewayAssociationProposal
-export def "x-amz-target-overture-service-create-direct-connect-gateway-association-proposal CreateDirectConnectGatewayAssociationProposal" [
+export def "x-amz-target-overture-service-create-direct-connect-gateway-association-proposal create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -890,27 +890,27 @@ export def "x-amz-target-overture-service-create-direct-connect-gateway-associat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  directConnectGatewayId: any
-  directConnectGatewayOwnerAccount: any
-  gatewayId: any
-  --addAllowedPrefixesToDirectConnectGateway: any
-  --removeAllowedPrefixesToDirectConnectGateway: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  direct_connect_gateway_id: any
+  direct_connect_gateway_owner_account: any
+  gateway_id: any
+  --add-allowed-prefixes-to-direct-connect-gateway: any
+  --remove-allowed-prefixes-to-direct-connect-gateway: any
 ]: any -> record<directConnectGatewayAssociationProposal: record<proposalId: record, directConnectGatewayId: record, directConnectGatewayOwnerAccount: record, proposalState: record, associatedGateway: record<id: record, type: record, ownerAccount: record, region: record>, existingAllowedPrefixesToDirectConnectGateway: record, requestedAllowedPrefixesToDirectConnectGateway: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.CreateDirectConnectGatewayAssociationProposal")
-  let body = {directConnectGatewayId: $directConnectGatewayId, directConnectGatewayOwnerAccount: $directConnectGatewayOwnerAccount, gatewayId: $gatewayId, addAllowedPrefixesToDirectConnectGateway: $addAllowedPrefixesToDirectConnectGateway, removeAllowedPrefixesToDirectConnectGateway: $removeAllowedPrefixesToDirectConnectGateway} | compact
+  let body = {"directConnectGatewayId": $direct_connect_gateway_id, "directConnectGatewayOwnerAccount": $direct_connect_gateway_owner_account, "gatewayId": $gateway_id, "addAllowedPrefixesToDirectConnectGateway": $add_allowed_prefixes_to_direct_connect_gateway, "removeAllowedPrefixesToDirectConnectGateway": $remove_allowed_prefixes_to_direct_connect_gateway} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -921,7 +921,7 @@ export def "x-amz-target-overture-service-create-direct-connect-gateway-associat
 #
 # POST /#X-Amz-Target=OvertureService.CreateInterconnect
 # operationId: CreateInterconnect
-export def "x-amz-target-overture-service-create-interconnect CreateInterconnect" [
+export def "x-amz-target-overture-service-create-interconnect create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -930,28 +930,28 @@ export def "x-amz-target-overture-service-create-interconnect CreateInterconnect
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  interconnectName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  interconnect_name: any
   bandwidth: any
   location: any
-  --lagId: any
+  --lag-id: any
   --tags: any
-  --providerName: any
+  --provider-name: any
 ]: any -> record<interconnectId: record, interconnectName: record, interconnectState: record, region: record, location: record, bandwidth: record, loaIssueTime: record, lagId: record, awsDevice: record, jumboFrameCapable: record, awsDeviceV2: record, awsLogicalDeviceId: record, hasLogicalRedundancy: record, tags: record, providerName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.CreateInterconnect")
-  let body = {interconnectName: $interconnectName, bandwidth: $bandwidth, location: $location, lagId: $lagId, tags: $tags, providerName: $providerName} | compact
+  let body = {"interconnectName": $interconnect_name, "bandwidth": $bandwidth, "location": $location, "lagId": $lag_id, "tags": $tags, "providerName": $provider_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -962,7 +962,7 @@ export def "x-amz-target-overture-service-create-interconnect CreateInterconnect
 #
 # POST /#X-Amz-Target=OvertureService.CreateLag
 # operationId: CreateLag
-export def "x-amz-target-overture-service-create-lag CreateLag" [
+export def "x-amz-target-overture-service-create-lag create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -971,31 +971,31 @@ export def "x-amz-target-overture-service-create-lag CreateLag" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  numberOfConnections: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  number_of_connections: any
   location: any
-  connectionsBandwidth: any
-  lagName: any
-  --connectionId: any
+  connections_bandwidth: any
+  lag_name: any
+  --connection-id: any
   --tags: any
-  --childConnectionTags: any
-  --providerName: any
-  --requestMACSec: any
+  --child-connection-tags: any
+  --provider-name: any
+  --request-mac-sec: any
 ]: any -> record<connectionsBandwidth: record, numberOfConnections: record, lagId: record, ownerAccount: record, lagName: record, lagState: record, location: record, region: record, minimumLinks: record, awsDevice: record, awsDeviceV2: record, awsLogicalDeviceId: record, connections: record, allowsHostedConnections: record, jumboFrameCapable: record, hasLogicalRedundancy: record, tags: record, providerName: record, macSecCapable: record, encryptionMode: record, macSecKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.CreateLag")
-  let body = {numberOfConnections: $numberOfConnections, location: $location, connectionsBandwidth: $connectionsBandwidth, lagName: $lagName, connectionId: $connectionId, tags: $tags, childConnectionTags: $childConnectionTags, providerName: $providerName, requestMACSec: $requestMACSec} | compact
+  let body = {"numberOfConnections": $number_of_connections, "location": $location, "connectionsBandwidth": $connections_bandwidth, "lagName": $lag_name, "connectionId": $connection_id, "tags": $tags, "childConnectionTags": $child_connection_tags, "providerName": $provider_name, "requestMACSec": $request_mac_sec} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1006,7 +1006,7 @@ export def "x-amz-target-overture-service-create-lag CreateLag" [
 #
 # POST /#X-Amz-Target=OvertureService.CreatePrivateVirtualInterface
 # operationId: CreatePrivateVirtualInterface
-export def "x-amz-target-overture-service-create-private-virtual-interface CreatePrivateVirtualInterface" [
+export def "x-amz-target-overture-service-create-private-virtual-interface create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1015,24 +1015,24 @@ export def "x-amz-target-overture-service-create-private-virtual-interface Creat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  connectionId: any
-  newPrivateVirtualInterface: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  connection_id: any
+  new_private_virtual_interface: any
 ]: any -> record<ownerAccount: record, virtualInterfaceId: record, location: record, connectionId: record, virtualInterfaceType: record, virtualInterfaceName: record, vlan: record, asn: record, amazonSideAsn: record, authKey: record, amazonAddress: record, customerAddress: record, addressFamily: record, virtualInterfaceState: record, customerRouterConfig: record, mtu: record, jumboFrameCapable: record, virtualGatewayId: record, directConnectGatewayId: record, routeFilterPrefixes: record, bgpPeers: record, region: record, awsDeviceV2: record, awsLogicalDeviceId: record, tags: record, siteLinkEnabled: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.CreatePrivateVirtualInterface")
-  let body = {connectionId: $connectionId, newPrivateVirtualInterface: $newPrivateVirtualInterface} | compact
+  let body = {"connectionId": $connection_id, "newPrivateVirtualInterface": $new_private_virtual_interface} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1043,7 +1043,7 @@ export def "x-amz-target-overture-service-create-private-virtual-interface Creat
 #
 # POST /#X-Amz-Target=OvertureService.CreatePublicVirtualInterface
 # operationId: CreatePublicVirtualInterface
-export def "x-amz-target-overture-service-create-public-virtual-interface CreatePublicVirtualInterface" [
+export def "x-amz-target-overture-service-create-public-virtual-interface create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,24 +1052,24 @@ export def "x-amz-target-overture-service-create-public-virtual-interface Create
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  connectionId: any
-  newPublicVirtualInterface: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  connection_id: any
+  new_public_virtual_interface: any
 ]: any -> record<ownerAccount: record, virtualInterfaceId: record, location: record, connectionId: record, virtualInterfaceType: record, virtualInterfaceName: record, vlan: record, asn: record, amazonSideAsn: record, authKey: record, amazonAddress: record, customerAddress: record, addressFamily: record, virtualInterfaceState: record, customerRouterConfig: record, mtu: record, jumboFrameCapable: record, virtualGatewayId: record, directConnectGatewayId: record, routeFilterPrefixes: record, bgpPeers: record, region: record, awsDeviceV2: record, awsLogicalDeviceId: record, tags: record, siteLinkEnabled: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.CreatePublicVirtualInterface")
-  let body = {connectionId: $connectionId, newPublicVirtualInterface: $newPublicVirtualInterface} | compact
+  let body = {"connectionId": $connection_id, "newPublicVirtualInterface": $new_public_virtual_interface} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1080,7 +1080,7 @@ export def "x-amz-target-overture-service-create-public-virtual-interface Create
 #
 # POST /#X-Amz-Target=OvertureService.CreateTransitVirtualInterface
 # operationId: CreateTransitVirtualInterface
-export def "x-amz-target-overture-service-create-transit-virtual-interface CreateTransitVirtualInterface" [
+export def "x-amz-target-overture-service-create-transit-virtual-interface create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1089,24 +1089,24 @@ export def "x-amz-target-overture-service-create-transit-virtual-interface Creat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  connectionId: any
-  newTransitVirtualInterface: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  connection_id: any
+  new_transit_virtual_interface: any
 ]: any -> record<virtualInterface: record<ownerAccount: record, virtualInterfaceId: record, location: record, connectionId: record, virtualInterfaceType: record, virtualInterfaceName: record, vlan: record, asn: record, amazonSideAsn: record, authKey: record, amazonAddress: record, customerAddress: record, addressFamily: record, virtualInterfaceState: record, customerRouterConfig: record, mtu: record, jumboFrameCapable: record, virtualGatewayId: record, directConnectGatewayId: record, routeFilterPrefixes: record, bgpPeers: record, region: record, awsDeviceV2: record, awsLogicalDeviceId: record, tags: record, siteLinkEnabled: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.CreateTransitVirtualInterface")
-  let body = {connectionId: $connectionId, newTransitVirtualInterface: $newTransitVirtualInterface} | compact
+  let body = {"connectionId": $connection_id, "newTransitVirtualInterface": $new_transit_virtual_interface} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1117,7 +1117,7 @@ export def "x-amz-target-overture-service-create-transit-virtual-interface Creat
 #
 # POST /#X-Amz-Target=OvertureService.DeleteBGPPeer
 # operationId: DeleteBGPPeer
-export def "x-amz-target-overture-service-delete-bgp-peer DeleteBGPPeer" [
+export def "x-amz-target-overture-service-delete-bgp-peer delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1126,26 +1126,26 @@ export def "x-amz-target-overture-service-delete-bgp-peer DeleteBGPPeer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  --virtualInterfaceId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  --virtual-interface-id: any
   --asn: any
-  --customerAddress: any
-  --bgpPeerId: any
+  --customer-address: any
+  --bgp-peer-id: any
 ]: any -> record<virtualInterface: record<ownerAccount: record, virtualInterfaceId: record, location: record, connectionId: record, virtualInterfaceType: record, virtualInterfaceName: record, vlan: record, asn: record, amazonSideAsn: record, authKey: record, amazonAddress: record, customerAddress: record, addressFamily: record, virtualInterfaceState: record, customerRouterConfig: record, mtu: record, jumboFrameCapable: record, virtualGatewayId: record, directConnectGatewayId: record, routeFilterPrefixes: record, bgpPeers: record, region: record, awsDeviceV2: record, awsLogicalDeviceId: record, tags: record, siteLinkEnabled: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DeleteBGPPeer")
-  let body = {virtualInterfaceId: $virtualInterfaceId, asn: $asn, customerAddress: $customerAddress, bgpPeerId: $bgpPeerId} | compact
+  let body = {"virtualInterfaceId": $virtual_interface_id, "asn": $asn, "customerAddress": $customer_address, "bgpPeerId": $bgp_peer_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1156,7 +1156,7 @@ export def "x-amz-target-overture-service-delete-bgp-peer DeleteBGPPeer" [
 #
 # POST /#X-Amz-Target=OvertureService.DeleteConnection
 # operationId: DeleteConnection
-export def "x-amz-target-overture-service-delete-connection DeleteConnection" [
+export def "x-amz-target-overture-service-delete-connection delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1165,23 +1165,23 @@ export def "x-amz-target-overture-service-delete-connection DeleteConnection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  connectionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  connection_id: any
 ]: any -> record<ownerAccount: record, connectionId: record, connectionName: record, connectionState: record, region: record, location: record, bandwidth: record, vlan: record, partnerName: record, loaIssueTime: record, lagId: record, awsDevice: record, jumboFrameCapable: record, awsDeviceV2: record, awsLogicalDeviceId: record, hasLogicalRedundancy: record, tags: record, providerName: record, macSecCapable: record, portEncryptionStatus: record, encryptionMode: record, macSecKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DeleteConnection")
-  let body = {connectionId: $connectionId} | compact
+  let body = {"connectionId": $connection_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1192,7 +1192,7 @@ export def "x-amz-target-overture-service-delete-connection DeleteConnection" [
 #
 # POST /#X-Amz-Target=OvertureService.DeleteDirectConnectGateway
 # operationId: DeleteDirectConnectGateway
-export def "x-amz-target-overture-service-delete-direct-connect-gateway DeleteDirectConnectGateway" [
+export def "x-amz-target-overture-service-delete-direct-connect-gateway delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1201,23 +1201,23 @@ export def "x-amz-target-overture-service-delete-direct-connect-gateway DeleteDi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  directConnectGatewayId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  direct_connect_gateway_id: any
 ]: any -> record<directConnectGateway: record<directConnectGatewayId: record, directConnectGatewayName: record, amazonSideAsn: record, ownerAccount: record, directConnectGatewayState: record, stateChangeError: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DeleteDirectConnectGateway")
-  let body = {directConnectGatewayId: $directConnectGatewayId} | compact
+  let body = {"directConnectGatewayId": $direct_connect_gateway_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1228,7 +1228,7 @@ export def "x-amz-target-overture-service-delete-direct-connect-gateway DeleteDi
 #
 # POST /#X-Amz-Target=OvertureService.DeleteDirectConnectGatewayAssociation
 # operationId: DeleteDirectConnectGatewayAssociation
-export def "x-amz-target-overture-service-delete-direct-connect-gateway-association DeleteDirectConnectGatewayAssociation" [
+export def "x-amz-target-overture-service-delete-direct-connect-gateway-association delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1237,25 +1237,25 @@ export def "x-amz-target-overture-service-delete-direct-connect-gateway-associat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  --associationId: any
-  --directConnectGatewayId: any
-  --virtualGatewayId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  --association-id: any
+  --direct-connect-gateway-id: any
+  --virtual-gateway-id: any
 ]: any -> record<directConnectGatewayAssociation: record<directConnectGatewayId: record, directConnectGatewayOwnerAccount: record, associationState: record, stateChangeError: record, associatedGateway: record<id: record, type: record, ownerAccount: record, region: record>, associationId: record, allowedPrefixesToDirectConnectGateway: record, virtualGatewayId: record, virtualGatewayRegion: record, virtualGatewayOwnerAccount: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DeleteDirectConnectGatewayAssociation")
-  let body = {associationId: $associationId, directConnectGatewayId: $directConnectGatewayId, virtualGatewayId: $virtualGatewayId} | compact
+  let body = {"associationId": $association_id, "directConnectGatewayId": $direct_connect_gateway_id, "virtualGatewayId": $virtual_gateway_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1266,7 +1266,7 @@ export def "x-amz-target-overture-service-delete-direct-connect-gateway-associat
 #
 # POST /#X-Amz-Target=OvertureService.DeleteDirectConnectGatewayAssociationProposal
 # operationId: DeleteDirectConnectGatewayAssociationProposal
-export def "x-amz-target-overture-service-delete-direct-connect-gateway-association-proposal DeleteDirectConnectGatewayAssociationProposal" [
+export def "x-amz-target-overture-service-delete-direct-connect-gateway-association-proposal delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1275,23 +1275,23 @@ export def "x-amz-target-overture-service-delete-direct-connect-gateway-associat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  proposalId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  proposal_id: any
 ]: any -> record<directConnectGatewayAssociationProposal: record<proposalId: record, directConnectGatewayId: record, directConnectGatewayOwnerAccount: record, proposalState: record, associatedGateway: record<id: record, type: record, ownerAccount: record, region: record>, existingAllowedPrefixesToDirectConnectGateway: record, requestedAllowedPrefixesToDirectConnectGateway: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DeleteDirectConnectGatewayAssociationProposal")
-  let body = {proposalId: $proposalId} | compact
+  let body = {"proposalId": $proposal_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1302,7 +1302,7 @@ export def "x-amz-target-overture-service-delete-direct-connect-gateway-associat
 #
 # POST /#X-Amz-Target=OvertureService.DeleteInterconnect
 # operationId: DeleteInterconnect
-export def "x-amz-target-overture-service-delete-interconnect DeleteInterconnect" [
+export def "x-amz-target-overture-service-delete-interconnect delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1311,23 +1311,23 @@ export def "x-amz-target-overture-service-delete-interconnect DeleteInterconnect
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  interconnectId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  interconnect_id: any
 ]: any -> record<interconnectState: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DeleteInterconnect")
-  let body = {interconnectId: $interconnectId} | compact
+  let body = {"interconnectId": $interconnect_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1338,7 +1338,7 @@ export def "x-amz-target-overture-service-delete-interconnect DeleteInterconnect
 #
 # POST /#X-Amz-Target=OvertureService.DeleteLag
 # operationId: DeleteLag
-export def "x-amz-target-overture-service-delete-lag DeleteLag" [
+export def "x-amz-target-overture-service-delete-lag delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1347,23 +1347,23 @@ export def "x-amz-target-overture-service-delete-lag DeleteLag" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  lagId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  lag_id: any
 ]: any -> record<connectionsBandwidth: record, numberOfConnections: record, lagId: record, ownerAccount: record, lagName: record, lagState: record, location: record, region: record, minimumLinks: record, awsDevice: record, awsDeviceV2: record, awsLogicalDeviceId: record, connections: record, allowsHostedConnections: record, jumboFrameCapable: record, hasLogicalRedundancy: record, tags: record, providerName: record, macSecCapable: record, encryptionMode: record, macSecKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DeleteLag")
-  let body = {lagId: $lagId} | compact
+  let body = {"lagId": $lag_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1374,7 +1374,7 @@ export def "x-amz-target-overture-service-delete-lag DeleteLag" [
 #
 # POST /#X-Amz-Target=OvertureService.DeleteVirtualInterface
 # operationId: DeleteVirtualInterface
-export def "x-amz-target-overture-service-delete-virtual-interface DeleteVirtualInterface" [
+export def "x-amz-target-overture-service-delete-virtual-interface delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1383,23 +1383,23 @@ export def "x-amz-target-overture-service-delete-virtual-interface DeleteVirtual
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  virtualInterfaceId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  virtual_interface_id: any
 ]: any -> record<virtualInterfaceState: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DeleteVirtualInterface")
-  let body = {virtualInterfaceId: $virtualInterfaceId} | compact
+  let body = {"virtualInterfaceId": $virtual_interface_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1412,7 +1412,7 @@ export def "x-amz-target-overture-service-delete-virtual-interface DeleteVirtual
 # DEPRECATED
 # operationId: DescribeConnectionLoa
 @deprecated
-export def "x-amz-target-overture-service-describe-connection-loa DescribeConnectionLoa" [
+export def "x-amz-target-overture-service-describe-connection-loa post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1421,25 +1421,25 @@ export def "x-amz-target-overture-service-describe-connection-loa DescribeConnec
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  connectionId: any
-  --providerName: any
-  --loaContentType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  connection_id: any
+  --provider-name: any
+  --loa-content-type: any
 ]: any -> record<loa: record<loaContent: record, loaContentType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeConnectionLoa")
-  let body = {connectionId: $connectionId, providerName: $providerName, loaContentType: $loaContentType} | compact
+  let body = {"connectionId": $connection_id, "providerName": $provider_name, "loaContentType": $loa_content_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1450,7 +1450,7 @@ export def "x-amz-target-overture-service-describe-connection-loa DescribeConnec
 #
 # POST /#X-Amz-Target=OvertureService.DescribeConnections
 # operationId: DescribeConnections
-export def "x-amz-target-overture-service-describe-connections DescribeConnections" [
+export def "x-amz-target-overture-service-describe-connections post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1459,23 +1459,23 @@ export def "x-amz-target-overture-service-describe-connections DescribeConnectio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  --connectionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  --connection-id: any
 ]: any -> record<connections: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeConnections")
-  let body = {connectionId: $connectionId} | compact
+  let body = {"connectionId": $connection_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1488,7 +1488,7 @@ export def "x-amz-target-overture-service-describe-connections DescribeConnectio
 # DEPRECATED
 # operationId: DescribeConnectionsOnInterconnect
 @deprecated
-export def "x-amz-target-overture-service-describe-connections-on-interconnect DescribeConnectionsOnInterconnect" [
+export def "x-amz-target-overture-service-describe-connections-on-interconnect post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1497,23 +1497,23 @@ export def "x-amz-target-overture-service-describe-connections-on-interconnect D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  interconnectId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  interconnect_id: any
 ]: any -> record<connections: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeConnectionsOnInterconnect")
-  let body = {interconnectId: $interconnectId} | compact
+  let body = {"interconnectId": $interconnect_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1524,7 +1524,7 @@ export def "x-amz-target-overture-service-describe-connections-on-interconnect D
 #
 # POST /#X-Amz-Target=OvertureService.DescribeCustomerMetadata
 # operationId: DescribeCustomerMetadata
-export def "x-amz-target-overture-service-describe-customer-metadata DescribeCustomerMetadata" [
+export def "x-amz-target-overture-service-describe-customer-metadata post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1533,19 +1533,19 @@ export def "x-amz-target-overture-service-describe-customer-metadata DescribeCus
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
 ]: nothing -> record<agreements: record, nniPartnerType: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeCustomerMetadata")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1556,7 +1556,7 @@ export def "x-amz-target-overture-service-describe-customer-metadata DescribeCus
 #
 # POST /#X-Amz-Target=OvertureService.DescribeDirectConnectGatewayAssociationProposals
 # operationId: DescribeDirectConnectGatewayAssociationProposals
-export def "x-amz-target-overture-service-describe-direct-connect-gateway-association-proposals DescribeDirectConnectGatewayAssociationProposals" [
+export def "x-amz-target-overture-service-describe-direct-connect-gateway-association-proposals post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1565,27 +1565,27 @@ export def "x-amz-target-overture-service-describe-direct-connect-gateway-associ
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  --directConnectGatewayId: any
-  --proposalId: any
-  --associatedGatewayId: any
-  --maxResults: any
-  --nextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  --direct-connect-gateway-id: any
+  --proposal-id: any
+  --associated-gateway-id: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<directConnectGatewayAssociationProposals: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeDirectConnectGatewayAssociationProposals")
-  let body = {directConnectGatewayId: $directConnectGatewayId, proposalId: $proposalId, associatedGatewayId: $associatedGatewayId, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"directConnectGatewayId": $direct_connect_gateway_id, "proposalId": $proposal_id, "associatedGatewayId": $associated_gateway_id, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1596,7 +1596,7 @@ export def "x-amz-target-overture-service-describe-direct-connect-gateway-associ
 #
 # POST /#X-Amz-Target=OvertureService.DescribeDirectConnectGatewayAssociations
 # operationId: DescribeDirectConnectGatewayAssociations
-export def "x-amz-target-overture-service-describe-direct-connect-gateway-associations DescribeDirectConnectGatewayAssociations" [
+export def "x-amz-target-overture-service-describe-direct-connect-gateway-associations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1605,28 +1605,28 @@ export def "x-amz-target-overture-service-describe-direct-connect-gateway-associ
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  --associationId: any
-  --associatedGatewayId: any
-  --directConnectGatewayId: any
-  --maxResults: any
-  --nextToken: any
-  --virtualGatewayId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  --association-id: any
+  --associated-gateway-id: any
+  --direct-connect-gateway-id: any
+  --max-results: any
+  --next-token: any
+  --virtual-gateway-id: any
 ]: any -> record<directConnectGatewayAssociations: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeDirectConnectGatewayAssociations")
-  let body = {associationId: $associationId, associatedGatewayId: $associatedGatewayId, directConnectGatewayId: $directConnectGatewayId, maxResults: $maxResults, nextToken: $nextToken, virtualGatewayId: $virtualGatewayId} | compact
+  let body = {"associationId": $association_id, "associatedGatewayId": $associated_gateway_id, "directConnectGatewayId": $direct_connect_gateway_id, "maxResults": $max_results, "nextToken": $next_token, "virtualGatewayId": $virtual_gateway_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1637,7 +1637,7 @@ export def "x-amz-target-overture-service-describe-direct-connect-gateway-associ
 #
 # POST /#X-Amz-Target=OvertureService.DescribeDirectConnectGatewayAttachments
 # operationId: DescribeDirectConnectGatewayAttachments
-export def "x-amz-target-overture-service-describe-direct-connect-gateway-attachments DescribeDirectConnectGatewayAttachments" [
+export def "x-amz-target-overture-service-describe-direct-connect-gateway-attachments post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1646,26 +1646,26 @@ export def "x-amz-target-overture-service-describe-direct-connect-gateway-attach
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  --directConnectGatewayId: any
-  --virtualInterfaceId: any
-  --maxResults: any
-  --nextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  --direct-connect-gateway-id: any
+  --virtual-interface-id: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<directConnectGatewayAttachments: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeDirectConnectGatewayAttachments")
-  let body = {directConnectGatewayId: $directConnectGatewayId, virtualInterfaceId: $virtualInterfaceId, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"directConnectGatewayId": $direct_connect_gateway_id, "virtualInterfaceId": $virtual_interface_id, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1676,7 +1676,7 @@ export def "x-amz-target-overture-service-describe-direct-connect-gateway-attach
 #
 # POST /#X-Amz-Target=OvertureService.DescribeDirectConnectGateways
 # operationId: DescribeDirectConnectGateways
-export def "x-amz-target-overture-service-describe-direct-connect-gateways DescribeDirectConnectGateways" [
+export def "x-amz-target-overture-service-describe-direct-connect-gateways post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1685,25 +1685,25 @@ export def "x-amz-target-overture-service-describe-direct-connect-gateways Descr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  --directConnectGatewayId: any
-  --maxResults: any
-  --nextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  --direct-connect-gateway-id: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<directConnectGateways: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeDirectConnectGateways")
-  let body = {directConnectGatewayId: $directConnectGatewayId, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"directConnectGatewayId": $direct_connect_gateway_id, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1714,7 +1714,7 @@ export def "x-amz-target-overture-service-describe-direct-connect-gateways Descr
 #
 # POST /#X-Amz-Target=OvertureService.DescribeHostedConnections
 # operationId: DescribeHostedConnections
-export def "x-amz-target-overture-service-describe-hosted-connections DescribeHostedConnections" [
+export def "x-amz-target-overture-service-describe-hosted-connections post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1723,23 +1723,23 @@ export def "x-amz-target-overture-service-describe-hosted-connections DescribeHo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  connectionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  connection_id: any
 ]: any -> record<connections: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeHostedConnections")
-  let body = {connectionId: $connectionId} | compact
+  let body = {"connectionId": $connection_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1752,7 +1752,7 @@ export def "x-amz-target-overture-service-describe-hosted-connections DescribeHo
 # DEPRECATED
 # operationId: DescribeInterconnectLoa
 @deprecated
-export def "x-amz-target-overture-service-describe-interconnect-loa DescribeInterconnectLoa" [
+export def "x-amz-target-overture-service-describe-interconnect-loa post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1761,25 +1761,25 @@ export def "x-amz-target-overture-service-describe-interconnect-loa DescribeInte
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  interconnectId: any
-  --providerName: any
-  --loaContentType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  interconnect_id: any
+  --provider-name: any
+  --loa-content-type: any
 ]: any -> record<loa: record<loaContent: record, loaContentType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeInterconnectLoa")
-  let body = {interconnectId: $interconnectId, providerName: $providerName, loaContentType: $loaContentType} | compact
+  let body = {"interconnectId": $interconnect_id, "providerName": $provider_name, "loaContentType": $loa_content_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1790,7 +1790,7 @@ export def "x-amz-target-overture-service-describe-interconnect-loa DescribeInte
 #
 # POST /#X-Amz-Target=OvertureService.DescribeInterconnects
 # operationId: DescribeInterconnects
-export def "x-amz-target-overture-service-describe-interconnects DescribeInterconnects" [
+export def "x-amz-target-overture-service-describe-interconnects post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1799,23 +1799,23 @@ export def "x-amz-target-overture-service-describe-interconnects DescribeInterco
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  --interconnectId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  --interconnect-id: any
 ]: any -> record<interconnects: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeInterconnects")
-  let body = {interconnectId: $interconnectId} | compact
+  let body = {"interconnectId": $interconnect_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1826,7 +1826,7 @@ export def "x-amz-target-overture-service-describe-interconnects DescribeInterco
 #
 # POST /#X-Amz-Target=OvertureService.DescribeLags
 # operationId: DescribeLags
-export def "x-amz-target-overture-service-describe-lags DescribeLags" [
+export def "x-amz-target-overture-service-describe-lags post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1835,23 +1835,23 @@ export def "x-amz-target-overture-service-describe-lags DescribeLags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  --lagId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  --lag-id: any
 ]: any -> record<lags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeLags")
-  let body = {lagId: $lagId} | compact
+  let body = {"lagId": $lag_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1862,7 +1862,7 @@ export def "x-amz-target-overture-service-describe-lags DescribeLags" [
 #
 # POST /#X-Amz-Target=OvertureService.DescribeLoa
 # operationId: DescribeLoa
-export def "x-amz-target-overture-service-describe-loa DescribeLoa" [
+export def "x-amz-target-overture-service-describe-loa post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1871,25 +1871,25 @@ export def "x-amz-target-overture-service-describe-loa DescribeLoa" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  connectionId: any
-  --providerName: any
-  --loaContentType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  connection_id: any
+  --provider-name: any
+  --loa-content-type: any
 ]: any -> record<loaContent: record, loaContentType: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeLoa")
-  let body = {connectionId: $connectionId, providerName: $providerName, loaContentType: $loaContentType} | compact
+  let body = {"connectionId": $connection_id, "providerName": $provider_name, "loaContentType": $loa_content_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1900,7 +1900,7 @@ export def "x-amz-target-overture-service-describe-loa DescribeLoa" [
 #
 # POST /#X-Amz-Target=OvertureService.DescribeLocations
 # operationId: DescribeLocations
-export def "x-amz-target-overture-service-describe-locations DescribeLocations" [
+export def "x-amz-target-overture-service-describe-locations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1909,19 +1909,19 @@ export def "x-amz-target-overture-service-describe-locations DescribeLocations" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
 ]: nothing -> record<locations: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeLocations")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1932,7 +1932,7 @@ export def "x-amz-target-overture-service-describe-locations DescribeLocations" 
 #
 # POST /#X-Amz-Target=OvertureService.DescribeRouterConfiguration
 # operationId: DescribeRouterConfiguration
-export def "x-amz-target-overture-service-describe-router-configuration DescribeRouterConfiguration" [
+export def "x-amz-target-overture-service-describe-router-configuration post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1941,24 +1941,24 @@ export def "x-amz-target-overture-service-describe-router-configuration Describe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
-  virtualInterfaceId: any
-  --routerTypeIdentifier: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
+  virtual_interface_id: any
+  --router-type-identifier: any
 ]: any -> record<customerRouterConfig: record, router: record<vendor: record, platform: record, software: record, xsltTemplateName: record, xsltTemplateNameForMacSec: record, routerTypeIdentifier: record>, virtualInterfaceId: record, virtualInterfaceName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeRouterConfiguration")
-  let body = {virtualInterfaceId: $virtualInterfaceId, routerTypeIdentifier: $routerTypeIdentifier} | compact
+  let body = {"virtualInterfaceId": $virtual_interface_id, "routerTypeIdentifier": $router_type_identifier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1969,7 +1969,7 @@ export def "x-amz-target-overture-service-describe-router-configuration Describe
 #
 # POST /#X-Amz-Target=OvertureService.DescribeTags
 # operationId: DescribeTags
-export def "x-amz-target-overture-service-describe-tags DescribeTags" [
+export def "x-amz-target-overture-service-describe-tags post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1978,23 +1978,23 @@ export def "x-amz-target-overture-service-describe-tags DescribeTags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
-  resourceArns: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
+  resource_arns: any
 ]: any -> record<resourceTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeTags")
-  let body = {resourceArns: $resourceArns} | compact
+  let body = {"resourceArns": $resource_arns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2005,7 +2005,7 @@ export def "x-amz-target-overture-service-describe-tags DescribeTags" [
 #
 # POST /#X-Amz-Target=OvertureService.DescribeVirtualGateways
 # operationId: DescribeVirtualGateways
-export def "x-amz-target-overture-service-describe-virtual-gateways DescribeVirtualGateways" [
+export def "x-amz-target-overture-service-describe-virtual-gateways post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2014,19 +2014,19 @@ export def "x-amz-target-overture-service-describe-virtual-gateways DescribeVirt
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-49
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-49
 ]: nothing -> record<virtualGateways: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeVirtualGateways")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2037,7 +2037,7 @@ export def "x-amz-target-overture-service-describe-virtual-gateways DescribeVirt
 #
 # POST /#X-Amz-Target=OvertureService.DescribeVirtualInterfaces
 # operationId: DescribeVirtualInterfaces
-export def "x-amz-target-overture-service-describe-virtual-interfaces DescribeVirtualInterfaces" [
+export def "x-amz-target-overture-service-describe-virtual-interfaces post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2046,24 +2046,24 @@ export def "x-amz-target-overture-service-describe-virtual-interfaces DescribeVi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-50
-  --connectionId: any
-  --virtualInterfaceId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-50
+  --connection-id: any
+  --virtual-interface-id: any
 ]: any -> record<virtualInterfaces: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DescribeVirtualInterfaces")
-  let body = {connectionId: $connectionId, virtualInterfaceId: $virtualInterfaceId} | compact
+  let body = {"connectionId": $connection_id, "virtualInterfaceId": $virtual_interface_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2074,7 +2074,7 @@ export def "x-amz-target-overture-service-describe-virtual-interfaces DescribeVi
 #
 # POST /#X-Amz-Target=OvertureService.DisassociateConnectionFromLag
 # operationId: DisassociateConnectionFromLag
-export def "x-amz-target-overture-service-disassociate-connection-from-lag DisassociateConnectionFromLag" [
+export def "x-amz-target-overture-service-disassociate-connection-from-lag post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2083,24 +2083,24 @@ export def "x-amz-target-overture-service-disassociate-connection-from-lag Disas
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-51
-  connectionId: any
-  lagId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-51
+  connection_id: any
+  lag_id: any
 ]: any -> record<ownerAccount: record, connectionId: record, connectionName: record, connectionState: record, region: record, location: record, bandwidth: record, vlan: record, partnerName: record, loaIssueTime: record, lagId: record, awsDevice: record, jumboFrameCapable: record, awsDeviceV2: record, awsLogicalDeviceId: record, hasLogicalRedundancy: record, tags: record, providerName: record, macSecCapable: record, portEncryptionStatus: record, encryptionMode: record, macSecKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DisassociateConnectionFromLag")
-  let body = {connectionId: $connectionId, lagId: $lagId} | compact
+  let body = {"connectionId": $connection_id, "lagId": $lag_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2111,7 +2111,7 @@ export def "x-amz-target-overture-service-disassociate-connection-from-lag Disas
 #
 # POST /#X-Amz-Target=OvertureService.DisassociateMacSecKey
 # operationId: DisassociateMacSecKey
-export def "x-amz-target-overture-service-disassociate-mac-sec-key DisassociateMacSecKey" [
+export def "x-amz-target-overture-service-disassociate-mac-sec-key post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2120,24 +2120,24 @@ export def "x-amz-target-overture-service-disassociate-mac-sec-key DisassociateM
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-52
-  connectionId: any
-  secretARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-52
+  connection_id: any
+  secret_arn: any
 ]: any -> record<connectionId: record, macSecKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.DisassociateMacSecKey")
-  let body = {connectionId: $connectionId, secretARN: $secretARN} | compact
+  let body = {"connectionId": $connection_id, "secretARN": $secret_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2148,7 +2148,7 @@ export def "x-amz-target-overture-service-disassociate-mac-sec-key DisassociateM
 #
 # POST /#X-Amz-Target=OvertureService.ListVirtualInterfaceTestHistory
 # operationId: ListVirtualInterfaceTestHistory
-export def "x-amz-target-overture-service-list-virtual-interface-test-history ListVirtualInterfaceTestHistory" [
+export def "x-amz-target-overture-service-list-virtual-interface-test-history list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2157,28 +2157,28 @@ export def "x-amz-target-overture-service-list-virtual-interface-test-history Li
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-53
-  --testId: any
-  --virtualInterfaceId: any
-  --bgpPeers: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-53
+  --test-id: any
+  --virtual-interface-id: any
+  --bgp-peers: any
   --status: any
-  --maxResults: any
-  --nextToken: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<virtualInterfaceTestHistory: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.ListVirtualInterfaceTestHistory")
-  let body = {testId: $testId, virtualInterfaceId: $virtualInterfaceId, bgpPeers: $bgpPeers, status: $status, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"testId": $test_id, "virtualInterfaceId": $virtual_interface_id, "bgpPeers": $bgp_peers, "status": $status, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2189,7 +2189,7 @@ export def "x-amz-target-overture-service-list-virtual-interface-test-history Li
 #
 # POST /#X-Amz-Target=OvertureService.StartBgpFailoverTest
 # operationId: StartBgpFailoverTest
-export def "x-amz-target-overture-service-start-bgp-failover-test StartBgpFailoverTest" [
+export def "x-amz-target-overture-service-start-bgp-failover-test start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2198,25 +2198,25 @@ export def "x-amz-target-overture-service-start-bgp-failover-test StartBgpFailov
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-54
-  virtualInterfaceId: any
-  --bgpPeers: any
-  --testDurationInMinutes: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-54
+  virtual_interface_id: any
+  --bgp-peers: any
+  --test-duration-in-minutes: any
 ]: any -> record<virtualInterfaceTest: record<testId: record, virtualInterfaceId: record, bgpPeers: record, status: record, ownerAccount: record, testDurationInMinutes: record, startTime: record, endTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.StartBgpFailoverTest")
-  let body = {virtualInterfaceId: $virtualInterfaceId, bgpPeers: $bgpPeers, testDurationInMinutes: $testDurationInMinutes} | compact
+  let body = {"virtualInterfaceId": $virtual_interface_id, "bgpPeers": $bgp_peers, "testDurationInMinutes": $test_duration_in_minutes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2227,7 +2227,7 @@ export def "x-amz-target-overture-service-start-bgp-failover-test StartBgpFailov
 #
 # POST /#X-Amz-Target=OvertureService.StopBgpFailoverTest
 # operationId: StopBgpFailoverTest
-export def "x-amz-target-overture-service-stop-bgp-failover-test StopBgpFailoverTest" [
+export def "x-amz-target-overture-service-stop-bgp-failover-test stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2236,23 +2236,23 @@ export def "x-amz-target-overture-service-stop-bgp-failover-test StopBgpFailover
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-55
-  virtualInterfaceId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-55
+  virtual_interface_id: any
 ]: any -> record<virtualInterfaceTest: record<testId: record, virtualInterfaceId: record, bgpPeers: record, status: record, ownerAccount: record, testDurationInMinutes: record, startTime: record, endTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.StopBgpFailoverTest")
-  let body = {virtualInterfaceId: $virtualInterfaceId} | compact
+  let body = {"virtualInterfaceId": $virtual_interface_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2263,7 +2263,7 @@ export def "x-amz-target-overture-service-stop-bgp-failover-test StopBgpFailover
 #
 # POST /#X-Amz-Target=OvertureService.TagResource
 # operationId: TagResource
-export def "x-amz-target-overture-service-tag-resource TagResource" [
+export def "x-amz-target-overture-service-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2272,24 +2272,24 @@ export def "x-amz-target-overture-service-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-56
-  resourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-56
+  resource_arn: any
   tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.TagResource")
-  let body = {resourceArn: $resourceArn, tags: $tags} | compact
+  let body = {"resourceArn": $resource_arn, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2300,7 +2300,7 @@ export def "x-amz-target-overture-service-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=OvertureService.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-overture-service-untag-resource UntagResource" [
+export def "x-amz-target-overture-service-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2309,24 +2309,24 @@ export def "x-amz-target-overture-service-untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-57
-  resourceArn: any
-  tagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-57
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.UntagResource")
-  let body = {resourceArn: $resourceArn, tagKeys: $tagKeys} | compact
+  let body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2337,7 +2337,7 @@ export def "x-amz-target-overture-service-untag-resource UntagResource" [
 #
 # POST /#X-Amz-Target=OvertureService.UpdateConnection
 # operationId: UpdateConnection
-export def "x-amz-target-overture-service-update-connection UpdateConnection" [
+export def "x-amz-target-overture-service-update-connection update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2346,25 +2346,25 @@ export def "x-amz-target-overture-service-update-connection UpdateConnection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-58
-  connectionId: any
-  --connectionName: any
-  --encryptionMode: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-58
+  connection_id: any
+  --connection-name: any
+  --encryption-mode: any
 ]: any -> record<ownerAccount: record, connectionId: record, connectionName: record, connectionState: record, region: record, location: record, bandwidth: record, vlan: record, partnerName: record, loaIssueTime: record, lagId: record, awsDevice: record, jumboFrameCapable: record, awsDeviceV2: record, awsLogicalDeviceId: record, hasLogicalRedundancy: record, tags: record, providerName: record, macSecCapable: record, portEncryptionStatus: record, encryptionMode: record, macSecKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.UpdateConnection")
-  let body = {connectionId: $connectionId, connectionName: $connectionName, encryptionMode: $encryptionMode} | compact
+  let body = {"connectionId": $connection_id, "connectionName": $connection_name, "encryptionMode": $encryption_mode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2375,7 +2375,7 @@ export def "x-amz-target-overture-service-update-connection UpdateConnection" [
 #
 # POST /#X-Amz-Target=OvertureService.UpdateDirectConnectGateway
 # operationId: UpdateDirectConnectGateway
-export def "x-amz-target-overture-service-update-direct-connect-gateway UpdateDirectConnectGateway" [
+export def "x-amz-target-overture-service-update-direct-connect-gateway update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2384,24 +2384,24 @@ export def "x-amz-target-overture-service-update-direct-connect-gateway UpdateDi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-59
-  directConnectGatewayId: any
-  newDirectConnectGatewayName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-59
+  direct_connect_gateway_id: any
+  new_direct_connect_gateway_name: any
 ]: any -> record<directConnectGateway: record<directConnectGatewayId: record, directConnectGatewayName: record, amazonSideAsn: record, ownerAccount: record, directConnectGatewayState: record, stateChangeError: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.UpdateDirectConnectGateway")
-  let body = {directConnectGatewayId: $directConnectGatewayId, newDirectConnectGatewayName: $newDirectConnectGatewayName} | compact
+  let body = {"directConnectGatewayId": $direct_connect_gateway_id, "newDirectConnectGatewayName": $new_direct_connect_gateway_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2412,7 +2412,7 @@ export def "x-amz-target-overture-service-update-direct-connect-gateway UpdateDi
 #
 # POST /#X-Amz-Target=OvertureService.UpdateDirectConnectGatewayAssociation
 # operationId: UpdateDirectConnectGatewayAssociation
-export def "x-amz-target-overture-service-update-direct-connect-gateway-association UpdateDirectConnectGatewayAssociation" [
+export def "x-amz-target-overture-service-update-direct-connect-gateway-association update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2421,25 +2421,25 @@ export def "x-amz-target-overture-service-update-direct-connect-gateway-associat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-60
-  --associationId: any
-  --addAllowedPrefixesToDirectConnectGateway: any
-  --removeAllowedPrefixesToDirectConnectGateway: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-60
+  --association-id: any
+  --add-allowed-prefixes-to-direct-connect-gateway: any
+  --remove-allowed-prefixes-to-direct-connect-gateway: any
 ]: any -> record<directConnectGatewayAssociation: record<directConnectGatewayId: record, directConnectGatewayOwnerAccount: record, associationState: record, stateChangeError: record, associatedGateway: record<id: record, type: record, ownerAccount: record, region: record>, associationId: record, allowedPrefixesToDirectConnectGateway: record, virtualGatewayId: record, virtualGatewayRegion: record, virtualGatewayOwnerAccount: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.UpdateDirectConnectGatewayAssociation")
-  let body = {associationId: $associationId, addAllowedPrefixesToDirectConnectGateway: $addAllowedPrefixesToDirectConnectGateway, removeAllowedPrefixesToDirectConnectGateway: $removeAllowedPrefixesToDirectConnectGateway} | compact
+  let body = {"associationId": $association_id, "addAllowedPrefixesToDirectConnectGateway": $add_allowed_prefixes_to_direct_connect_gateway, "removeAllowedPrefixesToDirectConnectGateway": $remove_allowed_prefixes_to_direct_connect_gateway} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2450,7 +2450,7 @@ export def "x-amz-target-overture-service-update-direct-connect-gateway-associat
 #
 # POST /#X-Amz-Target=OvertureService.UpdateLag
 # operationId: UpdateLag
-export def "x-amz-target-overture-service-update-lag UpdateLag" [
+export def "x-amz-target-overture-service-update-lag update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2459,26 +2459,26 @@ export def "x-amz-target-overture-service-update-lag UpdateLag" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-61
-  lagId: any
-  --lagName: any
-  --minimumLinks: any
-  --encryptionMode: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-61
+  lag_id: any
+  --lag-name: any
+  --minimum-links: any
+  --encryption-mode: any
 ]: any -> record<connectionsBandwidth: record, numberOfConnections: record, lagId: record, ownerAccount: record, lagName: record, lagState: record, location: record, region: record, minimumLinks: record, awsDevice: record, awsDeviceV2: record, awsLogicalDeviceId: record, connections: record, allowsHostedConnections: record, jumboFrameCapable: record, hasLogicalRedundancy: record, tags: record, providerName: record, macSecCapable: record, encryptionMode: record, macSecKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.UpdateLag")
-  let body = {lagId: $lagId, lagName: $lagName, minimumLinks: $minimumLinks, encryptionMode: $encryptionMode} | compact
+  let body = {"lagId": $lag_id, "lagName": $lag_name, "minimumLinks": $minimum_links, "encryptionMode": $encryption_mode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2489,7 +2489,7 @@ export def "x-amz-target-overture-service-update-lag UpdateLag" [
 #
 # POST /#X-Amz-Target=OvertureService.UpdateVirtualInterfaceAttributes
 # operationId: UpdateVirtualInterfaceAttributes
-export def "x-amz-target-overture-service-update-virtual-interface-attributes UpdateVirtualInterfaceAttributes" [
+export def "x-amz-target-overture-service-update-virtual-interface-attributes update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2498,26 +2498,26 @@ export def "x-amz-target-overture-service-update-virtual-interface-attributes Up
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-62
-  virtualInterfaceId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-62
+  virtual_interface_id: any
   --mtu: any
-  --enableSiteLink: any
-  --virtualInterfaceName: any
+  --enable-site-link: any
+  --virtual-interface-name: any
 ]: any -> record<ownerAccount: record, virtualInterfaceId: record, location: record, connectionId: record, virtualInterfaceType: record, virtualInterfaceName: record, vlan: record, asn: record, amazonSideAsn: record, authKey: record, amazonAddress: record, customerAddress: record, addressFamily: record, virtualInterfaceState: record, customerRouterConfig: record, mtu: record, jumboFrameCapable: record, virtualGatewayId: record, directConnectGatewayId: record, routeFilterPrefixes: record, bgpPeers: record, region: record, awsDeviceV2: record, awsLogicalDeviceId: record, tags: record, siteLinkEnabled: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=OvertureService.UpdateVirtualInterfaceAttributes")
-  let body = {virtualInterfaceId: $virtualInterfaceId, mtu: $mtu, enableSiteLink: $enableSiteLink, virtualInterfaceName: $virtualInterfaceName} | compact
+  let body = {"virtualInterfaceId": $virtual_interface_id, "mtu": $mtu, "enableSiteLink": $enable_site_link, "virtualInterfaceName": $virtual_interface_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

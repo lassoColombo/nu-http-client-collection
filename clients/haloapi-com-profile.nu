@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-subscription-
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "h5-profiles-appearance Halo-5-Player-Appearance" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "h5-profiles-appearance get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /h5/profiles/{player}/appearance
 # operationId: Halo-5-Player-Appearance
-export def "h5-profiles-appearance Halo-5-Player-Appearance" [
+export def "h5-profiles-appearance get" [
   player: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -107,7 +107,7 @@ export def "h5-profiles-appearance Halo-5-Player-Appearance" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/h5/profiles/($player)/appearance")
+  let full_url = (build-url $base ({player: $player} | format pattern "/h5/profiles/{player}/appearance"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -117,7 +117,7 @@ export def "h5-profiles-appearance Halo-5-Player-Appearance" [
 #
 # GET /h5/profiles/{player}/emblem
 # operationId: Halo-5-Player-Emblem-Image
-export def "h5-profiles-emblem Halo-5-Player-Emblem-Image" [
+export def "h5-profiles-emblem get" [
   player: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -132,7 +132,7 @@ export def "h5-profiles-emblem Halo-5-Player-Emblem-Image" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/h5/profiles/($player)/emblem" $qp)
+  let full_url = (build-url $base ({player: $player} | format pattern "/h5/profiles/{player}/emblem") $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,7 +142,7 @@ export def "h5-profiles-emblem Halo-5-Player-Emblem-Image" [
 #
 # GET /h5/profiles/{player}/spartan
 # operationId: Halo-5-Player-Spartan-Image
-export def "h5-profiles-spartan Halo-5-Player-Spartan-Image" [
+export def "h5-profiles-spartan get" [
   player: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -158,7 +158,7 @@ export def "h5-profiles-spartan Halo-5-Player-Spartan-Image" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "crop" $crop "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/h5/profiles/($player)/spartan" $qp)
+  let full_url = (build-url $base ({player: $player} | format pattern "/h5/profiles/{player}/spartan") $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

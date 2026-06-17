@@ -66,18 +66,18 @@ def base-url-completer [] { ["https://api.portfoliooptimizer.io/v1" "https://eu-
 def auth-scheme-completer [] { ["x-api-key"] }
 
 # Completers for enum parameters
-def denoisingMethod-completer [] { ["eigenvaluesClipping"] }
-def distanceMetric-completer [] { ["bures" "correlationMatrix" "euclidean"] }
-def targetEquicorrelationMatrix-completer [] { ["maximumEquicorrelationMatrix" "minimumEquicorrelationMatrix" "zeroEquicorrelationMatrix"] }
-def clusteringMethod-completer [] { ["averageLinkage" "completeLinkage" "singleLinkage" "wardLinkage"] }
-def bootstrapMethod-completer [] { ["circularBlock" "iid" "stationaryBlock"] }
-def factorsExtractionMethod-completer [] { ["approximateMinimumLinearTorsion" "exactMinimumLinearTorsion" "principalComponentAnalysis"] }
-def confidenceIntervalType-completer [] { ["lowerOneSided" "twoSided" "upperOneSided"] }
-def clusteringOrdering-completer [] { ["optimal" "r-hclust"] }
-def acrossClusterAllocationMethod-completer [] { ["equalWeighting" "inverseVariance" "inverseVolatility"] }
-def withinClusterAllocationMethod-completer [] { ["equalWeighting" "inverseVariance" "inverseVolatility"] }
-def subsetPortfoliosAggregationMethod-completer [] { ["average" "median"] }
-def subsetPortfoliosEnumerationMethod-completer [] { ["complete" "randomSampling"] }
+def denoising-method-completer [] { ["eigenvaluesClipping"] }
+def distance-metric-completer [] { ["bures" "correlationMatrix" "euclidean"] }
+def target-equicorrelation-matrix-completer [] { ["maximumEquicorrelationMatrix" "minimumEquicorrelationMatrix" "zeroEquicorrelationMatrix"] }
+def clustering-method-completer [] { ["averageLinkage" "completeLinkage" "singleLinkage" "wardLinkage"] }
+def bootstrap-method-completer [] { ["circularBlock" "iid" "stationaryBlock"] }
+def factors-extraction-method-completer [] { ["approximateMinimumLinearTorsion" "exactMinimumLinearTorsion" "principalComponentAnalysis"] }
+def confidence-interval-type-completer [] { ["lowerOneSided" "twoSided" "upperOneSided"] }
+def clustering-ordering-completer [] { ["optimal" "r-hclust"] }
+def across-cluster-allocation-method-completer [] { ["equalWeighting" "inverseVariance" "inverseVolatility"] }
+def within-cluster-allocation-method-completer [] { ["equalWeighting" "inverseVariance" "inverseVolatility"] }
+def subset-portfolios-aggregation-method-completer [] { ["average" "median"] }
+def subset-portfolios-enumeration-method-completer [] { ["complete" "randomSampling"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -116,14 +116,14 @@ export def "assets-analysis-absorption-ratio post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  --assetsCovarianceMatrixEigenvectors: record # shape: {eigenvectorsRetained?: int}
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  --assets-covariance-matrix-eigenvectors: record # shape: {eigenvectorsRetained?: int}
 ]: any -> record<assetsAbsorptionRatio: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/analysis/absorption-ratio")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsCovarianceMatrixEigenvectors: $assetsCovarianceMatrixEigenvectors} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsCovarianceMatrixEigenvectors": $assets_covariance_matrix_eigenvectors} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -143,15 +143,15 @@ export def "assets-analysis-turbulence-index post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsAverageReturns: list # assetsAverageReturns[i] is the average return of asset i over an historical reference period
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j over an historical reference period
-  assetsReturns: list # assetsReturns[i] is the return of asset i over a period different from the historical reference period
+  assets_average_returns: list # assetsAverageReturns[i] is the average return of asset i over an historical reference period
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j over an historical reference period
+  assets_returns: list # assetsReturns[i] is the return of asset i over a period different from the historical reference period
 ]: any -> record<assetsTurbulenceIndex: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/analysis/turbulence-index")
-  let body = {assets: $assets, assetsAverageReturns: $assetsAverageReturns, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns} | compact
+  let body = {"assets": $assets, "assetsAverageReturns": $assets_average_returns, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -172,13 +172,13 @@ export def "assets-correlation-matrix post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --assets: list # item shape: {assetReturns: list}
-  --assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
 ]: any -> record<assetsCorrelationMatrix: list<list<float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -198,14 +198,14 @@ export def "assets-correlation-matrix-bounds post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int
-  assetsCorrelationMatrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
-  assetsGroup: list # assetsGroup[k] is the indexes of the assets belonging to the assets group
+  assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
+  assets_group: list # assetsGroup[k] is the indexes of the assets belonging to the assets group
 ]: any -> record<assetsCorrelationMatrixLowerBounds: list<list<float>>, assetsCorrelationMatrixUpperBounds: list<list<float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/bounds")
-  let body = {assets: $assets, assetsCorrelationMatrix: $assetsCorrelationMatrix, assetsGroup: $assetsGroup} | compact
+  let body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "assetsGroup": $assets_group} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -225,15 +225,15 @@ export def "assets-correlation-matrix-denoised post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int
-  assetsCorrelationMatrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
-  assetsCorrelationMatrixAspectRatio: float # The aspect ratio of the asset correlation matrix, defined as the number of assets divided by the number of asset returns per asset used to compute the asset correlation matrix
-  --denoisingMethod: string@denoisingMethod-completer # The method used to denoise the asset correlation matrix (default: eigenvaluesClipping)
+  assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
+  assets_correlation_matrix_aspect_ratio: float # The aspect ratio of the asset correlation matrix, defined as the number of assets divided by the number of asset returns per asset used to compute the asset correlation matrix
+  --denoising-method: string@denoising-method-completer # The method used to denoise the asset correlation matrix (default: eigenvaluesClipping)
 ]: any -> record<assetsCorrelationMatrix: list<list<float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/denoised")
-  let body = {assets: $assets, assetsCorrelationMatrix: $assetsCorrelationMatrix, assetsCorrelationMatrixAspectRatio: $assetsCorrelationMatrixAspectRatio, denoisingMethod: $denoisingMethod} | compact
+  let body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "assetsCorrelationMatrixAspectRatio": $assets_correlation_matrix_aspect_ratio, "denoisingMethod": $denoising_method} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,15 +253,15 @@ export def "assets-correlation-matrix-distance post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int
-  assetsCorrelationMatrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
-  --distanceMetric: string@distanceMetric-completer # The distance metric to use to compute the distance between the asset correlation matrix and the reference correlation matrix (default: euclidean)
-  referenceCorrelationMatrix: list # referenceCorrelationMatrix[i][j] is the reference correlation between the asset i and the asset j
+  assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
+  --distance-metric: string@distance-metric-completer # The distance metric to use to compute the distance between the asset correlation matrix and the reference correlation matrix (default: euclidean)
+  reference_correlation_matrix: list # referenceCorrelationMatrix[i][j] is the reference correlation between the asset i and the asset j
 ]: any -> record<assetsCorrelationMatrixDistance: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/distance")
-  let body = {assets: $assets, assetsCorrelationMatrix: $assetsCorrelationMatrix, distanceMetric: $distanceMetric, referenceCorrelationMatrix: $referenceCorrelationMatrix} | compact
+  let body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "distanceMetric": $distance_metric, "referenceCorrelationMatrix": $reference_correlation_matrix} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -281,13 +281,13 @@ export def "assets-correlation-matrix-effective-rank post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCorrelationMatrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
+  assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
 ]: any -> record<assetsCorrelationMatrixEffectiveRank: list<list<float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/effective-rank")
-  let body = {assets: $assets, assetsCorrelationMatrix: $assetsCorrelationMatrix} | compact
+  let body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -307,14 +307,14 @@ export def "assets-correlation-matrix-informativeness post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int
-  assetsCorrelationMatrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
-  --distanceMetric: string@distanceMetric-completer # The distance metric to use to compute the informativeness of the asset correlation matrix (default: euclidean)
+  assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
+  --distance-metric: string@distance-metric-completer # The distance metric to use to compute the informativeness of the asset correlation matrix (default: euclidean)
 ]: any -> record<assetsCorrelationMatrixInformativeness: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/informativeness")
-  let body = {assets: $assets, assetsCorrelationMatrix: $assetsCorrelationMatrix, distanceMetric: $distanceMetric} | compact
+  let body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "distanceMetric": $distance_metric} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -334,14 +334,14 @@ export def "assets-correlation-matrix-nearest post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsApproximateCorrelationMatrix: list # assetsApproximateCorrelationMatrix[i][i] is the approximate correlation between the asset i and the asset j
-  --assetsFixedCorrelations: list # assetsFixedCorrelations[k] is the couple of indices (i,j) of the assets i and j for which to keep the approximate correlation assetsApproximateCorrelationMatrix[i][j] fixed
+  assets_approximate_correlation_matrix: list # assetsApproximateCorrelationMatrix[i][i] is the approximate correlation between the asset i and the asset j
+  --assets-fixed-correlations: list # assetsFixedCorrelations[k] is the couple of indices (i,j) of the assets i and j for which to keep the approximate correlation assetsApproximateCorrelationMatrix[i][j] fixed
 ]: any -> record<assetsCorrelationMatrix: list<list<float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/nearest")
-  let body = {assets: $assets, assetsApproximateCorrelationMatrix: $assetsApproximateCorrelationMatrix, assetsFixedCorrelations: $assetsFixedCorrelations} | compact
+  let body = {"assets": $assets, "assetsApproximateCorrelationMatrix": $assets_approximate_correlation_matrix, "assetsFixedCorrelations": $assets_fixed_correlations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -366,7 +366,7 @@ export def "assets-correlation-matrix-random post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/random")
-  let body = {assets: $assets} | compact
+  let body = {"assets": $assets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -386,16 +386,16 @@ export def "assets-correlation-matrix-shrinkage post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --assets: int
-  --assetsCorrelationMatrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
-  --shrinkageFactor: float # The shrinkage factor
-  --targetEquicorrelationMatrix: string@targetEquicorrelationMatrix-completer # The shrinkage target correlation matrix
-  --targetCorrelationMatrix: list # targetCorrelationMatrix[i][j] is the target correlation between the asset i and the asset j
+  --assets-correlation-matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
+  --shrinkage-factor: float # The shrinkage factor
+  --target-equicorrelation-matrix: string@target-equicorrelation-matrix-completer # The shrinkage target correlation matrix
+  --target-correlation-matrix: list # targetCorrelationMatrix[i][j] is the target correlation between the asset i and the asset j
 ]: any -> record<assetsCorrelationMatrix: list<list<float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/shrinkage")
-  let body = {assets: $assets, assetsCorrelationMatrix: $assetsCorrelationMatrix, shrinkageFactor: $shrinkageFactor, targetEquicorrelationMatrix: $targetEquicorrelationMatrix, targetCorrelationMatrix: $targetCorrelationMatrix} | compact
+  let body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "shrinkageFactor": $shrinkage_factor, "targetEquicorrelationMatrix": $target_equicorrelation_matrix, "targetCorrelationMatrix": $target_correlation_matrix} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -416,14 +416,14 @@ export def "assets-correlation-matrix-theory-implied post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: list # item shape: {assetHierarchicalClassification: list}
-  assetsCorrelationMatrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
-  --clusteringMethod: string@clusteringMethod-completer # The hierarchical clustering method to use (default: averageLinkage)
+  assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
+  --clustering-method: string@clustering-method-completer # The hierarchical clustering method to use (default: averageLinkage)
 ]: any -> record<assetsCorrelationMatrix: list<list<float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/theory-implied")
-  let body = {assets: $assets, assetsCorrelationMatrix: $assetsCorrelationMatrix, clusteringMethod: $clusteringMethod} | compact
+  let body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "clusteringMethod": $clustering_method} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -443,13 +443,13 @@ export def "assets-correlation-matrix-validation post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCorrelationMatrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
+  assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
 ]: any -> record<message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/validation")
-  let body = {assets: $assets, assetsCorrelationMatrix: $assetsCorrelationMatrix} | compact
+  let body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -470,15 +470,15 @@ export def "assets-covariance-matrix post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --assets: list # item shape: {assetReturns: list}
-  --assetsCorrelationMatrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
-  --assetsVariances: list # assetsVariances[i] is the variance of the asset i
-  --assetsVolatilities: list # assetsVolatilities[i] is the volatility of the asset i
+  --assets-correlation-matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
+  --assets-variances: list # assetsVariances[i] is the variance of the asset i
+  --assets-volatilities: list # assetsVolatilities[i] is the volatility of the asset i
 ]: any -> record<assetsCovarianceMatrix: list<list<float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/covariance/matrix")
-  let body = {assets: $assets, assetsCorrelationMatrix: $assetsCorrelationMatrix, assetsVariances: $assetsVariances, assetsVolatilities: $assetsVolatilities} | compact
+  let body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "assetsVariances": $assets_variances, "assetsVolatilities": $assets_volatilities} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -498,13 +498,13 @@ export def "assets-covariance-matrix-effective-rank post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
 ]: any -> record<assetsCovarianceMatrixEffectiveRank: list<list<float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/covariance/matrix/effective-rank")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -525,13 +525,13 @@ export def "assets-covariance-matrix-exponentially-weighted post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: list # item shape: {assetReturns: list}
-  --decayFactor: float # The exponential decay factor (default: 0.94)
+  --decay-factor: float # The exponential decay factor (default: 0.94)
 ]: any -> record<assetsCovarianceMatrix: list<list<float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/covariance/matrix/exponentially-weighted")
-  let body = {assets: $assets, decayFactor: $decayFactor} | compact
+  let body = {"assets": $assets, "decayFactor": $decay_factor} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -551,13 +551,13 @@ export def "assets-covariance-matrix-validation post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
 ]: any -> record<message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/covariance/matrix/validation")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -583,7 +583,7 @@ export def "assets-kurtosis post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/kurtosis")
-  let body = {assets: $assets} | compact
+  let body = {"assets": $assets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -609,7 +609,7 @@ export def "assets-prices-adjusted post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/prices/adjusted")
-  let body = {assets: $assets} | compact
+  let body = {"assets": $assets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -635,7 +635,7 @@ export def "assets-prices-adjusted-forward post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/prices/adjusted/forward")
-  let body = {assets: $assets} | compact
+  let body = {"assets": $assets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -661,7 +661,7 @@ export def "assets-returns post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/returns")
-  let body = {assets: $assets} | compact
+  let body = {"assets": $assets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -687,7 +687,7 @@ export def "assets-returns-average post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/returns/average")
-  let body = {assets: $assets} | compact
+  let body = {"assets": $assets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -708,17 +708,17 @@ export def "assets-returns-simulation-bootstrap post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: list # item shape: {assetReturns: list}
-  --bootstrapAverageBlockLength: float # The average length of the blocks to use in case the bootstrap method is 'stationaryBlock', in time periods; if not provided, defaults to the inverse of 3.15 * the common length of the assetReturns arrays^1/3
-  --bootstrapBlockLength: int # The length of the blocks to use in case the bootstrap method is 'circularBlock', in time periods; if not provided, defaults to [3.15 * the common length of the assetReturns arrays^1/3]
-  --bootstrapMethod: string@bootstrapMethod-completer # The bootstrap method to use (default: stationaryBlock)
+  --bootstrap-average-block-length: float # The average length of the blocks to use in case the bootstrap method is 'stationaryBlock', in time periods; if not provided, defaults to the inverse of 3.15 * the common length of the assetReturns arrays^1/3
+  --bootstrap-block-length: int # The length of the blocks to use in case the bootstrap method is 'circularBlock', in time periods; if not provided, defaults to [3.15 * the common length of the assetReturns arrays^1/3]
+  --bootstrap-method: string@bootstrap-method-completer # The bootstrap method to use (default: stationaryBlock)
   --simulations: int # The number of simulations to perform (default: 25)
-  --simulationsLength: int # The number of time period(s) to simulate per simulation; if not provided, defaults to the common length of the assetReturns arrays
+  --simulations-length: int # The number of time period(s) to simulate per simulation; if not provided, defaults to the common length of the assetReturns arrays
 ]: any -> record<simulations: table<assets: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/returns/simulation/bootstrap")
-  let body = {assets: $assets, bootstrapAverageBlockLength: $bootstrapAverageBlockLength, bootstrapBlockLength: $bootstrapBlockLength, bootstrapMethod: $bootstrapMethod, simulations: $simulations, simulationsLength: $simulationsLength} | compact
+  let body = {"assets": $assets, "bootstrapAverageBlockLength": $bootstrap_average_block_length, "bootstrapBlockLength": $bootstrap_block_length, "bootstrapMethod": $bootstrap_method, "simulations": $simulations, "simulationsLength": $simulations_length} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -744,7 +744,7 @@ export def "assets-skewness post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/skewness")
-  let body = {assets: $assets} | compact
+  let body = {"assets": $assets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -765,13 +765,13 @@ export def "assets-variance post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --assets: list # item shape: {assetReturns: list}
-  --assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
 ]: any -> record<assets: table<assetVariance: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/variance")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -792,13 +792,13 @@ export def "assets-volatility post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --assets: list # item shape: {assetReturns: list}
-  --assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
 ]: any -> record<assets: table<assetVolatility: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/volatility")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -819,13 +819,13 @@ export def "factors-residualization post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   factors: list # item shape: {factorReturns: list}
-  residualizedFactor: int # The index of the factor to residualize
+  residualized_factor: int # The index of the factor to residualize
 ]: any -> record<residualizedFactorReturns: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/factors/residualization")
-  let body = {factors: $factors, residualizedFactor: $residualizedFactor} | compact
+  let body = {"factors": $factors, "residualizedFactor": $residualized_factor} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -845,16 +845,16 @@ export def "portfolio-analysis-alpha post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --benchmarkReturns: list # benchmarkReturns[t] is the return of the benchmark at the time t; the benchmarkReturns array must have the same length as all the portfolioReturns arrays
+  --benchmark-returns: list # benchmarkReturns[t] is the return of the benchmark at the time t; the benchmarkReturns array must have the same length as all the portfolioReturns arrays
   --portfolios: list # item shape: {portfolioReturns: list}
-  --riskFreeRate: float # The risk free rate, assumed to be constant for any time t
-  --riskFreeReturns: list # riskFreeReturns[t] is the risk free return at the time t; the riskFreeReturns array must have the same length as all the portfolioReturns arrays
+  --risk-free-rate: float # The risk free rate, assumed to be constant for any time t
+  --risk-free-returns: list # riskFreeReturns[t] is the risk free return at the time t; the riskFreeReturns array must have the same length as all the portfolioReturns arrays
 ]: any -> record<portfolios: table<portfolioAlpha: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/alpha")
-  let body = {benchmarkReturns: $benchmarkReturns, portfolios: $portfolios, riskFreeRate: $riskFreeRate, riskFreeReturns: $riskFreeReturns} | compact
+  let body = {"benchmarkReturns": $benchmark_returns, "portfolios": $portfolios, "riskFreeRate": $risk_free_rate, "riskFreeReturns": $risk_free_returns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -874,16 +874,16 @@ export def "portfolio-analysis-beta post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --benchmarkReturns: list # benchmarkReturns[t] is the return of the benchmark at the time t; the benchmarkReturns array must have the same length as all the portfolioReturns arrays
+  --benchmark-returns: list # benchmarkReturns[t] is the return of the benchmark at the time t; the benchmarkReturns array must have the same length as all the portfolioReturns arrays
   --portfolios: list # item shape: {portfolioReturns: list}
-  --riskFreeRate: float # The risk free rate, assumed to be constant for any time t
-  --riskFreeReturns: list # riskFreeReturns[t] is the risk free return at the time t; the riskFreeReturns array must have the same length as all the portfolioReturns arrays
+  --risk-free-rate: float # The risk free rate, assumed to be constant for any time t
+  --risk-free-returns: list # riskFreeReturns[t] is the risk free return at the time t; the riskFreeReturns array must have the same length as all the portfolioReturns arrays
 ]: any -> record<portfolios: table<portfolioBeta: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/beta")
-  let body = {benchmarkReturns: $benchmarkReturns, portfolios: $portfolios, riskFreeRate: $riskFreeRate, riskFreeReturns: $riskFreeReturns} | compact
+  let body = {"benchmarkReturns": $benchmark_returns, "portfolios": $portfolios, "riskFreeRate": $risk_free_rate, "riskFreeReturns": $risk_free_returns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -910,7 +910,7 @@ export def "portfolio-analysis-conditional-value-at-risk post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/conditional-value-at-risk")
-  let body = {alpha: $alpha, portfolios: $portfolios} | compact
+  let body = {"alpha": $alpha, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -931,15 +931,15 @@ export def "portfolio-analysis-contributions-return post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  --assetsGroups: list
-  assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  --assets-groups: list
+  assets_returns: list # assetsReturns[i] is the arithmetic return of asset i
   portfolios: list # item shape: {assetsWeights: list}
 ]: any -> record<portfolios: table<assetsGroupsReturnContributions: list, assetsReturnContributions: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/contributions/return")
-  let body = {assets: $assets, assetsGroups: $assetsGroups, assetsReturns: $assetsReturns, portfolios: $portfolios} | compact
+  let body = {"assets": $assets, "assetsGroups": $assets_groups, "assetsReturns": $assets_returns, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -960,15 +960,15 @@ export def "portfolio-analysis-contributions-risk post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  --assetsGroups: list
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  --assets-groups: list
   portfolios: list # item shape: {assetsWeights: list}
 ]: any -> record<portfolios: table<assetsGroupsRiskContributions: list, assetsRiskContributions: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/contributions/risk")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsGroups: $assetsGroups, portfolios: $portfolios} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsGroups": $assets_groups, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -989,14 +989,14 @@ export def "portfolio-analysis-correlation-spectrum post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --assets: int # The number of assets
-  --assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   --portfolios: list # item shape: {assetsWeights: list}
 ]: any -> record<portfolios: table<portfolioCorrelationSpectrum: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/correlation-spectrum")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, portfolios: $portfolios} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1017,14 +1017,14 @@ export def "portfolio-analysis-diversification-ratio post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --assets: int # The number of assets
-  --assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   --portfolios: list # item shape: {assetsWeights: list}
 ]: any -> record<portfolios: table<portfolioDiversificationRatio: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/diversification-ratio")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, portfolios: $portfolios} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1050,7 +1050,7 @@ export def "portfolio-analysis-drawdowns post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/drawdowns")
-  let body = {portfolios: $portfolios} | compact
+  let body = {"portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1071,15 +1071,15 @@ export def "portfolio-analysis-effective-number-of-bets post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  --factorsExtractionMethod: string@factorsExtractionMethod-completer # The method used to extract the uncorrelated risk factors from the asset covariance matrix (default: exactMinimumLinearTorsion)
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  --factors-extraction-method: string@factors-extraction-method-completer # The method used to extract the uncorrelated risk factors from the asset covariance matrix (default: exactMinimumLinearTorsion)
   portfolios: list # item shape: {assetsWeights: list}
 ]: any -> record<portfolios: table<portfolioEffectiveNumberOfBets: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/effective-number-of-bets")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, factorsExtractionMethod: $factorsExtractionMethod, portfolios: $portfolios} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "factorsExtractionMethod": $factors_extraction_method, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1107,7 +1107,7 @@ export def "portfolio-analysis-factors-exposures post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/factors/exposures")
-  let body = {factors: $factors, portfolios: $portfolios} | compact
+  let body = {"factors": $factors, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1128,8 +1128,8 @@ export def "portfolio-analysis-mean-variance-efficient-frontier post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  assets_returns: list # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
   --portfolios: int # The number of portfolios to compute on the mean-variance efficient frontier (default: 25)
 ]: any -> record<portfolios: table<assetsWeights: list, portfolioReturn: float, portfolioVolatility: float>> {
@@ -1137,7 +1137,7 @@ export def "portfolio-analysis-mean-variance-efficient-frontier post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/mean-variance/efficient-frontier")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns, constraints: $constraints, portfolios: $portfolios} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1158,8 +1158,8 @@ export def "portfolio-analysis-mean-variance-minimum-variance-frontier post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  assets_returns: list # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
   --portfolios: int # The number of portfolios to compute on the mean-variance minimum variance frontier (default: 25)
 ]: any -> record<portfolios: table<assetsWeights: list, portfolioReturn: float, portfolioVolatility: float>> {
@@ -1167,7 +1167,7 @@ export def "portfolio-analysis-mean-variance-minimum-variance-frontier post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/mean-variance/minimum-variance-frontier")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns, constraints: $constraints, portfolios: $portfolios} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1188,14 +1188,14 @@ export def "portfolio-analysis-return post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --assets: int # The number of assets
-  --assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  --assets-returns: list # assetsReturns[i] is the arithmetic return of asset i
   --portfolios: list # item shape: {assetsWeights: list}
 ]: any -> record<portfolios: table<portfolioReturn: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/return")
-  let body = {assets: $assets, assetsReturns: $assetsReturns, portfolios: $portfolios} | compact
+  let body = {"assets": $assets, "assetsReturns": $assets_returns, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1221,7 +1221,7 @@ export def "portfolio-analysis-returns-average post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/returns/average")
-  let body = {portfolios: $portfolios} | compact
+  let body = {"portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1242,16 +1242,16 @@ export def "portfolio-analysis-sharpe-ratio post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --assets: int # The number of assets
-  --assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  --assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  --assets-returns: list # assetsReturns[i] is the arithmetic return of asset i
   --portfolios: list # item shape: {assetsWeights: list}
-  --riskFreeRate: float # The risk free rate
+  --risk-free-rate: float # The risk free rate
 ]: any -> record<portfolios: table<portfolioSharpeRatio: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/sharpe-ratio")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns, portfolios: $portfolios, riskFreeRate: $riskFreeRate} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "portfolios": $portfolios, "riskFreeRate": $risk_free_rate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1272,13 +1272,13 @@ export def "portfolio-analysis-sharpe-ratio-bias-adjusted post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   portfolios: list # item shape: {portfolioValues: list}
-  riskFreeRate: float # The risk free rate
+  risk_free_rate: float # The risk free rate
 ]: any -> record<portfolios: table<portfolioBiasAdjustedSharpeRatio: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/sharpe-ratio/bias-adjusted")
-  let body = {portfolios: $portfolios, riskFreeRate: $riskFreeRate} | compact
+  let body = {"portfolios": $portfolios, "riskFreeRate": $risk_free_rate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1298,16 +1298,16 @@ export def "portfolio-analysis-sharpe-ratio-confidence-interval post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --confidenceIntervalType: string@confidenceIntervalType-completer # The type of confidence interval to build (default: twoSided)
-  --confidenceLevel: float # The confidence level of the confidence interval to build, in percentage (default: 0.95)
+  --confidence-interval-type: string@confidence-interval-type-completer # The type of confidence interval to build (default: twoSided)
+  --confidence-level: float # The confidence level of the confidence interval to build, in percentage (default: 0.95)
   portfolios: list # item shape: {portfolioValues: list}
-  riskFreeRate: float # The risk free rate
+  risk_free_rate: float # The risk free rate
 ]: any -> record<portfolios: table<portfolioSharpeRatioConfidenceInterval: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/sharpe-ratio/confidence-interval")
-  let body = {confidenceIntervalType: $confidenceIntervalType, confidenceLevel: $confidenceLevel, portfolios: $portfolios, riskFreeRate: $riskFreeRate} | compact
+  let body = {"confidenceIntervalType": $confidence_interval_type, "confidenceLevel": $confidence_level, "portfolios": $portfolios, "riskFreeRate": $risk_free_rate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1327,16 +1327,16 @@ export def "portfolio-analysis-sharpe-ratio-probabilistic post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --benchmarkSharpeRatio: float # The Sharpe ratio of the benchmark, in the same sampling frequency as the sampling frequency of the portfolio values
+  --benchmark-sharpe-ratio: float # The Sharpe ratio of the benchmark, in the same sampling frequency as the sampling frequency of the portfolio values
   --portfolios: list # item shape: {portfolioValues: list}
-  --riskFreeRate: float # The risk free rate
-  --benchmarkValues: list # benchmarkValues[t] is the value of the benchmark at the time t; the benchmarkValues array must have the same length as all the portfolioValues arrays
+  --risk-free-rate: float # The risk free rate
+  --benchmark-values: list # benchmarkValues[t] is the value of the benchmark at the time t; the benchmarkValues array must have the same length as all the portfolioValues arrays
 ]: any -> record<portfolios: table<portfolioProbabilisticSharpeRatio: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/sharpe-ratio/probabilistic")
-  let body = {benchmarkSharpeRatio: $benchmarkSharpeRatio, portfolios: $portfolios, riskFreeRate: $riskFreeRate, benchmarkValues: $benchmarkValues} | compact
+  let body = {"benchmarkSharpeRatio": $benchmark_sharpe_ratio, "portfolios": $portfolios, "riskFreeRate": $risk_free_rate, "benchmarkValues": $benchmark_values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1356,17 +1356,17 @@ export def "portfolio-analysis-sharpe-ratio-probabilistic-minimum-track-record-l
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --benchmarkSharpeRatio: float # The Sharpe ratio of the benchmark, in the same sampling frequency as the sampling frequency of the portfolio values
-  --confidenceLevel: float # The confidence level of the minimum track record length, in percentage (default: 0.95)
+  --benchmark-sharpe-ratio: float # The Sharpe ratio of the benchmark, in the same sampling frequency as the sampling frequency of the portfolio values
+  --confidence-level: float # The confidence level of the minimum track record length, in percentage (default: 0.95)
   --portfolios: list # item shape: {portfolioValues: list}
-  --riskFreeRate: float # The risk free rate
-  --benchmarkValues: list # benchmarkValues[t] is the value of the benchmark at the time t; the benchmarkValues array must have the same length as all the portfolioValues arrays
+  --risk-free-rate: float # The risk free rate
+  --benchmark-values: list # benchmarkValues[t] is the value of the benchmark at the time t; the benchmarkValues array must have the same length as all the portfolioValues arrays
 ]: any -> record<portfolios: table<portfolioSharpeRatioMinimumTrackRecordLength: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/sharpe-ratio/probabilistic/minimum-track-record-length")
-  let body = {benchmarkSharpeRatio: $benchmarkSharpeRatio, confidenceLevel: $confidenceLevel, portfolios: $portfolios, riskFreeRate: $riskFreeRate, benchmarkValues: $benchmarkValues} | compact
+  let body = {"benchmarkSharpeRatio": $benchmark_sharpe_ratio, "confidenceLevel": $confidence_level, "portfolios": $portfolios, "riskFreeRate": $risk_free_rate, "benchmarkValues": $benchmark_values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1386,14 +1386,14 @@ export def "portfolio-analysis-tracking-error post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  benchmarkReturns: list # benchmarkReturns[t] is the return of the benchmark at the time t; the benchmarkReturns array must have the same length as all the portfolioReturns arrays
+  benchmark_returns: list # benchmarkReturns[t] is the return of the benchmark at the time t; the benchmarkReturns array must have the same length as all the portfolioReturns arrays
   portfolios: list # item shape: {portfolioReturns: list}
 ]: any -> record<portfolios: table<portfolioTrackingError: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/tracking-error")
-  let body = {benchmarkReturns: $benchmarkReturns, portfolios: $portfolios} | compact
+  let body = {"benchmarkReturns": $benchmark_returns, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1414,13 +1414,13 @@ export def "portfolio-analysis-ulcer-index post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   portfolios: list # item shape: {portfolioValues: list}
-  riskFreeRate: float # The risk free rate
+  risk_free_rate: float # The risk free rate
 ]: any -> record<portfolios: table<portfolioUlcerIndex: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/ulcer-index")
-  let body = {portfolios: $portfolios, riskFreeRate: $riskFreeRate} | compact
+  let body = {"portfolios": $portfolios, "riskFreeRate": $risk_free_rate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1441,13 +1441,13 @@ export def "portfolio-analysis-ulcer-performance-index post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   portfolios: list # item shape: {portfolioValues: list}
-  riskFreeRate: float # The risk free rate
+  risk_free_rate: float # The risk free rate
 ]: any -> record<portfolios: table<portfolioUlcerPerformanceIndex: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/ulcer-performance-index")
-  let body = {portfolios: $portfolios, riskFreeRate: $riskFreeRate} | compact
+  let body = {"portfolios": $portfolios, "riskFreeRate": $risk_free_rate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1474,7 +1474,7 @@ export def "portfolio-analysis-value-at-risk post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/value-at-risk")
-  let body = {alpha: $alpha, portfolios: $portfolios} | compact
+  let body = {"alpha": $alpha, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1495,14 +1495,14 @@ export def "portfolio-analysis-volatility post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --assets: int # The number of assets
-  --assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   --portfolios: list # item shape: {assetsWeights: list}
 ]: any -> record<portfolios: table<portfolioVolatility: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/volatility")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, portfolios: $portfolios} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1522,21 +1522,21 @@ export def "portfolio-construction-investable post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  --assetsGroups: list
-  --assetsGroupsWeights: list # assetsGroupsWeights[i] is the desired weight of the assets group k in the portfolio, in percentage (can be null to indicate no specific desire); requires assetsGroups to be present
-  --assetsMinimumNotionalValues: list # assetsMinimumNotionalValues[i] is the minimum monetary value that the position in the asset i is required to represent when the asset i is included in the portfolio
-  --assetsMinimumPositions: list # assetsMinimumPositions[i] is the minimum number of shares of the asset i that is required to purchase when the asset i is included in the portfolio (usual values are the same as for assetsSizeLots)
-  assetsPrices: list # assetsPrices[i] is the price of the asset i
-  --assetsSizeLots: list # assetsSizeLots[i] is the number of shares by which it is required to purchase the asset i (usual values are 1 if the asset needs to be purchased share by share, 100 if the asset needs to be purchased by an integer multiple of 100 shares, and 1/1000000 - e.g. for Robinhood broker - if the asset can be purchased by fractional shares)
-  --assetsWeights: list # assetsWeights[i] is the desired weight of the asset i in the portfolio, in percentage (can be null to indicate no specific desire)
-  --maximumAssetsGroupsWeights: list # maximumAssetsGroupsWeights[k] is the maximum desired weight of the assets group k in the portfolio, in percentage (can be null to indicate no specific desire); requires assetsGroups to be present
-  portfolioValue: float # The monetary value of the portfolio
+  --assets-groups: list
+  --assets-groups-weights: list # assetsGroupsWeights[i] is the desired weight of the assets group k in the portfolio, in percentage (can be null to indicate no specific desire); requires assetsGroups to be present
+  --assets-minimum-notional-values: list # assetsMinimumNotionalValues[i] is the minimum monetary value that the position in the asset i is required to represent when the asset i is included in the portfolio
+  --assets-minimum-positions: list # assetsMinimumPositions[i] is the minimum number of shares of the asset i that is required to purchase when the asset i is included in the portfolio (usual values are the same as for assetsSizeLots)
+  assets_prices: list # assetsPrices[i] is the price of the asset i
+  --assets-size-lots: list # assetsSizeLots[i] is the number of shares by which it is required to purchase the asset i (usual values are 1 if the asset needs to be purchased share by share, 100 if the asset needs to be purchased by an integer multiple of 100 shares, and 1/1000000 - e.g. for Robinhood broker - if the asset can be purchased by fractional shares)
+  --assets-weights: list # assetsWeights[i] is the desired weight of the asset i in the portfolio, in percentage (can be null to indicate no specific desire)
+  --maximum-assets-groups-weights: list # maximumAssetsGroupsWeights[k] is the maximum desired weight of the assets group k in the portfolio, in percentage (can be null to indicate no specific desire); requires assetsGroups to be present
+  portfolio_value: float # The monetary value of the portfolio
 ]: any -> record<assetsPositions: list<float>, assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/construction/investable")
-  let body = {assets: $assets, assetsGroups: $assetsGroups, assetsGroupsWeights: $assetsGroupsWeights, assetsMinimumNotionalValues: $assetsMinimumNotionalValues, assetsMinimumPositions: $assetsMinimumPositions, assetsPrices: $assetsPrices, assetsSizeLots: $assetsSizeLots, assetsWeights: $assetsWeights, maximumAssetsGroupsWeights: $maximumAssetsGroupsWeights, portfolioValue: $portfolioValue} | compact
+  let body = {"assets": $assets, "assetsGroups": $assets_groups, "assetsGroupsWeights": $assets_groups_weights, "assetsMinimumNotionalValues": $assets_minimum_notional_values, "assetsMinimumPositions": $assets_minimum_positions, "assetsPrices": $assets_prices, "assetsSizeLots": $assets_size_lots, "assetsWeights": $assets_weights, "maximumAssetsGroupsWeights": $maximum_assets_groups_weights, "portfolioValue": $portfolio_value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1558,14 +1558,14 @@ export def "portfolio-construction-mimicking post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: list # item shape: {assetReturns: list}
-  benchmarkReturns: list # benchmarkReturns[t] is the return of the benchmark at the time t; the benchmarkReturns array must have the same length as all the assetReturns arrays
+  benchmark_returns: list # benchmarkReturns[t] is the return of the benchmark at the time t; the benchmarkReturns array must have the same length as all the assetReturns arrays
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/construction/mimicking")
-  let body = {assets: $assets, benchmarkReturns: $benchmarkReturns, constraints: $constraints} | compact
+  let body = {"assets": $assets, "benchmarkReturns": $benchmark_returns, "constraints": $constraints} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1593,7 +1593,7 @@ export def "portfolio-construction-random post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/construction/random")
-  let body = {assets: $assets, constraints: $constraints, portfolios: $portfolios} | compact
+  let body = {"assets": $assets, "constraints": $constraints, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1614,14 +1614,14 @@ export def "portfolio-optimization-equal-risk-contributions post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   --constraints: record # shape: {maximumAssetsWeights?: list, minimumAssetsWeights?: list}
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/equal-risk-contributions")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, constraints: $constraints} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "constraints": $constraints} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1641,15 +1641,15 @@ export def "portfolio-optimization-equal-sharpe-ratio-contributions post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
-  riskFreeRate: float # The risk free rate
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  assets_returns: list # assetsReturns[i] is the arithmetic return of asset i
+  risk_free_rate: float # The risk free rate
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/equal-sharpe-ratio-contributions")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns, riskFreeRate: $riskFreeRate} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "riskFreeRate": $risk_free_rate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1669,13 +1669,13 @@ export def "portfolio-optimization-equal-volatility-weighted post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsVolatilities: list # assetsVolatilities[i] is the volatility of the asset i
+  assets_volatilities: list # assetsVolatilities[i] is the volatility of the asset i
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/equal-volatility-weighted")
-  let body = {assets: $assets, assetsVolatilities: $assetsVolatilities} | compact
+  let body = {"assets": $assets, "assetsVolatilities": $assets_volatilities} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1700,7 +1700,7 @@ export def "portfolio-optimization-equal-weighted post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/equal-weighted")
-  let body = {assets: $assets} | compact
+  let body = {"assets": $assets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1721,16 +1721,16 @@ export def "portfolio-optimization-hierarchical-risk-parity post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  --clusteringMethod: string@clusteringMethod-completer # The hierarchical clustering method to use (default: singleLinkage)
-  --clusteringOrdering: string@clusteringOrdering-completer # The order to impose on the hierarchical clustering tree leaves (default: r-hclust)
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  --clustering-method: string@clustering-method-completer # The hierarchical clustering method to use (default: singleLinkage)
+  --clustering-ordering: string@clustering-ordering-completer # The order to impose on the hierarchical clustering tree leaves (default: r-hclust)
   --constraints: record # shape: {maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/hierarchical-risk-parity")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, clusteringMethod: $clusteringMethod, clusteringOrdering: $clusteringOrdering, constraints: $constraints} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "clusteringMethod": $clustering_method, "clusteringOrdering": $clustering_ordering, "constraints": $constraints} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1750,20 +1750,20 @@ export def "portfolio-optimization-hierarchical-risk-parity-clustering-based pos
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --acrossClusterAllocationMethod: string@acrossClusterAllocationMethod-completer # The allocation method to use across clusters (default: equalWeighting)
+  --across-cluster-allocation-method: string@across-cluster-allocation-method-completer # The allocation method to use across clusters (default: equalWeighting)
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  --clusteringMethod: string@clusteringMethod-completer # The hierarchical clustering method to use (default: wardLinkage)
-  --clusteringOrdering: string@clusteringOrdering-completer # The order to impose on the hierarchical clustering tree leaves (default: r-hclust)
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  --clustering-method: string@clustering-method-completer # The hierarchical clustering method to use (default: wardLinkage)
+  --clustering-ordering: string@clustering-ordering-completer # The order to impose on the hierarchical clustering tree leaves (default: r-hclust)
   --clusters: int # The number of clusters to use in the hierarchical clustering tree; if not provided, the number of clusters to use is computed using the gap statistic method, as described in the first reference
   --constraints: record # shape: {maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
-  --withinClusterAllocationMethod: string@withinClusterAllocationMethod-completer # The allocation method to use within clusters (default: equalWeighting)
+  --within-cluster-allocation-method: string@within-cluster-allocation-method-completer # The allocation method to use within clusters (default: equalWeighting)
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/hierarchical-risk-parity/clustering-based")
-  let body = {acrossClusterAllocationMethod: $acrossClusterAllocationMethod, assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, clusteringMethod: $clusteringMethod, clusteringOrdering: $clusteringOrdering, clusters: $clusters, constraints: $constraints, withinClusterAllocationMethod: $withinClusterAllocationMethod} | compact
+  let body = {"acrossClusterAllocationMethod": $across_cluster_allocation_method, "assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "clusteringMethod": $clustering_method, "clusteringOrdering": $clustering_ordering, "clusters": $clusters, "constraints": $constraints, "withinClusterAllocationMethod": $within_cluster_allocation_method} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1783,13 +1783,13 @@ export def "portfolio-optimization-inverse-variance-weighted post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsVariances: list # assetsVariances[i] is the variance of the asset i
+  assets_variances: list # assetsVariances[i] is the variance of the asset i
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/inverse-variance-weighted")
-  let body = {assets: $assets, assetsVariances: $assetsVariances} | compact
+  let body = {"assets": $assets, "assetsVariances": $assets_variances} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1809,13 +1809,13 @@ export def "portfolio-optimization-inverse-volatility-weighted post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsVolatilities: list # assetsVolatilities[i] is the volatility of the asset i
+  assets_volatilities: list # assetsVolatilities[i] is the volatility of the asset i
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/inverse-volatility-weighted")
-  let body = {assets: $assets, assetsVolatilities: $assetsVolatilities} | compact
+  let body = {"assets": $assets, "assetsVolatilities": $assets_volatilities} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1835,13 +1835,13 @@ export def "portfolio-optimization-market-capitalization-weighted post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsMarketCapitalizations: list # assetsMarketCapitalizations[i] is the market capitalization of the asset i
+  assets_market_capitalizations: list # assetsMarketCapitalizations[i] is the market capitalization of the asset i
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/market-capitalization-weighted")
-  let body = {assets: $assets, assetsMarketCapitalizations: $assetsMarketCapitalizations} | compact
+  let body = {"assets": $assets, "assetsMarketCapitalizations": $assets_market_capitalizations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1862,15 +1862,15 @@ export def "portfolio-optimization-maximum-decorrelation post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCorrelationMatrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
-  --assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j
+  --assets-returns: list # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/maximum-decorrelation")
-  let body = {assets: $assets, assetsCorrelationMatrix: $assetsCorrelationMatrix, assetsReturns: $assetsReturns, constraints: $constraints} | compact
+  let body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "assetsReturns": $assets_returns, "constraints": $constraints} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1891,15 +1891,15 @@ export def "portfolio-optimization-maximum-return post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  --assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  assets_returns: list # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/maximum-return")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns, constraints: $constraints} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1920,15 +1920,15 @@ export def "portfolio-optimization-maximum-return-diversified post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  --assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  assets_returns: list # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, deltaReturn?: float, deltaVolatility?: float, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/maximum-return/diversified")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns, constraints: $constraints} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1949,19 +1949,19 @@ export def "portfolio-optimization-maximum-return-subset-resampling-based post" 
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  --assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  --assets-covariance-matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  assets_returns: list # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
-  --subsetPortfolios: int # The number of subset portfolios to compute; only applicable if the enumeration method for the subset portfolios is random sampling (default: 128)
-  --subsetPortfoliosAggregationMethod: string@subsetPortfoliosAggregationMethod-completer # The method to aggregate the subset portfolios (default: average)
-  --subsetPortfoliosEnumerationMethod: string@subsetPortfoliosEnumerationMethod-completer # The method to enumerate the subset portfolios (default: randomSampling)
-  --subsetSize: int # The number of assets to include in each subset portfolio; defaults to a value of order the square root of the total number of assets
+  --subset-portfolios: int # The number of subset portfolios to compute; only applicable if the enumeration method for the subset portfolios is random sampling (default: 128)
+  --subset-portfolios-aggregation-method: string@subset-portfolios-aggregation-method-completer # The method to aggregate the subset portfolios (default: average)
+  --subset-portfolios-enumeration-method: string@subset-portfolios-enumeration-method-completer # The method to enumerate the subset portfolios (default: randomSampling)
+  --subset-size: int # The number of assets to include in each subset portfolio; defaults to a value of order the square root of the total number of assets
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/maximum-return/subset-resampling-based")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns, constraints: $constraints, subsetPortfolios: $subsetPortfolios, subsetPortfoliosAggregationMethod: $subsetPortfoliosAggregationMethod, subsetPortfoliosEnumerationMethod: $subsetPortfoliosEnumerationMethod, subsetSize: $subsetSize} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints, "subsetPortfolios": $subset_portfolios, "subsetPortfoliosAggregationMethod": $subset_portfolios_aggregation_method, "subsetPortfoliosEnumerationMethod": $subset_portfolios_enumeration_method, "subsetSize": $subset_size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1982,16 +1982,16 @@ export def "portfolio-optimization-maximum-sharpe-ratio post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  assets_returns: list # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
-  riskFreeRate: float # The risk free rate
+  risk_free_rate: float # The risk free rate
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/maximum-sharpe-ratio")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns, constraints: $constraints, riskFreeRate: $riskFreeRate} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints, "riskFreeRate": $risk_free_rate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2012,16 +2012,16 @@ export def "portfolio-optimization-maximum-sharpe-ratio-diversified post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  assets_returns: list # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, deltaReturn?: float, deltaVolatility?: float, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
-  riskFreeRate: float # The risk free rate
+  risk_free_rate: float # The risk free rate
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/maximum-sharpe-ratio/diversified")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns, constraints: $constraints, riskFreeRate: $riskFreeRate} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints, "riskFreeRate": $risk_free_rate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2042,20 +2042,20 @@ export def "portfolio-optimization-maximum-sharpe-ratio-subset-resampling-based 
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  assets_returns: list # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
-  riskFreeRate: float # The risk free rate
-  --subsetPortfolios: int # The number of subset portfolios to compute; only applicable if the enumeration method for the subset portfolios is random sampling (default: 128)
-  --subsetPortfoliosAggregationMethod: string@subsetPortfoliosAggregationMethod-completer # The method to aggregate the subset portfolios (default: average)
-  --subsetPortfoliosEnumerationMethod: string@subsetPortfoliosEnumerationMethod-completer # The method to enumerate the subset portfolios (default: randomSampling)
-  --subsetSize: int # The number of assets to include in each subset portfolio; defaults to a value of order the square root of the total number of assets
+  risk_free_rate: float # The risk free rate
+  --subset-portfolios: int # The number of subset portfolios to compute; only applicable if the enumeration method for the subset portfolios is random sampling (default: 128)
+  --subset-portfolios-aggregation-method: string@subset-portfolios-aggregation-method-completer # The method to aggregate the subset portfolios (default: average)
+  --subset-portfolios-enumeration-method: string@subset-portfolios-enumeration-method-completer # The method to enumerate the subset portfolios (default: randomSampling)
+  --subset-size: int # The number of assets to include in each subset portfolio; defaults to a value of order the square root of the total number of assets
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/maximum-sharpe-ratio/subset-resampling-based")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns, constraints: $constraints, riskFreeRate: $riskFreeRate, subsetPortfolios: $subsetPortfolios, subsetPortfoliosAggregationMethod: $subsetPortfoliosAggregationMethod, subsetPortfoliosEnumerationMethod: $subsetPortfoliosEnumerationMethod, subsetSize: $subsetSize} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints, "riskFreeRate": $risk_free_rate, "subsetPortfolios": $subset_portfolios, "subsetPortfoliosAggregationMethod": $subset_portfolios_aggregation_method, "subsetPortfoliosEnumerationMethod": $subset_portfolios_enumeration_method, "subsetSize": $subset_size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2078,13 +2078,13 @@ export def "portfolio-optimization-maximum-ulcer-performance-index post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: list # item shape: {assetPrices: list}
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
-  riskFreeRate: float # The risk free rate
+  risk_free_rate: float # The risk free rate
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/maximum-ulcer-performance-index")
-  let body = {assets: $assets, constraints: $constraints, riskFreeRate: $riskFreeRate} | compact
+  let body = {"assets": $assets, "constraints": $constraints, "riskFreeRate": $risk_free_rate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2105,15 +2105,15 @@ export def "portfolio-optimization-mean-variance-efficient post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  assets_returns: list # assetsReturns[i] is the arithmetic return of asset i
   constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float, portfolioReturn?: float, portfolioVolatility?: float, riskTolerance?: float}
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/mean-variance-efficient")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns, constraints: $constraints} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2134,15 +2134,15 @@ export def "portfolio-optimization-mean-variance-efficient-diversified post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  assets_returns: list # assetsReturns[i] is the arithmetic return of asset i
   constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, deltaReturn?: float, deltaVolatility?: float, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float, portfolioReturn?: float, portfolioVolatility?: float, riskTolerance?: float}
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/mean-variance-efficient/diversified")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns, constraints: $constraints} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2163,19 +2163,19 @@ export def "portfolio-optimization-mean-variance-efficient-subset-resampling-bas
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  assets_returns: list # assetsReturns[i] is the arithmetic return of asset i
   constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float, portfolioReturn?: float, portfolioVolatility?: float, riskTolerance?: float}
-  --subsetPortfolios: int # The number of subset portfolios to compute; only applicable if the enumeration method for the subset portfolios is random sampling (default: 128)
-  --subsetPortfoliosAggregationMethod: string@subsetPortfoliosAggregationMethod-completer # The method to aggregate the subset portfolios (default: average)
-  --subsetPortfoliosEnumerationMethod: string@subsetPortfoliosEnumerationMethod-completer # The method to enumerate the subset portfolios (default: randomSampling)
-  --subsetSize: int # The number of assets to include in each subset portfolio; defaults to a value of order the square root of the total number of assets
+  --subset-portfolios: int # The number of subset portfolios to compute; only applicable if the enumeration method for the subset portfolios is random sampling (default: 128)
+  --subset-portfolios-aggregation-method: string@subset-portfolios-aggregation-method-completer # The method to aggregate the subset portfolios (default: average)
+  --subset-portfolios-enumeration-method: string@subset-portfolios-enumeration-method-completer # The method to enumerate the subset portfolios (default: randomSampling)
+  --subset-size: int # The number of assets to include in each subset portfolio; defaults to a value of order the square root of the total number of assets
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/mean-variance-efficient/subset-resampling-based")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns, constraints: $constraints, subsetPortfolios: $subsetPortfolios, subsetPortfoliosAggregationMethod: $subsetPortfoliosAggregationMethod, subsetPortfoliosEnumerationMethod: $subsetPortfoliosEnumerationMethod, subsetSize: $subsetSize} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints, "subsetPortfolios": $subset_portfolios, "subsetPortfoliosAggregationMethod": $subset_portfolios_aggregation_method, "subsetPortfoliosEnumerationMethod": $subset_portfolios_enumeration_method, "subsetSize": $subset_size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2195,14 +2195,14 @@ export def "portfolio-optimization-minimum-correlation post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int
-  assetsCorrelationMatrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j; required if assetsReturns is not provided
-  assetsVolatilities: list # assetsVariances[i] is the volatility of the asset i; required if assetsCorrelationMatrix is provided and assetsVariances is not provided
+  assets_correlation_matrix: list # assetsCorrelationMatrix[i][j] is the correlation between the asset i and the asset j; required if assetsReturns is not provided
+  assets_volatilities: list # assetsVariances[i] is the volatility of the asset i; required if assetsCorrelationMatrix is provided and assetsVariances is not provided
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/minimum-correlation")
-  let body = {assets: $assets, assetsCorrelationMatrix: $assetsCorrelationMatrix, assetsVolatilities: $assetsVolatilities} | compact
+  let body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "assetsVolatilities": $assets_volatilities} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2230,7 +2230,7 @@ export def "portfolio-optimization-minimum-ulcer-index post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/minimum-ulcer-index")
-  let body = {assets: $assets, constraints: $constraints} | compact
+  let body = {"assets": $assets, "constraints": $constraints} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2251,15 +2251,15 @@ export def "portfolio-optimization-minimum-variance post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  --assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  --assets-returns: list # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/minimum-variance")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns, constraints: $constraints} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2280,15 +2280,15 @@ export def "portfolio-optimization-minimum-variance-diversified post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  --assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  --assets-returns: list # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, deltaReturn?: float, deltaVolatility?: float, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/minimum-variance/diversified")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns, constraints: $constraints} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2309,19 +2309,19 @@ export def "portfolio-optimization-minimum-variance-subset-resampling-based post
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
-  --assetsReturns: list # assetsReturns[i] is the arithmetic return of asset i
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  --assets-returns: list # assetsReturns[i] is the arithmetic return of asset i
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
-  --subsetPortfolios: int # The number of subset portfolios to compute; only applicable if the enumeration method for the subset portfolios is random sampling (default: 128)
-  --subsetPortfoliosAggregationMethod: string@subsetPortfoliosAggregationMethod-completer # The method to aggregate the subset portfolios (default: average)
-  --subsetPortfoliosEnumerationMethod: string@subsetPortfoliosEnumerationMethod-completer # The method to enumerate the subset portfolios (default: randomSampling)
-  --subsetSize: int # The number of assets to include in each subset portfolio; defaults to a value of order the square root of the total number of assets
+  --subset-portfolios: int # The number of subset portfolios to compute; only applicable if the enumeration method for the subset portfolios is random sampling (default: 128)
+  --subset-portfolios-aggregation-method: string@subset-portfolios-aggregation-method-completer # The method to aggregate the subset portfolios (default: average)
+  --subset-portfolios-enumeration-method: string@subset-portfolios-enumeration-method-completer # The method to enumerate the subset portfolios (default: randomSampling)
+  --subset-size: int # The number of assets to include in each subset portfolio; defaults to a value of order the square root of the total number of assets
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/minimum-variance/subset-resampling-based")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, assetsReturns: $assetsReturns, constraints: $constraints, subsetPortfolios: $subsetPortfolios, subsetPortfoliosAggregationMethod: $subsetPortfoliosAggregationMethod, subsetPortfoliosEnumerationMethod: $subsetPortfoliosEnumerationMethod, subsetSize: $subsetSize} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints, "subsetPortfolios": $subset_portfolios, "subsetPortfoliosAggregationMethod": $subset_portfolios_aggregation_method, "subsetPortfoliosEnumerationMethod": $subset_portfolios_enumeration_method, "subsetSize": $subset_size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2342,14 +2342,14 @@ export def "portfolio-optimization-most-diversified post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   assets: int # The number of assets
-  assetsCovarianceMatrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
+  assets_covariance_matrix: list # assetsCovarianceMatrix[i][j] is the covariance between the asset i and the asset j
   --constraints: record # shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list, maximumAssetsWeights?: list, maximumPortfolioExposure?: float, minimumAssetsWeights?: list, minimumPortfolioExposure?: float}
 ]: any -> record<assetsWeights: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/most-diversified")
-  let body = {assets: $assets, assetsCovarianceMatrix: $assetsCovarianceMatrix, constraints: $constraints} | compact
+  let body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "constraints": $constraints} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2377,7 +2377,7 @@ export def "portfolio-simulation-rebalancing-drift-weight post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/simulation/rebalancing/drift-weight")
-  let body = {assets: $assets, portfolios: $portfolios} | compact
+  let body = {"assets": $assets, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2405,7 +2405,7 @@ export def "portfolio-simulation-rebalancing-fixed-weight post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/simulation/rebalancing/fixed-weight")
-  let body = {assets: $assets, portfolios: $portfolios} | compact
+  let body = {"assets": $assets, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2432,7 +2432,7 @@ export def "portfolio-simulation-rebalancing-random-weight post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/simulation/rebalancing/random-weight")
-  let body = {assets: $assets, portfolios: $portfolios} | compact
+  let body = {"assets": $assets, "portfolios": $portfolios} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

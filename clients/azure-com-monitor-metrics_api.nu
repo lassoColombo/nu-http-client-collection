@@ -66,12 +66,12 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def resultType-completer [] { ["Data" "Metadata"] }
+def result-type-completer [] { ["Data" "Metadata"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoftinsights-metrics List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoftinsights-metrics list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,8 +95,8 @@ export def commands []: nothing -> table {
 #
 # GET /{resourceUri}/providers/microsoft.insights/metrics
 # operationId: Metrics_List
-export def "providers-microsoftinsights-metrics List" [
-  resourceUri: string
+export def "providers-microsoftinsights-metrics list" [
+  resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,14 +112,14 @@ export def "providers-microsoftinsights-metrics List" [
   --top: int # The maximum number of records to retrieve. Valid only if $filter is specified. Defaults to 10. (format: int32)
   --orderby: string # The aggregation to use for sorting results and the direction of the sort. Only one order can be specified. Examples: sum asc.
   --filter: string # The **$filter** is used to reduce the set of metric data returned.<br>Example:<br>Metric contains metadata A, B and C.<br>- Return all time series of C where A = a1 and B = b1 or b2<br>**$filter=A eq ‘a1’ and B eq ‘b1’ or B eq ‘b2’ and C eq ‘*’**<br>- Invalid variant:<br>**$filter=A eq ‘a1’ and B eq ‘b1’ and C eq ‘*’ or B = ‘b2’**<br>This is invalid because the logical or operator cannot separate two different metadata names.<br>- Return all time series where A = a1, B = b1 and C = c1:<br>**$filter=A eq ‘a1’ and B eq ‘b1’ and C eq ‘c1’**<br>- Return all time series where A = a1<br>**$filter=A eq ‘a1’ and B eq ‘*’ and C eq ‘*’**.
-  --resultType: string@resultType-completer # Reduces the set of data collected. The syntax allowed depends on the operation. See the operation's description for details.
+  --result-type: string@result-type-completer # Reduces the set of data collected. The syntax allowed depends on the operation. See the operation's description for details.
   --api-version: string # Client Api Version.
   --metricnamespace: string # Metric namespace to query metric definitions for.
 ]: nothing -> record<cost: float, interval: string, namespace: string, resourceregion: string, timespan: string, value: table<id: string, name: record, timeseries: list, type: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timespan" $timespan "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "metricnames" $metricnames "scalar") (serialize-qp "aggregation" $aggregation "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "resultType" $resultType "scalar") (serialize-qp "api-version" $api_version "scalar") (serialize-qp "metricnamespace" $metricnamespace "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceUri)/providers/microsoft.insights/metrics" $qp)
+  let qp = [(serialize-qp "timespan" $timespan "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "metricnames" $metricnames "scalar") (serialize-qp "aggregation" $aggregation "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "resultType" $result_type "scalar") (serialize-qp "api-version" $api_version "scalar") (serialize-qp "metricnamespace" $metricnamespace "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_uri: $resource_uri} | format pattern "/{resource_uri}/providers/microsoft.insights/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

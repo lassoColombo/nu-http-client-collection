@@ -67,12 +67,12 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def kind-completer [] { ["GlobalDocumentDB" "MongoDB" "Parse"] }
-def keyKind-completer [] { ["primary" "primaryReadonly" "secondary" "secondaryReadonly"] }
+def key-kind-completer [] { ["primary" "primaryReadonly" "secondary" "secondaryReadonly"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-document-db-database-account-names CheckNameExists" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-document-db-database-account-names check-name-exists" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,8 +96,8 @@ export def commands []: nothing -> table {
 #
 # HEAD /providers/Microsoft.DocumentDB/databaseAccountNames/{accountName}
 # operationId: DatabaseAccounts_CheckNameExists
-export def "providers-microsoft-document-db-database-account-names CheckNameExists" [
-  accountName: string
+export def "providers-microsoft-document-db-database-account-names check-name-exists" [
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,7 +111,7 @@ export def "providers-microsoft-document-db-database-account-names CheckNameExis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.DocumentDB/databaseAccountNames/($accountName)" $qp)
+  let full_url = (build-url $base ({account_name: $account_name} | format pattern "/providers/Microsoft.DocumentDB/databaseAccountNames/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -121,7 +121,7 @@ export def "providers-microsoft-document-db-database-account-names CheckNameExis
 #
 # GET /providers/Microsoft.DocumentDB/operations
 # operationId: Operations_List
-export def "providers-microsoft-document-db-operations List" [
+export def "providers-microsoft-document-db-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,8 +145,8 @@ export def "providers-microsoft-document-db-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DocumentDB/databaseAccounts
 # operationId: DatabaseAccounts_List
-export def "subscriptions-providers-microsoft-document-db-database-accounts List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-document-db-database-accounts list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "subscriptions-providers-microsoft-document-db-database-accounts List
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DocumentDB/databaseAccounts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DocumentDB/databaseAccounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,9 +170,9 @@ export def "subscriptions-providers-microsoft-document-db-database-accounts List
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts
 # operationId: DatabaseAccounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -196,10 +196,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}
 # operationId: DatabaseAccounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -223,10 +223,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}
 # operationId: DatabaseAccounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +240,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -251,10 +251,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}
 # operationId: DatabaseAccounts_Update
 # --properties shape: {capabilities?: list, connectorOffer?: "Small", consistencyPolicy?: record, disableKeyBasedMetadataWriteAccess?: bool, enableAutomaticFailover?: bool, enableCassandraConnector?: bool, enableMultipleWriteLocations?: bool, ipRangeFilter?: string, isVirtualNetworkFilterEnabled?: bool, locations?: list, virtualNetworkRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,8 +272,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)" $qp)
-  let body = {location: $location, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}") $qp)
+  let body = {"location": $location, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -285,10 +285,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}
 # operationId: DatabaseAccounts_CreateOrUpdate
 # --properties shape: {capabilities?: list, connectorOffer?: "Small", consistencyPolicy?: record, databaseAccountOfferType: "Standard", disableKeyBasedMetadataWriteAccess?: bool, enableAutomaticFailover?: bool, enableCassandraConnector?: bool, enableMultipleWriteLocations?: bool, ipRangeFilter?: string, isVirtualNetworkFilterEnabled?: bool, locations: list, virtualNetworkRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,8 +307,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)" $qp)
-  let body = {kind: $kind, properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}") $qp)
+  let body = {"kind": $kind, "properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -319,10 +319,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces
 # operationId: CassandraResources_ListCassandraKeyspaces
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces ListCassandraKeyspaces" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,7 +336,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/cassandraKeyspaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/cassandraKeyspaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -346,11 +346,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}
 # operationId: CassandraResources_DeleteCassandraKeyspace
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces DeleteCassandraKeyspace" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  keyspaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  keyspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/cassandraKeyspaces/($keyspaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, keyspace_name: $keyspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/cassandraKeyspaces/{keyspace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -374,11 +374,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}
 # operationId: CassandraResources_GetCassandraKeyspace
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces GetCassandraKeyspace" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  keyspaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  keyspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,7 +392,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/cassandraKeyspaces/($keyspaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, keyspace_name: $keyspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/cassandraKeyspaces/{keyspace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -403,11 +403,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}
 # operationId: CassandraResources_CreateUpdateCassandraKeyspace
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces CreateUpdateCassandraKeyspace" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  keyspaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces create-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  keyspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,8 +425,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/cassandraKeyspaces/($keyspaceName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, keyspace_name: $keyspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/cassandraKeyspaces/{keyspace_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -437,11 +437,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/tables
 # operationId: CassandraResources_ListCassandraTables
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables ListCassandraTables" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  keyspaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  keyspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,7 +455,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/cassandraKeyspaces/($keyspaceName)/tables" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, keyspace_name: $keyspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/cassandraKeyspaces/{keyspace_name}/tables") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -465,12 +465,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/tables/{tableName}
 # operationId: CassandraResources_DeleteCassandraTable
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables DeleteCassandraTable" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  keyspaceName: string
-  tableName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  keyspace_name: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/cassandraKeyspaces/($keyspaceName)/tables/($tableName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, keyspace_name: $keyspace_name, table_name: $table_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/cassandraKeyspaces/{keyspace_name}/tables/{table_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -494,12 +494,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/tables/{tableName}
 # operationId: CassandraResources_GetCassandraTable
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables GetCassandraTable" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  keyspaceName: string
-  tableName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  keyspace_name: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -513,7 +513,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/cassandraKeyspaces/($keyspaceName)/tables/($tableName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, keyspace_name: $keyspace_name, table_name: $table_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/cassandraKeyspaces/{keyspace_name}/tables/{table_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -524,12 +524,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/tables/{tableName}
 # operationId: CassandraResources_CreateUpdateCassandraTable
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables CreateUpdateCassandraTable" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  keyspaceName: string
-  tableName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables create-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  keyspace_name: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,8 +547,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/cassandraKeyspaces/($keyspaceName)/tables/($tableName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, keyspace_name: $keyspace_name, table_name: $table_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/cassandraKeyspaces/{keyspace_name}/tables/{table_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -559,12 +559,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/tables/{tableName}/throughputSettings/default
 # operationId: CassandraResources_GetCassandraTableThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables-throughput-settings-default GetCassandraTableThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  keyspaceName: string
-  tableName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables-throughput-settings-default get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  keyspace_name: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,7 +578,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/cassandraKeyspaces/($keyspaceName)/tables/($tableName)/throughputSettings/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, keyspace_name: $keyspace_name, table_name: $table_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/cassandraKeyspaces/{keyspace_name}/tables/{table_name}/throughputSettings/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -589,12 +589,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/tables/{tableName}/throughputSettings/default
 # operationId: CassandraResources_UpdateCassandraTableThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables-throughput-settings-default UpdateCassandraTableThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  keyspaceName: string
-  tableName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables-throughput-settings-default update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  keyspace_name: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -612,8 +612,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/cassandraKeyspaces/($keyspaceName)/tables/($tableName)/throughputSettings/default" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, keyspace_name: $keyspace_name, table_name: $table_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/cassandraKeyspaces/{keyspace_name}/tables/{table_name}/throughputSettings/default") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -624,11 +624,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/throughputSettings/default
 # operationId: CassandraResources_GetCassandraKeyspaceThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-throughput-settings-default GetCassandraKeyspaceThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  keyspaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-throughput-settings-default get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  keyspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -642,7 +642,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/cassandraKeyspaces/($keyspaceName)/throughputSettings/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, keyspace_name: $keyspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/cassandraKeyspaces/{keyspace_name}/throughputSettings/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -653,11 +653,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/throughputSettings/default
 # operationId: CassandraResources_UpdateCassandraKeyspaceThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-throughput-settings-default UpdateCassandraKeyspaceThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  keyspaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-throughput-settings-default update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  keyspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -675,8 +675,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/cassandraKeyspaces/($keyspaceName)/throughputSettings/default" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, keyspace_name: $keyspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/cassandraKeyspaces/{keyspace_name}/throughputSettings/default") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -687,12 +687,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/collections/{collectionRid}/metricDefinitions
 # operationId: Collection_ListMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-metric-definitions ListMetricDefinitions" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseRid: string
-  collectionRid: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-metric-definitions list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_rid: string
+  collection_rid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -706,7 +706,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/databases/($databaseRid)/collections/($collectionRid)/metricDefinitions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_rid: $database_rid, collection_rid: $collection_rid} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/databases/{database_rid}/collections/{collection_rid}/metricDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -716,12 +716,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/collections/{collectionRid}/metrics
 # operationId: Collection_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-metrics ListMetrics" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseRid: string
-  collectionRid: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-metrics list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_rid: string
+  collection_rid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -736,7 +736,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/databases/($databaseRid)/collections/($collectionRid)/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_rid: $database_rid, collection_rid: $collection_rid} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/databases/{database_rid}/collections/{collection_rid}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -746,13 +746,13 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/collections/{collectionRid}/partitionKeyRangeId/{partitionKeyRangeId}/metrics
 # operationId: PartitionKeyRangeId_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-partition-key-range-id-metrics ListMetrics" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseRid: string
-  collectionRid: string
-  partitionKeyRangeId: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-partition-key-range-id-metrics list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_rid: string
+  collection_rid: string
+  partition_key_range_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,7 +767,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/databases/($databaseRid)/collections/($collectionRid)/partitionKeyRangeId/($partitionKeyRangeId)/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_rid: $database_rid, collection_rid: $collection_rid, partition_key_range_id: $partition_key_range_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/databases/{database_rid}/collections/{collection_rid}/partitionKeyRangeId/{partition_key_range_id}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -777,12 +777,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/collections/{collectionRid}/partitions/metrics
 # operationId: CollectionPartition_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-partitions-metrics ListMetrics" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseRid: string
-  collectionRid: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-partitions-metrics list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_rid: string
+  collection_rid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -797,7 +797,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/databases/($databaseRid)/collections/($collectionRid)/partitions/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_rid: $database_rid, collection_rid: $collection_rid} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/databases/{database_rid}/collections/{collection_rid}/partitions/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -807,12 +807,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/collections/{collectionRid}/partitions/usages
 # operationId: CollectionPartition_ListUsages
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-partitions-usages ListUsages" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseRid: string
-  collectionRid: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-partitions-usages list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_rid: string
+  collection_rid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -827,7 +827,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/databases/($databaseRid)/collections/($collectionRid)/partitions/usages" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_rid: $database_rid, collection_rid: $collection_rid} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/databases/{database_rid}/collections/{collection_rid}/partitions/usages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -837,12 +837,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/collections/{collectionRid}/usages
 # operationId: Collection_ListUsages
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-usages ListUsages" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseRid: string
-  collectionRid: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-usages list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_rid: string
+  collection_rid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -857,7 +857,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/databases/($databaseRid)/collections/($collectionRid)/usages" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_rid: $database_rid, collection_rid: $collection_rid} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/databases/{database_rid}/collections/{collection_rid}/usages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -867,11 +867,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/metricDefinitions
 # operationId: Database_ListMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-metric-definitions ListMetricDefinitions" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseRid: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-metric-definitions list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_rid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -885,7 +885,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/databases/($databaseRid)/metricDefinitions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_rid: $database_rid} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/databases/{database_rid}/metricDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -895,11 +895,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/metrics
 # operationId: Database_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-metrics ListMetrics" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseRid: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-metrics list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_rid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -914,7 +914,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/databases/($databaseRid)/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_rid: $database_rid} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/databases/{database_rid}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -924,11 +924,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/usages
 # operationId: Database_ListUsages
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-usages ListUsages" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseRid: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-usages list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_rid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -943,7 +943,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/databases/($databaseRid)/usages" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_rid: $database_rid} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/databases/{database_rid}/usages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -954,10 +954,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/failoverPriorityChange
 # operationId: DatabaseAccounts_FailoverPriorityChange
 # --failoverPolicies item shape: {failoverPriority?: int, locationName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-failover-priority-change FailoverPriorityChange" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-failover-priority-change post" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -967,14 +967,14 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01.
-  failoverPolicies: list # List of failover policies. — item shape: {failoverPriority?: int, locationName?: string}
+  failover_policies: list # List of failover policies. — item shape: {failoverPriority?: int, locationName?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/failoverPriorityChange" $qp)
-  let body = {failoverPolicies: $failoverPolicies} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/failoverPriorityChange") $qp)
+  let body = {"failoverPolicies": $failover_policies} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -985,10 +985,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases
 # operationId: GremlinResources_ListGremlinDatabases
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases ListGremlinDatabases" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1002,7 +1002,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/gremlinDatabases" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/gremlinDatabases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1012,11 +1012,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}
 # operationId: GremlinResources_DeleteGremlinDatabase
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases DeleteGremlinDatabase" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1030,7 +1030,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/gremlinDatabases/($databaseName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/gremlinDatabases/{database_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1040,11 +1040,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}
 # operationId: GremlinResources_GetGremlinDatabase
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases GetGremlinDatabase" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1058,7 +1058,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/gremlinDatabases/($databaseName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/gremlinDatabases/{database_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1069,11 +1069,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}
 # operationId: GremlinResources_CreateUpdateGremlinDatabase
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases CreateUpdateGremlinDatabase" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases create-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1091,8 +1091,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/gremlinDatabases/($databaseName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/gremlinDatabases/{database_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1103,11 +1103,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/graphs
 # operationId: GremlinResources_ListGremlinGraphs
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs ListGremlinGraphs" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1121,7 +1121,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/gremlinDatabases/($databaseName)/graphs" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/gremlinDatabases/{database_name}/graphs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1131,12 +1131,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/graphs/{graphName}
 # operationId: GremlinResources_DeleteGremlinGraph
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs DeleteGremlinGraph" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  graphName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  graph_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1150,7 +1150,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/gremlinDatabases/($databaseName)/graphs/($graphName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, graph_name: $graph_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/gremlinDatabases/{database_name}/graphs/{graph_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1160,12 +1160,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/graphs/{graphName}
 # operationId: GremlinResources_GetGremlinGraph
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs GetGremlinGraph" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  graphName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  graph_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1179,7 +1179,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/gremlinDatabases/($databaseName)/graphs/($graphName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, graph_name: $graph_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/gremlinDatabases/{database_name}/graphs/{graph_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1190,12 +1190,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/graphs/{graphName}
 # operationId: GremlinResources_CreateUpdateGremlinGraph
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs CreateUpdateGremlinGraph" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  graphName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs create-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  graph_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1213,8 +1213,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/gremlinDatabases/($databaseName)/graphs/($graphName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, graph_name: $graph_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/gremlinDatabases/{database_name}/graphs/{graph_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1225,12 +1225,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/graphs/{graphName}/throughputSettings/default
 # operationId: GremlinResources_GetGremlinGraphThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs-throughput-settings-default GetGremlinGraphThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  graphName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs-throughput-settings-default get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  graph_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1244,7 +1244,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/gremlinDatabases/($databaseName)/graphs/($graphName)/throughputSettings/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, graph_name: $graph_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/gremlinDatabases/{database_name}/graphs/{graph_name}/throughputSettings/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1255,12 +1255,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/graphs/{graphName}/throughputSettings/default
 # operationId: GremlinResources_UpdateGremlinGraphThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs-throughput-settings-default UpdateGremlinGraphThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  graphName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs-throughput-settings-default update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  graph_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1278,8 +1278,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/gremlinDatabases/($databaseName)/graphs/($graphName)/throughputSettings/default" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, graph_name: $graph_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/gremlinDatabases/{database_name}/graphs/{graph_name}/throughputSettings/default") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1290,11 +1290,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/throughputSettings/default
 # operationId: GremlinResources_GetGremlinDatabaseThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-throughput-settings-default GetGremlinDatabaseThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-throughput-settings-default get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1308,7 +1308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/gremlinDatabases/($databaseName)/throughputSettings/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/gremlinDatabases/{database_name}/throughputSettings/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1319,11 +1319,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/throughputSettings/default
 # operationId: GremlinResources_UpdateGremlinDatabaseThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-throughput-settings-default UpdateGremlinDatabaseThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-throughput-settings-default update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1341,8 +1341,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/gremlinDatabases/($databaseName)/throughputSettings/default" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/gremlinDatabases/{database_name}/throughputSettings/default") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1353,10 +1353,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/listConnectionStrings
 # operationId: DatabaseAccounts_ListConnectionStrings
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-list-connection-strings ListConnectionStrings" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-list-connection-strings list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1370,7 +1370,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/listConnectionStrings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/listConnectionStrings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1380,10 +1380,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/listKeys
 # operationId: DatabaseAccounts_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-list-keys ListKeys" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-list-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1397,7 +1397,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/listKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1407,10 +1407,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/metricDefinitions
 # operationId: DatabaseAccounts_ListMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-metric-definitions ListMetricDefinitions" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-metric-definitions list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1424,7 +1424,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/metricDefinitions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/metricDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1434,10 +1434,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/metrics
 # operationId: DatabaseAccounts_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-metrics ListMetrics" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-metrics list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1452,7 +1452,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1462,10 +1462,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases
 # operationId: MongoDBResources_ListMongoDBDatabases
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases ListMongoDBDatabases" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1479,7 +1479,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/mongodbDatabases" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/mongodbDatabases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1489,11 +1489,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}
 # operationId: MongoDBResources_DeleteMongoDBDatabase
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases DeleteMongoDBDatabase" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1507,7 +1507,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/mongodbDatabases/($databaseName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/mongodbDatabases/{database_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1517,11 +1517,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}
 # operationId: MongoDBResources_GetMongoDBDatabase
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases GetMongoDBDatabase" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1535,7 +1535,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/mongodbDatabases/($databaseName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/mongodbDatabases/{database_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1546,11 +1546,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}
 # operationId: MongoDBResources_CreateUpdateMongoDBDatabase
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases CreateUpdateMongoDBDatabase" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases create-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1568,8 +1568,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/mongodbDatabases/($databaseName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/mongodbDatabases/{database_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1580,11 +1580,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/collections
 # operationId: MongoDBResources_ListMongoDBCollections
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections ListMongoDBCollections" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1598,7 +1598,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/mongodbDatabases/($databaseName)/collections" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/mongodbDatabases/{database_name}/collections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1608,12 +1608,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/collections/{collectionName}
 # operationId: MongoDBResources_DeleteMongoDBCollection
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections DeleteMongoDBCollection" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  collectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1627,7 +1627,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/mongodbDatabases/($databaseName)/collections/($collectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, collection_name: $collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/mongodbDatabases/{database_name}/collections/{collection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1637,12 +1637,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/collections/{collectionName}
 # operationId: MongoDBResources_GetMongoDBCollection
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections GetMongoDBCollection" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  collectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1656,7 +1656,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/mongodbDatabases/($databaseName)/collections/($collectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, collection_name: $collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/mongodbDatabases/{database_name}/collections/{collection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1667,12 +1667,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/collections/{collectionName}
 # operationId: MongoDBResources_CreateUpdateMongoDBCollection
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections CreateUpdateMongoDBCollection" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  collectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections create-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1690,8 +1690,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/mongodbDatabases/($databaseName)/collections/($collectionName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, collection_name: $collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/mongodbDatabases/{database_name}/collections/{collection_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1702,12 +1702,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/collections/{collectionName}/throughputSettings/default
 # operationId: MongoDBResources_GetMongoDBCollectionThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections-throughput-settings-default GetMongoDBCollectionThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  collectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections-throughput-settings-default get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1721,7 +1721,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/mongodbDatabases/($databaseName)/collections/($collectionName)/throughputSettings/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, collection_name: $collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/mongodbDatabases/{database_name}/collections/{collection_name}/throughputSettings/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1732,12 +1732,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/collections/{collectionName}/throughputSettings/default
 # operationId: MongoDBResources_UpdateMongoDBCollectionThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections-throughput-settings-default UpdateMongoDBCollectionThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  collectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections-throughput-settings-default update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1755,8 +1755,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/mongodbDatabases/($databaseName)/collections/($collectionName)/throughputSettings/default" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, collection_name: $collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/mongodbDatabases/{database_name}/collections/{collection_name}/throughputSettings/default") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1767,11 +1767,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/throughputSettings/default
 # operationId: MongoDBResources_GetMongoDBDatabaseThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-throughput-settings-default GetMongoDBDatabaseThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-throughput-settings-default get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1785,7 +1785,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/mongodbDatabases/($databaseName)/throughputSettings/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/mongodbDatabases/{database_name}/throughputSettings/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1796,11 +1796,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/throughputSettings/default
 # operationId: MongoDBResources_UpdateMongoDBDatabaseThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-throughput-settings-default UpdateMongoDBDatabaseThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-throughput-settings-default update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1818,8 +1818,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/mongodbDatabases/($databaseName)/throughputSettings/default" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/mongodbDatabases/{database_name}/throughputSettings/default") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1830,10 +1830,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/offlineRegion
 # operationId: DatabaseAccounts_OfflineRegion
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-offline-region OfflineRegion" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-offline-region post" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1849,8 +1849,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/offlineRegion" $qp)
-  let body = {region: $region} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/offlineRegion") $qp)
+  let body = {"region": $region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1861,10 +1861,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/onlineRegion
 # operationId: DatabaseAccounts_OnlineRegion
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-online-region OnlineRegion" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-online-region post" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1880,8 +1880,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/onlineRegion" $qp)
-  let body = {region: $region} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/onlineRegion") $qp)
+  let body = {"region": $region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1892,10 +1892,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/percentile/metrics
 # operationId: Percentile_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-percentile-metrics ListMetrics" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-percentile-metrics list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1910,7 +1910,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/percentile/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/percentile/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1920,10 +1920,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/readonlykeys
 # operationId: DatabaseAccounts_GetReadOnlyKeys
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-readonlykeys GetReadOnlyKeys" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-readonlykeys get-read-only-keys" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1937,7 +1937,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/readonlykeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/readonlykeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1947,10 +1947,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/readonlykeys
 # operationId: DatabaseAccounts_ListReadOnlyKeys
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-readonlykeys ListReadOnlyKeys" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-readonlykeys list-read-only-keys" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1964,7 +1964,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/readonlykeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/readonlykeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1974,10 +1974,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/regenerateKey
 # operationId: DatabaseAccounts_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-regenerate-key RegenerateKey" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-regenerate-key post" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1987,14 +1987,14 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-08-01.
-  keyKind: string@keyKind-completer # The access key to regenerate.
+  key_kind: string@key-kind-completer # The access key to regenerate.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/regenerateKey" $qp)
-  let body = {keyKind: $keyKind} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/regenerateKey") $qp)
+  let body = {"keyKind": $key_kind} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2005,13 +2005,13 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/region/{region}/databases/{databaseRid}/collections/{collectionRid}/metrics
 # operationId: CollectionRegion_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-region-databases-collections-metrics ListMetrics" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-region-databases-collections-metrics list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   region: string
-  databaseRid: string
-  collectionRid: string
+  database_rid: string
+  collection_rid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2026,7 +2026,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/region/($region)/databases/($databaseRid)/collections/($collectionRid)/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, region: $region, database_rid: $database_rid, collection_rid: $collection_rid} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/region/{region}/databases/{database_rid}/collections/{collection_rid}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2036,14 +2036,14 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/region/{region}/databases/{databaseRid}/collections/{collectionRid}/partitionKeyRangeId/{partitionKeyRangeId}/metrics
 # operationId: PartitionKeyRangeIdRegion_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-region-databases-collections-partition-key-range-id-metrics ListMetrics" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-region-databases-collections-partition-key-range-id-metrics list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   region: string
-  databaseRid: string
-  collectionRid: string
-  partitionKeyRangeId: string
+  database_rid: string
+  collection_rid: string
+  partition_key_range_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2058,7 +2058,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/region/($region)/databases/($databaseRid)/collections/($collectionRid)/partitionKeyRangeId/($partitionKeyRangeId)/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, region: $region, database_rid: $database_rid, collection_rid: $collection_rid, partition_key_range_id: $partition_key_range_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/region/{region}/databases/{database_rid}/collections/{collection_rid}/partitionKeyRangeId/{partition_key_range_id}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2068,13 +2068,13 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/region/{region}/databases/{databaseRid}/collections/{collectionRid}/partitions/metrics
 # operationId: CollectionPartitionRegion_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-region-databases-collections-partitions-metrics ListMetrics" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-region-databases-collections-partitions-metrics list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   region: string
-  databaseRid: string
-  collectionRid: string
+  database_rid: string
+  collection_rid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2089,7 +2089,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/region/($region)/databases/($databaseRid)/collections/($collectionRid)/partitions/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, region: $region, database_rid: $database_rid, collection_rid: $collection_rid} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/region/{region}/databases/{database_rid}/collections/{collection_rid}/partitions/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2099,10 +2099,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/region/{region}/metrics
 # operationId: DatabaseAccountRegion_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-region-metrics ListMetrics" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-region-metrics list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2118,7 +2118,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/region/($region)/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, region: $region} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/region/{region}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2128,12 +2128,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sourceRegion/{sourceRegion}/targetRegion/{targetRegion}/percentile/metrics
 # operationId: PercentileSourceTarget_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-source-region-target-region-percentile-metrics ListMetrics" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  sourceRegion: string
-  targetRegion: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-source-region-target-region-percentile-metrics list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  source_region: string
+  target_region: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2148,7 +2148,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sourceRegion/($sourceRegion)/targetRegion/($targetRegion)/percentile/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, source_region: $source_region, target_region: $target_region} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sourceRegion/{source_region}/targetRegion/{target_region}/percentile/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2158,10 +2158,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases
 # operationId: SqlResources_ListSqlDatabases
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases ListSqlDatabases" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2175,7 +2175,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2185,11 +2185,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}
 # operationId: SqlResources_DeleteSqlDatabase
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases DeleteSqlDatabase" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2203,7 +2203,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2213,11 +2213,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}
 # operationId: SqlResources_GetSqlDatabase
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases GetSqlDatabase" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2231,7 +2231,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2242,11 +2242,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}
 # operationId: SqlResources_CreateUpdateSqlDatabase
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases CreateUpdateSqlDatabase" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases create-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2264,8 +2264,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2276,11 +2276,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers
 # operationId: SqlResources_ListSqlContainers
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers ListSqlContainers" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2294,7 +2294,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2304,12 +2304,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}
 # operationId: SqlResources_DeleteSqlContainer
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers DeleteSqlContainer" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2323,7 +2323,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2333,12 +2333,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}
 # operationId: SqlResources_GetSqlContainer
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers GetSqlContainer" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2352,7 +2352,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2363,12 +2363,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}
 # operationId: SqlResources_CreateUpdateSqlContainer
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers CreateUpdateSqlContainer" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers create-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2386,8 +2386,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2398,12 +2398,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/storedProcedures
 # operationId: SqlResources_ListSqlStoredProcedures
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-stored-procedures ListSqlStoredProcedures" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-stored-procedures list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2417,7 +2417,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)/storedProcedures" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}/storedProcedures") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2427,13 +2427,13 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/storedProcedures/{storedProcedureName}
 # operationId: SqlResources_DeleteSqlStoredProcedure
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-stored-procedures DeleteSqlStoredProcedure" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
-  storedProcedureName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-stored-procedures delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
+  stored_procedure_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2447,7 +2447,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)/storedProcedures/($storedProcedureName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name, stored_procedure_name: $stored_procedure_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}/storedProcedures/{stored_procedure_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2457,13 +2457,13 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/storedProcedures/{storedProcedureName}
 # operationId: SqlResources_GetSqlStoredProcedure
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-stored-procedures GetSqlStoredProcedure" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
-  storedProcedureName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-stored-procedures get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
+  stored_procedure_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2477,7 +2477,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)/storedProcedures/($storedProcedureName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name, stored_procedure_name: $stored_procedure_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}/storedProcedures/{stored_procedure_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2488,13 +2488,13 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/storedProcedures/{storedProcedureName}
 # operationId: SqlResources_CreateUpdateSqlStoredProcedure
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-stored-procedures CreateUpdateSqlStoredProcedure" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
-  storedProcedureName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-stored-procedures create-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
+  stored_procedure_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2512,8 +2512,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)/storedProcedures/($storedProcedureName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name, stored_procedure_name: $stored_procedure_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}/storedProcedures/{stored_procedure_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2524,12 +2524,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/throughputSettings/default
 # operationId: SqlResources_GetSqlContainerThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-throughput-settings-default GetSqlContainerThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-throughput-settings-default get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2543,7 +2543,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)/throughputSettings/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}/throughputSettings/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2554,12 +2554,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/throughputSettings/default
 # operationId: SqlResources_UpdateSqlContainerThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-throughput-settings-default UpdateSqlContainerThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-throughput-settings-default update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2577,8 +2577,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)/throughputSettings/default" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}/throughputSettings/default") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2589,12 +2589,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/triggers
 # operationId: SqlResources_ListSqlTriggers
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-triggers ListSqlTriggers" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-triggers list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2608,7 +2608,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)/triggers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}/triggers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2618,13 +2618,13 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/triggers/{triggerName}
 # operationId: SqlResources_DeleteSqlTrigger
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-triggers DeleteSqlTrigger" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
-  triggerName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-triggers delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
+  trigger_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2638,7 +2638,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)/triggers/($triggerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name, trigger_name: $trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}/triggers/{trigger_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2648,13 +2648,13 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/triggers/{triggerName}
 # operationId: SqlResources_GetSqlTrigger
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-triggers GetSqlTrigger" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
-  triggerName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-triggers get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
+  trigger_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2668,7 +2668,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)/triggers/($triggerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name, trigger_name: $trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}/triggers/{trigger_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2679,13 +2679,13 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/triggers/{triggerName}
 # operationId: SqlResources_CreateUpdateSqlTrigger
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-triggers CreateUpdateSqlTrigger" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
-  triggerName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-triggers create-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
+  trigger_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2703,8 +2703,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)/triggers/($triggerName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name, trigger_name: $trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}/triggers/{trigger_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2715,12 +2715,12 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/userDefinedFunctions
 # operationId: SqlResources_ListSqlUserDefinedFunctions
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-user-defined-functions ListSqlUserDefinedFunctions" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-user-defined-functions list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2734,7 +2734,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)/userDefinedFunctions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}/userDefinedFunctions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2744,13 +2744,13 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/userDefinedFunctions/{userDefinedFunctionName}
 # operationId: SqlResources_DeleteSqlUserDefinedFunction
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-user-defined-functions DeleteSqlUserDefinedFunction" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
-  userDefinedFunctionName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-user-defined-functions delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
+  user_defined_function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2764,7 +2764,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)/userDefinedFunctions/($userDefinedFunctionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name, user_defined_function_name: $user_defined_function_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}/userDefinedFunctions/{user_defined_function_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2774,13 +2774,13 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/userDefinedFunctions/{userDefinedFunctionName}
 # operationId: SqlResources_GetSqlUserDefinedFunction
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-user-defined-functions GetSqlUserDefinedFunction" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
-  userDefinedFunctionName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-user-defined-functions get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
+  user_defined_function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2794,7 +2794,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)/userDefinedFunctions/($userDefinedFunctionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name, user_defined_function_name: $user_defined_function_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}/userDefinedFunctions/{user_defined_function_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2805,13 +2805,13 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/userDefinedFunctions/{userDefinedFunctionName}
 # operationId: SqlResources_CreateUpdateSqlUserDefinedFunction
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-user-defined-functions CreateUpdateSqlUserDefinedFunction" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
-  containerName: string
-  userDefinedFunctionName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-user-defined-functions create-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
+  container_name: string
+  user_defined_function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2829,8 +2829,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/containers/($containerName)/userDefinedFunctions/($userDefinedFunctionName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name, container_name: $container_name, user_defined_function_name: $user_defined_function_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/containers/{container_name}/userDefinedFunctions/{user_defined_function_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2841,11 +2841,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/throughputSettings/default
 # operationId: SqlResources_GetSqlDatabaseThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-throughput-settings-default GetSqlDatabaseThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-throughput-settings-default get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2859,7 +2859,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/throughputSettings/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/throughputSettings/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2870,11 +2870,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/throughputSettings/default
 # operationId: SqlResources_UpdateSqlDatabaseThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-throughput-settings-default UpdateSqlDatabaseThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-throughput-settings-default update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2892,8 +2892,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/sqlDatabases/($databaseName)/throughputSettings/default" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/sqlDatabases/{database_name}/throughputSettings/default") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2904,10 +2904,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/tables
 # operationId: TableResources_ListTables
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables ListTables" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2921,7 +2921,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/tables" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/tables") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2931,11 +2931,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/tables/{tableName}
 # operationId: TableResources_DeleteTable
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables DeleteTable" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  tableName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2949,7 +2949,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/tables/($tableName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, table_name: $table_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/tables/{table_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2959,11 +2959,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/tables/{tableName}
 # operationId: TableResources_GetTable
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables GetTable" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  tableName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2977,7 +2977,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/tables/($tableName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, table_name: $table_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/tables/{table_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2988,11 +2988,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/tables/{tableName}
 # operationId: TableResources_CreateUpdateTable
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables CreateUpdateTable" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  tableName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables create-update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3010,8 +3010,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/tables/($tableName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, table_name: $table_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/tables/{table_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3022,11 +3022,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/tables/{tableName}/throughputSettings/default
 # operationId: TableResources_GetTableThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables-throughput-settings-default GetTableThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  tableName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables-throughput-settings-default get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3040,7 +3040,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/tables/($tableName)/throughputSettings/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, table_name: $table_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/tables/{table_name}/throughputSettings/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3051,11 +3051,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/tables/{tableName}/throughputSettings/default
 # operationId: TableResources_UpdateTableThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables-throughput-settings-default UpdateTableThroughput" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  tableName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables-throughput-settings-default update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3073,8 +3073,8 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/tables/($tableName)/throughputSettings/default" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, table_name: $table_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/tables/{table_name}/throughputSettings/default") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3085,11 +3085,11 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/targetRegion/{targetRegion}/percentile/metrics
 # operationId: PercentileTarget_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-target-region-percentile-metrics ListMetrics" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  targetRegion: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-target-region-percentile-metrics list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  target_region: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3104,7 +3104,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/targetRegion/($targetRegion)/percentile/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, target_region: $target_region} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/targetRegion/{target_region}/percentile/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3114,10 +3114,10 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/usages
 # operationId: DatabaseAccounts_ListUsages
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-usages ListUsages" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-usages list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3132,7 +3132,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DocumentDB/databaseAccounts/($accountName)/usages" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DocumentDB/databaseAccounts/{account_name}/usages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

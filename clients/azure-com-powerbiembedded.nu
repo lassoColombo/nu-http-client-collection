@@ -65,12 +65,12 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def keyName-completer [] { ["key1" "key2"] }
+def key-name-completer [] { ["key1" "key2"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-power-bi-operations get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-power-bi-operations get-available" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.PowerBI/operations
 # operationId: getAvailableOperations
-export def "providers-microsoft-power-bi-operations get" [
+export def "providers-microsoft-power-bi-operations get-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -118,8 +118,8 @@ export def "providers-microsoft-power-bi-operations get" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.PowerBI/locations/{location}/checkNameAvailability
 # operationId: WorkspaceCollections_checkNameAvailability
-export def "subscriptions-providers-microsoft-power-bi-locations-check-name-availability checkNameAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-power-bi-locations-check-name-availability check" [
+  subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -137,8 +137,8 @@ export def "subscriptions-providers-microsoft-power-bi-locations-check-name-avai
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.PowerBI/locations/($location)/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PowerBI/locations/{location}/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -149,8 +149,8 @@ export def "subscriptions-providers-microsoft-power-bi-locations-check-name-avai
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.PowerBI/workspaceCollections
 # operationId: WorkspaceCollections_listBySubscription
-export def "subscriptions-providers-microsoft-power-bi-workspace-collections listBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-power-bi-workspace-collections list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "subscriptions-providers-microsoft-power-bi-workspace-collections lis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.PowerBI/workspaceCollections" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PowerBI/workspaceCollections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -175,8 +175,8 @@ export def "subscriptions-providers-microsoft-power-bi-workspace-collections lis
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/moveResources
 # operationId: WorkspaceCollections_migrate
 export def "subscriptions-resource-groups-move-resources migrate" [
-  subscriptionId: string
-  resourceGroupName: string
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,14 +187,14 @@ export def "subscriptions-resource-groups-move-resources migrate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --resources: list
-  --targetResourceGroup: string # Name of the resource group the Power BI workspace collections will be migrated to.
+  --target-resource-group: string # Name of the resource group the Power BI workspace collections will be migrated to.
 ]: any -> record<code: string, details: table<code: string, message: string, target: string>, message: string, target: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/moveResources" $qp)
-  let body = {resources: $resources, targetResourceGroup: $targetResourceGroup} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/moveResources") $qp)
+  let body = {"resources": $resources, "targetResourceGroup": $target_resource_group} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -205,9 +205,9 @@ export def "subscriptions-resource-groups-move-resources migrate" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBI/workspaceCollections
 # operationId: WorkspaceCollections_listByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections listByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PowerBI/workspaceCollections" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PowerBI/workspaceCollections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -232,9 +232,9 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBI/workspaceCollections/{workspaceCollectionName}
 # operationId: WorkspaceCollections_delete
 export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceCollectionName: string
+  subscription_id: string
+  resource_group_name: string
+  workspace_collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PowerBI/workspaceCollections/($workspaceCollectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_collection_name: $workspace_collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PowerBI/workspaceCollections/{workspace_collection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,10 +258,10 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBI/workspaceCollections/{workspaceCollectionName}
 # operationId: WorkspaceCollections_getByName
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections get" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceCollectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections get-by-name" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +275,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PowerBI/workspaceCollections/($workspaceCollectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_collection_name: $workspace_collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PowerBI/workspaceCollections/{workspace_collection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -287,9 +287,9 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
 # operationId: WorkspaceCollections_update
 # --sku shape: {name: "S1", tier: "Standard"}
 export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections update" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceCollectionName: string
+  subscription_id: string
+  resource_group_name: string
+  workspace_collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,8 +306,8 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PowerBI/workspaceCollections/($workspaceCollectionName)" $qp)
-  let body = {sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_collection_name: $workspace_collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PowerBI/workspaceCollections/{workspace_collection_name}") $qp)
+  let body = {"sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -320,9 +320,9 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
 # operationId: WorkspaceCollections_create
 # --sku shape: {name: "S1", tier: "Standard"}
 export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections create" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceCollectionName: string
+  subscription_id: string
+  resource_group_name: string
+  workspace_collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,8 +340,8 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PowerBI/workspaceCollections/($workspaceCollectionName)" $qp)
-  let body = {location: $location, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_collection_name: $workspace_collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PowerBI/workspaceCollections/{workspace_collection_name}") $qp)
+  let body = {"location": $location, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -352,10 +352,10 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBI/workspaceCollections/{workspaceCollectionName}/listKeys
 # operationId: WorkspaceCollections_getAccessKeys
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections-list-keys post" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceCollectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections-list-keys get-access" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,7 +369,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PowerBI/workspaceCollections/($workspaceCollectionName)/listKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_collection_name: $workspace_collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PowerBI/workspaceCollections/{workspace_collection_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -380,9 +380,9 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBI/workspaceCollections/{workspaceCollectionName}/regenerateKey
 # operationId: WorkspaceCollections_regenerateKey
 export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections-regenerate-key regenerateKey" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceCollectionName: string
+  subscription_id: string
+  resource_group_name: string
+  workspace_collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,14 +392,14 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --keyName: string@keyName-completer # Key name
+  --key-name: string@key-name-completer # Key name
 ]: any -> record<key1: string, key2: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PowerBI/workspaceCollections/($workspaceCollectionName)/regenerateKey" $qp)
-  let body = {keyName: $keyName} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_collection_name: $workspace_collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PowerBI/workspaceCollections/{workspace_collection_name}/regenerateKey") $qp)
+  let body = {"keyName": $key_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -410,10 +410,10 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBI/workspaceCollections/{workspaceCollectionName}/workspaces
 # operationId: Workspaces_List
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections-workspaces List" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceCollectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections-workspaces list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PowerBI/workspaceCollections/($workspaceCollectionName)/workspaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_collection_name: $workspace_collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PowerBI/workspaceCollections/{workspace_collection_name}/workspaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -100,12 +100,12 @@ export def "list-federations get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-RapidApi-Key: string # Your key obtained from https://boggio-analytics.com/fp-api/
+  --x-rapid-api-key: string # Your key obtained from https://boggio-analytics.com/fp-api/
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/list-federations")
-  let extra_headers = {"X-RapidApi-Key": $X_RapidApi_Key} | compact
+  let extra_headers = {"X-RapidApi-Key": $x_rapid_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -124,12 +124,12 @@ export def "list-markets get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-RapidApi-Key: string # Your key obtained from https://boggio-analytics.com/fp-api/
+  --x-rapid-api-key: string # Your key obtained from https://boggio-analytics.com/fp-api/
 ]: nothing -> record<data: record<all: list<string>, allowed_for_your_subscription: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/list-markets")
-  let extra_headers = {"X-RapidApi-Key": $X_RapidApi_Key} | compact
+  let extra_headers = {"X-RapidApi-Key": $x_rapid_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -148,12 +148,12 @@ export def "performance-stats get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-RapidApi-Key: string # Your key obtained from https://boggio-analytics.com/fp-api/
+  --x-rapid-api-key: string # Your key obtained from https://boggio-analytics.com/fp-api/
 ]: nothing -> record<data: record<accuracy: record<last_14_days: float, last_30_days: float, last_7_days: float, yesterday: float>, details: record<last_14_days: record, last_30_days: record, last_7_days: record, yesterday: record>, market: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/performance-stats")
-  let extra_headers = {"X-RapidApi-Key": $X_RapidApi_Key} | compact
+  let extra_headers = {"X-RapidApi-Key": $x_rapid_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -172,12 +172,12 @@ export def "predictions list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-RapidApi-Key: string # Your key obtained from https://boggio-analytics.com/fp-api/
+  --x-rapid-api-key: string # Your key obtained from https://boggio-analytics.com/fp-api/
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/predictions")
-  let extra_headers = {"X-RapidApi-Key": $X_RapidApi_Key} | compact
+  let extra_headers = {"X-RapidApi-Key": $x_rapid_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,7 +200,7 @@ export def "predictions get" [
 ]: nothing -> record<data: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/predictions/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/predictions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

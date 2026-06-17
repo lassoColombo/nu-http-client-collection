@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "faxes ListFax" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "faxes list-fax" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/Faxes
 # operationId: ListFax
-export def "faxes ListFax" [
+export def "faxes list-fax" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,15 +102,15 @@ export def "faxes ListFax" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --From: string # Retrieve only those faxes sent from this phone number, specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.
-  --To: string # Retrieve only those faxes sent to this phone number, specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.
-  --DateCreatedOnOrBefore: string # Retrieve only those faxes with a `date_created` that is before or equal to this value, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
-  --DateCreatedAfter: string # Retrieve only those faxes with a `date_created` that is later than this value, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --qp-from: string # Retrieve only those faxes sent from this phone number, specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.
+  --qp-to: string # Retrieve only those faxes sent to this phone number, specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.
+  --date-created-on-or-before: string # Retrieve only those faxes with a `date_created` that is before or equal to this value, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
+  --date-created-after: string # Retrieve only those faxes with a `date_created` that is later than this value, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
 ]: nothing -> record<faxes: table<account_sid: string, api_version: string, date_created: string, date_updated: string, direction: string, duration: int, from: string, links: record, media_sid: string, media_url: string, num_pages: int, price: float, price_unit: string, quality: string, sid: string, status: string, to: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://fax.twilio.com")
-  let qp = [(serialize-qp "From" $From "scalar") (serialize-qp "To" $To "scalar") (serialize-qp "DateCreatedOnOrBefore" $DateCreatedOnOrBefore "scalar") (serialize-qp "DateCreatedAfter" $DateCreatedAfter "scalar") (serialize-qp "PageSize" $PageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "From" $qp_from "scalar") (serialize-qp "To" $qp_to "scalar") (serialize-qp "DateCreatedOnOrBefore" $date_created_on_or_before "scalar") (serialize-qp "DateCreatedAfter" $date_created_after "scalar") (serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Faxes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -121,8 +121,8 @@ export def "faxes ListFax" [
 #
 # GET /v1/Faxes/{FaxSid}/Media
 # operationId: ListFaxMedia
-export def "faxes-media ListFaxMedia" [
-  FaxSid: string
+export def "faxes-media list-fax" [
+  fax_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,12 +131,12 @@ export def "faxes-media ListFaxMedia" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
 ]: nothing -> record<media: table<account_sid: string, content_type: string, date_created: string, date_updated: string, fax_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://fax.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Faxes/($FaxSid)/Media" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({fax_sid: $fax_sid} | format pattern "/v1/Faxes/{fax_sid}/Media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -146,9 +146,9 @@ export def "faxes-media ListFaxMedia" [
 #
 # DELETE /v1/Faxes/{FaxSid}/Media/{Sid}
 # operationId: DeleteFaxMedia
-export def "faxes-media DeleteFaxMedia" [
-  FaxSid: string
-  Sid: string
+export def "faxes-media delete-fax" [
+  fax_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "faxes-media DeleteFaxMedia" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://fax.twilio.com")
-  let full_url = (build-url $base $"/v1/Faxes/($FaxSid)/Media/($Sid)")
+  let full_url = (build-url $base ({fax_sid: $fax_sid, sid: $sid} | format pattern "/v1/Faxes/{fax_sid}/Media/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,9 +170,9 @@ export def "faxes-media DeleteFaxMedia" [
 #
 # GET /v1/Faxes/{FaxSid}/Media/{Sid}
 # operationId: FetchFaxMedia
-export def "faxes-media FetchFaxMedia" [
-  FaxSid: string
-  Sid: string
+export def "faxes-media get-fax" [
+  fax_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "faxes-media FetchFaxMedia" [
 ]: nothing -> record<account_sid: string, content_type: string, date_created: string, date_updated: string, fax_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://fax.twilio.com")
-  let full_url = (build-url $base $"/v1/Faxes/($FaxSid)/Media/($Sid)")
+  let full_url = (build-url $base ({fax_sid: $fax_sid, sid: $sid} | format pattern "/v1/Faxes/{fax_sid}/Media/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -194,8 +194,8 @@ export def "faxes-media FetchFaxMedia" [
 #
 # DELETE /v1/Faxes/{Sid}
 # operationId: DeleteFax
-export def "faxes DeleteFax" [
-  Sid: string
+export def "faxes delete-fax" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "faxes DeleteFax" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://fax.twilio.com")
-  let full_url = (build-url $base $"/v1/Faxes/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Faxes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -217,8 +217,8 @@ export def "faxes DeleteFax" [
 #
 # GET /v1/Faxes/{Sid}
 # operationId: FetchFax
-export def "faxes FetchFax" [
-  Sid: string
+export def "faxes get-fax" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "faxes FetchFax" [
 ]: nothing -> record<account_sid: string, api_version: string, date_created: string, date_updated: string, direction: string, duration: int, from: string, links: record, media_sid: string, media_url: string, num_pages: int, price: float, price_unit: string, quality: string, sid: string, status: string, to: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://fax.twilio.com")
-  let full_url = (build-url $base $"/v1/Faxes/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Faxes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

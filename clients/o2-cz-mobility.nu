@@ -114,7 +114,7 @@ export def "info get" [
 #
 # GET /transit/{from}/{to}
 # operationId: transit
-export def "transit transit" [
+export def "transit get" [
   from: string
   to: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -125,14 +125,14 @@ export def "transit transit" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fromType: string # occurence type in the source basic residential unit (1 - transit, 2 - visit, 0 - both)
-  --toType: string # occurence type in the destination basic residential unit (1 - transit, 2 - visit, 0 - both)
+  --from-type: string # occurence type in the source basic residential unit (1 - transit, 2 - visit, 0 - both)
+  --to-type: string # occurence type in the destination basic residential unit (1 - transit, 2 - visit, 0 - both)
   --uniques: string # all or only uniques (0 - all, 1 - uniques) (e.g. 0)
 ]: nothing -> record<count: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fromType" $fromType "scalar") (serialize-qp "toType" $toType "scalar") (serialize-qp "uniques" $uniques "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/transit/($from)/($to)" $qp)
+  let qp = [(serialize-qp "fromType" $from_type "scalar") (serialize-qp "toType" $to_type "scalar") (serialize-qp "uniques" $uniques "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({from: $from, to: $to} | format pattern "/transit/{from}/{to}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

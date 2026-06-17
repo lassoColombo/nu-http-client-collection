@@ -67,8 +67,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def sort-completer [] { ["CreatedDateUTC" "Name" "Size"] }
-def ObjectGroup-completer [] { ["Account" "BankTransaction" "Contact" "CreditNote" "Invoice" "Item" "ManualJournal" "Overpayment" "Payment" "Prepayment" "Receipt"] }
-def ObjectType-completer [] { ["AccPayCredit" "AccPayPayment" "AccRec" "AccRecCredit" "AccRecPayment" "Account" "Accpay" "Adjustment" "ApCreditPayment" "ApOverPayment" "ApOverPaymentPayment" "ApOverPaymentSourcePayment" "ApPrepayment" "ApPrepaymentPayment" "ApPrepaymentSourcePayment" "ArCreditPayment" "ArOverPayment" "ArOverpaymentPayment" "ArOverpaymentSourcePayment" "ArPrepayment" "ArPrepaymentPayment" "ArPrepaymentSourcePayment" "Bank" "Business" "CashPaid" "CashRec" "Contact" "Current" "Currliab" "Depreciatn" "DirectCosts" "Employee" "Equity" "ExpPayment" "Expense" "Fixed" "FixedAsset" "Liability" "ManJournal" "NonCurrent" "Org" "OtherIncome" "Overheads" "PayRun" "Person" "Prepayment" "PriceListItem" "PurchaseOrder" "Receipt" "Revenue" "Sales" "Termliab" "Transfer" "Unknown" "User"] }
+def object-group-completer [] { ["Account" "BankTransaction" "Contact" "CreditNote" "Invoice" "Item" "ManualJournal" "Overpayment" "Payment" "Prepayment" "Receipt"] }
+def object-type-completer [] { ["AccPayCredit" "AccPayPayment" "AccRec" "AccRecCredit" "AccRecPayment" "Account" "Accpay" "Adjustment" "ApCreditPayment" "ApOverPayment" "ApOverPaymentPayment" "ApOverPaymentSourcePayment" "ApPrepayment" "ApPrepaymentPayment" "ApPrepaymentSourcePayment" "ArCreditPayment" "ArOverPayment" "ArOverpaymentPayment" "ArOverpaymentSourcePayment" "ArPrepayment" "ArPrepaymentPayment" "ArPrepaymentSourcePayment" "Bank" "Business" "CashPaid" "CashRec" "Contact" "Current" "Currliab" "Depreciatn" "DirectCosts" "Employee" "Equity" "ExpPayment" "Expense" "Fixed" "FixedAsset" "Liability" "ManJournal" "NonCurrent" "Org" "OtherIncome" "Overheads" "PayRun" "Person" "Prepayment" "PriceListItem" "PurchaseOrder" "Receipt" "Revenue" "Sales" "Termliab" "Transfer" "Unknown" "User"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -98,7 +98,7 @@ export def commands []: nothing -> table {
 # GET /Associations/{ObjectId}
 # operationId: getAssociationsByObject
 export def "associations get" [
-  ObjectId: string
+  object_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,7 +111,7 @@ export def "associations get" [
 ]: nothing -> table<FileId: string, ObjectGroup: string, ObjectId: string, ObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Associations/($ObjectId)")
+  let full_url = (build-url $base ({object_id: $object_id} | format pattern "/Associations/{object_id}"))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -152,7 +152,7 @@ export def "files list" [
 #
 # POST /Files
 # operationId: uploadFile
-export def "files uploadFile" [
+export def "files upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,19 +161,19 @@ export def "files uploadFile" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --FolderId: string # pass an optional folder id to save file to specific folder (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
+  --folder-id: string # pass an optional folder id to save file to specific folder (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --body-body: string # format: byte
   --filename: string
-  --mimeType: string
+  --mime-type: string
   --name: string # exact name of the file you are uploading
 ]: any -> record<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record<FirstName: string, FullName: string, Id: string, LastName: string, Name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "FolderId" $FolderId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "FolderId" $folder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Files" $qp)
-  let body = {body: $body_body, filename: $filename, mimeType: $mimeType, name: $name} | compact
+  let body = {"body": $body_body, "filename": $filename, "mimeType": $mime_type, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -187,7 +187,7 @@ export def "files uploadFile" [
 # DELETE /Files/{FileId}
 # operationId: deleteFile
 export def "files delete" [
-  FileId: string
+  file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "files delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Files/($FileId)")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/Files/{file_id}"))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -213,7 +213,7 @@ export def "files delete" [
 # GET /Files/{FileId}
 # operationId: getFile
 export def "files get" [
-  FileId: string
+  file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "files get" [
 ]: nothing -> record<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record<FirstName: string, FullName: string, Id: string, LastName: string, Name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Files/($FileId)")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/Files/{file_id}"))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -239,8 +239,8 @@ export def "files get" [
 # PUT /Files/{FileId}
 # operationId: updateFile
 # --User shape: {FirstName?: string, FullName?: string, Id: string, LastName?: string, Name?: string}
-export def "files updateFile" [
-  FileId: string
+export def "files update" [
+  file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,20 +250,20 @@ export def "files updateFile" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
-  --CreatedDateUtc: string # Created date in UTC (e.g. 2020-12-03T19:04:58.6970000)
-  --FolderId: string # Folder relation object's UUID (format: uuid, e.g. 0f8ccf21-7267-4268-9167-a1e2c40c84c8)
-  --Id: string # File object's UUID (format: uuid, e.g. d290f1ee-6c54-4b01-90e6-d701748f0851)
-  --MimeType: string # MimeType of the file (image/png, image/jpeg, application/pdf, etc..) (e.g. image/jpeg)
-  --Name: string # File Name (e.g. File2.jpg)
-  --Size: int # Numeric value in bytes (e.g. 3615)
-  --UpdatedDateUtc: string # Updated date in UTC (e.g. 2020-12-03T19:04:58.6970000)
-  --User: record # shape: {FirstName?: string, FullName?: string, Id: string, LastName?: string, Name?: string}
+  --created-date-utc: string # Created date in UTC (e.g. 2020-12-03T19:04:58.6970000)
+  --folder-id: string # Folder relation object's UUID (format: uuid, e.g. 0f8ccf21-7267-4268-9167-a1e2c40c84c8)
+  --id: string # File object's UUID (format: uuid, e.g. d290f1ee-6c54-4b01-90e6-d701748f0851)
+  --mime-type: string # MimeType of the file (image/png, image/jpeg, application/pdf, etc..) (e.g. image/jpeg)
+  --name: string # File Name (e.g. File2.jpg)
+  --size: int # Numeric value in bytes (e.g. 3615)
+  --updated-date-utc: string # Updated date in UTC (e.g. 2020-12-03T19:04:58.6970000)
+  --user: record # shape: {FirstName?: string, FullName?: string, Id: string, LastName?: string, Name?: string}
 ]: any -> record<CreatedDateUtc: string, FolderId: string, Id: string, MimeType: string, Name: string, Size: int, UpdatedDateUtc: string, User: record<FirstName: string, FullName: string, Id: string, LastName: string, Name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Files/($FileId)")
-  let body = {CreatedDateUtc: $CreatedDateUtc, FolderId: $FolderId, Id: $Id, MimeType: $MimeType, Name: $Name, Size: $Size, UpdatedDateUtc: $UpdatedDateUtc, User: $User} | compact
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/Files/{file_id}"))
+  let body = {"CreatedDateUtc": $created_date_utc, "FolderId": $folder_id, "Id": $id, "MimeType": $mime_type, "Name": $name, "Size": $size, "UpdatedDateUtc": $updated_date_utc, "User": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -277,7 +277,7 @@ export def "files updateFile" [
 # GET /Files/{FileId}/Associations
 # operationId: getFileAssociations
 export def "files-associations get" [
-  FileId: string
+  file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "files-associations get" [
 ]: nothing -> table<FileId: string, ObjectGroup: string, ObjectId: string, ObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Files/($FileId)/Associations")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/Files/{file_id}/Associations"))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -302,8 +302,8 @@ export def "files-associations get" [
 #
 # POST /Files/{FileId}/Associations
 # operationId: createFileAssociation
-export def "files-associations createFileAssociation" [
-  FileId: string
+export def "files-associations create" [
+  file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,16 +313,16 @@ export def "files-associations createFileAssociation" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
-  --body-FileId: string # The unique identifier of the file (format: uuid)
-  --ObjectGroup: string@ObjectGroup-completer # The Object Group that the object is in. These roughly correlate to the endpoints that can be used to retrieve the object via the core accounting API.
-  --ObjectId: string # The identifier of the object that the file is being associated with (e.g. InvoiceID, BankTransactionID, ContactID) (format: uuid)
-  --ObjectType: string@ObjectType-completer # The Object Type
+  --body-file-id: string # The unique identifier of the file (format: uuid)
+  --object-group: string@object-group-completer # The Object Group that the object is in. These roughly correlate to the endpoints that can be used to retrieve the object via the core accounting API.
+  --object-id: string # The identifier of the object that the file is being associated with (e.g. InvoiceID, BankTransactionID, ContactID) (format: uuid)
+  --object-type: string@object-type-completer # The Object Type
 ]: any -> record<FileId: string, ObjectGroup: string, ObjectId: string, ObjectType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Files/($FileId)/Associations")
-  let body = {FileId: $body_FileId, ObjectGroup: $ObjectGroup, ObjectId: $ObjectId, ObjectType: $ObjectType} | compact
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/Files/{file_id}/Associations"))
+  let body = {"FileId": $body_file_id, "ObjectGroup": $object_group, "ObjectId": $object_id, "ObjectType": $object_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -336,8 +336,8 @@ export def "files-associations createFileAssociation" [
 # DELETE /Files/{FileId}/Associations/{ObjectId}
 # operationId: deleteFileAssociation
 export def "files-associations delete" [
-  FileId: string
-  ObjectId: string
+  file_id: string
+  object_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,7 +350,7 @@ export def "files-associations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Files/($FileId)/Associations/($ObjectId)")
+  let full_url = (build-url $base ({file_id: $file_id, object_id: $object_id} | format pattern "/Files/{file_id}/Associations/{object_id}"))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -363,7 +363,7 @@ export def "files-associations delete" [
 # GET /Files/{FileId}/Content
 # operationId: getFileContent
 export def "files-content get" [
-  FileId: string
+  file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,7 +376,7 @@ export def "files-content get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Files/($FileId)/Content")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/Files/{file_id}/Content"))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/octet-stream"
@@ -415,7 +415,7 @@ export def "folders list" [
 #
 # POST /Folders
 # operationId: createFolder
-export def "folders createFolder" [
+export def "folders create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,17 +425,17 @@ export def "folders createFolder" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
-  --Email: string # The email address used to email files to the inbox. Only the inbox will have this element. (e.g. foo@bar.com)
-  --FileCount: int # The number of files in the folder (e.g. 5)
-  --Id: string # Xero unique identifier for a folder  Files (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
-  --IsInbox: oneof<nothing, bool> # to indicate if the folder is the Inbox. The Inbox cannot be renamed or deleted. (e.g. true)
-  --Name: string # The name of the folder (e.g. assets)
+  --email: string # The email address used to email files to the inbox. Only the inbox will have this element. (e.g. foo@bar.com)
+  --file-count: int # The number of files in the folder (e.g. 5)
+  --id: string # Xero unique identifier for a folder  Files (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
+  --is-inbox: oneof<nothing, bool> # to indicate if the folder is the Inbox. The Inbox cannot be renamed or deleted. (e.g. true)
+  --name: string # The name of the folder (e.g. assets)
 ]: any -> record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Folders")
-  let body = {Email: $Email, FileCount: $FileCount, Id: $Id, IsInbox: $IsInbox, Name: $Name} | compact
+  let body = {"Email": $email, "FileCount": $file_count, "Id": $id, "IsInbox": $is_inbox, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -449,7 +449,7 @@ export def "folders createFolder" [
 # DELETE /Folders/{FolderId}
 # operationId: deleteFolder
 export def "folders delete" [
-  FolderId: string
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -462,7 +462,7 @@ export def "folders delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Folders/($FolderId)")
+  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/Folders/{folder_id}"))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -475,7 +475,7 @@ export def "folders delete" [
 # GET /Folders/{FolderId}
 # operationId: getFolder
 export def "folders get" [
-  FolderId: string
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -488,7 +488,7 @@ export def "folders get" [
 ]: nothing -> record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Folders/($FolderId)")
+  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/Folders/{folder_id}"))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -500,8 +500,8 @@ export def "folders get" [
 #
 # PUT /Folders/{FolderId}
 # operationId: updateFolder
-export def "folders updateFolder" [
-  FolderId: string
+export def "folders update" [
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -511,17 +511,17 @@ export def "folders updateFolder" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
-  --Email: string # The email address used to email files to the inbox. Only the inbox will have this element. (e.g. foo@bar.com)
-  --FileCount: int # The number of files in the folder (e.g. 5)
-  --Id: string # Xero unique identifier for a folder  Files (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
-  --IsInbox: oneof<nothing, bool> # to indicate if the folder is the Inbox. The Inbox cannot be renamed or deleted. (e.g. true)
-  --Name: string # The name of the folder (e.g. assets)
+  --email: string # The email address used to email files to the inbox. Only the inbox will have this element. (e.g. foo@bar.com)
+  --file-count: int # The number of files in the folder (e.g. 5)
+  --id: string # Xero unique identifier for a folder  Files (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
+  --is-inbox: oneof<nothing, bool> # to indicate if the folder is the Inbox. The Inbox cannot be renamed or deleted. (e.g. true)
+  --name: string # The name of the folder (e.g. assets)
 ]: any -> record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Folders/($FolderId)")
-  let body = {Email: $Email, FileCount: $FileCount, Id: $Id, IsInbox: $IsInbox, Name: $Name} | compact
+  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/Folders/{folder_id}"))
+  let body = {"Email": $email, "FileCount": $file_count, "Id": $id, "IsInbox": $is_inbox, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

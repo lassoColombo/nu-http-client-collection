@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "code get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "code get-product-info" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /code/{code}
 # operationId: getProductInfo
-export def "code get" [
+export def "code get-product-info" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -106,7 +106,7 @@ export def "code get" [
 ]: nothing -> record<barcodeUrl: string, codeType: string, product: record<brand: string, category: string, description: string, ean: int, imageUrl: string, name: string, region: string, specs: list<list>, upc: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/code/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/code/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

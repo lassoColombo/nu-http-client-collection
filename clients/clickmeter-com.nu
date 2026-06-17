@@ -68,12 +68,12 @@ def auth-scheme-completer [] { ["x-clickmeter-authkey"] }
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "application/xml" "text/json" "text/xml"] }
 def accept-completer-1 [] { ["application/json" "text/json"] }
-def sortDirection-completer [] { ["asc" "desc"] }
-def timeFormat-completer [] { ["AmPm" "H24"] }
-def entityType-completer [] { ["datapoint" "group"] }
+def sort-direction-completer [] { ["asc" "desc"] }
+def time-format-completer [] { ["AmPm" "H24"] }
+def entity-type-completer [] { ["datapoint" "group"] }
 def type-completer [] { ["r" "w"] }
-def timeFrame-completer [] { ["beginning" "currentmonth" "currentyear" "custom" "last120" "last12months" "last180" "last30" "last7" "last90" "lastmonth" "lastyear" "previousmonth" "today" "yesterday"] }
-def groupBy-completer [] { ["month" "week"] }
+def time-frame-completer [] { ["beginning" "currentmonth" "currentyear" "custom" "last120" "last12months" "last180" "last30" "last7" "last90" "lastmonth" "lastyear" "previousmonth" "today" "yesterday"] }
+def group-by-completer [] { ["month" "week"] }
 def status-completer [] { ["active" "deleted"] }
 def type-completer-1 [] { ["tl" "tp"] }
 def status-completer-1 [] { ["active" "deleted" "paused" "spam"] }
@@ -85,13 +85,13 @@ def status-completer-2 [] { ["Abuse" "Active" "Deleted" "Paused"] }
 def type-completer-2 [] { ["TrackingLink" "TrackingPixel"] }
 def type-completer-3 [] { ["dedicated" "go" "personal" "system"] }
 def type-completer-4 [] { ["Dedicated" "Go" "Personal" "System"] }
-def groupBy-completer-1 [] { ["active" "deleted"] }
+def group-by-completer-1 [] { ["active" "deleted"] }
 def type-completer-5 [] { ["dp" "gr" "tl" "tp"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account Get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -115,7 +115,7 @@ export def commands []: nothing -> table {
 #
 # GET /account
 # operationId: Account_Get
-export def "account Get" [
+export def "account get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,7 +138,7 @@ export def "account Get" [
 #
 # POST /account
 # operationId: Account_Post
-export def "account Post" [
+export def "account create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -148,17 +148,17 @@ export def "account Post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --boGoVal: string
-  --bonusClicks: int # format: int64
-  --companyName: string
-  --companyRole: string
+  --bo-go-val: string
+  --bonus-clicks: int # format: int64
+  --company-name: string
+  --company-role: string
   --email: string
-  --firstName: string
-  --lastName: string
+  --first-name: string
+  --last-name: string
   --phone: string
-  --redirectOnly: oneof<nothing, bool>
-  --registrationDate: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
-  --timeframeMinDate: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --redirect-only: oneof<nothing, bool>
+  --registration-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --timeframe-min-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
   --timezone: int # format: int32
   --timezonename: string
 ]: any -> record<boGoVal: string, bonusClicks: int, companyName: string, companyRole: string, email: string, firstName: string, lastName: string, phone: string, redirectOnly: bool, registrationDate: string, timeframeMinDate: string, timezone: int, timezonename: string> {
@@ -166,7 +166,7 @@ export def "account Post" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account")
-  let body = {boGoVal: $boGoVal, bonusClicks: $bonusClicks, companyName: $companyName, companyRole: $companyRole, email: $email, firstName: $firstName, lastName: $lastName, phone: $phone, redirectOnly: $redirectOnly, registrationDate: $registrationDate, timeframeMinDate: $timeframeMinDate, timezone: $timezone, timezonename: $timezonename} | compact
+  let body = {"boGoVal": $bo_go_val, "bonusClicks": $bonus_clicks, "companyName": $company_name, "companyRole": $company_role, "email": $email, "firstName": $first_name, "lastName": $last_name, "phone": $phone, "redirectOnly": $redirect_only, "registrationDate": $registration_date, "timeframeMinDate": $timeframe_min_date, "timezone": $timezone, "timezonename": $timezonename} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -177,7 +177,7 @@ export def "account Post" [
 #
 # GET /account/domainwhitelist
 # operationId: Account_GetDomainWhitelist
-export def "account-domainwhitelist GetDomainWhitelist" [
+export def "account-domainwhitelist get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "account-domainwhitelist GetDomainWhitelist" [
 #
 # POST /account/domainwhitelist
 # operationId: Account_PutDomainWhitelist
-export def "account-domainwhitelist PutDomainWhitelist" [
+export def "account-domainwhitelist update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "account-domainwhitelist PutDomainWhitelist" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/domainwhitelist")
-  let body = {id: $id, name: $name} | compact
+  let body = {"id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -231,8 +231,8 @@ export def "account-domainwhitelist PutDomainWhitelist" [
 #
 # DELETE /account/domainwhitelist/{whitelistId}
 # operationId: Account_DeleteDomainWhitelist
-export def "account-domainwhitelist DeleteDomainWhitelist" [
-  whitelistId: string
+export def "account-domainwhitelist delete" [
+  whitelist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "account-domainwhitelist DeleteDomainWhitelist" [
 ]: nothing -> record<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/domainwhitelist/($whitelistId)")
+  let full_url = (build-url $base ({whitelist_id: $whitelist_id} | format pattern "/account/domainwhitelist/{whitelist_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -255,7 +255,7 @@ export def "account-domainwhitelist DeleteDomainWhitelist" [
 #
 # GET /account/guests
 # operationId: Account_GetGuests
-export def "account-guests GetGuests" [
+export def "account-guests list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,13 +267,13 @@ export def "account-guests GetGuests" [
   --accept: string@accept-completer-1 # Response content type
   --offset: int # Offset where to start from (format: int32)
   --limit: int # Limit results to this number (format: int32)
-  --sortBy: string # Field to sort by
-  --sortDirection: string@sortDirection-completer # Direction of sort "asc" or "desc"
-  --textSearch: string # Filter fields by this pattern
+  --sort-by: string # Field to sort by
+  --sort-direction: string@sort-direction-completer # Direction of sort "asc" or "desc"
+  --text-search: string # Filter fields by this pattern
 ]: nothing -> record<entities: table<id: int, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortDirection" $sortDirection "scalar") (serialize-qp "textSearch" $textSearch "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/guests" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -288,7 +288,7 @@ export def "account-guests GetGuests" [
 # --currentGrant shape: {DatapointType?: string, Entity?: record, EntityName?: string, EntityType?: string, Type?: string}
 # --extendedGrants shape: {allowAllGrants?: bool, allowGroupCreation?: bool}
 # --hitOptions shape: {hideReferrer?: bool}
-export def "account-guests PutGuest" [
+export def "account-guests update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,37 +298,37 @@ export def "account-guests PutGuest" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apiKey: string
-  --conversionOptions: record # shape: {hideComCost?: bool, hideCost?: bool, hideCount?: bool, hideParams?: bool, hideValue?: bool, percentCommission?: int, percentValue?: int}
-  --creationDate: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
-  --currentGrant: record # shape: {DatapointType?: string, Entity?: record, EntityName?: string, EntityType?: string, Type?: string}
-  --dateFormat: string
-  --decimalSeparator: string
+  --api-key: string
+  --conversion-options: record # shape: {hideComCost?: bool, hideCost?: bool, hideCount?: bool, hideParams?: bool, hideValue?: bool, percentCommission?: int, percentValue?: int}
+  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --current-grant: record # shape: {DatapointType?: string, Entity?: record, EntityName?: string, EntityType?: string, Type?: string}
+  --date-format: string
+  --decimal-separator: string
   --email: string
-  --extendedGrants: record # shape: {allowAllGrants?: bool, allowGroupCreation?: bool}
-  --groupGrants: int # format: int64
-  --hitOptions: record # shape: {hideReferrer?: bool}
+  --extended-grants: record # shape: {allowAllGrants?: bool, allowGroupCreation?: bool}
+  --group-grants: int # format: int64
+  --hit-options: record # shape: {hideReferrer?: bool}
   --id: int # format: int64
   --key: string
   --language: string
-  --loginCount: int # format: int32
+  --login-count: int # format: int32
   --name: string
   --notes: string
-  --numberGroupSeparator: string
+  --number-group-separator: string
   --password: string
-  --timeFormat: string@timeFormat-completer
-  --timeZone: int # format: int32
-  --timeframeMinDate: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --time-format: string@time-format-completer
+  --time-zone: int # format: int32
+  --timeframe-min-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
   --timezonename: string
-  --tlGrants: int # format: int64
-  --tpGrants: int # format: int64
-  --userName: string
+  --tl-grants: int # format: int64
+  --tp-grants: int # format: int64
+  --user-name: string
 ]: any -> record<apiKey: string, conversionOptions: record<hideComCost: bool, hideCost: bool, hideCount: bool, hideParams: bool, hideValue: bool, percentCommission: int, percentValue: int>, creationDate: string, currentGrant: record<DatapointType: string, Entity: record<id: int, uri: string>, EntityName: string, EntityType: string, Type: string>, dateFormat: string, decimalSeparator: string, email: string, extendedGrants: record<allowAllGrants: bool, allowGroupCreation: bool>, groupGrants: int, hitOptions: record<hideReferrer: bool>, id: int, key: string, language: string, loginCount: int, name: string, notes: string, numberGroupSeparator: string, password: string, timeFormat: string, timeZone: int, timeframeMinDate: string, timezonename: string, tlGrants: int, tpGrants: int, userName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/guests")
-  let body = {apiKey: $apiKey, conversionOptions: $conversionOptions, creationDate: $creationDate, currentGrant: $currentGrant, dateFormat: $dateFormat, decimalSeparator: $decimalSeparator, email: $email, extendedGrants: $extendedGrants, groupGrants: $groupGrants, hitOptions: $hitOptions, id: $id, key: $key, language: $language, loginCount: $loginCount, name: $name, notes: $notes, numberGroupSeparator: $numberGroupSeparator, password: $password, timeFormat: $timeFormat, timeZone: $timeZone, timeframeMinDate: $timeframeMinDate, timezonename: $timezonename, tlGrants: $tlGrants, tpGrants: $tpGrants, userName: $userName} | compact
+  let body = {"apiKey": $api_key, "conversionOptions": $conversion_options, "creationDate": $creation_date, "currentGrant": $current_grant, "dateFormat": $date_format, "decimalSeparator": $decimal_separator, "email": $email, "extendedGrants": $extended_grants, "groupGrants": $group_grants, "hitOptions": $hit_options, "id": $id, "key": $key, "language": $language, "loginCount": $login_count, "name": $name, "notes": $notes, "numberGroupSeparator": $number_group_separator, "password": $password, "timeFormat": $time_format, "timeZone": $time_zone, "timeframeMinDate": $timeframe_min_date, "timezonename": $timezonename, "tlGrants": $tl_grants, "tpGrants": $tp_grants, "userName": $user_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -339,7 +339,7 @@ export def "account-guests PutGuest" [
 #
 # GET /account/guests/count
 # operationId: Account_GetGuestsCount
-export def "account-guests-count GetGuestsCount" [
+export def "account-guests-count get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,11 +349,11 @@ export def "account-guests-count GetGuestsCount" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --textSearch: string # Filter fields by this pattern
+  --text-search: string # Filter fields by this pattern
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "textSearch" $textSearch "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/guests/count" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -364,8 +364,8 @@ export def "account-guests-count GetGuestsCount" [
 #
 # DELETE /account/guests/{guestId}
 # operationId: Account_DeleteGuest
-export def "account-guests DeleteGuest" [
-  guestId: int
+export def "account-guests delete" [
+  guest_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,7 +378,7 @@ export def "account-guests DeleteGuest" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/guests/($guestId)")
+  let full_url = (build-url $base ({guest_id: $guest_id} | format pattern "/account/guests/{guest_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -388,8 +388,8 @@ export def "account-guests DeleteGuest" [
 #
 # GET /account/guests/{guestId}
 # operationId: Account_GetGuest
-export def "account-guests GetGuest" [
-  guestId: int
+export def "account-guests get" [
+  guest_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,7 +402,7 @@ export def "account-guests GetGuest" [
 ]: nothing -> record<apiKey: string, conversionOptions: record<hideComCost: bool, hideCost: bool, hideCount: bool, hideParams: bool, hideValue: bool, percentCommission: int, percentValue: int>, creationDate: string, currentGrant: record<DatapointType: string, Entity: record<id: int, uri: string>, EntityName: string, EntityType: string, Type: string>, dateFormat: string, decimalSeparator: string, email: string, extendedGrants: record<allowAllGrants: bool, allowGroupCreation: bool>, groupGrants: int, hitOptions: record<hideReferrer: bool>, id: int, key: string, language: string, loginCount: int, name: string, notes: string, numberGroupSeparator: string, password: string, timeFormat: string, timeZone: int, timeframeMinDate: string, timezonename: string, tlGrants: int, tpGrants: int, userName: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/guests/($guestId)")
+  let full_url = (build-url $base ({guest_id: $guest_id} | format pattern "/account/guests/{guest_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -416,8 +416,8 @@ export def "account-guests GetGuest" [
 # --currentGrant shape: {DatapointType?: string, Entity?: record, EntityName?: string, EntityType?: string, Type?: string}
 # --extendedGrants shape: {allowAllGrants?: bool, allowGroupCreation?: bool}
 # --hitOptions shape: {hideReferrer?: bool}
-export def "account-guests PostGuest" [
-  guestId: int
+export def "account-guests create" [
+  guest_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,37 +427,37 @@ export def "account-guests PostGuest" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --apiKey: string
-  --conversionOptions: record # shape: {hideComCost?: bool, hideCost?: bool, hideCount?: bool, hideParams?: bool, hideValue?: bool, percentCommission?: int, percentValue?: int}
-  --creationDate: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
-  --currentGrant: record # shape: {DatapointType?: string, Entity?: record, EntityName?: string, EntityType?: string, Type?: string}
-  --dateFormat: string
-  --decimalSeparator: string
+  --api-key: string
+  --conversion-options: record # shape: {hideComCost?: bool, hideCost?: bool, hideCount?: bool, hideParams?: bool, hideValue?: bool, percentCommission?: int, percentValue?: int}
+  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --current-grant: record # shape: {DatapointType?: string, Entity?: record, EntityName?: string, EntityType?: string, Type?: string}
+  --date-format: string
+  --decimal-separator: string
   --email: string
-  --extendedGrants: record # shape: {allowAllGrants?: bool, allowGroupCreation?: bool}
-  --groupGrants: int # format: int64
-  --hitOptions: record # shape: {hideReferrer?: bool}
+  --extended-grants: record # shape: {allowAllGrants?: bool, allowGroupCreation?: bool}
+  --group-grants: int # format: int64
+  --hit-options: record # shape: {hideReferrer?: bool}
   --id: int # format: int64
   --key: string
   --language: string
-  --loginCount: int # format: int32
+  --login-count: int # format: int32
   --name: string
   --notes: string
-  --numberGroupSeparator: string
+  --number-group-separator: string
   --password: string
-  --timeFormat: string@timeFormat-completer
-  --timeZone: int # format: int32
-  --timeframeMinDate: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --time-format: string@time-format-completer
+  --time-zone: int # format: int32
+  --timeframe-min-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
   --timezonename: string
-  --tlGrants: int # format: int64
-  --tpGrants: int # format: int64
-  --userName: string
+  --tl-grants: int # format: int64
+  --tp-grants: int # format: int64
+  --user-name: string
 ]: any -> record<apiKey: string, conversionOptions: record<hideComCost: bool, hideCost: bool, hideCount: bool, hideParams: bool, hideValue: bool, percentCommission: int, percentValue: int>, creationDate: string, currentGrant: record<DatapointType: string, Entity: record<id: int, uri: string>, EntityName: string, EntityType: string, Type: string>, dateFormat: string, decimalSeparator: string, email: string, extendedGrants: record<allowAllGrants: bool, allowGroupCreation: bool>, groupGrants: int, hitOptions: record<hideReferrer: bool>, id: int, key: string, language: string, loginCount: int, name: string, notes: string, numberGroupSeparator: string, password: string, timeFormat: string, timeZone: int, timeframeMinDate: string, timezonename: string, tlGrants: int, tpGrants: int, userName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/guests/($guestId)")
-  let body = {apiKey: $apiKey, conversionOptions: $conversionOptions, creationDate: $creationDate, currentGrant: $currentGrant, dateFormat: $dateFormat, decimalSeparator: $decimalSeparator, email: $email, extendedGrants: $extendedGrants, groupGrants: $groupGrants, hitOptions: $hitOptions, id: $id, key: $key, language: $language, loginCount: $loginCount, name: $name, notes: $notes, numberGroupSeparator: $numberGroupSeparator, password: $password, timeFormat: $timeFormat, timeZone: $timeZone, timeframeMinDate: $timeframeMinDate, timezonename: $timezonename, tlGrants: $tlGrants, tpGrants: $tpGrants, userName: $userName} | compact
+  let full_url = (build-url $base ({guest_id: $guest_id} | format pattern "/account/guests/{guest_id}"))
+  let body = {"apiKey": $api_key, "conversionOptions": $conversion_options, "creationDate": $creation_date, "currentGrant": $current_grant, "dateFormat": $date_format, "decimalSeparator": $decimal_separator, "email": $email, "extendedGrants": $extended_grants, "groupGrants": $group_grants, "hitOptions": $hit_options, "id": $id, "key": $key, "language": $language, "loginCount": $login_count, "name": $name, "notes": $notes, "numberGroupSeparator": $number_group_separator, "password": $password, "timeFormat": $time_format, "timeZone": $time_zone, "timeframeMinDate": $timeframe_min_date, "timezonename": $timezonename, "tlGrants": $tl_grants, "tpGrants": $tp_grants, "userName": $user_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -468,8 +468,8 @@ export def "account-guests PostGuest" [
 #
 # GET /account/guests/{guestId}/permissions
 # operationId: Account_GetPermissions
-export def "account-guests-permissions GetPermissions" [
-  guestId: int
+export def "account-guests-permissions get" [
+  guest_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,16 +479,16 @@ export def "account-guests-permissions GetPermissions" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --entityType: string@entityType-completer # Can be "datapoint" or "group"
+  --entity-type: string@entity-type-completer # Can be "datapoint" or "group"
   --offset: int # Offset where to start from (format: int32)
   --limit: int # Limit results to this number (format: int32)
   --type: string@type-completer # Can be "w" or "r"
-  --entityId: int # Optional id of the datapoint/group entity to filter by (format: int64)
+  --entity-id: int # Optional id of the datapoint/group entity to filter by (format: int64)
 ]: nothing -> record<entities: table<DatapointType: string, Entity: record, EntityName: string, EntityType: string, Type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "entityType" $entityType "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "entityId" $entityId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/guests/($guestId)/permissions" $qp)
+  let qp = [(serialize-qp "entityType" $entity_type "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "entityId" $entity_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({guest_id: $guest_id} | format pattern "/account/guests/{guest_id}/permissions") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -498,8 +498,8 @@ export def "account-guests-permissions GetPermissions" [
 #
 # GET /account/guests/{guestId}/permissions/count
 # operationId: Account_GetPermissionsCount
-export def "account-guests-permissions-count GetPermissionsCount" [
-  guestId: int
+export def "account-guests-permissions-count get" [
+  guest_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,14 +509,14 @@ export def "account-guests-permissions-count GetPermissionsCount" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --entityType: string@entityType-completer # Can be "datapoint" or "group"
+  --entity-type: string@entity-type-completer # Can be "datapoint" or "group"
   --type: string@type-completer # Can be "w" or "r"
-  --entityId: int # Optional id of the datapoint/group entity to filter by (format: int64)
+  --entity-id: int # Optional id of the datapoint/group entity to filter by (format: int64)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "entityType" $entityType "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "entityId" $entityId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/guests/($guestId)/permissions/count" $qp)
+  let qp = [(serialize-qp "entityType" $entity_type "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "entityId" $entity_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({guest_id: $guest_id} | format pattern "/account/guests/{guest_id}/permissions/count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -526,7 +526,7 @@ export def "account-guests-permissions-count GetPermissionsCount" [
 #
 # POST /account/guests/{guestId}/{type}/permissions/patch
 export def "account-guests-permissions-patch post" [
-  guestId: int
+  guest_id: int
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -537,15 +537,15 @@ export def "account-guests-permissions-patch post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Action: string
-  --Id: int # format: int64
-  --Verb: string
+  --action: string
+  --id: int # format: int64
+  --verb: string
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/guests/($guestId)/($type)/permissions/patch")
-  let body = {Action: $Action, Id: $Id, Verb: $Verb} | compact
+  let full_url = (build-url $base ({guest_id: $guest_id, type: $type} | format pattern "/account/guests/{guest_id}/{type}/permissions/patch"))
+  let body = {"Action": $action, "Id": $id, "Verb": $verb} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -556,8 +556,8 @@ export def "account-guests-permissions-patch post" [
 #
 # PUT /account/guests/{guestId}/{type}/permissions/patch
 # operationId: Account_PatchPermissions
-export def "account-guests-permissions-patch PatchPermissions" [
-  guestId: int
+export def "account-guests-permissions-patch update" [
+  guest_id: int
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -568,15 +568,15 @@ export def "account-guests-permissions-patch PatchPermissions" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Action: string
-  --Id: int # format: int64
-  --Verb: string
+  --action: string
+  --id: int # format: int64
+  --verb: string
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/guests/($guestId)/($type)/permissions/patch")
-  let body = {Action: $Action, Id: $Id, Verb: $Verb} | compact
+  let full_url = (build-url $base ({guest_id: $guest_id, type: $type} | format pattern "/account/guests/{guest_id}/{type}/permissions/patch"))
+  let body = {"Action": $action, "Id": $id, "Verb": $verb} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -587,7 +587,7 @@ export def "account-guests-permissions-patch PatchPermissions" [
 #
 # GET /account/ipblacklist
 # operationId: Account_GetIpBlacklist
-export def "account-ipblacklist GetIpBlacklist" [
+export def "account-ipblacklist get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -613,7 +613,7 @@ export def "account-ipblacklist GetIpBlacklist" [
 #
 # POST /account/ipblacklist
 # operationId: Account_PutIpBlacklist
-export def "account-ipblacklist PutIpBlacklist" [
+export def "account-ipblacklist update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,7 +630,7 @@ export def "account-ipblacklist PutIpBlacklist" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/ipblacklist")
-  let body = {id: $id, ip: $ip} | compact
+  let body = {"id": $id, "ip": $ip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -641,8 +641,8 @@ export def "account-ipblacklist PutIpBlacklist" [
 #
 # DELETE /account/ipblacklist/{blacklistId}
 # operationId: Account_DeleteIpBlacklist
-export def "account-ipblacklist DeleteIpBlacklist" [
-  blacklistId: string
+export def "account-ipblacklist delete" [
+  blacklist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,7 +655,7 @@ export def "account-ipblacklist DeleteIpBlacklist" [
 ]: nothing -> record<id: string, ip: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/ipblacklist/($blacklistId)")
+  let full_url = (build-url $base ({blacklist_id: $blacklist_id} | format pattern "/account/ipblacklist/{blacklist_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -665,7 +665,7 @@ export def "account-ipblacklist DeleteIpBlacklist" [
 #
 # GET /account/plan
 # operationId: Account_GetPlan
-export def "account-plan GetPlan" [
+export def "account-plan get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -688,7 +688,7 @@ export def "account-plan GetPlan" [
 #
 # GET /aggregated
 # operationId: Aggregated_GetStatisticsSingle
-export def "aggregated GetStatisticsSingle" [
+export def "aggregated get-statistics-single" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -698,15 +698,15 @@ export def "aggregated GetStatisticsSingle" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --hourly: oneof<nothing, bool> # If using "yesterday" or "today" timeframe you can ask for the hourly detail
-  --onlyFavorites: string
+  --only-favorites: string
 ]: nothing -> record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "hourly" $hourly "scalar") (serialize-qp "onlyFavorites" $onlyFavorites "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aggregated" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -717,7 +717,7 @@ export def "aggregated GetStatisticsSingle" [
 #
 # GET /aggregated/list
 # operationId: Aggregated_GetStatisticsList
-export def "aggregated-list GetStatisticsList" [
+export def "aggregated-list get-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -727,14 +727,14 @@ export def "aggregated-list GetStatisticsList" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
-  --groupBy: string@groupBy-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --group-by: string@group-by-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
 ]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "groupBy" $groupBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aggregated/list" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -745,7 +745,7 @@ export def "aggregated-list GetStatisticsList" [
 #
 # GET /aggregated/summary/conversions
 # operationId: Aggregated_GetConversionsSummary
-export def "aggregated-summary-conversions GetConversionsSummary" [
+export def "aggregated-summary-conversions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -755,19 +755,19 @@ export def "aggregated-summary-conversions GetConversionsSummary" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --status: string@status-completer # Status of conversion ("deleted"/"active")
-  --sortBy: string # Field to sort by
-  --sortDirection: string@sortDirection-completer # Direction of sort "asc" or "desc"
+  --sort-by: string # Field to sort by
+  --sort-direction: string@sort-direction-completer # Direction of sort "asc" or "desc"
   --offset: int # Offset where to start from (format: int32)
   --limit: int # Limit results to this number (format: int32)
-  --textSearch: string # Filter fields by this pattern
+  --text-search: string # Filter fields by this pattern
 ]: nothing -> record<count: int, limit: int, offset: int, result: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortDirection" $sortDirection "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "textSearch" $textSearch "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aggregated/summary/conversions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -778,7 +778,7 @@ export def "aggregated-summary-conversions GetConversionsSummary" [
 #
 # GET /aggregated/summary/datapoints
 # operationId: Aggregated_GetDatapointsSummary
-export def "aggregated-summary-datapoints GetDatapointsSummary" [
+export def "aggregated-summary-datapoints get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,23 +788,23 @@ export def "aggregated-summary-datapoints GetDatapointsSummary" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
   --type: string@type-completer-1 # Type of datapoint ("tl"/"tp")
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --status: string@status-completer-1 # Status of datapoint ("deleted"/"active"/"paused"/"spam")
   --tag: string # A comma separated list of tags you want to filter with.
   --favourite: oneof<nothing, bool> # Is the datapoint marked as favourite
-  --sortBy: string # Field to sort by
-  --sortDirection: string@sortDirection-completer # Direction of sort "asc" or "desc"
+  --sort-by: string # Field to sort by
+  --sort-direction: string@sort-direction-completer # Direction of sort "asc" or "desc"
   --offset: int # Offset where to start from (format: int32)
   --limit: int # Limit results to this number (format: int32)
-  --groupId: int # Filter by this group id (format: int64)
-  --textSearch: string # Filter fields by this pattern
+  --group-id: int # Filter by this group id (format: int64)
+  --text-search: string # Filter fields by this pattern
 ]: nothing -> record<count: int, limit: int, offset: int, result: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortDirection" $sortDirection "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "groupId" $groupId "scalar") (serialize-qp "textSearch" $textSearch "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aggregated/summary/datapoints" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -815,7 +815,7 @@ export def "aggregated-summary-datapoints GetDatapointsSummary" [
 #
 # GET /aggregated/summary/groups
 # operationId: Aggregated_GetGroupsSummary
-export def "aggregated-summary-groups GetGroupsSummary" [
+export def "aggregated-summary-groups get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -825,21 +825,21 @@ export def "aggregated-summary-groups GetGroupsSummary" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --status: string@status-completer # Status of group ("deleted"/"active")
   --tag: string # A comma separated list of tags you want to filter with.
   --favourite: oneof<nothing, bool> # Is the group marked as favourite
-  --sortBy: string # Field to sort by
-  --sortDirection: string@sortDirection-completer # Direction of sort "asc" or "desc"
+  --sort-by: string # Field to sort by
+  --sort-direction: string@sort-direction-completer # Direction of sort "asc" or "desc"
   --offset: int # Offset where to start from (format: int32)
   --limit: int # Limit results to this number (format: int32)
-  --textSearch: string # Filter fields by this pattern
+  --text-search: string # Filter fields by this pattern
 ]: nothing -> record<count: int, limit: int, offset: int, result: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortDirection" $sortDirection "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "textSearch" $textSearch "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aggregated/summary/groups" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -850,7 +850,7 @@ export def "aggregated-summary-groups GetGroupsSummary" [
 #
 # GET /clickstream
 # operationId: ClickStream_Get
-export def "clickstream Get" [
+export def "clickstream get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -863,12 +863,12 @@ export def "clickstream Get" [
   --group: int # Filter by this group id (mutually exclusive with "datapoint" and "conversion") (format: int64)
   --datapoint: int # Filter by this datapoint id (mutually exclusive with "group" and "conversion") (format: int64)
   --conversion: int # Filter by this conversion id (mutually exclusive with "datapoint" and "group") (format: int64)
-  --pageSize: int # Limit results to this number (format: int32, default: 50)
+  --page-size: int # Limit results to this number (format: int32, default: 50)
   --filter: string@filter-completer # Filter event type ("spiders"/"uniques"/"nonuniques"/"conversions")
 ]: nothing -> record<entities: table<accessTime: string, browser: record, clientLanguage: string, conversion1: record, conversion2: record, conversion3: record, conversion4: record, conversion5: record, conversions: list, entity: record, ip: string, isProxy: string, isSpider: string, isUnique: string, location: record, org: string, os: record, queryParams: string, realDestinationUrl: string, referer: string, source: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "group" $group "scalar") (serialize-qp "datapoint" $datapoint "scalar") (serialize-qp "conversion" $conversion "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "group" $group "scalar") (serialize-qp "datapoint" $datapoint "scalar") (serialize-qp "conversion" $conversion "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/clickstream" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -879,7 +879,7 @@ export def "clickstream Get" [
 #
 # GET /conversions
 # operationId: Conversions_Get
-export def "conversions Get" [
+export def "conversions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -892,13 +892,13 @@ export def "conversions Get" [
   --offset: int # Offset where to start from (format: int32)
   --limit: int # Limit results to this number (format: int32)
   --status: string@status-completer # Status of conversion ("deleted"/"active")
-  --textSearch: string # Filter fields by this pattern
-  --createdAfter: string # Exclude conversions created before this date (YYYYMMDD)
-  --createdBefore: string # Exclude conversions created after this date (YYYYMMDD)
+  --text-search: string # Filter fields by this pattern
+  --created-after: string # Exclude conversions created before this date (YYYYMMDD)
+  --created-before: string # Exclude conversions created after this date (YYYYMMDD)
 ]: nothing -> record<entities: table<id: int, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $textSearch "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/conversions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -909,7 +909,7 @@ export def "conversions Get" [
 #
 # POST /conversions
 # operationId: Conversions_Put
-export def "conversions Put" [
+export def "conversions update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -920,7 +920,7 @@ export def "conversions Put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --code: string
-  --creationDate: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
   --deleted: oneof<nothing, bool>
   --description: string
   --id: int # format: int64
@@ -932,7 +932,7 @@ export def "conversions Put" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversions")
-  let body = {code: $code, creationDate: $creationDate, deleted: $deleted, description: $description, id: $id, name: $name, protocol: $protocol, value: $value} | compact
+  let body = {"code": $code, "creationDate": $creation_date, "deleted": $deleted, "description": $description, "id": $id, "name": $name, "protocol": $protocol, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -943,7 +943,7 @@ export def "conversions Put" [
 #
 # GET /conversions/aggregated/list
 # operationId: Conversions_GetStatisticsAllList
-export def "conversions-aggregated-list GetStatisticsAllList" [
+export def "conversions-aggregated-list get-statistics-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -953,15 +953,15 @@ export def "conversions-aggregated-list GetStatisticsAllList" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --status: string@status-completer # Status of conversion ("deleted"/"active")
-  --groupBy: string@groupBy-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
+  --group-by: string@group-by-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
 ]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "groupBy" $groupBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/conversions/aggregated/list" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -972,7 +972,7 @@ export def "conversions-aggregated-list GetStatisticsAllList" [
 #
 # GET /conversions/count
 # operationId: Conversions_Count
-export def "conversions-count Count" [
+export def "conversions-count get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -983,13 +983,13 @@ export def "conversions-count Count" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string@status-completer # Status of conversion ("deleted"/"active")
-  --textSearch: string # Filter fields by this pattern
-  --createdAfter: string # Exclude conversions created before this date (YYYYMMDD)
-  --createdBefore: string # Exclude conversions created after this date (YYYYMMDD)
+  --text-search: string # Filter fields by this pattern
+  --created-after: string # Exclude conversions created before this date (YYYYMMDD)
+  --created-before: string # Exclude conversions created after this date (YYYYMMDD)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $textSearch "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/conversions/count" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1000,8 +1000,8 @@ export def "conversions-count Count" [
 #
 # DELETE /conversions/{conversionId}
 # operationId: Conversions_Delete
-export def "conversions Delete" [
-  conversionId: int
+export def "conversions delete" [
+  conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1014,7 +1014,7 @@ export def "conversions Delete" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conversions/($conversionId)")
+  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1024,7 +1024,7 @@ export def "conversions Delete" [
 #
 # GET /conversions/{conversionId}
 export def "conversions get" [
-  conversionId: int
+  conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,7 +1037,7 @@ export def "conversions get" [
 ]: nothing -> record<code: string, creationDate: string, deleted: bool, description: string, id: int, name: string, protocol: string, value: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conversions/($conversionId)")
+  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1047,8 +1047,8 @@ export def "conversions get" [
 #
 # POST /conversions/{conversionId}
 # operationId: Conversions_Post
-export def "conversions Post" [
-  conversionId: int
+export def "conversions create" [
+  conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1059,7 +1059,7 @@ export def "conversions Post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --code: string
-  --creationDate: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
   --deleted: oneof<nothing, bool>
   --description: string
   --id: int # format: int64
@@ -1070,8 +1070,8 @@ export def "conversions Post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conversions/($conversionId)")
-  let body = {code: $code, creationDate: $creationDate, deleted: $deleted, description: $description, id: $id, name: $name, protocol: $protocol, value: $value} | compact
+  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}"))
+  let body = {"code": $code, "creationDate": $creation_date, "deleted": $deleted, "description": $description, "id": $id, "name": $name, "protocol": $protocol, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1082,8 +1082,8 @@ export def "conversions Post" [
 #
 # GET /conversions/{conversionId}/aggregated
 # operationId: Conversions_GetStatisticsSingle
-export def "conversions-aggregated GetStatisticsSingle" [
-  conversionId: int
+export def "conversions-aggregated get-statistics-single" [
+  conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1093,17 +1093,17 @@ export def "conversions-aggregated GetStatisticsSingle" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --tag: string # Filter by this tag name
   --favourite: oneof<nothing, bool> # Is the datapoint marked as favourite
   --hourly: oneof<nothing, bool> # If using "yesterday" or "today" timeframe you can ask for the hourly detail
 ]: nothing -> record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "hourly" $hourly "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/conversions/($conversionId)/aggregated" $qp)
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "hourly" $hourly "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}/aggregated") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1113,8 +1113,8 @@ export def "conversions-aggregated GetStatisticsSingle" [
 #
 # GET /conversions/{conversionId}/aggregated/list
 # operationId: Conversions_GetStatisticsList
-export def "conversions-aggregated-list GetStatisticsList" [
-  conversionId: int
+export def "conversions-aggregated-list get-statistics" [
+  conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1124,15 +1124,15 @@ export def "conversions-aggregated-list GetStatisticsList" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
-  --groupBy: string@groupBy-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --group-by: string@group-by-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
 ]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "groupBy" $groupBy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/conversions/($conversionId)/aggregated/list" $qp)
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}/aggregated/list") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1142,8 +1142,8 @@ export def "conversions-aggregated-list GetStatisticsList" [
 #
 # GET /conversions/{conversionId}/datapoints
 # operationId: Conversions_GetDatapoints
-export def "conversions-datapoints GetDatapoints" [
-  conversionId: int
+export def "conversions-datapoints get" [
+  conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1158,14 +1158,14 @@ export def "conversions-datapoints GetDatapoints" [
   --type: string@type-completer-1 # Type of datapoint ("tl"/"tp")
   --status: string@status-completer-1 # Status of datapoint ("deleted"/"active"/"paused"/"spam")
   --tags: string # Filter by this tag name
-  --textSearch: string # Filter fields by this pattern
-  --createdAfter: string # Exclude datapoints created before this date (YYYYMMDD)
-  --createdBefore: string # Exclude datapoints created after this date (YYYYMMDD)
+  --text-search: string # Filter fields by this pattern
+  --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
+  --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
 ]: nothing -> record<entities: table<id: int, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $textSearch "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/conversions/($conversionId)/datapoints" $qp)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}/datapoints") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1176,7 +1176,7 @@ export def "conversions-datapoints GetDatapoints" [
 # PUT /conversions/{conversionId}/datapoints/batch/patch
 # --PatchRequests item shape: {Action?: string, Id?: int}
 export def "conversions-datapoints-batch-patch put" [
-  conversionId: int
+  conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1186,13 +1186,13 @@ export def "conversions-datapoints-batch-patch put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --PatchRequests: list # item shape: {Action?: string, Id?: int}
+  --patch-requests: list # item shape: {Action?: string, Id?: int}
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conversions/($conversionId)/datapoints/batch/patch")
-  let body = {PatchRequests: $PatchRequests} | compact
+  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}/datapoints/batch/patch"))
+  let body = {"PatchRequests": $patch_requests} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1203,8 +1203,8 @@ export def "conversions-datapoints-batch-patch put" [
 #
 # GET /conversions/{conversionId}/datapoints/count
 # operationId: Conversions_GetDatapointsCount
-export def "conversions-datapoints-count GetDatapointsCount" [
-  conversionId: int
+export def "conversions-datapoints-count get" [
+  conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1217,14 +1217,14 @@ export def "conversions-datapoints-count GetDatapointsCount" [
   --type: string # Type of datapoint ("tl"/"tp")
   --status: string # Status of datapoint ("deleted"/"active"/"paused"/"spam")
   --tags: string # Filter by this tag name
-  --textSearch: string # Filter fields by this pattern
-  --createdAfter: string # Exclude datapoints created before this date (YYYYMMDD)
-  --createdBefore: string # Exclude datapoints created after this date (YYYYMMDD)
+  --text-search: string # Filter fields by this pattern
+  --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
+  --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $textSearch "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/conversions/($conversionId)/datapoints/count" $qp)
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}/datapoints/count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1234,8 +1234,8 @@ export def "conversions-datapoints-count GetDatapointsCount" [
 #
 # PUT /conversions/{conversionId}/datapoints/patch
 # operationId: Conversions_Patch
-export def "conversions-datapoints-patch Patch" [
-  conversionId: int
+export def "conversions-datapoints-patch update" [
+  conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1245,15 +1245,15 @@ export def "conversions-datapoints-patch Patch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Action: string
-  --Id: int # format: int64
-  --ReplaceId: int # format: int64
+  --action: string
+  --id: int # format: int64
+  --replace-id: int # format: int64
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conversions/($conversionId)/datapoints/patch")
-  let body = {Action: $Action, Id: $Id, ReplaceId: $ReplaceId} | compact
+  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}/datapoints/patch"))
+  let body = {"Action": $action, "Id": $id, "ReplaceId": $replace_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1264,8 +1264,8 @@ export def "conversions-datapoints-patch Patch" [
 #
 # GET /conversions/{conversionId}/hits
 # operationId: Conversions_GetHits
-export def "conversions-hits GetHits" [
-  conversionId: int
+export def "conversions-hits get" [
+  conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1278,14 +1278,14 @@ export def "conversions-hits GetHits" [
   --timeframe: string@timeframe-completer # Timeframe of the request. See list at $timeframeList
   --limit: int # Limit results to this number (format: int32)
   --offset: string # Offset where to start from (it's the lastKey field in the response object)
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --filter: string@filter-completer-1 # Filter event type ("spiders"/"uniques"/"nonuniques"/"conversions")
 ]: nothing -> record<hits: table<accessTime: string, browser: record, clientLanguage: string, conversion1: record, conversion2: record, conversion3: record, conversion4: record, conversion5: record, conversions: list, entity: record, ip: string, isProxy: string, isSpider: string, isUnique: string, location: record, org: string, os: record, queryParams: string, realDestinationUrl: string, referer: string, source: record, type: string>, lastKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/conversions/($conversionId)/hits" $qp)
+  let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}/hits") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1295,8 +1295,8 @@ export def "conversions-hits GetHits" [
 #
 # PUT /conversions/{conversionId}/notes
 # operationId: Conversions_PatchNotes
-export def "conversions-notes PatchNotes" [
-  conversionId: int
+export def "conversions-notes update" [
+  conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1306,13 +1306,13 @@ export def "conversions-notes PatchNotes" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Text: string
+  --text: string
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conversions/($conversionId)/notes")
-  let body = {Text: $Text} | compact
+  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}/notes"))
+  let body = {"Text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1323,7 +1323,7 @@ export def "conversions-notes PatchNotes" [
 #
 # GET /datapoints
 # operationId: DataPoints_Get
-export def "datapoints Get" [
+export def "datapoints list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1338,16 +1338,16 @@ export def "datapoints Get" [
   --type: string@type-completer-1 # Type of the datapoint ("tp"/"tl")
   --status: string@status-completer-1 # Status of the datapoint
   --tags: string # A comma separated list of tags you want to filter with.
-  --textSearch: string # Filter fields by this pattern
-  --onlyFavorites: oneof<nothing, bool> # Filter fields by favourite status
-  --sortBy: string # Field to sort by
-  --sortDirection: string@sortDirection-completer # Direction of sort "asc" or "desc"
-  --createdAfter: string # Exclude datapoints created before this date (YYYYMMDD)
-  --createdBefore: string # Exclude datapoints created after this date (YYYYMMDD)
+  --text-search: string # Filter fields by this pattern
+  --only-favorites: oneof<nothing, bool> # Filter fields by favourite status
+  --sort-by: string # Field to sort by
+  --sort-direction: string@sort-direction-completer # Direction of sort "asc" or "desc"
+  --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
+  --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
 ]: nothing -> record<entities: table<id: int, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $textSearch "scalar") (serialize-qp "onlyFavorites" $onlyFavorites "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortDirection" $sortDirection "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/datapoints" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1361,7 +1361,7 @@ export def "datapoints Get" [
 # --tags item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
 # --typeTL shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, pauseAfterDateExpiration?: bool, randomDestinationItems?: list, redirectType?: "PermanentRedirect"|"TemporaryRedirect", referrerClean?: "None"|"Clean"|"Myself", scripts?: list, sequentialDestinationItems?: list, spilloverDestinationItems?: list, uniqueDestinationItem?: record, url?: string, urlAfterClicksExpiration?: string, urlAfterDateExpiration?: string, urlsByLanguage?: list, urlsByNation?: list, weightedDestinationItems?: list}
 # --typeTP shape: {parameterNote?: string}
-export def "datapoints Put" [
+export def "datapoints update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1371,42 +1371,42 @@ export def "datapoints Put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --creationDate: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
-  --encodeIp: oneof<nothing, bool>
-  --fifthConversionId: int # format: int64
-  --fifthConversionName: string
-  --firstConversionId: int # format: int64
-  --firstConversionName: string
-  --fourthConversionId: int # format: int64
-  --fourthConversionName: string
-  --groupId: int # format: int64
-  --groupName: string
+  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --encode-ip: oneof<nothing, bool>
+  --fifth-conversion-id: int # format: int64
+  --fifth-conversion-name: string
+  --first-conversion-id: int # format: int64
+  --first-conversion-name: string
+  --fourth-conversion-id: int # format: int64
+  --fourth-conversion-name: string
+  --group-id: int # format: int64
+  --group-name: string
   --id: int # format: int64
-  --isPublic: oneof<nothing, bool>
-  --isSecured: oneof<nothing, bool>
-  --lightTracking: oneof<nothing, bool>
+  --is-public: oneof<nothing, bool>
+  --is-secured: oneof<nothing, bool>
+  --light-tracking: oneof<nothing, bool>
   --name: string
   --notes: string
   --preferred: oneof<nothing, bool>
-  --redirectOnly: oneof<nothing, bool>
-  --secondConversionId: int # format: int64
-  --secondConversionName: string
+  --redirect-only: oneof<nothing, bool>
+  --second-conversion-id: int # format: int64
+  --second-conversion-name: string
   --status: string@status-completer-2
   --tags: list # item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
-  --thirdConversionId: int # format: int64
-  --thirdConversionName: string
+  --third-conversion-id: int # format: int64
+  --third-conversion-name: string
   --title: string
-  --trackingCode: string
+  --tracking-code: string
   --type: string@type-completer-2
-  --typeTL: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, pauseAfterDateExpiration?: bool, randomDestinationItems?: list, redirectType?: "PermanentRedirect"|"TemporaryRedirect", referrerClean?: "None"|"Clean"|"Myself", scripts?: list, sequentialDestinationItems?: list, spilloverDestinationItems?: list, uniqueDestinationItem?: record, url?: string, urlAfterClicksExpiration?: string, urlAfterDateExpiration?: string, urlsByLanguage?: list, urlsByNation?: list, weightedDestinationItems?: list}
-  --typeTP: record # shape: {parameterNote?: string}
-  --writePermited: oneof<nothing, bool>
+  --type-tl: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, pauseAfterDateExpiration?: bool, randomDestinationItems?: list, redirectType?: "PermanentRedirect"|"TemporaryRedirect", referrerClean?: "None"|"Clean"|"Myself", scripts?: list, sequentialDestinationItems?: list, spilloverDestinationItems?: list, uniqueDestinationItem?: record, url?: string, urlAfterClicksExpiration?: string, urlAfterDateExpiration?: string, urlsByLanguage?: list, urlsByNation?: list, weightedDestinationItems?: list}
+  --type-tp: record # shape: {parameterNote?: string}
+  --write-permited: oneof<nothing, bool>
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/datapoints")
-  let body = {creationDate: $creationDate, encodeIp: $encodeIp, fifthConversionId: $fifthConversionId, fifthConversionName: $fifthConversionName, firstConversionId: $firstConversionId, firstConversionName: $firstConversionName, fourthConversionId: $fourthConversionId, fourthConversionName: $fourthConversionName, groupId: $groupId, groupName: $groupName, id: $id, isPublic: $isPublic, isSecured: $isSecured, lightTracking: $lightTracking, name: $name, notes: $notes, preferred: $preferred, redirectOnly: $redirectOnly, secondConversionId: $secondConversionId, secondConversionName: $secondConversionName, status: $status, tags: $tags, thirdConversionId: $thirdConversionId, thirdConversionName: $thirdConversionName, title: $title, trackingCode: $trackingCode, type: $type, typeTL: $typeTL, typeTP: $typeTP, writePermited: $writePermited} | compact
+  let body = {"creationDate": $creation_date, "encodeIp": $encode_ip, "fifthConversionId": $fifth_conversion_id, "fifthConversionName": $fifth_conversion_name, "firstConversionId": $first_conversion_id, "firstConversionName": $first_conversion_name, "fourthConversionId": $fourth_conversion_id, "fourthConversionName": $fourth_conversion_name, "groupId": $group_id, "groupName": $group_name, "id": $id, "isPublic": $is_public, "isSecured": $is_secured, "lightTracking": $light_tracking, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "secondConversionId": $second_conversion_id, "secondConversionName": $second_conversion_name, "status": $status, "tags": $tags, "thirdConversionId": $third_conversion_id, "thirdConversionName": $third_conversion_name, "title": $title, "trackingCode": $tracking_code, "type": $type, "typeTL": $type_tl, "typeTP": $type_tp, "writePermited": $write_permited} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1417,7 +1417,7 @@ export def "datapoints Put" [
 #
 # GET /datapoints/aggregated
 # operationId: DataPoints_GetStatisticsAggregatedSingle
-export def "datapoints-aggregated GetStatisticsAggregatedSingle" [
+export def "datapoints-aggregated get-statistics-aggregated-single" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1427,10 +1427,10 @@ export def "datapoints-aggregated GetStatisticsAggregatedSingle" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
   --type: string@type-completer-1 # Type of datapoint ("tl"/"tp")
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --hourly: oneof<nothing, bool> # If using "yesterday" or "today" timeframe you can ask for the hourly detail
   --status: string@status-completer-1 # Status of datapoint ("deleted"/"active"/"paused"/"spam")
   --tag: string # A comma separated list of tags you want to filter with.
@@ -1438,7 +1438,7 @@ export def "datapoints-aggregated GetStatisticsAggregatedSingle" [
 ]: nothing -> record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "hourly" $hourly "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/datapoints/aggregated" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1449,7 +1449,7 @@ export def "datapoints-aggregated GetStatisticsAggregatedSingle" [
 #
 # GET /datapoints/aggregated/list
 # operationId: DataPoints_GetStatisticsAllList
-export def "datapoints-aggregated-list GetStatisticsAllList" [
+export def "datapoints-aggregated-list get-statistics-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1460,17 +1460,17 @@ export def "datapoints-aggregated-list GetStatisticsAllList" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --type: string@type-completer-1 # Type of datapoint ("tl"/"tp")
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --status: string@status-completer-1 # Status of datapoint ("deleted"/"active"/"paused"/"spam")
   --tag: string # A comma separated list of tags you want to filter with.
   --favourite: oneof<nothing, bool> # Is the datapoint is marked as favourite
-  --groupBy: string@groupBy-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
+  --group-by: string@group-by-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
 ]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "groupBy" $groupBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/datapoints/aggregated/list" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1482,7 +1482,7 @@ export def "datapoints-aggregated-list GetStatisticsAllList" [
 # DELETE /datapoints/batch
 # operationId: DataPoints_BatchDelete
 # --Entities item shape: {id?: int, uri?: string}
-export def "datapoints-batch BatchDelete" [
+export def "datapoints-batch delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1492,13 +1492,13 @@ export def "datapoints-batch BatchDelete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --Entities: list # item shape: {id?: int, uri?: string}
+  --entities: list # item shape: {id?: int, uri?: string}
 ]: any -> record<entityData: record<creationDate: string, encodeIp: bool, fifthConversionId: int, fifthConversionName: string, firstConversionId: int, firstConversionName: string, fourthConversionId: int, fourthConversionName: string, groupId: int, groupName: string, id: int, isPublic: bool, isSecured: bool, lightTracking: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, secondConversionId: int, secondConversionName: string, status: string, tags: list<record>, thirdConversionId: int, thirdConversionName: string, title: string, trackingCode: string, type: string, typeTL: record<appendQuery: bool, browserDestinationItem: record, destinationMode: string, domainId: int, encodeUrl: bool, expirationClicks: int, expirationDate: string, firstUrl: string, goDomainId: int, hideUrl: bool, hideUrlTitle: string, isABTest: bool, password: string, pauseAfterClicksExpiration: bool, pauseAfterDateExpiration: bool, randomDestinationItems: list, redirectType: string, referrerClean: string, scripts: list, sequentialDestinationItems: list, spilloverDestinationItems: list, uniqueDestinationItem: record, url: string, urlAfterClicksExpiration: string, urlAfterDateExpiration: string, urlsByLanguage: list, urlsByNation: list, weightedDestinationItems: list>, typeTP: record<parameterNote: string>, writePermited: bool>, errors: table<code: record, errorMessage: string, errorValue: record, property: string>, result: record<id: int, uri: string>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/datapoints/batch")
-  let body = {Entities: $Entities} | compact
+  let body = {"Entities": $entities} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1510,7 +1510,7 @@ export def "datapoints-batch BatchDelete" [
 # POST /datapoints/batch
 # operationId: DataPoints_BatchPost
 # --List item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, thirdConversionId?: int, thirdConversionName?: string, title?: string, trackingCode?: string, type?: "TrackingLink"|"TrackingPixel", typeTL?: record, typeTP?: record, writePermited?: bool}
-export def "datapoints-batch BatchPost" [
+export def "datapoints-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1520,13 +1520,13 @@ export def "datapoints-batch BatchPost" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --List: list # item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, thirdConversionId?: int, thirdConversionName?: string, title?: string, trackingCode?: string, type?: "TrackingLink"|"TrackingPixel", typeTL?: record, typeTP?: record, writePermited?: bool}
+  --list: list # item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, thirdConversionId?: int, thirdConversionName?: string, title?: string, trackingCode?: string, type?: "TrackingLink"|"TrackingPixel", typeTL?: record, typeTP?: record, writePermited?: bool}
 ]: any -> record<entityData: record<creationDate: string, encodeIp: bool, fifthConversionId: int, fifthConversionName: string, firstConversionId: int, firstConversionName: string, fourthConversionId: int, fourthConversionName: string, groupId: int, groupName: string, id: int, isPublic: bool, isSecured: bool, lightTracking: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, secondConversionId: int, secondConversionName: string, status: string, tags: list<record>, thirdConversionId: int, thirdConversionName: string, title: string, trackingCode: string, type: string, typeTL: record<appendQuery: bool, browserDestinationItem: record, destinationMode: string, domainId: int, encodeUrl: bool, expirationClicks: int, expirationDate: string, firstUrl: string, goDomainId: int, hideUrl: bool, hideUrlTitle: string, isABTest: bool, password: string, pauseAfterClicksExpiration: bool, pauseAfterDateExpiration: bool, randomDestinationItems: list, redirectType: string, referrerClean: string, scripts: list, sequentialDestinationItems: list, spilloverDestinationItems: list, uniqueDestinationItem: record, url: string, urlAfterClicksExpiration: string, urlAfterDateExpiration: string, urlsByLanguage: list, urlsByNation: list, weightedDestinationItems: list>, typeTP: record<parameterNote: string>, writePermited: bool>, errors: table<code: record, errorMessage: string, errorValue: record, property: string>, result: record<id: int, uri: string>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/datapoints/batch")
-  let body = {List: $List} | compact
+  let body = {"List": $list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1538,7 +1538,7 @@ export def "datapoints-batch BatchPost" [
 # PUT /datapoints/batch
 # operationId: DataPoints_BatchPut
 # --List item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, thirdConversionId?: int, thirdConversionName?: string, title?: string, trackingCode?: string, type?: "TrackingLink"|"TrackingPixel", typeTL?: record, typeTP?: record, writePermited?: bool}
-export def "datapoints-batch BatchPut" [
+export def "datapoints-batch update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1548,13 +1548,13 @@ export def "datapoints-batch BatchPut" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --List: list # item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, thirdConversionId?: int, thirdConversionName?: string, title?: string, trackingCode?: string, type?: "TrackingLink"|"TrackingPixel", typeTL?: record, typeTP?: record, writePermited?: bool}
+  --list: list # item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, thirdConversionId?: int, thirdConversionName?: string, title?: string, trackingCode?: string, type?: "TrackingLink"|"TrackingPixel", typeTL?: record, typeTP?: record, writePermited?: bool}
 ]: any -> record<entityData: record<creationDate: string, encodeIp: bool, fifthConversionId: int, fifthConversionName: string, firstConversionId: int, firstConversionName: string, fourthConversionId: int, fourthConversionName: string, groupId: int, groupName: string, id: int, isPublic: bool, isSecured: bool, lightTracking: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, secondConversionId: int, secondConversionName: string, status: string, tags: list<record>, thirdConversionId: int, thirdConversionName: string, title: string, trackingCode: string, type: string, typeTL: record<appendQuery: bool, browserDestinationItem: record, destinationMode: string, domainId: int, encodeUrl: bool, expirationClicks: int, expirationDate: string, firstUrl: string, goDomainId: int, hideUrl: bool, hideUrlTitle: string, isABTest: bool, password: string, pauseAfterClicksExpiration: bool, pauseAfterDateExpiration: bool, randomDestinationItems: list, redirectType: string, referrerClean: string, scripts: list, sequentialDestinationItems: list, spilloverDestinationItems: list, uniqueDestinationItem: record, url: string, urlAfterClicksExpiration: string, urlAfterDateExpiration: string, urlsByLanguage: list, urlsByNation: list, weightedDestinationItems: list>, typeTP: record<parameterNote: string>, writePermited: bool>, errors: table<code: record, errorMessage: string, errorValue: record, property: string>, result: record<id: int, uri: string>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/datapoints/batch")
-  let body = {List: $List} | compact
+  let body = {"List": $list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1565,7 +1565,7 @@ export def "datapoints-batch BatchPut" [
 #
 # GET /datapoints/count
 # operationId: DataPoints_Count
-export def "datapoints-count Count" [
+export def "datapoints-count get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1578,14 +1578,14 @@ export def "datapoints-count Count" [
   --type: string@type-completer-1 # Type of the datapoint ("tp"/"tl")
   --status: string@status-completer-1 # Status of the datapoint
   --tags: string # A comma separated list of tags you want to filter with.
-  --textSearch: string # Filter fields by this pattern
-  --onlyFavorites: oneof<nothing, bool> # Filter fields by favourite status
-  --createdAfter: string # Exclude datapoints created before this date (YYYYMMDD)
-  --createdBefore: string # Exclude datapoints created after this date (YYYYMMDD)
+  --text-search: string # Filter fields by this pattern
+  --only-favorites: oneof<nothing, bool> # Filter fields by favourite status
+  --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
+  --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $textSearch "scalar") (serialize-qp "onlyFavorites" $onlyFavorites "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/datapoints/count" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1596,7 +1596,7 @@ export def "datapoints-count Count" [
 #
 # DELETE /datapoints/{id}
 # operationId: DataPoints_Delete
-export def "datapoints Delete" [
+export def "datapoints delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1610,7 +1610,7 @@ export def "datapoints Delete" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/datapoints/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/datapoints/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1633,7 +1633,7 @@ export def "datapoints get" [
 ]: nothing -> record<creationDate: string, encodeIp: bool, fifthConversionId: int, fifthConversionName: string, firstConversionId: int, firstConversionName: string, fourthConversionId: int, fourthConversionName: string, groupId: int, groupName: string, id: int, isPublic: bool, isSecured: bool, lightTracking: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, secondConversionId: int, secondConversionName: string, status: string, tags: table<datapoints: list, groups: list, id: int, name: string>, thirdConversionId: int, thirdConversionName: string, title: string, trackingCode: string, type: string, typeTL: record<appendQuery: bool, browserDestinationItem: record<emailDestinationUrl: string, mobileDestinationUrl: string, spidersDestinationUrl: string>, destinationMode: string, domainId: int, encodeUrl: bool, expirationClicks: int, expirationDate: string, firstUrl: string, goDomainId: int, hideUrl: bool, hideUrlTitle: string, isABTest: bool, password: string, pauseAfterClicksExpiration: bool, pauseAfterDateExpiration: bool, randomDestinationItems: list<record>, redirectType: string, referrerClean: string, scripts: list<record>, sequentialDestinationItems: list<record>, spilloverDestinationItems: list<record>, uniqueDestinationItem: record<firstDestinationUrl: string>, url: string, urlAfterClicksExpiration: string, urlAfterDateExpiration: string, urlsByLanguage: list<record>, urlsByNation: list<record>, weightedDestinationItems: list<record>>, typeTP: record<parameterNote: string>, writePermited: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/datapoints/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/datapoints/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1646,7 +1646,7 @@ export def "datapoints get" [
 # --tags item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
 # --typeTL shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, pauseAfterDateExpiration?: bool, randomDestinationItems?: list, redirectType?: "PermanentRedirect"|"TemporaryRedirect", referrerClean?: "None"|"Clean"|"Myself", scripts?: list, sequentialDestinationItems?: list, spilloverDestinationItems?: list, uniqueDestinationItem?: record, url?: string, urlAfterClicksExpiration?: string, urlAfterDateExpiration?: string, urlsByLanguage?: list, urlsByNation?: list, weightedDestinationItems?: list}
 # --typeTP shape: {parameterNote?: string}
-export def "datapoints Post" [
+export def "datapoints create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1657,42 +1657,42 @@ export def "datapoints Post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --creationDate: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
-  --encodeIp: oneof<nothing, bool>
-  --fifthConversionId: int # format: int64
-  --fifthConversionName: string
-  --firstConversionId: int # format: int64
-  --firstConversionName: string
-  --fourthConversionId: int # format: int64
-  --fourthConversionName: string
-  --groupId: int # format: int64
-  --groupName: string
+  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --encode-ip: oneof<nothing, bool>
+  --fifth-conversion-id: int # format: int64
+  --fifth-conversion-name: string
+  --first-conversion-id: int # format: int64
+  --first-conversion-name: string
+  --fourth-conversion-id: int # format: int64
+  --fourth-conversion-name: string
+  --group-id: int # format: int64
+  --group-name: string
   --body-id: int # format: int64
-  --isPublic: oneof<nothing, bool>
-  --isSecured: oneof<nothing, bool>
-  --lightTracking: oneof<nothing, bool>
+  --is-public: oneof<nothing, bool>
+  --is-secured: oneof<nothing, bool>
+  --light-tracking: oneof<nothing, bool>
   --name: string
   --notes: string
   --preferred: oneof<nothing, bool>
-  --redirectOnly: oneof<nothing, bool>
-  --secondConversionId: int # format: int64
-  --secondConversionName: string
+  --redirect-only: oneof<nothing, bool>
+  --second-conversion-id: int # format: int64
+  --second-conversion-name: string
   --status: string@status-completer-2
   --tags: list # item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
-  --thirdConversionId: int # format: int64
-  --thirdConversionName: string
+  --third-conversion-id: int # format: int64
+  --third-conversion-name: string
   --title: string
-  --trackingCode: string
+  --tracking-code: string
   --type: string@type-completer-2
-  --typeTL: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, pauseAfterDateExpiration?: bool, randomDestinationItems?: list, redirectType?: "PermanentRedirect"|"TemporaryRedirect", referrerClean?: "None"|"Clean"|"Myself", scripts?: list, sequentialDestinationItems?: list, spilloverDestinationItems?: list, uniqueDestinationItem?: record, url?: string, urlAfterClicksExpiration?: string, urlAfterDateExpiration?: string, urlsByLanguage?: list, urlsByNation?: list, weightedDestinationItems?: list}
-  --typeTP: record # shape: {parameterNote?: string}
-  --writePermited: oneof<nothing, bool>
+  --type-tl: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, pauseAfterDateExpiration?: bool, randomDestinationItems?: list, redirectType?: "PermanentRedirect"|"TemporaryRedirect", referrerClean?: "None"|"Clean"|"Myself", scripts?: list, sequentialDestinationItems?: list, spilloverDestinationItems?: list, uniqueDestinationItem?: record, url?: string, urlAfterClicksExpiration?: string, urlAfterDateExpiration?: string, urlsByLanguage?: list, urlsByNation?: list, weightedDestinationItems?: list}
+  --type-tp: record # shape: {parameterNote?: string}
+  --write-permited: oneof<nothing, bool>
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/datapoints/($id)")
-  let body = {creationDate: $creationDate, encodeIp: $encodeIp, fifthConversionId: $fifthConversionId, fifthConversionName: $fifthConversionName, firstConversionId: $firstConversionId, firstConversionName: $firstConversionName, fourthConversionId: $fourthConversionId, fourthConversionName: $fourthConversionName, groupId: $groupId, groupName: $groupName, id: $body_id, isPublic: $isPublic, isSecured: $isSecured, lightTracking: $lightTracking, name: $name, notes: $notes, preferred: $preferred, redirectOnly: $redirectOnly, secondConversionId: $secondConversionId, secondConversionName: $secondConversionName, status: $status, tags: $tags, thirdConversionId: $thirdConversionId, thirdConversionName: $thirdConversionName, title: $title, trackingCode: $trackingCode, type: $type, typeTL: $typeTL, typeTP: $typeTP, writePermited: $writePermited} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/datapoints/{id}"))
+  let body = {"creationDate": $creation_date, "encodeIp": $encode_ip, "fifthConversionId": $fifth_conversion_id, "fifthConversionName": $fifth_conversion_name, "firstConversionId": $first_conversion_id, "firstConversionName": $first_conversion_name, "fourthConversionId": $fourth_conversion_id, "fourthConversionName": $fourth_conversion_name, "groupId": $group_id, "groupName": $group_name, "id": $body_id, "isPublic": $is_public, "isSecured": $is_secured, "lightTracking": $light_tracking, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "secondConversionId": $second_conversion_id, "secondConversionName": $second_conversion_name, "status": $status, "tags": $tags, "thirdConversionId": $third_conversion_id, "thirdConversionName": $third_conversion_name, "title": $title, "trackingCode": $tracking_code, "type": $type, "typeTL": $type_tl, "typeTP": $type_tp, "writePermited": $write_permited} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1703,7 +1703,7 @@ export def "datapoints Post" [
 #
 # GET /datapoints/{id}/aggregated
 # operationId: DataPoints_GetStatisticsSingle
-export def "datapoints-aggregated GetStatisticsSingle" [
+export def "datapoints-aggregated get-statistics-single" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1714,15 +1714,15 @@ export def "datapoints-aggregated GetStatisticsSingle" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --hourly: oneof<nothing, bool> # If using "yesterday" or "today" timeframe you can ask for the hourly detail
 ]: nothing -> record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "hourly" $hourly "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/datapoints/($id)/aggregated" $qp)
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/datapoints/{id}/aggregated") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1732,7 +1732,7 @@ export def "datapoints-aggregated GetStatisticsSingle" [
 #
 # GET /datapoints/{id}/aggregated/list
 # operationId: DataPoints_GetStatisticsList
-export def "datapoints-aggregated-list GetStatisticsList" [
+export def "datapoints-aggregated-list get-statistics" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1743,15 +1743,15 @@ export def "datapoints-aggregated-list GetStatisticsList" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
-  --groupBy: string@groupBy-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --group-by: string@group-by-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
 ]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "groupBy" $groupBy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/datapoints/($id)/aggregated/list" $qp)
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/datapoints/{id}/aggregated/list") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1761,7 +1761,7 @@ export def "datapoints-aggregated-list GetStatisticsList" [
 #
 # PUT /datapoints/{id}/favourite
 # operationId: DataPoints_PatchFavourite
-export def "datapoints-favourite PatchFavourite" [
+export def "datapoints-favourite update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1775,7 +1775,7 @@ export def "datapoints-favourite PatchFavourite" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/datapoints/($id)/favourite")
+  let full_url = (build-url $base ({id: $id} | format pattern "/datapoints/{id}/favourite"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1785,7 +1785,7 @@ export def "datapoints-favourite PatchFavourite" [
 #
 # GET /datapoints/{id}/hits
 # operationId: DataPoints_GetHits
-export def "datapoints-hits GetHits" [
+export def "datapoints-hits get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1799,14 +1799,14 @@ export def "datapoints-hits GetHits" [
   --timeframe: string@timeframe-completer # Timeframe of the request. See list at $timeframeList
   --limit: int # Limit results to this number (format: int32)
   --offset: string # Offset where to start from (it's the lastKey field in the response object)
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --filter: string@filter-completer-1 # Filter event type ("spiders"/"uniques"/"nonuniques"/"conversions")
 ]: nothing -> record<hits: table<accessTime: string, browser: record, clientLanguage: string, conversion1: record, conversion2: record, conversion3: record, conversion4: record, conversion5: record, conversions: list, entity: record, ip: string, isProxy: string, isSpider: string, isUnique: string, location: record, org: string, os: record, queryParams: string, realDestinationUrl: string, referer: string, source: record, type: string>, lastKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/datapoints/($id)/hits" $qp)
+  let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/datapoints/{id}/hits") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1816,7 +1816,7 @@ export def "datapoints-hits GetHits" [
 #
 # PUT /datapoints/{id}/notes
 # operationId: DataPoints_PatchNotes
-export def "datapoints-notes PatchNotes" [
+export def "datapoints-notes update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1827,13 +1827,13 @@ export def "datapoints-notes PatchNotes" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Text: string
+  --text: string
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/datapoints/($id)/notes")
-  let body = {Text: $Text} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/datapoints/{id}/notes"))
+  let body = {"Text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1844,7 +1844,7 @@ export def "datapoints-notes PatchNotes" [
 #
 # GET /domains
 # operationId: Domains_Get
-export def "domains Get" [
+export def "domains list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1872,7 +1872,7 @@ export def "domains Get" [
 #
 # POST /domains
 # operationId: Domains_Put
-export def "domains Put" [
+export def "domains update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1883,7 +1883,7 @@ export def "domains Put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --custom404: string
-  --customHomepage: string
+  --custom-homepage: string
   --id: int # format: int64
   --name: string
   --type: string@type-completer-4
@@ -1892,7 +1892,7 @@ export def "domains Put" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/domains")
-  let body = {custom404: $custom404, customHomepage: $customHomepage, id: $id, name: $name, type: $type} | compact
+  let body = {"custom404": $custom404, "customHomepage": $custom_homepage, "id": $id, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1903,7 +1903,7 @@ export def "domains Put" [
 #
 # GET /domains/count
 # operationId: Domains_Count
-export def "domains-count Count" [
+export def "domains-count get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1929,7 +1929,7 @@ export def "domains-count Count" [
 #
 # DELETE /domains/{id}
 # operationId: Domains_Delete
-export def "domains Delete" [
+export def "domains delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1943,7 +1943,7 @@ export def "domains Delete" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/domains/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1966,7 +1966,7 @@ export def "domains get" [
 ]: nothing -> record<custom404: string, customHomepage: string, id: int, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/domains/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1976,7 +1976,7 @@ export def "domains get" [
 #
 # POST /domains/{id}
 # operationId: Domains_Update
-export def "domains Update" [
+export def "domains update-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1988,7 +1988,7 @@ export def "domains Update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --custom404: string
-  --customHomepage: string
+  --custom-homepage: string
   --body-id: int # format: int64
   --name: string
   --type: string@type-completer-4
@@ -1996,8 +1996,8 @@ export def "domains Update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($id)")
-  let body = {custom404: $custom404, customHomepage: $customHomepage, id: $body_id, name: $name, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/domains/{id}"))
+  let body = {"custom404": $custom404, "customHomepage": $custom_homepage, "id": $body_id, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2008,7 +2008,7 @@ export def "domains Update" [
 #
 # GET /groups
 # operationId: Groups_Get
-export def "groups Get" [
+export def "groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2022,14 +2022,14 @@ export def "groups Get" [
   --limit: int # Maximum elements to retrieve. Default to 20 if not specified. (format: int32, default: 20)
   --status: string@status-completer # Status of the group
   --tags: string # A comma separated list of tags you want to filter with.
-  --textSearch: string # Filter fields by this pattern
-  --createdAfter: string # Exclude groups created before this date (YYYYMMDD)
-  --createdBefore: string # Exclude groups created after this date (YYYYMMDD)
+  --text-search: string # Filter fields by this pattern
+  --created-after: string # Exclude groups created before this date (YYYYMMDD)
+  --created-before: string # Exclude groups created after this date (YYYYMMDD)
   --write: oneof<nothing, bool> # Write permission
 ]: nothing -> record<entities: table<id: int, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $textSearch "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar") (serialize-qp "write" $write "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "write" $write "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/groups" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2041,7 +2041,7 @@ export def "groups Get" [
 # POST /groups
 # operationId: Groups_Put
 # --tags item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
-export def "groups Put" [
+export def "groups update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2051,22 +2051,22 @@ export def "groups Put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --creationDate: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
   --deleted: oneof<nothing, bool>
   --id: int # format: int64
-  --isPublic: oneof<nothing, bool>
+  --is-public: oneof<nothing, bool>
   --name: string
   --notes: string
   --preferred: oneof<nothing, bool>
-  --redirectOnly: oneof<nothing, bool>
+  --redirect-only: oneof<nothing, bool>
   --tags: list # item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
-  --writePermited: oneof<nothing, bool>
+  --write-permited: oneof<nothing, bool>
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/groups")
-  let body = {creationDate: $creationDate, deleted: $deleted, id: $id, isPublic: $isPublic, name: $name, notes: $notes, preferred: $preferred, redirectOnly: $redirectOnly, tags: $tags, writePermited: $writePermited} | compact
+  let body = {"creationDate": $creation_date, "deleted": $deleted, "id": $id, "isPublic": $is_public, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "tags": $tags, "writePermited": $write_permited} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2077,7 +2077,7 @@ export def "groups Put" [
 #
 # GET /groups/aggregated
 # operationId: Groups_GetStatisticsAggregatedSingle
-export def "groups-aggregated GetStatisticsAggregatedSingle" [
+export def "groups-aggregated get-statistics-aggregated-single" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2087,9 +2087,9 @@ export def "groups-aggregated GetStatisticsAggregatedSingle" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --hourly: oneof<nothing, bool> # If using "yesterday" or "today" timeframe you can ask for the hourly detail
   --status: string@status-completer # Status of group ("deleted"/"active")
   --tag: string # A comma separated list of tags you want to filter with.
@@ -2097,7 +2097,7 @@ export def "groups-aggregated GetStatisticsAggregatedSingle" [
 ]: nothing -> record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "hourly" $hourly "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/groups/aggregated" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2108,7 +2108,7 @@ export def "groups-aggregated GetStatisticsAggregatedSingle" [
 #
 # GET /groups/aggregated/list
 # operationId: Groups_GetStatisticsAllList
-export def "groups-aggregated-list GetStatisticsAllList" [
+export def "groups-aggregated-list get-statistics-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2118,17 +2118,17 @@ export def "groups-aggregated-list GetStatisticsAllList" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --status: string # Status of group ("deleted"/"active")
   --tag: string # A comma separated list of tags you want to filter with.
   --favourite: oneof<nothing, bool> # Is the group is marked as favourite
-  --groupBy: string@groupBy-completer-1 # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
+  --group-by: string@group-by-completer-1 # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
 ]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "groupBy" $groupBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/groups/aggregated/list" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2139,7 +2139,7 @@ export def "groups-aggregated-list GetStatisticsAllList" [
 #
 # GET /groups/count
 # operationId: Groups_Count
-export def "groups-count Count" [
+export def "groups-count get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2151,14 +2151,14 @@ export def "groups-count Count" [
   --accept: string@accept-completer # Response content type
   --status: string@status-completer # Status of the datapoint
   --tags: string # A comma separated list of tags you want to filter with.
-  --textSearch: string # Filter fields by this pattern
-  --createdAfter: string # Exclude groups created before this date (YYYYMMDD)
-  --createdBefore: string # Exclude groups created after this date (YYYYMMDD)
+  --text-search: string # Filter fields by this pattern
+  --created-after: string # Exclude groups created before this date (YYYYMMDD)
+  --created-before: string # Exclude groups created after this date (YYYYMMDD)
   --write: oneof<nothing, bool> # Write permission
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $textSearch "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar") (serialize-qp "write" $write "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "write" $write "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/groups/count" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2169,7 +2169,7 @@ export def "groups-count Count" [
 #
 # DELETE /groups/{id}
 # operationId: Groups_Delete
-export def "groups Delete" [
+export def "groups delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2183,7 +2183,7 @@ export def "groups Delete" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2206,7 +2206,7 @@ export def "groups get" [
 ]: nothing -> record<creationDate: string, deleted: bool, id: int, isPublic: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, tags: table<datapoints: list, groups: list, id: int, name: string>, writePermited: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2217,7 +2217,7 @@ export def "groups get" [
 # POST /groups/{id}
 # operationId: Groups_Post
 # --tags item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
-export def "groups Post" [
+export def "groups create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2228,22 +2228,22 @@ export def "groups Post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --creationDate: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
   --deleted: oneof<nothing, bool>
   --body-id: int # format: int64
-  --isPublic: oneof<nothing, bool>
+  --is-public: oneof<nothing, bool>
   --name: string
   --notes: string
   --preferred: oneof<nothing, bool>
-  --redirectOnly: oneof<nothing, bool>
+  --redirect-only: oneof<nothing, bool>
   --tags: list # item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
-  --writePermited: oneof<nothing, bool>
+  --write-permited: oneof<nothing, bool>
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($id)")
-  let body = {creationDate: $creationDate, deleted: $deleted, id: $body_id, isPublic: $isPublic, name: $name, notes: $notes, preferred: $preferred, redirectOnly: $redirectOnly, tags: $tags, writePermited: $writePermited} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}"))
+  let body = {"creationDate": $creation_date, "deleted": $deleted, "id": $body_id, "isPublic": $is_public, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "tags": $tags, "writePermited": $write_permited} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2254,7 +2254,7 @@ export def "groups Post" [
 #
 # GET /groups/{id}/aggregated
 # operationId: Groups_GetStatisticsSingle
-export def "groups-aggregated GetStatisticsSingle" [
+export def "groups-aggregated get-statistics-single" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2265,15 +2265,15 @@ export def "groups-aggregated GetStatisticsSingle" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --hourly: oneof<nothing, bool> # If using "yesterday" or "today" timeframe you can ask for the hourly detail
 ]: nothing -> record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "hourly" $hourly "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/groups/($id)/aggregated" $qp)
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/aggregated") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2283,7 +2283,7 @@ export def "groups-aggregated GetStatisticsSingle" [
 #
 # GET /groups/{id}/aggregated/list
 # operationId: Groups_GetStatisticsList
-export def "groups-aggregated-list GetStatisticsList" [
+export def "groups-aggregated-list get-statistics" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2294,15 +2294,15 @@ export def "groups-aggregated-list GetStatisticsList" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
-  --groupBy: string@groupBy-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --group-by: string@group-by-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
 ]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "groupBy" $groupBy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/groups/($id)/aggregated/list" $qp)
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/aggregated/list") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2312,7 +2312,7 @@ export def "groups-aggregated-list GetStatisticsList" [
 #
 # GET /groups/{id}/aggregated/summary
 # operationId: Groups_GetDatapointsSummary
-export def "groups-aggregated-summary GetDatapointsSummary" [
+export def "groups-aggregated-summary get-datapoints" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2323,23 +2323,23 @@ export def "groups-aggregated-summary GetDatapointsSummary" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeFrame: string@timeFrame-completer # Timeframe of the request. See list at $timeframeList
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
   --type: string@type-completer-1 # Type of datapoint ("tl"/"tp")
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --status: string@status-completer # Status of datapoint ("deleted"/"active"/"paused"/"spam")
   --tag: string # A comma separated list of tags you want to filter with.
   --favourite: oneof<nothing, bool> # Is the datapoint marked as favourite
-  --sortBy: string # Field to sort by
-  --sortDirection: string@sortDirection-completer # Direction of sort "asc" or "desc"
+  --sort-by: string # Field to sort by
+  --sort-direction: string@sort-direction-completer # Direction of sort "asc" or "desc"
   --offset: int # Offset where to start from (format: int32, default: 0)
   --limit: int # Limit results to this number (format: int32, default: 20)
-  --textSearch: string # Filter fields by this pattern
+  --text-search: string # Filter fields by this pattern
 ]: nothing -> record<count: int, limit: int, offset: int, result: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeFrame" $timeFrame "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortDirection" $sortDirection "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "textSearch" $textSearch "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/groups/($id)/aggregated/summary" $qp)
+  let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/aggregated/summary") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2349,7 +2349,7 @@ export def "groups-aggregated-summary GetDatapointsSummary" [
 #
 # GET /groups/{id}/datapoints
 # operationId: Groups_GetDatapoints
-export def "groups-datapoints GetDatapoints" [
+export def "groups-datapoints get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2365,17 +2365,17 @@ export def "groups-datapoints GetDatapoints" [
   --type: string@type-completer-1 # Type of the datapoint ("tp"/"tl")
   --status: string@status-completer-1 # Status of the datapoint
   --tags: string # A comma separated list of tags you want to filter with.
-  --textSearch: string # Filter fields by this pattern
-  --onlyFavorites: oneof<nothing, bool> # Filter fields by favourite status
-  --sortBy: string # Field to sort by
-  --sortDirection: string@sortDirection-completer # Direction of sort "asc" or "desc"
-  --createdAfter: string # Exclude datapoints created before this date (YYYYMMDD)
-  --createdBefore: string # Exclude datapoints created after this date (YYYYMMDD)
+  --text-search: string # Filter fields by this pattern
+  --only-favorites: oneof<nothing, bool> # Filter fields by favourite status
+  --sort-by: string # Field to sort by
+  --sort-direction: string@sort-direction-completer # Direction of sort "asc" or "desc"
+  --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
+  --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
 ]: nothing -> record<entities: table<id: int, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $textSearch "scalar") (serialize-qp "onlyFavorites" $onlyFavorites "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortDirection" $sortDirection "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/groups/($id)/datapoints" $qp)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/datapoints") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2388,7 +2388,7 @@ export def "groups-datapoints GetDatapoints" [
 # --tags item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
 # --typeTL shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, pauseAfterDateExpiration?: bool, randomDestinationItems?: list, redirectType?: "PermanentRedirect"|"TemporaryRedirect", referrerClean?: "None"|"Clean"|"Myself", scripts?: list, sequentialDestinationItems?: list, spilloverDestinationItems?: list, uniqueDestinationItem?: record, url?: string, urlAfterClicksExpiration?: string, urlAfterDateExpiration?: string, urlsByLanguage?: list, urlsByNation?: list, weightedDestinationItems?: list}
 # --typeTP shape: {parameterNote?: string}
-export def "groups-datapoints PutDatapoint" [
+export def "groups-datapoints update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2399,42 +2399,42 @@ export def "groups-datapoints PutDatapoint" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --creationDate: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
-  --encodeIp: oneof<nothing, bool>
-  --fifthConversionId: int # format: int64
-  --fifthConversionName: string
-  --firstConversionId: int # format: int64
-  --firstConversionName: string
-  --fourthConversionId: int # format: int64
-  --fourthConversionName: string
-  --groupId: int # format: int64
-  --groupName: string
+  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --encode-ip: oneof<nothing, bool>
+  --fifth-conversion-id: int # format: int64
+  --fifth-conversion-name: string
+  --first-conversion-id: int # format: int64
+  --first-conversion-name: string
+  --fourth-conversion-id: int # format: int64
+  --fourth-conversion-name: string
+  --group-id: int # format: int64
+  --group-name: string
   --body-id: int # format: int64
-  --isPublic: oneof<nothing, bool>
-  --isSecured: oneof<nothing, bool>
-  --lightTracking: oneof<nothing, bool>
+  --is-public: oneof<nothing, bool>
+  --is-secured: oneof<nothing, bool>
+  --light-tracking: oneof<nothing, bool>
   --name: string
   --notes: string
   --preferred: oneof<nothing, bool>
-  --redirectOnly: oneof<nothing, bool>
-  --secondConversionId: int # format: int64
-  --secondConversionName: string
+  --redirect-only: oneof<nothing, bool>
+  --second-conversion-id: int # format: int64
+  --second-conversion-name: string
   --status: string@status-completer-2
   --tags: list # item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
-  --thirdConversionId: int # format: int64
-  --thirdConversionName: string
+  --third-conversion-id: int # format: int64
+  --third-conversion-name: string
   --title: string
-  --trackingCode: string
+  --tracking-code: string
   --type: string@type-completer-2
-  --typeTL: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, pauseAfterDateExpiration?: bool, randomDestinationItems?: list, redirectType?: "PermanentRedirect"|"TemporaryRedirect", referrerClean?: "None"|"Clean"|"Myself", scripts?: list, sequentialDestinationItems?: list, spilloverDestinationItems?: list, uniqueDestinationItem?: record, url?: string, urlAfterClicksExpiration?: string, urlAfterDateExpiration?: string, urlsByLanguage?: list, urlsByNation?: list, weightedDestinationItems?: list}
-  --typeTP: record # shape: {parameterNote?: string}
-  --writePermited: oneof<nothing, bool>
+  --type-tl: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, pauseAfterDateExpiration?: bool, randomDestinationItems?: list, redirectType?: "PermanentRedirect"|"TemporaryRedirect", referrerClean?: "None"|"Clean"|"Myself", scripts?: list, sequentialDestinationItems?: list, spilloverDestinationItems?: list, uniqueDestinationItem?: record, url?: string, urlAfterClicksExpiration?: string, urlAfterDateExpiration?: string, urlsByLanguage?: list, urlsByNation?: list, weightedDestinationItems?: list}
+  --type-tp: record # shape: {parameterNote?: string}
+  --write-permited: oneof<nothing, bool>
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($id)/datapoints")
-  let body = {creationDate: $creationDate, encodeIp: $encodeIp, fifthConversionId: $fifthConversionId, fifthConversionName: $fifthConversionName, firstConversionId: $firstConversionId, firstConversionName: $firstConversionName, fourthConversionId: $fourthConversionId, fourthConversionName: $fourthConversionName, groupId: $groupId, groupName: $groupName, id: $body_id, isPublic: $isPublic, isSecured: $isSecured, lightTracking: $lightTracking, name: $name, notes: $notes, preferred: $preferred, redirectOnly: $redirectOnly, secondConversionId: $secondConversionId, secondConversionName: $secondConversionName, status: $status, tags: $tags, thirdConversionId: $thirdConversionId, thirdConversionName: $thirdConversionName, title: $title, trackingCode: $trackingCode, type: $type, typeTL: $typeTL, typeTP: $typeTP, writePermited: $writePermited} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/datapoints"))
+  let body = {"creationDate": $creation_date, "encodeIp": $encode_ip, "fifthConversionId": $fifth_conversion_id, "fifthConversionName": $fifth_conversion_name, "firstConversionId": $first_conversion_id, "firstConversionName": $first_conversion_name, "fourthConversionId": $fourth_conversion_id, "fourthConversionName": $fourth_conversion_name, "groupId": $group_id, "groupName": $group_name, "id": $body_id, "isPublic": $is_public, "isSecured": $is_secured, "lightTracking": $light_tracking, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "secondConversionId": $second_conversion_id, "secondConversionName": $second_conversion_name, "status": $status, "tags": $tags, "thirdConversionId": $third_conversion_id, "thirdConversionName": $third_conversion_name, "title": $title, "trackingCode": $tracking_code, "type": $type, "typeTL": $type_tl, "typeTP": $type_tp, "writePermited": $write_permited} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2445,7 +2445,7 @@ export def "groups-datapoints PutDatapoint" [
 #
 # GET /groups/{id}/datapoints/count
 # operationId: Groups_GetDatapointsCount
-export def "groups-datapoints-count GetDatapointsCount" [
+export def "groups-datapoints-count get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2459,15 +2459,15 @@ export def "groups-datapoints-count GetDatapointsCount" [
   --type: string@type-completer-1 # Type of the datapoint ("tp"/"tl")
   --status: string@status-completer-1 # Status of the datapoint
   --tags: string # A comma separated list of tags you want to filter with.
-  --textSearch: string # Filter fields by this pattern
-  --onlyFavorites: oneof<nothing, bool> # Filter fields by favourite status
-  --createdAfter: string # Exclude datapoints created before this date (YYYYMMDD)
-  --createdBefore: string # Exclude datapoints created after this date (YYYYMMDD)
+  --text-search: string # Filter fields by this pattern
+  --only-favorites: oneof<nothing, bool> # Filter fields by favourite status
+  --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
+  --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $textSearch "scalar") (serialize-qp "onlyFavorites" $onlyFavorites "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/groups/($id)/datapoints/count" $qp)
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/datapoints/count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2477,7 +2477,7 @@ export def "groups-datapoints-count GetDatapointsCount" [
 #
 # PUT /groups/{id}/favourite
 # operationId: Groups_PatchFavourite
-export def "groups-favourite PatchFavourite" [
+export def "groups-favourite update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2491,7 +2491,7 @@ export def "groups-favourite PatchFavourite" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($id)/favourite")
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/favourite"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2501,7 +2501,7 @@ export def "groups-favourite PatchFavourite" [
 #
 # GET /groups/{id}/hits
 # operationId: Groups_GetHits
-export def "groups-hits GetHits" [
+export def "groups-hits get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2515,14 +2515,14 @@ export def "groups-hits GetHits" [
   --timeframe: string@timeframe-completer # Timeframe of the request. See list at $timeframeList
   --limit: int # Limit results to this number (format: int32)
   --offset: string # Offset where to start from (it's the lastKey field in the response object)
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --filter: string@filter-completer-1 # Filter event type ("spiders"/"uniques"/"nonuniques"/"conversions")
 ]: nothing -> record<hits: table<accessTime: string, browser: record, clientLanguage: string, conversion1: record, conversion2: record, conversion3: record, conversion4: record, conversion5: record, conversions: list, entity: record, ip: string, isProxy: string, isSpider: string, isUnique: string, location: record, org: string, os: record, queryParams: string, realDestinationUrl: string, referer: string, source: record, type: string>, lastKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/groups/($id)/hits" $qp)
+  let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/hits") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2532,7 +2532,7 @@ export def "groups-hits GetHits" [
 #
 # PUT /groups/{id}/notes
 # operationId: Groups_PatchNotes
-export def "groups-notes PatchNotes" [
+export def "groups-notes update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2543,13 +2543,13 @@ export def "groups-notes PatchNotes" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Text: string
+  --text: string
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($id)/notes")
-  let body = {Text: $Text} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/notes"))
+  let body = {"Text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2560,7 +2560,7 @@ export def "groups-notes PatchNotes" [
 #
 # GET /hits
 # operationId: Hits_GetHits
-export def "hits GetHits" [
+export def "hits get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2573,13 +2573,13 @@ export def "hits GetHits" [
   --timeframe: string@timeframe-completer # Timeframe of the request. See list at $timeframeList
   --limit: int # Limit results to this number (format: int32)
   --offset: string # Offset where to start from (it's the lastKey field in the response object)
-  --fromDay: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
-  --toDay: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
+  --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
+  --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --filter: string@filter-completer-1 # Filter event type ("spiders"/"uniques"/"nonuniques"/"conversions")
 ]: nothing -> record<hits: table<accessTime: string, browser: record, clientLanguage: string, conversion1: record, conversion2: record, conversion3: record, conversion4: record, conversion5: record, conversions: list, entity: record, ip: string, isProxy: string, isSpider: string, isUnique: string, location: record, org: string, os: record, queryParams: string, realDestinationUrl: string, referer: string, source: record, type: string>, lastKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $fromDay "scalar") (serialize-qp "toDay" $toDay "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hits" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2590,7 +2590,7 @@ export def "hits GetHits" [
 #
 # GET /me
 # operationId: Me_GetMe
-export def "me GetMe" [
+export def "me get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2613,7 +2613,7 @@ export def "me GetMe" [
 #
 # GET /me/plan
 # operationId: Me_GetMePlan
-export def "me-plan GetMePlan" [
+export def "me-plan get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2636,7 +2636,7 @@ export def "me-plan GetMePlan" [
 #
 # GET /retargeting
 # operationId: Retargeting_Get
-export def "retargeting Get" [
+export def "retargeting list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2662,7 +2662,7 @@ export def "retargeting Get" [
 #
 # POST /retargeting
 # operationId: Retargeting_Put
-export def "retargeting Put" [
+export def "retargeting update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2680,7 +2680,7 @@ export def "retargeting Put" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/retargeting")
-  let body = {id: $id, name: $name, script: $script} | compact
+  let body = {"id": $id, "name": $name, "script": $script} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2691,7 +2691,7 @@ export def "retargeting Put" [
 #
 # GET /retargeting/count
 # operationId: Retargeting_Count
-export def "retargeting-count Count" [
+export def "retargeting-count get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2714,7 +2714,7 @@ export def "retargeting-count Count" [
 #
 # DELETE /retargeting/{id}
 # operationId: Retargeting_Delete
-export def "retargeting Delete" [
+export def "retargeting delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2728,7 +2728,7 @@ export def "retargeting Delete" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/retargeting/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/retargeting/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2751,7 +2751,7 @@ export def "retargeting get" [
 ]: nothing -> record<id: int, name: string, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/retargeting/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/retargeting/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2761,7 +2761,7 @@ export def "retargeting get" [
 #
 # POST /retargeting/{id}
 # operationId: Retargeting_Post
-export def "retargeting Post" [
+export def "retargeting create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2779,8 +2779,8 @@ export def "retargeting Post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/retargeting/($id)")
-  let body = {id: $body_id, name: $name, script: $script} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/retargeting/{id}"))
+  let body = {"id": $body_id, "name": $name, "script": $script} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2791,7 +2791,7 @@ export def "retargeting Post" [
 #
 # GET /retargeting/{id}/datapoints
 # operationId: Retargeting_GetDatapoints
-export def "retargeting-datapoints GetDatapoints" [
+export def "retargeting-datapoints get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2806,17 +2806,17 @@ export def "retargeting-datapoints GetDatapoints" [
   --limit: int # Maximum elements to retrieve. Default to 20 if not specified. (format: int32, default: 20)
   --status: string@status-completer-1 # Status of the datapoint
   --tags: string # A comma separated list of tags you want to filter with.
-  --textSearch: string # Filter fields by this pattern
-  --onlyFavorites: oneof<nothing, bool> # Filter fields by favourite status
-  --sortBy: string # Field to sort by
-  --sortDirection: string@sortDirection-completer # Direction of sort "asc" or "desc"
-  --createdAfter: string # Exclude datapoints created before this date (YYYYMMDD)
-  --createdBefore: string # Exclude datapoints created after this date (YYYYMMDD)
+  --text-search: string # Filter fields by this pattern
+  --only-favorites: oneof<nothing, bool> # Filter fields by favourite status
+  --sort-by: string # Field to sort by
+  --sort-direction: string@sort-direction-completer # Direction of sort "asc" or "desc"
+  --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
+  --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
 ]: nothing -> record<entities: table<id: int, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $textSearch "scalar") (serialize-qp "onlyFavorites" $onlyFavorites "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortDirection" $sortDirection "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/retargeting/($id)/datapoints" $qp)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/retargeting/{id}/datapoints") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2826,7 +2826,7 @@ export def "retargeting-datapoints GetDatapoints" [
 #
 # GET /retargeting/{id}/datapoints/count
 # operationId: Retargeting_GetDatapointsCount
-export def "retargeting-datapoints-count GetDatapointsCount" [
+export def "retargeting-datapoints-count get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2839,15 +2839,15 @@ export def "retargeting-datapoints-count GetDatapointsCount" [
   --accept: string@accept-completer # Response content type
   --status: string@status-completer-1 # Status of the datapoint
   --tags: string # A comma separated list of tags you want to filter with.
-  --textSearch: string # Filter fields by this pattern
-  --onlyFavorites: oneof<nothing, bool> # Filter fields by favourite status
-  --createdAfter: string # Exclude datapoints created before this date (YYYYMMDD)
-  --createdBefore: string # Exclude datapoints created after this date (YYYYMMDD)
+  --text-search: string # Filter fields by this pattern
+  --only-favorites: oneof<nothing, bool> # Filter fields by favourite status
+  --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
+  --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $textSearch "scalar") (serialize-qp "onlyFavorites" $onlyFavorites "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/retargeting/($id)/datapoints/count" $qp)
+  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/retargeting/{id}/datapoints/count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2857,7 +2857,7 @@ export def "retargeting-datapoints-count GetDatapointsCount" [
 #
 # GET /tags
 # operationId: Tags_Get
-export def "tags Get" [
+export def "tags list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2887,7 +2887,7 @@ export def "tags Get" [
 #
 # POST /tags
 # operationId: Tags_Put
-export def "tags Put" [
+export def "tags update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2906,7 +2906,7 @@ export def "tags Put" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tags")
-  let body = {datapoints: $datapoints, groups: $groups, id: $id, name: $name} | compact
+  let body = {"datapoints": $datapoints, "groups": $groups, "id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2917,7 +2917,7 @@ export def "tags Put" [
 #
 # GET /tags/count
 # operationId: Tags_Count
-export def "tags-count Count" [
+export def "tags-count get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2945,8 +2945,8 @@ export def "tags-count Count" [
 #
 # DELETE /tags/{tagId}
 # operationId: Tags_Delete
-export def "tags Delete" [
-  tagId: int
+export def "tags delete" [
+  tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2959,7 +2959,7 @@ export def "tags Delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($tagId)")
+  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2969,7 +2969,7 @@ export def "tags Delete" [
 #
 # GET /tags/{tagId}
 export def "tags get" [
-  tagId: int
+  tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2982,7 +2982,7 @@ export def "tags get" [
 ]: nothing -> record<datapoints: list<int>, groups: list<int>, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($tagId)")
+  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2992,8 +2992,8 @@ export def "tags get" [
 #
 # DELETE /tags/{tagId}/datapoints
 # operationId: Tags_DeleteRelatedDatapoints
-export def "tags-datapoints DeleteRelatedDatapoints" [
-  tagId: int
+export def "tags-datapoints delete-related" [
+  tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3006,7 +3006,7 @@ export def "tags-datapoints DeleteRelatedDatapoints" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($tagId)/datapoints")
+  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/datapoints"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3016,8 +3016,8 @@ export def "tags-datapoints DeleteRelatedDatapoints" [
 #
 # GET /tags/{tagId}/datapoints
 # operationId: Tags_GetDatapoints
-export def "tags-datapoints GetDatapoints" [
-  tagId: int
+export def "tags-datapoints get" [
+  tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3031,14 +3031,14 @@ export def "tags-datapoints GetDatapoints" [
   --limit: int # Maximum elements to retrieve. Default to 20 if not specified. (format: int32, default: 20)
   --type: string@type-completer-1 # Type of the datapoint ("tp"/"tl")
   --status: string@status-completer-1 # Status of the datapoint
-  --textSearch: string # Filter fields by this pattern
-  --createdAfter: string # Exclude datapoints created before this date (YYYYMMDD)
-  --createdBefore: string # Exclude datapoints created after this date (YYYYMMDD)
+  --text-search: string # Filter fields by this pattern
+  --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
+  --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
 ]: nothing -> record<entities: table<id: int, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $textSearch "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($tagId)/datapoints" $qp)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/datapoints") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3048,8 +3048,8 @@ export def "tags-datapoints GetDatapoints" [
 #
 # GET /tags/{tagId}/datapoints/count
 # operationId: Tags_GetDatapointsCount
-export def "tags-datapoints-count GetDatapointsCount" [
-  tagId: int
+export def "tags-datapoints-count get" [
+  tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3061,14 +3061,14 @@ export def "tags-datapoints-count GetDatapointsCount" [
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-1 # Type of the datapoint ("tp"/"tl")
   --status: string@status-completer-1 # Status of the datapoint
-  --textSearch: string # Filter fields by this pattern
-  --createdAfter: string # Exclude datapoints created before this date (YYYYMMDD)
-  --createdBefore: string # Exclude datapoints created after this date (YYYYMMDD)
+  --text-search: string # Filter fields by this pattern
+  --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
+  --created-before: string # Exclude datapoints created after this date (YYYYMMDD)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $textSearch "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($tagId)/datapoints/count" $qp)
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/datapoints/count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3078,8 +3078,8 @@ export def "tags-datapoints-count GetDatapointsCount" [
 #
 # PUT /tags/{tagId}/datapoints/patch
 # operationId: Tags_PatchDataPoint
-export def "tags-datapoints-patch PatchDataPoint" [
-  tagId: int
+export def "tags-datapoints-patch update" [
+  tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3089,14 +3089,14 @@ export def "tags-datapoints-patch PatchDataPoint" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Action: string
-  --Id: int # format: int64
+  --action: string
+  --id: int # format: int64
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($tagId)/datapoints/patch")
-  let body = {Action: $Action, Id: $Id} | compact
+  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/datapoints/patch"))
+  let body = {"Action": $action, "Id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3107,8 +3107,8 @@ export def "tags-datapoints-patch PatchDataPoint" [
 #
 # DELETE /tags/{tagId}/groups
 # operationId: Tags_DeleteRelatedGroups
-export def "tags-groups DeleteRelatedGroups" [
-  tagId: int
+export def "tags-groups delete-related" [
+  tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3121,7 +3121,7 @@ export def "tags-groups DeleteRelatedGroups" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($tagId)/groups")
+  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/groups"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3131,8 +3131,8 @@ export def "tags-groups DeleteRelatedGroups" [
 #
 # GET /tags/{tagId}/groups
 # operationId: Tags_GetGroups
-export def "tags-groups GetGroups" [
-  tagId: int
+export def "tags-groups get" [
+  tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3145,14 +3145,14 @@ export def "tags-groups GetGroups" [
   --offset: int # Where to start when retrieving elements. Default is 0 if not specified. (format: int32, default: 0)
   --limit: int # Maximum elements to retrieve. Default to 20 if not specified. (format: int32, default: 20)
   --status: string@status-completer # Status of the datapoint
-  --textSearch: string # Filter fields by this pattern
-  --createdAfter: string # Exclude groups created before this date (YYYYMMDD)
-  --createdBefore: string # Exclude groups created after this date (YYYYMMDD)
+  --text-search: string # Filter fields by this pattern
+  --created-after: string # Exclude groups created before this date (YYYYMMDD)
+  --created-before: string # Exclude groups created after this date (YYYYMMDD)
 ]: nothing -> record<entities: table<id: int, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $textSearch "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($tagId)/groups" $qp)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/groups") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3162,8 +3162,8 @@ export def "tags-groups GetGroups" [
 #
 # GET /tags/{tagId}/groups/count
 # operationId: Tags_GetGroupsCount
-export def "tags-groups-count GetGroupsCount" [
-  tagId: int
+export def "tags-groups-count get" [
+  tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3174,14 +3174,14 @@ export def "tags-groups-count GetGroupsCount" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string@status-completer # Status of the datapoint
-  --textSearch: string # Filter fields by this pattern
-  --createdAfter: string # Exclude groups created before this date (YYYYMMDD)
-  --createdBefore: string # Exclude groups created after this date (YYYYMMDD)
+  --text-search: string # Filter fields by this pattern
+  --created-after: string # Exclude groups created before this date (YYYYMMDD)
+  --created-before: string # Exclude groups created after this date (YYYYMMDD)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $textSearch "scalar") (serialize-qp "createdAfter" $createdAfter "scalar") (serialize-qp "createdBefore" $createdBefore "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($tagId)/groups/count" $qp)
+  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/groups/count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3191,8 +3191,8 @@ export def "tags-groups-count GetGroupsCount" [
 #
 # PUT /tags/{tagId}/groups/patch
 # operationId: Tags_PatchGroup
-export def "tags-groups-patch PatchGroup" [
-  tagId: int
+export def "tags-groups-patch update" [
+  tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3202,14 +3202,14 @@ export def "tags-groups-patch PatchGroup" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Action: string
-  --Id: int # format: int64
+  --action: string
+  --id: int # format: int64
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($tagId)/groups/patch")
-  let body = {Action: $Action, Id: $Id} | compact
+  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/groups/patch"))
+  let body = {"Action": $action, "Id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3220,8 +3220,8 @@ export def "tags-groups-patch PatchGroup" [
 #
 # PUT /tags/{tagId}/name
 # operationId: Tags_PatchTagName
-export def "tags-name PatchTagName" [
-  tagId: int
+export def "tags-name update" [
+  tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3231,13 +3231,13 @@ export def "tags-name PatchTagName" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Text: string
+  --text: string
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($tagId)/name")
-  let body = {Text: $Text} | compact
+  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/name"))
+  let body = {"Text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

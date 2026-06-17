@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api listApplication" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api list-application" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: listApplication
-export def "api listApplication" [
+export def "api list-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -121,7 +121,7 @@ export def "api listApplication" [
 # --capabilities shape: {meetings?: record, messages?: record, rtc?: record, vbc?: record, verify?: record, voice?: record}
 # --keys shape: {public_key?: string}
 # --privacy shape: {improve_ai?: bool}
-export def "api createApplication" [
+export def "api create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,7 +139,7 @@ export def "api createApplication" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/")
-  let body = {capabilities: $capabilities, keys: $keys, name: $name, privacy: $privacy} | compact
+  let body = {"capabilities": $capabilities, "keys": $keys, "name": $name, "privacy": $privacy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -150,7 +150,7 @@ export def "api createApplication" [
 #
 # DELETE /{id}
 # operationId: deleteApplication
-export def "api delete" [
+export def "api delete-application" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -163,7 +163,7 @@ export def "api delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +173,7 @@ export def "api delete" [
 #
 # GET /{id}
 # operationId: getApplication
-export def "api get" [
+export def "api get-application" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -186,7 +186,7 @@ export def "api get" [
 ]: nothing -> record<capabilities: record<meetings: record<webhooks: record>, messages: record<version: string, webhooks: record>, rtc: record<leg_persistence_time: int, signed_callbacks: bool, webhooks: record>, vbc: record, verify: record<version: string, webhooks: record>, voice: record<conversation_ttl: int, payments: record, signed_callbacks: bool, webhooks: record>>, id: string, name: string, privacy: record<improve_ai: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -199,7 +199,7 @@ export def "api get" [
 # --capabilities shape: {meetings?: record, messages?: record, rtc?: record, vbc?: record, verify?: record, voice?: record}
 # --keys shape: {public_key?: string}
 # --privacy shape: {improve_ai?: bool}
-export def "api updateApplication" [
+export def "api update-application" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,8 +217,8 @@ export def "api updateApplication" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($id)")
-  let body = {capabilities: $capabilities, keys: $keys, name: $name, privacy: $privacy} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/{id}"))
+  let body = {"capabilities": $capabilities, "keys": $keys, "name": $name, "privacy": $privacy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

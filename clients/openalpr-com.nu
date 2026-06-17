@@ -140,7 +140,7 @@ export def "recognize recognizeFile" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "secret_key" $secret_key "scalar") (serialize-qp "recognize_vehicle" $recognize_vehicle "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "return_image" $return_image "scalar") (serialize-qp "topn" $topn "scalar") (serialize-qp "is_cropped" $is_cropped "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recognize" $qp)
-  let body = {image: $image} | compact
+  let body = {"image": $image} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

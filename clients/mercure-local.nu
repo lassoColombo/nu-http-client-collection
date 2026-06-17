@@ -104,14 +104,14 @@ export def "well-known-mercure get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --topic: list # The topic to get updates from, can be a URI template (RFC6570).
-  --Last-Event-ID: string # The last received event id, to retrieve missed events.
-  --Last-Event-ID: string # The last received event id, to retrieve missed events, takes precedence over the query parameter.
+  --last-event-id: string # The last received event id, to retrieve missed events.
+  --last-event-id: string # The last received event id, to retrieve missed events, takes precedence over the query parameter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "topic" $topic "multi") (serialize-qp "Last-Event-ID" $Last_Event_ID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "topic" $topic "multi") (serialize-qp "Last-Event-ID" $last_event_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/.well-known/mercure" $qp)
-  let extra_headers = {"Last-Event-ID": $Last_Event_ID} | compact
+  let extra_headers = {"Last-Event-ID": $last_event_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/event-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -142,7 +142,7 @@ export def "well-known-mercure post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/mercure")
-  let body = {data: $data, id: $id, private: $private, retry: $retry, topic: $topic, type: $type} | compact
+  let body = {"data": $data, "id": $id, "private": $private, "retry": $retry, "topic": $topic, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -188,7 +188,7 @@ export def "well-known-mercure-subscriptions get-by-topic" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/.well-known/mercure/subscriptions/($topic)")
+  let full_url = (build-url $base ({topic: $topic} | format pattern "/.well-known/mercure/subscriptions/{topic}"))
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +212,7 @@ export def "well-known-mercure-subscriptions get-by-topic-subscriber" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/.well-known/mercure/subscriptions/($topic)/($subscriber)")
+  let full_url = (build-url $base ({topic: $topic, subscriber: $subscriber} | format pattern "/.well-known/mercure/subscriptions/{topic}/{subscriber}"))
   let accept_val = "application/ld+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

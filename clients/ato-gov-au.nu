@@ -66,13 +66,13 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def gender-completer [] { ["Female" "Male" "Not Applicable" "Not Known"] }
-def lifecycleState-completer [] { ["Approved" "Expired" "Issued" "Pending Approval" "Suspended"] }
-def electronicAddressType-completer [] { ["Email" "Fax" "Landline" "Mobile" "Website"] }
-def licenseType-completer [] { ["Australian Financial Services License" "License 2B"] }
-def partyRoleType-completer [] { ["Director" "Employee" "Member" "Partner" "Trustee"] }
-def relatedPartyRoleType-completer [] { ["Association" "Company" "Employer" "Organisation" "Partnership" "Trust"] }
-def relationshipType-completer [] { ["Directorship" "Employment" "Membership" "Partnership" "Trusteeship"] }
-def legalEntityType-completer [] { ["Company" "Joint Venture" "Partnership" "Trust"] }
+def lifecycle-state-completer [] { ["Approved" "Expired" "Issued" "Pending Approval" "Suspended"] }
+def electronic-address-type-completer [] { ["Email" "Fax" "Landline" "Mobile" "Website"] }
+def license-type-completer [] { ["Australian Financial Services License" "License 2B"] }
+def party-role-type-completer [] { ["Director" "Employee" "Member" "Partner" "Trustee"] }
+def related-party-role-type-completer [] { ["Association" "Company" "Employer" "Organisation" "Partnership" "Trust"] }
+def relationship-type-completer [] { ["Directorship" "Employment" "Membership" "Partnership" "Trusteeship"] }
+def legal-entity-type-completer [] { ["Company" "Joint Venture" "Partnership" "Trust"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -109,12 +109,12 @@ export def "business-names get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/business-names")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -133,12 +133,12 @@ export def "classifications-address-types get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<description: string, id: record, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/address-types")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -157,12 +157,12 @@ export def "classifications-business-name-lifecycle-states get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<description: string, id: record, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/business-name-lifecycle-states")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -181,12 +181,12 @@ export def "classifications-electronic-address-types get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<description: string, id: record, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/electronic-address-types")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -205,12 +205,12 @@ export def "classifications-genders get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<gender: string, id: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/genders")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -229,12 +229,12 @@ export def "classifications-legal-entity-types get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<description: string, id: record, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/legal-entity-types")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,12 +253,12 @@ export def "classifications-license-lifecycle-states get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<description: string, id: record, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/license-lifecycle-states")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -277,12 +277,12 @@ export def "classifications-license-types get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<description: string, id: record, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/license-types")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -301,12 +301,12 @@ export def "classifications-name-directions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<description: string, id: record, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/name-directions")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -325,12 +325,12 @@ export def "classifications-name-prefixes get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<description: string, id: record, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/name-prefixes")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -349,12 +349,12 @@ export def "classifications-name-types get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<description: string, id: record, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/name-types")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -373,12 +373,12 @@ export def "classifications-registered-identifier-types get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<description: string, id: record, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/registered-identifier-types")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -397,12 +397,12 @@ export def "classifications-roles get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<id: record, reciprocalRole: string, reciprocalRoleDescription: string, relationship: string, role: string, roleDescription: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/roles")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -421,15 +421,15 @@ export def "individuals list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --dateOfBirth: string # The individual's date of birth, for example, `1979-01-13` (in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format).
-  --placeOfBirth: string # The individual's place of birth, for example, `Tamworth`.
-  --apiKey: string # The API key.
+  --date-of-birth: string # The individual's date of birth, for example, `1979-01-13` (in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format).
+  --place-of-birth: string # The individual's place of birth, for example, `Tamworth`.
+  --api-key: string # The API key.
 ]: nothing -> table<addresses: list<record>, dateOfBirth: string, electronicAddresses: list<record>, fromDate: string, gender: string, id: record, names: list<record>, placeOfBirth: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dateOfBirth" $dateOfBirth "scalar") (serialize-qp "placeOfBirth" $placeOfBirth "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dateOfBirth" $date_of_birth "scalar") (serialize-qp "placeOfBirth" $place_of_birth "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/individuals" $qp)
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -451,21 +451,21 @@ export def "individuals post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
   --addresses: list # item shape: {city?: string, country?: string, line1?: string, line2?: string, line3?: string, name?: string, postalCode?: string, suburb?: string, addressType?: "Mailing"|"Principal Place of Business"|"Principal Place of Residence"}
-  dateOfBirth: string # The individual's date of birth, for example, `1979-01-13` (in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format). (format: date, e.g. 1979-01-13)
-  --electronicAddresses: list # item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
+  date_of_birth: string # The individual's date of birth, for example, `1979-01-13` (in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format). (format: date, e.g. 1979-01-13)
+  --electronic-addresses: list # item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
   --gender: string@gender-completer # The individual's gender. (default: Male)
   --names: list # item shape: {direction?: "left-to-right"|"right-to-left", familyName?: string, formalSalutation?: string, givenName?: string, informalSalutation?: string, middleName?: string, namePrefix?: "Mr"|"Ms", nameSuffix?: string, nameType?: "Alias"|"Principal Name"}
-  placeOfBirth: string # The individual's place of birth, for example, `Tamworth`. (e.g. Tamworth)
+  place_of_birth: string # The individual's place of birth, for example, `Tamworth`. (e.g. Tamworth)
 ]: any -> record<addresses: table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, dateOfBirth: string, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string>, fromDate: string, gender: string, id: record, names: table<direction: string, familyName: string, formalSalutation: string, fromDate: string, givenName: string, id: record, informalSalutation: string, middleName: string, namePrefix: string, nameSuffix: string, nameType: string, toDate: string>, placeOfBirth: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/individuals")
-  let body = {addresses: $addresses, dateOfBirth: $dateOfBirth, electronicAddresses: $electronicAddresses, gender: $gender, names: $names, placeOfBirth: $placeOfBirth} | compact
+  let body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "electronicAddresses": $electronic_addresses, "gender": $gender, "names": $names, "placeOfBirth": $place_of_birth} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -476,7 +476,7 @@ export def "individuals post" [
 #
 # DELETE /individuals/{partyId}
 export def "individuals delete" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,12 +485,12 @@ export def "individuals delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -501,7 +501,7 @@ export def "individuals delete" [
 #
 # GET /individuals/{partyId}
 export def "individuals get" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,12 +510,12 @@ export def "individuals get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> record<addresses: table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, dateOfBirth: string, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string>, fromDate: string, gender: string, id: record, names: table<direction: string, familyName: string, formalSalutation: string, fromDate: string, givenName: string, id: record, informalSalutation: string, middleName: string, namePrefix: string, nameSuffix: string, nameType: string, toDate: string>, placeOfBirth: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -529,7 +529,7 @@ export def "individuals get" [
 # --electronicAddresses item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
 # --names item shape: {direction?: "left-to-right"|"right-to-left", familyName?: string, formalSalutation?: string, givenName?: string, informalSalutation?: string, middleName?: string, namePrefix?: "Mr"|"Ms", nameSuffix?: string, nameType?: "Alias"|"Principal Name"}
 export def "individuals put" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,21 +538,21 @@ export def "individuals put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
   --addresses: list # item shape: {city?: string, country?: string, line1?: string, line2?: string, line3?: string, name?: string, postalCode?: string, suburb?: string, addressType?: "Mailing"|"Principal Place of Business"|"Principal Place of Residence"}
-  dateOfBirth: string # The individual's date of birth, for example, `1979-01-13` (in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format). (format: date, e.g. 1979-01-13)
-  --electronicAddresses: list # item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
+  date_of_birth: string # The individual's date of birth, for example, `1979-01-13` (in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format). (format: date, e.g. 1979-01-13)
+  --electronic-addresses: list # item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
   --gender: string@gender-completer # The individual's gender. (default: Male)
   --names: list # item shape: {direction?: "left-to-right"|"right-to-left", familyName?: string, formalSalutation?: string, givenName?: string, informalSalutation?: string, middleName?: string, namePrefix?: "Mr"|"Ms", nameSuffix?: string, nameType?: "Alias"|"Principal Name"}
-  placeOfBirth: string # The individual's place of birth, for example, `Tamworth`. (e.g. Tamworth)
+  place_of_birth: string # The individual's place of birth, for example, `Tamworth`. (e.g. Tamworth)
 ]: any -> record<addresses: table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, dateOfBirth: string, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string>, fromDate: string, gender: string, id: record, names: table<direction: string, familyName: string, formalSalutation: string, fromDate: string, givenName: string, id: record, informalSalutation: string, middleName: string, namePrefix: string, nameSuffix: string, nameType: string, toDate: string>, placeOfBirth: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)")
-  let body = {addresses: $addresses, dateOfBirth: $dateOfBirth, electronicAddresses: $electronicAddresses, gender: $gender, names: $names, placeOfBirth: $placeOfBirth} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}"))
+  let body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "electronicAddresses": $electronic_addresses, "gender": $gender, "names": $names, "placeOfBirth": $place_of_birth} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -563,7 +563,7 @@ export def "individuals put" [
 #
 # GET /individuals/{partyId}/addresses
 export def "individuals-addresses list" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,12 +572,12 @@ export def "individuals-addresses list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/addresses")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/addresses"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -588,7 +588,7 @@ export def "individuals-addresses list" [
 #
 # POST /individuals/{partyId}/addresses
 export def "individuals-addresses post" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -597,23 +597,23 @@ export def "individuals-addresses post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
   --city: string # The city. (e.g. Canberra)
   --country: string # The country. (e.g. Australia)
   --line1: string # The address line 1. (e.g. Level 7)
   --line2: string # The address line 2. (e.g. 21 Genge Street)
   --line3: string # The address line 3. (e.g. )
   --name: string # The address name. (e.g. Kembery Building)
-  --postalCode: string # The postal code. (e.g. 2601)
+  --postal-code: string # The postal code. (e.g. 2601)
   --suburb: string # The suburb. (e.g. Civic)
 ]: any -> record<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/addresses")
-  let body = {city: $city, country: $country, line1: $line1, line2: $line2, line3: $line3, name: $name, postalCode: $postalCode, suburb: $suburb} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/addresses"))
+  let body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -624,8 +624,8 @@ export def "individuals-addresses post" [
 #
 # DELETE /individuals/{partyId}/addresses/{addressId}
 export def "individuals-addresses delete" [
-  partyId: string
-  addressId: string
+  party_id: string
+  address_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -634,12 +634,12 @@ export def "individuals-addresses delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/addresses/($addressId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/individuals/{party_id}/addresses/{address_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -650,8 +650,8 @@ export def "individuals-addresses delete" [
 #
 # GET /individuals/{partyId}/addresses/{addressId}
 export def "individuals-addresses get" [
-  partyId: string
-  addressId: string
+  party_id: string
+  address_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,12 +660,12 @@ export def "individuals-addresses get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> record<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/addresses/($addressId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/individuals/{party_id}/addresses/{address_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -676,8 +676,8 @@ export def "individuals-addresses get" [
 #
 # PUT /individuals/{partyId}/addresses/{addressId}
 export def "individuals-addresses put" [
-  partyId: string
-  addressId: string
+  party_id: string
+  address_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,23 +686,23 @@ export def "individuals-addresses put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
   --city: string # The city. (e.g. Canberra)
   --country: string # The country. (e.g. Australia)
   --line1: string # The address line 1. (e.g. Level 7)
   --line2: string # The address line 2. (e.g. 21 Genge Street)
   --line3: string # The address line 3. (e.g. )
   --name: string # The address name. (e.g. Kembery Building)
-  --postalCode: string # The postal code. (e.g. 2601)
+  --postal-code: string # The postal code. (e.g. 2601)
   --suburb: string # The suburb. (e.g. Civic)
 ]: any -> record<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/addresses/($addressId)")
-  let body = {city: $city, country: $country, line1: $line1, line2: $line2, line3: $line3, name: $name, postalCode: $postalCode, suburb: $suburb} | compact
+  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/individuals/{party_id}/addresses/{address_id}"))
+  let body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -713,7 +713,7 @@ export def "individuals-addresses put" [
 #
 # GET /individuals/{partyId}/business-names
 export def "individuals-business-names list" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,12 +722,12 @@ export def "individuals-business-names list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/business-names")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/business-names"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -738,7 +738,7 @@ export def "individuals-business-names list" [
 #
 # POST /individuals/{partyId}/business-names
 export def "individuals-business-names post" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,17 +747,17 @@ export def "individuals-business-names post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
-  --lifecycleState: string@lifecycleState-completer # The business name's lifecycle state. (default: Pending Approval)
+  --api-key: string # The API key.
+  --lifecycle-state: string@lifecycle-state-completer # The business name's lifecycle state. (default: Pending Approval)
   --name: string # The business name. (e.g. XYZ Technology Ventures)
 ]: any -> record<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/business-names")
-  let body = {lifecycleState: $lifecycleState, name: $name} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/business-names"))
+  let body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -768,8 +768,8 @@ export def "individuals-business-names post" [
 #
 # DELETE /individuals/{partyId}/business-names/{productId}
 export def "individuals-business-names delete" [
-  partyId: string
-  productId: string
+  party_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,12 +778,12 @@ export def "individuals-business-names delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/business-names/($productId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/individuals/{party_id}/business-names/{product_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -794,8 +794,8 @@ export def "individuals-business-names delete" [
 #
 # GET /individuals/{partyId}/business-names/{productId}
 export def "individuals-business-names get" [
-  partyId: string
-  productId: string
+  party_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -804,12 +804,12 @@ export def "individuals-business-names get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> record<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/business-names/($productId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/individuals/{party_id}/business-names/{product_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -820,8 +820,8 @@ export def "individuals-business-names get" [
 #
 # PUT /individuals/{partyId}/business-names/{productId}
 export def "individuals-business-names put" [
-  partyId: string
-  productId: string
+  party_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,17 +830,17 @@ export def "individuals-business-names put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
-  --lifecycleState: string@lifecycleState-completer # The business name's lifecycle state. (default: Pending Approval)
+  --api-key: string # The API key.
+  --lifecycle-state: string@lifecycle-state-completer # The business name's lifecycle state. (default: Pending Approval)
   --name: string # The business name. (e.g. XYZ Technology Ventures)
 ]: any -> record<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/business-names/($productId)")
-  let body = {lifecycleState: $lifecycleState, name: $name} | compact
+  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/individuals/{party_id}/business-names/{product_id}"))
+  let body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -851,7 +851,7 @@ export def "individuals-business-names put" [
 #
 # GET /individuals/{partyId}/electronic-addresses
 export def "individuals-electronic-addresses list" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -860,12 +860,12 @@ export def "individuals-electronic-addresses list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/electronic-addresses")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/electronic-addresses"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -876,7 +876,7 @@ export def "individuals-electronic-addresses list" [
 #
 # POST /individuals/{partyId}/electronic-addresses
 export def "individuals-electronic-addresses post" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -885,10 +885,10 @@ export def "individuals-electronic-addresses post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
-  --areaCode: string # The area code, for example, "02". (e.g. 02)
-  --countryPrefix: string # The country prefix, for example, "61". (e.g. 61)
-  --electronicAddressType: string@electronicAddressType-completer # The electronic address type. (default: Landline)
+  --api-key: string # The API key.
+  --area-code: string # The area code, for example, "02". (e.g. 02)
+  --country-prefix: string # The country prefix, for example, "61". (e.g. 61)
+  --electronic-address-type: string@electronic-address-type-completer # The electronic address type. (default: Landline)
   --email: string # The email address, for example, "robert.ferguson@ato.gov.au". (e.g. )
   --extension: string # The extension number, for example, "4453". (e.g. )
   --number: string # The number, for example, "62164453". (e.g. 62164453)
@@ -897,10 +897,10 @@ export def "individuals-electronic-addresses post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/electronic-addresses")
-  let body = {areaCode: $areaCode, countryPrefix: $countryPrefix, electronicAddressType: $electronicAddressType, email: $email, extension: $extension, number: $number, url: $body_url} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/electronic-addresses"))
+  let body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -911,8 +911,8 @@ export def "individuals-electronic-addresses post" [
 #
 # DELETE /individuals/{partyId}/electronic-addresses/{addressId}
 export def "individuals-electronic-addresses delete" [
-  partyId: string
-  addressId: string
+  party_id: string
+  address_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -921,12 +921,12 @@ export def "individuals-electronic-addresses delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/electronic-addresses/($addressId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/individuals/{party_id}/electronic-addresses/{address_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -937,8 +937,8 @@ export def "individuals-electronic-addresses delete" [
 #
 # GET /individuals/{partyId}/electronic-addresses/{addressId}
 export def "individuals-electronic-addresses get" [
-  partyId: string
-  addressId: string
+  party_id: string
+  address_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -947,12 +947,12 @@ export def "individuals-electronic-addresses get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/electronic-addresses/($addressId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/individuals/{party_id}/electronic-addresses/{address_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -963,8 +963,8 @@ export def "individuals-electronic-addresses get" [
 #
 # PUT /individuals/{partyId}/electronic-addresses/{addressId}
 export def "individuals-electronic-addresses put" [
-  partyId: string
-  addressId: string
+  party_id: string
+  address_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -973,10 +973,10 @@ export def "individuals-electronic-addresses put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
-  --areaCode: string # The area code, for example, "02". (e.g. 02)
-  --countryPrefix: string # The country prefix, for example, "61". (e.g. 61)
-  --electronicAddressType: string@electronicAddressType-completer # The electronic address type. (default: Landline)
+  --api-key: string # The API key.
+  --area-code: string # The area code, for example, "02". (e.g. 02)
+  --country-prefix: string # The country prefix, for example, "61". (e.g. 61)
+  --electronic-address-type: string@electronic-address-type-completer # The electronic address type. (default: Landline)
   --email: string # The email address, for example, "robert.ferguson@ato.gov.au". (e.g. )
   --extension: string # The extension number, for example, "4453". (e.g. )
   --number: string # The number, for example, "62164453". (e.g. 62164453)
@@ -985,10 +985,10 @@ export def "individuals-electronic-addresses put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/electronic-addresses/($addressId)")
-  let body = {areaCode: $areaCode, countryPrefix: $countryPrefix, electronicAddressType: $electronicAddressType, email: $email, extension: $extension, number: $number, url: $body_url} | compact
+  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/individuals/{party_id}/electronic-addresses/{address_id}"))
+  let body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -999,7 +999,7 @@ export def "individuals-electronic-addresses put" [
 #
 # GET /individuals/{partyId}/licenses
 export def "individuals-licenses list" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1008,12 +1008,12 @@ export def "individuals-licenses list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/licenses")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/licenses"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1024,7 +1024,7 @@ export def "individuals-licenses list" [
 #
 # POST /individuals/{partyId}/licenses
 export def "individuals-licenses post" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1033,17 +1033,17 @@ export def "individuals-licenses post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
-  --licenseType: string@licenseType-completer # The license type. (default: Australian Financial Services License)
-  --lifecycleState: string@lifecycleState-completer # The business name's lifecycle state. (default: Pending Approval)
+  --api-key: string # The API key.
+  --license-type: string@license-type-completer # The license type. (default: Australian Financial Services License)
+  --lifecycle-state: string@lifecycle-state-completer # The business name's lifecycle state. (default: Pending Approval)
 ]: any -> record<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/licenses")
-  let body = {licenseType: $licenseType, lifecycleState: $lifecycleState} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/licenses"))
+  let body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1054,8 +1054,8 @@ export def "individuals-licenses post" [
 #
 # DELETE /individuals/{partyId}/licenses/{productId}
 export def "individuals-licenses delete" [
-  partyId: string
-  productId: string
+  party_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1064,12 +1064,12 @@ export def "individuals-licenses delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/licenses/($productId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/individuals/{party_id}/licenses/{product_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1080,8 +1080,8 @@ export def "individuals-licenses delete" [
 #
 # GET /individuals/{partyId}/licenses/{productId}
 export def "individuals-licenses get" [
-  partyId: string
-  productId: string
+  party_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1090,12 +1090,12 @@ export def "individuals-licenses get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> record<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/licenses/($productId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/individuals/{party_id}/licenses/{product_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1106,8 +1106,8 @@ export def "individuals-licenses get" [
 #
 # PUT /individuals/{partyId}/licenses/{productId}
 export def "individuals-licenses put" [
-  partyId: string
-  productId: string
+  party_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1116,17 +1116,17 @@ export def "individuals-licenses put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
-  --licenseType: string@licenseType-completer # The license type. (default: Australian Financial Services License)
-  --lifecycleState: string@lifecycleState-completer # The business name's lifecycle state. (default: Pending Approval)
+  --api-key: string # The API key.
+  --license-type: string@license-type-completer # The license type. (default: Australian Financial Services License)
+  --lifecycle-state: string@lifecycle-state-completer # The business name's lifecycle state. (default: Pending Approval)
 ]: any -> record<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/licenses/($productId)")
-  let body = {licenseType: $licenseType, lifecycleState: $lifecycleState} | compact
+  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/individuals/{party_id}/licenses/{product_id}"))
+  let body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1137,7 +1137,7 @@ export def "individuals-licenses put" [
 #
 # GET /individuals/{partyId}/roles
 export def "individuals-roles list" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1146,12 +1146,12 @@ export def "individuals-roles list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/roles")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/roles"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1162,7 +1162,7 @@ export def "individuals-roles list" [
 #
 # POST /individuals/{partyId}/roles
 export def "individuals-roles post" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1171,19 +1171,19 @@ export def "individuals-roles post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
-  --partyRoleType: string@partyRoleType-completer # The party's role type. (default: Employee)
-  relatedPartyId: any # The related party's unique identifier.
-  --relatedPartyRoleType: string@relatedPartyRoleType-completer # The related party's role type. (default: Employer)
-  relationshipType: string@relationshipType-completer # The relationship type. (default: Employment)
+  --api-key: string # The API key.
+  --party-role-type: string@party-role-type-completer # The party's role type. (default: Employee)
+  related_party_id: any # The related party's unique identifier.
+  --related-party-role-type: string@related-party-role-type-completer # The related party's role type. (default: Employer)
+  relationship_type: string@relationship-type-completer # The relationship type. (default: Employment)
 ]: any -> record<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/roles")
-  let body = {partyRoleType: $partyRoleType, relatedPartyId: $relatedPartyId, relatedPartyRoleType: $relatedPartyRoleType, relationshipType: $relationshipType} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/roles"))
+  let body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1194,8 +1194,8 @@ export def "individuals-roles post" [
 #
 # DELETE /individuals/{partyId}/roles/{roleId}
 export def "individuals-roles delete" [
-  partyId: string
-  roleId: string
+  party_id: string
+  role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1204,12 +1204,12 @@ export def "individuals-roles delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/roles/($roleId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, role_id: $role_id} | format pattern "/individuals/{party_id}/roles/{role_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1220,8 +1220,8 @@ export def "individuals-roles delete" [
 #
 # GET /individuals/{partyId}/roles/{roleId}
 export def "individuals-roles get" [
-  partyId: string
-  roleId: string
+  party_id: string
+  role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1230,12 +1230,12 @@ export def "individuals-roles get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> record<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/roles/($roleId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, role_id: $role_id} | format pattern "/individuals/{party_id}/roles/{role_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1246,8 +1246,8 @@ export def "individuals-roles get" [
 #
 # PUT /individuals/{partyId}/roles/{roleId}
 export def "individuals-roles put" [
-  partyId: string
-  roleId: string
+  party_id: string
+  role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1256,19 +1256,19 @@ export def "individuals-roles put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
-  --partyRoleType: string@partyRoleType-completer # The party's role type. (default: Employee)
-  relatedPartyId: any # The related party's unique identifier.
-  --relatedPartyRoleType: string@relatedPartyRoleType-completer # The related party's role type. (default: Employer)
-  relationshipType: string@relationshipType-completer # The relationship type. (default: Employment)
+  --api-key: string # The API key.
+  --party-role-type: string@party-role-type-completer # The party's role type. (default: Employee)
+  related_party_id: any # The related party's unique identifier.
+  --related-party-role-type: string@related-party-role-type-completer # The related party's role type. (default: Employer)
+  relationship_type: string@relationship-type-completer # The relationship type. (default: Employment)
 ]: any -> record<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/individuals/($partyId)/roles/($roleId)")
-  let body = {partyRoleType: $partyRoleType, relatedPartyId: $relatedPartyId, relatedPartyRoleType: $relatedPartyRoleType, relationshipType: $relationshipType} | compact
+  let full_url = (build-url $base ({party_id: $party_id, role_id: $role_id} | format pattern "/individuals/{party_id}/roles/{role_id}"))
+  let body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1287,12 +1287,12 @@ export def "licenses get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/licenses")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1311,15 +1311,15 @@ export def "organisations list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --registeredIdentifier: string # The registered identifier, for example, `ACN` or `ABN`.
+  --registered-identifier: string # The registered identifier, for example, `ACN` or `ABN`.
   --identifier: string # The identifier, for example, `123456789`.
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<addresses: list<record>, electronicAddresses: list<record>, establishmentDate: string, fromDate: string, id: record, legalEntityType: string, names: list<record>, registeredIdentifiers: list<record>, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "registeredIdentifier" $registeredIdentifier "scalar") (serialize-qp "identifier" $identifier "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "registeredIdentifier" $registered_identifier "scalar") (serialize-qp "identifier" $identifier "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/organisations" $qp)
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1342,21 +1342,21 @@ export def "organisations post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
   --addresses: list # item shape: {city?: string, country?: string, line1?: string, line2?: string, line3?: string, name?: string, postalCode?: string, suburb?: string, addressType?: "Mailing"|"Principal Place of Business"}
-  --electronicAddresses: list # item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
-  establishmentDate: string # The organisation's establishment date, for example, `1928-03-03` (in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format). (format: date, e.g. 1928-03-03)
-  legalEntityType: string@legalEntityType-completer # The organisation's legal entity type. (default: Company)
+  --electronic-addresses: list # item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
+  establishment_date: string # The organisation's establishment date, for example, `1928-03-03` (in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format). (format: date, e.g. 1928-03-03)
+  legal_entity_type: string@legal-entity-type-completer # The organisation's legal entity type. (default: Company)
   --names: list # item shape: {name?: string}
-  --registeredIdentifiers: list # item shape: {identifier?: string, identifierType?: "ACN"|"ABN"}
+  --registered-identifiers: list # item shape: {identifier?: string, identifierType?: "ACN"|"ABN"}
 ]: any -> record<addresses: table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string>, establishmentDate: string, fromDate: string, id: record, legalEntityType: string, names: table<fromDate: string, id: record, name: string, toDate: string>, registeredIdentifiers: table<fromDate: string, id: record, identifier: string, identifierType: string, toDate: string>, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organisations")
-  let body = {addresses: $addresses, electronicAddresses: $electronicAddresses, establishmentDate: $establishmentDate, legalEntityType: $legalEntityType, names: $names, registeredIdentifiers: $registeredIdentifiers} | compact
+  let body = {"addresses": $addresses, "electronicAddresses": $electronic_addresses, "establishmentDate": $establishment_date, "legalEntityType": $legal_entity_type, "names": $names, "registeredIdentifiers": $registered_identifiers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1367,7 +1367,7 @@ export def "organisations post" [
 #
 # DELETE /organisations/{partyId}
 export def "organisations delete" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1376,12 +1376,12 @@ export def "organisations delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1392,7 +1392,7 @@ export def "organisations delete" [
 #
 # GET /organisations/{partyId}
 export def "organisations get" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1401,12 +1401,12 @@ export def "organisations get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> record<addresses: table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string>, establishmentDate: string, fromDate: string, id: record, legalEntityType: string, names: table<fromDate: string, id: record, name: string, toDate: string>, registeredIdentifiers: table<fromDate: string, id: record, identifier: string, identifierType: string, toDate: string>, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1421,7 +1421,7 @@ export def "organisations get" [
 # --names item shape: {name?: string}
 # --registeredIdentifiers item shape: {identifier?: string, identifierType?: "ACN"|"ABN"}
 export def "organisations put" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1430,21 +1430,21 @@ export def "organisations put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
   --addresses: list # item shape: {city?: string, country?: string, line1?: string, line2?: string, line3?: string, name?: string, postalCode?: string, suburb?: string, addressType?: "Mailing"|"Principal Place of Business"}
-  --electronicAddresses: list # item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
-  establishmentDate: string # The organisation's establishment date, for example, `1928-03-03` (in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format). (format: date, e.g. 1928-03-03)
-  legalEntityType: string@legalEntityType-completer # The organisation's legal entity type. (default: Company)
+  --electronic-addresses: list # item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
+  establishment_date: string # The organisation's establishment date, for example, `1928-03-03` (in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format). (format: date, e.g. 1928-03-03)
+  legal_entity_type: string@legal-entity-type-completer # The organisation's legal entity type. (default: Company)
   --names: list # item shape: {name?: string}
-  --registeredIdentifiers: list # item shape: {identifier?: string, identifierType?: "ACN"|"ABN"}
+  --registered-identifiers: list # item shape: {identifier?: string, identifierType?: "ACN"|"ABN"}
 ]: any -> record<addresses: table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string>, establishmentDate: string, fromDate: string, id: record, legalEntityType: string, names: table<fromDate: string, id: record, name: string, toDate: string>, registeredIdentifiers: table<fromDate: string, id: record, identifier: string, identifierType: string, toDate: string>, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)")
-  let body = {addresses: $addresses, electronicAddresses: $electronicAddresses, establishmentDate: $establishmentDate, legalEntityType: $legalEntityType, names: $names, registeredIdentifiers: $registeredIdentifiers} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}"))
+  let body = {"addresses": $addresses, "electronicAddresses": $electronic_addresses, "establishmentDate": $establishment_date, "legalEntityType": $legal_entity_type, "names": $names, "registeredIdentifiers": $registered_identifiers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1455,7 +1455,7 @@ export def "organisations put" [
 #
 # GET /organisations/{partyId}/addresses
 export def "organisations-addresses list" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1464,12 +1464,12 @@ export def "organisations-addresses list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/addresses")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/addresses"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1480,7 +1480,7 @@ export def "organisations-addresses list" [
 #
 # POST /organisations/{partyId}/addresses
 export def "organisations-addresses post" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1489,23 +1489,23 @@ export def "organisations-addresses post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
   --city: string # The city. (e.g. Canberra)
   --country: string # The country. (e.g. Australia)
   --line1: string # The address line 1. (e.g. Level 7)
   --line2: string # The address line 2. (e.g. 21 Genge Street)
   --line3: string # The address line 3. (e.g. )
   --name: string # The address name. (e.g. Kembery Building)
-  --postalCode: string # The postal code. (e.g. 2601)
+  --postal-code: string # The postal code. (e.g. 2601)
   --suburb: string # The suburb. (e.g. Civic)
 ]: any -> record<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/addresses")
-  let body = {city: $city, country: $country, line1: $line1, line2: $line2, line3: $line3, name: $name, postalCode: $postalCode, suburb: $suburb} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/addresses"))
+  let body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1516,8 +1516,8 @@ export def "organisations-addresses post" [
 #
 # DELETE /organisations/{partyId}/addresses/{addressId}
 export def "organisations-addresses delete" [
-  partyId: string
-  addressId: string
+  party_id: string
+  address_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1526,12 +1526,12 @@ export def "organisations-addresses delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/addresses/($addressId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/organisations/{party_id}/addresses/{address_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1542,8 +1542,8 @@ export def "organisations-addresses delete" [
 #
 # GET /organisations/{partyId}/addresses/{addressId}
 export def "organisations-addresses get" [
-  partyId: string
-  addressId: string
+  party_id: string
+  address_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1552,12 +1552,12 @@ export def "organisations-addresses get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> record<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/addresses/($addressId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/organisations/{party_id}/addresses/{address_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1568,8 +1568,8 @@ export def "organisations-addresses get" [
 #
 # PUT /organisations/{partyId}/addresses/{addressId}
 export def "organisations-addresses put" [
-  partyId: string
-  addressId: string
+  party_id: string
+  address_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1578,23 +1578,23 @@ export def "organisations-addresses put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
   --city: string # The city. (e.g. Canberra)
   --country: string # The country. (e.g. Australia)
   --line1: string # The address line 1. (e.g. Level 7)
   --line2: string # The address line 2. (e.g. 21 Genge Street)
   --line3: string # The address line 3. (e.g. )
   --name: string # The address name. (e.g. Kembery Building)
-  --postalCode: string # The postal code. (e.g. 2601)
+  --postal-code: string # The postal code. (e.g. 2601)
   --suburb: string # The suburb. (e.g. Civic)
 ]: any -> record<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/addresses/($addressId)")
-  let body = {city: $city, country: $country, line1: $line1, line2: $line2, line3: $line3, name: $name, postalCode: $postalCode, suburb: $suburb} | compact
+  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/organisations/{party_id}/addresses/{address_id}"))
+  let body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1605,7 +1605,7 @@ export def "organisations-addresses put" [
 #
 # GET /organisations/{partyId}/business-names
 export def "organisations-business-names list" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1614,12 +1614,12 @@ export def "organisations-business-names list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/business-names")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/business-names"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1630,7 +1630,7 @@ export def "organisations-business-names list" [
 #
 # POST /organisations/{partyId}/business-names
 export def "organisations-business-names post" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1639,17 +1639,17 @@ export def "organisations-business-names post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
-  --lifecycleState: string@lifecycleState-completer # The business name's lifecycle state. (default: Pending Approval)
+  --api-key: string # The API key.
+  --lifecycle-state: string@lifecycle-state-completer # The business name's lifecycle state. (default: Pending Approval)
   --name: string # The business name. (e.g. XYZ Technology Ventures)
 ]: any -> record<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/business-names")
-  let body = {lifecycleState: $lifecycleState, name: $name} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/business-names"))
+  let body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1660,8 +1660,8 @@ export def "organisations-business-names post" [
 #
 # DELETE /organisations/{partyId}/business-names/{productId}
 export def "organisations-business-names delete" [
-  partyId: string
-  productId: string
+  party_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1670,12 +1670,12 @@ export def "organisations-business-names delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/business-names/($productId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/organisations/{party_id}/business-names/{product_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1686,8 +1686,8 @@ export def "organisations-business-names delete" [
 #
 # GET /organisations/{partyId}/business-names/{productId}
 export def "organisations-business-names get" [
-  partyId: string
-  productId: string
+  party_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1696,12 +1696,12 @@ export def "organisations-business-names get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> record<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/business-names/($productId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/organisations/{party_id}/business-names/{product_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1712,8 +1712,8 @@ export def "organisations-business-names get" [
 #
 # PUT /organisations/{partyId}/business-names/{productId}
 export def "organisations-business-names put" [
-  partyId: string
-  productId: string
+  party_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1722,17 +1722,17 @@ export def "organisations-business-names put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
-  --lifecycleState: string@lifecycleState-completer # The business name's lifecycle state. (default: Pending Approval)
+  --api-key: string # The API key.
+  --lifecycle-state: string@lifecycle-state-completer # The business name's lifecycle state. (default: Pending Approval)
   --name: string # The business name. (e.g. XYZ Technology Ventures)
 ]: any -> record<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/business-names/($productId)")
-  let body = {lifecycleState: $lifecycleState, name: $name} | compact
+  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/organisations/{party_id}/business-names/{product_id}"))
+  let body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1743,7 +1743,7 @@ export def "organisations-business-names put" [
 #
 # GET /organisations/{partyId}/electronic-addresses
 export def "organisations-electronic-addresses list" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1752,12 +1752,12 @@ export def "organisations-electronic-addresses list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/electronic-addresses")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/electronic-addresses"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1768,7 +1768,7 @@ export def "organisations-electronic-addresses list" [
 #
 # POST /organisations/{partyId}/electronic-addresses
 export def "organisations-electronic-addresses post" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1777,10 +1777,10 @@ export def "organisations-electronic-addresses post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
-  --areaCode: string # The area code, for example, "02". (e.g. 02)
-  --countryPrefix: string # The country prefix, for example, "61". (e.g. 61)
-  --electronicAddressType: string@electronicAddressType-completer # The electronic address type. (default: Landline)
+  --api-key: string # The API key.
+  --area-code: string # The area code, for example, "02". (e.g. 02)
+  --country-prefix: string # The country prefix, for example, "61". (e.g. 61)
+  --electronic-address-type: string@electronic-address-type-completer # The electronic address type. (default: Landline)
   --email: string # The email address, for example, "robert.ferguson@ato.gov.au". (e.g. )
   --extension: string # The extension number, for example, "4453". (e.g. )
   --number: string # The number, for example, "62164453". (e.g. 62164453)
@@ -1789,10 +1789,10 @@ export def "organisations-electronic-addresses post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/electronic-addresses")
-  let body = {areaCode: $areaCode, countryPrefix: $countryPrefix, electronicAddressType: $electronicAddressType, email: $email, extension: $extension, number: $number, url: $body_url} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/electronic-addresses"))
+  let body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1803,8 +1803,8 @@ export def "organisations-electronic-addresses post" [
 #
 # DELETE /organisations/{partyId}/electronic-addresses/{addressId}
 export def "organisations-electronic-addresses delete" [
-  partyId: string
-  addressId: string
+  party_id: string
+  address_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1813,12 +1813,12 @@ export def "organisations-electronic-addresses delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/electronic-addresses/($addressId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/organisations/{party_id}/electronic-addresses/{address_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1829,8 +1829,8 @@ export def "organisations-electronic-addresses delete" [
 #
 # GET /organisations/{partyId}/electronic-addresses/{addressId}
 export def "organisations-electronic-addresses get" [
-  partyId: string
-  addressId: string
+  party_id: string
+  address_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1839,12 +1839,12 @@ export def "organisations-electronic-addresses get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/electronic-addresses/($addressId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/organisations/{party_id}/electronic-addresses/{address_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1855,8 +1855,8 @@ export def "organisations-electronic-addresses get" [
 #
 # PUT /organisations/{partyId}/electronic-addresses/{addressId}
 export def "organisations-electronic-addresses put" [
-  partyId: string
-  addressId: string
+  party_id: string
+  address_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1865,10 +1865,10 @@ export def "organisations-electronic-addresses put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
-  --areaCode: string # The area code, for example, "02". (e.g. 02)
-  --countryPrefix: string # The country prefix, for example, "61". (e.g. 61)
-  --electronicAddressType: string@electronicAddressType-completer # The electronic address type. (default: Landline)
+  --api-key: string # The API key.
+  --area-code: string # The area code, for example, "02". (e.g. 02)
+  --country-prefix: string # The country prefix, for example, "61". (e.g. 61)
+  --electronic-address-type: string@electronic-address-type-completer # The electronic address type. (default: Landline)
   --email: string # The email address, for example, "robert.ferguson@ato.gov.au". (e.g. )
   --extension: string # The extension number, for example, "4453". (e.g. )
   --number: string # The number, for example, "62164453". (e.g. 62164453)
@@ -1877,10 +1877,10 @@ export def "organisations-electronic-addresses put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/electronic-addresses/($addressId)")
-  let body = {areaCode: $areaCode, countryPrefix: $countryPrefix, electronicAddressType: $electronicAddressType, email: $email, extension: $extension, number: $number, url: $body_url} | compact
+  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/organisations/{party_id}/electronic-addresses/{address_id}"))
+  let body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1891,7 +1891,7 @@ export def "organisations-electronic-addresses put" [
 #
 # GET /organisations/{partyId}/licenses
 export def "organisations-licenses list" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1900,12 +1900,12 @@ export def "organisations-licenses list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/licenses")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/licenses"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1916,7 +1916,7 @@ export def "organisations-licenses list" [
 #
 # POST /organisations/{partyId}/licenses
 export def "organisations-licenses post" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1925,17 +1925,17 @@ export def "organisations-licenses post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
-  --licenseType: string@licenseType-completer # The license type. (default: Australian Financial Services License)
-  --lifecycleState: string@lifecycleState-completer # The business name's lifecycle state. (default: Pending Approval)
+  --api-key: string # The API key.
+  --license-type: string@license-type-completer # The license type. (default: Australian Financial Services License)
+  --lifecycle-state: string@lifecycle-state-completer # The business name's lifecycle state. (default: Pending Approval)
 ]: any -> record<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/licenses")
-  let body = {licenseType: $licenseType, lifecycleState: $lifecycleState} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/licenses"))
+  let body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1946,8 +1946,8 @@ export def "organisations-licenses post" [
 #
 # DELETE /organisations/{partyId}/licenses/{productId}
 export def "organisations-licenses delete" [
-  partyId: string
-  productId: string
+  party_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1956,12 +1956,12 @@ export def "organisations-licenses delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/licenses/($productId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/organisations/{party_id}/licenses/{product_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1972,8 +1972,8 @@ export def "organisations-licenses delete" [
 #
 # GET /organisations/{partyId}/licenses/{productId}
 export def "organisations-licenses get" [
-  partyId: string
-  productId: string
+  party_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1982,12 +1982,12 @@ export def "organisations-licenses get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> record<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/licenses/($productId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/organisations/{party_id}/licenses/{product_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1998,8 +1998,8 @@ export def "organisations-licenses get" [
 #
 # PUT /organisations/{partyId}/licenses/{productId}
 export def "organisations-licenses put" [
-  partyId: string
-  productId: string
+  party_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2008,17 +2008,17 @@ export def "organisations-licenses put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
-  --licenseType: string@licenseType-completer # The license type. (default: Australian Financial Services License)
-  --lifecycleState: string@lifecycleState-completer # The business name's lifecycle state. (default: Pending Approval)
+  --api-key: string # The API key.
+  --license-type: string@license-type-completer # The license type. (default: Australian Financial Services License)
+  --lifecycle-state: string@lifecycle-state-completer # The business name's lifecycle state. (default: Pending Approval)
 ]: any -> record<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/licenses/($productId)")
-  let body = {licenseType: $licenseType, lifecycleState: $lifecycleState} | compact
+  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/organisations/{party_id}/licenses/{product_id}"))
+  let body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2029,7 +2029,7 @@ export def "organisations-licenses put" [
 #
 # GET /organisations/{partyId}/roles
 export def "organisations-roles list" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2038,12 +2038,12 @@ export def "organisations-roles list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> table<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/roles")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/roles"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2054,7 +2054,7 @@ export def "organisations-roles list" [
 #
 # POST /organisations/{partyId}/roles
 export def "organisations-roles post" [
-  partyId: string
+  party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2063,19 +2063,19 @@ export def "organisations-roles post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
-  --partyRoleType: string@partyRoleType-completer # The party's role type. (default: Employee)
-  relatedPartyId: any # The related party's unique identifier.
-  --relatedPartyRoleType: string@relatedPartyRoleType-completer # The related party's role type. (default: Employer)
-  relationshipType: string@relationshipType-completer # The relationship type. (default: Employment)
+  --api-key: string # The API key.
+  --party-role-type: string@party-role-type-completer # The party's role type. (default: Employee)
+  related_party_id: any # The related party's unique identifier.
+  --related-party-role-type: string@related-party-role-type-completer # The related party's role type. (default: Employer)
+  relationship_type: string@relationship-type-completer # The relationship type. (default: Employment)
 ]: any -> record<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/roles")
-  let body = {partyRoleType: $partyRoleType, relatedPartyId: $relatedPartyId, relatedPartyRoleType: $relatedPartyRoleType, relationshipType: $relationshipType} | compact
+  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/roles"))
+  let body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2086,8 +2086,8 @@ export def "organisations-roles post" [
 #
 # DELETE /organisations/{partyId}/roles/{roleId}
 export def "organisations-roles delete" [
-  partyId: string
-  roleId: string
+  party_id: string
+  role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2096,12 +2096,12 @@ export def "organisations-roles delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/roles/($roleId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, role_id: $role_id} | format pattern "/organisations/{party_id}/roles/{role_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2112,8 +2112,8 @@ export def "organisations-roles delete" [
 #
 # GET /organisations/{partyId}/roles/{roleId}
 export def "organisations-roles get" [
-  partyId: string
-  roleId: string
+  party_id: string
+  role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2122,12 +2122,12 @@ export def "organisations-roles get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
+  --api-key: string # The API key.
 ]: nothing -> record<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/roles/($roleId)")
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let full_url = (build-url $base ({party_id: $party_id, role_id: $role_id} | format pattern "/organisations/{party_id}/roles/{role_id}"))
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2138,8 +2138,8 @@ export def "organisations-roles get" [
 #
 # PUT /organisations/{partyId}/roles/{roleId}
 export def "organisations-roles put" [
-  partyId: string
-  roleId: string
+  party_id: string
+  role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2148,19 +2148,19 @@ export def "organisations-roles put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiKey: string # The API key.
-  --partyRoleType: string@partyRoleType-completer # The party's role type. (default: Employee)
-  relatedPartyId: any # The related party's unique identifier.
-  --relatedPartyRoleType: string@relatedPartyRoleType-completer # The related party's role type. (default: Employer)
-  relationshipType: string@relationshipType-completer # The relationship type. (default: Employment)
+  --api-key: string # The API key.
+  --party-role-type: string@party-role-type-completer # The party's role type. (default: Employee)
+  related_party_id: any # The related party's unique identifier.
+  --related-party-role-type: string@related-party-role-type-completer # The related party's role type. (default: Employer)
+  relationship_type: string@relationship-type-completer # The relationship type. (default: Employment)
 ]: any -> record<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($partyId)/roles/($roleId)")
-  let body = {partyRoleType: $partyRoleType, relatedPartyId: $relatedPartyId, relatedPartyRoleType: $relatedPartyRoleType, relationshipType: $relationshipType} | compact
+  let full_url = (build-url $base ({party_id: $party_id, role_id: $role_id} | format pattern "/organisations/{party_id}/roles/{role_id}"))
+  let body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $apiKey} | compact
+  let extra_headers = {"apiKey": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

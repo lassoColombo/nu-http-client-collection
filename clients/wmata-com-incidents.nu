@@ -67,8 +67,8 @@ def base-url-completer [] { ["http://api.wmata.com/Incidents.svc" "https://api.w
 def auth-scheme-completer [] { ["api_key" "query-api_key"] }
 
 # Completers for enum parameters
-def Route-completer [] { ["90" "X1"] }
-def StationCode-completer [] { ["A03" "E09"] }
+def route-completer [] { ["90" "X1"] }
+def station-code-completer [] { ["A03" "E09"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -106,11 +106,11 @@ export def "bus-incidents 54763641281d830c946a3d78" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Route: string@Route-completer # Bus route.  Use full route code, i.e.: C2 instead of C2v1, C2v2, etc.
+  --route: string@route-completer # Bus route.  Use full route code, i.e.: C2 instead of C2v1, C2v2, etc.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Route" $Route "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Route" $route "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/BusIncidents" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -130,11 +130,11 @@ export def "elevator-incidents 54763641281d830c946a3d79" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --StationCode: string@StationCode-completer # Two-letter station code.  Use the Station List method to return a list of all station codes.
+  --station-code: string@station-code-completer # Two-letter station code.  Use the Station List method to return a list of all station codes.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "StationCode" $StationCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "StationCode" $station_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ElevatorIncidents" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -176,11 +176,11 @@ export def "json-bus-incidents 54763641281d830c946a3d75" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Route: string@Route-completer # Base bus route; variations are not recognized (i.e.: C2 instead of C2v1, C2v2, etc.).
+  --route: string@route-completer # Base bus route; variations are not recognized (i.e.: C2 instead of C2v1, C2v2, etc.).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Route" $Route "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Route" $route "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/BusIncidents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,11 +200,11 @@ export def "json-elevator-incidents 54763641281d830c946a3d76" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --StationCode: string@StationCode-completer # Station code.  Use the Station List method to return a list of all station codes.
+  --station-code: string@station-code-completer # Station code.  Use the Station List method to return a list of all station codes.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "StationCode" $StationCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "StationCode" $station_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/ElevatorIncidents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

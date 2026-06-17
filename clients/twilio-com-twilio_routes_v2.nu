@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "phone-numbers FetchPhoneNumber" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "phone-numbers get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /v2/PhoneNumbers/{PhoneNumber}
 # operationId: FetchPhoneNumber
-export def "phone-numbers FetchPhoneNumber" [
-  PhoneNumber: string
+export def "phone-numbers get" [
+  phone_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,7 +106,7 @@ export def "phone-numbers FetchPhoneNumber" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, phone_number: string, sid: string, url: string, voice_region: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://routes.twilio.com")
-  let full_url = (build-url $base $"/v2/PhoneNumbers/($PhoneNumber)")
+  let full_url = (build-url $base ({phone_number: $phone_number} | format pattern "/v2/PhoneNumbers/{phone_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -116,8 +116,8 @@ export def "phone-numbers FetchPhoneNumber" [
 #
 # POST /v2/PhoneNumbers/{PhoneNumber}
 # operationId: UpdatePhoneNumber
-export def "phone-numbers UpdatePhoneNumber" [
-  PhoneNumber: string
+export def "phone-numbers update" [
+  phone_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,14 +126,14 @@ export def "phone-numbers UpdatePhoneNumber" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --FriendlyName: string # A human readable description of this resource, up to 64 characters.
-  --VoiceRegion: string # The Inbound Processing Region used for this phone number for voice
+  --friendly-name: string # A human readable description of this resource, up to 64 characters.
+  --voice-region: string # The Inbound Processing Region used for this phone number for voice
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, phone_number: string, sid: string, url: string, voice_region: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://routes.twilio.com")
-  let full_url = (build-url $base $"/v2/PhoneNumbers/($PhoneNumber)")
-  let body = {FriendlyName: $FriendlyName, VoiceRegion: $VoiceRegion} | compact
+  let full_url = (build-url $base ({phone_number: $phone_number} | format pattern "/v2/PhoneNumbers/{phone_number}"))
+  let body = {"FriendlyName": $friendly_name, "VoiceRegion": $voice_region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -143,8 +143,8 @@ export def "phone-numbers UpdatePhoneNumber" [
 # GET /v2/SipDomains/{SipDomain}
 #
 # operationId: FetchSipDomain
-export def "sip-domains FetchSipDomain" [
-  SipDomain: string
+export def "sip-domains get" [
+  sip_domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "sip-domains FetchSipDomain" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, sip_domain: string, url: string, voice_region: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://routes.twilio.com")
-  let full_url = (build-url $base $"/v2/SipDomains/($SipDomain)")
+  let full_url = (build-url $base ({sip_domain: $sip_domain} | format pattern "/v2/SipDomains/{sip_domain}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -165,8 +165,8 @@ export def "sip-domains FetchSipDomain" [
 # POST /v2/SipDomains/{SipDomain}
 #
 # operationId: UpdateSipDomain
-export def "sip-domains UpdateSipDomain" [
-  SipDomain: string
+export def "sip-domains update" [
+  sip_domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,14 +175,14 @@ export def "sip-domains UpdateSipDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --FriendlyName: string
-  --VoiceRegion: string
+  --friendly-name: string
+  --voice-region: string
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, sip_domain: string, url: string, voice_region: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://routes.twilio.com")
-  let full_url = (build-url $base $"/v2/SipDomains/($SipDomain)")
-  let body = {FriendlyName: $FriendlyName, VoiceRegion: $VoiceRegion} | compact
+  let full_url = (build-url $base ({sip_domain: $sip_domain} | format pattern "/v2/SipDomains/{sip_domain}"))
+  let body = {"FriendlyName": $friendly_name, "VoiceRegion": $voice_region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -193,8 +193,8 @@ export def "sip-domains UpdateSipDomain" [
 #
 # GET /v2/Trunks/{SipTrunkDomain}
 # operationId: FetchTrunks
-export def "trunks FetchTrunks" [
-  SipTrunkDomain: string
+export def "trunks get" [
+  sip_trunk_domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "trunks FetchTrunks" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, sip_trunk_domain: string, url: string, voice_region: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://routes.twilio.com")
-  let full_url = (build-url $base $"/v2/Trunks/($SipTrunkDomain)")
+  let full_url = (build-url $base ({sip_trunk_domain: $sip_trunk_domain} | format pattern "/v2/Trunks/{sip_trunk_domain}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -216,8 +216,8 @@ export def "trunks FetchTrunks" [
 #
 # POST /v2/Trunks/{SipTrunkDomain}
 # operationId: UpdateTrunks
-export def "trunks UpdateTrunks" [
-  SipTrunkDomain: string
+export def "trunks update" [
+  sip_trunk_domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,14 +226,14 @@ export def "trunks UpdateTrunks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --FriendlyName: string # A human readable description of this resource, up to 64 characters.
-  --VoiceRegion: string # The Inbound Processing Region used for this SIP Trunk for voice
+  --friendly-name: string # A human readable description of this resource, up to 64 characters.
+  --voice-region: string # The Inbound Processing Region used for this SIP Trunk for voice
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, sip_trunk_domain: string, url: string, voice_region: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://routes.twilio.com")
-  let full_url = (build-url $base $"/v2/Trunks/($SipTrunkDomain)")
-  let body = {FriendlyName: $FriendlyName, VoiceRegion: $VoiceRegion} | compact
+  let full_url = (build-url $base ({sip_trunk_domain: $sip_trunk_domain} | format pattern "/v2/Trunks/{sip_trunk_domain}"))
+  let body = {"FriendlyName": $friendly_name, "VoiceRegion": $voice_region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

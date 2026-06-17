@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoftinsights-diagnostic-settings-service Get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoftinsights-diagnostic-settings-service get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /{resourceUri}/providers/microsoft.insights/diagnosticSettings/service
 # operationId: ServiceDiagnosticSettings_Get
-export def "providers-microsoftinsights-diagnostic-settings-service Get" [
-  resourceUri: string
+export def "providers-microsoftinsights-diagnostic-settings-service get" [
+  resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "providers-microsoftinsights-diagnostic-settings-service Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceUri)/providers/microsoft.insights/diagnosticSettings/service" $qp)
+  let full_url = (build-url $base ({resource_uri: $resource_uri} | format pattern "/{resource_uri}/providers/microsoft.insights/diagnosticSettings/service") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,8 +119,8 @@ export def "providers-microsoftinsights-diagnostic-settings-service Get" [
 # PATCH /{resourceUri}/providers/microsoft.insights/diagnosticSettings/service
 # operationId: ServiceDiagnosticSettings_Update
 # --properties shape: {eventHubAuthorizationRuleId?: string, logs?: list, metrics?: list, serviceBusRuleId?: string, storageAccountId?: string, workspaceId?: string}
-export def "providers-microsoftinsights-diagnostic-settings-service Update" [
-  resourceUri: string
+export def "providers-microsoftinsights-diagnostic-settings-service update" [
+  resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,8 +137,8 @@ export def "providers-microsoftinsights-diagnostic-settings-service Update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceUri)/providers/microsoft.insights/diagnosticSettings/service" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({resource_uri: $resource_uri} | format pattern "/{resource_uri}/providers/microsoft.insights/diagnosticSettings/service") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -150,8 +150,8 @@ export def "providers-microsoftinsights-diagnostic-settings-service Update" [
 # PUT /{resourceUri}/providers/microsoft.insights/diagnosticSettings/service
 # operationId: ServiceDiagnosticSettings_CreateOrUpdate
 # --properties shape: {eventHubAuthorizationRuleId?: string, logs?: list, metrics?: list, serviceBusRuleId?: string, storageAccountId?: string, workspaceId?: string}
-export def "providers-microsoftinsights-diagnostic-settings-service CreateOrUpdate" [
-  resourceUri: string
+export def "providers-microsoftinsights-diagnostic-settings-service create-or-update" [
+  resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,8 +169,8 @@ export def "providers-microsoftinsights-diagnostic-settings-service CreateOrUpda
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceUri)/providers/microsoft.insights/diagnosticSettings/service" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({resource_uri: $resource_uri} | format pattern "/{resource_uri}/providers/microsoft.insights/diagnosticSettings/service") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

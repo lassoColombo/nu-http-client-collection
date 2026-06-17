@@ -144,7 +144,7 @@ export def "movies newMovie" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/movies")
-  let body = {cache: $cache, comment: $comment, draft: $draft, elements: $elements, fps: $fps, height: $height, quality: $quality, resolution: $resolution, scenes: $scenes, settings: $settings, width: $width} | compact
+  let body = {"cache": $cache, "comment": $comment, "draft": $draft, "elements": $elements, "fps": $fps, "height": $height, "quality": $quality, "resolution": $resolution, "scenes": $scenes, "settings": $settings, "width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

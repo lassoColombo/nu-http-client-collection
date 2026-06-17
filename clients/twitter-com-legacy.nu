@@ -225,13 +225,13 @@ export def "account-update-profile-background-imagejson image" [
   --qp-use: string # Determines whether to display the profile background image or not. When set to true, t or 1 the background image will be displayed if an image is being uploaded with the request, or has been uploaded previously. An error will be returned if you try to use a background image when one is not being uploaded or does not exist. If this parameter is defined but set to anything other than true, t or 1, the background image will stop being used.
   --include-entities: string # The entities node will not be included when set to false.  Example Values: false
   --skip-status: string # When set to either true, t or 1 statuses will not be included in the returned user objects.
-  --Content-Type: string # Content type header
+  --content-type: string # Content type header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tile" $tile "scalar") (serialize-qp "use" $qp_use "scalar") (serialize-qp "include_entities" $include_entities "scalar") (serialize-qp "skip_status" $skip_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/update_profile_background_image.json" $qp)
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -284,13 +284,13 @@ export def "account-update-profile-imagejson image" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip-status: string # When set to either true, t or 1 statuses will not be included in the returned user objects.
-  --Content-Type: string # Content type header
+  --content-type: string # Content type header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip_status" $skip_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/update_profile_image.json" $qp)
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -889,7 +889,7 @@ export def "geo-id id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/geo/id/($place_id).json")
+  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/geo/id/{place_id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -909,12 +909,12 @@ export def "geo-placesjson geoplaces" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --attribute:street-address: string # This parameter searches for places which have this given street address. There are other well-known, and application specific attributes available. Custom attributes are also permitted. Learn more about Place Attributes.  Example Values: 795%20Folsom%20St
+  --attribute-street-address: string # This parameter searches for places which have this given street address. There are other well-known, and application specific attributes available. Custom attributes are also permitted. Learn more about Place Attributes.  Example Values: 795%20Folsom%20St
   --callback: string # If supplied, the response will use the JSONP format with a callback of the given name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "attribute:street_address" $attribute:street_address "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "attribute:street_address" $attribute_street_address "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geo/places.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -968,12 +968,12 @@ export def "geo-searchjson geosearch" [
   --accuracy: string # A hint on the "region" in which to search. If a number, then this is a radius in meters, but it can also take a string that is suffixed with ft to specify feet. If this is not passed in, then it is assumed to be 0m. If coming from a device, in practice, this value is whatever accuracy the device has measuring its location (whether it be coming from a GPS, WiFi triangulation, etc.).  Example Values: 5ft
   --granularity: string # This is the minimal granularity of place types to return and must be one of: poi, neighborhood, city, admin or country. If no granularity is provided for the request neighborhood is assumed. Setting this to city, for example, will find places which have a type of city, admin or country.  Example Values: city
   --contained-within: string # This is the place_id which you would like to restrict the search results to. Setting this value means only places within the given place_id will be found.  Specify a place_id. For example, to scope all results to places within "San Francisco, CA USA", you would specify a place_id of "5a110d312052166f"  Example Values: 247f43d441defc03
-  --attribute:street-address: string # This parameter searches for places which have this given street address. There are other well-known, and application specific attributes available. Custom attributes are also permitted. Learn more about Place Attributes.  Example Values: 795%20Folsom%20St
+  --attribute-street-address: string # This parameter searches for places which have this given street address. There are other well-known, and application specific attributes available. Custom attributes are also permitted. Learn more about Place Attributes.  Example Values: 795%20Folsom%20St
   --callback: string # If supplied, the response will use the JSONP format with a callback of the given name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accuracy" $accuracy "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "contained_within" $contained_within "scalar") (serialize-qp "attribute:street_address" $attribute:street_address "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accuracy" $accuracy "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "contained_within" $contained_within "scalar") (serialize-qp "attribute:street_address" $attribute_street_address "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geo/search.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -995,12 +995,12 @@ export def "geo-similar-placesjson places" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --contained-within: string # This is the place_id which you would like to restrict the search results to. Setting this value means only places within the given place_id will be found.  Specify a place_id. For example, to scope all results to places within "San Francisco, CA USA", you would specify a place_id of "5a110d312052166f"  Example Values: 247f43d441defc03
-  --attribute:street-address: string # This parameter searches for places which have this given street address. There are other well-known, and application specific attributes available. Custom attributes are also permitted. Learn more about Place Attributes.  Example Values: 795%20Folsom%20St
+  --attribute-street-address: string # This parameter searches for places which have this given street address. There are other well-known, and application specific attributes available. Custom attributes are also permitted. Learn more about Place Attributes.  Example Values: 795%20Folsom%20St
   --callback: string # If supplied, the response will use the JSONP format with a callback of the given name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "contained_within" $contained_within "scalar") (serialize-qp "attribute:street_address" $attribute:street_address "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "contained_within" $contained_within "scalar") (serialize-qp "attribute:street_address" $attribute_street_address "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geo/similar_places.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1104,7 +1104,7 @@ export def "help-tosjson helptos" [
 # POST /lists/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/create
 # operationId: lists.create
-export def "lists-createjson listscreate" [
+export def "lists-createjson list-s-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1131,7 +1131,7 @@ export def "lists-createjson listscreate" [
 # POST /lists/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/destroy
 # operationId: lists.destroy
-export def "lists-destroyjson listsdestroy" [
+export def "lists-destroyjson list-s-destroy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1157,7 +1157,7 @@ export def "lists-destroyjson listsdestroy" [
 # GET /lists/list.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/list
 # operationId: lists.list
-export def "lists-listjson listslist" [
+export def "lists-listjson list-s" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1183,7 +1183,7 @@ export def "lists-listjson listslist" [
 # GET /lists/members.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/members
 # operationId: lists.members
-export def "lists-membersjson listsmembers" [
+export def "lists-membersjson list-s-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1212,7 +1212,7 @@ export def "lists-membersjson listsmembers" [
 # POST /lists/members/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/members/create
 # operationId: lists.members.create
-export def "lists-members-createjson listsmemberscreate" [
+export def "lists-members-createjson list-s-members-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1266,7 +1266,7 @@ export def "lists-members-create-alljson all" [
 # POST /lists/members/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/members/destroy
 # operationId: lists.members.destroy
-export def "lists-members-destroyjson listsmembersdestroy" [
+export def "lists-members-destroyjson list-s-members-destroy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1324,7 +1324,7 @@ export def "lists-members-destroy-alljson all" [
 # GET /lists/members/show.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/members/show
 # operationId: lists.members.show
-export def "lists-members-showjson listsmembersshow" [
+export def "lists-members-showjson list-s-members-show" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1352,7 +1352,7 @@ export def "lists-members-showjson listsmembersshow" [
 # GET /lists/memberships.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/memberships
 # operationId: lists.memberships
-export def "lists-membershipsjson listsmemberships" [
+export def "lists-membershipsjson list-s-memberships" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1380,7 +1380,7 @@ export def "lists-membershipsjson listsmemberships" [
 # GET /lists/show.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/show
 # operationId: lists.show
-export def "lists-showjson listsshow" [
+export def "lists-showjson list-s-show" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1406,7 +1406,7 @@ export def "lists-showjson listsshow" [
 # GET /lists/statuses.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/statuses
 # operationId: lists.statuses
-export def "lists-statusesjson listsstatuses" [
+export def "lists-statusesjson list-s-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1437,7 +1437,7 @@ export def "lists-statusesjson listsstatuses" [
 # GET /lists/subscribers.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/subscribers
 # operationId: lists.subscribers
-export def "lists-subscribersjson listssubscribers" [
+export def "lists-subscribersjson list-s-subscribers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1466,7 +1466,7 @@ export def "lists-subscribersjson listssubscribers" [
 # POST /lists/subscribers/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/subscribers/create
 # operationId: lists.subscribers.create
-export def "lists-subscribers-createjson listssubscriberscreate" [
+export def "lists-subscribers-createjson list-s-subscribers-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1492,7 +1492,7 @@ export def "lists-subscribers-createjson listssubscriberscreate" [
 # POST /lists/subscribers/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/subscribers/destroy
 # operationId: lists.subscribers.destroy
-export def "lists-subscribers-destroyjson listssubscribersdestroy" [
+export def "lists-subscribers-destroyjson list-s-subscribers-destroy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1518,7 +1518,7 @@ export def "lists-subscribers-destroyjson listssubscribersdestroy" [
 # GET /lists/subscribers/show.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/subscribers/show
 # operationId: lists.subscribers.show
-export def "lists-subscribers-showjson listssubscribersshow" [
+export def "lists-subscribers-showjson list-s-subscribers-show" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1546,7 +1546,7 @@ export def "lists-subscribers-showjson listssubscribersshow" [
 # GET /lists/subscriptions.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/subscriptions
 # operationId: lists.subscriptions
-export def "lists-subscriptionsjson listssubscriptions" [
+export def "lists-subscriptionsjson list-s-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1572,7 +1572,7 @@ export def "lists-subscriptionsjson listssubscriptions" [
 # POST /lists/update.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/update
 # operationId: lists.update
-export def "lists-updatejson listsupdate" [
+export def "lists-updatejson list-s-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1601,7 +1601,7 @@ export def "lists-updatejson listsupdate" [
 # POST /saved_searches/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/saved_searches/create
 # operationId: saved_searches.create
-export def "saved-searches-createjson searchescreate" [
+export def "saved-searches-createjson list-es-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1626,7 +1626,7 @@ export def "saved-searches-createjson searchescreate" [
 # POST /saved_searches/destroy/{id}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/saved_searches/destroy/%3Aid
 # operationId: saved_searches.destroy
-export def "saved-searches-destroy searchesdestroy" [
+export def "saved-searches-destroy list-es" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1639,7 +1639,7 @@ export def "saved-searches-destroy searchesdestroy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/saved_searches/destroy/($id).json")
+  let full_url = (build-url $base ({id: $id} | format pattern "/saved_searches/destroy/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1650,7 +1650,7 @@ export def "saved-searches-destroy searchesdestroy" [
 # GET /saved_searches/list.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/saved_searches/list
 # operationId: saved_searches.list
-export def "saved-searches-listjson searcheslist" [
+export def "saved-searches-listjson list-es-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1686,7 +1686,7 @@ export def "saved-searches-show savedsearchesid" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/saved_searches/show/($id).json")
+  let full_url = (build-url $base ({id: $id} | format pattern "/saved_searches/show/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1747,7 +1747,7 @@ export def "statuses-destroy statusesdestroy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "trim_user" $trim_user "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/statuses/destroy/($id).json" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/statuses/destroy/{id}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1864,7 +1864,7 @@ export def "statuses-retweet statusesretweetid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "trim_user" $trim_user "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/statuses/retweet/($id).json" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/statuses/retweet/{id}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1891,7 +1891,7 @@ export def "statuses-retweets statusesretweets" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "trim_user" $trim_user "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/statuses/retweets/($id).json" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/statuses/retweets/{id}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1919,7 +1919,7 @@ export def "statuses-show statusesshow" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "trim_user" $trim_user "scalar") (serialize-qp "include_my_retweet" $include_my_retweet "scalar") (serialize-qp "include_entities" $include_entities "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/statuses/show/($id).json" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/statuses/show/{id}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1978,13 +1978,13 @@ export def "statuses-update-with-mediajson media" [
   --long: string # The longitude of the location this tweet refers to. The valid ranges for longitude is -180.0 to +180.0 (East is positive) inclusive. This parameter will be ignored if outside that range, not a number, geo_enabled is disabled, or if there not a corresponding lat parameter. Example value: -122.400612831116.
   --place-id: string # A place in the world identified by a Twitter place ID. Place IDs can be retrieved from geo/reverse_geocode.
   --display-coordinates: string # Whether or not to put a pin on the exact coordinates a tweet has been sent from.
-  --Content-Type: string # Content type.
+  --content-type: string # Content type.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "media" $media "scalar") (serialize-qp "possibly_sensitive" $possibly_sensitive "scalar") (serialize-qp "in_reply_to_status_id" $in_reply_to_status_id "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "long" $long "scalar") (serialize-qp "place_id" $place_id "scalar") (serialize-qp "display_coordinates" $display_coordinates "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statuses/update_with_media.json" $qp)
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2299,7 +2299,7 @@ export def "users-suggestions userssuggestionsslug" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/suggestions/($slug).json" $qp)
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/users/suggestions/{slug}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2323,7 +2323,7 @@ export def "users-suggestions-membersjson userssuggestionsslugmembers" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/suggestions/($slug)/members.json")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/users/suggestions/{slug}/members.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

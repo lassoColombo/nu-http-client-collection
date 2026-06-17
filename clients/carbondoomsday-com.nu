@@ -139,7 +139,7 @@ export def "co2 read" [
 ]: nothing -> record<date: string, ppm: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/co2/($date)/")
+  let full_url = (build-url $base ({date: $date} | format pattern "/co2/{date}/"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

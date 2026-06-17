@@ -71,7 +71,7 @@ def accept-completer [] { ["application/json" "application/xml" "text/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "classify-iterations-image ClassifyImage" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "classify-iterations-image post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,9 +95,9 @@ export def commands []: nothing -> table {
 #
 # POST /{projectId}/classify/iterations/{publishedName}/image
 # operationId: ClassifyImage
-export def "classify-iterations-image ClassifyImage" [
-  projectId: string
-  publishedName: string
+export def "classify-iterations-image post" [
+  project_id: string
+  published_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,14 +108,14 @@ export def "classify-iterations-image ClassifyImage" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --application: string # Optional. Specifies the name of application using the endpoint.
-  imageData: string # Binary image data. Supported formats are JPEG, GIF, PNG, and BMP. Supports images up to 4MB. (format: binary)
+  image_data: string # Binary image data. Supported formats are JPEG, GIF, PNG, and BMP. Supports images up to 4MB. (format: binary)
 ]: any -> record<created: string, id: string, iteration: string, predictions: table<boundingBox: record, probability: float, tagId: string, tagName: string>, project: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "prediction-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "application" $application "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($projectId)/classify/iterations/($publishedName)/image" $qp)
-  let body = {imageData: $imageData} | compact
+  let full_url = (build-url $base ({project_id: $project_id, published_name: $published_name} | format pattern "/{project_id}/classify/iterations/{published_name}/image") $qp)
+  let body = {"imageData": $image_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -126,9 +126,9 @@ export def "classify-iterations-image ClassifyImage" [
 #
 # POST /{projectId}/classify/iterations/{publishedName}/image/nostore
 # operationId: ClassifyImageWithNoStore
-export def "classify-iterations-image-nostore ClassifyImageWithNoStore" [
-  projectId: string
-  publishedName: string
+export def "classify-iterations-image-nostore post" [
+  project_id: string
+  published_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,14 +139,14 @@ export def "classify-iterations-image-nostore ClassifyImageWithNoStore" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --application: string # Optional. Specifies the name of application using the endpoint.
-  imageData: string # Binary image data. Supported formats are JPEG, GIF, PNG, and BMP. Supports images up to 0MB. (format: binary)
+  image_data: string # Binary image data. Supported formats are JPEG, GIF, PNG, and BMP. Supports images up to 0MB. (format: binary)
 ]: any -> record<created: string, id: string, iteration: string, predictions: table<boundingBox: record, probability: float, tagId: string, tagName: string>, project: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "prediction-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "application" $application "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($projectId)/classify/iterations/($publishedName)/image/nostore" $qp)
-  let body = {imageData: $imageData} | compact
+  let full_url = (build-url $base ({project_id: $project_id, published_name: $published_name} | format pattern "/{project_id}/classify/iterations/{published_name}/image/nostore") $qp)
+  let body = {"imageData": $image_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -157,9 +157,9 @@ export def "classify-iterations-image-nostore ClassifyImageWithNoStore" [
 #
 # POST /{projectId}/classify/iterations/{publishedName}/url
 # operationId: ClassifyImageUrl
-export def "classify-iterations-url ClassifyImageUrl" [
-  projectId: string
-  publishedName: string
+export def "classify-iterations-url post" [
+  project_id: string
+  published_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,8 +176,8 @@ export def "classify-iterations-url ClassifyImageUrl" [
   let auth = (build-auth $token ($auth_scheme | default "prediction-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "application" $application "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($projectId)/classify/iterations/($publishedName)/url" $qp)
-  let body = {url: $body_url} | compact
+  let full_url = (build-url $base ({project_id: $project_id, published_name: $published_name} | format pattern "/{project_id}/classify/iterations/{published_name}/url") $qp)
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -188,9 +188,9 @@ export def "classify-iterations-url ClassifyImageUrl" [
 #
 # POST /{projectId}/classify/iterations/{publishedName}/url/nostore
 # operationId: ClassifyImageUrlWithNoStore
-export def "classify-iterations-url-nostore ClassifyImageUrlWithNoStore" [
-  projectId: string
-  publishedName: string
+export def "classify-iterations-url-nostore post" [
+  project_id: string
+  published_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,8 +207,8 @@ export def "classify-iterations-url-nostore ClassifyImageUrlWithNoStore" [
   let auth = (build-auth $token ($auth_scheme | default "prediction-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "application" $application "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($projectId)/classify/iterations/($publishedName)/url/nostore" $qp)
-  let body = {url: $body_url} | compact
+  let full_url = (build-url $base ({project_id: $project_id, published_name: $published_name} | format pattern "/{project_id}/classify/iterations/{published_name}/url/nostore") $qp)
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -219,9 +219,9 @@ export def "classify-iterations-url-nostore ClassifyImageUrlWithNoStore" [
 #
 # POST /{projectId}/detect/iterations/{publishedName}/image
 # operationId: DetectImage
-export def "detect-iterations-image DetectImage" [
-  projectId: string
-  publishedName: string
+export def "detect-iterations-image post" [
+  project_id: string
+  published_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,14 +232,14 @@ export def "detect-iterations-image DetectImage" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --application: string # Optional. Specifies the name of application using the endpoint.
-  imageData: string # Binary image data. Supported formats are JPEG, GIF, PNG, and BMP. Supports images up to 4MB. (format: binary)
+  image_data: string # Binary image data. Supported formats are JPEG, GIF, PNG, and BMP. Supports images up to 4MB. (format: binary)
 ]: any -> record<created: string, id: string, iteration: string, predictions: table<boundingBox: record, probability: float, tagId: string, tagName: string>, project: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "prediction-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "application" $application "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($projectId)/detect/iterations/($publishedName)/image" $qp)
-  let body = {imageData: $imageData} | compact
+  let full_url = (build-url $base ({project_id: $project_id, published_name: $published_name} | format pattern "/{project_id}/detect/iterations/{published_name}/image") $qp)
+  let body = {"imageData": $image_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -250,9 +250,9 @@ export def "detect-iterations-image DetectImage" [
 #
 # POST /{projectId}/detect/iterations/{publishedName}/image/nostore
 # operationId: DetectImageWithNoStore
-export def "detect-iterations-image-nostore DetectImageWithNoStore" [
-  projectId: string
-  publishedName: string
+export def "detect-iterations-image-nostore post" [
+  project_id: string
+  published_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,14 +263,14 @@ export def "detect-iterations-image-nostore DetectImageWithNoStore" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --application: string # Optional. Specifies the name of application using the endpoint.
-  imageData: string # Binary image data. Supported formats are JPEG, GIF, PNG, and BMP. Supports images up to 0MB. (format: binary)
+  image_data: string # Binary image data. Supported formats are JPEG, GIF, PNG, and BMP. Supports images up to 0MB. (format: binary)
 ]: any -> record<created: string, id: string, iteration: string, predictions: table<boundingBox: record, probability: float, tagId: string, tagName: string>, project: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "prediction-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "application" $application "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($projectId)/detect/iterations/($publishedName)/image/nostore" $qp)
-  let body = {imageData: $imageData} | compact
+  let full_url = (build-url $base ({project_id: $project_id, published_name: $published_name} | format pattern "/{project_id}/detect/iterations/{published_name}/image/nostore") $qp)
+  let body = {"imageData": $image_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -281,9 +281,9 @@ export def "detect-iterations-image-nostore DetectImageWithNoStore" [
 #
 # POST /{projectId}/detect/iterations/{publishedName}/url
 # operationId: DetectImageUrl
-export def "detect-iterations-url DetectImageUrl" [
-  projectId: string
-  publishedName: string
+export def "detect-iterations-url post" [
+  project_id: string
+  published_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,8 +300,8 @@ export def "detect-iterations-url DetectImageUrl" [
   let auth = (build-auth $token ($auth_scheme | default "prediction-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "application" $application "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($projectId)/detect/iterations/($publishedName)/url" $qp)
-  let body = {url: $body_url} | compact
+  let full_url = (build-url $base ({project_id: $project_id, published_name: $published_name} | format pattern "/{project_id}/detect/iterations/{published_name}/url") $qp)
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -312,9 +312,9 @@ export def "detect-iterations-url DetectImageUrl" [
 #
 # POST /{projectId}/detect/iterations/{publishedName}/url/nostore
 # operationId: DetectImageUrlWithNoStore
-export def "detect-iterations-url-nostore DetectImageUrlWithNoStore" [
-  projectId: string
-  publishedName: string
+export def "detect-iterations-url-nostore post" [
+  project_id: string
+  published_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,8 +331,8 @@ export def "detect-iterations-url-nostore DetectImageUrlWithNoStore" [
   let auth = (build-auth $token ($auth_scheme | default "prediction-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "application" $application "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($projectId)/detect/iterations/($publishedName)/url/nostore" $qp)
-  let body = {url: $body_url} | compact
+  let full_url = (build-url $base ({project_id: $project_id, published_name: $published_name} | format pattern "/{project_id}/detect/iterations/{published_name}/url/nostore") $qp)
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

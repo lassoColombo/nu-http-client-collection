@@ -66,12 +66,12 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def keyType-completer [] { ["PrimaryKey" "SecondaryKey"] }
+def key-type-completer [] { ["PrimaryKey" "SecondaryKey"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-relay-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-relay-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Relay/operations
 # operationId: Operations_List
-export def "providers-microsoft-relay-operations List" [
+export def "providers-microsoft-relay-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,8 +119,8 @@ export def "providers-microsoft-relay-operations List" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Relay/checkNameAvailability
 # operationId: Namespaces_CheckNameAvailability
-export def "subscriptions-providers-microsoft-relay-check-name-availability CheckNameAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-relay-check-name-availability check" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,8 +136,8 @@ export def "subscriptions-providers-microsoft-relay-check-name-availability Chec
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Relay/checkNameAvailability" $qp)
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Relay/checkNameAvailability") $qp)
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -148,8 +148,8 @@ export def "subscriptions-providers-microsoft-relay-check-name-availability Chec
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Relay/namespaces
 # operationId: Namespaces_List
-export def "subscriptions-providers-microsoft-relay-namespaces List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-relay-namespaces list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "subscriptions-providers-microsoft-relay-namespaces List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Relay/namespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Relay/namespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,9 +173,9 @@ export def "subscriptions-providers-microsoft-relay-namespaces List" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces
 # operationId: Namespaces_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces L
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -199,10 +199,10 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces L
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}
 # operationId: Namespaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces Delete" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces D
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,10 +226,10 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces D
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}
 # operationId: Namespaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces Get" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces G
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -254,10 +254,10 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces G
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}
 # operationId: Namespaces_Update
 # --sku shape: {name: "Standard", tier?: "Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces Update" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,8 +275,8 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces U
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)" $qp)
-  let body = {properties: $properties, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -288,10 +288,10 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces U
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}
 # operationId: Namespaces_CreateOrUpdate
 # --sku shape: {name: "Standard", tier?: "Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces CreateOrUpdate" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -310,8 +310,8 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces C
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)" $qp)
-  let body = {properties: $properties, sku: $sku, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -322,10 +322,10 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces C
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/authorizationRules
 # operationId: Namespaces_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules ListAuthorizationRules" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/authorizationRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/authorizationRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -349,11 +349,11 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/authorizationRules/{authorizationRuleName}
 # operationId: Namespaces_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules DeleteAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,7 +367,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/authorizationRules/($authorizationRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/authorizationRules/{authorization_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -377,11 +377,11 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/authorizationRules/{authorizationRuleName}
 # operationId: Namespaces_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules GetAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/authorizationRules/($authorizationRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/authorizationRules/{authorization_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -406,11 +406,11 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/authorizationRules/{authorizationRuleName}
 # operationId: Namespaces_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights: list}
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules CreateOrUpdateAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,8 +426,8 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/authorizationRules/($authorizationRuleName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/authorizationRules/{authorization_rule_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -438,11 +438,11 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/authorizationRules/{authorizationRuleName}/listKeys
 # operationId: Namespaces_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules-list-keys ListKeys" [
-  resourceGroupName: string
-  namespaceName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules-list-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/authorizationRules/($authorizationRuleName)/listKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/authorizationRules/{authorization_rule_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -466,11 +466,11 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/authorizationRules/{authorizationRuleName}/regenerateKeys
 # operationId: Namespaces_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules-regenerate-keys RegenerateKeys" [
-  resourceGroupName: string
-  namespaceName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules-regenerate-keys post" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,14 +481,14 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --key: string # Optional. If the key value is provided, this is set to key type, or autogenerated key value set for key type.
-  keyType: string@keyType-completer # The access key to regenerate.
+  key_type: string@key-type-completer # The access key to regenerate.
 ]: any -> record<keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/authorizationRules/($authorizationRuleName)/regenerateKeys" $qp)
-  let body = {key: $key, keyType: $keyType} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/authorizationRules/{authorization_rule_name}/regenerateKeys") $qp)
+  let body = {"key": $key, "keyType": $key_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -499,10 +499,10 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections
 # operationId: HybridConnections_ListByNamespace
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections ListByNamespace" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections list-by" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,7 +516,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/hybridConnections" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/hybridConnections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -526,11 +526,11 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}
 # operationId: HybridConnections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections Delete" [
-  resourceGroupName: string
-  namespaceName: string
-  hybridConnectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  hybrid_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -544,7 +544,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/hybridConnections/($hybridConnectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, hybrid_connection_name: $hybrid_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/hybridConnections/{hybrid_connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -554,11 +554,11 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}
 # operationId: HybridConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections Get" [
-  resourceGroupName: string
-  namespaceName: string
-  hybridConnectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  hybrid_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/hybridConnections/($hybridConnectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, hybrid_connection_name: $hybrid_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/hybridConnections/{hybrid_connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -583,11 +583,11 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}
 # operationId: HybridConnections_CreateOrUpdate
 # --properties shape: {requiresClientAuthorization?: bool, userMetadata?: string}
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections CreateOrUpdate" [
-  resourceGroupName: string
-  namespaceName: string
-  hybridConnectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  hybrid_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,8 +603,8 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/hybridConnections/($hybridConnectionName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, hybrid_connection_name: $hybrid_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/hybridConnections/{hybrid_connection_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -615,11 +615,11 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}/authorizationRules
 # operationId: HybridConnections_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules ListAuthorizationRules" [
-  resourceGroupName: string
-  namespaceName: string
-  hybridConnectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  hybrid_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -633,7 +633,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/hybridConnections/($hybridConnectionName)/authorizationRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, hybrid_connection_name: $hybrid_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/hybridConnections/{hybrid_connection_name}/authorizationRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -643,12 +643,12 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}/authorizationRules/{authorizationRuleName}
 # operationId: HybridConnections_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules DeleteAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  hybridConnectionName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  hybrid_connection_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -662,7 +662,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/hybridConnections/($hybridConnectionName)/authorizationRules/($authorizationRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, hybrid_connection_name: $hybrid_connection_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/hybridConnections/{hybrid_connection_name}/authorizationRules/{authorization_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -672,12 +672,12 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}/authorizationRules/{authorizationRuleName}
 # operationId: HybridConnections_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules GetAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  hybridConnectionName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  hybrid_connection_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -691,7 +691,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/hybridConnections/($hybridConnectionName)/authorizationRules/($authorizationRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, hybrid_connection_name: $hybrid_connection_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/hybridConnections/{hybrid_connection_name}/authorizationRules/{authorization_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -702,12 +702,12 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}/authorizationRules/{authorizationRuleName}
 # operationId: HybridConnections_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights: list}
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules CreateOrUpdateAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  hybridConnectionName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  hybrid_connection_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -723,8 +723,8 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/hybridConnections/($hybridConnectionName)/authorizationRules/($authorizationRuleName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, hybrid_connection_name: $hybrid_connection_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/hybridConnections/{hybrid_connection_name}/authorizationRules/{authorization_rule_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -735,12 +735,12 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}/authorizationRules/{authorizationRuleName}/listKeys
 # operationId: HybridConnections_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules-list-keys ListKeys" [
-  resourceGroupName: string
-  namespaceName: string
-  hybridConnectionName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules-list-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  hybrid_connection_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -754,7 +754,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/hybridConnections/($hybridConnectionName)/authorizationRules/($authorizationRuleName)/listKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, hybrid_connection_name: $hybrid_connection_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/hybridConnections/{hybrid_connection_name}/authorizationRules/{authorization_rule_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -764,12 +764,12 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}/authorizationRules/{authorizationRuleName}/regenerateKeys
 # operationId: HybridConnections_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules-regenerate-keys RegenerateKeys" [
-  resourceGroupName: string
-  namespaceName: string
-  hybridConnectionName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules-regenerate-keys post" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  hybrid_connection_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -780,14 +780,14 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --key: string # Optional. If the key value is provided, this is set to key type, or autogenerated key value set for key type.
-  keyType: string@keyType-completer # The access key to regenerate.
+  key_type: string@key-type-completer # The access key to regenerate.
 ]: any -> record<keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/hybridConnections/($hybridConnectionName)/authorizationRules/($authorizationRuleName)/regenerateKeys" $qp)
-  let body = {key: $key, keyType: $keyType} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, hybrid_connection_name: $hybrid_connection_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/hybridConnections/{hybrid_connection_name}/authorizationRules/{authorization_rule_name}/regenerateKeys") $qp)
+  let body = {"key": $key, "keyType": $key_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -798,10 +798,10 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays
 # operationId: WCFRelays_ListByNamespace
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays ListByNamespace" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays list-by" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -815,7 +815,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/wcfRelays" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/wcfRelays") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -825,11 +825,11 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}
 # operationId: WCFRelays_Delete
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays Delete" [
-  resourceGroupName: string
-  namespaceName: string
-  relayName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  relay_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -843,7 +843,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/wcfRelays/($relayName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, relay_name: $relay_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/wcfRelays/{relay_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -853,11 +853,11 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}
 # operationId: WCFRelays_Get
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays Get" [
-  resourceGroupName: string
-  namespaceName: string
-  relayName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  relay_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -871,7 +871,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/wcfRelays/($relayName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, relay_name: $relay_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/wcfRelays/{relay_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -882,11 +882,11 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}
 # operationId: WCFRelays_CreateOrUpdate
 # --properties shape: {relayType?: "NetTcp"|"Http", requiresClientAuthorization?: bool, requiresTransportSecurity?: bool, userMetadata?: string}
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays CreateOrUpdate" [
-  resourceGroupName: string
-  namespaceName: string
-  relayName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  relay_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -902,8 +902,8 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/wcfRelays/($relayName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, relay_name: $relay_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/wcfRelays/{relay_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -914,11 +914,11 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}/authorizationRules
 # operationId: WCFRelays_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules ListAuthorizationRules" [
-  resourceGroupName: string
-  namespaceName: string
-  relayName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  relay_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,7 +932,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/wcfRelays/($relayName)/authorizationRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, relay_name: $relay_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/wcfRelays/{relay_name}/authorizationRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -942,12 +942,12 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}/authorizationRules/{authorizationRuleName}
 # operationId: WCFRelays_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules DeleteAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  relayName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  relay_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -961,7 +961,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/wcfRelays/($relayName)/authorizationRules/($authorizationRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, relay_name: $relay_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/wcfRelays/{relay_name}/authorizationRules/{authorization_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -971,12 +971,12 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}/authorizationRules/{authorizationRuleName}
 # operationId: WCFRelays_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules GetAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  relayName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  relay_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -990,7 +990,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/wcfRelays/($relayName)/authorizationRules/($authorizationRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, relay_name: $relay_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/wcfRelays/{relay_name}/authorizationRules/{authorization_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1001,12 +1001,12 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}/authorizationRules/{authorizationRuleName}
 # operationId: WCFRelays_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights: list}
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules CreateOrUpdateAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  relayName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  relay_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1022,8 +1022,8 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/wcfRelays/($relayName)/authorizationRules/($authorizationRuleName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, relay_name: $relay_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/wcfRelays/{relay_name}/authorizationRules/{authorization_rule_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1034,12 +1034,12 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}/authorizationRules/{authorizationRuleName}/listKeys
 # operationId: WCFRelays_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules-list-keys ListKeys" [
-  resourceGroupName: string
-  namespaceName: string
-  relayName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules-list-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  relay_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1053,7 +1053,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/wcfRelays/($relayName)/authorizationRules/($authorizationRuleName)/listKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, relay_name: $relay_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/wcfRelays/{relay_name}/authorizationRules/{authorization_rule_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1063,12 +1063,12 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}/authorizationRules/{authorizationRuleName}/regenerateKeys
 # operationId: WCFRelays_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules-regenerate-keys RegenerateKeys" [
-  resourceGroupName: string
-  namespaceName: string
-  relayName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules-regenerate-keys post" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  relay_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1079,14 +1079,14 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --key: string # Optional. If the key value is provided, this is set to key type, or autogenerated key value set for key type.
-  keyType: string@keyType-completer # The access key to regenerate.
+  key_type: string@key-type-completer # The access key to regenerate.
 ]: any -> record<keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Relay/namespaces/($namespaceName)/wcfRelays/($relayName)/authorizationRules/($authorizationRuleName)/regenerateKeys" $qp)
-  let body = {key: $key, keyType: $keyType} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, relay_name: $relay_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Relay/namespaces/{namespace_name}/wcfRelays/{relay_name}/authorizationRules/{authorization_rule_name}/regenerateKeys") $qp)
+  let body = {"key": $key, "keyType": $key_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

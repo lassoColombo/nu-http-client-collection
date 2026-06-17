@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "listjson listAPIs" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "listjson list-p-is" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /list.json
 # operationId: listAPIs
-export def "listjson listAPIs" [
+export def "listjson list-p-is" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,7 +114,7 @@ export def "listjson listAPIs" [
 #
 # GET /metrics.json
 # operationId: getMetrics
-export def "metricsjson get" [
+export def "metricsjson get-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,7 +136,7 @@ export def "metricsjson get" [
 #
 # GET /providers.json
 # operationId: getProviders
-export def "providersjson get" [
+export def "providersjson get-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "providersjson get" [
 #
 # GET /specs/{provider}/{api}.json
 # operationId: getAPI
-export def "specs list" [
+export def "specs get-pi" [
   provider: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -172,7 +172,7 @@ export def "specs list" [
 ]: nothing -> record<added: string, preferred: string, versions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/specs/($provider)/($api).json")
+  let full_url = (build-url $base ({provider: $provider, api: $api} | format pattern "/specs/{provider}/{api}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,7 +197,7 @@ export def "specs get" [
 ]: nothing -> record<added: string, preferred: string, versions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/specs/($provider)/($service)/($api).json")
+  let full_url = (build-url $base ({provider: $provider, service: $service, api: $api} | format pattern "/specs/{provider}/{service}/{api}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -220,7 +220,7 @@ export def "ap-is get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($provider).json")
+  let full_url = (build-url $base ({provider: $provider} | format pattern "/{provider}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,7 +230,7 @@ export def "ap-is get" [
 #
 # GET /{provider}/services.json
 # operationId: getServices
-export def "servicesjson get" [
+export def "servicesjson get-services" [
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -243,7 +243,7 @@ export def "servicesjson get" [
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($provider)/services.json")
+  let full_url = (build-url $base ({provider: $provider} | format pattern "/{provider}/services.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

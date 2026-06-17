@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reference-data-locations-pois list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reference-data-locations-pois get-points-of-interest" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /reference-data/locations/pois
 # operationId: getPointsOfInterest
-export def "reference-data-locations-pois list" [
+export def "reference-data-locations-pois get-points-of-interest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,13 +104,13 @@ export def "reference-data-locations-pois list" [
   --latitude: float # Latitude (decimal coordinates) (format: double, e.g. 41.397158)
   --longitude: float # Longitude (decimal coordinates) (format: double, e.g. 2.160873)
   --radius: int # radius of the search in Kilometer. Can be from 0 to 20, default value is 1 Km. (default: 1)
-  --pagelimit: int # maximum items in one page (default: 10)
-  --pageoffset: int # start index of the requested page (default: 0)
+  --page-limit: int # maximum items in one page (default: 10)
+  --page-offset: int # start index of the requested page (default: 0)
   --categories: list # category of the location.   Multiple value can be selected using a comma i.e. SIGHTS, SHOPPING
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "page[limit]" $pagelimit "scalar") (serialize-qp "page[offset]" $pageoffset "scalar") (serialize-qp "categories" $categories "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[offset]" $page_offset "scalar") (serialize-qp "categories" $categories "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/reference-data/locations/pois" $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -121,7 +121,7 @@ export def "reference-data-locations-pois list" [
 #
 # GET /reference-data/locations/pois/by-square
 # operationId: getPointsOfInterestBySquare
-export def "reference-data-locations-pois-by-square get" [
+export def "reference-data-locations-pois-by-square get-points-of-interest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,13 +134,13 @@ export def "reference-data-locations-pois-by-square get" [
   --west: float # Longitude west of bounding box (decimal coordinates) (format: double, e.g. 2.160873)
   --south: float # Latitude south of bounding box (decimal coordinates) (format: double, e.g. 41.394582)
   --east: float # Longitude east of bounding box (decimal coordinates) (format: double, e.g. 2.177181)
-  --pagelimit: int # maximum items in one page (default: 10)
-  --pageoffset: int # start index of the requested page (default: 0)
+  --page-limit: int # maximum items in one page (default: 10)
+  --page-offset: int # start index of the requested page (default: 0)
   --categories: list # category of the location.   Multiple value can be selected using a comma i.e. SIGHTS, SHOPPING
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "north" $north "scalar") (serialize-qp "west" $west "scalar") (serialize-qp "south" $south "scalar") (serialize-qp "east" $east "scalar") (serialize-qp "page[limit]" $pagelimit "scalar") (serialize-qp "page[offset]" $pageoffset "scalar") (serialize-qp "categories" $categories "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "north" $north "scalar") (serialize-qp "west" $west "scalar") (serialize-qp "south" $south "scalar") (serialize-qp "east" $east "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[offset]" $page_offset "scalar") (serialize-qp "categories" $categories "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/reference-data/locations/pois/by-square" $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -151,8 +151,8 @@ export def "reference-data-locations-pois-by-square get" [
 #
 # GET /reference-data/locations/pois/{poisId}
 # operationId: getPointOfInterest
-export def "reference-data-locations-pois get" [
-  poisId: string
+export def "reference-data-locations-pois get-point-of-interest" [
+  pois_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "reference-data-locations-pois get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reference-data/locations/pois/($poisId)")
+  let full_url = (build-url $base ({pois_id: $pois_id} | format pattern "/reference-data/locations/pois/{pois_id}"))
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

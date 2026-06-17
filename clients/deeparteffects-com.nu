@@ -100,11 +100,11 @@ export def "noauth-result get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --submissionId: string
+  --submission-id: string
 ]: nothing -> record<status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "submissionId" $submissionId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "submissionId" $submission_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/noauth/result" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -140,18 +140,18 @@ export def "noauth-upload post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --imageBase64Encoded: string # Base64 decoded image
-  --imageSize: int # Image size in px. Picture will be resized for processing.
-  --optimizeForPrint: oneof<nothing, bool> # Use this flag to get an artwork optimized for print.
-  --partnerId: string # The unique identifier for a partner with dedicated api access.
-  --styleId: string # The unique identifier for a style
-  --useOriginalColors: oneof<nothing, bool> # Use this flag to use the original color from your photo for the artwork.
+  --image-base64-encoded: string # Base64 decoded image
+  --image-size: int # Image size in px. Picture will be resized for processing.
+  --optimize-for-print: oneof<nothing, bool> # Use this flag to get an artwork optimized for print.
+  --partner-id: string # The unique identifier for a partner with dedicated api access.
+  --style-id: string # The unique identifier for a style
+  --use-original-colors: oneof<nothing, bool> # Use this flag to use the original color from your photo for the artwork.
 ]: any -> record<submissionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/noauth/upload")
-  let body = {imageBase64Encoded: $imageBase64Encoded, imageSize: $imageSize, optimizeForPrint: $optimizeForPrint, partnerId: $partnerId, styleId: $styleId, useOriginalColors: $useOriginalColors} | compact
+  let body = {"imageBase64Encoded": $image_base64_encoded, "imageSize": $image_size, "optimizeForPrint": $optimize_for_print, "partnerId": $partner_id, "styleId": $style_id, "useOriginalColors": $use_original_colors} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

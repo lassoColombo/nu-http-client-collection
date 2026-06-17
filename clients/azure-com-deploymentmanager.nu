@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-deployment-manager-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-deployment-manager-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DeploymentManager/operations
 # operationId: Operations_List
-export def "providers-microsoft-deployment-manager-operations List" [
+export def "providers-microsoft-deployment-manager-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,9 +117,9 @@ export def "providers-microsoft-deployment-manager-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/artifactSources
 # operationId: ArtifactSources_List
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-artifact-sources List" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-artifact-sources list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,7 +133,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/artifactSources" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/artifactSources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,10 +143,10 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/artifactSources/{artifactSourceName}
 # operationId: ArtifactSources_Delete
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-artifact-sources Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  artifactSourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-artifact-sources delete" [
+  subscription_id: string
+  resource_group_name: string
+  artifact_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/artifactSources/($artifactSourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, artifact_source_name: $artifact_source_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/artifactSources/{artifact_source_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,10 +170,10 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/artifactSources/{artifactSourceName}
 # operationId: ArtifactSources_Get
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-artifact-sources Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  artifactSourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-artifact-sources get" [
+  subscription_id: string
+  resource_group_name: string
+  artifact_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/artifactSources/($artifactSourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, artifact_source_name: $artifact_source_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/artifactSources/{artifact_source_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,10 +197,10 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/artifactSources/{artifactSourceName}
 # operationId: ArtifactSources_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-artifact-sources CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  artifactSourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-artifact-sources create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  artifact_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,8 +218,8 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/artifactSources/($artifactSourceName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, artifact_source_name: $artifact_source_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/artifactSources/{artifact_source_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -230,9 +230,9 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts
 # operationId: Rollouts_List
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts List" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/rollouts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/rollouts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,10 +256,10 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts/{rolloutName}
 # operationId: Rollouts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  rolloutName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts delete" [
+  subscription_id: string
+  resource_group_name: string
+  rollout_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,7 +273,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/rollouts/($rolloutName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, rollout_name: $rollout_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/rollouts/{rollout_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -283,10 +283,10 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts/{rolloutName}
 # operationId: Rollouts_Get
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  rolloutName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts get" [
+  subscription_id: string
+  resource_group_name: string
+  rollout_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,12 +296,12 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --retryAttempt: int # Rollout retry attempt ordinal to get the result of. If not specified, result of the latest attempt will be returned.
+  --retry-attempt: int # Rollout retry attempt ordinal to get the result of. If not specified, result of the latest attempt will be returned.
 ]: nothing -> record<identity: record<identityIds: list<string>, type: string>, properties: record<artifactSourceId: string, buildVersion: string, stepGroups: list<record>, targetServiceTopologyId: string, operationInfo: record<endTime: string, error: record, retryAttempt: int, skipSucceededOnRetry: bool, startTime: string>, services: list<record>, status: string, totalRetryAttempts: int>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "retryAttempt" $retryAttempt "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/rollouts/($rolloutName)" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "retryAttempt" $retry_attempt "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, rollout_name: $rollout_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/rollouts/{rollout_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -313,10 +313,10 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 # operationId: Rollouts_CreateOrUpdate
 # --identity shape: {identityIds: list, type: string}
 # --properties shape: {artifactSourceId?: string, buildVersion: string, stepGroups: list, targetServiceTopologyId: string}
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  rolloutName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  rollout_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,8 +335,8 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/rollouts/($rolloutName)" $qp)
-  let body = {identity: $identity, properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, rollout_name: $rollout_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/rollouts/{rollout_name}") $qp)
+  let body = {"identity": $identity, "properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -347,10 +347,10 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts/{rolloutName}/cancel
 # operationId: Rollouts_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts-cancel Cancel" [
-  subscriptionId: string
-  resourceGroupName: string
-  rolloutName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts-cancel cancel" [
+  subscription_id: string
+  resource_group_name: string
+  rollout_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/rollouts/($rolloutName)/cancel" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, rollout_name: $rollout_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/rollouts/{rollout_name}/cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -374,10 +374,10 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts/{rolloutName}/restart
 # operationId: Rollouts_Restart
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts-restart Restart" [
-  subscriptionId: string
-  resourceGroupName: string
-  rolloutName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts-restart restart" [
+  subscription_id: string
+  resource_group_name: string
+  rollout_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,13 +386,13 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --skipSucceeded: oneof<nothing, bool> # If true, will skip all succeeded steps so far in the rollout. If false, will execute the entire rollout again regardless of the current state of individual resources. Defaults to false if not specified.
+  --skip-succeeded: oneof<nothing, bool> # If true, will skip all succeeded steps so far in the rollout. If false, will execute the entire rollout again regardless of the current state of individual resources. Defaults to false if not specified.
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<identity: record<identityIds: list<string>, type: string>, properties: record<artifactSourceId: string, buildVersion: string, stepGroups: list<record>, targetServiceTopologyId: string, operationInfo: record<endTime: string, error: record, retryAttempt: int, skipSucceededOnRetry: bool, startTime: string>, services: list<record>, status: string, totalRetryAttempts: int>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "skipSucceeded" $skipSucceeded "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/rollouts/($rolloutName)/restart" $qp)
+  let qp = [(serialize-qp "skipSucceeded" $skip_succeeded "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, rollout_name: $rollout_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/rollouts/{rollout_name}/restart") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -402,9 +402,9 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies
 # operationId: ServiceTopologies_List
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies List" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,7 +418,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/serviceTopologies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -428,10 +428,10 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}
 # operationId: ServiceTopologies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceTopologyName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies delete" [
+  subscription_id: string
+  resource_group_name: string
+  service_topology_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -445,7 +445,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_topology_name: $service_topology_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/serviceTopologies/{service_topology_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -455,10 +455,10 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}
 # operationId: ServiceTopologies_Get
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceTopologyName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies get" [
+  subscription_id: string
+  resource_group_name: string
+  service_topology_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -472,7 +472,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_topology_name: $service_topology_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/serviceTopologies/{service_topology_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -482,10 +482,10 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}
 # operationId: ServiceTopologies_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceTopologyName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  service_topology_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -503,8 +503,8 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_topology_name: $service_topology_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/serviceTopologies/{service_topology_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -515,10 +515,10 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services
 # operationId: Services_List
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services List" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceTopologyName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services list" [
+  subscription_id: string
+  resource_group_name: string
+  service_topology_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -532,7 +532,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)/services" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_topology_name: $service_topology_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/serviceTopologies/{service_topology_name}/services") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -542,11 +542,11 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}
 # operationId: Services_Delete
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceTopologyName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services delete" [
+  subscription_id: string
+  resource_group_name: string
+  service_topology_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,7 +560,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)/services/($serviceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_topology_name: $service_topology_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/serviceTopologies/{service_topology_name}/services/{service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -570,11 +570,11 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}
 # operationId: Services_Get
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceTopologyName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services get" [
+  subscription_id: string
+  resource_group_name: string
+  service_topology_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,7 +588,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)/services/($serviceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_topology_name: $service_topology_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/serviceTopologies/{service_topology_name}/services/{service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -598,11 +598,11 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}
 # operationId: Services_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceTopologyName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  service_topology_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -620,8 +620,8 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)/services/($serviceName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_topology_name: $service_topology_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/serviceTopologies/{service_topology_name}/services/{service_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -632,11 +632,11 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}/serviceUnits
 # operationId: ServiceUnits_List
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services-service-units List" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceTopologyName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services-service-units list" [
+  subscription_id: string
+  resource_group_name: string
+  service_topology_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -650,7 +650,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)/services/($serviceName)/serviceUnits" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_topology_name: $service_topology_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/serviceTopologies/{service_topology_name}/services/{service_name}/serviceUnits") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -660,12 +660,12 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}/serviceUnits/{serviceUnitName}
 # operationId: ServiceUnits_Delete
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services-service-units Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceTopologyName: string
-  serviceName: string
-  serviceUnitName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services-service-units delete" [
+  subscription_id: string
+  resource_group_name: string
+  service_topology_name: string
+  service_name: string
+  service_unit_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,7 +679,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)/services/($serviceName)/serviceUnits/($serviceUnitName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_topology_name: $service_topology_name, service_name: $service_name, service_unit_name: $service_unit_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/serviceTopologies/{service_topology_name}/services/{service_name}/serviceUnits/{service_unit_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -689,12 +689,12 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}/serviceUnits/{serviceUnitName}
 # operationId: ServiceUnits_Get
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services-service-units Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceTopologyName: string
-  serviceName: string
-  serviceUnitName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services-service-units get" [
+  subscription_id: string
+  resource_group_name: string
+  service_topology_name: string
+  service_name: string
+  service_unit_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -708,7 +708,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)/services/($serviceName)/serviceUnits/($serviceUnitName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_topology_name: $service_topology_name, service_name: $service_name, service_unit_name: $service_unit_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/serviceTopologies/{service_topology_name}/services/{service_name}/serviceUnits/{service_unit_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -718,12 +718,12 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}/serviceUnits/{serviceUnitName}
 # operationId: ServiceUnits_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services-service-units CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceTopologyName: string
-  serviceName: string
-  serviceUnitName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services-service-units create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  service_topology_name: string
+  service_name: string
+  service_unit_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,8 +741,8 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)/services/($serviceName)/serviceUnits/($serviceUnitName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_topology_name: $service_topology_name, service_name: $service_name, service_unit_name: $service_unit_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/serviceTopologies/{service_topology_name}/services/{service_name}/serviceUnits/{service_unit_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -753,9 +753,9 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/steps
 # operationId: Steps_List
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-steps List" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-steps list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -769,7 +769,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/steps" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/steps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -779,10 +779,10 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/steps/{stepName}
 # operationId: Steps_Delete
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-steps Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  stepName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-steps delete" [
+  subscription_id: string
+  resource_group_name: string
+  step_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,7 +796,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/steps/($stepName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, step_name: $step_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/steps/{step_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -806,10 +806,10 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/steps/{stepName}
 # operationId: Steps_Get
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-steps Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  stepName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-steps get" [
+  subscription_id: string
+  resource_group_name: string
+  step_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -823,7 +823,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/steps/($stepName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, step_name: $step_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/steps/{step_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -834,10 +834,10 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/steps/{stepName}
 # operationId: Steps_CreateOrUpdate
 # --properties shape: {stepType: "Wait"|"HealthCheck"}
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-steps CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  stepName: string
+export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-steps create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  step_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -855,8 +855,8 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/steps/($stepName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, step_name: $step_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DeploymentManager/steps/{step_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

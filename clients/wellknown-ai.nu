@@ -113,7 +113,7 @@ export def "plugins get" [
 #
 # GET /plugins
 # operationId: getProvider
-export def "plugins get-1" [
+export def "plugins get-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

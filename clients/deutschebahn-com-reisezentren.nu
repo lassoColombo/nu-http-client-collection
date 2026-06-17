@@ -128,7 +128,7 @@ export def "reisezentren-loc list" [
 ]: nothing -> record<address: string, city: string, id: int, lat: float, lon: float, name: string, openingTimes: record<fri: list<string>, mon: list<string>, sat: list<string>, sun: list<string>, thu: list<string>, tue: list<string>, wed: list<string>>, postCode: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reisezentren/loc/($lat)/($lon)")
+  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/reisezentren/loc/{lat}/{lon}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -152,7 +152,7 @@ export def "reisezentren-loc get" [
 ]: nothing -> record<address: string, city: string, id: int, lat: float, lon: float, name: string, openingTimes: record<fri: list<string>, mon: list<string>, sat: list<string>, sun: list<string>, thu: list<string>, tue: list<string>, wed: list<string>>, postCode: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reisezentren/loc/($lat)/($lon)/($dist)")
+  let full_url = (build-url $base ({lat: $lat, lon: $lon, dist: $dist} | format pattern "/reisezentren/loc/{lat}/{lon}/{dist}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -174,7 +174,7 @@ export def "reisezentren get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reisezentren/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/reisezentren/{id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

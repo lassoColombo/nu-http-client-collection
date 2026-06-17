@@ -240,7 +240,7 @@ export def "globalusergroups-members get" [
 ]: nothing -> table<authorizationPossible: bool, displayName: string, externalId: string, firstLogin: string, firstName: string, hardLock: bool, homeOrg: int, id: string, lastLogin: string, lastName: string, locked: bool, prefs: record<locale: string>, primaryEmail: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/globalusergroups/($groupid)/members")
+  let full_url = (build-url $base ({groupid: $groupid} | format pattern "/globalusergroups/{groupid}/members"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -280,17 +280,17 @@ export def "orgunits post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --caller: string # The id of the user that initiated this operation (format: uuid, e.g. 81590981-1e05-4fd5-aa15-15bc4b06cf7f)
-  --clientNumber: string # A client number. Sometimes used when communicating with external system. Must be unique if specified. (e.g. X-1234)
+  --client-number: string # A client number. Sometimes used when communicating with external system. Must be unique if specified. (e.g. X-1234)
   --country: string # The country code that best matches the organization unit. If unspecified the platform default will be set. (format: locale, e.g. se)
-  displayName: string # The name shown for the organization unit (e.g. Sample Corp)
-  --externalId: string # The external id (foreign key). Must not exceed 255 characters.
+  display_name: string # The name shown for the organization unit (e.g. Sample Corp)
+  --external-id: string # The external id (foreign key). Must not exceed 255 characters.
   --parent: float # A Organization Unit id of the parent Organization Unit (optional). (format: id64, e.g. 1234)
 ]: any -> record<ouId: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orgunits")
-  let body = {caller: $caller, clientNumber: $clientNumber, country: $country, displayName: $displayName, externalId: $externalId, parent: $parent} | compact
+  let body = {"caller": $caller, "clientNumber": $client_number, "country": $country, "displayName": $display_name, "externalId": $external_id, "parent": $parent} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -313,7 +313,7 @@ export def "orgunits get" [
 ]: nothing -> record<externalId: string, id: int, name: string, parentId: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)")
+  let full_url = (build-url $base ({orgid: $orgid} | format pattern "/orgunits/{orgid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -333,17 +333,17 @@ export def "orgunits patch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --caller: string # The id of the user that initiated this operation (format: uuid, e.g. 81590981-1e05-4fd5-aa15-15bc4b06cf7f)
-  --clientNumber: string # A client number. Sometimes used when communicating with external system. Must be unique if specified. (e.g. X-1234)
+  --client-number: string # A client number. Sometimes used when communicating with external system. Must be unique if specified. (e.g. X-1234)
   --country: string # The country code that best matches the organization unit. If unspecified the platform default will be set. (format: locale, e.g. se)
-  --displayName: string # The name shown for the organization unit (e.g. Sample Corp)
-  --externalId: string # The external id (foreign key). Must not exceed 255 characters.
+  --display-name: string # The name shown for the organization unit (e.g. Sample Corp)
+  --external-id: string # The external id (foreign key). Must not exceed 255 characters.
   --parent: float # A Organization Unit id of the parent Organization Unit (optional). (format: id64, e.g. 1234)
 ]: any -> record<code: int, field: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)")
-  let body = {caller: $caller, clientNumber: $clientNumber, country: $country, displayName: $displayName, externalId: $externalId, parent: $parent} | compact
+  let full_url = (build-url $base ({orgid: $orgid} | format pattern "/orgunits/{orgid}"))
+  let body = {"caller": $caller, "clientNumber": $client_number, "country": $country, "displayName": $display_name, "externalId": $external_id, "parent": $parent} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -366,7 +366,7 @@ export def "orgunits-projects list" [
 ]: nothing -> table<adminUrl: string, country: string, created: string, createdBy: string, designId: int, externalId: string, id: int, locale: string, name: string, note: string, orgId: int, status: string, timezone: string, userDescription: string, userTitle: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/projects")
+  let full_url = (build-url $base ({orgid: $orgid} | format pattern "/orgunits/{orgid}/projects"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -386,20 +386,20 @@ export def "orgunits-projects post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # The country code. Default value will be used if not specified (format: countrycode, e.g. SE)
-  --createdBy: string # The id of the user that created the project. If the creator is not known this value can be *null* or not specified (format: uuid, e.g. 8c102c8e-fabd-4c8a-b245-4d2d2f77fc4b)
-  designId: int # The id of the design this project should be based on (format: int64)
+  --created-by: string # The id of the user that created the project. If the creator is not known this value can be *null* or not specified (format: uuid, e.g. 8c102c8e-fabd-4c8a-b245-4d2d2f77fc4b)
+  design_id: int # The id of the design this project should be based on (format: int64)
   --locale: string # The primary locale for this project. Default value will be used if not specified (format: locale, e.g. en-US)
   name: string # The internal name of the project
   --note: string # The internal note field
   --timezone: string # The main timezone for the project. Do not specify for default timezone (format: timezone, e.g. Europe/Stockholm)
-  --userDescription: string # The description presented to participants. Do not specify for default value from design
-  --userTitle: string # The title presented to participants. Do not specify for default value from design
+  --user-description: string # The description presented to participants. Do not specify for default value from design
+  --user-title: string # The title presented to participants. Do not specify for default value from design
 ]: any -> record<adminUrl: string, country: string, created: string, createdBy: string, designId: int, externalId: string, id: int, locale: string, name: string, note: string, orgId: int, status: string, timezone: string, userDescription: string, userTitle: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/projects")
-  let body = {country: $country, createdBy: $createdBy, designId: $designId, locale: $locale, name: $name, note: $note, timezone: $timezone, userDescription: $userDescription, userTitle: $userTitle} | compact
+  let full_url = (build-url $base ({orgid: $orgid} | format pattern "/orgunits/{orgid}/projects"))
+  let body = {"country": $country, "createdBy": $created_by, "designId": $design_id, "locale": $locale, "name": $name, "note": $note, "timezone": $timezone, "userDescription": $user_description, "userTitle": $user_title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -423,7 +423,7 @@ export def "orgunits-projects delete" [
 ]: nothing -> record<code: int, field: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/projects/($projectid)")
+  let full_url = (build-url $base ({orgid: $orgid, projectid: $projectid} | format pattern "/orgunits/{orgid}/projects/{projectid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -446,7 +446,7 @@ export def "orgunits-projects get" [
 ]: nothing -> record<adminUrl: string, country: string, created: string, createdBy: string, designId: int, externalId: string, id: int, locale: string, name: string, note: string, orgId: int, status: string, timezone: string, userDescription: string, userTitle: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/projects/($projectid)")
+  let full_url = (build-url $base ({orgid: $orgid, projectid: $projectid} | format pattern "/orgunits/{orgid}/projects/{projectid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -472,14 +472,14 @@ export def "orgunits-projects patch" [
   --note: string # The internal note field
   --status: string@status-completer # Project status. Can be either ACTIVATED, NEW or DISABLED (e.g. ACTIVATED)
   --timezone: string # The main timezone for the project (format: timezone, e.g. Europe/Stockholm)
-  --userDescription: string # The description presented to participants. This value can be *null*.
-  --userTitle: string # The title presented to participants
+  --user-description: string # The description presented to participants. This value can be *null*.
+  --user-title: string # The title presented to participants
 ]: any -> record<adminUrl: string, country: string, created: string, createdBy: string, designId: int, externalId: string, id: int, locale: string, name: string, note: string, orgId: int, status: string, timezone: string, userDescription: string, userTitle: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/projects/($projectid)")
-  let body = {country: $country, locale: $locale, name: $name, note: $note, status: $status, timezone: $timezone, userDescription: $userDescription, userTitle: $userTitle} | compact
+  let full_url = (build-url $base ({orgid: $orgid, projectid: $projectid} | format pattern "/orgunits/{orgid}/projects/{projectid}"))
+  let body = {"country": $country, "locale": $locale, "name": $name, "note": $note, "status": $status, "timezone": $timezone, "userDescription": $user_description, "userTitle": $user_title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -503,7 +503,7 @@ export def "orgunits-projects-participants get" [
 ]: nothing -> table<accessLink: string, activated: bool, activitiesCompleted: float, activitiesTotal: float, errorMessage: string, expiration: string, externalId: string, firstAccess: string, firstActivation: string, firstMail: string, id: int, inError: bool, lastAccess: string, lastActivation: string, lastMail: string, projectId: int, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/projects/($projectid)/participants")
+  let full_url = (build-url $base ({orgid: $orgid, projectid: $projectid} | format pattern "/orgunits/{orgid}/projects/{projectid}/participants"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -530,8 +530,8 @@ export def "orgunits-projects-participants post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/projects/($projectid)/participants")
-  let body = {email: $email, extid: $extid, userid: $userid} | compact
+  let full_url = (build-url $base ({orgid: $orgid, projectid: $projectid} | format pattern "/orgunits/{orgid}/projects/{projectid}/participants"))
+  let body = {"email": $email, "extid": $extid, "userid": $userid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -544,7 +544,7 @@ export def "orgunits-projects-participants post" [
 export def "orgunits-projects-participants-participant-id delete" [
   orgid: int
   projectid: int
-  participantId: int
+  participant_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -556,7 +556,7 @@ export def "orgunits-projects-participants-participant-id delete" [
 ]: nothing -> record<code: int, field: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/projects/($projectid)/participants/$($participantId)")
+  let full_url = (build-url $base ({orgid: $orgid, projectid: $projectid, participant_id: $participant_id} | format pattern "/orgunits/{orgid}/projects/{projectid}/participants/${participant_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -568,7 +568,7 @@ export def "orgunits-projects-participants-participant-id delete" [
 export def "orgunits-projects-participants-participant-id-activate post" [
   orgid: int
   projectid: int
-  participantId: int
+  participant_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,7 +580,7 @@ export def "orgunits-projects-participants-participant-id-activate post" [
 ]: nothing -> record<code: int, field: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/projects/($projectid)/participants/$($participantId)/activate")
+  let full_url = (build-url $base ({orgid: $orgid, projectid: $projectid, participant_id: $participant_id} | format pattern "/orgunits/{orgid}/projects/{projectid}/participants/${participant_id}/activate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -592,7 +592,7 @@ export def "orgunits-projects-participants-participant-id-activate post" [
 export def "orgunits-projects-participants-participant-id-loginlink post" [
   orgid: int
   projectid: int
-  participantId: int
+  participant_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -604,7 +604,7 @@ export def "orgunits-projects-participants-participant-id-loginlink post" [
 ]: nothing -> record<link: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/projects/($projectid)/participants/$($participantId)/loginlink")
+  let full_url = (build-url $base ({orgid: $orgid, projectid: $projectid, participant_id: $participant_id} | format pattern "/orgunits/{orgid}/projects/{projectid}/participants/${participant_id}/loginlink"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -627,7 +627,7 @@ export def "orgunits-projects-teammembers get" [
 ]: nothing -> table<roles: record<name: string, roleid: string>, userid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/projects/($projectid)/teammembers")
+  let full_url = (build-url $base ({orgid: $orgid, projectid: $projectid} | format pattern "/orgunits/{orgid}/projects/{projectid}/teammembers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -649,7 +649,7 @@ export def "orgunits-usergroups list" [
 ]: nothing -> table<children: list<any>, globalId: int, groupId: int, name: string, parent: int, userGroup: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/usergroups")
+  let full_url = (build-url $base ({orgid: $orgid} | format pattern "/orgunits/{orgid}/usergroups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -674,8 +674,8 @@ export def "orgunits-usergroups post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/usergroups")
-  let body = {name: $name, parent: $parent} | compact
+  let full_url = (build-url $base ({orgid: $orgid} | format pattern "/orgunits/{orgid}/usergroups"))
+  let body = {"name": $name, "parent": $parent} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -699,7 +699,7 @@ export def "orgunits-usergroups get" [
 ]: nothing -> record<children: list<any>, globalId: int, groupId: int, name: string, parent: int, userGroup: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/usergroups/($groupid)")
+  let full_url = (build-url $base ({orgid: $orgid, groupid: $groupid} | format pattern "/orgunits/{orgid}/usergroups/{groupid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -722,7 +722,7 @@ export def "orgunits-usergroups-members get" [
 ]: nothing -> table<authorizationPossible: bool, displayName: string, externalId: string, firstLogin: string, firstName: string, hardLock: bool, homeOrg: int, id: string, lastLogin: string, lastName: string, locked: bool, prefs: record<locale: string>, primaryEmail: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/usergroups/($groupid)/members")
+  let full_url = (build-url $base ({orgid: $orgid, groupid: $groupid} | format pattern "/orgunits/{orgid}/usergroups/{groupid}/members"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -747,8 +747,8 @@ export def "orgunits-usergroups-members post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/usergroups/($groupid)/members")
-  let body = {uuid: $uuid} | compact
+  let full_url = (build-url $base ({orgid: $orgid, groupid: $groupid} | format pattern "/orgunits/{orgid}/usergroups/{groupid}/members"))
+  let body = {"uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -773,7 +773,7 @@ export def "orgunits-usergroups-members delete" [
 ]: nothing -> record<code: int, field: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgunits/($orgid)/usergroups/($groupid)/members/($uuid)")
+  let full_url = (build-url $base ({orgid: $orgid, groupid: $groupid, uuid: $uuid} | format pattern "/orgunits/{orgid}/usergroups/{groupid}/members/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -815,20 +815,20 @@ export def "users post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --displayName: string # The name shown when the user is listed (e.g. Jane Doe)
-  --externalId: string # The external id (foreign key). Must not exceed 255 characters.
-  --firstName: string # The first (given) name of the user (e.g. Jane)
-  --hardLock: oneof<nothing, bool> # True if the user should be locked from the system
-  --homeOrg: int # The primary organization for the user. Must match the id of an Organization Unit. (format: int64, e.g. 1234)
-  --lastName: any # The last name (surname) of the user (format: string, e.g. Doe)
+  --display-name: string # The name shown when the user is listed (e.g. Jane Doe)
+  --external-id: string # The external id (foreign key). Must not exceed 255 characters.
+  --first-name: string # The first (given) name of the user (e.g. Jane)
+  --hard-lock: oneof<nothing, bool> # True if the user should be locked from the system
+  --home-org: int # The primary organization for the user. Must match the id of an Organization Unit. (format: int64, e.g. 1234)
+  --last-name: any # The last name (surname) of the user (format: string, e.g. Doe)
   --locale: string # The user's preferred language/locale setting. Affects date and number formatting. (format: locale, e.g. en-US)
-  --primaryEmail: string # The primary email for the user. Used for communication from the platform. (e.g. jane.doe@example.com)
+  --primary-email: string # The primary email for the user. Used for communication from the platform. (e.g. jane.doe@example.com)
 ]: any -> record<userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users")
-  let body = {displayName: $displayName, externalId: $externalId, firstName: $firstName, hardLock: $hardLock, homeOrg: $homeOrg, lastName: $lastName, locale: $locale, primaryEmail: $primaryEmail} | compact
+  let body = {"displayName": $display_name, "externalId": $external_id, "firstName": $first_name, "hardLock": $hard_lock, "homeOrg": $home_org, "lastName": $last_name, "locale": $locale, "primaryEmail": $primary_email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -851,7 +851,7 @@ export def "users get" [
 ]: nothing -> record<authorizationPossible: bool, displayName: string, externalId: string, firstLogin: string, firstName: string, hardLock: bool, homeOrg: int, id: string, lastLogin: string, lastName: string, locked: bool, prefs: record<locale: string>, primaryEmail: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($userid)")
+  let full_url = (build-url $base ({userid: $userid} | format pattern "/users/{userid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -870,20 +870,20 @@ export def "users patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --displayName: string # The name shown when the user is listed (e.g. Jane Doe)
-  --externalId: string # The external id (foreign key). Must not exceed 255 characters.
-  --firstName: string # The first (given) name of the user (e.g. Jane)
-  --hardLock: oneof<nothing, bool> # True if the user should be locked from the system
-  --homeOrg: int # The primary organization for the user. Must match the id of an Organization Unit. (format: int64, e.g. 1234)
-  --lastName: any # The last name (surname) of the user (format: string, e.g. Doe)
+  --display-name: string # The name shown when the user is listed (e.g. Jane Doe)
+  --external-id: string # The external id (foreign key). Must not exceed 255 characters.
+  --first-name: string # The first (given) name of the user (e.g. Jane)
+  --hard-lock: oneof<nothing, bool> # True if the user should be locked from the system
+  --home-org: int # The primary organization for the user. Must match the id of an Organization Unit. (format: int64, e.g. 1234)
+  --last-name: any # The last name (surname) of the user (format: string, e.g. Doe)
   --locale: string # The user's preferred language/locale setting. Affects date and number formatting. (format: locale, e.g. en-US)
-  --primaryEmail: string # The primary email for the user. Used for communication from the platform. (e.g. jane.doe@example.com)
+  --primary-email: string # The primary email for the user. Used for communication from the platform. (e.g. jane.doe@example.com)
 ]: any -> record<code: int, field: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($userid)")
-  let body = {displayName: $displayName, externalId: $externalId, firstName: $firstName, hardLock: $hardLock, homeOrg: $homeOrg, lastName: $lastName, locale: $locale, primaryEmail: $primaryEmail} | compact
+  let full_url = (build-url $base ({userid: $userid} | format pattern "/users/{userid}"))
+  let body = {"displayName": $display_name, "externalId": $external_id, "firstName": $first_name, "hardLock": $hard_lock, "homeOrg": $home_org, "lastName": $last_name, "locale": $locale, "primaryEmail": $primary_email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -895,7 +895,7 @@ export def "users patch" [
 # GET /users/{userid}/pic?key={APIKEY}
 export def "users-pic-key-apikey get" [
   userid: string
-  APIKEY: string
+  apikey: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -907,7 +907,7 @@ export def "users-pic-key-apikey get" [
 ]: nothing -> record<code: int, field: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($userid)/pic?key=($APIKEY)")
+  let full_url = (build-url $base ({userid: $userid, apikey: $apikey} | format pattern "/users/{userid}/pic?key={apikey}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -929,7 +929,7 @@ export def "users-project-participations get" [
 ]: nothing -> record<accessLink: string, activated: bool, activitiesCompleted: float, activitiesTotal: float, errorMessage: string, expiration: string, externalId: string, firstAccess: string, firstActivation: string, firstMail: string, id: int, inError: bool, lastAccess: string, lastActivation: string, lastMail: string, projectId: int, projectName: string, projectOrgId: int, projectStatus: string, projectThumbnail: string, projectUserTitle: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($userid)/projectParticipations")
+  let full_url = (build-url $base ({userid: $userid} | format pattern "/users/{userid}/projectParticipations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

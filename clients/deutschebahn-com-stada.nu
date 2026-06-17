@@ -134,7 +134,7 @@ export def "stations get" [
 ]: nothing -> record<limit: int, offset: int, result: table<DBinformation: record, aufgabentraeger: record, category: int, evaNumbers: list, federalState: string, hasBicycleParking: bool, hasCarRental: bool, hasDBLounge: bool, hasLocalPublicTransport: bool, hasLockerSystem: bool, hasLostAndFound: bool, hasMobilityService: string, hasParking: bool, hasPublicFacilities: bool, hasRailwayMission: bool, hasSteplessAccess: string, hasTaxiRank: bool, hasTravelCenter: bool, hasTravelNecessities: bool, hasWiFi: bool, localServiceStaff: record, mailingAdress: record, name: string, number: int, priceCategory: int, regionalbereich: record, riL100Identifiers: list, stationManagement: record, szentrale: record, timetableOffice: record>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stations/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/stations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -180,7 +180,7 @@ export def "szentralen get" [
 ]: nothing -> record<limit: int, offset: int, result: table<address: record, email: string, internalFaxNumber: string, internalPhoneNumber: string, mobilePhoneNumber: string, name: string, number: int, publicFaxNumber: string, publicPhoneNumber: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/szentralen/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/szentralen/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

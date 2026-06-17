@@ -66,13 +66,13 @@ def base-url-completer [] { ["https://chat.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
 # Completers for enum parameters
-def Type-completer [] { ["private" "public"] }
-def X-Twilio-Webhook-Enabled-completer [] { ["false" "true"] }
+def type-completer [] { ["private" "public"] }
+def x-twilio-webhook-enabled-completer [] { ["false" "true"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "services-channels UpdateChannel" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "services-channels update" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,9 +96,9 @@ export def commands []: nothing -> table {
 #
 # POST /v3/Services/{ServiceSid}/Channels/{Sid}
 # operationId: UpdateChannel
-export def "services-channels UpdateChannel" [
-  ServiceSid: string
-  Sid: string
+export def "services-channels update" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,17 +107,17 @@ export def "services-channels UpdateChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
-  --MessagingServiceSid: string # The unique ID of the [Messaging Service](https://www.twilio.com/docs/sms/services/api) this channel belongs to.
-  --Type: string@Type-completer
+  --x-twilio-webhook-enabled: string@x-twilio-webhook-enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
+  --messaging-service-sid: string # The unique ID of the [Messaging Service](https://www.twilio.com/docs/sms/services/api) this channel belongs to.
+  --type: string@type-completer
 ]: any -> record<account_sid: string, attributes: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, members_count: int, messages_count: int, messaging_service_sid: string, service_sid: string, sid: string, type: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://chat.twilio.com")
-  let full_url = (build-url $base $"/v3/Services/($ServiceSid)/Channels/($Sid)")
-  let body = {MessagingServiceSid: $MessagingServiceSid, Type: $Type} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v3/Services/{service_sid}/Channels/{sid}"))
+  let body = {"MessagingServiceSid": $messaging_service_sid, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Twilio-Webhook-Enabled": $X_Twilio_Webhook_Enabled} | compact
+  let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

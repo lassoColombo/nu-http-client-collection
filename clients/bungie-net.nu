@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["x-api-key" "bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app-api-usage AppGetApplicationApiUsage" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app-api-usage get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,8 +94,8 @@ export def commands []: nothing -> table {
 #
 # GET /App/ApiUsage/{applicationId}/
 # operationId: App.GetApplicationApiUsage
-export def "app-api-usage AppGetApplicationApiUsage" [
-  applicationId: int
+export def "app-api-usage get" [
+  application_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "app-api-usage AppGetApplicationApiUsage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "end" $end "scalar") (serialize-qp "start" $start "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/App/ApiUsage/($applicationId)/" $qp)
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/App/ApiUsage/{application_id}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,7 +120,7 @@ export def "app-api-usage AppGetApplicationApiUsage" [
 #
 # GET /App/FirstParty/
 # operationId: App.GetBungieApplications
-export def "app-first-party AppGetBungieApplications" [
+export def "app-first-party get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,10 +142,10 @@ export def "app-first-party AppGetBungieApplications" [
 #
 # GET /CommunityContent/Get/{sort}/{mediaFilter}/{page}/
 # operationId: CommunityContent.GetCommunityContent
-export def "community-content-get CommunityContentGetCommunityContent" [
-  mediaFilter: int
-  page: int
+export def "community-content-get get" [
   sort: int
+  media_filter: int
+  page: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,7 +157,7 @@ export def "community-content-get CommunityContentGetCommunityContent" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/CommunityContent/Get/($sort)/($mediaFilter)/($page)/")
+  let full_url = (build-url $base ({sort: $sort, media_filter: $media_filter, page: $page} | format pattern "/CommunityContent/Get/{sort}/{media_filter}/{page}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -167,7 +167,7 @@ export def "community-content-get CommunityContentGetCommunityContent" [
 #
 # GET /Content/GetContentById/{id}/{locale}/
 # operationId: Content.GetContentById
-export def "content-get-content-by-id ContentGetContentById" [
+export def "content-get-content-by-id get" [
   id: int
   locale: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -183,7 +183,7 @@ export def "content-get-content-by-id ContentGetContentById" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "head" $head "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Content/GetContentById/($id)/($locale)/" $qp)
+  let full_url = (build-url $base ({id: $id, locale: $locale} | format pattern "/Content/GetContentById/{id}/{locale}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -193,10 +193,10 @@ export def "content-get-content-by-id ContentGetContentById" [
 #
 # GET /Content/GetContentByTagAndType/{tag}/{type}/{locale}/
 # operationId: Content.GetContentByTagAndType
-export def "content-get-content-by-tag-and-type ContentGetContentByTagAndType" [
-  locale: string
+export def "content-get-content-by-tag-and-type get" [
   tag: string
   type: string
+  locale: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "content-get-content-by-tag-and-type ContentGetContentByTagAndType" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "head" $head "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Content/GetContentByTagAndType/($tag)/($type)/($locale)/" $qp)
+  let full_url = (build-url $base ({tag: $tag, type: $type, locale: $locale} | format pattern "/Content/GetContentByTagAndType/{tag}/{type}/{locale}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -220,7 +220,7 @@ export def "content-get-content-by-tag-and-type ContentGetContentByTagAndType" [
 #
 # GET /Content/GetContentType/{type}/
 # operationId: Content.GetContentType
-export def "content-get-content-type ContentGetContentType" [
+export def "content-get-content-type get" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,7 +233,7 @@ export def "content-get-content-type ContentGetContentType" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Content/GetContentType/($type)/")
+  let full_url = (build-url $base ({type: $type} | format pattern "/Content/GetContentType/{type}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -243,8 +243,8 @@ export def "content-get-content-type ContentGetContentType" [
 #
 # GET /Content/Rss/NewsArticles/{pageToken}/
 # operationId: Content.RssNewsArticles
-export def "content-rss-news-articles ContentRssNewsArticles" [
-  pageToken: string
+export def "content-rss-news-articles get" [
+  page_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,7 +259,7 @@ export def "content-rss-news-articles ContentRssNewsArticles" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "categoryfilter" $categoryfilter "scalar") (serialize-qp "includebody" $includebody "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Content/Rss/NewsArticles/($pageToken)/" $qp)
+  let full_url = (build-url $base ({page_token: $page_token} | format pattern "/Content/Rss/NewsArticles/{page_token}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -269,7 +269,7 @@ export def "content-rss-news-articles ContentRssNewsArticles" [
 #
 # GET /Content/Search/{locale}/
 # operationId: Content.SearchContentWithText
-export def "content-search ContentSearchContentWithText" [
+export def "content-search get" [
   locale: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +289,7 @@ export def "content-search ContentSearchContentWithText" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ctype" $ctype "scalar") (serialize-qp "currentpage" $currentpage "scalar") (serialize-qp "head" $head "scalar") (serialize-qp "searchtext" $searchtext "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Content/Search/($locale)/" $qp)
+  let full_url = (build-url $base ({locale: $locale} | format pattern "/Content/Search/{locale}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,10 +299,10 @@ export def "content-search ContentSearchContentWithText" [
 #
 # GET /Content/SearchContentByTagAndType/{tag}/{type}/{locale}/
 # operationId: Content.SearchContentByTagAndType
-export def "content-search-content-by-tag-and-type ContentSearchContentByTagAndType" [
-  locale: string
+export def "content-search-content-by-tag-and-type get" [
   tag: string
   type: string
+  locale: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "content-search-content-by-tag-and-type ContentSearchContentByTagAndT
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "currentpage" $currentpage "scalar") (serialize-qp "head" $head "scalar") (serialize-qp "itemsperpage" $itemsperpage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Content/SearchContentByTagAndType/($tag)/($type)/($locale)/" $qp)
+  let full_url = (build-url $base ({tag: $tag, type: $type, locale: $locale} | format pattern "/Content/SearchContentByTagAndType/{tag}/{type}/{locale}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -328,7 +328,7 @@ export def "content-search-content-by-tag-and-type ContentSearchContentByTagAndT
 #
 # GET /Content/SearchHelpArticles/{searchtext}/{size}/
 # operationId: Content.SearchHelpArticles
-export def "content-search-help-articles ContentSearchHelpArticles" [
+export def "content-search-help-articles get" [
   searchtext: string
   size: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -342,7 +342,7 @@ export def "content-search-help-articles ContentSearchHelpArticles" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Content/SearchHelpArticles/($searchtext)/($size)/")
+  let full_url = (build-url $base ({searchtext: $searchtext, size: $size} | format pattern "/Content/SearchHelpArticles/{searchtext}/{size}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -352,7 +352,7 @@ export def "content-search-help-articles ContentSearchHelpArticles" [
 #
 # POST /Destiny2/Actions/Items/EquipItem/
 # operationId: Destiny2.EquipItem
-export def "destiny2-actions-items-equip-item Destiny2EquipItem" [
+export def "destiny2-actions-items-equip-item post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,7 +374,7 @@ export def "destiny2-actions-items-equip-item Destiny2EquipItem" [
 #
 # POST /Destiny2/Actions/Items/EquipItems/
 # operationId: Destiny2.EquipItems
-export def "destiny2-actions-items-equip-items Destiny2EquipItems" [
+export def "destiny2-actions-items-equip-items post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,7 +396,7 @@ export def "destiny2-actions-items-equip-items Destiny2EquipItems" [
 #
 # POST /Destiny2/Actions/Items/InsertSocketPlug/
 # operationId: Destiny2.InsertSocketPlug
-export def "destiny2-actions-items-insert-socket-plug Destiny2InsertSocketPlug" [
+export def "destiny2-actions-items-insert-socket-plug post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,7 +418,7 @@ export def "destiny2-actions-items-insert-socket-plug Destiny2InsertSocketPlug" 
 #
 # POST /Destiny2/Actions/Items/InsertSocketPlugFree/
 # operationId: Destiny2.InsertSocketPlugFree
-export def "destiny2-actions-items-insert-socket-plug-free Destiny2InsertSocketPlugFree" [
+export def "destiny2-actions-items-insert-socket-plug-free post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,7 +440,7 @@ export def "destiny2-actions-items-insert-socket-plug-free Destiny2InsertSocketP
 #
 # POST /Destiny2/Actions/Items/PullFromPostmaster/
 # operationId: Destiny2.PullFromPostmaster
-export def "destiny2-actions-items-pull-from-postmaster Destiny2PullFromPostmaster" [
+export def "destiny2-actions-items-pull-from-postmaster post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -462,7 +462,7 @@ export def "destiny2-actions-items-pull-from-postmaster Destiny2PullFromPostmast
 #
 # POST /Destiny2/Actions/Items/SetLockState/
 # operationId: Destiny2.SetItemLockState
-export def "destiny2-actions-items-set-lock-state Destiny2SetItemLockState" [
+export def "destiny2-actions-items-set-lock-state post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "destiny2-actions-items-set-lock-state Destiny2SetItemLockState" [
 #
 # POST /Destiny2/Actions/Items/SetTrackedState/
 # operationId: Destiny2.SetQuestTrackedState
-export def "destiny2-actions-items-set-tracked-state Destiny2SetQuestTrackedState" [
+export def "destiny2-actions-items-set-tracked-state post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -506,7 +506,7 @@ export def "destiny2-actions-items-set-tracked-state Destiny2SetQuestTrackedStat
 #
 # POST /Destiny2/Actions/Items/TransferItem/
 # operationId: Destiny2.TransferItem
-export def "destiny2-actions-items-transfer-item Destiny2TransferItem" [
+export def "destiny2-actions-items-transfer-item post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -528,7 +528,7 @@ export def "destiny2-actions-items-transfer-item Destiny2TransferItem" [
 #
 # POST /Destiny2/Actions/Loadouts/ClearLoadout/
 # operationId: Destiny2.ClearLoadout
-export def "destiny2-actions-loadouts-clear-loadout Destiny2ClearLoadout" [
+export def "destiny2-actions-loadouts-clear-loadout post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -550,7 +550,7 @@ export def "destiny2-actions-loadouts-clear-loadout Destiny2ClearLoadout" [
 #
 # POST /Destiny2/Actions/Loadouts/EquipLoadout/
 # operationId: Destiny2.EquipLoadout
-export def "destiny2-actions-loadouts-equip-loadout Destiny2EquipLoadout" [
+export def "destiny2-actions-loadouts-equip-loadout post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "destiny2-actions-loadouts-equip-loadout Destiny2EquipLoadout" [
 #
 # POST /Destiny2/Actions/Loadouts/SnapshotLoadout/
 # operationId: Destiny2.SnapshotLoadout
-export def "destiny2-actions-loadouts-snapshot-loadout Destiny2SnapshotLoadout" [
+export def "destiny2-actions-loadouts-snapshot-loadout post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,7 +594,7 @@ export def "destiny2-actions-loadouts-snapshot-loadout Destiny2SnapshotLoadout" 
 #
 # POST /Destiny2/Actions/Loadouts/UpdateLoadoutIdentifiers/
 # operationId: Destiny2.UpdateLoadoutIdentifiers
-export def "destiny2-actions-loadouts-update-loadout-identifiers Destiny2UpdateLoadoutIdentifiers" [
+export def "destiny2-actions-loadouts-update-loadout-identifiers post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,9 +616,9 @@ export def "destiny2-actions-loadouts-update-loadout-identifiers Destiny2UpdateL
 #
 # GET /Destiny2/Armory/Search/{type}/{searchTerm}/
 # operationId: Destiny2.SearchDestinyEntities
-export def "destiny2-armory-search Destiny2SearchDestinyEntities" [
-  searchTerm: string
+export def "destiny2-armory-search get" [
   type: string
+  search_term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,7 +632,7 @@ export def "destiny2-armory-search Destiny2SearchDestinyEntities" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Destiny2/Armory/Search/($type)/($searchTerm)/" $qp)
+  let full_url = (build-url $base ({type: $type, search_term: $search_term} | format pattern "/Destiny2/Armory/Search/{type}/{search_term}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -642,7 +642,7 @@ export def "destiny2-armory-search Destiny2SearchDestinyEntities" [
 #
 # POST /Destiny2/Awa/AwaProvideAuthorizationResult/
 # operationId: Destiny2.AwaProvideAuthorizationResult
-export def "destiny2-awa-awa-provide-authorization-result Destiny2AwaProvideAuthorizationResult" [
+export def "destiny2-awa-awa-provide-authorization-result post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,8 +664,8 @@ export def "destiny2-awa-awa-provide-authorization-result Destiny2AwaProvideAuth
 #
 # GET /Destiny2/Awa/GetActionToken/{correlationId}/
 # operationId: Destiny2.AwaGetActionToken
-export def "destiny2-awa-get-action-token Destiny2AwaGetActionToken" [
-  correlationId: string
+export def "destiny2-awa-get-action-token get" [
+  correlation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -677,7 +677,7 @@ export def "destiny2-awa-get-action-token Destiny2AwaGetActionToken" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Destiny2/Awa/GetActionToken/($correlationId)/")
+  let full_url = (build-url $base ({correlation_id: $correlation_id} | format pattern "/Destiny2/Awa/GetActionToken/{correlation_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -687,7 +687,7 @@ export def "destiny2-awa-get-action-token Destiny2AwaGetActionToken" [
 #
 # POST /Destiny2/Awa/Initialize/
 # operationId: Destiny2.AwaInitializeRequest
-export def "destiny2-awa-initialize Destiny2AwaInitializeRequest" [
+export def "destiny2-awa-initialize post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -709,7 +709,7 @@ export def "destiny2-awa-initialize Destiny2AwaInitializeRequest" [
 #
 # GET /Destiny2/Clan/ClanBannerDictionary/
 # operationId: Destiny2.GetClanBannerSource
-export def "destiny2-clan-clan-banner-dictionary Destiny2GetClanBannerSource" [
+export def "destiny2-clan-clan-banner-dictionary get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -731,8 +731,8 @@ export def "destiny2-clan-clan-banner-dictionary Destiny2GetClanBannerSource" [
 #
 # GET /Destiny2/Clan/{groupId}/WeeklyRewardState/
 # operationId: Destiny2.GetClanWeeklyRewardState
-export def "destiny2-clan-weekly-reward-state Destiny2GetClanWeeklyRewardState" [
-  groupId: int
+export def "destiny2-clan-weekly-reward-state get" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -744,7 +744,7 @@ export def "destiny2-clan-weekly-reward-state Destiny2GetClanWeeklyRewardState" 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Destiny2/Clan/($groupId)/WeeklyRewardState/")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/Destiny2/Clan/{group_id}/WeeklyRewardState/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -754,7 +754,7 @@ export def "destiny2-clan-weekly-reward-state Destiny2GetClanWeeklyRewardState" 
 #
 # GET /Destiny2/Manifest/
 # operationId: Destiny2.GetDestinyManifest
-export def "destiny2-manifest Destiny2GetDestinyManifest" [
+export def "destiny2-manifest get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -776,9 +776,9 @@ export def "destiny2-manifest Destiny2GetDestinyManifest" [
 #
 # GET /Destiny2/Manifest/{entityType}/{hashIdentifier}/
 # operationId: Destiny2.GetDestinyEntityDefinition
-export def "destiny2-manifest Destiny2GetDestinyEntityDefinition" [
-  entityType: string
-  hashIdentifier: int
+export def "destiny2-manifest get-by-entityType-hashIdentifier" [
+  entity_type: string
+  hash_identifier: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -790,7 +790,7 @@ export def "destiny2-manifest Destiny2GetDestinyEntityDefinition" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Destiny2/Manifest/($entityType)/($hashIdentifier)/")
+  let full_url = (build-url $base ({entity_type: $entity_type, hash_identifier: $hash_identifier} | format pattern "/Destiny2/Manifest/{entity_type}/{hash_identifier}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -800,7 +800,7 @@ export def "destiny2-manifest Destiny2GetDestinyEntityDefinition" [
 #
 # GET /Destiny2/Milestones/
 # operationId: Destiny2.GetPublicMilestones
-export def "destiny2-milestones Destiny2GetPublicMilestones" [
+export def "destiny2-milestones get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,8 +822,8 @@ export def "destiny2-milestones Destiny2GetPublicMilestones" [
 #
 # GET /Destiny2/Milestones/{milestoneHash}/Content/
 # operationId: Destiny2.GetPublicMilestoneContent
-export def "destiny2-milestones-content Destiny2GetPublicMilestoneContent" [
-  milestoneHash: int
+export def "destiny2-milestones-content get" [
+  milestone_hash: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -835,7 +835,7 @@ export def "destiny2-milestones-content Destiny2GetPublicMilestoneContent" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Destiny2/Milestones/($milestoneHash)/Content/")
+  let full_url = (build-url $base ({milestone_hash: $milestone_hash} | format pattern "/Destiny2/Milestones/{milestone_hash}/Content/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -845,8 +845,8 @@ export def "destiny2-milestones-content Destiny2GetPublicMilestoneContent" [
 #
 # POST /Destiny2/SearchDestinyPlayerByBungieName/{membershipType}/
 # operationId: Destiny2.SearchDestinyPlayerByBungieName
-export def "destiny2-search-destiny-player-by-bungie-name Destiny2SearchDestinyPlayerByBungieName" [
-  membershipType: int
+export def "destiny2-search-destiny-player-by-bungie-name post" [
+  membership_type: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -858,7 +858,7 @@ export def "destiny2-search-destiny-player-by-bungie-name Destiny2SearchDestinyP
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Destiny2/SearchDestinyPlayerByBungieName/($membershipType)/")
+  let full_url = (build-url $base ({membership_type: $membership_type} | format pattern "/Destiny2/SearchDestinyPlayerByBungieName/{membership_type}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -868,8 +868,8 @@ export def "destiny2-search-destiny-player-by-bungie-name Destiny2SearchDestinyP
 #
 # GET /Destiny2/Stats/AggregateClanStats/{groupId}/
 # operationId: Destiny2.GetClanAggregateStats
-export def "destiny2-stats-aggregate-clan-stats Destiny2GetClanAggregateStats" [
-  groupId: int
+export def "destiny2-stats-aggregate-clan-stats get" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -883,7 +883,7 @@ export def "destiny2-stats-aggregate-clan-stats Destiny2GetClanAggregateStats" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "modes" $modes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Destiny2/Stats/AggregateClanStats/($groupId)/" $qp)
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/Destiny2/Stats/AggregateClanStats/{group_id}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -893,7 +893,7 @@ export def "destiny2-stats-aggregate-clan-stats Destiny2GetClanAggregateStats" [
 #
 # GET /Destiny2/Stats/Definition/
 # operationId: Destiny2.GetHistoricalStatsDefinition
-export def "destiny2-stats-definition Destiny2GetHistoricalStatsDefinition" [
+export def "destiny2-stats-definition get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -915,8 +915,8 @@ export def "destiny2-stats-definition Destiny2GetHistoricalStatsDefinition" [
 #
 # GET /Destiny2/Stats/Leaderboards/Clans/{groupId}/
 # operationId: Destiny2.GetClanLeaderboards
-export def "destiny2-stats-leaderboards-clans Destiny2GetClanLeaderboards" [
-  groupId: int
+export def "destiny2-stats-leaderboards-clans get" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,7 +932,7 @@ export def "destiny2-stats-leaderboards-clans Destiny2GetClanLeaderboards" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxtop" $maxtop "scalar") (serialize-qp "modes" $modes "scalar") (serialize-qp "statid" $statid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Destiny2/Stats/Leaderboards/Clans/($groupId)/" $qp)
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/Destiny2/Stats/Leaderboards/Clans/{group_id}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -942,10 +942,10 @@ export def "destiny2-stats-leaderboards-clans Destiny2GetClanLeaderboards" [
 #
 # GET /Destiny2/Stats/Leaderboards/{membershipType}/{destinyMembershipId}/{characterId}/
 # operationId: Destiny2.GetLeaderboardsForCharacter
-export def "destiny2-stats-leaderboards Destiny2GetLeaderboardsForCharacter" [
-  characterId: int
-  destinyMembershipId: int
-  membershipType: int
+export def "destiny2-stats-leaderboards get" [
+  membership_type: int
+  destiny_membership_id: int
+  character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -961,7 +961,7 @@ export def "destiny2-stats-leaderboards Destiny2GetLeaderboardsForCharacter" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxtop" $maxtop "scalar") (serialize-qp "modes" $modes "scalar") (serialize-qp "statid" $statid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Destiny2/Stats/Leaderboards/($membershipType)/($destinyMembershipId)/($characterId)/" $qp)
+  let full_url = (build-url $base ({membership_type: $membership_type, destiny_membership_id: $destiny_membership_id, character_id: $character_id} | format pattern "/Destiny2/Stats/Leaderboards/{membership_type}/{destiny_membership_id}/{character_id}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -971,8 +971,8 @@ export def "destiny2-stats-leaderboards Destiny2GetLeaderboardsForCharacter" [
 #
 # GET /Destiny2/Stats/PostGameCarnageReport/{activityId}/
 # operationId: Destiny2.GetPostGameCarnageReport
-export def "destiny2-stats-post-game-carnage-report Destiny2GetPostGameCarnageReport" [
-  activityId: int
+export def "destiny2-stats-post-game-carnage-report get" [
+  activity_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -984,7 +984,7 @@ export def "destiny2-stats-post-game-carnage-report Destiny2GetPostGameCarnageRe
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Destiny2/Stats/PostGameCarnageReport/($activityId)/")
+  let full_url = (build-url $base ({activity_id: $activity_id} | format pattern "/Destiny2/Stats/PostGameCarnageReport/{activity_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -994,8 +994,8 @@ export def "destiny2-stats-post-game-carnage-report Destiny2GetPostGameCarnageRe
 #
 # POST /Destiny2/Stats/PostGameCarnageReport/{activityId}/Report/
 # operationId: Destiny2.ReportOffensivePostGameCarnageReportPlayer
-export def "destiny2-stats-post-game-carnage-report-report Destiny2ReportOffensivePostGameCarnageReportPlayer" [
-  activityId: int
+export def "destiny2-stats-post-game-carnage-report-report post" [
+  activity_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1007,7 +1007,7 @@ export def "destiny2-stats-post-game-carnage-report-report Destiny2ReportOffensi
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Destiny2/Stats/PostGameCarnageReport/($activityId)/Report/")
+  let full_url = (build-url $base ({activity_id: $activity_id} | format pattern "/Destiny2/Stats/PostGameCarnageReport/{activity_id}/Report/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1017,7 +1017,7 @@ export def "destiny2-stats-post-game-carnage-report-report Destiny2ReportOffensi
 #
 # GET /Destiny2/Vendors/
 # operationId: Destiny2.GetPublicVendors
-export def "destiny2-vendors Destiny2GetPublicVendors" [
+export def "destiny2-vendors get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1041,10 +1041,10 @@ export def "destiny2-vendors Destiny2GetPublicVendors" [
 #
 # GET /Destiny2/{membershipType}/Account/{destinyMembershipId}/Character/{characterId}/Stats/
 # operationId: Destiny2.GetHistoricalStats
-export def "destiny2-account-character-stats Destiny2GetHistoricalStats" [
-  characterId: int
-  destinyMembershipId: int
-  membershipType: int
+export def "destiny2-account-character-stats get" [
+  membership_type: int
+  destiny_membership_id: int
+  character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1057,12 +1057,12 @@ export def "destiny2-account-character-stats Destiny2GetHistoricalStats" [
   --daystart: string # First day to return when daily stats are requested. Use the format YYYY-MM-DD. Currently, we cannot allow more than 31 days of daily data to be requested in a single request. (format: date-time)
   --groups: list # Group of stats to include, otherwise only general stats are returned. Comma separated list is allowed. Values: General, Weapons, Medals
   --modes: list # Game modes to return. See the documentation for DestinyActivityModeType for valid values, and pass in string representation, comma delimited.
-  --periodType: int # Indicates a specific period type to return. Optional. May be: Daily, AllTime, or Activity (format: int32)
+  --period-type: int # Indicates a specific period type to return. Optional. May be: Daily, AllTime, or Activity (format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dayend" $dayend "scalar") (serialize-qp "daystart" $daystart "scalar") (serialize-qp "groups" $groups "csv") (serialize-qp "modes" $modes "csv") (serialize-qp "periodType" $periodType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Destiny2/($membershipType)/Account/($destinyMembershipId)/Character/($characterId)/Stats/" $qp)
+  let qp = [(serialize-qp "dayend" $dayend "scalar") (serialize-qp "daystart" $daystart "scalar") (serialize-qp "groups" $groups "csv") (serialize-qp "modes" $modes "csv") (serialize-qp "periodType" $period_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({membership_type: $membership_type, destiny_membership_id: $destiny_membership_id, character_id: $character_id} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1072,10 +1072,10 @@ export def "destiny2-account-character-stats Destiny2GetHistoricalStats" [
 #
 # GET /Destiny2/{membershipType}/Account/{destinyMembershipId}/Character/{characterId}/Stats/Activities/
 # operationId: Destiny2.GetActivityHistory
-export def "destiny2-account-character-stats-activities Destiny2GetActivityHistory" [
-  characterId: int
-  destinyMembershipId: int
-  membershipType: int
+export def "destiny2-account-character-stats-activities get" [
+  membership_type: int
+  destiny_membership_id: int
+  character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1091,7 +1091,7 @@ export def "destiny2-account-character-stats-activities Destiny2GetActivityHisto
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Destiny2/($membershipType)/Account/($destinyMembershipId)/Character/($characterId)/Stats/Activities/" $qp)
+  let full_url = (build-url $base ({membership_type: $membership_type, destiny_membership_id: $destiny_membership_id, character_id: $character_id} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/Activities/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1101,10 +1101,10 @@ export def "destiny2-account-character-stats-activities Destiny2GetActivityHisto
 #
 # GET /Destiny2/{membershipType}/Account/{destinyMembershipId}/Character/{characterId}/Stats/AggregateActivityStats/
 # operationId: Destiny2.GetDestinyAggregateActivityStats
-export def "destiny2-account-character-stats-aggregate-activity-stats Destiny2GetDestinyAggregateActivityStats" [
-  characterId: int
-  destinyMembershipId: int
-  membershipType: int
+export def "destiny2-account-character-stats-aggregate-activity-stats get" [
+  membership_type: int
+  destiny_membership_id: int
+  character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1116,7 +1116,7 @@ export def "destiny2-account-character-stats-aggregate-activity-stats Destiny2Ge
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Destiny2/($membershipType)/Account/($destinyMembershipId)/Character/($characterId)/Stats/AggregateActivityStats/")
+  let full_url = (build-url $base ({membership_type: $membership_type, destiny_membership_id: $destiny_membership_id, character_id: $character_id} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/AggregateActivityStats/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1126,10 +1126,10 @@ export def "destiny2-account-character-stats-aggregate-activity-stats Destiny2Ge
 #
 # GET /Destiny2/{membershipType}/Account/{destinyMembershipId}/Character/{characterId}/Stats/UniqueWeapons/
 # operationId: Destiny2.GetUniqueWeaponHistory
-export def "destiny2-account-character-stats-unique-weapons Destiny2GetUniqueWeaponHistory" [
-  characterId: int
-  destinyMembershipId: int
-  membershipType: int
+export def "destiny2-account-character-stats-unique-weapons get" [
+  membership_type: int
+  destiny_membership_id: int
+  character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1141,7 +1141,7 @@ export def "destiny2-account-character-stats-unique-weapons Destiny2GetUniqueWea
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Destiny2/($membershipType)/Account/($destinyMembershipId)/Character/($characterId)/Stats/UniqueWeapons/")
+  let full_url = (build-url $base ({membership_type: $membership_type, destiny_membership_id: $destiny_membership_id, character_id: $character_id} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/UniqueWeapons/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1151,9 +1151,9 @@ export def "destiny2-account-character-stats-unique-weapons Destiny2GetUniqueWea
 #
 # GET /Destiny2/{membershipType}/Account/{destinyMembershipId}/Stats/
 # operationId: Destiny2.GetHistoricalStatsForAccount
-export def "destiny2-account-stats Destiny2GetHistoricalStatsForAccount" [
-  destinyMembershipId: int
-  membershipType: int
+export def "destiny2-account-stats get" [
+  membership_type: int
+  destiny_membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1167,7 +1167,7 @@ export def "destiny2-account-stats Destiny2GetHistoricalStatsForAccount" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groups" $groups "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Destiny2/($membershipType)/Account/($destinyMembershipId)/Stats/" $qp)
+  let full_url = (build-url $base ({membership_type: $membership_type, destiny_membership_id: $destiny_membership_id} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Stats/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1177,9 +1177,9 @@ export def "destiny2-account-stats Destiny2GetHistoricalStatsForAccount" [
 #
 # GET /Destiny2/{membershipType}/Account/{destinyMembershipId}/Stats/Leaderboards/
 # operationId: Destiny2.GetLeaderboards
-export def "destiny2-account-stats-leaderboards Destiny2GetLeaderboards" [
-  destinyMembershipId: int
-  membershipType: int
+export def "destiny2-account-stats-leaderboards get" [
+  membership_type: int
+  destiny_membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1195,7 +1195,7 @@ export def "destiny2-account-stats-leaderboards Destiny2GetLeaderboards" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxtop" $maxtop "scalar") (serialize-qp "modes" $modes "scalar") (serialize-qp "statid" $statid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Destiny2/($membershipType)/Account/($destinyMembershipId)/Stats/Leaderboards/" $qp)
+  let full_url = (build-url $base ({membership_type: $membership_type, destiny_membership_id: $destiny_membership_id} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Stats/Leaderboards/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1205,9 +1205,9 @@ export def "destiny2-account-stats-leaderboards Destiny2GetLeaderboards" [
 #
 # GET /Destiny2/{membershipType}/Profile/{destinyMembershipId}/
 # operationId: Destiny2.GetProfile
-export def "destiny2-profile Destiny2GetProfile" [
-  destinyMembershipId: int
-  membershipType: int
+export def "destiny2-profile get" [
+  membership_type: int
+  destiny_membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1221,7 +1221,7 @@ export def "destiny2-profile Destiny2GetProfile" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Destiny2/($membershipType)/Profile/($destinyMembershipId)/" $qp)
+  let full_url = (build-url $base ({membership_type: $membership_type, destiny_membership_id: $destiny_membership_id} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1231,10 +1231,10 @@ export def "destiny2-profile Destiny2GetProfile" [
 #
 # GET /Destiny2/{membershipType}/Profile/{destinyMembershipId}/Character/{characterId}/
 # operationId: Destiny2.GetCharacter
-export def "destiny2-profile-character Destiny2GetCharacter" [
-  characterId: int
-  destinyMembershipId: int
-  membershipType: int
+export def "destiny2-profile-character get" [
+  membership_type: int
+  destiny_membership_id: int
+  character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1248,7 +1248,7 @@ export def "destiny2-profile-character Destiny2GetCharacter" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Destiny2/($membershipType)/Profile/($destinyMembershipId)/Character/($characterId)/" $qp)
+  let full_url = (build-url $base ({membership_type: $membership_type, destiny_membership_id: $destiny_membership_id, character_id: $character_id} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Character/{character_id}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1258,11 +1258,11 @@ export def "destiny2-profile-character Destiny2GetCharacter" [
 #
 # GET /Destiny2/{membershipType}/Profile/{destinyMembershipId}/Character/{characterId}/Collectibles/{collectiblePresentationNodeHash}/
 # operationId: Destiny2.GetCollectibleNodeDetails
-export def "destiny2-profile-character-collectibles Destiny2GetCollectibleNodeDetails" [
-  characterId: int
-  collectiblePresentationNodeHash: int
-  destinyMembershipId: int
-  membershipType: int
+export def "destiny2-profile-character-collectibles get" [
+  membership_type: int
+  destiny_membership_id: int
+  character_id: int
+  collectible_presentation_node_hash: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1276,7 +1276,7 @@ export def "destiny2-profile-character-collectibles Destiny2GetCollectibleNodeDe
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Destiny2/($membershipType)/Profile/($destinyMembershipId)/Character/($characterId)/Collectibles/($collectiblePresentationNodeHash)/" $qp)
+  let full_url = (build-url $base ({membership_type: $membership_type, destiny_membership_id: $destiny_membership_id, character_id: $character_id, collectible_presentation_node_hash: $collectible_presentation_node_hash} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Character/{character_id}/Collectibles/{collectible_presentation_node_hash}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1286,10 +1286,10 @@ export def "destiny2-profile-character-collectibles Destiny2GetCollectibleNodeDe
 #
 # GET /Destiny2/{membershipType}/Profile/{destinyMembershipId}/Character/{characterId}/Vendors/
 # operationId: Destiny2.GetVendors
-export def "destiny2-profile-character-vendors Destiny2GetVendors" [
-  characterId: int
-  destinyMembershipId: int
-  membershipType: int
+export def "destiny2-profile-character-vendors list" [
+  membership_type: int
+  destiny_membership_id: int
+  character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1304,7 +1304,7 @@ export def "destiny2-profile-character-vendors Destiny2GetVendors" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "components" $components "csv") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Destiny2/($membershipType)/Profile/($destinyMembershipId)/Character/($characterId)/Vendors/" $qp)
+  let full_url = (build-url $base ({membership_type: $membership_type, destiny_membership_id: $destiny_membership_id, character_id: $character_id} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Character/{character_id}/Vendors/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1314,11 +1314,11 @@ export def "destiny2-profile-character-vendors Destiny2GetVendors" [
 #
 # GET /Destiny2/{membershipType}/Profile/{destinyMembershipId}/Character/{characterId}/Vendors/{vendorHash}/
 # operationId: Destiny2.GetVendor
-export def "destiny2-profile-character-vendors Destiny2GetVendor" [
-  characterId: int
-  destinyMembershipId: int
-  membershipType: int
-  vendorHash: int
+export def "destiny2-profile-character-vendors get" [
+  membership_type: int
+  destiny_membership_id: int
+  character_id: int
+  vendor_hash: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1332,7 +1332,7 @@ export def "destiny2-profile-character-vendors Destiny2GetVendor" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Destiny2/($membershipType)/Profile/($destinyMembershipId)/Character/($characterId)/Vendors/($vendorHash)/" $qp)
+  let full_url = (build-url $base ({membership_type: $membership_type, destiny_membership_id: $destiny_membership_id, character_id: $character_id, vendor_hash: $vendor_hash} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Character/{character_id}/Vendors/{vendor_hash}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1342,10 +1342,10 @@ export def "destiny2-profile-character-vendors Destiny2GetVendor" [
 #
 # GET /Destiny2/{membershipType}/Profile/{destinyMembershipId}/Item/{itemInstanceId}/
 # operationId: Destiny2.GetItem
-export def "destiny2-profile-item Destiny2GetItem" [
-  destinyMembershipId: int
-  itemInstanceId: int
-  membershipType: int
+export def "destiny2-profile-item get" [
+  membership_type: int
+  destiny_membership_id: int
+  item_instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1359,7 +1359,7 @@ export def "destiny2-profile-item Destiny2GetItem" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Destiny2/($membershipType)/Profile/($destinyMembershipId)/Item/($itemInstanceId)/" $qp)
+  let full_url = (build-url $base ({membership_type: $membership_type, destiny_membership_id: $destiny_membership_id, item_instance_id: $item_instance_id} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Item/{item_instance_id}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1369,9 +1369,9 @@ export def "destiny2-profile-item Destiny2GetItem" [
 #
 # GET /Destiny2/{membershipType}/Profile/{membershipId}/LinkedProfiles/
 # operationId: Destiny2.GetLinkedProfiles
-export def "destiny2-profile-linked-profiles Destiny2GetLinkedProfiles" [
-  membershipId: int
-  membershipType: int
+export def "destiny2-profile-linked-profiles get" [
+  membership_type: int
+  membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1380,12 +1380,12 @@ export def "destiny2-profile-linked-profiles Destiny2GetLinkedProfiles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --getAllMemberships: oneof<nothing, bool> # (optional) if set to 'true', all memberships regardless of whether they're obscured by overrides will be returned. Normal privacy restrictions on account linking will still apply no matter what.
+  --get-all-memberships: oneof<nothing, bool> # (optional) if set to 'true', all memberships regardless of whether they're obscured by overrides will be returned. Normal privacy restrictions on account linking will still apply no matter what.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "getAllMemberships" $getAllMemberships "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Destiny2/($membershipType)/Profile/($membershipId)/LinkedProfiles/" $qp)
+  let qp = [(serialize-qp "getAllMemberships" $get_all_memberships "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({membership_type: $membership_type, membership_id: $membership_id} | format pattern "/Destiny2/{membership_type}/Profile/{membership_id}/LinkedProfiles/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1395,8 +1395,8 @@ export def "destiny2-profile-linked-profiles Destiny2GetLinkedProfiles" [
 #
 # GET /Fireteam/Clan/{groupId}/ActiveCount/
 # operationId: Fireteam.GetActivePrivateClanFireteamCount
-export def "fireteam-clan-active-count FireteamGetActivePrivateClanFireteamCount" [
-  groupId: int
+export def "fireteam-clan-active-count get" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1408,7 +1408,7 @@ export def "fireteam-clan-active-count FireteamGetActivePrivateClanFireteamCount
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Fireteam/Clan/($groupId)/ActiveCount/")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/Fireteam/Clan/{group_id}/ActiveCount/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1418,14 +1418,14 @@ export def "fireteam-clan-active-count FireteamGetActivePrivateClanFireteamCount
 #
 # GET /Fireteam/Clan/{groupId}/Available/{platform}/{activityType}/{dateRange}/{slotFilter}/{publicOnly}/{page}/
 # operationId: Fireteam.GetAvailableClanFireteams
-export def "fireteam-clan-available FireteamGetAvailableClanFireteams" [
-  activityType: int
-  dateRange: int
-  groupId: int
-  page: int
+export def "fireteam-clan-available get" [
+  group_id: int
   platform: int
-  publicOnly: int
-  slotFilter: int
+  activity_type: int
+  date_range: int
+  slot_filter: int
+  public_only: int
+  page: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1434,13 +1434,13 @@ export def "fireteam-clan-available FireteamGetAvailableClanFireteams" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --excludeImmediate: oneof<nothing, bool> # If you wish the result to exclude immediate fireteams, set this to true. Immediate-only can be forced using the dateRange enum.
-  --langFilter: string # An optional language filter.
+  --exclude-immediate: oneof<nothing, bool> # If you wish the result to exclude immediate fireteams, set this to true. Immediate-only can be forced using the dateRange enum.
+  --lang-filter: string # An optional language filter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "excludeImmediate" $excludeImmediate "scalar") (serialize-qp "langFilter" $langFilter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Fireteam/Clan/($groupId)/Available/($platform)/($activityType)/($dateRange)/($slotFilter)/($publicOnly)/($page)/" $qp)
+  let qp = [(serialize-qp "excludeImmediate" $exclude_immediate "scalar") (serialize-qp "langFilter" $lang_filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({group_id: $group_id, platform: $platform, activity_type: $activity_type, date_range: $date_range, slot_filter: $slot_filter, public_only: $public_only, page: $page} | format pattern "/Fireteam/Clan/{group_id}/Available/{platform}/{activity_type}/{date_range}/{slot_filter}/{public_only}/{page}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1450,11 +1450,11 @@ export def "fireteam-clan-available FireteamGetAvailableClanFireteams" [
 #
 # GET /Fireteam/Clan/{groupId}/My/{platform}/{includeClosed}/{page}/
 # operationId: Fireteam.GetMyClanFireteams
-export def "fireteam-clan-my FireteamGetMyClanFireteams" [
-  groupId: int
-  includeClosed: bool
-  page: int
+export def "fireteam-clan-my get" [
+  group_id: int
   platform: int
+  include_closed: bool
+  page: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1463,13 +1463,13 @@ export def "fireteam-clan-my FireteamGetMyClanFireteams" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groupFilter: oneof<nothing, bool> # If true, filter by clan. Otherwise, ignore the clan and show all of the user's fireteams.
-  --langFilter: string # An optional language filter.
+  --group-filter: oneof<nothing, bool> # If true, filter by clan. Otherwise, ignore the clan and show all of the user's fireteams.
+  --lang-filter: string # An optional language filter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupFilter" $groupFilter "scalar") (serialize-qp "langFilter" $langFilter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Fireteam/Clan/($groupId)/My/($platform)/($includeClosed)/($page)/" $qp)
+  let qp = [(serialize-qp "groupFilter" $group_filter "scalar") (serialize-qp "langFilter" $lang_filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({group_id: $group_id, platform: $platform, include_closed: $include_closed, page: $page} | format pattern "/Fireteam/Clan/{group_id}/My/{platform}/{include_closed}/{page}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1479,9 +1479,9 @@ export def "fireteam-clan-my FireteamGetMyClanFireteams" [
 #
 # GET /Fireteam/Clan/{groupId}/Summary/{fireteamId}/
 # operationId: Fireteam.GetClanFireteam
-export def "fireteam-clan-summary FireteamGetClanFireteam" [
-  fireteamId: int
-  groupId: int
+export def "fireteam-clan-summary get" [
+  group_id: int
+  fireteam_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1493,7 +1493,7 @@ export def "fireteam-clan-summary FireteamGetClanFireteam" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Fireteam/Clan/($groupId)/Summary/($fireteamId)/")
+  let full_url = (build-url $base ({group_id: $group_id, fireteam_id: $fireteam_id} | format pattern "/Fireteam/Clan/{group_id}/Summary/{fireteam_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1503,12 +1503,12 @@ export def "fireteam-clan-summary FireteamGetClanFireteam" [
 #
 # GET /Fireteam/Search/Available/{platform}/{activityType}/{dateRange}/{slotFilter}/{page}/
 # operationId: Fireteam.SearchPublicAvailableClanFireteams
-export def "fireteam-search-available FireteamSearchPublicAvailableClanFireteams" [
-  activityType: int
-  dateRange: int
-  page: int
+export def "fireteam-search-available get" [
   platform: int
-  slotFilter: int
+  activity_type: int
+  date_range: int
+  slot_filter: int
+  page: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1517,13 +1517,13 @@ export def "fireteam-search-available FireteamSearchPublicAvailableClanFireteams
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --excludeImmediate: oneof<nothing, bool> # If you wish the result to exclude immediate fireteams, set this to true. Immediate-only can be forced using the dateRange enum.
-  --langFilter: string # An optional language filter.
+  --exclude-immediate: oneof<nothing, bool> # If you wish the result to exclude immediate fireteams, set this to true. Immediate-only can be forced using the dateRange enum.
+  --lang-filter: string # An optional language filter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "excludeImmediate" $excludeImmediate "scalar") (serialize-qp "langFilter" $langFilter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Fireteam/Search/Available/($platform)/($activityType)/($dateRange)/($slotFilter)/($page)/" $qp)
+  let qp = [(serialize-qp "excludeImmediate" $exclude_immediate "scalar") (serialize-qp "langFilter" $lang_filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({platform: $platform, activity_type: $activity_type, date_range: $date_range, slot_filter: $slot_filter, page: $page} | format pattern "/Fireteam/Search/Available/{platform}/{activity_type}/{date_range}/{slot_filter}/{page}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1533,11 +1533,11 @@ export def "fireteam-search-available FireteamSearchPublicAvailableClanFireteams
 #
 # GET /Forum/GetCoreTopicsPaged/{page}/{sort}/{quickDate}/{categoryFilter}/
 # operationId: Forum.GetCoreTopicsPaged
-export def "forum-get-core-topics-paged ForumGetCoreTopicsPaged" [
-  categoryFilter: int
+export def "forum-get-core-topics-paged get" [
   page: int
-  quickDate: int
   sort: int
+  quick_date: int
+  category_filter: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1551,7 +1551,7 @@ export def "forum-get-core-topics-paged ForumGetCoreTopicsPaged" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locales" $locales "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Forum/GetCoreTopicsPaged/($page)/($sort)/($quickDate)/($categoryFilter)/" $qp)
+  let full_url = (build-url $base ({page: $page, sort: $sort, quick_date: $quick_date, category_filter: $category_filter} | format pattern "/Forum/GetCoreTopicsPaged/{page}/{sort}/{quick_date}/{category_filter}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1561,7 +1561,7 @@ export def "forum-get-core-topics-paged ForumGetCoreTopicsPaged" [
 #
 # GET /Forum/GetForumTagSuggestions/
 # operationId: Forum.GetForumTagSuggestions
-export def "forum-get-forum-tag-suggestions ForumGetForumTagSuggestions" [
+export def "forum-get-forum-tag-suggestions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1585,8 +1585,8 @@ export def "forum-get-forum-tag-suggestions ForumGetForumTagSuggestions" [
 #
 # GET /Forum/GetPostAndParent/{childPostId}/
 # operationId: Forum.GetPostAndParent
-export def "forum-get-post-and-parent ForumGetPostAndParent" [
-  childPostId: int
+export def "forum-get-post-and-parent get" [
+  child_post_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1600,7 +1600,7 @@ export def "forum-get-post-and-parent ForumGetPostAndParent" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "showbanned" $showbanned "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Forum/GetPostAndParent/($childPostId)/" $qp)
+  let full_url = (build-url $base ({child_post_id: $child_post_id} | format pattern "/Forum/GetPostAndParent/{child_post_id}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1610,8 +1610,8 @@ export def "forum-get-post-and-parent ForumGetPostAndParent" [
 #
 # GET /Forum/GetPostAndParentAwaitingApproval/{childPostId}/
 # operationId: Forum.GetPostAndParentAwaitingApproval
-export def "forum-get-post-and-parent-awaiting-approval ForumGetPostAndParentAwaitingApproval" [
-  childPostId: int
+export def "forum-get-post-and-parent-awaiting-approval get" [
+  child_post_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1625,7 +1625,7 @@ export def "forum-get-post-and-parent-awaiting-approval ForumGetPostAndParentAwa
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "showbanned" $showbanned "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Forum/GetPostAndParentAwaitingApproval/($childPostId)/" $qp)
+  let full_url = (build-url $base ({child_post_id: $child_post_id} | format pattern "/Forum/GetPostAndParentAwaitingApproval/{child_post_id}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1635,14 +1635,14 @@ export def "forum-get-post-and-parent-awaiting-approval ForumGetPostAndParentAwa
 #
 # GET /Forum/GetPostsThreadedPaged/{parentPostId}/{page}/{pageSize}/{replySize}/{getParentPost}/{rootThreadMode}/{sortMode}/
 # operationId: Forum.GetPostsThreadedPaged
-export def "forum-get-posts-threaded-paged ForumGetPostsThreadedPaged" [
-  getParentPost: bool
+export def "forum-get-posts-threaded-paged get" [
+  parent_post_id: int
   page: int
-  pageSize: int
-  parentPostId: int
-  replySize: int
-  rootThreadMode: bool
-  sortMode: int
+  page_size: int
+  reply_size: int
+  get_parent_post: bool
+  root_thread_mode: bool
+  sort_mode: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1656,7 +1656,7 @@ export def "forum-get-posts-threaded-paged ForumGetPostsThreadedPaged" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "showbanned" $showbanned "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Forum/GetPostsThreadedPaged/($parentPostId)/($page)/($pageSize)/($replySize)/($getParentPost)/($rootThreadMode)/($sortMode)/" $qp)
+  let full_url = (build-url $base ({parent_post_id: $parent_post_id, page: $page, page_size: $page_size, reply_size: $reply_size, get_parent_post: $get_parent_post, root_thread_mode: $root_thread_mode, sort_mode: $sort_mode} | format pattern "/Forum/GetPostsThreadedPaged/{parent_post_id}/{page}/{page_size}/{reply_size}/{get_parent_post}/{root_thread_mode}/{sort_mode}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1666,13 +1666,13 @@ export def "forum-get-posts-threaded-paged ForumGetPostsThreadedPaged" [
 #
 # GET /Forum/GetPostsThreadedPagedFromChild/{childPostId}/{page}/{pageSize}/{replySize}/{rootThreadMode}/{sortMode}/
 # operationId: Forum.GetPostsThreadedPagedFromChild
-export def "forum-get-posts-threaded-paged-from-child ForumGetPostsThreadedPagedFromChild" [
-  childPostId: int
+export def "forum-get-posts-threaded-paged-from-child get" [
+  child_post_id: int
   page: int
-  pageSize: int
-  replySize: int
-  rootThreadMode: bool
-  sortMode: int
+  page_size: int
+  reply_size: int
+  root_thread_mode: bool
+  sort_mode: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1686,7 +1686,7 @@ export def "forum-get-posts-threaded-paged-from-child ForumGetPostsThreadedPaged
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "showbanned" $showbanned "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Forum/GetPostsThreadedPagedFromChild/($childPostId)/($page)/($pageSize)/($replySize)/($rootThreadMode)/($sortMode)/" $qp)
+  let full_url = (build-url $base ({child_post_id: $child_post_id, page: $page, page_size: $page_size, reply_size: $reply_size, root_thread_mode: $root_thread_mode, sort_mode: $sort_mode} | format pattern "/Forum/GetPostsThreadedPagedFromChild/{child_post_id}/{page}/{page_size}/{reply_size}/{root_thread_mode}/{sort_mode}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1696,8 +1696,8 @@ export def "forum-get-posts-threaded-paged-from-child ForumGetPostsThreadedPaged
 #
 # GET /Forum/GetTopicForContent/{contentId}/
 # operationId: Forum.GetTopicForContent
-export def "forum-get-topic-for-content ForumGetTopicForContent" [
-  contentId: int
+export def "forum-get-topic-for-content get" [
+  content_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1709,7 +1709,7 @@ export def "forum-get-topic-for-content ForumGetTopicForContent" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Forum/GetTopicForContent/($contentId)/")
+  let full_url = (build-url $base ({content_id: $content_id} | format pattern "/Forum/GetTopicForContent/{content_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1719,13 +1719,13 @@ export def "forum-get-topic-for-content ForumGetTopicForContent" [
 #
 # GET /Forum/GetTopicsPaged/{page}/{pageSize}/{group}/{sort}/{quickDate}/{categoryFilter}/
 # operationId: Forum.GetTopicsPaged
-export def "forum-get-topics-paged ForumGetTopicsPaged" [
-  categoryFilter: int
-  group: int
+export def "forum-get-topics-paged get" [
   page: int
-  pageSize: int
-  quickDate: int
+  page_size: int
+  group: int
   sort: int
+  quick_date: int
+  category_filter: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1740,7 +1740,7 @@ export def "forum-get-topics-paged ForumGetTopicsPaged" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locales" $locales "scalar") (serialize-qp "tagstring" $tagstring "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Forum/GetTopicsPaged/($page)/($pageSize)/($group)/($sort)/($quickDate)/($categoryFilter)/" $qp)
+  let full_url = (build-url $base ({page: $page, page_size: $page_size, group: $group, sort: $sort, quick_date: $quick_date, category_filter: $category_filter} | format pattern "/Forum/GetTopicsPaged/{page}/{page_size}/{group}/{sort}/{quick_date}/{category_filter}/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1750,8 +1750,8 @@ export def "forum-get-topics-paged ForumGetTopicsPaged" [
 #
 # GET /Forum/Poll/{topicId}/
 # operationId: Forum.GetPoll
-export def "forum-poll ForumGetPoll" [
-  topicId: int
+export def "forum-poll get" [
+  topic_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1763,7 +1763,7 @@ export def "forum-poll ForumGetPoll" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Forum/Poll/($topicId)/")
+  let full_url = (build-url $base ({topic_id: $topic_id} | format pattern "/Forum/Poll/{topic_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1773,7 +1773,7 @@ export def "forum-poll ForumGetPoll" [
 #
 # POST /Forum/Recruit/Summaries/
 # operationId: Forum.GetRecruitmentThreadSummaries
-export def "forum-recruit-summaries ForumGetRecruitmentThreadSummaries" [
+export def "forum-recruit-summaries post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1841,7 +1841,7 @@ export def "global-alerts GetGlobalAlerts" [
 #
 # GET /GroupV2/GetAvailableAvatars/
 # operationId: GroupV2.GetAvailableAvatars
-export def "group-v2-get-available-avatars GroupV2GetAvailableAvatars" [
+export def "group-v2-get-available-avatars get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1863,7 +1863,7 @@ export def "group-v2-get-available-avatars GroupV2GetAvailableAvatars" [
 #
 # GET /GroupV2/GetAvailableThemes/
 # operationId: GroupV2.GetAvailableThemes
-export def "group-v2-get-available-themes GroupV2GetAvailableThemes" [
+export def "group-v2-get-available-themes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1885,8 +1885,8 @@ export def "group-v2-get-available-themes GroupV2GetAvailableThemes" [
 #
 # GET /GroupV2/GetUserClanInviteSetting/{mType}/
 # operationId: GroupV2.GetUserClanInviteSetting
-export def "group-v2-get-user-clan-invite-setting GroupV2GetUserClanInviteSetting" [
-  mType: int
+export def "group-v2-get-user-clan-invite-setting get" [
+  m_type: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1898,7 +1898,7 @@ export def "group-v2-get-user-clan-invite-setting GroupV2GetUserClanInviteSettin
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/GetUserClanInviteSetting/($mType)/")
+  let full_url = (build-url $base ({m_type: $m_type} | format pattern "/GroupV2/GetUserClanInviteSetting/{m_type}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1908,9 +1908,9 @@ export def "group-v2-get-user-clan-invite-setting GroupV2GetUserClanInviteSettin
 #
 # GET /GroupV2/Name/{groupName}/{groupType}/
 # operationId: GroupV2.GetGroupByName
-export def "group-v2-name GroupV2GetGroupByName" [
-  groupName: string
-  groupType: int
+export def "group-v2-name get" [
+  group_name: string
+  group_type: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1922,7 +1922,7 @@ export def "group-v2-name GroupV2GetGroupByName" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/Name/($groupName)/($groupType)/")
+  let full_url = (build-url $base ({group_name: $group_name, group_type: $group_type} | format pattern "/GroupV2/Name/{group_name}/{group_type}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1932,7 +1932,7 @@ export def "group-v2-name GroupV2GetGroupByName" [
 #
 # POST /GroupV2/NameV2/
 # operationId: GroupV2.GetGroupByNameV2
-export def "group-v2-name-v2 GroupV2GetGroupByNameV2" [
+export def "group-v2-name-v2 post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1954,9 +1954,9 @@ export def "group-v2-name-v2 GroupV2GetGroupByNameV2" [
 #
 # POST /GroupV2/Recommended/{groupType}/{createDateRange}/
 # operationId: GroupV2.GetRecommendedGroups
-export def "group-v2-recommended GroupV2GetRecommendedGroups" [
-  createDateRange: int
-  groupType: int
+export def "group-v2-recommended post" [
+  group_type: int
+  create_date_range: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1968,7 +1968,7 @@ export def "group-v2-recommended GroupV2GetRecommendedGroups" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/Recommended/($groupType)/($createDateRange)/")
+  let full_url = (build-url $base ({group_type: $group_type, create_date_range: $create_date_range} | format pattern "/GroupV2/Recommended/{group_type}/{create_date_range}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1978,10 +1978,10 @@ export def "group-v2-recommended GroupV2GetRecommendedGroups" [
 #
 # GET /GroupV2/Recover/{membershipType}/{membershipId}/{groupType}/
 # operationId: GroupV2.RecoverGroupForFounder
-export def "group-v2-recover GroupV2RecoverGroupForFounder" [
-  groupType: int
-  membershipId: int
-  membershipType: int
+export def "group-v2-recover get" [
+  membership_type: int
+  membership_id: int
+  group_type: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1993,7 +1993,7 @@ export def "group-v2-recover GroupV2RecoverGroupForFounder" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/Recover/($membershipType)/($membershipId)/($groupType)/")
+  let full_url = (build-url $base ({membership_type: $membership_type, membership_id: $membership_id, group_type: $group_type} | format pattern "/GroupV2/Recover/{membership_type}/{membership_id}/{group_type}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2003,7 +2003,7 @@ export def "group-v2-recover GroupV2RecoverGroupForFounder" [
 #
 # POST /GroupV2/Search/
 # operationId: GroupV2.GroupSearch
-export def "group-v2-search GroupV2GroupSearch" [
+export def "group-v2-search post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2025,11 +2025,11 @@ export def "group-v2-search GroupV2GroupSearch" [
 #
 # GET /GroupV2/User/Potential/{membershipType}/{membershipId}/{filter}/{groupType}/
 # operationId: GroupV2.GetPotentialGroupsForMember
-export def "group-v2-user-potential GroupV2GetPotentialGroupsForMember" [
+export def "group-v2-user-potential get" [
+  membership_type: int
+  membership_id: int
   filter: int
-  groupType: int
-  membershipId: int
-  membershipType: int
+  group_type: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2041,7 +2041,7 @@ export def "group-v2-user-potential GroupV2GetPotentialGroupsForMember" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/User/Potential/($membershipType)/($membershipId)/($filter)/($groupType)/")
+  let full_url = (build-url $base ({membership_type: $membership_type, membership_id: $membership_id, filter: $filter, group_type: $group_type} | format pattern "/GroupV2/User/Potential/{membership_type}/{membership_id}/{filter}/{group_type}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2051,11 +2051,11 @@ export def "group-v2-user-potential GroupV2GetPotentialGroupsForMember" [
 #
 # GET /GroupV2/User/{membershipType}/{membershipId}/{filter}/{groupType}/
 # operationId: GroupV2.GetGroupsForMember
-export def "group-v2-user GroupV2GetGroupsForMember" [
+export def "group-v2-user get" [
+  membership_type: int
+  membership_id: int
   filter: int
-  groupType: int
-  membershipId: int
-  membershipType: int
+  group_type: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2067,7 +2067,7 @@ export def "group-v2-user GroupV2GetGroupsForMember" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/User/($membershipType)/($membershipId)/($filter)/($groupType)/")
+  let full_url = (build-url $base ({membership_type: $membership_type, membership_id: $membership_id, filter: $filter, group_type: $group_type} | format pattern "/GroupV2/User/{membership_type}/{membership_id}/{filter}/{group_type}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2077,8 +2077,8 @@ export def "group-v2-user GroupV2GetGroupsForMember" [
 #
 # GET /GroupV2/{groupId}/
 # operationId: GroupV2.GetGroup
-export def "group-v2 GroupV2GetGroup" [
-  groupId: int
+export def "group-v2 get" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2090,7 +2090,7 @@ export def "group-v2 GroupV2GetGroup" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/GroupV2/{group_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2100,10 +2100,10 @@ export def "group-v2 GroupV2GetGroup" [
 #
 # POST /GroupV2/{groupId}/Admin/AbdicateFoundership/{membershipType}/{founderIdNew}/
 # operationId: GroupV2.AbdicateFoundership
-export def "group-v2-admin-abdicate-foundership GroupV2AbdicateFoundership" [
-  founderIdNew: int
-  groupId: int
-  membershipType: int
+export def "group-v2-admin-abdicate-foundership post" [
+  group_id: int
+  membership_type: int
+  founder_id_new: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2115,7 +2115,7 @@ export def "group-v2-admin-abdicate-foundership GroupV2AbdicateFoundership" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Admin/AbdicateFoundership/($membershipType)/($founderIdNew)/")
+  let full_url = (build-url $base ({group_id: $group_id, membership_type: $membership_type, founder_id_new: $founder_id_new} | format pattern "/GroupV2/{group_id}/Admin/AbdicateFoundership/{membership_type}/{founder_id_new}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2125,8 +2125,8 @@ export def "group-v2-admin-abdicate-foundership GroupV2AbdicateFoundership" [
 #
 # GET /GroupV2/{groupId}/AdminsAndFounder/
 # operationId: GroupV2.GetAdminsAndFounderOfGroup
-export def "group-v2-admins-and-founder GroupV2GetAdminsAndFounderOfGroup" [
-  groupId: int
+export def "group-v2-admins-and-founder get" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2140,7 +2140,7 @@ export def "group-v2-admins-and-founder GroupV2GetAdminsAndFounderOfGroup" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "currentpage" $currentpage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/GroupV2/($groupId)/AdminsAndFounder/" $qp)
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/GroupV2/{group_id}/AdminsAndFounder/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2150,8 +2150,8 @@ export def "group-v2-admins-and-founder GroupV2GetAdminsAndFounderOfGroup" [
 #
 # GET /GroupV2/{groupId}/Banned/
 # operationId: GroupV2.GetBannedMembersOfGroup
-export def "group-v2-banned GroupV2GetBannedMembersOfGroup" [
-  groupId: int
+export def "group-v2-banned get" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2165,7 +2165,7 @@ export def "group-v2-banned GroupV2GetBannedMembersOfGroup" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "currentpage" $currentpage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Banned/" $qp)
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/GroupV2/{group_id}/Banned/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2175,8 +2175,8 @@ export def "group-v2-banned GroupV2GetBannedMembersOfGroup" [
 #
 # POST /GroupV2/{groupId}/Edit/
 # operationId: GroupV2.EditGroup
-export def "group-v2-edit GroupV2EditGroup" [
-  groupId: int
+export def "group-v2-edit post" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2188,7 +2188,7 @@ export def "group-v2-edit GroupV2EditGroup" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Edit/")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/GroupV2/{group_id}/Edit/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2198,8 +2198,8 @@ export def "group-v2-edit GroupV2EditGroup" [
 #
 # POST /GroupV2/{groupId}/EditClanBanner/
 # operationId: GroupV2.EditClanBanner
-export def "group-v2-edit-clan-banner GroupV2EditClanBanner" [
-  groupId: int
+export def "group-v2-edit-clan-banner post" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2211,7 +2211,7 @@ export def "group-v2-edit-clan-banner GroupV2EditClanBanner" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/EditClanBanner/")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/GroupV2/{group_id}/EditClanBanner/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2221,8 +2221,8 @@ export def "group-v2-edit-clan-banner GroupV2EditClanBanner" [
 #
 # POST /GroupV2/{groupId}/EditFounderOptions/
 # operationId: GroupV2.EditFounderOptions
-export def "group-v2-edit-founder-options GroupV2EditFounderOptions" [
-  groupId: int
+export def "group-v2-edit-founder-options post" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2234,7 +2234,7 @@ export def "group-v2-edit-founder-options GroupV2EditFounderOptions" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/EditFounderOptions/")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/GroupV2/{group_id}/EditFounderOptions/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2244,8 +2244,8 @@ export def "group-v2-edit-founder-options GroupV2EditFounderOptions" [
 #
 # GET /GroupV2/{groupId}/Members/
 # operationId: GroupV2.GetMembersOfGroup
-export def "group-v2-members GroupV2GetMembersOfGroup" [
-  groupId: int
+export def "group-v2-members get" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2255,13 +2255,13 @@ export def "group-v2-members GroupV2GetMembersOfGroup" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --currentpage: int # Page number (starting with 1). Each page has a fixed size of 50 items per page. (format: int32)
-  --memberType: int # Filter out other member types. Use None for all members. (format: int32)
-  --nameSearch: string # The name fragment upon which a search should be executed for members with matching display or unique names.
+  --member-type: int # Filter out other member types. Use None for all members. (format: int32)
+  --name-search: string # The name fragment upon which a search should be executed for members with matching display or unique names.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "currentpage" $currentpage "scalar") (serialize-qp "memberType" $memberType "scalar") (serialize-qp "nameSearch" $nameSearch "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Members/" $qp)
+  let qp = [(serialize-qp "currentpage" $currentpage "scalar") (serialize-qp "memberType" $member_type "scalar") (serialize-qp "nameSearch" $name_search "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/GroupV2/{group_id}/Members/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2271,10 +2271,10 @@ export def "group-v2-members GroupV2GetMembersOfGroup" [
 #
 # POST /GroupV2/{groupId}/Members/Approve/{membershipType}/{membershipId}/
 # operationId: GroupV2.ApprovePending
-export def "group-v2-members-approve GroupV2ApprovePending" [
-  groupId: int
-  membershipId: int
-  membershipType: int
+export def "group-v2-members-approve post" [
+  group_id: int
+  membership_type: int
+  membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2286,7 +2286,7 @@ export def "group-v2-members-approve GroupV2ApprovePending" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Members/Approve/($membershipType)/($membershipId)/")
+  let full_url = (build-url $base ({group_id: $group_id, membership_type: $membership_type, membership_id: $membership_id} | format pattern "/GroupV2/{group_id}/Members/Approve/{membership_type}/{membership_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2296,8 +2296,8 @@ export def "group-v2-members-approve GroupV2ApprovePending" [
 #
 # POST /GroupV2/{groupId}/Members/ApproveAll/
 # operationId: GroupV2.ApproveAllPending
-export def "group-v2-members-approve-all GroupV2ApproveAllPending" [
-  groupId: int
+export def "group-v2-members-approve-all post" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2309,7 +2309,7 @@ export def "group-v2-members-approve-all GroupV2ApproveAllPending" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Members/ApproveAll/")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/GroupV2/{group_id}/Members/ApproveAll/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2319,8 +2319,8 @@ export def "group-v2-members-approve-all GroupV2ApproveAllPending" [
 #
 # POST /GroupV2/{groupId}/Members/ApproveList/
 # operationId: GroupV2.ApprovePendingForList
-export def "group-v2-members-approve-list GroupV2ApprovePendingForList" [
-  groupId: int
+export def "group-v2-members-approve-list post" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2332,7 +2332,7 @@ export def "group-v2-members-approve-list GroupV2ApprovePendingForList" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Members/ApproveList/")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/GroupV2/{group_id}/Members/ApproveList/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2342,8 +2342,8 @@ export def "group-v2-members-approve-list GroupV2ApprovePendingForList" [
 #
 # POST /GroupV2/{groupId}/Members/DenyAll/
 # operationId: GroupV2.DenyAllPending
-export def "group-v2-members-deny-all GroupV2DenyAllPending" [
-  groupId: int
+export def "group-v2-members-deny-all post" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2355,7 +2355,7 @@ export def "group-v2-members-deny-all GroupV2DenyAllPending" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Members/DenyAll/")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/GroupV2/{group_id}/Members/DenyAll/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2365,8 +2365,8 @@ export def "group-v2-members-deny-all GroupV2DenyAllPending" [
 #
 # POST /GroupV2/{groupId}/Members/DenyList/
 # operationId: GroupV2.DenyPendingForList
-export def "group-v2-members-deny-list GroupV2DenyPendingForList" [
-  groupId: int
+export def "group-v2-members-deny-list post" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2378,7 +2378,7 @@ export def "group-v2-members-deny-list GroupV2DenyPendingForList" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Members/DenyList/")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/GroupV2/{group_id}/Members/DenyList/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2388,10 +2388,10 @@ export def "group-v2-members-deny-list GroupV2DenyPendingForList" [
 #
 # POST /GroupV2/{groupId}/Members/IndividualInvite/{membershipType}/{membershipId}/
 # operationId: GroupV2.IndividualGroupInvite
-export def "group-v2-members-individual-invite GroupV2IndividualGroupInvite" [
-  groupId: int
-  membershipId: int
-  membershipType: int
+export def "group-v2-members-individual-invite post" [
+  group_id: int
+  membership_type: int
+  membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2403,7 +2403,7 @@ export def "group-v2-members-individual-invite GroupV2IndividualGroupInvite" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Members/IndividualInvite/($membershipType)/($membershipId)/")
+  let full_url = (build-url $base ({group_id: $group_id, membership_type: $membership_type, membership_id: $membership_id} | format pattern "/GroupV2/{group_id}/Members/IndividualInvite/{membership_type}/{membership_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2413,10 +2413,10 @@ export def "group-v2-members-individual-invite GroupV2IndividualGroupInvite" [
 #
 # POST /GroupV2/{groupId}/Members/IndividualInviteCancel/{membershipType}/{membershipId}/
 # operationId: GroupV2.IndividualGroupInviteCancel
-export def "group-v2-members-individual-invite-cancel GroupV2IndividualGroupInviteCancel" [
-  groupId: int
-  membershipId: int
-  membershipType: int
+export def "group-v2-members-individual-invite-cancel post" [
+  group_id: int
+  membership_type: int
+  membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2428,7 +2428,7 @@ export def "group-v2-members-individual-invite-cancel GroupV2IndividualGroupInvi
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Members/IndividualInviteCancel/($membershipType)/($membershipId)/")
+  let full_url = (build-url $base ({group_id: $group_id, membership_type: $membership_type, membership_id: $membership_id} | format pattern "/GroupV2/{group_id}/Members/IndividualInviteCancel/{membership_type}/{membership_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2438,8 +2438,8 @@ export def "group-v2-members-individual-invite-cancel GroupV2IndividualGroupInvi
 #
 # GET /GroupV2/{groupId}/Members/InvitedIndividuals/
 # operationId: GroupV2.GetInvitedIndividuals
-export def "group-v2-members-invited-individuals GroupV2GetInvitedIndividuals" [
-  groupId: int
+export def "group-v2-members-invited-individuals get" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2453,7 +2453,7 @@ export def "group-v2-members-invited-individuals GroupV2GetInvitedIndividuals" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "currentpage" $currentpage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Members/InvitedIndividuals/" $qp)
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/GroupV2/{group_id}/Members/InvitedIndividuals/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2463,8 +2463,8 @@ export def "group-v2-members-invited-individuals GroupV2GetInvitedIndividuals" [
 #
 # GET /GroupV2/{groupId}/Members/Pending/
 # operationId: GroupV2.GetPendingMemberships
-export def "group-v2-members-pending GroupV2GetPendingMemberships" [
-  groupId: int
+export def "group-v2-members-pending get" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2478,7 +2478,7 @@ export def "group-v2-members-pending GroupV2GetPendingMemberships" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "currentpage" $currentpage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Members/Pending/" $qp)
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/GroupV2/{group_id}/Members/Pending/") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2488,10 +2488,10 @@ export def "group-v2-members-pending GroupV2GetPendingMemberships" [
 #
 # POST /GroupV2/{groupId}/Members/{membershipType}/{membershipId}/Ban/
 # operationId: GroupV2.BanMember
-export def "group-v2-members-ban GroupV2BanMember" [
-  groupId: int
-  membershipId: int
-  membershipType: int
+export def "group-v2-members-ban post" [
+  group_id: int
+  membership_type: int
+  membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2503,7 +2503,7 @@ export def "group-v2-members-ban GroupV2BanMember" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Members/($membershipType)/($membershipId)/Ban/")
+  let full_url = (build-url $base ({group_id: $group_id, membership_type: $membership_type, membership_id: $membership_id} | format pattern "/GroupV2/{group_id}/Members/{membership_type}/{membership_id}/Ban/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2513,10 +2513,10 @@ export def "group-v2-members-ban GroupV2BanMember" [
 #
 # POST /GroupV2/{groupId}/Members/{membershipType}/{membershipId}/Kick/
 # operationId: GroupV2.KickMember
-export def "group-v2-members-kick GroupV2KickMember" [
-  groupId: int
-  membershipId: int
-  membershipType: int
+export def "group-v2-members-kick post" [
+  group_id: int
+  membership_type: int
+  membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2528,7 +2528,7 @@ export def "group-v2-members-kick GroupV2KickMember" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Members/($membershipType)/($membershipId)/Kick/")
+  let full_url = (build-url $base ({group_id: $group_id, membership_type: $membership_type, membership_id: $membership_id} | format pattern "/GroupV2/{group_id}/Members/{membership_type}/{membership_id}/Kick/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2538,11 +2538,11 @@ export def "group-v2-members-kick GroupV2KickMember" [
 #
 # POST /GroupV2/{groupId}/Members/{membershipType}/{membershipId}/SetMembershipType/{memberType}/
 # operationId: GroupV2.EditGroupMembership
-export def "group-v2-members-set-membership-type GroupV2EditGroupMembership" [
-  groupId: int
-  membershipId: int
-  membershipType: int
-  memberType: int
+export def "group-v2-members-set-membership-type post" [
+  group_id: int
+  membership_type: int
+  membership_id: int
+  member_type: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2554,7 +2554,7 @@ export def "group-v2-members-set-membership-type GroupV2EditGroupMembership" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Members/($membershipType)/($membershipId)/SetMembershipType/($memberType)/")
+  let full_url = (build-url $base ({group_id: $group_id, membership_type: $membership_type, membership_id: $membership_id, member_type: $member_type} | format pattern "/GroupV2/{group_id}/Members/{membership_type}/{membership_id}/SetMembershipType/{member_type}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2564,10 +2564,10 @@ export def "group-v2-members-set-membership-type GroupV2EditGroupMembership" [
 #
 # POST /GroupV2/{groupId}/Members/{membershipType}/{membershipId}/Unban/
 # operationId: GroupV2.UnbanMember
-export def "group-v2-members-unban GroupV2UnbanMember" [
-  groupId: int
-  membershipId: int
-  membershipType: int
+export def "group-v2-members-unban post" [
+  group_id: int
+  membership_type: int
+  membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2579,7 +2579,7 @@ export def "group-v2-members-unban GroupV2UnbanMember" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/Members/($membershipType)/($membershipId)/Unban/")
+  let full_url = (build-url $base ({group_id: $group_id, membership_type: $membership_type, membership_id: $membership_id} | format pattern "/GroupV2/{group_id}/Members/{membership_type}/{membership_id}/Unban/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2589,8 +2589,8 @@ export def "group-v2-members-unban GroupV2UnbanMember" [
 #
 # GET /GroupV2/{groupId}/OptionalConversations/
 # operationId: GroupV2.GetGroupOptionalConversations
-export def "group-v2-optional-conversations GroupV2GetGroupOptionalConversations" [
-  groupId: int
+export def "group-v2-optional-conversations get" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2602,7 +2602,7 @@ export def "group-v2-optional-conversations GroupV2GetGroupOptionalConversations
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/OptionalConversations/")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/GroupV2/{group_id}/OptionalConversations/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2612,8 +2612,8 @@ export def "group-v2-optional-conversations GroupV2GetGroupOptionalConversations
 #
 # POST /GroupV2/{groupId}/OptionalConversations/Add/
 # operationId: GroupV2.AddOptionalConversation
-export def "group-v2-optional-conversations-add GroupV2AddOptionalConversation" [
-  groupId: int
+export def "group-v2-optional-conversations-add post" [
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2625,7 +2625,7 @@ export def "group-v2-optional-conversations-add GroupV2AddOptionalConversation" 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/OptionalConversations/Add/")
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/GroupV2/{group_id}/OptionalConversations/Add/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2635,9 +2635,9 @@ export def "group-v2-optional-conversations-add GroupV2AddOptionalConversation" 
 #
 # POST /GroupV2/{groupId}/OptionalConversations/Edit/{conversationId}/
 # operationId: GroupV2.EditOptionalConversation
-export def "group-v2-optional-conversations-edit GroupV2EditOptionalConversation" [
-  conversationId: int
-  groupId: int
+export def "group-v2-optional-conversations-edit post" [
+  group_id: int
+  conversation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2649,7 +2649,7 @@ export def "group-v2-optional-conversations-edit GroupV2EditOptionalConversation
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GroupV2/($groupId)/OptionalConversations/Edit/($conversationId)/")
+  let full_url = (build-url $base ({group_id: $group_id, conversation_id: $conversation_id} | format pattern "/GroupV2/{group_id}/OptionalConversations/Edit/{conversation_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2681,7 +2681,7 @@ export def "settings GetCommonSettings" [
 #
 # GET /Social/Friends/
 # operationId: Social.GetFriendList
-export def "social-friends SocialGetFriendList" [
+export def "social-friends get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2703,8 +2703,8 @@ export def "social-friends SocialGetFriendList" [
 #
 # POST /Social/Friends/Add/{membershipId}/
 # operationId: Social.IssueFriendRequest
-export def "social-friends-add SocialIssueFriendRequest" [
-  membershipId: string
+export def "social-friends-add post" [
+  membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2716,7 +2716,7 @@ export def "social-friends-add SocialIssueFriendRequest" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Social/Friends/Add/($membershipId)/")
+  let full_url = (build-url $base ({membership_id: $membership_id} | format pattern "/Social/Friends/Add/{membership_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2726,8 +2726,8 @@ export def "social-friends-add SocialIssueFriendRequest" [
 #
 # POST /Social/Friends/Remove/{membershipId}/
 # operationId: Social.RemoveFriend
-export def "social-friends-remove SocialRemoveFriend" [
-  membershipId: string
+export def "social-friends-remove post" [
+  membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2739,7 +2739,7 @@ export def "social-friends-remove SocialRemoveFriend" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Social/Friends/Remove/($membershipId)/")
+  let full_url = (build-url $base ({membership_id: $membership_id} | format pattern "/Social/Friends/Remove/{membership_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2749,7 +2749,7 @@ export def "social-friends-remove SocialRemoveFriend" [
 #
 # GET /Social/Friends/Requests/
 # operationId: Social.GetFriendRequestList
-export def "social-friends-requests SocialGetFriendRequestList" [
+export def "social-friends-requests get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2771,8 +2771,8 @@ export def "social-friends-requests SocialGetFriendRequestList" [
 #
 # POST /Social/Friends/Requests/Accept/{membershipId}/
 # operationId: Social.AcceptFriendRequest
-export def "social-friends-requests-accept SocialAcceptFriendRequest" [
-  membershipId: string
+export def "social-friends-requests-accept post" [
+  membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2784,7 +2784,7 @@ export def "social-friends-requests-accept SocialAcceptFriendRequest" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Social/Friends/Requests/Accept/($membershipId)/")
+  let full_url = (build-url $base ({membership_id: $membership_id} | format pattern "/Social/Friends/Requests/Accept/{membership_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2794,8 +2794,8 @@ export def "social-friends-requests-accept SocialAcceptFriendRequest" [
 #
 # POST /Social/Friends/Requests/Decline/{membershipId}/
 # operationId: Social.DeclineFriendRequest
-export def "social-friends-requests-decline SocialDeclineFriendRequest" [
-  membershipId: string
+export def "social-friends-requests-decline post" [
+  membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2807,7 +2807,7 @@ export def "social-friends-requests-decline SocialDeclineFriendRequest" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Social/Friends/Requests/Decline/($membershipId)/")
+  let full_url = (build-url $base ({membership_id: $membership_id} | format pattern "/Social/Friends/Requests/Decline/{membership_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2817,8 +2817,8 @@ export def "social-friends-requests-decline SocialDeclineFriendRequest" [
 #
 # POST /Social/Friends/Requests/Remove/{membershipId}/
 # operationId: Social.RemoveFriendRequest
-export def "social-friends-requests-remove SocialRemoveFriendRequest" [
-  membershipId: string
+export def "social-friends-requests-remove post" [
+  membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2830,7 +2830,7 @@ export def "social-friends-requests-remove SocialRemoveFriendRequest" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Social/Friends/Requests/Remove/($membershipId)/")
+  let full_url = (build-url $base ({membership_id: $membership_id} | format pattern "/Social/Friends/Requests/Remove/{membership_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2840,8 +2840,8 @@ export def "social-friends-requests-remove SocialRemoveFriendRequest" [
 #
 # GET /Social/PlatformFriends/{friendPlatform}/{page}/
 # operationId: Social.GetPlatformFriendList
-export def "social-platform-friends SocialGetPlatformFriendList" [
-  friendPlatform: int
+export def "social-platform-friends get" [
+  friend_platform: int
   page: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2854,7 +2854,7 @@ export def "social-platform-friends SocialGetPlatformFriendList" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Social/PlatformFriends/($friendPlatform)/($page)/")
+  let full_url = (build-url $base ({friend_platform: $friend_platform, page: $page} | format pattern "/Social/PlatformFriends/{friend_platform}/{page}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2864,9 +2864,9 @@ export def "social-platform-friends SocialGetPlatformFriendList" [
 #
 # POST /Tokens/Partner/ApplyMissingOffers/{partnerApplicationId}/{targetBnetMembershipId}/
 # operationId: Tokens.ApplyMissingPartnerOffersWithoutClaim
-export def "tokens-partner-apply-missing-offers TokensApplyMissingPartnerOffersWithoutClaim" [
-  partnerApplicationId: int
-  targetBnetMembershipId: int
+export def "tokens-partner-apply-missing-offers post" [
+  partner_application_id: int
+  target_bnet_membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2878,7 +2878,7 @@ export def "tokens-partner-apply-missing-offers TokensApplyMissingPartnerOffersW
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Tokens/Partner/ApplyMissingOffers/($partnerApplicationId)/($targetBnetMembershipId)/")
+  let full_url = (build-url $base ({partner_application_id: $partner_application_id, target_bnet_membership_id: $target_bnet_membership_id} | format pattern "/Tokens/Partner/ApplyMissingOffers/{partner_application_id}/{target_bnet_membership_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2888,7 +2888,7 @@ export def "tokens-partner-apply-missing-offers TokensApplyMissingPartnerOffersW
 #
 # POST /Tokens/Partner/ClaimOffer/
 # operationId: Tokens.ClaimPartnerOffer
-export def "tokens-partner-claim-offer TokensClaimPartnerOffer" [
+export def "tokens-partner-claim-offer post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2910,7 +2910,7 @@ export def "tokens-partner-claim-offer TokensClaimPartnerOffer" [
 #
 # POST /Tokens/Partner/ForceDropsRepair/
 # operationId: Tokens.ForceDropsRepair
-export def "tokens-partner-force-drops-repair TokensForceDropsRepair" [
+export def "tokens-partner-force-drops-repair post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2932,9 +2932,9 @@ export def "tokens-partner-force-drops-repair TokensForceDropsRepair" [
 #
 # GET /Tokens/Partner/History/{partnerApplicationId}/{targetBnetMembershipId}/
 # operationId: Tokens.GetPartnerOfferSkuHistory
-export def "tokens-partner-history TokensGetPartnerOfferSkuHistory" [
-  partnerApplicationId: int
-  targetBnetMembershipId: int
+export def "tokens-partner-history get" [
+  partner_application_id: int
+  target_bnet_membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2946,7 +2946,7 @@ export def "tokens-partner-history TokensGetPartnerOfferSkuHistory" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Tokens/Partner/History/($partnerApplicationId)/($targetBnetMembershipId)/")
+  let full_url = (build-url $base ({partner_application_id: $partner_application_id, target_bnet_membership_id: $target_bnet_membership_id} | format pattern "/Tokens/Partner/History/{partner_application_id}/{target_bnet_membership_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2956,9 +2956,9 @@ export def "tokens-partner-history TokensGetPartnerOfferSkuHistory" [
 #
 # GET /Tokens/Partner/History/{targetBnetMembershipId}/Application/{partnerApplicationId}/
 # operationId: Tokens.GetPartnerRewardHistory
-export def "tokens-partner-history-application TokensGetPartnerRewardHistory" [
-  partnerApplicationId: int
-  targetBnetMembershipId: int
+export def "tokens-partner-history-application get" [
+  target_bnet_membership_id: int
+  partner_application_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2970,7 +2970,7 @@ export def "tokens-partner-history-application TokensGetPartnerRewardHistory" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Tokens/Partner/History/($targetBnetMembershipId)/Application/($partnerApplicationId)/")
+  let full_url = (build-url $base ({target_bnet_membership_id: $target_bnet_membership_id, partner_application_id: $partner_application_id} | format pattern "/Tokens/Partner/History/{target_bnet_membership_id}/Application/{partner_application_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2980,7 +2980,7 @@ export def "tokens-partner-history-application TokensGetPartnerRewardHistory" [
 #
 # GET /Tokens/Rewards/BungieRewards/
 # operationId: Tokens.GetBungieRewardsList
-export def "tokens-rewards-bungie-rewards TokensGetBungieRewardsList" [
+export def "tokens-rewards-bungie-rewards get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3002,9 +3002,9 @@ export def "tokens-rewards-bungie-rewards TokensGetBungieRewardsList" [
 #
 # GET /Tokens/Rewards/GetRewardsForPlatformUser/{membershipId}/{membershipType}/
 # operationId: Tokens.GetBungieRewardsForPlatformUser
-export def "tokens-rewards-get-rewards-for-platform-user TokensGetBungieRewardsForPlatformUser" [
-  membershipId: int
-  membershipType: int
+export def "tokens-rewards-get-rewards-for-platform-user get" [
+  membership_id: int
+  membership_type: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3016,7 +3016,7 @@ export def "tokens-rewards-get-rewards-for-platform-user TokensGetBungieRewardsF
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Tokens/Rewards/GetRewardsForPlatformUser/($membershipId)/($membershipType)/")
+  let full_url = (build-url $base ({membership_id: $membership_id, membership_type: $membership_type} | format pattern "/Tokens/Rewards/GetRewardsForPlatformUser/{membership_id}/{membership_type}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3026,8 +3026,8 @@ export def "tokens-rewards-get-rewards-for-platform-user TokensGetBungieRewardsF
 #
 # GET /Tokens/Rewards/GetRewardsForUser/{membershipId}/
 # operationId: Tokens.GetBungieRewardsForUser
-export def "tokens-rewards-get-rewards-for-user TokensGetBungieRewardsForUser" [
-  membershipId: int
+export def "tokens-rewards-get-rewards-for-user get" [
+  membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3039,7 +3039,7 @@ export def "tokens-rewards-get-rewards-for-user TokensGetBungieRewardsForUser" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Tokens/Rewards/GetRewardsForUser/($membershipId)/")
+  let full_url = (build-url $base ({membership_id: $membership_id} | format pattern "/Tokens/Rewards/GetRewardsForUser/{membership_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3049,7 +3049,7 @@ export def "tokens-rewards-get-rewards-for-user TokensGetBungieRewardsForUser" [
 #
 # GET /Trending/Categories/
 # operationId: Trending.GetTrendingCategories
-export def "trending-categories TrendingGetTrendingCategories" [
+export def "trending-categories get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3071,9 +3071,9 @@ export def "trending-categories TrendingGetTrendingCategories" [
 #
 # GET /Trending/Categories/{categoryId}/{pageNumber}/
 # operationId: Trending.GetTrendingCategory
-export def "trending-categories TrendingGetTrendingCategory" [
-  categoryId: string
-  pageNumber: int
+export def "trending-categories get-by-categoryId-pageNumber" [
+  category_id: string
+  page_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3085,7 +3085,7 @@ export def "trending-categories TrendingGetTrendingCategory" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Trending/Categories/($categoryId)/($pageNumber)/")
+  let full_url = (build-url $base ({category_id: $category_id, page_number: $page_number} | format pattern "/Trending/Categories/{category_id}/{page_number}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3095,9 +3095,9 @@ export def "trending-categories TrendingGetTrendingCategory" [
 #
 # GET /Trending/Details/{trendingEntryType}/{identifier}/
 # operationId: Trending.GetTrendingEntryDetail
-export def "trending-details TrendingGetTrendingEntryDetail" [
+export def "trending-details get" [
+  trending_entry_type: int
   identifier: string
-  trendingEntryType: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3109,7 +3109,7 @@ export def "trending-details TrendingGetTrendingEntryDetail" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Trending/Details/($trendingEntryType)/($identifier)/")
+  let full_url = (build-url $base ({trending_entry_type: $trending_entry_type, identifier: $identifier} | format pattern "/Trending/Details/{trending_entry_type}/{identifier}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3119,7 +3119,7 @@ export def "trending-details TrendingGetTrendingEntryDetail" [
 #
 # GET /User/GetAvailableThemes/
 # operationId: User.GetAvailableThemes
-export def "user-get-available-themes UserGetAvailableThemes" [
+export def "user-get-available-themes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3141,7 +3141,7 @@ export def "user-get-available-themes UserGetAvailableThemes" [
 #
 # GET /User/GetBungieNetUserById/{id}/
 # operationId: User.GetBungieNetUserById
-export def "user-get-bungie-net-user-by-id UserGetBungieNetUserById" [
+export def "user-get-bungie-net-user-by-id get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3154,7 +3154,7 @@ export def "user-get-bungie-net-user-by-id UserGetBungieNetUserById" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/User/GetBungieNetUserById/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/User/GetBungieNetUserById/{id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3164,8 +3164,8 @@ export def "user-get-bungie-net-user-by-id UserGetBungieNetUserById" [
 #
 # GET /User/GetCredentialTypesForTargetAccount/{membershipId}/
 # operationId: User.GetCredentialTypesForTargetAccount
-export def "user-get-credential-types-for-target-account UserGetCredentialTypesForTargetAccount" [
-  membershipId: int
+export def "user-get-credential-types-for-target-account get" [
+  membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3177,7 +3177,7 @@ export def "user-get-credential-types-for-target-account UserGetCredentialTypesF
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/User/GetCredentialTypesForTargetAccount/($membershipId)/")
+  let full_url = (build-url $base ({membership_id: $membership_id} | format pattern "/User/GetCredentialTypesForTargetAccount/{membership_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3187,9 +3187,9 @@ export def "user-get-credential-types-for-target-account UserGetCredentialTypesF
 #
 # GET /User/GetMembershipFromHardLinkedCredential/{crType}/{credential}/
 # operationId: User.GetMembershipFromHardLinkedCredential
-export def "user-get-membership-from-hard-linked-credential UserGetMembershipFromHardLinkedCredential" [
+export def "user-get-membership-from-hard-linked-credential get" [
+  cr_type: int
   credential: string
-  crType: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3201,7 +3201,7 @@ export def "user-get-membership-from-hard-linked-credential UserGetMembershipFro
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/User/GetMembershipFromHardLinkedCredential/($crType)/($credential)/")
+  let full_url = (build-url $base ({cr_type: $cr_type, credential: $credential} | format pattern "/User/GetMembershipFromHardLinkedCredential/{cr_type}/{credential}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3211,9 +3211,9 @@ export def "user-get-membership-from-hard-linked-credential UserGetMembershipFro
 #
 # GET /User/GetMembershipsById/{membershipId}/{membershipType}/
 # operationId: User.GetMembershipDataById
-export def "user-get-memberships-by-id UserGetMembershipDataById" [
-  membershipId: int
-  membershipType: int
+export def "user-get-memberships-by-id get" [
+  membership_id: int
+  membership_type: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3225,7 +3225,7 @@ export def "user-get-memberships-by-id UserGetMembershipDataById" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/User/GetMembershipsById/($membershipId)/($membershipType)/")
+  let full_url = (build-url $base ({membership_id: $membership_id, membership_type: $membership_type} | format pattern "/User/GetMembershipsById/{membership_id}/{membership_type}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3235,7 +3235,7 @@ export def "user-get-memberships-by-id UserGetMembershipDataById" [
 #
 # GET /User/GetMembershipsForCurrentUser/
 # operationId: User.GetMembershipDataForCurrentUser
-export def "user-get-memberships-for-current-user UserGetMembershipDataForCurrentUser" [
+export def "user-get-memberships-for-current-user get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3257,8 +3257,8 @@ export def "user-get-memberships-for-current-user UserGetMembershipDataForCurren
 #
 # GET /User/GetSanitizedPlatformDisplayNames/{membershipId}/
 # operationId: User.GetSanitizedPlatformDisplayNames
-export def "user-get-sanitized-platform-display-names UserGetSanitizedPlatformDisplayNames" [
-  membershipId: int
+export def "user-get-sanitized-platform-display-names get" [
+  membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3270,7 +3270,7 @@ export def "user-get-sanitized-platform-display-names UserGetSanitizedPlatformDi
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/User/GetSanitizedPlatformDisplayNames/($membershipId)/")
+  let full_url = (build-url $base ({membership_id: $membership_id} | format pattern "/User/GetSanitizedPlatformDisplayNames/{membership_id}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3280,7 +3280,7 @@ export def "user-get-sanitized-platform-display-names UserGetSanitizedPlatformDi
 #
 # POST /User/Search/GlobalName/{page}/
 # operationId: User.SearchByGlobalNamePost
-export def "user-search-global-name UserSearchByGlobalNamePost" [
+export def "user-search-global-name post" [
   page: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3293,7 +3293,7 @@ export def "user-search-global-name UserSearchByGlobalNamePost" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/User/Search/GlobalName/($page)/")
+  let full_url = (build-url $base ({page: $page} | format pattern "/User/Search/GlobalName/{page}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3303,8 +3303,8 @@ export def "user-search-global-name UserSearchByGlobalNamePost" [
 #
 # GET /User/Search/Prefix/{displayNamePrefix}/{page}/
 # operationId: User.SearchByGlobalNamePrefix
-export def "user-search-prefix UserSearchByGlobalNamePrefix" [
-  displayNamePrefix: string
+export def "user-search-prefix get" [
+  display_name_prefix: string
   page: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3317,7 +3317,7 @@ export def "user-search-prefix UserSearchByGlobalNamePrefix" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/User/Search/Prefix/($displayNamePrefix)/($page)/")
+  let full_url = (build-url $base ({display_name_prefix: $display_name_prefix, page: $page} | format pattern "/User/Search/Prefix/{display_name_prefix}/{page}/"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

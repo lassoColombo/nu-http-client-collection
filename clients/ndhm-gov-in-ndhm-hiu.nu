@@ -147,19 +147,19 @@ export def "v05-consent-requests-init post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-CM-ID: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
   consent: record # shape: {careContexts?: list, hiTypes: list, hip?: record, hiu: record, patient: record, permission: record, purpose: record, requester: record}
-  requestId: string # a nonce, unique for each HTTP request. (format: uuid, e.g. 499a5a4a-7dda-4f20-9b67-e24589627061)
+  request_id: string # a nonce, unique for each HTTP request. (format: uuid, e.g. 499a5a4a-7dda-4f20-9b67-e24589627061)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/consent-requests/init")
-  let body = {consent: $consent, requestId: $requestId, timestamp: $timestamp} | compact
+  let body = {"consent": $consent, "requestId": $request_id, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-CM-ID": $X_CM_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-CM-ID": $x_cm_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -181,11 +181,11 @@ export def "v05-consent-requests-on-init post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-HIU-ID: string # Identifier of the health information user to which the request was intended.
-  --consentRequest: record # shape: {id: string}
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
+  --consent-request: record # shape: {id: string}
   --body-error: record # shape: {code: "1000"|"10001", message: string}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
@@ -193,9 +193,9 @@ export def "v05-consent-requests-on-init post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://dev.ndhm.gov.in/hiu")
   let full_url = (build-url $base "/v0.5/consent-requests/on-init")
-  let body = {consentRequest: $consentRequest, error: $body_error, requestId: $requestId, resp: $resp, timestamp: $timestamp} | compact
+  let body = {"consentRequest": $consent_request, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-HIU-ID": $X_HIU_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-HIU-ID": $x_hiu_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -217,11 +217,11 @@ export def "v05-consent-requests-on-status post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-HIU-ID: string # Identifier of the health information user to which the request was intended.
-  --consentRequest: record # shape: {consentArtefacts: list, id: string, status: "GRANTED"|"EXPIRED"|"DENIED"|"REQUESTED"|"REVOKED"}
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
+  --consent-request: record # shape: {consentArtefacts: list, id: string, status: "GRANTED"|"EXPIRED"|"DENIED"|"REQUESTED"|"REVOKED"}
   --body-error: record # shape: {code: "1000"|"10001", message: string}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
@@ -229,9 +229,9 @@ export def "v05-consent-requests-on-status post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://dev.ndhm.gov.in/hiu")
   let full_url = (build-url $base "/v0.5/consent-requests/on-status")
-  let body = {consentRequest: $consentRequest, error: $body_error, requestId: $requestId, resp: $resp, timestamp: $timestamp} | compact
+  let body = {"consentRequest": $consent_request, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-HIU-ID": $X_HIU_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-HIU-ID": $x_hiu_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -250,19 +250,19 @@ export def "v05-consent-requests-status post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-CM-ID: string # Suffix of the consent manager to which the request was intended.
-  consentRequestId: string
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  consent_request_id: string
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/consent-requests/status")
-  let body = {consentRequestId: $consentRequestId, requestId: $requestId, timestamp: $timestamp} | compact
+  let body = {"consentRequestId": $consent_request_id, "requestId": $request_id, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-CM-ID": $X_CM_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-CM-ID": $x_cm_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -281,19 +281,19 @@ export def "v05-consents-fetch post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-CM-ID: string # Suffix of the consent manager to which the request was intended.
-  consentId: string
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  consent_id: string
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/consents/fetch")
-  let body = {consentId: $consentId, requestId: $requestId, timestamp: $timestamp} | compact
+  let body = {"consentId": $consent_id, "requestId": $request_id, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-CM-ID": $X_CM_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-CM-ID": $x_cm_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -313,19 +313,19 @@ export def "v05-consents-hiu-notify post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-HIU-ID: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
   notification: record # shape: {consentArtefacts?: list, consentRequestId: string, status: "GRANTED"|"EXPIRED"|"DENIED"|"REQUESTED"|"REVOKED"}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://dev.ndhm.gov.in/hiu")
   let full_url = (build-url $base "/v0.5/consents/hiu/notify")
-  let body = {notification: $notification, requestId: $requestId, timestamp: $timestamp} | compact
+  let body = {"notification": $notification, "requestId": $request_id, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-HIU-ID": $X_HIU_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-HIU-ID": $x_hiu_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -347,11 +347,11 @@ export def "v05-consents-hiu-on-notify post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-CM-ID: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
   --acknowledgement: list # item shape: {consentId: string, status: "OK"|"UNKNOWN"}
   --body-error: record # shape: {code: "1000"|"10001", message: string}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
@@ -359,9 +359,9 @@ export def "v05-consents-hiu-on-notify post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/consents/hiu/on-notify")
-  let body = {acknowledgement: $acknowledgement, error: $body_error, requestId: $requestId, resp: $resp, timestamp: $timestamp} | compact
+  let body = {"acknowledgement": $acknowledgement, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-CM-ID": $X_CM_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-CM-ID": $x_cm_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -383,11 +383,11 @@ export def "v05-consents-on-fetch post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-HIU-ID: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
   --consent: record # shape: {consentDetail: record, signature: string, status: "GRANTED"|"EXPIRED"|"DENIED"|"REQUESTED"|"REVOKED"}
   --body-error: record # shape: {code: "1000"|"10001", message: string}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
@@ -395,9 +395,9 @@ export def "v05-consents-on-fetch post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://dev.ndhm.gov.in/hiu")
   let full_url = (build-url $base "/v0.5/consents/on-fetch")
-  let body = {consent: $consent, error: $body_error, requestId: $requestId, resp: $resp, timestamp: $timestamp} | compact
+  let body = {"consent": $consent, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-HIU-ID": $X_HIU_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-HIU-ID": $x_hiu_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -417,19 +417,19 @@ export def "v05-health-information-cm-request post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-CM-ID: string # Suffix of the consent manager to which the request was intended.
-  hiRequest: record # shape: {consent: record, dataPushUrl: string, dateRange: record, keyMaterial: record}
-  requestId: string # format: uuid, e.g. a1s2c932-2f70-3ds3-a3b5-2sfd46b12a18d
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  hi_request: record # shape: {consent: record, dataPushUrl: string, dateRange: record, keyMaterial: record}
+  request_id: string # format: uuid, e.g. a1s2c932-2f70-3ds3-a3b5-2sfd46b12a18d
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/health-information/cm/request")
-  let body = {hiRequest: $hiRequest, requestId: $requestId, timestamp: $timestamp} | compact
+  let body = {"hiRequest": $hi_request, "requestId": $request_id, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-CM-ID": $X_CM_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-CM-ID": $x_cm_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -451,11 +451,11 @@ export def "v05-health-information-hiu-on-request post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-HIU-ID: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
   --body-error: record # shape: {code: "1000"|"10001", message: string}
-  --hiRequest: record # shape: {sessionStatus: "REQUESTED"|"ACKNOWLEDGED", transactionId: string}
-  requestId: string # format: uuid, e.g. a1s2c932-2f70-3ds3-a3b5-2sfd46b12a18d
+  --hi-request: record # shape: {sessionStatus: "REQUESTED"|"ACKNOWLEDGED", transactionId: string}
+  request_id: string # format: uuid, e.g. a1s2c932-2f70-3ds3-a3b5-2sfd46b12a18d
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
@@ -463,9 +463,9 @@ export def "v05-health-information-hiu-on-request post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://dev.ndhm.gov.in/hiu")
   let full_url = (build-url $base "/v0.5/health-information/hiu/on-request")
-  let body = {error: $body_error, hiRequest: $hiRequest, requestId: $requestId, resp: $resp, timestamp: $timestamp} | compact
+  let body = {"error": $body_error, "hiRequest": $hi_request, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-HIU-ID": $X_HIU_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-HIU-ID": $x_hiu_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -485,19 +485,19 @@ export def "v05-health-information-notify post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-CM-ID: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
   notification: record # shape: {consentId: string, doneAt: string, notifier: record, statusNotification: record, transactionId: string}
-  requestId: string # a nonce, unique for each HTTP request. (format: uuid, e.g. 499a5a4a-7dda-4f20-9b67-e24589627061)
+  request_id: string # a nonce, unique for each HTTP request. (format: uuid, e.g. 499a5a4a-7dda-4f20-9b67-e24589627061)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/health-information/notify")
-  let body = {notification: $notification, requestId: $requestId, timestamp: $timestamp} | compact
+  let body = {"notification": $notification, "requestId": $request_id, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-CM-ID": $X_CM_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-CM-ID": $x_cm_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -517,20 +517,20 @@ export def "v05-health-information-transfer post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
   entries: list
-  keyMaterial: record # shape: {cryptoAlg: string, curve: string, dhPublicKey: record, nonce: string}
-  pageCount: int # Total number of pages.
-  pageNumber: int # Current page number.
-  transactionId: string # Transaction Id issued when data requested. (format: uuid)
+  key_material: record # shape: {cryptoAlg: string, curve: string, dhPublicKey: record, nonce: string}
+  page_count: int # Total number of pages.
+  page_number: int # Current page number.
+  transaction_id: string # Transaction Id issued when data requested. (format: uuid)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://dev.ndhm.gov.in/hiu")
   let full_url = (build-url $base "/v0.5/health-information/transfer")
-  let body = {entries: $entries, keyMaterial: $keyMaterial, pageCount: $pageCount, pageNumber: $pageNumber, transactionId: $transactionId} | compact
+  let body = {"entries": $entries, "keyMaterial": $key_material, "pageCount": $page_count, "pageNumber": $page_number, "transactionId": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -572,19 +572,19 @@ export def "v05-patients-find post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-CM-ID: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
   query: record # shape: {patient: record, requester: record}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/patients/find")
-  let body = {query: $query, requestId: $requestId, timestamp: $timestamp} | compact
+  let body = {"query": $query, "requestId": $request_id, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-CM-ID": $X_CM_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-CM-ID": $x_cm_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -606,10 +606,10 @@ export def "v05-patients-on-find post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
   --body-error: record # shape: {code: "1000"|"10001", message: string}
   --patient: record # shape: {id: string, name: string}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
@@ -617,9 +617,9 @@ export def "v05-patients-on-find post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://dev.ndhm.gov.in/hiu")
   let full_url = (build-url $base "/v0.5/patients/on-find")
-  let body = {error: $body_error, patient: $patient, requestId: $requestId, resp: $resp, timestamp: $timestamp} | compact
+  let body = {"error": $body_error, "patient": $patient, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -639,14 +639,14 @@ export def "v05-sessions post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  clientId: string
-  clientSecret: string
+  client_id: string
+  client_secret: string
 ]: any -> record<accessToken: string, expiresIn: int, refreshExpiresIn: int, refreshToken: string, tokenType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/sessions")
-  let body = {clientId: $clientId, clientSecret: $clientSecret} | compact
+  let body = {"clientId": $client_id, "clientSecret": $client_secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -666,9 +666,9 @@ export def "v05-subscription-requests-cm-init post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-CM-ID: string # Suffix of the consent manager to which the request was intended.
-  requestId: string # a nonce, unique for each HTTP request. (format: uuid, e.g. 499a5a4a-7dda-4f20-9b67-e24589627061)
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  request_id: string # a nonce, unique for each HTTP request. (format: uuid, e.g. 499a5a4a-7dda-4f20-9b67-e24589627061)
   subscription: record # shape: {categories: list, hips?: list, hiu: record, patient: record, period: record, purpose: record}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
@@ -676,9 +676,9 @@ export def "v05-subscription-requests-cm-init post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/subscription-requests/cm/init")
-  let body = {requestId: $requestId, subscription: $subscription, timestamp: $timestamp} | compact
+  let body = {"requestId": $request_id, "subscription": $subscription, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-CM-ID": $X_CM_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-CM-ID": $x_cm_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -698,19 +698,19 @@ export def "v05-subscription-requests-hiu-notify post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-HIU-ID: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
   notification: record # shape: {status: "GRANTED"|"DENIED", subscription?: record, subscriptionRequestId?: string}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/subscription-requests/hiu/notify")
-  let body = {notification: $notification, requestId: $requestId, timestamp: $timestamp} | compact
+  let body = {"notification": $notification, "requestId": $request_id, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-HIU-ID": $X_HIU_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-HIU-ID": $x_hiu_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -732,21 +732,21 @@ export def "v05-subscription-requests-hiu-on-init post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-HIU-ID: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
   --body-error: record # shape: {code: "1000"|"10001", message: string}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
-  --subscriptionRequest: record # shape: {id: string}
+  --subscription-request: record # shape: {id: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/subscription-requests/hiu/on-init")
-  let body = {error: $body_error, requestId: $requestId, resp: $resp, subscriptionRequest: $subscriptionRequest, timestamp: $timestamp} | compact
+  let body = {"error": $body_error, "requestId": $request_id, "resp": $resp, "subscriptionRequest": $subscription_request, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-HIU-ID": $X_HIU_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-HIU-ID": $x_hiu_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -768,11 +768,11 @@ export def "v05-subscription-requests-hiu-on-notify post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-CM-ID: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
   --acknowledgement: record # shape: {status: "OK", subscriptionRequestId: string}
   --body-error: record # shape: {code: "1000"|"10001", message: string}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
@@ -780,9 +780,9 @@ export def "v05-subscription-requests-hiu-on-notify post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/subscription-requests/hiu/on-notify")
-  let body = {acknowledgement: $acknowledgement, error: $body_error, requestId: $requestId, resp: $resp, timestamp: $timestamp} | compact
+  let body = {"acknowledgement": $acknowledgement, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-CM-ID": $X_CM_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-CM-ID": $x_cm_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -802,19 +802,19 @@ export def "v05-subscriptions-hiu-notify post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-HIU-ID: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
   event: record # shape: {category: "LINK", content: record, id: string, published: string, subscriptionId: string}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/subscriptions/hiu/notify")
-  let body = {event: $event, requestId: $requestId, timestamp: $timestamp} | compact
+  let body = {"event": $event, "requestId": $request_id, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-HIU-ID": $X_HIU_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-HIU-ID": $x_hiu_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -836,11 +836,11 @@ export def "v05-subscriptions-hiu-on-notify post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-CM-ID: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
   --acknowledgement: record # shape: {eventId: string, status: "OK"}
   --body-error: record # shape: {code: "1000"|"10001", message: string}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
@@ -848,9 +848,9 @@ export def "v05-subscriptions-hiu-on-notify post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/subscriptions/hiu/on-notify")
-  let body = {acknowledgement: $acknowledgement, error: $body_error, requestId: $requestId, resp: $resp, timestamp: $timestamp} | compact
+  let body = {"acknowledgement": $acknowledgement, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-CM-ID": $X_CM_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-CM-ID": $x_cm_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -870,20 +870,20 @@ export def "v05-users-auth-confirm post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-CM-ID: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
   credential: record # note, demographic details are only required for demographic auth at this point. — shape: {authCode?: string, demographic?: record}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
-  transactionId: string
+  transaction_id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/users/auth/confirm")
-  let body = {credential: $credential, requestId: $requestId, timestamp: $timestamp, transactionId: $transactionId} | compact
+  let body = {"credential": $credential, "requestId": $request_id, "timestamp": $timestamp, "transactionId": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-CM-ID": $X_CM_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-CM-ID": $x_cm_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -903,19 +903,19 @@ export def "v05-users-auth-fetch-modes post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-CM-ID: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
   query: record # shape: {id: string, purpose: "LINK"|"KYC"|"KYC_AND_LINK", requester: record}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/users/auth/fetch-modes")
-  let body = {query: $query, requestId: $requestId, timestamp: $timestamp} | compact
+  let body = {"query": $query, "requestId": $request_id, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-CM-ID": $X_CM_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-CM-ID": $x_cm_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -935,19 +935,19 @@ export def "v05-users-auth-init post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-CM-ID: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
   query: record # shape: {authMode?: "MOBILE_OTP"|"DIRECT"|"DEMOGRAPHICS"|"AADHAAR_OTP", id: string, purpose: "LINK"|"KYC"|"KYC_AND_LINK", requester: record}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/users/auth/init")
-  let body = {query: $query, requestId: $requestId, timestamp: $timestamp} | compact
+  let body = {"query": $query, "requestId": $request_id, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-CM-ID": $X_CM_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-CM-ID": $x_cm_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -967,20 +967,20 @@ export def "v05-users-auth-notify post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-HIP-ID: string # Identifier of the health information provider to which the request was intended.
-  --X-HIU-ID: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-hip-id: string # Identifier of the health information provider to which the request was intended.
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
   --body-auth: record # depending on the purpose of auth, as specified in /auth/init, the response may include the following    1. LINK - only returns **accessToken**   2. KYC - only returns **patient**   3. KYC_AND_LINK - returns both **accessToken** and **patient** — shape: {accessToken?: string, patient?: record, status: "GRANTED"|"DENIED", transactionId: string, validity?: record}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/users/auth/notify")
-  let body = {auth: $body_auth, requestId: $requestId, timestamp: $timestamp} | compact
+  let body = {"auth": $body_auth, "requestId": $request_id, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-HIP-ID": $X_HIP_ID, "X-HIU-ID": $X_HIU_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-HIP-ID": $x_hip_id, "X-HIU-ID": $x_hiu_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1002,12 +1002,12 @@ export def "v05-users-auth-on-confirm post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-HIP-ID: string # Identifier of the health information provider to which the request was intended.
-  --X-HIU-ID: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-hip-id: string # Identifier of the health information provider to which the request was intended.
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
   --body-auth: record # depending on the purpose of auth, as specified in /auth/init, the response may include the following    1. LINK - only returns **accessToken**   2. KYC - only returns **patient**   3. KYC_AND_LINK - returns both **accessToken** and **patient** — shape: {accessToken?: string, patient?: record, validity?: record}
   --body-error: record # shape: {code: "1000"|"10001", message: string}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
@@ -1015,9 +1015,9 @@ export def "v05-users-auth-on-confirm post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/users/auth/on-confirm")
-  let body = {auth: $body_auth, error: $body_error, requestId: $requestId, resp: $resp, timestamp: $timestamp} | compact
+  let body = {"auth": $body_auth, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-HIP-ID": $X_HIP_ID, "X-HIU-ID": $X_HIU_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-HIP-ID": $x_hip_id, "X-HIU-ID": $x_hiu_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1039,12 +1039,12 @@ export def "v05-users-auth-on-fetch-modes post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-HIP-ID: string # Identifier of the health information provider to which the request was intended.
-  --X-HIU-ID: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-hip-id: string # Identifier of the health information provider to which the request was intended.
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
   --body-auth: record # shape: {modes: list, purpose: "LINK"|"KYC"|"KYC_AND_LINK"}
   --body-error: record # shape: {code: "1000"|"10001", message: string}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
@@ -1052,9 +1052,9 @@ export def "v05-users-auth-on-fetch-modes post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/users/auth/on-fetch-modes")
-  let body = {auth: $body_auth, error: $body_error, requestId: $requestId, resp: $resp, timestamp: $timestamp} | compact
+  let body = {"auth": $body_auth, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-HIP-ID": $X_HIP_ID, "X-HIU-ID": $X_HIU_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-HIP-ID": $x_hip_id, "X-HIU-ID": $x_hiu_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1076,12 +1076,12 @@ export def "v05-users-auth-on-init post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-HIP-ID: string # Identifier of the health information provider to which the request was intended.
-  --X-HIU-ID: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-hip-id: string # Identifier of the health information provider to which the request was intended.
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
   --body-auth: record # shape: {meta?: record, mode: "MOBILE_OTP"|"DIRECT"|"DEMOGRAPHICS"|"AADHAAR_OTP", transactionId: string}
   --body-error: record # shape: {code: "1000"|"10001", message: string}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
@@ -1089,9 +1089,9 @@ export def "v05-users-auth-on-init post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/users/auth/on-init")
-  let body = {auth: $body_auth, error: $body_error, requestId: $requestId, resp: $resp, timestamp: $timestamp} | compact
+  let body = {"auth": $body_auth, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-HIP-ID": $X_HIP_ID, "X-HIU-ID": $X_HIU_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-HIP-ID": $x_hip_id, "X-HIU-ID": $x_hiu_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1113,11 +1113,11 @@ export def "v05-users-auth-on-notify post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
-  --X-CM-ID: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server, which will be sent by gateway to authenticate itself with API bridge.
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
   --acknowledgement: record # shape: {status: "OK"}
   --body-error: record # shape: {code: "1000"|"10001", message: string}
-  requestId: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
+  request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
 ]: any -> any {
@@ -1125,9 +1125,9 @@ export def "v05-users-auth-on-notify post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.5/users/auth/on-notify")
-  let body = {acknowledgement: $acknowledgement, error: $body_error, requestId: $requestId, resp: $resp, timestamp: $timestamp} | compact
+  let body = {"acknowledgement": $acknowledgement, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization, "X-CM-ID": $X_CM_ID} | compact
+  let extra_headers = {"Authorization": $authorization, "X-CM-ID": $x_cm_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

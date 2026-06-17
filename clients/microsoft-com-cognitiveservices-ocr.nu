@@ -71,7 +71,7 @@ def mode-completer [] { ["Handwritten" "Printed"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "read-core-async-batch-analyze BatchReadFile" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "read-core-async-batch-analyze post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # POST /read/core/asyncBatchAnalyze
 # operationId: BatchReadFile
-export def "read-core-async-batch-analyze BatchReadFile" [
+export def "read-core-async-batch-analyze post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "read-core-async-batch-analyze BatchReadFile" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/read/core/asyncBatchAnalyze")
-  let body = {url: $body_url} | compact
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -121,8 +121,8 @@ export def "read-core-async-batch-analyze BatchReadFile" [
 #
 # GET /read/operations/{operationId}
 # operationId: GetReadOperationResult
-export def "read-operations GetReadOperationResult" [
-  operationId: string
+export def "read-operations get-read-operation-result" [
+  operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "read-operations GetReadOperationResult" [
 ]: nothing -> record<recognitionResults: table<clockwiseOrientation: float, height: float, lines: list, page: int, unit: string, width: float>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/read/operations/($operationId)")
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/read/operations/{operation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,7 +144,7 @@ export def "read-operations GetReadOperationResult" [
 #
 # POST /recognizeText
 # operationId: RecognizeText
-export def "recognize-text RecognizeText" [
+export def "recognize-text post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "recognize-text RecognizeText" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mode" $mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recognizeText" $qp)
-  let body = {url: $body_url} | compact
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -172,8 +172,8 @@ export def "recognize-text RecognizeText" [
 #
 # GET /textOperations/{operationId}
 # operationId: GetTextOperationResult
-export def "text-operations GetTextOperationResult" [
-  operationId: string
+export def "text-operations get-text-operation-result" [
+  operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "text-operations GetTextOperationResult" [
 ]: nothing -> record<recognitionResult: record<clockwiseOrientation: float, height: float, lines: list<record>, page: int, unit: string, width: float>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/textOperations/($operationId)")
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/textOperations/{operation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

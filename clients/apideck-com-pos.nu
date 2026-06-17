@@ -182,7 +182,7 @@ export def "pos-items itemsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pos/items" $qp)
-  let body = {abbreviation: $abbreviation, absent_at_location_ids: $absent_at_location_ids, available: $available, available_for_pickup: $available_for_pickup, available_online: $available_online, categories: $categories, code: $code, cost: $cost, deleted: $deleted, description: $description, hidden: $hidden, id: $id, idempotency_key: $idempotency_key, modifier_groups: $modifier_groups, name: $name, options: $options, present_at_all_locations: $present_at_all_locations, price_amount: $price_amount, price_currency: $price_currency, pricing_type: $pricing_type, product_type: $product_type, sku: $sku, tax_ids: $tax_ids, variations: $variations} | compact
+  let body = {"abbreviation": $abbreviation, "absent_at_location_ids": $absent_at_location_ids, "available": $available, "available_for_pickup": $available_for_pickup, "available_online": $available_online, "categories": $categories, "code": $code, "cost": $cost, "deleted": $deleted, "description": $description, "hidden": $hidden, "id": $id, "idempotency_key": $idempotency_key, "modifier_groups": $modifier_groups, "name": $name, "options": $options, "present_at_all_locations": $present_at_all_locations, "price_amount": $price_amount, "price_currency": $price_currency, "pricing_type": $pricing_type, "product_type": $product_type, "sku": $sku, "tax_ids": $tax_ids, "variations": $variations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -213,7 +213,7 @@ export def "pos-items itemsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/items/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/items/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -244,7 +244,7 @@ export def "pos-items itemsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/items/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/items/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -302,8 +302,8 @@ export def "pos-items itemsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/items/($id)" $qp)
-  let body = {abbreviation: $abbreviation, absent_at_location_ids: $absent_at_location_ids, available: $available, available_for_pickup: $available_for_pickup, available_online: $available_online, categories: $categories, code: $code, cost: $cost, deleted: $deleted, description: $description, hidden: $hidden, id: $body_id, idempotency_key: $idempotency_key, modifier_groups: $modifier_groups, name: $name, options: $options, present_at_all_locations: $present_at_all_locations, price_amount: $price_amount, price_currency: $price_currency, pricing_type: $pricing_type, product_type: $product_type, sku: $sku, tax_ids: $tax_ids, variations: $variations} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/items/{id}") $qp)
+  let body = {"abbreviation": $abbreviation, "absent_at_location_ids": $absent_at_location_ids, "available": $available, "available_for_pickup": $available_for_pickup, "available_online": $available_online, "categories": $categories, "code": $code, "cost": $cost, "deleted": $deleted, "description": $description, "hidden": $hidden, "id": $body_id, "idempotency_key": $idempotency_key, "modifier_groups": $modifier_groups, "name": $name, "options": $options, "present_at_all_locations": $present_at_all_locations, "price_amount": $price_amount, "price_currency": $price_currency, "pricing_type": $pricing_type, "product_type": $product_type, "sku": $sku, "tax_ids": $tax_ids, "variations": $variations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -374,7 +374,7 @@ export def "pos-locations locationsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pos/locations" $qp)
-  let body = {address: $address, business_name: $business_name, currency: $currency, merchant_id: $merchant_id, name: $name, status: $status} | compact
+  let body = {"address": $address, "business_name": $business_name, "currency": $currency, "merchant_id": $merchant_id, "name": $name, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -405,7 +405,7 @@ export def "pos-locations locationsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/locations/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/locations/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -436,7 +436,7 @@ export def "pos-locations locationsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/locations/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/locations/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -474,8 +474,8 @@ export def "pos-locations locationsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/locations/($id)" $qp)
-  let body = {address: $address, business_name: $business_name, currency: $currency, merchant_id: $merchant_id, name: $name, status: $status} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/locations/{id}") $qp)
+  let body = {"address": $address, "business_name": $business_name, "currency": $currency, "merchant_id": $merchant_id, "name": $name, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -549,7 +549,7 @@ export def "pos-merchants merchantsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pos/merchants" $qp)
-  let body = {address: $address, currency: $currency, language: $language, main_location_id: $main_location_id, name: $name, owner_id: $owner_id, service_charges: $service_charges, status: $status} | compact
+  let body = {"address": $address, "currency": $currency, "language": $language, "main_location_id": $main_location_id, "name": $name, "owner_id": $owner_id, "service_charges": $service_charges, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -580,7 +580,7 @@ export def "pos-merchants merchantsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/merchants/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/merchants/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -611,7 +611,7 @@ export def "pos-merchants merchantsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/merchants/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/merchants/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -652,8 +652,8 @@ export def "pos-merchants merchantsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/merchants/($id)" $qp)
-  let body = {address: $address, currency: $currency, language: $language, main_location_id: $main_location_id, name: $name, owner_id: $owner_id, service_charges: $service_charges, status: $status} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/merchants/{id}") $qp)
+  let body = {"address": $address, "currency": $currency, "language": $language, "main_location_id": $main_location_id, "name": $name, "owner_id": $owner_id, "service_charges": $service_charges, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -727,7 +727,7 @@ export def "pos-modifier-groups modifierGroupsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pos/modifier-groups" $qp)
-  let body = {alternate_name: $alternate_name, deleted: $deleted, maximum_allowed: $maximum_allowed, minimum_required: $minimum_required, modifiers: $modifiers, name: $name, present_at_all_locations: $present_at_all_locations, row_version: $row_version, selection_type: $selection_type} | compact
+  let body = {"alternate_name": $alternate_name, "deleted": $deleted, "maximum_allowed": $maximum_allowed, "minimum_required": $minimum_required, "modifiers": $modifiers, "name": $name, "present_at_all_locations": $present_at_all_locations, "row_version": $row_version, "selection_type": $selection_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -758,7 +758,7 @@ export def "pos-modifier-groups modifierGroupsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/modifier-groups/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/modifier-groups/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -789,7 +789,7 @@ export def "pos-modifier-groups modifierGroupsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/modifier-groups/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/modifier-groups/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -830,8 +830,8 @@ export def "pos-modifier-groups modifierGroupsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/modifier-groups/($id)" $qp)
-  let body = {alternate_name: $alternate_name, deleted: $deleted, maximum_allowed: $maximum_allowed, minimum_required: $minimum_required, modifiers: $modifiers, name: $name, present_at_all_locations: $present_at_all_locations, row_version: $row_version, selection_type: $selection_type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/modifier-groups/{id}") $qp)
+  let body = {"alternate_name": $alternate_name, "deleted": $deleted, "maximum_allowed": $maximum_allowed, "minimum_required": $minimum_required, "modifiers": $modifiers, "name": $name, "present_at_all_locations": $present_at_all_locations, "row_version": $row_version, "selection_type": $selection_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -902,7 +902,7 @@ export def "pos-modifiers modifiersAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pos/modifiers" $qp)
-  let body = {alternate_name: $alternate_name, available: $available, currency: $currency, idempotency_key: $idempotency_key, modifier_group_id: $modifier_group_id, name: $name, price_amount: $price_amount} | compact
+  let body = {"alternate_name": $alternate_name, "available": $available, "currency": $currency, "idempotency_key": $idempotency_key, "modifier_group_id": $modifier_group_id, "name": $name, "price_amount": $price_amount} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -934,7 +934,7 @@ export def "pos-modifiers modifiersDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "filter" $filter "deepObject")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/modifiers/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/modifiers/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -966,7 +966,7 @@ export def "pos-modifiers modifiersOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/modifiers/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/modifiers/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1004,8 +1004,8 @@ export def "pos-modifiers modifiersUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/modifiers/($id)" $qp)
-  let body = {alternate_name: $alternate_name, available: $available, currency: $currency, idempotency_key: $idempotency_key, modifier_group_id: $modifier_group_id, name: $name, price_amount: $price_amount} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/modifiers/{id}") $qp)
+  let body = {"alternate_name": $alternate_name, "available": $available, "currency": $currency, "idempotency_key": $idempotency_key, "modifier_group_id": $modifier_group_id, "name": $name, "price_amount": $price_amount} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1071,7 +1071,7 @@ export def "pos-order-types orderTypesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pos/order-types" $qp)
-  let body = {default: $default, name: $name} | compact
+  let body = {"default": $default, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1102,7 +1102,7 @@ export def "pos-order-types orderTypesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/order-types/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/order-types/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1133,7 +1133,7 @@ export def "pos-order-types orderTypesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/order-types/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/order-types/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1166,8 +1166,8 @@ export def "pos-order-types orderTypesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/order-types/($id)" $qp)
-  let body = {default: $default, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/order-types/{id}") $qp)
+  let body = {"default": $default, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1276,7 +1276,7 @@ export def "pos-orders ordersAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pos/orders" $qp)
-  let body = {closed_date: $closed_date, currency: $currency, customer_id: $customer_id, customers: $customers, discounts: $discounts, employee_id: $employee_id, fulfillments: $fulfillments, idempotency_key: $idempotency_key, line_items: $line_items, location_id: $location_id, merchant_id: $merchant_id, note: $note, order_date: $order_date, order_number: $order_number, order_type_id: $order_type_id, payment_status: $payment_status, payments: $payments, reference_id: $reference_id, refunded: $refunded, refunds: $refunds, seat: $seat, service_charges: $service_charges, status: $status, table: $table, taxes: $taxes, tenders: $tenders, title: $title, total_amount: $total_amount, total_discount: $total_discount, total_refund: $total_refund, total_service_charge: $total_service_charge, total_tax: $total_tax, total_tip: $total_tip, version: $version, voided: $voided} | compact
+  let body = {"closed_date": $closed_date, "currency": $currency, "customer_id": $customer_id, "customers": $customers, "discounts": $discounts, "employee_id": $employee_id, "fulfillments": $fulfillments, "idempotency_key": $idempotency_key, "line_items": $line_items, "location_id": $location_id, "merchant_id": $merchant_id, "note": $note, "order_date": $order_date, "order_number": $order_number, "order_type_id": $order_type_id, "payment_status": $payment_status, "payments": $payments, "reference_id": $reference_id, "refunded": $refunded, "refunds": $refunds, "seat": $seat, "service_charges": $service_charges, "status": $status, "table": $table, "taxes": $taxes, "tenders": $tenders, "title": $title, "total_amount": $total_amount, "total_discount": $total_discount, "total_refund": $total_refund, "total_service_charge": $total_service_charge, "total_tax": $total_tax, "total_tip": $total_tip, "version": $version, "voided": $voided} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1307,7 +1307,7 @@ export def "pos-orders ordersDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/orders/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/orders/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1338,7 +1338,7 @@ export def "pos-orders ordersOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/orders/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/orders/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1413,8 +1413,8 @@ export def "pos-orders ordersUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/orders/($id)" $qp)
-  let body = {closed_date: $closed_date, currency: $currency, customer_id: $customer_id, customers: $customers, discounts: $discounts, employee_id: $employee_id, fulfillments: $fulfillments, idempotency_key: $idempotency_key, line_items: $line_items, location_id: $location_id, merchant_id: $merchant_id, note: $note, order_date: $order_date, order_number: $order_number, order_type_id: $order_type_id, payment_status: $payment_status, payments: $payments, reference_id: $reference_id, refunded: $refunded, refunds: $refunds, seat: $seat, service_charges: $service_charges, status: $status, table: $table, taxes: $taxes, tenders: $tenders, title: $title, total_amount: $total_amount, total_discount: $total_discount, total_refund: $total_refund, total_service_charge: $total_service_charge, total_tax: $total_tax, total_tip: $total_tip, version: $version, voided: $voided} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/orders/{id}") $qp)
+  let body = {"closed_date": $closed_date, "currency": $currency, "customer_id": $customer_id, "customers": $customers, "discounts": $discounts, "employee_id": $employee_id, "fulfillments": $fulfillments, "idempotency_key": $idempotency_key, "line_items": $line_items, "location_id": $location_id, "merchant_id": $merchant_id, "note": $note, "order_date": $order_date, "order_number": $order_number, "order_type_id": $order_type_id, "payment_status": $payment_status, "payments": $payments, "reference_id": $reference_id, "refunded": $refunded, "refunds": $refunds, "seat": $seat, "service_charges": $service_charges, "status": $status, "table": $table, "taxes": $taxes, "tenders": $tenders, "title": $title, "total_amount": $total_amount, "total_discount": $total_discount, "total_refund": $total_refund, "total_service_charge": $total_service_charge, "total_tax": $total_tax, "total_tip": $total_tip, "version": $version, "voided": $voided} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1491,8 +1491,8 @@ export def "pos-orders-pay ordersPay" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/orders/($id)/pay" $qp)
-  let body = {closed_date: $closed_date, currency: $currency, customer_id: $customer_id, customers: $customers, discounts: $discounts, employee_id: $employee_id, fulfillments: $fulfillments, idempotency_key: $idempotency_key, line_items: $line_items, location_id: $location_id, merchant_id: $merchant_id, note: $note, order_date: $order_date, order_number: $order_number, order_type_id: $order_type_id, payment_status: $payment_status, payments: $payments, reference_id: $reference_id, refunded: $refunded, refunds: $refunds, seat: $seat, service_charges: $service_charges, status: $status, table: $table, taxes: $taxes, tenders: $tenders, title: $title, total_amount: $total_amount, total_discount: $total_discount, total_refund: $total_refund, total_service_charge: $total_service_charge, total_tax: $total_tax, total_tip: $total_tip, version: $version, voided: $voided} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/orders/{id}/pay") $qp)
+  let body = {"closed_date": $closed_date, "currency": $currency, "customer_id": $customer_id, "customers": $customers, "discounts": $discounts, "employee_id": $employee_id, "fulfillments": $fulfillments, "idempotency_key": $idempotency_key, "line_items": $line_items, "location_id": $location_id, "merchant_id": $merchant_id, "note": $note, "order_date": $order_date, "order_number": $order_number, "order_type_id": $order_type_id, "payment_status": $payment_status, "payments": $payments, "reference_id": $reference_id, "refunded": $refunded, "refunds": $refunds, "seat": $seat, "service_charges": $service_charges, "status": $status, "table": $table, "taxes": $taxes, "tenders": $tenders, "title": $title, "total_amount": $total_amount, "total_discount": $total_discount, "total_refund": $total_refund, "total_service_charge": $total_service_charge, "total_tax": $total_tax, "total_tip": $total_tip, "version": $version, "voided": $voided} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1591,7 +1591,7 @@ export def "pos-payments paymentsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pos/payments" $qp)
-  let body = {amount: $amount, app_fee: $app_fee, approved: $approved, bank_account: $bank_account, card_details: $card_details, cash: $cash, change_back_cash_amount: $change_back_cash_amount, currency: $currency, customer_id: $customer_id, device_id: $device_id, employee_id: $employee_id, external_details: $external_details, external_payment_id: $external_payment_id, idempotency_key: $idempotency_key, location_id: $location_id, merchant_id: $merchant_id, order_id: $order_id, processing_fees: $processing_fees, refunded: $refunded, service_charges: $service_charges, source: $body_source, source_id: $source_id, status: $status, tax: $tax, tender_id: $tender_id, tip: $tip, total: $total, wallet: $wallet} | compact
+  let body = {"amount": $amount, "app_fee": $app_fee, "approved": $approved, "bank_account": $bank_account, "card_details": $card_details, "cash": $cash, "change_back_cash_amount": $change_back_cash_amount, "currency": $currency, "customer_id": $customer_id, "device_id": $device_id, "employee_id": $employee_id, "external_details": $external_details, "external_payment_id": $external_payment_id, "idempotency_key": $idempotency_key, "location_id": $location_id, "merchant_id": $merchant_id, "order_id": $order_id, "processing_fees": $processing_fees, "refunded": $refunded, "service_charges": $service_charges, "source": $body_source, "source_id": $source_id, "status": $status, "tax": $tax, "tender_id": $tender_id, "tip": $tip, "total": $total, "wallet": $wallet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1622,7 +1622,7 @@ export def "pos-payments paymentsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/payments/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/payments/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1653,7 +1653,7 @@ export def "pos-payments paymentsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/payments/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/payments/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1719,8 +1719,8 @@ export def "pos-payments paymentsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/payments/($id)" $qp)
-  let body = {amount: $amount, app_fee: $app_fee, approved: $approved, bank_account: $bank_account, card_details: $card_details, cash: $cash, change_back_cash_amount: $change_back_cash_amount, currency: $currency, customer_id: $customer_id, device_id: $device_id, employee_id: $employee_id, external_details: $external_details, external_payment_id: $external_payment_id, idempotency_key: $idempotency_key, location_id: $location_id, merchant_id: $merchant_id, order_id: $order_id, processing_fees: $processing_fees, refunded: $refunded, service_charges: $service_charges, source: $body_source, source_id: $source_id, status: $status, tax: $tax, tender_id: $tender_id, tip: $tip, total: $total, wallet: $wallet} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/payments/{id}") $qp)
+  let body = {"amount": $amount, "app_fee": $app_fee, "approved": $approved, "bank_account": $bank_account, "card_details": $card_details, "cash": $cash, "change_back_cash_amount": $change_back_cash_amount, "currency": $currency, "customer_id": $customer_id, "device_id": $device_id, "employee_id": $employee_id, "external_details": $external_details, "external_payment_id": $external_payment_id, "idempotency_key": $idempotency_key, "location_id": $location_id, "merchant_id": $merchant_id, "order_id": $order_id, "processing_fees": $processing_fees, "refunded": $refunded, "service_charges": $service_charges, "source": $body_source, "source_id": $source_id, "status": $status, "tax": $tax, "tender_id": $tender_id, "tip": $tip, "total": $total, "wallet": $wallet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1791,7 +1791,7 @@ export def "pos-tenders tendersAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pos/tenders" $qp)
-  let body = {active: $active, allows_tipping: $allows_tipping, editable: $editable, hidden: $hidden, key: $key, label: $label, opens_cash_drawer: $opens_cash_drawer} | compact
+  let body = {"active": $active, "allows_tipping": $allows_tipping, "editable": $editable, "hidden": $hidden, "key": $key, "label": $label, "opens_cash_drawer": $opens_cash_drawer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1822,7 +1822,7 @@ export def "pos-tenders tendersDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/tenders/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/tenders/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1853,7 +1853,7 @@ export def "pos-tenders tendersOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/tenders/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/tenders/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1891,8 +1891,8 @@ export def "pos-tenders tendersUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pos/tenders/($id)" $qp)
-  let body = {active: $active, allows_tipping: $allows_tipping, editable: $editable, hidden: $hidden, key: $key, label: $label, opens_cash_drawer: $opens_cash_drawer} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/pos/tenders/{id}") $qp)
+  let body = {"active": $active, "allows_tipping": $allows_tipping, "editable": $editable, "hidden": $hidden, "key": $key, "label": $label, "opens_cash_drawer": $opens_cash_drawer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

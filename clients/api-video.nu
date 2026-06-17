@@ -66,14 +66,14 @@ def base-url-completer [] { ["https://ws.api.video"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def sortOrder-completer [] { ["asc" "desc"] }
-def sortBy-completer [] { ["createdAt" "updatedAt"] }
-def sortBy-completer-1 [] { ["createdAt" "ttl"] }
+def sort-order-completer [] { ["asc" "desc"] }
+def sort-by-completer [] { ["createdAt" "updatedAt"] }
+def sort-by-completer-1 [] { ["createdAt" "ttl"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account account" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +99,7 @@ export def commands []: nothing -> table {
 # DEPRECATED
 # operationId: GET_account
 @deprecated
-export def "account account" [
+export def "account get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,7 +122,7 @@ export def "account account" [
 # GET /analytics/live-streams/{liveStreamId}
 # operationId: GET_analytics-live-streams-liveStreamId
 export def "analytics-live-streams analytics-live-streams-liveStreamId" [
-  liveStreamId: string
+  live_stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,13 +132,13 @@ export def "analytics-live-streams analytics-live-streams-liveStreamId" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --period: string # Period must have one of the following formats:  - For a day : "2018-01-01", - For a week: "2018-W01",  - For a month: "2018-01" - For a year: "2018" For a range period:  -  Date range: "2018-01-01/2018-01-15"  (format: period, e.g. 2019-01-01)
-  --currentPage: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
-  --pageSize: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
+  --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
+  --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
 ]: nothing -> record<data: table<client: record, device: record, location: record, os: record, referrer: record, session: record>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "period" $period "scalar") (serialize-qp "currentPage" $currentPage "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/analytics/live-streams/($liveStreamId)" $qp)
+  let qp = [(serialize-qp "period" $period "scalar") (serialize-qp "currentPage" $current_page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({live_stream_id: $live_stream_id} | format pattern "/analytics/live-streams/{live_stream_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -149,7 +149,7 @@ export def "analytics-live-streams analytics-live-streams-liveStreamId" [
 # GET /analytics/sessions/{sessionId}/events
 # operationId: GET_analytics-sessions-sessionId-events
 export def "analytics-sessions-events analytics-sessions-sessionId-events" [
-  sessionId: string
+  session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,13 +158,13 @@ export def "analytics-sessions-events analytics-sessions-sessionId-events" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --currentPage: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
-  --pageSize: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
+  --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
+  --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
 ]: nothing -> record<data: table<at: int, emittedAt: string, from: int, to: int, type: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "currentPage" $currentPage "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/analytics/sessions/($sessionId)/events" $qp)
+  let qp = [(serialize-qp "currentPage" $current_page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({session_id: $session_id} | format pattern "/analytics/sessions/{session_id}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -175,7 +175,7 @@ export def "analytics-sessions-events analytics-sessions-sessionId-events" [
 # GET /analytics/videos/{videoId}
 # operationId: GET_analytics-videos-videoId
 export def "analytics-videos analytics-videos-videoId" [
-  videoId: string
+  video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,13 +186,13 @@ export def "analytics-videos analytics-videos-videoId" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --period: string # Period must have one of the following formats:  - For a day : 2018-01-01, - For a week: 2018-W01,  - For a month: 2018-01 - For a year: 2018 For a range period:  -  Date range: 2018-01-01/2018-01-15  (format: period)
   --metadata: list # Metadata and [Dynamic Metadata](https://api.video/blog/endpoints/dynamic-metadata) filter. Send an array of key value pairs you want to filter sessios with. (e.g. [{"key": "Author", "value": "John Doe"}, {"key": "Format", "value": "Tutorial"}])
-  --currentPage: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
-  --pageSize: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
+  --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
+  --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
 ]: nothing -> record<data: table<client: record, device: record, location: record, os: record, referrer: record, session: record>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "period" $period "scalar") (serialize-qp "metadata" $metadata "multi") (serialize-qp "currentPage" $currentPage "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/analytics/videos/($videoId)" $qp)
+  let qp = [(serialize-qp "period" $period "scalar") (serialize-qp "metadata" $metadata "multi") (serialize-qp "currentPage" $current_page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/analytics/videos/{video_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,7 +202,7 @@ export def "analytics-videos analytics-videos-videoId" [
 #
 # POST /auth/api-key
 # operationId: POST_auth-api-key
-export def "auth-api-key auth-api-key" [
+export def "auth-api-key post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,13 +211,13 @@ export def "auth-api-key auth-api-key" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey: string # Your account API key. You can use your sandbox API key, or you can use your production API key.
+  api_key: string # Your account API key. You can use your sandbox API key, or you can use your production API key.
 ]: any -> record<access_token: string, expires_in: int, refresh_token: string, token_type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/api-key")
-  let body = {apiKey: $apiKey} | compact
+  let body = {"apiKey": $api_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -228,7 +228,7 @@ export def "auth-api-key auth-api-key" [
 #
 # POST /auth/refresh
 # operationId: POST_auth-refresh
-export def "auth-refresh auth-refresh" [
+export def "auth-refresh post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,13 +237,13 @@ export def "auth-refresh auth-refresh" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  refreshToken: string # The refresh token is either the first refresh token you received when you authenticated with the auth/api-key endpoint, or it's the refresh token from the last time you used the auth/refresh endpoint. Place this in the body of your request to obtain a new access token (which is valid for an hour) and a new refresh token.
+  refresh_token: string # The refresh token is either the first refresh token you received when you authenticated with the auth/api-key endpoint, or it's the refresh token from the last time you used the auth/refresh endpoint. Place this in the body of your request to obtain a new access token (which is valid for an hour) and a new refresh token.
 ]: any -> record<access_token: string, expires_in: int, refresh_token: string, token_type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/refresh")
-  let body = {refreshToken: $refreshToken} | compact
+  let body = {"refreshToken": $refresh_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -254,7 +254,7 @@ export def "auth-refresh auth-refresh" [
 #
 # GET /live-streams
 # operationId: GET_live-streams
-export def "live-streams live-streams" [
+export def "live-streams get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,16 +263,16 @@ export def "live-streams live-streams" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --streamKey: string # The unique stream key that allows you to stream videos. (e.g. 30087931-229e-42cf-b5f9-e91bcc1f7332)
+  --stream-key: string # The unique stream key that allows you to stream videos. (e.g. 30087931-229e-42cf-b5f9-e91bcc1f7332)
   --name: string # You can filter live streams by their name or a part of their name. (e.g. My Video)
-  --sortBy: string # Allowed: createdAt, publishedAt, name. createdAt - the time a livestream was created using the specified streamKey. publishedAt - the time a livestream was published using the specified streamKey. name - the name of the livestream. If you choose one of the time based options, the time is presented in ISO-8601 format. (e.g. createdAt)
-  --sortOrder: string@sortOrder-completer # Allowed: asc, desc. Ascending for date and time means that earlier values precede later ones. Descending means that later values preced earlier ones. For title, it is 0-9 and A-Z ascending and Z-A, 9-0 descending. (e.g. desc)
-  --currentPage: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
-  --pageSize: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
+  --sort-by: string # Allowed: createdAt, publishedAt, name. createdAt - the time a livestream was created using the specified streamKey. publishedAt - the time a livestream was published using the specified streamKey. name - the name of the livestream. If you choose one of the time based options, the time is presented in ISO-8601 format. (e.g. createdAt)
+  --sort-order: string@sort-order-completer # Allowed: asc, desc. Ascending for date and time means that earlier values precede later ones. Descending means that later values preced earlier ones. For title, it is 0-9 and A-Z ascending and Z-A, 9-0 descending. (e.g. desc)
+  --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
+  --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
 ]: nothing -> record<data: table<assets: record, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "streamKey" $streamKey "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "currentPage" $currentPage "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "streamKey" $stream_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "currentPage" $current_page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/live-streams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -283,7 +283,7 @@ export def "live-streams live-streams" [
 #
 # POST /live-streams
 # operationId: POST_live-streams
-export def "live-streams live-streams-1" [
+export def "live-streams post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "live-streams live-streams-1" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Add a name for your live stream here. (e.g. My Live Stream Video)
-  --playerId: string # The unique identifier for the player. (e.g. pl4f4ferf5erfr5zed4fsdd)
+  --player-id: string # The unique identifier for the player. (e.g. pl4f4ferf5erfr5zed4fsdd)
   --public: oneof<nothing, bool> # BETA FEATURE Please limit all public = false ("private") livestreams to 3,000 users. Whether your video can be viewed by everyone, or requires authentication to see it. A setting of false will require a unique token for each view.
   --record: oneof<nothing, bool> # Whether you are recording or not. True for record, false for not record. (default: false, e.g. true)
 ]: any -> record<assets: record<hls: string, iframe: string, player: string, thumbnail: string>, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string> {
@@ -301,7 +301,7 @@ export def "live-streams live-streams-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/live-streams")
-  let body = {name: $name, playerId: $playerId, public: $public, record: $record} | compact
+  let body = {"name": $name, "playerId": $player_id, "public": $public, "record": $record} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -313,7 +313,7 @@ export def "live-streams live-streams-1" [
 # DELETE /live-streams/{liveStreamId}
 # operationId: DELETE_live-streams-liveStreamId
 export def "live-streams live-streams-liveStreamId-by-liveStreamId" [
-  liveStreamId: string
+  live_stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "live-streams live-streams-liveStreamId-by-liveStreamId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/live-streams/($liveStreamId)")
+  let full_url = (build-url $base ({live_stream_id: $live_stream_id} | format pattern "/live-streams/{live_stream_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -336,7 +336,7 @@ export def "live-streams live-streams-liveStreamId-by-liveStreamId" [
 # GET /live-streams/{liveStreamId}
 # operationId: GET_live-streams-liveStreamId
 export def "live-streams live-streams-liveStreamId-by-liveStreamId-1" [
-  liveStreamId: string
+  live_stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,7 +348,7 @@ export def "live-streams live-streams-liveStreamId-by-liveStreamId-1" [
 ]: nothing -> record<assets: record<hls: string, iframe: string, player: string, thumbnail: string>, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/live-streams/($liveStreamId)")
+  let full_url = (build-url $base ({live_stream_id: $live_stream_id} | format pattern "/live-streams/{live_stream_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -359,7 +359,7 @@ export def "live-streams live-streams-liveStreamId-by-liveStreamId-1" [
 # PATCH /live-streams/{liveStreamId}
 # operationId: PATCH_live-streams-liveStreamId
 export def "live-streams live-streams-liveStreamId-by-liveStreamId-2" [
-  liveStreamId: string
+  live_stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,15 +369,15 @@ export def "live-streams live-streams-liveStreamId-by-liveStreamId-2" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name you want to use for your live stream. (e.g. My Live Stream Video)
-  --playerId: string # The unique ID for the player associated with a live stream that you want to update. (e.g. pl45KFKdlddgk654dspkze)
+  --player-id: string # The unique ID for the player associated with a live stream that you want to update. (e.g. pl45KFKdlddgk654dspkze)
   --public: oneof<nothing, bool> # BETA FEATURE Please limit all public = false ("private") livestreams to 3,000 users. Whether your video can be viewed by everyone, or requires authentication to see it. A setting of false will require a unique token for each view.
   --record: oneof<nothing, bool> # Use this to indicate whether you want the recording on or off. On is true, off is false. (e.g. true)
 ]: any -> record<assets: record<hls: string, iframe: string, player: string, thumbnail: string>, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/live-streams/($liveStreamId)")
-  let body = {name: $name, playerId: $playerId, public: $public, record: $record} | compact
+  let full_url = (build-url $base ({live_stream_id: $live_stream_id} | format pattern "/live-streams/{live_stream_id}"))
+  let body = {"name": $name, "playerId": $player_id, "public": $public, "record": $record} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -389,7 +389,7 @@ export def "live-streams live-streams-liveStreamId-by-liveStreamId-2" [
 # DELETE /live-streams/{liveStreamId}/thumbnail
 # operationId: DELETE_live-streams-liveStreamId-thumbnail
 export def "live-streams-thumbnail live-streams-liveStreamId-thumbnail-by-liveStreamId" [
-  liveStreamId: string
+  live_stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "live-streams-thumbnail live-streams-liveStreamId-thumbnail-by-liveSt
 ]: nothing -> record<assets: record<hls: string, iframe: string, player: string, thumbnail: string>, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/live-streams/($liveStreamId)/thumbnail")
+  let full_url = (build-url $base ({live_stream_id: $live_stream_id} | format pattern "/live-streams/{live_stream_id}/thumbnail"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -412,7 +412,7 @@ export def "live-streams-thumbnail live-streams-liveStreamId-thumbnail-by-liveSt
 # POST /live-streams/{liveStreamId}/thumbnail
 # operationId: POST_live-streams-liveStreamId-thumbnail
 export def "live-streams-thumbnail live-streams-liveStreamId-thumbnail-by-liveStreamId-1" [
-  liveStreamId: string
+  live_stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,8 +426,8 @@ export def "live-streams-thumbnail live-streams-liveStreamId-thumbnail-by-liveSt
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/live-streams/($liveStreamId)/thumbnail")
-  let body = {file: $file} | compact
+  let full_url = (build-url $base ({live_stream_id: $live_stream_id} | format pattern "/live-streams/{live_stream_id}/thumbnail"))
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -438,7 +438,7 @@ export def "live-streams-thumbnail live-streams-liveStreamId-thumbnail-by-liveSt
 #
 # GET /players
 # operationId: GET_players
-export def "players players" [
+export def "players get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,14 +447,14 @@ export def "players players" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sortBy: string@sortBy-completer # createdAt is the time the player was created. updatedAt is the time the player was last updated. The time is presented in ISO-8601 format. (e.g. createdAt)
-  --sortOrder: string@sortOrder-completer # Allowed: asc, desc. Ascending for date and time means that earlier values precede later ones. Descending means that later values preced earlier ones. (e.g. asc)
-  --currentPage: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
-  --pageSize: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
+  --sort-by: string@sort-by-completer # createdAt is the time the player was created. updatedAt is the time the player was last updated. The time is presented in ISO-8601 format. (e.g. createdAt)
+  --sort-order: string@sort-order-completer # Allowed: asc, desc. Ascending for date and time means that earlier values precede later ones. Descending means that later values preced earlier ones. (e.g. asc)
+  --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
+  --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
 ]: nothing -> record<data: table<backgroundBottom: string, backgroundText: string, backgroundTop: string, enableApi: bool, enableControls: bool, forceAutoplay: bool, forceLoop: bool, hideTitle: bool, link: string, linkHover: string, text: string, trackBackground: string, trackPlayed: string, trackUnplayed: string, assets: record, createdAt: string, linkActive: string, playerId: string, shapeAspect: string, shapeBackgroundBottom: string, shapeBackgroundTop: string, shapeMargin: int, shapeRadius: int, updatedAt: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "currentPage" $currentPage "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "currentPage" $current_page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/players" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -465,7 +465,7 @@ export def "players players" [
 #
 # POST /players
 # operationId: POST_players
-export def "players players-1" [
+export def "players post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -474,26 +474,26 @@ export def "players players-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --backgroundBottom: string # RGBA color: bottom 50% of background. Default: rgba(0, 0, 0, .7)
-  --backgroundText: string # RGBA color for title text. Default: rgba(255, 255, 255, 1)
-  --backgroundTop: string # RGBA color: top 50% of background. Default: rgba(0, 0, 0, .7)
-  --enableApi: oneof<nothing, bool> # enable/disable player SDK access. Default: true (default: true)
-  --enableControls: oneof<nothing, bool> # enable/disable player controls. Default: true (default: true)
-  --forceAutoplay: oneof<nothing, bool> # enable/disable player autoplay. Default: false (default: false)
-  --forceLoop: oneof<nothing, bool> # enable/disable looping. Default: false (default: false)
-  --hideTitle: oneof<nothing, bool> # enable/disable title. Default: false (default: false)
+  --background-bottom: string # RGBA color: bottom 50% of background. Default: rgba(0, 0, 0, .7)
+  --background-text: string # RGBA color for title text. Default: rgba(255, 255, 255, 1)
+  --background-top: string # RGBA color: top 50% of background. Default: rgba(0, 0, 0, .7)
+  --enable-api: oneof<nothing, bool> # enable/disable player SDK access. Default: true (default: true)
+  --enable-controls: oneof<nothing, bool> # enable/disable player controls. Default: true (default: true)
+  --force-autoplay: oneof<nothing, bool> # enable/disable player autoplay. Default: false (default: false)
+  --force-loop: oneof<nothing, bool> # enable/disable looping. Default: false (default: false)
+  --hide-title: oneof<nothing, bool> # enable/disable title. Default: false (default: false)
   --link: string # RGBA color for all controls. Default: rgba(255, 255, 255, 1)
-  --linkHover: string # RGBA color for all controls when hovered. Default: rgba(255, 255, 255, 1)
+  --link-hover: string # RGBA color for all controls when hovered. Default: rgba(255, 255, 255, 1)
   --text: string # RGBA color for timer text. Default: rgba(255, 255, 255, 1)
-  --trackBackground: string # RGBA color playback bar: background. Default: rgba(255, 255, 255, .2)
-  --trackPlayed: string # RGBA color playback bar: played content. Default: rgba(88, 131, 255, .95)
-  --trackUnplayed: string # RGBA color playback bar: downloaded but unplayed (buffered) content. Default: rgba(255, 255, 255, .35)
+  --track-background: string # RGBA color playback bar: background. Default: rgba(255, 255, 255, .2)
+  --track-played: string # RGBA color playback bar: played content. Default: rgba(88, 131, 255, .95)
+  --track-unplayed: string # RGBA color playback bar: downloaded but unplayed (buffered) content. Default: rgba(255, 255, 255, .35)
 ]: any -> record<backgroundBottom: string, backgroundText: string, backgroundTop: string, enableApi: bool, enableControls: bool, forceAutoplay: bool, forceLoop: bool, hideTitle: bool, link: string, linkHover: string, text: string, trackBackground: string, trackPlayed: string, trackUnplayed: string, assets: record<link: string, logo: string>, createdAt: string, linkActive: string, playerId: string, shapeAspect: string, shapeBackgroundBottom: string, shapeBackgroundTop: string, shapeMargin: int, shapeRadius: int, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/players")
-  let body = {backgroundBottom: $backgroundBottom, backgroundText: $backgroundText, backgroundTop: $backgroundTop, enableApi: $enableApi, enableControls: $enableControls, forceAutoplay: $forceAutoplay, forceLoop: $forceLoop, hideTitle: $hideTitle, link: $link, linkHover: $linkHover, text: $text, trackBackground: $trackBackground, trackPlayed: $trackPlayed, trackUnplayed: $trackUnplayed} | compact
+  let body = {"backgroundBottom": $background_bottom, "backgroundText": $background_text, "backgroundTop": $background_top, "enableApi": $enable_api, "enableControls": $enable_controls, "forceAutoplay": $force_autoplay, "forceLoop": $force_loop, "hideTitle": $hide_title, "link": $link, "linkHover": $link_hover, "text": $text, "trackBackground": $track_background, "trackPlayed": $track_played, "trackUnplayed": $track_unplayed} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -505,7 +505,7 @@ export def "players players-1" [
 # DELETE /players/{playerId}
 # operationId: DELETE_players-playerId
 export def "players players-playerId-by-playerId" [
-  playerId: string
+  player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,7 +517,7 @@ export def "players players-playerId-by-playerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/players/($playerId)")
+  let full_url = (build-url $base ({player_id: $player_id} | format pattern "/players/{player_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -528,7 +528,7 @@ export def "players players-playerId-by-playerId" [
 # GET /players/{playerId}
 # operationId: GET_players-playerId
 export def "players players-playerId-by-playerId-1" [
-  playerId: string
+  player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "players players-playerId-by-playerId-1" [
 ]: nothing -> record<backgroundBottom: string, backgroundText: string, backgroundTop: string, enableApi: bool, enableControls: bool, forceAutoplay: bool, forceLoop: bool, hideTitle: bool, link: string, linkHover: string, text: string, trackBackground: string, trackPlayed: string, trackUnplayed: string, assets: record<link: string, logo: string>, createdAt: string, linkActive: string, playerId: string, shapeAspect: string, shapeBackgroundBottom: string, shapeBackgroundTop: string, shapeMargin: int, shapeRadius: int, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/players/($playerId)")
+  let full_url = (build-url $base ({player_id: $player_id} | format pattern "/players/{player_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -551,7 +551,7 @@ export def "players players-playerId-by-playerId-1" [
 # PATCH /players/{playerId}
 # operationId: PATCH_players-playerId
 export def "players players-playerId-by-playerId-2" [
-  playerId: string
+  player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,26 +560,26 @@ export def "players players-playerId-by-playerId-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --backgroundBottom: string # RGBA color: bottom 50% of background. Default: rgba(0, 0, 0, .7)
-  --backgroundText: string # RGBA color for title text. Default: rgba(255, 255, 255, 1)
-  --backgroundTop: string # RGBA color: top 50% of background. Default: rgba(0, 0, 0, .7)
-  --enableApi: oneof<nothing, bool> # enable/disable player SDK access. Default: true (default: true)
-  --enableControls: oneof<nothing, bool> # enable/disable player controls. Default: true (default: true)
-  --forceAutoplay: oneof<nothing, bool> # enable/disable player autoplay. Default: false (default: false)
-  --forceLoop: oneof<nothing, bool> # enable/disable looping. Default: false (default: false)
-  --hideTitle: oneof<nothing, bool> # enable/disable title. Default: false (default: false)
+  --background-bottom: string # RGBA color: bottom 50% of background. Default: rgba(0, 0, 0, .7)
+  --background-text: string # RGBA color for title text. Default: rgba(255, 255, 255, 1)
+  --background-top: string # RGBA color: top 50% of background. Default: rgba(0, 0, 0, .7)
+  --enable-api: oneof<nothing, bool> # enable/disable player SDK access. Default: true (default: true)
+  --enable-controls: oneof<nothing, bool> # enable/disable player controls. Default: true (default: true)
+  --force-autoplay: oneof<nothing, bool> # enable/disable player autoplay. Default: false (default: false)
+  --force-loop: oneof<nothing, bool> # enable/disable looping. Default: false (default: false)
+  --hide-title: oneof<nothing, bool> # enable/disable title. Default: false (default: false)
   --link: string # RGBA color for all controls. Default: rgba(255, 255, 255, 1)
-  --linkHover: string # RGBA color for all controls when hovered. Default: rgba(255, 255, 255, 1)
+  --link-hover: string # RGBA color for all controls when hovered. Default: rgba(255, 255, 255, 1)
   --text: string # RGBA color for timer text. Default: rgba(255, 255, 255, 1)
-  --trackBackground: string # RGBA color playback bar: background. Default: rgba(255, 255, 255, .2)
-  --trackPlayed: string # RGBA color playback bar: played content. Default: rgba(88, 131, 255, .95)
-  --trackUnplayed: string # RGBA color playback bar: downloaded but unplayed (buffered) content. Default: rgba(255, 255, 255, .35)
+  --track-background: string # RGBA color playback bar: background. Default: rgba(255, 255, 255, .2)
+  --track-played: string # RGBA color playback bar: played content. Default: rgba(88, 131, 255, .95)
+  --track-unplayed: string # RGBA color playback bar: downloaded but unplayed (buffered) content. Default: rgba(255, 255, 255, .35)
 ]: any -> record<backgroundBottom: string, backgroundText: string, backgroundTop: string, enableApi: bool, enableControls: bool, forceAutoplay: bool, forceLoop: bool, hideTitle: bool, link: string, linkHover: string, text: string, trackBackground: string, trackPlayed: string, trackUnplayed: string, assets: record<link: string, logo: string>, createdAt: string, linkActive: string, playerId: string, shapeAspect: string, shapeBackgroundBottom: string, shapeBackgroundTop: string, shapeMargin: int, shapeRadius: int, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/players/($playerId)")
-  let body = {backgroundBottom: $backgroundBottom, backgroundText: $backgroundText, backgroundTop: $backgroundTop, enableApi: $enableApi, enableControls: $enableControls, forceAutoplay: $forceAutoplay, forceLoop: $forceLoop, hideTitle: $hideTitle, link: $link, linkHover: $linkHover, text: $text, trackBackground: $trackBackground, trackPlayed: $trackPlayed, trackUnplayed: $trackUnplayed} | compact
+  let full_url = (build-url $base ({player_id: $player_id} | format pattern "/players/{player_id}"))
+  let body = {"backgroundBottom": $background_bottom, "backgroundText": $background_text, "backgroundTop": $background_top, "enableApi": $enable_api, "enableControls": $enable_controls, "forceAutoplay": $force_autoplay, "forceLoop": $force_loop, "hideTitle": $hide_title, "link": $link, "linkHover": $link_hover, "text": $text, "trackBackground": $track_background, "trackPlayed": $track_played, "trackUnplayed": $track_unplayed} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -591,7 +591,7 @@ export def "players players-playerId-by-playerId-2" [
 # DELETE /players/{playerId}/logo
 # operationId: DELETE_players-playerId-logo
 export def "players-logo players-playerId-logo-by-playerId" [
-  playerId: string
+  player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,7 +603,7 @@ export def "players-logo players-playerId-logo-by-playerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/players/($playerId)/logo")
+  let full_url = (build-url $base ({player_id: $player_id} | format pattern "/players/{player_id}/logo"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -614,7 +614,7 @@ export def "players-logo players-playerId-logo-by-playerId" [
 # POST /players/{playerId}/logo
 # operationId: POST_players-playerId-logo
 export def "players-logo players-playerId-logo-by-playerId-1" [
-  playerId: string
+  player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,8 +629,8 @@ export def "players-logo players-playerId-logo-by-playerId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/players/($playerId)/logo")
-  let body = {file: $file, link: $link} | compact
+  let full_url = (build-url $base ({player_id: $player_id} | format pattern "/players/{player_id}/logo"))
+  let body = {"file": $file, "link": $link} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -641,7 +641,7 @@ export def "players-logo players-playerId-logo-by-playerId-1" [
 #
 # POST /upload
 # operationId: POST_upload
-export def "upload upload" [
+export def "upload post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -651,18 +651,18 @@ export def "upload upload" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # The unique identifier for the token you want to use to upload a video. (e.g. to1tcmSFHeYY5KzyhOqVKMKb)
-  --Content-Range: string # Content-Range represents the range of bytes that will be returned as a result of the request. Byte ranges are inclusive, meaning that bytes 0-999 represents the first 1000 bytes in a file or object. (e.g. Content-Range: bytes 200-100/5000)
+  --content-range: string # Content-Range represents the range of bytes that will be returned as a result of the request. Byte ranges are inclusive, meaning that bytes 0-999 represents the first 1000 bytes in a file or object. (e.g. Content-Range: bytes 200-100/5000)
   file: string # The path to the video you want to upload. (format: binary, e.g. path/to/video/video.mp4)
-  --videoId: string # The video id returned by the first call to this endpoint in a large video upload scenario.
+  --video-id: string # The video id returned by the first call to this endpoint in a large video upload scenario.
 ]: any -> record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/upload" $qp)
-  let body = {file: $file, videoId: $videoId} | compact
+  let body = {"file": $file, "videoId": $video_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Range": $Content_Range} | compact
+  let extra_headers = {"Content-Range": $content_range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -673,7 +673,7 @@ export def "upload upload" [
 #
 # GET /upload-tokens
 # operationId: GET_upload-tokens
-export def "upload-tokens upload-tokens" [
+export def "upload-tokens get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -682,14 +682,14 @@ export def "upload-tokens upload-tokens" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sortBy: string@sortBy-completer-1 # Allowed: createdAt, ttl. You can use these to sort by when a token was created, or how much longer the token will be active (ttl - time to live). Date and time is presented in ISO-8601 format. (e.g. ttl)
-  --sortOrder: string@sortOrder-completer # Allowed: asc, desc. Ascending is 0-9 or A-Z. Descending is 9-0 or Z-A. (e.g. asc)
-  --currentPage: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
-  --pageSize: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
+  --sort-by: string@sort-by-completer-1 # Allowed: createdAt, ttl. You can use these to sort by when a token was created, or how much longer the token will be active (ttl - time to live). Date and time is presented in ISO-8601 format. (e.g. ttl)
+  --sort-order: string@sort-order-completer # Allowed: asc, desc. Ascending is 0-9 or A-Z. Descending is 9-0 or Z-A. (e.g. asc)
+  --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
+  --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
 ]: nothing -> record<data: table<createdAt: string, expiresAt: string, token: string, ttl: int>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "currentPage" $currentPage "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "currentPage" $current_page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/upload-tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -700,7 +700,7 @@ export def "upload-tokens upload-tokens" [
 #
 # POST /upload-tokens
 # operationId: POST_upload-tokens
-export def "upload-tokens upload-tokens-1" [
+export def "upload-tokens post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,7 +715,7 @@ export def "upload-tokens upload-tokens-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/upload-tokens")
-  let body = {ttl: $ttl} | compact
+  let body = {"ttl": $ttl} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -727,7 +727,7 @@ export def "upload-tokens upload-tokens-1" [
 # DELETE /upload-tokens/{uploadToken}
 # operationId: DELETE_upload-tokens-uploadToken
 export def "upload-tokens upload-tokens-uploadToken-by-uploadToken" [
-  uploadToken: string
+  upload_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,7 +739,7 @@ export def "upload-tokens upload-tokens-uploadToken-by-uploadToken" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/upload-tokens/($uploadToken)")
+  let full_url = (build-url $base ({upload_token: $upload_token} | format pattern "/upload-tokens/{upload_token}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -750,7 +750,7 @@ export def "upload-tokens upload-tokens-uploadToken-by-uploadToken" [
 # GET /upload-tokens/{uploadToken}
 # operationId: GET_upload-tokens-uploadToken
 export def "upload-tokens upload-tokens-uploadToken-by-uploadToken-1" [
-  uploadToken: string
+  upload_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -762,7 +762,7 @@ export def "upload-tokens upload-tokens-uploadToken-by-uploadToken-1" [
 ]: nothing -> record<createdAt: string, expiresAt: string, token: string, ttl: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/upload-tokens/($uploadToken)")
+  let full_url = (build-url $base ({upload_token: $upload_token} | format pattern "/upload-tokens/{upload_token}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -772,7 +772,7 @@ export def "upload-tokens upload-tokens-uploadToken-by-uploadToken-1" [
 #
 # GET /videos
 # operationId: LIST-videos
-export def "videos LIST-videos" [
+export def "videos list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -785,15 +785,15 @@ export def "videos LIST-videos" [
   --tags: list # A tag is a category you create and apply to videos. You can search for videos with particular tags by listing one or more here. Only videos that have all the tags you list will be returned. (e.g. "tags": ["captions", "dialogue"])
   --metadata: list # Videos can be tagged with metadata tags in key:value pairs. You can search for videos with specific key value pairs using this parameter. [Dynamic Metadata](https://api.video/blog/endpoints/dynamic-metadata) allows you to define a key that allows any value pair. (e.g. [{"key":"Author", "value":"John Doe"}, {"key":"Format", "value":"Tutorial"}])
   --description: string # If you described a video with a term or sentence, you can add it here to return videos containing this string. (e.g. New Zealand)
-  --liveStreamId: string # If you know the ID for a live stream, you can retrieve the stream by adding the ID for it here. (e.g. li400mYKSgQ6xs7taUeSaEKr)
-  --sortBy: string # Allowed: publishedAt, title. You can search by the time videos were published at, or by title. (e.g. publishedAt)
-  --sortOrder: string # Allowed: asc, desc. asc is ascending and sorts from A to Z. desc is descending and sorts from Z to A. (e.g. asc)
-  --currentPage: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
-  --pageSize: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
+  --live-stream-id: string # If you know the ID for a live stream, you can retrieve the stream by adding the ID for it here. (e.g. li400mYKSgQ6xs7taUeSaEKr)
+  --sort-by: string # Allowed: publishedAt, title. You can search by the time videos were published at, or by title. (e.g. publishedAt)
+  --sort-order: string # Allowed: asc, desc. asc is ascending and sorts from A to Z. desc is descending and sorts from Z to A. (e.g. asc)
+  --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
+  --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
 ]: nothing -> record<data: table<assets: record, description: string, metadata: list, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record, tags: list, title: string, updatedAt: string, videoId: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "description" $description "scalar") (serialize-qp "liveStreamId" $liveStreamId "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "currentPage" $currentPage "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "description" $description "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "currentPage" $current_page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/videos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -805,7 +805,7 @@ export def "videos LIST-videos" [
 # POST /videos
 # operationId: POST-video
 # --metadata item shape: {key?: string, value?: string}
-export def "videos POST-video" [
+export def "videos post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -816,11 +816,11 @@ export def "videos POST-video" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # A brief description of your video. (e.g. A video about string theory.)
   --metadata: list # A list of key value pairs that you use to provide metadata for your video. These pairs can be made dynamic, allowing you to segment your audience. Read more on [dynamic metadata](https://api.video/blog/endpoints/dynamic-metadata). (e.g. [{"key": "Author", "value": "John Doe"}]) — item shape: {key?: string, value?: string}
-  --mp4Support: oneof<nothing, bool> # Enables mp4 version in addition to streamed version. (default: true, e.g. true)
+  --mp4-support: oneof<nothing, bool> # Enables mp4 version in addition to streamed version. (default: true, e.g. true)
   --panoramic: oneof<nothing, bool> # Indicates if your video is a 360/immersive video. (default: false, e.g. false)
-  --playerId: string # The unique identification number for your video player. (e.g. pl45KFKdlddgk654dspkze)
+  --player-id: string # The unique identification number for your video player. (e.g. pl45KFKdlddgk654dspkze)
   --public: oneof<nothing, bool> # Whether your video can be viewed by everyone, or requires authentication to see it. A setting of false will require a unique token for each view. Default is true. Tutorials on [private videos](https://api.video/blog/endpoints/private-videos). (default: true, e.g. true)
-  --publishedAt: string # The API uses ISO-8601 format for time, and includes 3 places for milliseconds. (format: date-time, e.g. 2020-07-14T23:36:18.598Z)
+  --published-at: string # The API uses ISO-8601 format for time, and includes 3 places for milliseconds. (format: date-time, e.g. 2020-07-14T23:36:18.598Z)
   --body-source: string # If you add a video already on the web, this is where you enter the url for the video. (e.g. https://www.myvideo.url.com/video.mp4)
   --tags: list # A list of tags you want to use to describe your video. (e.g. ["maths", "string theory", "video"])
   title: string # The title of your new video. (e.g. Maths video)
@@ -829,7 +829,7 @@ export def "videos POST-video" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/videos")
-  let body = {description: $description, metadata: $metadata, mp4Support: $mp4Support, panoramic: $panoramic, playerId: $playerId, public: $public, publishedAt: $publishedAt, source: $body_source, tags: $tags, title: $title} | compact
+  let body = {"description": $description, "metadata": $metadata, "mp4Support": $mp4_support, "panoramic": $panoramic, "playerId": $player_id, "public": $public, "publishedAt": $published_at, "source": $body_source, "tags": $tags, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -840,8 +840,8 @@ export def "videos POST-video" [
 #
 # DELETE /videos/{videoId}
 # operationId: DELETE-video
-export def "videos DELETE-video" [
-  videoId: string
+export def "videos delete" [
+  video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -853,7 +853,7 @@ export def "videos DELETE-video" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($videoId)")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -863,8 +863,8 @@ export def "videos DELETE-video" [
 #
 # GET /videos/{videoId}
 # operationId: GET-video
-export def "videos GET-video" [
-  videoId: string
+export def "videos get" [
+  video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -876,7 +876,7 @@ export def "videos GET-video" [
 ]: nothing -> record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($videoId)")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -887,8 +887,8 @@ export def "videos GET-video" [
 # PATCH /videos/{videoId}
 # operationId: PATCH-video
 # --metadata item shape: {key?: string, value?: string}
-export def "videos PATCH-video" [
-  videoId: string
+export def "videos patch" [
+  video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -899,9 +899,9 @@ export def "videos PATCH-video" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # A brief description of the video. (e.g. A film about good books.)
   --metadata: list # A list (array) of dictionaries where each dictionary contains a key value pair that describes the video. As with tags, you must send the complete list of metadata you want as whatever you send here will overwrite the existing metadata for the video. [Dynamic Metadata](https://api.video/blog/endpoints/dynamic-metadata) allows you to define a key that allows any value pair. — item shape: {key?: string, value?: string}
-  --mp4Support: oneof<nothing, bool> # Whether the player supports the mp4 format. (e.g. true)
+  --mp4-support: oneof<nothing, bool> # Whether the player supports the mp4 format. (e.g. true)
   --panoramic: oneof<nothing, bool> # Whether the video is a 360 degree or immersive video. (e.g. false)
-  --playerId: string # The unique ID for the player you want to associate with your video. (e.g. pl4k0jvEUuaTdRAEjQ4Jfrgz)
+  --player-id: string # The unique ID for the player you want to associate with your video. (e.g. pl4k0jvEUuaTdRAEjQ4Jfrgz)
   --public: oneof<nothing, bool> # Whether the video is publicly available or not. False means it is set to private. Default is true. Tutorials on [private videos](https://api.video/blog/endpoints/private-videos). (e.g. true)
   --tags: list # A list of terms or words you want to tag the video with. Make sure the list includes all the tags you want as whatever you send in this list will overwrite the existing list for the video. (e.g. ["maths", "string theory", "video"])
   --title: string # The title you want to use for your video.
@@ -909,8 +909,8 @@ export def "videos PATCH-video" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($videoId)")
-  let body = {description: $description, metadata: $metadata, mp4Support: $mp4Support, panoramic: $panoramic, playerId: $playerId, public: $public, tags: $tags, title: $title} | compact
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}"))
+  let body = {"description": $description, "metadata": $metadata, "mp4Support": $mp4_support, "panoramic": $panoramic, "playerId": $player_id, "public": $public, "tags": $tags, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -922,7 +922,7 @@ export def "videos PATCH-video" [
 # GET /videos/{videoId}/captions
 # operationId: GET_videos-videoId-captions
 export def "videos-captions videos-videoId-captions" [
-  videoId: string
+  video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -931,13 +931,13 @@ export def "videos-captions videos-videoId-captions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --currentPage: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
-  --pageSize: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
+  --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
+  --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
 ]: nothing -> record<data: table<default: bool, src: string, srclang: string, uri: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "currentPage" $currentPage "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/videos/($videoId)/captions" $qp)
+  let qp = [(serialize-qp "currentPage" $current_page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/captions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -948,7 +948,7 @@ export def "videos-captions videos-videoId-captions" [
 # DELETE /videos/{videoId}/captions/{language}
 # operationId: DELETE_videos-videoId-captions-language
 export def "videos-captions videos-videoId-captions-language-by-videoId-language" [
-  videoId: string
+  video_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -961,7 +961,7 @@ export def "videos-captions videos-videoId-captions-language-by-videoId-language
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($videoId)/captions/($language)")
+  let full_url = (build-url $base ({video_id: $video_id, language: $language} | format pattern "/videos/{video_id}/captions/{language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -972,7 +972,7 @@ export def "videos-captions videos-videoId-captions-language-by-videoId-language
 # GET /videos/{videoId}/captions/{language}
 # operationId: GET_videos-videoId-captions-language
 export def "videos-captions videos-videoId-captions-language-by-videoId-language-1" [
-  videoId: string
+  video_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -985,7 +985,7 @@ export def "videos-captions videos-videoId-captions-language-by-videoId-language
 ]: nothing -> record<default: bool, src: string, srclang: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($videoId)/captions/($language)")
+  let full_url = (build-url $base ({video_id: $video_id, language: $language} | format pattern "/videos/{video_id}/captions/{language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -996,7 +996,7 @@ export def "videos-captions videos-videoId-captions-language-by-videoId-language
 # PATCH /videos/{videoId}/captions/{language}
 # operationId: PATCH_videos-videoId-captions-language
 export def "videos-captions videos-videoId-captions-language-by-videoId-language-2" [
-  videoId: string
+  video_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1011,8 +1011,8 @@ export def "videos-captions videos-videoId-captions-language-by-videoId-language
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($videoId)/captions/($language)")
-  let body = {default: $default} | compact
+  let full_url = (build-url $base ({video_id: $video_id, language: $language} | format pattern "/videos/{video_id}/captions/{language}"))
+  let body = {"default": $default} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1024,7 +1024,7 @@ export def "videos-captions videos-videoId-captions-language-by-videoId-language
 # POST /videos/{videoId}/captions/{language}
 # operationId: POST_videos-videoId-captions-language
 export def "videos-captions videos-videoId-captions-language-by-videoId-language-3" [
-  videoId: string
+  video_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1039,8 +1039,8 @@ export def "videos-captions videos-videoId-captions-language-by-videoId-language
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($videoId)/captions/($language)")
-  let body = {file: $file} | compact
+  let full_url = (build-url $base ({video_id: $video_id, language: $language} | format pattern "/videos/{video_id}/captions/{language}"))
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1052,7 +1052,7 @@ export def "videos-captions videos-videoId-captions-language-by-videoId-language
 # GET /videos/{videoId}/chapters
 # operationId: GET_videos-videoId-chapters
 export def "videos-chapters videos-videoId-chapters" [
-  videoId: string
+  video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1061,13 +1061,13 @@ export def "videos-chapters videos-videoId-chapters" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --currentPage: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
-  --pageSize: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
+  --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
+  --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
 ]: nothing -> record<data: table<language: string, src: string, uri: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "currentPage" $currentPage "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/videos/($videoId)/chapters" $qp)
+  let qp = [(serialize-qp "currentPage" $current_page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/chapters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1078,7 +1078,7 @@ export def "videos-chapters videos-videoId-chapters" [
 # DELETE /videos/{videoId}/chapters/{language}
 # operationId: DELETE_videos-videoId-chapters-language
 export def "videos-chapters videos-videoId-chapters-language-by-videoId-language" [
-  videoId: string
+  video_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1091,7 +1091,7 @@ export def "videos-chapters videos-videoId-chapters-language-by-videoId-language
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($videoId)/chapters/($language)")
+  let full_url = (build-url $base ({video_id: $video_id, language: $language} | format pattern "/videos/{video_id}/chapters/{language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1102,7 +1102,7 @@ export def "videos-chapters videos-videoId-chapters-language-by-videoId-language
 # GET /videos/{videoId}/chapters/{language}
 # operationId: GET_videos-videoId-chapters-language
 export def "videos-chapters videos-videoId-chapters-language-by-videoId-language-1" [
-  videoId: string
+  video_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1115,7 +1115,7 @@ export def "videos-chapters videos-videoId-chapters-language-by-videoId-language
 ]: nothing -> record<language: string, src: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($videoId)/chapters/($language)")
+  let full_url = (build-url $base ({video_id: $video_id, language: $language} | format pattern "/videos/{video_id}/chapters/{language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1126,7 +1126,7 @@ export def "videos-chapters videos-videoId-chapters-language-by-videoId-language
 # POST /videos/{videoId}/chapters/{language}
 # operationId: POST_videos-videoId-chapters-language
 export def "videos-chapters videos-videoId-chapters-language-by-videoId-language-2" [
-  videoId: string
+  video_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1141,8 +1141,8 @@ export def "videos-chapters videos-videoId-chapters-language-by-videoId-language
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($videoId)/chapters/($language)")
-  let body = {file: $file} | compact
+  let full_url = (build-url $base ({video_id: $video_id, language: $language} | format pattern "/videos/{video_id}/chapters/{language}"))
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1154,7 +1154,7 @@ export def "videos-chapters videos-videoId-chapters-language-by-videoId-language
 # POST /videos/{videoId}/source
 # operationId: POST_videos-videoId-source
 export def "videos-source videos-videoId-source" [
-  videoId: string
+  video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1163,16 +1163,16 @@ export def "videos-source videos-videoId-source" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Range: string # Content-Range represents the range of bytes that will be returned as a result of the request. Byte ranges are inclusive, meaning that bytes 0-999 represents the first 1000 bytes in a file or object. (e.g. Content-Range: bytes 200-100/5000)
+  --content-range: string # Content-Range represents the range of bytes that will be returned as a result of the request. Byte ranges are inclusive, meaning that bytes 0-999 represents the first 1000 bytes in a file or object. (e.g. Content-Range: bytes 200-100/5000)
   file: string # The path to the video you would like to upload. The path must be local. If you want to use a video from an online source, you must use the "/videos" endpoint and add the "source" parameter when you create a new video. (format: binary, e.g. @/path/to/video.mp4)
 ]: any -> record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($videoId)/source")
-  let body = {file: $file} | compact
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/source"))
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Range": $Content_Range} | compact
+  let extra_headers = {"Content-Range": $content_range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1183,8 +1183,8 @@ export def "videos-source videos-videoId-source" [
 #
 # GET /videos/{videoId}/status
 # operationId: GET-video-status
-export def "videos-status GET-video-status" [
-  videoId: string
+export def "videos-status get" [
+  video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1196,7 +1196,7 @@ export def "videos-status GET-video-status" [
 ]: nothing -> record<encoding: record<metadata: record<aspectRatio: string, audioCodec: string, bitrate: float, duration: int, framerate: int, height: int, samplerate: int, videoCodec: string, width: int>, playable: bool, qualities: list<record>>, ingest: record<filesize: int, receivedBytes: list<record>, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($videoId)/status")
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1207,7 +1207,7 @@ export def "videos-status GET-video-status" [
 # PATCH /videos/{videoId}/thumbnail
 # operationId: PATCH_videos-videoId-thumbnail
 export def "videos-thumbnail videos-videoId-thumbnail-by-videoId" [
-  videoId: string
+  video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1221,8 +1221,8 @@ export def "videos-thumbnail videos-videoId-thumbnail-by-videoId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($videoId)/thumbnail")
-  let body = {timecode: $timecode} | compact
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/thumbnail"))
+  let body = {"timecode": $timecode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1234,7 +1234,7 @@ export def "videos-thumbnail videos-videoId-thumbnail-by-videoId" [
 # POST /videos/{videoId}/thumbnail
 # operationId: POST_videos-videoId-thumbnail
 export def "videos-thumbnail videos-videoId-thumbnail-by-videoId-1" [
-  videoId: string
+  video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1248,8 +1248,8 @@ export def "videos-thumbnail videos-videoId-thumbnail-by-videoId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/videos/($videoId)/thumbnail")
-  let body = {file: $file} | compact
+  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/videos/{video_id}/thumbnail"))
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1260,7 +1260,7 @@ export def "videos-thumbnail videos-videoId-thumbnail-by-videoId-1" [
 #
 # GET /webhooks
 # operationId: LIST-webhooks
-export def "webhooks LIST-webhooks" [
+export def "webhooks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1270,12 +1270,12 @@ export def "webhooks LIST-webhooks" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --events: string # The webhook event that you wish to filter on. (e.g. video.encoding.quality.completed)
-  --currentPage: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
-  --pageSize: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
+  --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
+  --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
 ]: nothing -> record<data: table<createdAt: string, events: list, url: string, webhookId: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "events" $events "scalar") (serialize-qp "currentPage" $currentPage "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "events" $events "scalar") (serialize-qp "currentPage" $current_page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1286,7 +1286,7 @@ export def "webhooks LIST-webhooks" [
 #
 # POST /webhooks
 # operationId: POST-webhooks
-export def "webhooks POST-webhooks" [
+export def "webhooks post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1302,7 +1302,7 @@ export def "webhooks POST-webhooks" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks")
-  let body = {events: $events, url: $body_url} | compact
+  let body = {"events": $events, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1313,8 +1313,8 @@ export def "webhooks POST-webhooks" [
 #
 # DELETE /webhooks/{webhookId}
 # operationId: DELETE-webhook
-export def "webhooks DELETE-webhook" [
-  webhookId: string
+export def "webhooks delete" [
+  webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1326,7 +1326,7 @@ export def "webhooks DELETE-webhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhooks/($webhookId)")
+  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1336,8 +1336,8 @@ export def "webhooks DELETE-webhook" [
 #
 # GET /webhooks/{webhookId}
 # operationId: GET-Webhook
-export def "webhooks GET-Webhook" [
-  webhookId: string
+export def "webhooks get" [
+  webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1349,7 +1349,7 @@ export def "webhooks GET-Webhook" [
 ]: nothing -> record<createdAt: string, events: list<string>, url: string, webhookId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhooks/($webhookId)")
+  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

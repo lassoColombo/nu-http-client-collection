@@ -71,7 +71,7 @@ def granularity-completer [] { ["daily" "hourly" "minutely" "monthly" "weekly" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "timeseries-entire-detect EntireDetect" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "timeseries-entire-detect post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 # POST /timeseries/entire/detect
 # operationId: EntireDetect
 # --series item shape: {timestamp: string, value: float}
-export def "timeseries-entire-detect EntireDetect" [
+export def "timeseries-entire-detect post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,9 +105,9 @@ export def "timeseries-entire-detect EntireDetect" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customInterval: int # Custom Interval is used to set non-standard time interval, for example, if the series is 5 minutes, request can be set as {"granularity":"minutely", "customInterval":5}. (format: int32)
+  --custom-interval: int # Custom Interval is used to set non-standard time interval, for example, if the series is 5 minutes, request can be set as {"granularity":"minutely", "customInterval":5}. (format: int32)
   granularity: string@granularity-completer # Can only be one of yearly, monthly, weekly, daily, hourly or minutely. Granularity is used for verify whether input series is valid.
-  --maxAnomalyRatio: float # Optional argument, advanced model parameter, max anomaly ratio in a time series. (format: float)
+  --max-anomaly-ratio: float # Optional argument, advanced model parameter, max anomaly ratio in a time series. (format: float)
   --period: int # Optional argument, periodic value of a time series. If the value is null or does not present, the API will determine the period automatically. (format: int32)
   --sensitivity: int # Optional argument, advanced model parameter, between 0-99, the lower the value is, the larger the margin value will be which means less anomalies will be accepted. (format: int32)
   series: list # Time series data points. Points should be sorted by timestamp in ascending order to match the anomaly detection result. If the data is not sorted correctly or there is duplicated timestamp, the API will not work. In such case, an error message will be returned. — item shape: {timestamp: string, value: float}
@@ -116,7 +116,7 @@ export def "timeseries-entire-detect EntireDetect" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/timeseries/entire/detect")
-  let body = {customInterval: $customInterval, granularity: $granularity, maxAnomalyRatio: $maxAnomalyRatio, period: $period, sensitivity: $sensitivity, series: $series} | compact
+  let body = {"customInterval": $custom_interval, "granularity": $granularity, "maxAnomalyRatio": $max_anomaly_ratio, "period": $period, "sensitivity": $sensitivity, "series": $series} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -128,7 +128,7 @@ export def "timeseries-entire-detect EntireDetect" [
 # POST /timeseries/last/detect
 # operationId: LastDetect
 # --series item shape: {timestamp: string, value: float}
-export def "timeseries-last-detect LastDetect" [
+export def "timeseries-last-detect post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,9 +137,9 @@ export def "timeseries-last-detect LastDetect" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customInterval: int # Custom Interval is used to set non-standard time interval, for example, if the series is 5 minutes, request can be set as {"granularity":"minutely", "customInterval":5}. (format: int32)
+  --custom-interval: int # Custom Interval is used to set non-standard time interval, for example, if the series is 5 minutes, request can be set as {"granularity":"minutely", "customInterval":5}. (format: int32)
   granularity: string@granularity-completer # Can only be one of yearly, monthly, weekly, daily, hourly or minutely. Granularity is used for verify whether input series is valid.
-  --maxAnomalyRatio: float # Optional argument, advanced model parameter, max anomaly ratio in a time series. (format: float)
+  --max-anomaly-ratio: float # Optional argument, advanced model parameter, max anomaly ratio in a time series. (format: float)
   --period: int # Optional argument, periodic value of a time series. If the value is null or does not present, the API will determine the period automatically. (format: int32)
   --sensitivity: int # Optional argument, advanced model parameter, between 0-99, the lower the value is, the larger the margin value will be which means less anomalies will be accepted. (format: int32)
   series: list # Time series data points. Points should be sorted by timestamp in ascending order to match the anomaly detection result. If the data is not sorted correctly or there is duplicated timestamp, the API will not work. In such case, an error message will be returned. — item shape: {timestamp: string, value: float}
@@ -148,7 +148,7 @@ export def "timeseries-last-detect LastDetect" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/timeseries/last/detect")
-  let body = {customInterval: $customInterval, granularity: $granularity, maxAnomalyRatio: $maxAnomalyRatio, period: $period, sensitivity: $sensitivity, series: $series} | compact
+  let body = {"customInterval": $custom_interval, "granularity": $granularity, "maxAnomalyRatio": $max_anomaly_ratio, "period": $period, "sensitivity": $sensitivity, "series": $series} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -199,7 +199,7 @@ export def "cities-findcitiesfromlatlong options" [
 #
 # GET /cities/findcitiesfromtext
 # operationId: getAutocomplete
-export def "cities-findcitiesfromtext get" [
+export def "cities-findcitiesfromtext get-autocomplete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,13 +400,13 @@ export def "distance get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locationA: string # The location as a latitude / longitude point ( ex. 67.85572,20.22513 ) of location point A
-  --locationB: string # The location as a latitude / longitude point ( ex. 67.85572,20.22513 ) of location point B
+  --location-a: string # The location as a latitude / longitude point ( ex. 67.85572,20.22513 ) of location point A
+  --location-b: string # The location as a latitude / longitude point ( ex. 67.85572,20.22513 ) of location point B
   --unit: string@unit-completer # The unit of length you want the elevation returned either meters or feet returned (default: kms)
 ]: nothing -> record<count: int, data: float, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "locationA" $locationA "scalar") (serialize-qp "locationB" $locationB "scalar") (serialize-qp "unit" $unit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "locationA" $location_a "scalar") (serialize-qp "locationB" $location_b "scalar") (serialize-qp "unit" $unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/distance" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -484,7 +484,7 @@ export def "elevation options" [
 #
 # GET /pong
 # operationId: getPing
-export def "pong get" [
+export def "pong get-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

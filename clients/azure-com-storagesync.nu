@@ -67,12 +67,12 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def type-completer [] { ["Microsoft.StorageSync/storageSyncServices"] }
-def changeDetectionMode-completer [] { ["Default" "Recursive"] }
+def change-detection-mode-completer [] { ["Default" "Recursive"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-storage-sync-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-storage-sync-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.StorageSync/operations
 # operationId: Operations_List
-export def "providers-microsoft-storage-sync-operations List" [
+export def "providers-microsoft-storage-sync-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,9 +120,9 @@ export def "providers-microsoft-storage-sync-operations List" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.StorageSync/locations/{locationName}/checkNameAvailability
 # operationId: StorageSyncServices_CheckNameAvailability
-export def "subscriptions-providers-microsoft-storage-sync-locations-check-name-availability CheckNameAvailability" [
-  locationName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-storage-sync-locations-check-name-availability check" [
+  subscription_id: string
+  location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,8 +139,8 @@ export def "subscriptions-providers-microsoft-storage-sync-locations-check-name-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.StorageSync/locations/($locationName)/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location_name: $location_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.StorageSync/locations/{location_name}/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -151,8 +151,8 @@ export def "subscriptions-providers-microsoft-storage-sync-locations-check-name-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.StorageSync/storageSyncServices
 # operationId: StorageSyncServices_ListBySubscription
-export def "subscriptions-providers-microsoft-storage-sync-storage-sync-services ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-storage-sync-storage-sync-services list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "subscriptions-providers-microsoft-storage-sync-storage-sync-services
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.StorageSync/storageSyncServices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.StorageSync/storageSyncServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,12 +176,12 @@ export def "subscriptions-providers-microsoft-storage-sync-storage-sync-services
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/locations/{locationName}/workflows/{workflowId}/operations/{operationId}
 # operationId: OperationStatus_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-locations-workflows-operations Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  locationName: string
-  workflowId: string
-  operationId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-locations-workflows-operations get" [
+  subscription_id: string
+  resource_group_name: string
+  location_name: string
+  workflow_id: string
+  operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-locat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/locations/($locationName)/workflows/($workflowId)/operations/($operationId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location_name: $location_name, workflow_id: $workflow_id, operation_id: $operation_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/locations/{location_name}/workflows/{workflow_id}/operations/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -205,9 +205,9 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-locat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices
 # operationId: StorageSyncServices_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -231,10 +231,10 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}
 # operationId: StorageSyncServices_Delete
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services delete" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,10 +258,10 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}
 # operationId: StorageSyncServices_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services get" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +275,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -285,10 +285,10 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}
 # operationId: StorageSyncServices_Update
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services update" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,8 +305,8 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -317,10 +317,10 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}
 # operationId: StorageSyncServices_Create
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services create" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,8 +338,8 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)" $qp)
-  let body = {location: $location, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}") $qp)
+  let body = {"location": $location, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -350,10 +350,10 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/registeredServers
 # operationId: RegisteredServers_ListByStorageSyncService
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-registered-servers ListByStorageSyncService" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-registered-servers list-by" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,7 +367,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/registeredServers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/registeredServers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -377,11 +377,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/registeredServers/{serverId}
 # operationId: RegisteredServers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-registered-servers Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  serverId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-registered-servers delete" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/registeredServers/($serverId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, server_id: $server_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/registeredServers/{server_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -405,11 +405,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/registeredServers/{serverId}
 # operationId: RegisteredServers_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-registered-servers Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  serverId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-registered-servers get" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,7 +423,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/registeredServers/($serverId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, server_id: $server_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/registeredServers/{server_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -434,11 +434,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/registeredServers/{serverId}
 # operationId: RegisteredServers_Create
 # --properties shape: {agentVersion?: string, clusterId?: string, clusterName?: string, friendlyName?: string, lastHeartBeat?: string, serverCertificate?: string, serverId?: string, serverOSVersion?: string, serverRole?: string}
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-registered-servers Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  serverId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-registered-servers create" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,8 +454,8 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/registeredServers/($serverId)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, server_id: $server_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/registeredServers/{server_id}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -466,11 +466,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/registeredServers/{serverId}/triggerRollover
 # operationId: RegisteredServers_triggerRollover
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-registered-servers-trigger-rollover triggerRollover" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  serverId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-registered-servers-trigger-rollover trigger" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,14 +480,14 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --serverCertificate: string # Certificate Data
+  --server-certificate: string # Certificate Data
 ]: any -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/registeredServers/($serverId)/triggerRollover" $qp)
-  let body = {serverCertificate: $serverCertificate} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, server_id: $server_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/registeredServers/{server_id}/triggerRollover") $qp)
+  let body = {"serverCertificate": $server_certificate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -498,10 +498,10 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups
 # operationId: SyncGroups_ListByStorageSyncService
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups ListByStorageSyncService" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups list-by" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -515,7 +515,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -525,11 +525,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}
 # operationId: SyncGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups delete" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,7 +543,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -553,11 +553,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}
 # operationId: SyncGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups get" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -571,7 +571,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -581,11 +581,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}
 # operationId: SyncGroups_Create
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups create" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,8 +601,8 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -613,11 +613,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints
 # operationId: CloudEndpoints_ListBySyncGroup
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints ListBySyncGroup" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints list-by" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -631,7 +631,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)/cloudEndpoints" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -641,12 +641,12 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}
 # operationId: CloudEndpoints_Delete
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
-  cloudEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints delete" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
+  cloud_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,7 +660,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)/cloudEndpoints/($cloudEndpointName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name, cloud_endpoint_name: $cloud_endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -670,12 +670,12 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}
 # operationId: CloudEndpoints_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
-  cloudEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints get" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
+  cloud_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,7 +689,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)/cloudEndpoints/($cloudEndpointName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name, cloud_endpoint_name: $cloud_endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -700,12 +700,12 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}
 # operationId: CloudEndpoints_Create
 # --properties shape: {azureFileShareName?: string, friendlyName?: string, storageAccountResourceId?: string, storageAccountTenantId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
-  cloudEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints create" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
+  cloud_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -721,8 +721,8 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)/cloudEndpoints/($cloudEndpointName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name, cloud_endpoint_name: $cloud_endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -733,12 +733,12 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}/postbackup
 # operationId: CloudEndpoints_PostBackup
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-postbackup PostBackup" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
-  cloudEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-postbackup create-backup" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
+  cloud_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -748,14 +748,14 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --azureFileShare: string # Azure File Share.
+  --azure-file-share: string # Azure File Share.
 ]: any -> record<backupMetadata: record<cloudEndpointName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)/cloudEndpoints/($cloudEndpointName)/postbackup" $qp)
-  let body = {azureFileShare: $azureFileShare} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name, cloud_endpoint_name: $cloud_endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}/postbackup") $qp)
+  let body = {"azureFileShare": $azure_file_share} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -767,12 +767,12 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}/postrestore
 # operationId: CloudEndpoints_PostRestore
 # --restoreFileSpec item shape: {path?: string}
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-postrestore PostRestore" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
-  cloudEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-postrestore create-restore" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
+  cloud_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -782,21 +782,21 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --azureFileShareUri: string # Post Restore Azure file share uri.
-  --failedFileList: string # Post Restore Azure failed file list.
+  --azure-file-share-uri: string # Post Restore Azure file share uri.
+  --failed-file-list: string # Post Restore Azure failed file list.
   --partition: string # Post Restore partition.
-  --replicaGroup: string # Post Restore replica group.
-  --requestId: string # Post Restore request id.
-  --restoreFileSpec: list # Post Restore restore file spec array. — item shape: {path?: string}
-  --sourceAzureFileShareUri: string # Post Restore Azure source azure file share uri.
+  --replica-group: string # Post Restore replica group.
+  --request-id: string # Post Restore request id.
+  --restore-file-spec: list # Post Restore restore file spec array. — item shape: {path?: string}
+  --source-azure-file-share-uri: string # Post Restore Azure source azure file share uri.
   --status: string # Post Restore Azure status.
 ]: any -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)/cloudEndpoints/($cloudEndpointName)/postrestore" $qp)
-  let body = {azureFileShareUri: $azureFileShareUri, failedFileList: $failedFileList, partition: $partition, replicaGroup: $replicaGroup, requestId: $requestId, restoreFileSpec: $restoreFileSpec, sourceAzureFileShareUri: $sourceAzureFileShareUri, status: $status} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name, cloud_endpoint_name: $cloud_endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}/postrestore") $qp)
+  let body = {"azureFileShareUri": $azure_file_share_uri, "failedFileList": $failed_file_list, "partition": $partition, "replicaGroup": $replica_group, "requestId": $request_id, "restoreFileSpec": $restore_file_spec, "sourceAzureFileShareUri": $source_azure_file_share_uri, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -807,12 +807,12 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}/prebackup
 # operationId: CloudEndpoints_PreBackup
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-prebackup PreBackup" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
-  cloudEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-prebackup post" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
+  cloud_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,14 +822,14 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --azureFileShare: string # Azure File Share.
+  --azure-file-share: string # Azure File Share.
 ]: any -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)/cloudEndpoints/($cloudEndpointName)/prebackup" $qp)
-  let body = {azureFileShare: $azureFileShare} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name, cloud_endpoint_name: $cloud_endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}/prebackup") $qp)
+  let body = {"azureFileShare": $azure_file_share} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -841,12 +841,12 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}/prerestore
 # operationId: CloudEndpoints_PreRestore
 # --restoreFileSpec item shape: {path?: string}
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-prerestore PreRestore" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
-  cloudEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-prerestore post" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
+  cloud_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,22 +856,22 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --azureFileShareUri: string # Pre Restore Azure file share uri.
-  --backupMetadataPropertyBag: string # Pre Restore backup metadata property bag.
+  --azure-file-share-uri: string # Pre Restore Azure file share uri.
+  --backup-metadata-property-bag: string # Pre Restore backup metadata property bag.
   --partition: string # Pre Restore partition.
-  --pauseWaitForSyncDrainTimePeriodInSeconds: int # Pre Restore pause wait for sync drain time period in seconds.
-  --replicaGroup: string # Pre Restore replica group.
-  --requestId: string # Pre Restore request id.
-  --restoreFileSpec: list # Pre Restore restore file spec array. — item shape: {path?: string}
-  --sourceAzureFileShareUri: string # Pre Restore Azure source azure file share uri.
+  --pause-wait-for-sync-drain-time-period-in-seconds: int # Pre Restore pause wait for sync drain time period in seconds.
+  --replica-group: string # Pre Restore replica group.
+  --request-id: string # Pre Restore request id.
+  --restore-file-spec: list # Pre Restore restore file spec array. — item shape: {path?: string}
+  --source-azure-file-share-uri: string # Pre Restore Azure source azure file share uri.
   --status: string # Pre Restore Azure status.
 ]: any -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)/cloudEndpoints/($cloudEndpointName)/prerestore" $qp)
-  let body = {azureFileShareUri: $azureFileShareUri, backupMetadataPropertyBag: $backupMetadataPropertyBag, partition: $partition, pauseWaitForSyncDrainTimePeriodInSeconds: $pauseWaitForSyncDrainTimePeriodInSeconds, replicaGroup: $replicaGroup, requestId: $requestId, restoreFileSpec: $restoreFileSpec, sourceAzureFileShareUri: $sourceAzureFileShareUri, status: $status} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name, cloud_endpoint_name: $cloud_endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}/prerestore") $qp)
+  let body = {"azureFileShareUri": $azure_file_share_uri, "backupMetadataPropertyBag": $backup_metadata_property_bag, "partition": $partition, "pauseWaitForSyncDrainTimePeriodInSeconds": $pause_wait_for_sync_drain_time_period_in_seconds, "replicaGroup": $replica_group, "requestId": $request_id, "restoreFileSpec": $restore_file_spec, "sourceAzureFileShareUri": $source_azure_file_share_uri, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -883,11 +883,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}/restoreheartbeat
 # operationId: CloudEndpoints_restoreheartbeat
 export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-restoreheartbeat restoreheartbeat" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
-  cloudEndpointName: string
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
+  cloud_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -901,7 +901,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)/cloudEndpoints/($cloudEndpointName)/restoreheartbeat" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name, cloud_endpoint_name: $cloud_endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}/restoreheartbeat") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -911,12 +911,12 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}/triggerChangeDetection
 # operationId: CloudEndpoints_TriggerChangeDetection
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-trigger-change-detection TriggerChangeDetection" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
-  cloudEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-trigger-change-detection trigger" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
+  cloud_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -926,16 +926,16 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --changeDetectionMode: string@changeDetectionMode-completer # Change Detection Mode. Applies to a directory specified in directoryPath parameter.
-  --directoryPath: string # Relative path to a directory Azure File share for which change detection is to be performed.
+  --change-detection-mode: string@change-detection-mode-completer # Change Detection Mode. Applies to a directory specified in directoryPath parameter.
+  --directory-path: string # Relative path to a directory Azure File share for which change detection is to be performed.
   --paths: list # Array of relative paths on the Azure File share to be included in the change detection. Can be files and directories.
 ]: any -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)/cloudEndpoints/($cloudEndpointName)/triggerChangeDetection" $qp)
-  let body = {changeDetectionMode: $changeDetectionMode, directoryPath: $directoryPath, paths: $paths} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name, cloud_endpoint_name: $cloud_endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}/triggerChangeDetection") $qp)
+  let body = {"changeDetectionMode": $change_detection_mode, "directoryPath": $directory_path, "paths": $paths} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -946,11 +946,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/serverEndpoints
 # operationId: ServerEndpoints_ListBySyncGroup
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints ListBySyncGroup" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints list-by" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -964,7 +964,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)/serverEndpoints" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/serverEndpoints") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -974,12 +974,12 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/serverEndpoints/{serverEndpointName}
 # operationId: ServerEndpoints_Delete
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
-  serverEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints delete" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
+  server_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -993,7 +993,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)/serverEndpoints/($serverEndpointName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name, server_endpoint_name: $server_endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/serverEndpoints/{server_endpoint_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1003,12 +1003,12 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/serverEndpoints/{serverEndpointName}
 # operationId: ServerEndpoints_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
-  serverEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints get" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
+  server_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1022,7 +1022,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)/serverEndpoints/($serverEndpointName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name, server_endpoint_name: $server_endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/serverEndpoints/{server_endpoint_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1033,12 +1033,12 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/serverEndpoints/{serverEndpointName}
 # operationId: ServerEndpoints_Update
 # --properties shape: {cloudTiering?: "on"|"off", offlineDataTransfer?: "on"|"off", offlineDataTransferShareName?: string, tierFilesOlderThanDays?: int, volumeFreeSpacePercent?: int}
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
-  serverEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints update" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
+  server_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1054,8 +1054,8 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)/serverEndpoints/($serverEndpointName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name, server_endpoint_name: $server_endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/serverEndpoints/{server_endpoint_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1067,12 +1067,12 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/serverEndpoints/{serverEndpointName}
 # operationId: ServerEndpoints_Create
 # --properties shape: {cloudTiering?: "on"|"off", friendlyName?: string, offlineDataTransfer?: "on"|"off", offlineDataTransferShareName?: string, serverLocalPath?: string, serverResourceId?: string, tierFilesOlderThanDays?: int, volumeFreeSpacePercent?: int}
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
-  serverEndpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints create" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
+  server_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1088,8 +1088,8 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)/serverEndpoints/($serverEndpointName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name, server_endpoint_name: $server_endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/serverEndpoints/{server_endpoint_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1101,11 +1101,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/serverEndpoints/{serverEndpointName}/recallAction
 # operationId: ServerEndpoints_recallAction
 export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints-recall-action recallAction" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  syncGroupName: string
-  serverEndpointName: string
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  sync_group_name: string
+  server_endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1116,14 +1116,14 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --pattern: string # Pattern of the files.
-  --recallPath: string # Recall path.
+  --recall-path: string # Recall path.
 ]: any -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/syncGroups/($syncGroupName)/serverEndpoints/($serverEndpointName)/recallAction" $qp)
-  let body = {pattern: $pattern, recallPath: $recallPath} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, sync_group_name: $sync_group_name, server_endpoint_name: $server_endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/serverEndpoints/{server_endpoint_name}/recallAction") $qp)
+  let body = {"pattern": $pattern, "recallPath": $recall_path} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1134,10 +1134,10 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/workflows
 # operationId: Workflows_ListByStorageSyncService
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-workflows ListByStorageSyncService" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-workflows list-by" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1151,7 +1151,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/workflows" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/workflows") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1161,11 +1161,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/workflows/{workflowId}
 # operationId: Workflows_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-workflows Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  workflowId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-workflows get" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  workflow_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1179,7 +1179,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/workflows/($workflowId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, workflow_id: $workflow_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/workflows/{workflow_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1189,11 +1189,11 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/workflows/{workflowId}/abort
 # operationId: Workflows_Abort
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-workflows-abort Abort" [
-  subscriptionId: string
-  resourceGroupName: string
-  storageSyncServiceName: string
-  workflowId: string
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-workflows-abort abort" [
+  subscription_id: string
+  resource_group_name: string
+  storage_sync_service_name: string
+  workflow_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1207,7 +1207,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.StorageSync/storageSyncServices/($storageSyncServiceName)/workflows/($workflowId)/abort" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, storage_sync_service_name: $storage_sync_service_name, workflow_id: $workflow_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/workflows/{workflow_id}/abort") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

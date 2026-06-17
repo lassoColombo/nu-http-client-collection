@@ -105,7 +105,7 @@ export def "bng2latlong get" [
 ]: nothing -> record<easting: int, error: string, latitude: float, longitude: float, northing: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bng2latlong/($easting)/($northing)")
+  let full_url = (build-url $base ({easting: $easting, northing: $northing} | format pattern "/bng2latlong/{easting}/{northing}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

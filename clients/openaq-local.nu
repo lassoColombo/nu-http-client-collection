@@ -66,7 +66,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def entity-completer [] { ["community" "government" "research"] }
-def sensorType-completer [] { ["low-cost sensor" "reference grade"] }
+def sensor-type-completer [] { ["low-cost sensor" "reference grade"] }
 def spatial-completer [] { ["country" "location" "project" "total"] }
 def temporal-completer [] { ["day" "dow" "hod" "hour" "month" "moy" "year"] }
 
@@ -223,7 +223,7 @@ export def "countries get-by-country_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "country" $country "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/countries/($country_id)" $qp)
+  let full_url = (build-url $base ({country_id: $country_id} | format pattern "/v1/countries/{country_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,18 +258,18 @@ export def "latest get" [
   --location-id: int
   --location: list
   --order-by: string # Order by a field (default: lastUpdated)
-  --isMobile: oneof<nothing, bool> # Location is mobile
-  --isAnalysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
-  --sourceName: list # Name of the data source
+  --is-mobile: oneof<nothing, bool> # Location is mobile
+  --is-analysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
+  --source-name: list # Name of the data source
   --entity: string # Source entity type.
-  --sensorType: string # Type of Sensor
-  --modelName: list # Model Name of Sensor
-  --manufacturerName: list # Manufacturer of Sensor
-  --dumpRaw: oneof<nothing, bool> # default: false
+  --sensor-type: string # Type of Sensor
+  --model-name: list # Model Name of Sensor
+  --manufacturer-name: list # Manufacturer of Sensor
+  --dump-raw: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "modelName" $modelName "multi") (serialize-qp "manufacturerName" $manufacturerName "multi") (serialize-qp "dumpRaw" $dumpRaw "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -305,19 +305,19 @@ export def "latest get-by-location_id" [
   --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
   --location: list
   --order-by: string # Order by a field (default: lastUpdated)
-  --isMobile: oneof<nothing, bool> # Location is mobile
-  --isAnalysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
-  --sourceName: list # Name of the data source
+  --is-mobile: oneof<nothing, bool> # Location is mobile
+  --is-analysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
+  --source-name: list # Name of the data source
   --entity: string # Source entity type.
-  --sensorType: string # Type of Sensor
-  --modelName: list # Model Name of Sensor
-  --manufacturerName: list # Manufacturer of Sensor
-  --dumpRaw: oneof<nothing, bool> # default: false
+  --sensor-type: string # Type of Sensor
+  --model-name: list # Model Name of Sensor
+  --manufacturer-name: list # Manufacturer of Sensor
+  --dump-raw: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "modelName" $modelName "multi") (serialize-qp "manufacturerName" $manufacturerName "multi") (serialize-qp "dumpRaw" $dumpRaw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/latest/($location_id)" $qp)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/v1/latest/{location_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -352,18 +352,18 @@ export def "locations get" [
   --location-id: int
   --location: list
   --order-by: string # Order by a field (default: lastUpdated)
-  --isMobile: oneof<nothing, bool> # Location is mobile
-  --isAnalysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
-  --sourceName: list # Name of the data source
+  --is-mobile: oneof<nothing, bool> # Location is mobile
+  --is-analysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
+  --source-name: list # Name of the data source
   --entity: string # Source entity type.
-  --sensorType: string # Type of Sensor
-  --modelName: list # Model Name of Sensor
-  --manufacturerName: list # Manufacturer of Sensor
-  --dumpRaw: oneof<nothing, bool> # default: false
+  --sensor-type: string # Type of Sensor
+  --model-name: list # Model Name of Sensor
+  --manufacturer-name: list # Manufacturer of Sensor
+  --dump-raw: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "modelName" $modelName "multi") (serialize-qp "manufacturerName" $manufacturerName "multi") (serialize-qp "dumpRaw" $dumpRaw "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/locations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -399,19 +399,19 @@ export def "locations get-by-location_id" [
   --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
   --location: list
   --order-by: string # Order by a field (default: lastUpdated)
-  --isMobile: oneof<nothing, bool> # Location is mobile
-  --isAnalysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
-  --sourceName: list # Name of the data source
+  --is-mobile: oneof<nothing, bool> # Location is mobile
+  --is-analysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
+  --source-name: list # Name of the data source
   --entity: string # Source entity type.
-  --sensorType: string # Type of Sensor
-  --modelName: list # Model Name of Sensor
-  --manufacturerName: list # Manufacturer of Sensor
-  --dumpRaw: oneof<nothing, bool> # default: false
+  --sensor-type: string # Type of Sensor
+  --model-name: list # Model Name of Sensor
+  --manufacturer-name: list # Manufacturer of Sensor
+  --dump-raw: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "modelName" $modelName "multi") (serialize-qp "manufacturerName" $manufacturerName "multi") (serialize-qp "dumpRaw" $dumpRaw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/locations/($location_id)" $qp)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/v1/locations/{location_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -449,18 +449,18 @@ export def "measurements get" [
   --location-id: int
   --location: list
   --order-by: string # default: datetime
-  --isMobile: oneof<nothing, bool>
-  --isAnalysis: oneof<nothing, bool>
+  --is-mobile: oneof<nothing, bool>
+  --is-analysis: oneof<nothing, bool>
   --project: int
   --entity: string@entity-completer
-  --sensorType: string@sensorType-completer
+  --sensor-type: string@sensor-type-completer
   --value-from: float
   --value-to: float
   --include-fields: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "value_from" $value_from "scalar") (serialize-qp "value_to" $value_to "scalar") (serialize-qp "include_fields" $include_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "value_from" $value_from "scalar") (serialize-qp "value_to" $value_to "scalar") (serialize-qp "include_fields" $include_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/measurements" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -484,14 +484,14 @@ export def "parameters get" [
   --page: int # Paginate through results. (default: 1)
   --offset: int # default: 0
   --qp-sort: string # Define sort order. (default: asc)
-  --sourceName: list
-  --sourceId: list
-  --sourceSlug: list
+  --source-name: list
+  --source-id: list
+  --source-slug: list
   --order-by: string # default: id
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<description: string, displayName: string, id: int, isCore: bool, maxColorValue: float, name: string, preferredUnit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "sourceId" $sourceId "multi") (serialize-qp "sourceSlug" $sourceSlug "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "sourceId" $source_id "multi") (serialize-qp "sourceSlug" $source_slug "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/parameters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -653,7 +653,7 @@ export def "countries get-by-country_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "country" $country "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/countries/($country_id)" $qp)
+  let full_url = (build-url $base ({country_id: $country_id} | format pattern "/v2/countries/{country_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -688,18 +688,18 @@ export def "latest get-1" [
   --location-id: int
   --location: list
   --order-by: string # Order by a field (default: lastUpdated)
-  --isMobile: oneof<nothing, bool> # Location is mobile
-  --isAnalysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
-  --sourceName: list # Name of the data source
+  --is-mobile: oneof<nothing, bool> # Location is mobile
+  --is-analysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
+  --source-name: list # Name of the data source
   --entity: string # Source entity type.
-  --sensorType: string # Type of Sensor
-  --modelName: list # Model Name of Sensor
-  --manufacturerName: list # Manufacturer of Sensor
-  --dumpRaw: oneof<nothing, bool> # default: false
+  --sensor-type: string # Type of Sensor
+  --model-name: list # Model Name of Sensor
+  --manufacturer-name: list # Manufacturer of Sensor
+  --dump-raw: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "modelName" $modelName "multi") (serialize-qp "manufacturerName" $manufacturerName "multi") (serialize-qp "dumpRaw" $dumpRaw "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -735,19 +735,19 @@ export def "latest get-by-location_id-1" [
   --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
   --location: list
   --order-by: string # Order by a field (default: lastUpdated)
-  --isMobile: oneof<nothing, bool> # Location is mobile
-  --isAnalysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
-  --sourceName: list # Name of the data source
+  --is-mobile: oneof<nothing, bool> # Location is mobile
+  --is-analysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
+  --source-name: list # Name of the data source
   --entity: string # Source entity type.
-  --sensorType: string # Type of Sensor
-  --modelName: list # Model Name of Sensor
-  --manufacturerName: list # Manufacturer of Sensor
-  --dumpRaw: oneof<nothing, bool> # default: false
+  --sensor-type: string # Type of Sensor
+  --model-name: list # Model Name of Sensor
+  --manufacturer-name: list # Manufacturer of Sensor
+  --dump-raw: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "modelName" $modelName "multi") (serialize-qp "manufacturerName" $manufacturerName "multi") (serialize-qp "dumpRaw" $dumpRaw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/latest/($location_id)" $qp)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/v2/latest/{location_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -782,18 +782,18 @@ export def "locations get-1" [
   --location-id: int
   --location: list
   --order-by: string # Order by a field (default: lastUpdated)
-  --isMobile: oneof<nothing, bool> # Location is mobile
-  --isAnalysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
-  --sourceName: list # Name of the data source
+  --is-mobile: oneof<nothing, bool> # Location is mobile
+  --is-analysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
+  --source-name: list # Name of the data source
   --entity: string # Source entity type.
-  --sensorType: string # Type of Sensor
-  --modelName: list # Model Name of Sensor
-  --manufacturerName: list # Manufacturer of Sensor
-  --dumpRaw: oneof<nothing, bool> # default: false
+  --sensor-type: string # Type of Sensor
+  --model-name: list # Model Name of Sensor
+  --manufacturer-name: list # Manufacturer of Sensor
+  --dump-raw: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "modelName" $modelName "multi") (serialize-qp "manufacturerName" $manufacturerName "multi") (serialize-qp "dumpRaw" $dumpRaw "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/locations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -840,16 +840,16 @@ export def "locations-tiles-mobile-generalized get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --parameter: string
   --location: list # limit data to location id
-  --lastUpdatedFrom: string
-  --lastUpdatedTo: string
-  --isMobile: oneof<nothing, bool>
+  --last-updated-from: string
+  --last-updated-to: string
+  --is-mobile: oneof<nothing, bool>
   --project: int
-  --isAnalysis: oneof<nothing, bool>
+  --is-analysis: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "parameter" $parameter "scalar") (serialize-qp "location" $location "multi") (serialize-qp "lastUpdatedFrom" $lastUpdatedFrom "scalar") (serialize-qp "lastUpdatedTo" $lastUpdatedTo "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/locations/tiles/mobile-generalized/($z)/($x)/($y).pbf" $qp)
+  let qp = [(serialize-qp "parameter" $parameter "scalar") (serialize-qp "location" $location "multi") (serialize-qp "lastUpdatedFrom" $last_updated_from "scalar") (serialize-qp "lastUpdatedTo" $last_updated_to "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({z: $z, x: $x, y: $y} | format pattern "/v2/locations/tiles/mobile-generalized/{z}/{x}/{y}.pbf") $qp)
   let accept_val = "application/x-protobuf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -893,20 +893,20 @@ export def "locations-tiles-mobile get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --dateFrom: string
-  --dateTo: string
+  --date-from: string
+  --date-to: string
   --parameter: string
   --location: list # limit data to location id
-  --lastUpdatedFrom: string
-  --lastUpdatedTo: string
-  --isMobile: oneof<nothing, bool>
+  --last-updated-from: string
+  --last-updated-to: string
+  --is-mobile: oneof<nothing, bool>
   --project: int
-  --isAnalysis: oneof<nothing, bool>
+  --is-analysis: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dateFrom" $dateFrom "scalar") (serialize-qp "dateTo" $dateTo "scalar") (serialize-qp "parameter" $parameter "scalar") (serialize-qp "location" $location "multi") (serialize-qp "lastUpdatedFrom" $lastUpdatedFrom "scalar") (serialize-qp "lastUpdatedTo" $lastUpdatedTo "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/locations/tiles/mobile/($z)/($x)/($y).pbf" $qp)
+  let qp = [(serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "parameter" $parameter "scalar") (serialize-qp "location" $location "multi") (serialize-qp "lastUpdatedFrom" $last_updated_from "scalar") (serialize-qp "lastUpdatedTo" $last_updated_to "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({z: $z, x: $x, y: $y} | format pattern "/v2/locations/tiles/mobile/{z}/{x}/{y}.pbf") $qp)
   let accept_val = "application/x-protobuf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -974,16 +974,16 @@ export def "locations-tiles get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --parameter: string
   --location: list # limit data to location id
-  --lastUpdatedFrom: string
-  --lastUpdatedTo: string
-  --isMobile: oneof<nothing, bool>
+  --last-updated-from: string
+  --last-updated-to: string
+  --is-mobile: oneof<nothing, bool>
   --project: int
-  --isAnalysis: oneof<nothing, bool>
+  --is-analysis: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "parameter" $parameter "scalar") (serialize-qp "location" $location "multi") (serialize-qp "lastUpdatedFrom" $lastUpdatedFrom "scalar") (serialize-qp "lastUpdatedTo" $lastUpdatedTo "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/locations/tiles/($z)/($x)/($y).pbf" $qp)
+  let qp = [(serialize-qp "parameter" $parameter "scalar") (serialize-qp "location" $location "multi") (serialize-qp "lastUpdatedFrom" $last_updated_from "scalar") (serialize-qp "lastUpdatedTo" $last_updated_to "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({z: $z, x: $x, y: $y} | format pattern "/v2/locations/tiles/{z}/{x}/{y}.pbf") $qp)
   let accept_val = "application/x-protobuf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1018,19 +1018,19 @@ export def "locations get-by-location_id-1" [
   --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
   --location: list
   --order-by: string # Order by a field (default: lastUpdated)
-  --isMobile: oneof<nothing, bool> # Location is mobile
-  --isAnalysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
-  --sourceName: list # Name of the data source
+  --is-mobile: oneof<nothing, bool> # Location is mobile
+  --is-analysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
+  --source-name: list # Name of the data source
   --entity: string # Source entity type.
-  --sensorType: string # Type of Sensor
-  --modelName: list # Model Name of Sensor
-  --manufacturerName: list # Manufacturer of Sensor
-  --dumpRaw: oneof<nothing, bool> # default: false
+  --sensor-type: string # Type of Sensor
+  --model-name: list # Model Name of Sensor
+  --manufacturer-name: list # Manufacturer of Sensor
+  --dump-raw: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "modelName" $modelName "multi") (serialize-qp "manufacturerName" $manufacturerName "multi") (serialize-qp "dumpRaw" $dumpRaw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/locations/($location_id)" $qp)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/v2/locations/{location_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1090,18 +1090,18 @@ export def "measurements get-1" [
   --location-id: int
   --location: list
   --order-by: string # default: datetime
-  --isMobile: oneof<nothing, bool>
-  --isAnalysis: oneof<nothing, bool>
+  --is-mobile: oneof<nothing, bool>
+  --is-analysis: oneof<nothing, bool>
   --project: int
   --entity: string@entity-completer
-  --sensorType: string@sensorType-completer
+  --sensor-type: string@sensor-type-completer
   --value-from: float
   --value-to: float
   --include-fields: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "value_from" $value_from "scalar") (serialize-qp "value_to" $value_to "scalar") (serialize-qp "include_fields" $include_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "value_from" $value_from "scalar") (serialize-qp "value_to" $value_to "scalar") (serialize-qp "include_fields" $include_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/measurements" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1147,14 +1147,14 @@ export def "parameters get-1" [
   --page: int # Paginate through results. (default: 1)
   --offset: int # default: 0
   --qp-sort: string # Define sort order. (default: asc)
-  --sourceName: list
-  --sourceId: list
-  --sourceSlug: list
+  --source-name: list
+  --source-id: list
+  --source-slug: list
   --order-by: string # default: id
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<description: string, displayName: string, id: int, isCore: bool, maxColorValue: float, name: string, preferredUnit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "sourceId" $sourceId "multi") (serialize-qp "sourceSlug" $sourceSlug "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "sourceId" $source_id "multi") (serialize-qp "sourceSlug" $source_slug "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/parameters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1186,15 +1186,15 @@ export def "projects list" [
   --project-id: int
   --project: list
   --order-by: string # default: lastUpdated
-  --isMobile: oneof<nothing, bool>
-  --isAnalysis: oneof<nothing, bool>
+  --is-mobile: oneof<nothing, bool>
+  --is-analysis: oneof<nothing, bool>
   --entity: string
-  --sensorType: string
-  --sourceName: list
+  --sensor-type: string
+  --source-name: list
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<bbox: list, countries: list, entity: string, firstUpdated: string, id: int, isAnalysis: bool, isMobile: bool, lastUpdated: string, locationIds: list, locations: int, measurements: int, name: string, parameters: list, sensorType: string, sources: list, subtitle: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "project_id" $project_id "scalar") (serialize-qp "project" $project "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "sourceName" $sourceName "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "project_id" $project_id "scalar") (serialize-qp "project" $project "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "sourceName" $source_name "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1226,16 +1226,16 @@ export def "projects get" [
   --unit: list
   --project: list
   --order-by: string # default: lastUpdated
-  --isMobile: oneof<nothing, bool>
-  --isAnalysis: oneof<nothing, bool>
+  --is-mobile: oneof<nothing, bool>
+  --is-analysis: oneof<nothing, bool>
   --entity: string
-  --sensorType: string
-  --sourceName: list
+  --sensor-type: string
+  --source-name: list
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<bbox: list, countries: list, entity: string, firstUpdated: string, id: int, isAnalysis: bool, isMobile: bool, lastUpdated: string, locationIds: list, locations: int, measurements: int, name: string, parameters: list, sensorType: string, sources: list, subtitle: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "project" $project "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "sourceName" $sourceName "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/projects/($project_id)" $qp)
+  let qp = [(serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "project" $project "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "sourceName" $source_name "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/v2/projects/{project_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1258,14 +1258,14 @@ export def "sources get-1" [
   --page: int # Paginate through results. (default: 1)
   --offset: int # default: 0
   --qp-sort: string # Define sort order. (default: asc)
-  --sourceName: list
-  --sourceId: list
-  --sourceSlug: list
+  --source-name: list
+  --source-id: list
+  --source-slug: list
   --order-by: string # default: sourceName
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "sourceId" $sourceId "multi") (serialize-qp "sourceSlug" $sourceSlug "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "sourceId" $source_id "multi") (serialize-qp "sourceSlug" $source_slug "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/sources" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1289,7 +1289,7 @@ export def "sources-readme get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/sources/readme/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/v2/sources/readme/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -66,12 +66,12 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def databaseState-completer [] { ["All" "Deleted" "Live"] }
+def database-state-completer [] { ["All" "Deleted" "Live"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-sql-locations-long-term-retention-backups ListByLocation" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-sql-locations-long-term-retention-backups list-by" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,9 +95,9 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionBackups
 # operationId: LongTermRetentionBackups_ListByLocation
-export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-backups ListByLocation" [
-  locationName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-backups list-by" [
+  subscription_id: string
+  location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,14 +106,14 @@ export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --onlyLatestPerDatabase: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
-  --databaseState: string@databaseState-completer # Whether to query against just live databases, just deleted databases, or all databases.
+  --only-latest-per-database: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
+  --database-state: string@database-state-completer # Whether to query against just live databases, just deleted databases, or all databases.
   --api-version: string # The API version to use for the request.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "onlyLatestPerDatabase" $onlyLatestPerDatabase "scalar") (serialize-qp "databaseState" $databaseState "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Sql/locations/($locationName)/longTermRetentionBackups" $qp)
+  let qp = [(serialize-qp "onlyLatestPerDatabase" $only_latest_per_database "scalar") (serialize-qp "databaseState" $database_state "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location_name: $location_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionBackups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -123,10 +123,10 @@ export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionServers/{longTermRetentionServerName}/longTermRetentionBackups
 # operationId: LongTermRetentionBackups_ListByServer
-export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-backups ListByServer" [
-  locationName: string
-  longTermRetentionServerName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-backups list-by" [
+  subscription_id: string
+  location_name: string
+  long_term_retention_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,14 +135,14 @@ export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --onlyLatestPerDatabase: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
-  --databaseState: string@databaseState-completer # Whether to query against just live databases, just deleted databases, or all databases.
+  --only-latest-per-database: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
+  --database-state: string@database-state-completer # Whether to query against just live databases, just deleted databases, or all databases.
   --api-version: string # The API version to use for the request.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "onlyLatestPerDatabase" $onlyLatestPerDatabase "scalar") (serialize-qp "databaseState" $databaseState "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Sql/locations/($locationName)/longTermRetentionServers/($longTermRetentionServerName)/longTermRetentionBackups" $qp)
+  let qp = [(serialize-qp "onlyLatestPerDatabase" $only_latest_per_database "scalar") (serialize-qp "databaseState" $database_state "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location_name: $location_name, long_term_retention_server_name: $long_term_retention_server_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionServers/{long_term_retention_server_name}/longTermRetentionBackups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -152,11 +152,11 @@ export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionServers/{longTermRetentionServerName}/longTermRetentionDatabases/{longTermRetentionDatabaseName}/longTermRetentionBackups
 # operationId: LongTermRetentionBackups_ListByDatabase
-export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups ListByDatabase" [
-  locationName: string
-  longTermRetentionServerName: string
-  longTermRetentionDatabaseName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups list-by" [
+  subscription_id: string
+  location_name: string
+  long_term_retention_server_name: string
+  long_term_retention_database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,14 +165,14 @@ export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --onlyLatestPerDatabase: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
-  --databaseState: string@databaseState-completer # Whether to query against just live databases, just deleted databases, or all databases.
+  --only-latest-per-database: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
+  --database-state: string@database-state-completer # Whether to query against just live databases, just deleted databases, or all databases.
   --api-version: string # The API version to use for the request.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "onlyLatestPerDatabase" $onlyLatestPerDatabase "scalar") (serialize-qp "databaseState" $databaseState "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Sql/locations/($locationName)/longTermRetentionServers/($longTermRetentionServerName)/longTermRetentionDatabases/($longTermRetentionDatabaseName)/longTermRetentionBackups" $qp)
+  let qp = [(serialize-qp "onlyLatestPerDatabase" $only_latest_per_database "scalar") (serialize-qp "databaseState" $database_state "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location_name: $location_name, long_term_retention_server_name: $long_term_retention_server_name, long_term_retention_database_name: $long_term_retention_database_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionServers/{long_term_retention_server_name}/longTermRetentionDatabases/{long_term_retention_database_name}/longTermRetentionBackups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -182,12 +182,12 @@ export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionServers/{longTermRetentionServerName}/longTermRetentionDatabases/{longTermRetentionDatabaseName}/longTermRetentionBackups/{backupName}
 # operationId: LongTermRetentionBackups_Delete
-export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups Delete" [
-  locationName: string
-  longTermRetentionServerName: string
-  longTermRetentionDatabaseName: string
-  backupName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups delete" [
+  subscription_id: string
+  location_name: string
+  long_term_retention_server_name: string
+  long_term_retention_database_name: string
+  backup_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Sql/locations/($locationName)/longTermRetentionServers/($longTermRetentionServerName)/longTermRetentionDatabases/($longTermRetentionDatabaseName)/longTermRetentionBackups/($backupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location_name: $location_name, long_term_retention_server_name: $long_term_retention_server_name, long_term_retention_database_name: $long_term_retention_database_name, backup_name: $backup_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionServers/{long_term_retention_server_name}/longTermRetentionDatabases/{long_term_retention_database_name}/longTermRetentionBackups/{backup_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -211,12 +211,12 @@ export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionServers/{longTermRetentionServerName}/longTermRetentionDatabases/{longTermRetentionDatabaseName}/longTermRetentionBackups/{backupName}
 # operationId: LongTermRetentionBackups_Get
-export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups Get" [
-  locationName: string
-  longTermRetentionServerName: string
-  longTermRetentionDatabaseName: string
-  backupName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups get" [
+  subscription_id: string
+  location_name: string
+  long_term_retention_server_name: string
+  long_term_retention_database_name: string
+  backup_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Sql/locations/($locationName)/longTermRetentionServers/($longTermRetentionServerName)/longTermRetentionDatabases/($longTermRetentionDatabaseName)/longTermRetentionBackups/($backupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location_name: $location_name, long_term_retention_server_name: $long_term_retention_server_name, long_term_retention_database_name: $long_term_retention_database_name, backup_name: $backup_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionServers/{long_term_retention_server_name}/longTermRetentionDatabases/{long_term_retention_database_name}/longTermRetentionBackups/{backup_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -240,10 +240,10 @@ export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionBackups
 # operationId: LongTermRetentionBackups_ListByResourceGroupLocation
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long-term-retention-backups ListByResourceGroupLocation" [
-  resourceGroupName: string
-  locationName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long-term-retention-backups list-by" [
+  subscription_id: string
+  resource_group_name: string
+  location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,14 +252,14 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --onlyLatestPerDatabase: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
-  --databaseState: string@databaseState-completer # Whether to query against just live databases, just deleted databases, or all databases.
+  --only-latest-per-database: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
+  --database-state: string@database-state-completer # Whether to query against just live databases, just deleted databases, or all databases.
   --api-version: string # The API version to use for the request.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "onlyLatestPerDatabase" $onlyLatestPerDatabase "scalar") (serialize-qp "databaseState" $databaseState "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/locations/($locationName)/longTermRetentionBackups" $qp)
+  let qp = [(serialize-qp "onlyLatestPerDatabase" $only_latest_per_database "scalar") (serialize-qp "databaseState" $database_state "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location_name: $location_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionBackups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -269,11 +269,11 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionServers/{longTermRetentionServerName}/longTermRetentionBackups
 # operationId: LongTermRetentionBackups_ListByResourceGroupServer
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-backups ListByResourceGroupServer" [
-  resourceGroupName: string
-  locationName: string
-  longTermRetentionServerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-backups list-by" [
+  subscription_id: string
+  resource_group_name: string
+  location_name: string
+  long_term_retention_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,14 +282,14 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --onlyLatestPerDatabase: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
-  --databaseState: string@databaseState-completer # Whether to query against just live databases, just deleted databases, or all databases.
+  --only-latest-per-database: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
+  --database-state: string@database-state-completer # Whether to query against just live databases, just deleted databases, or all databases.
   --api-version: string # The API version to use for the request.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "onlyLatestPerDatabase" $onlyLatestPerDatabase "scalar") (serialize-qp "databaseState" $databaseState "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/locations/($locationName)/longTermRetentionServers/($longTermRetentionServerName)/longTermRetentionBackups" $qp)
+  let qp = [(serialize-qp "onlyLatestPerDatabase" $only_latest_per_database "scalar") (serialize-qp "databaseState" $database_state "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location_name: $location_name, long_term_retention_server_name: $long_term_retention_server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionServers/{long_term_retention_server_name}/longTermRetentionBackups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,12 +299,12 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionServers/{longTermRetentionServerName}/longTermRetentionDatabases/{longTermRetentionDatabaseName}/longTermRetentionBackups
 # operationId: LongTermRetentionBackups_ListByResourceGroupDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups ListByResourceGroupDatabase" [
-  resourceGroupName: string
-  locationName: string
-  longTermRetentionServerName: string
-  longTermRetentionDatabaseName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups list-by" [
+  subscription_id: string
+  resource_group_name: string
+  location_name: string
+  long_term_retention_server_name: string
+  long_term_retention_database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,14 +313,14 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --onlyLatestPerDatabase: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
-  --databaseState: string@databaseState-completer # Whether to query against just live databases, just deleted databases, or all databases.
+  --only-latest-per-database: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
+  --database-state: string@database-state-completer # Whether to query against just live databases, just deleted databases, or all databases.
   --api-version: string # The API version to use for the request.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "onlyLatestPerDatabase" $onlyLatestPerDatabase "scalar") (serialize-qp "databaseState" $databaseState "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/locations/($locationName)/longTermRetentionServers/($longTermRetentionServerName)/longTermRetentionDatabases/($longTermRetentionDatabaseName)/longTermRetentionBackups" $qp)
+  let qp = [(serialize-qp "onlyLatestPerDatabase" $only_latest_per_database "scalar") (serialize-qp "databaseState" $database_state "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location_name: $location_name, long_term_retention_server_name: $long_term_retention_server_name, long_term_retention_database_name: $long_term_retention_database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionServers/{long_term_retention_server_name}/longTermRetentionDatabases/{long_term_retention_database_name}/longTermRetentionBackups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -330,13 +330,13 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionServers/{longTermRetentionServerName}/longTermRetentionDatabases/{longTermRetentionDatabaseName}/longTermRetentionBackups/{backupName}
 # operationId: LongTermRetentionBackups_DeleteByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups DeleteByResourceGroup" [
-  resourceGroupName: string
-  locationName: string
-  longTermRetentionServerName: string
-  longTermRetentionDatabaseName: string
-  backupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups delete-by" [
+  subscription_id: string
+  resource_group_name: string
+  location_name: string
+  long_term_retention_server_name: string
+  long_term_retention_database_name: string
+  backup_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,7 +350,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/locations/($locationName)/longTermRetentionServers/($longTermRetentionServerName)/longTermRetentionDatabases/($longTermRetentionDatabaseName)/longTermRetentionBackups/($backupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location_name: $location_name, long_term_retention_server_name: $long_term_retention_server_name, long_term_retention_database_name: $long_term_retention_database_name, backup_name: $backup_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionServers/{long_term_retention_server_name}/longTermRetentionDatabases/{long_term_retention_database_name}/longTermRetentionBackups/{backup_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -360,13 +360,13 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionServers/{longTermRetentionServerName}/longTermRetentionDatabases/{longTermRetentionDatabaseName}/longTermRetentionBackups/{backupName}
 # operationId: LongTermRetentionBackups_GetByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups GetByResourceGroup" [
-  resourceGroupName: string
-  locationName: string
-  longTermRetentionServerName: string
-  longTermRetentionDatabaseName: string
-  backupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups get-by" [
+  subscription_id: string
+  resource_group_name: string
+  location_name: string
+  long_term_retention_server_name: string
+  long_term_retention_database_name: string
+  backup_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,7 +380,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/locations/($locationName)/longTermRetentionServers/($longTermRetentionServerName)/longTermRetentionDatabases/($longTermRetentionDatabaseName)/longTermRetentionBackups/($backupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location_name: $location_name, long_term_retention_server_name: $long_term_retention_server_name, long_term_retention_database_name: $long_term_retention_database_name, backup_name: $backup_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionServers/{long_term_retention_server_name}/longTermRetentionDatabases/{long_term_retention_database_name}/longTermRetentionBackups/{backup_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -390,11 +390,11 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/backupLongTermRetentionPolicies
 # operationId: BackupLongTermRetentionPolicies_ListByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-backup-long-term-retention-policies ListByDatabase" [
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-backup-long-term-retention-policies list-by" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,7 +408,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/backupLongTermRetentionPolicies" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/backupLongTermRetentionPolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -418,12 +418,12 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/backupLongTermRetentionPolicies/{policyName}
 # operationId: BackupLongTermRetentionPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-backup-long-term-retention-policies Get" [
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
-  policyName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-backup-long-term-retention-policies get" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -437,7 +437,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/backupLongTermRetentionPolicies/($policyName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name, policy_name: $policy_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/backupLongTermRetentionPolicies/{policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -448,12 +448,12 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/backupLongTermRetentionPolicies/{policyName}
 # operationId: BackupLongTermRetentionPolicies_CreateOrUpdate
 # --properties shape: {monthlyRetention?: string, weekOfYear?: int, weeklyRetention?: string, yearlyRetention?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-backup-long-term-retention-policies CreateOrUpdate" [
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
-  policyName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-backup-long-term-retention-policies create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,8 +469,8 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/backupLongTermRetentionPolicies/($policyName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name, policy_name: $policy_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/backupLongTermRetentionPolicies/{policy_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

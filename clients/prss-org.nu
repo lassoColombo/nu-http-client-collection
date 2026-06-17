@@ -66,7 +66,7 @@ def base-url-completer [] { ["http://localhost" "https://radiodns.prss.org" "htt
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def orderById-completer [] { ["asc" "desc"] }
+def order-by-id-completer [] { ["asc" "desc"] }
 def format-completer [] { ["radiodns"] }
 
 # List all available API commands with their parameters
@@ -104,13 +104,13 @@ export def "broadcastservices list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageStart: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
-  --pageSize: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
-  --orderById: string@orderById-completer # The sort order of the list of broadcast services, based on broadcast service ID. If unspecified, the broadcast services are returned in random order. If using paging to iterate through the results, sort order should be specified.
+  --page-start: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
+  --page-size: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
+  --order-by-id: string@order-by-id-completer # The sort order of the list of broadcast services, based on broadcast service ID. If unspecified, the broadcast services are returned in random order. If using paging to iterate through the results, sort order should be specified.
 ]: nothing -> table<beginAirDate: string, beginTransmissionDate: string, createdDate: string, customerId: int, endAirDate: string, endTransmissionDate: string, id: int, lastModifiedDate: string, programId: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageStart" $pageStart "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "orderById" $orderById "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderById" $order_by_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/broadcastservices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -133,7 +133,7 @@ export def "broadcastservices get" [
 ]: nothing -> record<createdDate: string, description: string, id: int, lastModifiedDate: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/broadcastservices/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/broadcastservices/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -151,7 +151,7 @@ export def "cddrive-files-content post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-MD5: string # If present, the MD5 will be compared against the file received as a message integrity check.
+  --content-md5: string # If present, the MD5 will be compared against the file received as a message integrity check.
   --file: string # The file content being uploaded. (format: binary)
   --name: string # The name of the file, including extension.
   --parent-id: int # The ID of the parent folder or 0 for the root folder. (format: int64)
@@ -160,9 +160,9 @@ export def "cddrive-files-content post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/cddrive/files/content")
-  let body = {file: $file, name: $name, parent-id: $parent_id} | compact
+  let body = {"file": $file, "name": $name, "parent-id": $parent_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-MD5": $Content_MD5} | compact
+  let extra_headers = {"Content-MD5": $content_md5} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -185,7 +185,7 @@ export def "cddrive-files delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/cddrive/files/($file_id)")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/api/v2/cddrive/files/{file_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,7 +207,7 @@ export def "cddrive-files get" [
 ]: nothing -> record<createdDate: string, id: int, lastModifiedDate: string, name: string, parentId: int, size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/cddrive/files/($file_id)")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/api/v2/cddrive/files/{file_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,12 +226,12 @@ export def "cddrive-files-content get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Range: string # Can be used to limit the range of bytes retrieved. Only a single byte range in the format ```bytes={start-range}-{end-range}``` is supported.
+  --range: string # Can be used to limit the range of bytes retrieved. Only a single byte range in the format ```bytes={start-range}-{end-range}``` is supported.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/cddrive/files/($file_id)/content")
-  let extra_headers = {"Range": $Range} | compact
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/api/v2/cddrive/files/{file_id}/content"))
+  let extra_headers = {"Range": $range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -257,7 +257,7 @@ export def "cddrive-folders post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/cddrive/folders")
-  let body = {name: $name, parent-id: $parent_id} | compact
+  let body = {"name": $name, "parent-id": $parent_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -282,7 +282,7 @@ export def "cddrive-folders delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "recursive" $recursive "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v2/cddrive/folders/($folder_id)" $qp)
+  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/api/v2/cddrive/folders/{folder_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -304,7 +304,7 @@ export def "cddrive-folders get" [
 ]: nothing -> record<createdDate: string, id: int, lastModifiedDate: string, name: string, parentId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/cddrive/folders/($folder_id)")
+  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/api/v2/cddrive/folders/{folder_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -329,7 +329,7 @@ export def "cddrive-folders-items get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v2/cddrive/folders/($folder_id)/items" $qp)
+  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/api/v2/cddrive/folders/{folder_id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -348,16 +348,16 @@ export def "episodes list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # Matches on the ID of the episode. (format: int64)
-  --beginAirDateAfter: string # Matches on the begin air date of the episode (inclusive). (format: date-time)
-  --endAirDateBefore: string # Matches on the end air date of the episode (inclusive). (format: date-time)
-  --programId: int # Matches on the ID of the program that owns the episode. (format: int64)
-  --pageStart: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
-  --pageSize: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
-  --orderById: string@orderById-completer # The sort order of the list of episodes, based on episode ID. If unspecified, the episodes are returned in random order. If using paging to iterate through the results, sort order should be specified.
+  --begin-air-date-after: string # Matches on the begin air date of the episode (inclusive). (format: date-time)
+  --end-air-date-before: string # Matches on the end air date of the episode (inclusive). (format: date-time)
+  --program-id: int # Matches on the ID of the program that owns the episode. (format: int64)
+  --page-start: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
+  --page-size: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
+  --order-by-id: string@order-by-id-completer # The sort order of the list of episodes, based on episode ID. If unspecified, the episodes are returned in random order. If using paging to iterate through the results, sort order should be specified.
 ]: nothing -> table<beginAirDate: string, beginTransmissionDate: string, createdDate: string, customerId: int, endAirDate: string, endTransmissionDate: string, id: int, lastModifiedDate: string, programId: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "beginAirDateAfter" $beginAirDateAfter "scalar") (serialize-qp "endAirDateBefore" $endAirDateBefore "scalar") (serialize-qp "programId" $programId "scalar") (serialize-qp "pageStart" $pageStart "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "orderById" $orderById "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "beginAirDateAfter" $begin_air_date_after "scalar") (serialize-qp "endAirDateBefore" $end_air_date_before "scalar") (serialize-qp "programId" $program_id "scalar") (serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderById" $order_by_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/episodes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -380,7 +380,7 @@ export def "episodes get" [
 ]: nothing -> record<beginAirDate: string, beginTransmissionDate: string, createdDate: string, customerId: int, endAirDate: string, endTransmissionDate: string, id: int, lastModifiedDate: string, programId: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/episodes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/episodes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,7 +411,7 @@ export def "metapub-program-information-batch post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/metapub/program-information/batch")
-  let body = {format: $format, name: $name, program: $program, uri: $uri} | compact
+  let body = {"format": $format, "name": $name, "program": $program, "uri": $uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -436,7 +436,7 @@ export def "metapub-program-information-batch get" [
 ]: nothing -> record<createdDate: string, finishedDate: string, format: string, id: int, message: string, name: string, program: record<airDate: string, title: string>, status: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/metapub/program-information/batch/($batch_id)")
+  let full_url = (build-url $base ({batch_id: $batch_id} | format pattern "/api/v2/metapub/program-information/batch/{batch_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -454,11 +454,11 @@ export def "pieces list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --episodeId: int # The ID of the episode that owns the piece. (format: int64)
+  --episode-id: int # The ID of the episode that owns the piece. (format: int64)
 ]: nothing -> table<contributor: string, createdDate: string, description: string, episodeId: int, fullDescription: string, id: int, imageCdDriveUri: string, imageFileName: string, imageFileSize: int, imageOriginalFileName: string, lastModifiedDate: string, relativeEndTime: int, relativeStartTime: int, segmentNumber: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "episodeId" $episodeId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "episodeId" $episode_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/pieces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -479,22 +479,22 @@ export def "pieces post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --contributor: string # The artist or contributor name.
   --description: string # The short description of the piece.
-  episodeId: int # The ID of the episode that owns the piece. (format: int64)
-  --fullDescription: string # The long description of the piece.
-  --imageCdDriveUri: string # The URI to the piece image content in CD Drive. Format should be 'cddrive:id:{value}' or 'cddrive://{path}'. This property is only used on modification and is not returned.
-  --imageFileName: string # The name of the piece image file. Generated at creation.
-  --imageFileSize: int # The size of the piece image file in bytes. Generated at creation. (format: int64)
-  --imageOriginalFileName: string # The user's original name of the piece image file.
-  relativeEndTime: int # Seconds relative to the start of the episode. (format: int32)
-  relativeStartTime: int # Seconds relative to the start of the episode. (format: int32)
-  --segmentNumber: int # The number of the segment that this piece is in, starting with 1. This is an optional field but it can be used to provide more detail by linking the piece to a specific audio segment. (format: int32)
+  episode_id: int # The ID of the episode that owns the piece. (format: int64)
+  --full-description: string # The long description of the piece.
+  --image-cd-drive-uri: string # The URI to the piece image content in CD Drive. Format should be 'cddrive:id:{value}' or 'cddrive://{path}'. This property is only used on modification and is not returned.
+  --image-file-name: string # The name of the piece image file. Generated at creation.
+  --image-file-size: int # The size of the piece image file in bytes. Generated at creation. (format: int64)
+  --image-original-file-name: string # The user's original name of the piece image file.
+  relative_end_time: int # Seconds relative to the start of the episode. (format: int32)
+  relative_start_time: int # Seconds relative to the start of the episode. (format: int32)
+  --segment-number: int # The number of the segment that this piece is in, starting with 1. This is an optional field but it can be used to provide more detail by linking the piece to a specific audio segment. (format: int32)
   title: string # The human readable title of the piece that is normally displayed on an end user's device.
 ]: any -> record<contributor: string, createdDate: string, description: string, episodeId: int, fullDescription: string, id: int, imageCdDriveUri: string, imageFileName: string, imageFileSize: int, imageOriginalFileName: string, lastModifiedDate: string, relativeEndTime: int, relativeStartTime: int, segmentNumber: int, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/pieces")
-  let body = {contributor: $contributor, description: $description, episodeId: $episodeId, fullDescription: $fullDescription, imageCdDriveUri: $imageCdDriveUri, imageFileName: $imageFileName, imageFileSize: $imageFileSize, imageOriginalFileName: $imageOriginalFileName, relativeEndTime: $relativeEndTime, relativeStartTime: $relativeStartTime, segmentNumber: $segmentNumber, title: $title} | compact
+  let body = {"contributor": $contributor, "description": $description, "episodeId": $episode_id, "fullDescription": $full_description, "imageCdDriveUri": $image_cd_drive_uri, "imageFileName": $image_file_name, "imageFileSize": $image_file_size, "imageOriginalFileName": $image_original_file_name, "relativeEndTime": $relative_end_time, "relativeStartTime": $relative_start_time, "segmentNumber": $segment_number, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -517,7 +517,7 @@ export def "pieces delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/pieces/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/pieces/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -539,7 +539,7 @@ export def "pieces get" [
 ]: nothing -> record<contributor: string, createdDate: string, description: string, episodeId: int, fullDescription: string, id: int, imageCdDriveUri: string, imageFileName: string, imageFileSize: int, imageOriginalFileName: string, lastModifiedDate: string, relativeEndTime: int, relativeStartTime: int, segmentNumber: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/pieces/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/pieces/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -558,12 +558,12 @@ export def "programs-search get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --keywords: string # Free text search that matches against the program title or description.
-  --pageStart: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
-  --pageSize: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
+  --page-start: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
+  --page-size: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
 ]: nothing -> table<createdDate: string, customerId: int, id: int, lastModifiedDate: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "keywords" $keywords "scalar") (serialize-qp "pageStart" $pageStart "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "keywords" $keywords "scalar") (serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/programs/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -586,7 +586,7 @@ export def "programs get" [
 ]: nothing -> record<createdDate: string, customerId: int, id: int, lastModifiedDate: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/programs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/programs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -604,15 +604,15 @@ export def "segments list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --episodeId: int # The ID of the episode that owns the segment. (format: int64)
-  --segmentNumber: int # format: int32
-  --pageStart: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
-  --pageSize: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
-  --orderById: string@orderById-completer # The sort order of the list of segments, based on segment ID. If unspecified, the segments are returned in random order. If using paging to iterate through the results, sort order should be specified.
+  --episode-id: int # The ID of the episode that owns the segment. (format: int64)
+  --segment-number: int # format: int32
+  --page-start: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
+  --page-size: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
+  --order-by-id: string@order-by-id-completer # The sort order of the list of segments, based on segment ID. If unspecified, the segments are returned in random order. If using paging to iterate through the results, sort order should be specified.
 ]: nothing -> table<channels: int, createdDate: string, episodeId: int, fileName: string, fileSize: int, id: int, inCue: string, lastModifiedDate: string, length: int, originalFileName: string, outCue: string, segmentNumber: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "episodeId" $episodeId "scalar") (serialize-qp "segmentNumber" $segmentNumber "scalar") (serialize-qp "pageStart" $pageStart "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "orderById" $orderById "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "episodeId" $episode_id "scalar") (serialize-qp "segmentNumber" $segment_number "scalar") (serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderById" $order_by_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/segments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -631,17 +631,17 @@ export def "segments post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  cdDriveUri: string # The URI to the segment content in CD Drive. Format should be 'cddrive:id:{value}' or 'cddrive://{path}'.
-  episodeId: int # The ID of the episode that owns the segment. (format: int64)
-  --inCue: string # The incue for the segment. Defaults to the program segment incue.
-  --outCue: string # The outcue for the segment. Defaults to the program segment outcue.
-  segmentNumber: int # The segment number of the segment. (format: int32)
+  cd_drive_uri: string # The URI to the segment content in CD Drive. Format should be 'cddrive:id:{value}' or 'cddrive://{path}'.
+  episode_id: int # The ID of the episode that owns the segment. (format: int64)
+  --in-cue: string # The incue for the segment. Defaults to the program segment incue.
+  --out-cue: string # The outcue for the segment. Defaults to the program segment outcue.
+  segment_number: int # The segment number of the segment. (format: int32)
 ]: any -> record<channels: int, createdDate: string, episodeId: int, fileName: string, fileSize: int, id: int, inCue: string, lastModifiedDate: string, length: int, originalFileName: string, outCue: string, segmentNumber: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/segments")
-  let body = {cdDriveUri: $cdDriveUri, episodeId: $episodeId, inCue: $inCue, outCue: $outCue, segmentNumber: $segmentNumber} | compact
+  let body = {"cdDriveUri": $cd_drive_uri, "episodeId": $episode_id, "inCue": $in_cue, "outCue": $out_cue, "segmentNumber": $segment_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -664,7 +664,7 @@ export def "segments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/segments/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/segments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -686,7 +686,7 @@ export def "segments get" [
 ]: nothing -> record<channels: int, createdDate: string, episodeId: int, fileName: string, fileSize: int, id: int, inCue: string, lastModifiedDate: string, length: int, originalFileName: string, outCue: string, segmentNumber: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/segments/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/segments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -708,7 +708,7 @@ export def "segments-content get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/segments/($id)/content")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/segments/{id}/content"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -726,13 +726,13 @@ export def "spotinsertions list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageStart: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
-  --pageSize: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
-  --orderById: string@orderById-completer # The sort order of the list of spot insertions, based on ID. If unspecified, the spot insertions are returned in random order. If using paging to iterate through the results, sort order should be specified.
+  --page-start: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
+  --page-size: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
+  --order-by-id: string@order-by-id-completer # The sort order of the list of spot insertions, based on ID. If unspecified, the spot insertions are returned in random order. If using paging to iterate through the results, sort order should be specified.
 ]: nothing -> table<broadcastServiceId: int, createdDate: string, cue: string, customerId: int, duration: int, endDate: string, id: int, programId: int, spots: list<int>, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageStart" $pageStart "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "orderById" $orderById "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderById" $order_by_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/spotinsertions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -751,19 +751,19 @@ export def "spotinsertions post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  broadcastServiceId: int # The ID of the broadcast service for the spot insertion. (format: int64)
+  broadcast_service_id: int # The ID of the broadcast service for the spot insertion. (format: int64)
   cue: string # The cue that triggers the spot insertion. (e.g. S:000_SPOT)
   duration: int # The duration of the spot insertion. (format: int32)
-  endDate: string # The date the spot insertion ends. The time will be set to midnight Eastern Time. (format: date, e.g. 2020-01-31)
-  programId: int # The ID of the program for the spot insertion. (format: int64)
+  end_date: string # The date the spot insertion ends. The time will be set to midnight Eastern Time. (format: date, e.g. 2020-01-31)
+  program_id: int # The ID of the program for the spot insertion. (format: int64)
   spots: list # The ordered list of spot IDs to play.
-  startDate: string # The date the spot insertion can start. The time will be set to midnight Eastern Time. (format: date, e.g. 2020-01-31)
+  start_date: string # The date the spot insertion can start. The time will be set to midnight Eastern Time. (format: date, e.g. 2020-01-31)
 ]: any -> record<broadcastServiceId: int, createdDate: string, cue: string, customerId: int, duration: int, endDate: string, id: int, programId: int, spots: list<int>, startDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/spotinsertions")
-  let body = {broadcastServiceId: $broadcastServiceId, cue: $cue, duration: $duration, endDate: $endDate, programId: $programId, spots: $spots, startDate: $startDate} | compact
+  let body = {"broadcastServiceId": $broadcast_service_id, "cue": $cue, "duration": $duration, "endDate": $end_date, "programId": $program_id, "spots": $spots, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -786,7 +786,7 @@ export def "spotinsertions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/spotinsertions/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/spotinsertions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -808,7 +808,7 @@ export def "spotinsertions get" [
 ]: nothing -> record<broadcastServiceId: int, createdDate: string, cue: string, customerId: int, duration: int, endDate: string, id: int, programId: int, spots: list<int>, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/spotinsertions/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/spotinsertions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -826,13 +826,13 @@ export def "spots list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageStart: int # The start page of the spot to return. The first item is indexed at 0. (format: int32, default: 0)
-  --pageSize: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
-  --orderById: string@orderById-completer # The sort order of the list of spots, based on spot ID. If unspecified, the spots are returned in random order. If using paging to iterate through the results, sort order should be specified.
+  --page-start: int # The start page of the spot to return. The first item is indexed at 0. (format: int32, default: 0)
+  --page-size: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
+  --order-by-id: string@order-by-id-completer # The sort order of the list of spots, based on spot ID. If unspecified, the spots are returned in random order. If using paging to iterate through the results, sort order should be specified.
 ]: nothing -> table<createdDate: string, duration: int, fileName: string, fileSize: int, id: int, lastModifiedDate: string, lastUploadedDate: string, name: string, notes: string, originalFileName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageStart" $pageStart "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "orderById" $orderById "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderById" $order_by_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/spots" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -851,7 +851,7 @@ export def "spots post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  cdDriveUri: string # The URI to the spot content in CD Drive. Format should be 'cddrive:id:{value}' or 'cddrive://{path}'.
+  cd_drive_uri: string # The URI to the spot content in CD Drive. Format should be 'cddrive:id:{value}' or 'cddrive://{path}'.
   name: string # The name of the spot to create/update.
   notes: string # Notes pertaining to the spot.
 ]: any -> record<createdDate: string, duration: int, fileName: string, fileSize: int, id: int, lastModifiedDate: string, lastUploadedDate: string, name: string, notes: string, originalFileName: string> {
@@ -859,7 +859,7 @@ export def "spots post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/spots")
-  let body = {cdDriveUri: $cdDriveUri, name: $name, notes: $notes} | compact
+  let body = {"cdDriveUri": $cd_drive_uri, "name": $name, "notes": $notes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -882,7 +882,7 @@ export def "spots delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/spots/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/spots/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -904,7 +904,7 @@ export def "spots get" [
 ]: nothing -> record<createdDate: string, duration: int, fileName: string, fileSize: int, id: int, lastModifiedDate: string, lastUploadedDate: string, name: string, notes: string, originalFileName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/spots/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/v2/spots/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -971,7 +971,7 @@ export def "radiodns-spi-31-id get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "/")
-  let full_url = (build-url $base $"/radiodns/spi/3.1/id/($fqdn)/($sid)/($date)_PI.xml")
+  let full_url = (build-url $base ({fqdn: $fqdn, sid: $sid, date: $date} | format pattern "/radiodns/spi/3.1/id/{fqdn}/{sid}/{date}_PI.xml"))
   let extra_headers = {"x-radiodnsspi-api-key": $x_radiodnsspi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/xml"

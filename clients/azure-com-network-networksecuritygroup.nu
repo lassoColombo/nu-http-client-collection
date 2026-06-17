@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-network-security-groups ListAll" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-network-security-groups list-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/networkSecurityGroups
 # operationId: NetworkSecurityGroups_ListAll
-export def "subscriptions-providers-microsoft-network-network-security-groups ListAll" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-network-network-security-groups list-all" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "subscriptions-providers-microsoft-network-network-security-groups Li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/networkSecurityGroups" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/networkSecurityGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,9 +118,9 @@ export def "subscriptions-providers-microsoft-network-network-security-groups Li
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups
 # operationId: NetworkSecurityGroups_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups List" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkSecurityGroups" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkSecurityGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,10 +144,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}
 # operationId: NetworkSecurityGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups Delete" [
-  resourceGroupName: string
-  networkSecurityGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups delete" [
+  subscription_id: string
+  resource_group_name: string
+  network_security_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkSecurityGroups/($networkSecurityGroupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_security_group_name: $network_security_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkSecurityGroups/{network_security_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,10 +171,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}
 # operationId: NetworkSecurityGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups Get" [
-  resourceGroupName: string
-  networkSecurityGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups get" [
+  subscription_id: string
+  resource_group_name: string
+  network_security_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkSecurityGroups/($networkSecurityGroupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_security_group_name: $network_security_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkSecurityGroups/{network_security_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -199,10 +199,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}
 # operationId: NetworkSecurityGroups_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups UpdateTags" [
-  resourceGroupName: string
-  networkSecurityGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups update-tags" [
+  subscription_id: string
+  resource_group_name: string
+  network_security_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,8 +218,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkSecurityGroups/($networkSecurityGroupName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_security_group_name: $network_security_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkSecurityGroups/{network_security_group_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -231,10 +231,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}
 # operationId: NetworkSecurityGroups_CreateOrUpdate
 # --properties shape: {defaultSecurityRules?: list, resourceGuid?: string, securityRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups CreateOrUpdate" [
-  resourceGroupName: string
-  networkSecurityGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  network_security_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,8 +254,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkSecurityGroups/($networkSecurityGroupName)" $qp)
-  let body = {etag: $etag, properties: $properties, id: $id, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_security_group_name: $network_security_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkSecurityGroups/{network_security_group_name}") $qp)
+  let body = {"etag": $etag, "properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -266,10 +266,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}/defaultSecurityRules
 # operationId: DefaultSecurityRules_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups-default-security-rules List" [
-  resourceGroupName: string
-  networkSecurityGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups-default-security-rules list" [
+  subscription_id: string
+  resource_group_name: string
+  network_security_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +283,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkSecurityGroups/($networkSecurityGroupName)/defaultSecurityRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_security_group_name: $network_security_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkSecurityGroups/{network_security_group_name}/defaultSecurityRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -293,11 +293,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}/defaultSecurityRules/{defaultSecurityRuleName}
 # operationId: DefaultSecurityRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups-default-security-rules Get" [
-  resourceGroupName: string
-  networkSecurityGroupName: string
-  defaultSecurityRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups-default-security-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  network_security_group_name: string
+  default_security_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkSecurityGroups/($networkSecurityGroupName)/defaultSecurityRules/($defaultSecurityRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_security_group_name: $network_security_group_name, default_security_rule_name: $default_security_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkSecurityGroups/{network_security_group_name}/defaultSecurityRules/{default_security_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -321,10 +321,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}/securityRules
 # operationId: SecurityRules_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups-security-rules List" [
-  resourceGroupName: string
-  networkSecurityGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups-security-rules list" [
+  subscription_id: string
+  resource_group_name: string
+  network_security_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkSecurityGroups/($networkSecurityGroupName)/securityRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_security_group_name: $network_security_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkSecurityGroups/{network_security_group_name}/securityRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -348,11 +348,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}/securityRules/{securityRuleName}
 # operationId: SecurityRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups-security-rules Delete" [
-  resourceGroupName: string
-  networkSecurityGroupName: string
-  securityRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups-security-rules delete" [
+  subscription_id: string
+  resource_group_name: string
+  network_security_group_name: string
+  security_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +366,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkSecurityGroups/($networkSecurityGroupName)/securityRules/($securityRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_security_group_name: $network_security_group_name, security_rule_name: $security_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkSecurityGroups/{network_security_group_name}/securityRules/{security_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -376,11 +376,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}/securityRules/{securityRuleName}
 # operationId: SecurityRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups-security-rules Get" [
-  resourceGroupName: string
-  networkSecurityGroupName: string
-  securityRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups-security-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  network_security_group_name: string
+  security_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,7 +394,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkSecurityGroups/($networkSecurityGroupName)/securityRules/($securityRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_security_group_name: $network_security_group_name, security_rule_name: $security_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkSecurityGroups/{network_security_group_name}/securityRules/{security_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -405,11 +405,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}/securityRules/{securityRuleName}
 # operationId: SecurityRules_CreateOrUpdate
 # --properties shape: {access: "Allow"|"Deny", description?: string, destinationAddressPrefix?: string, destinationAddressPrefixes?: list, destinationApplicationSecurityGroups?: list, destinationPortRange?: string, destinationPortRanges?: list, direction: "Inbound"|"Outbound", priority?: int, protocol: "Tcp"|"Udp"|"Icmp"|"Esp"|"*"|"Ah", sourceAddressPrefix?: string, sourceAddressPrefixes?: list, sourceApplicationSecurityGroups?: list, sourcePortRange?: string, sourcePortRanges?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups-security-rules CreateOrUpdate" [
-  resourceGroupName: string
-  networkSecurityGroupName: string
-  securityRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups-security-rules create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  network_security_group_name: string
+  security_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,8 +428,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkSecurityGroups/($networkSecurityGroupName)/securityRules/($securityRuleName)" $qp)
-  let body = {etag: $etag, name: $name, properties: $properties, id: $id} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_security_group_name: $network_security_group_name, security_rule_name: $security_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkSecurityGroups/{network_security_group_name}/securityRules/{security_rule_name}") $qp)
+  let body = {"etag": $etag, "name": $name, "properties": $properties, "id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

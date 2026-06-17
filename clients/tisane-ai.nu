@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hypernyms listHypernyms" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hypernyms list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /hypernyms
 # operationId: listHypernyms
-export def "hypernyms listHypernyms" [
+export def "hypernyms list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,14 +102,14 @@ export def "hypernyms listHypernyms" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --family: string # (Required) a numeric identifier of the family (e.g. {family_id})
-  --maxLevel: string # (Required) maximum distance from the family (e.g. {max_number_of_levels})
-  --Ocp-Apim-Subscription-Key: string # {{apiKeyDescription}} (e.g. {{apiKey}})
+  --max-level: string # (Required) maximum distance from the family (e.g. {max_number_of_levels})
+  --ocp-apim-subscription-key: string # {{apiKeyDescription}} (e.g. {{apiKey}})
 ]: nothing -> list<list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "family" $family "scalar") (serialize-qp "maxLevel" $maxLevel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "family" $family "scalar") (serialize-qp "maxLevel" $max_level "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hypernyms" $qp)
-  let extra_headers = {"Ocp-Apim-Subscription-Key": $Ocp_Apim_Subscription_Key} | compact
+  let extra_headers = {"Ocp-Apim-Subscription-Key": $ocp_apim_subscription_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,7 +120,7 @@ export def "hypernyms listHypernyms" [
 #
 # GET /hyponyms
 # operationId: listHyponyms
-export def "hyponyms listHyponyms" [
+export def "hyponyms list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,14 +130,14 @@ export def "hyponyms listHyponyms" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --family: string # (Required) a numeric identifier of the family (e.g. {family_id})
-  --maxLevel: string # (Required) maximum distance from the family (e.g. {max_number_of_levels})
-  --Ocp-Apim-Subscription-Key: string # {{apiKeyDescription}} (e.g. {{apiKey}})
+  --max-level: string # (Required) maximum distance from the family (e.g. {max_number_of_levels})
+  --ocp-apim-subscription-key: string # {{apiKeyDescription}} (e.g. {{apiKey}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "family" $family "scalar") (serialize-qp "maxLevel" $maxLevel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "family" $family "scalar") (serialize-qp "maxLevel" $max_level "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hyponyms" $qp)
-  let extra_headers = {"Ocp-Apim-Subscription-Key": $Ocp_Apim_Subscription_Key} | compact
+  let extra_headers = {"Ocp-Apim-Subscription-Key": $ocp_apim_subscription_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -148,7 +148,7 @@ export def "hyponyms listHyponyms" [
 #
 # GET /inflections
 # operationId: listInflectedForms
-export def "inflections listInflectedForms" [
+export def "inflections list-inflected-forms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,13 +160,13 @@ export def "inflections listInflectedForms" [
   --language: string # (Required) The language code (e.g. {language_code})
   --lexeme: string # (Required) The lexeme to inspect (e.g. {lexeme_id})
   --family: string # (Required) The family to inspect (e.g. {family_id})
-  --Ocp-Apim-Subscription-Key: string # {{apiKeyDescription}} (e.g. {{apiKey}})
+  --ocp-apim-subscription-key: string # {{apiKeyDescription}} (e.g. {{apiKey}})
 ]: nothing -> table<features: list<record>, isLemma: bool, text: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "lexeme" $lexeme "scalar") (serialize-qp "family" $family "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/inflections" $qp)
-  let extra_headers = {"Ocp-Apim-Subscription-Key": $Ocp_Apim_Subscription_Key} | compact
+  let extra_headers = {"Ocp-Apim-Subscription-Key": $ocp_apim_subscription_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -177,7 +177,7 @@ export def "inflections listInflectedForms" [
 #
 # GET /lm/family
 # operationId: getFamilyDetails
-export def "lm-family get" [
+export def "lm-family get-family-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,13 +187,13 @@ export def "lm-family get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # (Required) a numeric identifier of the family (e.g. {family_id})
-  --Ocp-Apim-Subscription-Key: string # {{apiKeyDescription}} (e.g. {{apiKey}})
+  --ocp-apim-subscription-key: string # {{apiKeyDescription}} (e.g. {{apiKey}})
 ]: nothing -> record<definition: string, description: string, hypernyms: list<list<float>>, permId: string, requestId: string, wikidata: string, wordnet30: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lm/family" $qp)
-  let extra_headers = {"Ocp-Apim-Subscription-Key": $Ocp_Apim_Subscription_Key} | compact
+  let extra_headers = {"Ocp-Apim-Subscription-Key": $ocp_apim_subscription_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -204,7 +204,7 @@ export def "lm-family get" [
 #
 # GET /senses
 # operationId: listWordSenses
-export def "senses listWordSenses" [
+export def "senses list-word" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,13 +215,13 @@ export def "senses listWordSenses" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # (Required) a standard culture code (ISO-639 language code with an optional country extension) (e.g. {language_code})
   --word: string # (Required) the word to inspect (e.g. {word})
-  --Ocp-Apim-Subscription-Key: string # {{apiKeyDescription}} (e.g. {{apiKey}})
+  --ocp-apim-subscription-key: string # {{apiKeyDescription}} (e.g. {{apiKey}})
 ]: nothing -> table<families: list<record>, features: list<record>, frequency: float, isLemma: bool, legacyMapId: float, lemma: string, lexemeId: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "word" $word "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/senses" $qp)
-  let extra_headers = {"Ocp-Apim-Subscription-Key": $Ocp_Apim_Subscription_Key} | compact
+  let extra_headers = {"Ocp-Apim-Subscription-Key": $ocp_apim_subscription_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,7 +232,7 @@ export def "senses listWordSenses" [
 #
 # GET /values
 # operationId: listFeatureValues
-export def "values listFeatureValues" [
+export def "values list-feature" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,13 +244,13 @@ export def "values listFeatureValues" [
   --language: string # (Required) Language code (e.g. {language_code})
   --type: string # (Required) Feature type (e.g. {Grammar/Style/Semantics})
   --description: string # (Required) Feature list name (localized) (e.g. {feature_list_name})
-  --Ocp-Apim-Subscription-Key: string # {{apiKeyDescription}} (e.g. {{apiKey}})
+  --ocp-apim-subscription-key: string # {{apiKeyDescription}} (e.g. {{apiKey}})
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "description" $description "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/values" $qp)
-  let extra_headers = {"Ocp-Apim-Subscription-Key": $Ocp_Apim_Subscription_Key} | compact
+  let extra_headers = {"Ocp-Apim-Subscription-Key": $ocp_apim_subscription_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

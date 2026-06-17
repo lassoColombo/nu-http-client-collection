@@ -127,7 +127,7 @@ export def "webhook-logs eventLogsAll" [
 # operationId: webhooksResolve
 export def "webhook-w webhooksResolve" [
   id: string
-  serviceId: string
+  service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,7 +143,7 @@ export def "webhook-w webhooksResolve" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "e" $e "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/webhook/w/($id)/($serviceId)" $qp)
+  let full_url = (build-url $base ({id: $id, service_id: $service_id} | format pattern "/webhook/w/{id}/{service_id}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -202,7 +202,7 @@ export def "webhook-webhooks webhooksAdd" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook/webhooks")
-  let body = {delivery_url: $delivery_url, description: $description, events: $events, status: $status, unified_api: $unified_api} | compact
+  let body = {"delivery_url": $delivery_url, "description": $description, "events": $events, "status": $status, "unified_api": $unified_api} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -229,7 +229,7 @@ export def "webhook-webhooks webhooksDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhook/webhooks/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/webhook/webhooks/{id}"))
   let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -255,7 +255,7 @@ export def "webhook-webhooks webhooksOne" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhook/webhooks/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/webhook/webhooks/{id}"))
   let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -286,8 +286,8 @@ export def "webhook-webhooks webhooksUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhook/webhooks/($id)")
-  let body = {delivery_url: $delivery_url, description: $description, events: $events, status: $status} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/webhook/webhooks/{id}"))
+  let body = {"delivery_url": $delivery_url, "description": $description, "events": $events, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -302,7 +302,7 @@ export def "webhook-webhooks webhooksUpdate" [
 # operationId: webhooksExecute
 export def "webhook-webhooks-execute webhooksExecute" [
   id: string
-  serviceId: string
+  service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "webhook-webhooks-execute webhooksExecute" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhook/webhooks/($id)/execute/($serviceId)")
+  let full_url = (build-url $base ({id: $id, service_id: $service_id} | format pattern "/webhook/webhooks/{id}/execute/{service_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -329,7 +329,7 @@ export def "webhook-webhooks-execute webhooksExecute" [
 # operationId: webhooksShortExecute
 export def "webhook-webhooks-x webhooksShortExecute" [
   id: string
-  serviceId: string
+  service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,7 +346,7 @@ export def "webhook-webhooks-x webhooksShortExecute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "l_id" $l_id "scalar") (serialize-qp "e" $e "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/webhook/webhooks/($id)/x/($serviceId)" $qp)
+  let full_url = (build-url $base ({id: $id, service_id: $service_id} | format pattern "/webhook/webhooks/{id}/x/{service_id}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

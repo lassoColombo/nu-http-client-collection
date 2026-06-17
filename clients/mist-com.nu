@@ -194,7 +194,7 @@ def topic-completer [] { ["sdkclient-scan-data"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "const-alarm-defs get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "const-alarm-defs get-alarm-definitions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -218,7 +218,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/const/alarm_defs
 # operationId: getAlarmDefinitions
-export def "const-alarm-defs get" [
+export def "const-alarm-defs get-alarm-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "const-ap-channels get" [
 #
 # GET /api/v1/const/ap_led_status
 # operationId: getApLedDefinition
-export def "const-ap-led-status get" [
+export def "const-ap-led-status get-ap-led-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "const-applications get" [
 #
 # GET /api/v1/const/call_events
 # operationId: getCallEventsDefinitions
-export def "const-call-events get" [
+export def "const-call-events get-call-events-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,7 +330,7 @@ export def "const-call-events get" [
 #
 # GET /api/v1/const/client_events
 # operationId: getClientEventsDefinitions
-export def "const-client-events get" [
+export def "const-client-events get-client-events-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "const-client-events get" [
 #
 # GET /api/v1/const/countries
 # operationId: getCountryCodes
-export def "const-countries get" [
+export def "const-countries get-country-codes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,7 +374,7 @@ export def "const-countries get" [
 #
 # GET /api/v1/const/default_gateway_config
 # operationId: getGetawayDefaultConfig
-export def "const-default-gateway-config get" [
+export def "const-default-gateway-config get-getaway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -399,7 +399,7 @@ export def "const-default-gateway-config get" [
 #
 # GET /api/v1/const/device_events
 # operationId: getDeviceEventsDefinitions
-export def "const-device-events get" [
+export def "const-device-events get-device-events-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +443,7 @@ export def "const-device-models get" [
 #
 # GET /api/v1/const/insight_metrics
 # operationId: getSiteAvailableInsightMetrics
-export def "const-insight-metrics get" [
+export def "const-insight-metrics get-site-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,7 +465,7 @@ export def "const-insight-metrics get" [
 #
 # GET /api/v1/const/languages
 # operationId: getSiteLanguages
-export def "const-languages get" [
+export def "const-languages get-site" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,7 +487,7 @@ export def "const-languages get" [
 #
 # GET /api/v1/const/mxedge_events
 # operationId: getMxEdgeEventsDefinitions
-export def "const-mxedge-events get" [
+export def "const-mxedge-events get-mx-edge-events-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -533,7 +533,7 @@ export def "const-mxedge-models get" [
 # DEPRECATED
 # operationId: getSystemEventsDefinitions
 @deprecated
-export def "const-system-events get" [
+export def "const-system-events get-system-events-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,7 +590,7 @@ export def "installer-orgs-alarmtemplates get" [
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/alarmtemplates")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/installer/orgs/{org_id}/alarmtemplates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -600,7 +600,7 @@ export def "installer-orgs-alarmtemplates get" [
 #
 # GET /api/v1/installer/orgs/{org_id}/deviceprofiles
 # operationId: getInstallerDeviceProfiles_WIP_
-export def "installer-orgs-deviceprofiles " [
+export def "installer-orgs-deviceprofiles get" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -613,7 +613,7 @@ export def "installer-orgs-deviceprofiles " [
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/deviceprofiles")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/installer/orgs/{org_id}/deviceprofiles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -623,7 +623,7 @@ export def "installer-orgs-deviceprofiles " [
 #
 # GET /api/v1/installer/orgs/{org_id}/devices
 # operationId: getInstallerListOfRenctlyClaimedDevices
-export def "installer-orgs-devices get" [
+export def "installer-orgs-devices get-installer-list-of-renctly-claimed" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -636,7 +636,7 @@ export def "installer-orgs-devices get" [
 ]: nothing -> table<connected: bool, height: float, map_id: string, orientation: float, x: float, y: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/devices")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/installer/orgs/{org_id}/devices"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -661,7 +661,7 @@ export def "installer-orgs-devices claimInstallerDevices" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/devices")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/installer/orgs/{org_id}/devices"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -686,7 +686,7 @@ export def "installer-orgs-devices unassignInstallerRecentlyClaimedDevice" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/devices/($device_mac)")
+  let full_url = (build-url $base ({org_id: $org_id, device_mac: $device_mac} | format pattern "/api/v1/installer/orgs/{org_id}/devices/{device_mac}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -721,8 +721,8 @@ export def "installer-orgs-devices provisionInstallerDevices" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/devices/($device_mac)")
-  let body = {deviceprofile_name: $deviceprofile_name, height: $height, map_id: $map_id, name: $name, orientation: $orientation, replacing_mac: $replacing_mac, role: $role, site_name: $site_name, x: $x, y: $y} | compact
+  let full_url = (build-url $base ({org_id: $org_id, device_mac: $device_mac} | format pattern "/api/v1/installer/orgs/{org_id}/devices/{device_mac}"))
+  let body = {"deviceprofile_name": $deviceprofile_name, "height": $height, "map_id": $map_id, "name": $name, "orientation": $orientation, "replacing_mac": $replacing_mac, "role": $role, "site_name": $site_name, "x": $x, "y": $y} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -733,7 +733,7 @@ export def "installer-orgs-devices provisionInstallerDevices" [
 #
 # POST /api/v1/installer/orgs/{org_id}/devices/{device_mac}/locate
 # operationId: startInstallerLocateDevice
-export def "installer-orgs-devices-locate startInstallerLocateDevice" [
+export def "installer-orgs-devices-locate start" [
   org_id: string
   device_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -749,7 +749,7 @@ export def "installer-orgs-devices-locate startInstallerLocateDevice" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/devices/($device_mac)/locate")
+  let full_url = (build-url $base ({org_id: $org_id, device_mac: $device_mac} | format pattern "/api/v1/installer/orgs/{org_id}/devices/{device_mac}/locate"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -760,7 +760,7 @@ export def "installer-orgs-devices-locate startInstallerLocateDevice" [
 #
 # POST /api/v1/installer/orgs/{org_id}/devices/{device_mac}/unlocate
 # operationId: stopInstallerLocateDevice
-export def "installer-orgs-devices-unlocate stopInstallerLocateDevice" [
+export def "installer-orgs-devices-unlocate stop-installer-locate" [
   org_id: string
   device_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -774,7 +774,7 @@ export def "installer-orgs-devices-unlocate stopInstallerLocateDevice" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/devices/($device_mac)/unlocate")
+  let full_url = (build-url $base ({org_id: $org_id, device_mac: $device_mac} | format pattern "/api/v1/installer/orgs/{org_id}/devices/{device_mac}/unlocate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -784,10 +784,10 @@ export def "installer-orgs-devices-unlocate stopInstallerLocateDevice" [
 #
 # DELETE /api/v1/installer/orgs/{org_id}/devices/{device_mac}/{image_name}
 # operationId: deleteInstallerDeviceImage
-export def "installer-orgs-devices delete" [
+export def "installer-orgs-devices delete-installer-device-image" [
   org_id: string
-  image_name: string
   device_mac: string
+  image_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -799,7 +799,7 @@ export def "installer-orgs-devices delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/devices/($device_mac)/($image_name)")
+  let full_url = (build-url $base ({org_id: $org_id, device_mac: $device_mac, image_name: $image_name} | format pattern "/api/v1/installer/orgs/{org_id}/devices/{device_mac}/{image_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -809,10 +809,10 @@ export def "installer-orgs-devices delete" [
 #
 # POST /api/v1/installer/orgs/{org_id}/devices/{device_mac}/{image_name}
 # operationId: addInstallerDeviceImage
-export def "installer-orgs-devices addInstallerDeviceImage" [
+export def "installer-orgs-devices create-installer-device-image" [
   org_id: string
-  image_name: string
   device_mac: string
+  image_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -827,8 +827,8 @@ export def "installer-orgs-devices addInstallerDeviceImage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/devices/($device_mac)/($image_name)")
-  let body = {file: $file, json: $json} | compact
+  let full_url = (build-url $base ({org_id: $org_id, device_mac: $device_mac, image_name: $image_name} | format pattern "/api/v1/installer/orgs/{org_id}/devices/{device_mac}/{image_name}"))
+  let body = {"file": $file, "json": $json} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -839,7 +839,7 @@ export def "installer-orgs-devices addInstallerDeviceImage" [
 #
 # GET /api/v1/installer/orgs/{org_id}/rftemplates
 # operationId: getInstallerRfTemplatesNames
-export def "installer-orgs-rftemplates get" [
+export def "installer-orgs-rftemplates get-installer-rf-templates-names" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -852,7 +852,7 @@ export def "installer-orgs-rftemplates get" [
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/rftemplates")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/installer/orgs/{org_id}/rftemplates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -875,7 +875,7 @@ export def "installer-orgs-secpolicies get" [
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/secpolicies")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/installer/orgs/{org_id}/secpolicies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -898,7 +898,7 @@ export def "installer-orgs-sitegroups get" [
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/sitegroups")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/installer/orgs/{org_id}/sitegroups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -921,7 +921,7 @@ export def "installer-orgs-sites get" [
 ]: nothing -> table<address: string, country_code: string, id: string, latlng: record<lat: float, lng: float>, name: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/sites")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/installer/orgs/{org_id}/sites"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -932,7 +932,7 @@ export def "installer-orgs-sites get" [
 # PUT /api/v1/installer/orgs/{org_id}/sites/{site_name}
 # operationId: createOrUpdateInstallerSites
 # --latlng shape: {lat?: float, lng?: float}
-export def "installer-orgs-sites createOrUpdateInstallerSites" [
+export def "installer-orgs-sites create-or-update" [
   org_id: string
   site_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -961,8 +961,8 @@ export def "installer-orgs-sites createOrUpdateInstallerSites" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/sites/($site_name)")
-  let body = {: $body_param, address: $address, alarmtemplate_id: $alarmtemplate_id, aptemplate_id: $aptemplate_id, country_code: $country_code, gatewaytemplate_id: $gatewaytemplate_id, latlng: $latlng, name: $name, networktemplate_id: $networktemplate_id, notes: $notes, rftemplate_id: $rftemplate_id, secpolicy_id: $secpolicy_id, sitegroup_ids: $sitegroup_ids, timezone: $timezone} | compact
+  let full_url = (build-url $base ({org_id: $org_id, site_name: $site_name} | format pattern "/api/v1/installer/orgs/{org_id}/sites/{site_name}"))
+  let body = {"field-1": $body_param, "address": $address, "alarmtemplate_id": $alarmtemplate_id, "aptemplate_id": $aptemplate_id, "country_code": $country_code, "gatewaytemplate_id": $gatewaytemplate_id, "latlng": $latlng, "name": $name, "networktemplate_id": $networktemplate_id, "notes": $notes, "rftemplate_id": $rftemplate_id, "secpolicy_id": $secpolicy_id, "sitegroup_ids": $sitegroup_ids, "timezone": $timezone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -987,7 +987,7 @@ export def "installer-orgs-sites-maps get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/sites/($site_name)/maps")
+  let full_url = (build-url $base ({org_id: $org_id, site_name: $site_name} | format pattern "/api/v1/installer/orgs/{org_id}/sites/{site_name}/maps"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -998,7 +998,7 @@ export def "installer-orgs-sites-maps get" [
 # POST /api/v1/installer/orgs/{org_id}/sites/{site_name}/maps/import
 # operationId: importInstallerMap
 # --json shape: {import_all_floorplans?: bool, import_height?: bool, import_orientation?: bool, vendor_name: "ibwave"|"ekahau"}
-export def "installer-orgs-sites-maps-import importInstallerMap" [
+export def "installer-orgs-sites-maps-import import" [
   org_id: string
   site_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1016,8 +1016,8 @@ export def "installer-orgs-sites-maps-import importInstallerMap" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/sites/($site_name)/maps/import")
-  let body = {csv: $csv, file: $file, json: $json} | compact
+  let full_url = (build-url $base ({org_id: $org_id, site_name: $site_name} | format pattern "/api/v1/installer/orgs/{org_id}/sites/{site_name}/maps/import"))
+  let body = {"csv": $csv, "file": $file, "json": $json} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1043,7 +1043,7 @@ export def "installer-orgs-sites-maps delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/sites/($site_name)/maps/($map_id)")
+  let full_url = (build-url $base ({org_id: $org_id, site_name: $site_name, map_id: $map_id} | format pattern "/api/v1/installer/orgs/{org_id}/sites/{site_name}/maps/{map_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1059,7 +1059,7 @@ export def "installer-orgs-sites-maps delete" [
 # --wall_path shape: {coordinate?: string, name?: string, nodes?: list}
 # --wayfinding shape: {micello?: record, snap_to_path?: bool}
 # --wayfinding_path shape: {coordinate?: string, nodes?: list}
-export def "installer-orgs-sites-maps createInstallerMap" [
+export def "installer-orgs-sites-maps create" [
   org_id: string
   site_name: string
   map_id: string
@@ -1097,8 +1097,8 @@ export def "installer-orgs-sites-maps createInstallerMap" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/sites/($site_name)/maps/($map_id)")
-  let body = {flags: $flags, height: $height, height_m: $height_m, latlng_br: $latlng_br, latlng_tl: $latlng_tl, locked: $locked, name: $name, occupancy_limit: $occupancy_limit, orientation: $orientation, origin_x: $origin_x, origin_y: $origin_y, ppm: $ppm, sitesurvey_path: $sitesurvey_path, type: $type, use_auto_orientation: $use_auto_orientation, use_auto_placement: $use_auto_placement, view: $view, wall_path: $wall_path, wayfinding: $wayfinding, wayfinding_path: $wayfinding_path, width: $width, width_m: $width_m} | compact
+  let full_url = (build-url $base ({org_id: $org_id, site_name: $site_name, map_id: $map_id} | format pattern "/api/v1/installer/orgs/{org_id}/sites/{site_name}/maps/{map_id}"))
+  let body = {"flags": $flags, "height": $height, "height_m": $height_m, "latlng_br": $latlng_br, "latlng_tl": $latlng_tl, "locked": $locked, "name": $name, "occupancy_limit": $occupancy_limit, "orientation": $orientation, "origin_x": $origin_x, "origin_y": $origin_y, "ppm": $ppm, "sitesurvey_path": $sitesurvey_path, "type": $type, "use_auto_orientation": $use_auto_orientation, "use_auto_placement": $use_auto_placement, "view": $view, "wall_path": $wall_path, "wayfinding": $wayfinding, "wayfinding_path": $wayfinding_path, "width": $width, "width_m": $width_m} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1115,7 +1115,7 @@ export def "installer-orgs-sites-maps createInstallerMap" [
 # --wall_path shape: {coordinate?: string, name?: string, nodes?: list}
 # --wayfinding shape: {micello?: record, snap_to_path?: bool}
 # --wayfinding_path shape: {coordinate?: string, nodes?: list}
-export def "installer-orgs-sites-maps updateInstallerMap" [
+export def "installer-orgs-sites-maps update" [
   org_id: string
   site_name: string
   map_id: string
@@ -1153,8 +1153,8 @@ export def "installer-orgs-sites-maps updateInstallerMap" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/orgs/($org_id)/sites/($site_name)/maps/($map_id)")
-  let body = {flags: $flags, height: $height, height_m: $height_m, latlng_br: $latlng_br, latlng_tl: $latlng_tl, locked: $locked, name: $name, occupancy_limit: $occupancy_limit, orientation: $orientation, origin_x: $origin_x, origin_y: $origin_y, ppm: $ppm, sitesurvey_path: $sitesurvey_path, type: $type, use_auto_orientation: $use_auto_orientation, use_auto_placement: $use_auto_placement, view: $view, wall_path: $wall_path, wayfinding: $wayfinding, wayfinding_path: $wayfinding_path, width: $width, width_m: $width_m} | compact
+  let full_url = (build-url $base ({org_id: $org_id, site_name: $site_name, map_id: $map_id} | format pattern "/api/v1/installer/orgs/{org_id}/sites/{site_name}/maps/{map_id}"))
+  let body = {"flags": $flags, "height": $height, "height_m": $height_m, "latlng_br": $latlng_br, "latlng_tl": $latlng_tl, "locked": $locked, "name": $name, "occupancy_limit": $occupancy_limit, "orientation": $orientation, "origin_x": $origin_x, "origin_y": $origin_y, "ppm": $ppm, "sitesurvey_path": $sitesurvey_path, "type": $type, "use_auto_orientation": $use_auto_orientation, "use_auto_placement": $use_auto_placement, "view": $view, "wall_path": $wall_path, "wayfinding": $wayfinding, "wayfinding_path": $wayfinding_path, "width": $width, "width_m": $width_m} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1178,7 +1178,7 @@ export def "installer-sites-optimize optimizeInstallerRrm" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/installer/sites/($site_name)/optimize")
+  let full_url = (build-url $base ({site_name: $site_name} | format pattern "/api/v1/installer/sites/{site_name}/optimize"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1188,8 +1188,8 @@ export def "installer-sites-optimize optimizeInstallerRrm" [
 #
 # POST /api/v1/invite/verify/{token}
 # operationId: verifyAdminInvite
-export def "invite-verify verifyAdminInvite" [
-  token: string
+export def "invite-verify verify-admin" [
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1201,7 +1201,7 @@ export def "invite-verify verifyAdminInvite" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/invite/verify/($token)")
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/api/v1/invite/verify/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1211,7 +1211,7 @@ export def "invite-verify verifyAdminInvite" [
 #
 # POST /api/v1/login
 # operationId: login
-export def "login login" [
+export def "login post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1228,7 +1228,7 @@ export def "login login" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/login")
-  let body = {email: $email, password: $password, two_factor: $two_factor} | compact
+  let body = {"email": $email, "password": $password, "two_factor": $two_factor} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1254,7 +1254,7 @@ export def "login-lookup lookup" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/login/lookup")
-  let body = {email: $email} | compact
+  let body = {"email": $email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1278,7 +1278,7 @@ export def "login-oauth unlinkOAuth2Provider" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/login/oauth/($provider)")
+  let full_url = (build-url $base ({provider: $provider} | format pattern "/api/v1/login/oauth/{provider}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1288,7 +1288,7 @@ export def "login-oauth unlinkOAuth2Provider" [
 #
 # GET /api/v1/login/oauth/{provider}
 # operationId: getOAuth2AuthorizationUrlForLogin
-export def "login-oauth get" [
+export def "login-oauth get-o-auth2-authorization-url-for" [
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1303,7 +1303,7 @@ export def "login-oauth get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "forward" $forward "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/login/oauth/($provider)" $qp)
+  let full_url = (build-url $base ({provider: $provider} | format pattern "/api/v1/login/oauth/{provider}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1328,8 +1328,8 @@ export def "login-oauth loginOAuth2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/login/oauth/($provider)")
-  let body = {code: $code} | compact
+  let full_url = (build-url $base ({provider: $provider} | format pattern "/api/v1/login/oauth/{provider}"))
+  let body = {"code": $code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1355,7 +1355,7 @@ export def "login-two-factor twoFactor" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/login/two_factor")
-  let body = {two_factor: $two_factor} | compact
+  let body = {"two_factor": $two_factor} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1366,7 +1366,7 @@ export def "login-two-factor twoFactor" [
 #
 # POST /api/v1/logout
 # operationId: logout
-export def "logout logout" [
+export def "logout post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1403,8 +1403,8 @@ export def "mobile-verify activateSdkInvite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/mobile/verify/($secret)")
-  let body = {device_id: $device_id} | compact
+  let full_url = (build-url $base ({secret: $secret} | format pattern "/api/v1/mobile/verify/{secret}"))
+  let body = {"device_id": $device_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1415,7 +1415,7 @@ export def "mobile-verify activateSdkInvite" [
 #
 # POST /api/v1/msps
 # operationId: createMsp
-export def "msps createMsp" [
+export def "msps create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1435,7 +1435,7 @@ export def "msps createMsp" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/msps")
-  let body = {allow_mist: $allow_mist, id: $id, logo_url: $logo_url, name: $name, tier: $tier, url: $body_url} | compact
+  let body = {"allow_mist": $allow_mist, "id": $id, "logo_url": $logo_url, "name": $name, "tier": $tier, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1459,7 +1459,7 @@ export def "msps delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)")
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1469,7 +1469,7 @@ export def "msps delete" [
 #
 # GET /api/v1/msps/{msp_id}
 # operationId: getMspDetails
-export def "msps get" [
+export def "msps get-msp-details" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1482,7 +1482,7 @@ export def "msps get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)")
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1492,7 +1492,7 @@ export def "msps get" [
 #
 # PUT /api/v1/msps/{msp_id}
 # operationId: updateMsp
-export def "msps updateMsp" [
+export def "msps update" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1512,8 +1512,8 @@ export def "msps updateMsp" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)")
-  let body = {allow_mist: $allow_mist, id: $id, logo_url: $logo_url, name: $name, tier: $tier, url: $body_url} | compact
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}"))
+  let body = {"allow_mist": $allow_mist, "id": $id, "logo_url": $logo_url, "name": $name, "tier": $tier, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1537,7 +1537,7 @@ export def "msps-admins list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/admins")
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/admins"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1547,7 +1547,7 @@ export def "msps-admins list" [
 #
 # DELETE /api/v1/msps/{msp_id}/admins/{admin_id}
 # operationId: revokeMspAdmin
-export def "msps-admins revokeMspAdmin" [
+export def "msps-admins delete" [
   msp_id: string
   admin_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1561,7 +1561,7 @@ export def "msps-admins revokeMspAdmin" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/admins/($admin_id)")
+  let full_url = (build-url $base ({msp_id: $msp_id, admin_id: $admin_id} | format pattern "/api/v1/msps/{msp_id}/admins/{admin_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1585,7 +1585,7 @@ export def "msps-admins get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/admins/($admin_id)")
+  let full_url = (build-url $base ({msp_id: $msp_id, admin_id: $admin_id} | format pattern "/api/v1/msps/{msp_id}/admins/{admin_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1596,7 +1596,7 @@ export def "msps-admins get" [
 # PUT /api/v1/msps/{msp_id}/admins/{admin_id}
 # operationId: updateMspAdmin
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list, views?: list}
-export def "msps-admins updateMspAdmin" [
+export def "msps-admins update" [
   msp_id: string
   admin_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1617,8 +1617,8 @@ export def "msps-admins updateMspAdmin" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/admins/($admin_id)")
-  let body = {email: $email, first_name: $first_name, hours: $hours, last_name: $last_name, phone: $phone, phone2: $phone2} | compact
+  let full_url = (build-url $base ({msp_id: $msp_id, admin_id: $admin_id} | format pattern "/api/v1/msps/{msp_id}/admins/{admin_id}"))
+  let body = {"email": $email, "first_name": $first_name, "hours": $hours, "last_name": $last_name, "phone": $phone, "phone2": $phone2} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1644,8 +1644,8 @@ export def "msps-claim claimMspLicence" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/claim")
-  let body = {code: $code} | compact
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/claim"))
+  let body = {"code": $code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1656,7 +1656,7 @@ export def "msps-claim claimMspLicence" [
 #
 # GET /api/v1/msps/{msp_id}/insights/{metric}
 # operationId: getMspSle
-export def "msps-insights get" [
+export def "msps-insights get-msp-sle" [
   msp_id: string
   metric: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1676,7 +1676,7 @@ export def "msps-insights get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sle" $sle "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/insights/($metric)" $qp)
+  let full_url = (build-url $base ({msp_id: $msp_id, metric: $metric} | format pattern "/api/v1/msps/{msp_id}/insights/{metric}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1700,7 +1700,7 @@ export def "msps-inventory get" [
 ]: nothing -> record<for_site: bool, mac: string, model: string, org_id: string, serial: string, site_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/inventory/($device_mac)")
+  let full_url = (build-url $base ({msp_id: $msp_id, device_mac: $device_mac} | format pattern "/api/v1/msps/{msp_id}/inventory/{device_mac}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1731,8 +1731,8 @@ export def "msps-invites inviteMspAdmin" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/invites")
-  let body = {email: $email, first_name: $first_name, hours: $hours, last_name: $last_name, phone: $phone, phone2: $phone2} | compact
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/invites"))
+  let body = {"email": $email, "first_name": $first_name, "hours": $hours, "last_name": $last_name, "phone": $phone, "phone2": $phone2} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1757,7 +1757,7 @@ export def "msps-invites uninviteMspAdmin" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/invites/($invite_id)")
+  let full_url = (build-url $base ({msp_id: $msp_id, invite_id: $invite_id} | format pattern "/api/v1/msps/{msp_id}/invites/{invite_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1768,7 +1768,7 @@ export def "msps-invites uninviteMspAdmin" [
 # PUT /api/v1/msps/{msp_id}/invites/{invite_id}
 # operationId: updateMspAdminInvite
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list, views?: list}
-export def "msps-invites updateMspAdminInvite" [
+export def "msps-invites update-msp-admin" [
   msp_id: string
   invite_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1789,8 +1789,8 @@ export def "msps-invites updateMspAdminInvite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/invites/($invite_id)")
-  let body = {email: $email, first_name: $first_name, hours: $hours, last_name: $last_name, phone: $phone, phone2: $phone2} | compact
+  let full_url = (build-url $base ({msp_id: $msp_id, invite_id: $invite_id} | format pattern "/api/v1/msps/{msp_id}/invites/{invite_id}"))
+  let body = {"email": $email, "first_name": $first_name, "hours": $hours, "last_name": $last_name, "phone": $phone, "phone2": $phone2} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1814,7 +1814,7 @@ export def "msps-licenses get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/licenses")
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/licenses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1824,7 +1824,7 @@ export def "msps-licenses get" [
 #
 # PUT /api/v1/msps/{msp_id}/licenses
 # operationId: moveOrDeleteMspLicenseToAnotherOrg
-export def "msps-licenses moveOrDeleteMspLicenseToAnotherOrg" [
+export def "msps-licenses move-or-delete-msp-license-to-another-org" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1843,8 +1843,8 @@ export def "msps-licenses moveOrDeleteMspLicenseToAnotherOrg" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/licenses")
-  let body = {dst_org_id: $dst_org_id, notes: $notes, op: $op, quantity: $quantity, subscription_id: $subscription_id} | compact
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/licenses"))
+  let body = {"dst_org_id": $dst_org_id, "notes": $notes, "op": $op, "quantity": $quantity, "subscription_id": $subscription_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1868,7 +1868,7 @@ export def "msps-logo delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/logo")
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/logo"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1878,7 +1878,7 @@ export def "msps-logo delete" [
 #
 # POST /api/v1/msps/{msp_id}/logo
 # operationId: postMspLogo
-export def "msps-logo post" [
+export def "msps-logo create" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1893,8 +1893,8 @@ export def "msps-logo post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/logo")
-  let body = {logo_url: $logo_url} | compact
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/logo"))
+  let body = {"logo_url": $logo_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1922,7 +1922,7 @@ export def "msps-logs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "org_id" $org_id "scalar") (serialize-qp "admin_name" $admin_name "scalar") (serialize-qp "message" $message "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/logs" $qp)
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1947,7 +1947,7 @@ export def "msps-logs-count countMspLogs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/logs/count" $qp)
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/logs/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1970,7 +1970,7 @@ export def "msps-orggroups list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/orggroups")
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/orggroups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1980,7 +1980,7 @@ export def "msps-orggroups list" [
 #
 # POST /api/v1/msps/{msp_id}/orggroups
 # operationId: createMspOrgGroup
-export def "msps-orggroups createMspOrgGroup" [
+export def "msps-orggroups create" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1996,8 +1996,8 @@ export def "msps-orggroups createMspOrgGroup" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/orggroups")
-  let body = {name: $name, org_ids: $org_ids} | compact
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/orggroups"))
+  let body = {"name": $name, "org_ids": $org_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2022,7 +2022,7 @@ export def "msps-orggroups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/orggroups/($orggroup_id)")
+  let full_url = (build-url $base ({msp_id: $msp_id, orggroup_id: $orggroup_id} | format pattern "/api/v1/msps/{msp_id}/orggroups/{orggroup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2046,7 +2046,7 @@ export def "msps-orggroups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/orggroups/($orggroup_id)")
+  let full_url = (build-url $base ({msp_id: $msp_id, orggroup_id: $orggroup_id} | format pattern "/api/v1/msps/{msp_id}/orggroups/{orggroup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2056,7 +2056,7 @@ export def "msps-orggroups get" [
 #
 # PUT /api/v1/msps/{msp_id}/orggroups/{orggroup_id}
 # operationId: updateMspOrgGroup
-export def "msps-orggroups updateMspOrgGroup" [
+export def "msps-orggroups update" [
   msp_id: string
   orggroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2073,8 +2073,8 @@ export def "msps-orggroups updateMspOrgGroup" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/orggroups/($orggroup_id)")
-  let body = {name: $name, org_ids: $org_ids} | compact
+  let full_url = (build-url $base ({msp_id: $msp_id, orggroup_id: $orggroup_id} | format pattern "/api/v1/msps/{msp_id}/orggroups/{orggroup_id}"))
+  let body = {"name": $name, "org_ids": $org_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2098,7 +2098,7 @@ export def "msps-orgs list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/orgs")
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/orgs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2108,7 +2108,7 @@ export def "msps-orgs list" [
 #
 # POST /api/v1/msps/{msp_id}/orgs
 # operationId: createMspOrg
-export def "msps-orgs createMspOrg" [
+export def "msps-orgs create" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2127,8 +2127,8 @@ export def "msps-orgs createMspOrg" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/orgs")
-  let body = {alarmtemplate_id: $alarmtemplate_id, allow_mist: $allow_mist, name: $name, orggroup_ids: $orggroup_ids, session_expiry: $session_expiry} | compact
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/orgs"))
+  let body = {"alarmtemplate_id": $alarmtemplate_id, "allow_mist": $allow_mist, "name": $name, "orggroup_ids": $orggroup_ids, "session_expiry": $session_expiry} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2155,8 +2155,8 @@ export def "msps-orgs manageMspOrgs" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/orgs")
-  let body = {op: $op, org_ids: $org_ids} | compact
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/orgs"))
+  let body = {"op": $op, "org_ids": $org_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2167,7 +2167,7 @@ export def "msps-orgs manageMspOrgs" [
 #
 # GET /api/v1/msps/{msp_id}/orgs/search
 # operationId: searchMspOrgs
-export def "msps-orgs-search searchMspOrgs" [
+export def "msps-orgs-search list" [
   msp_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2187,7 +2187,7 @@ export def "msps-orgs-search searchMspOrgs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "org_id" $org_id "scalar") (serialize-qp "sub_insufficient" $sub_insufficient "scalar") (serialize-qp "trial_enabled" $trial_enabled "scalar") (serialize-qp "usage_types" $usage_types "multi") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/orgs/search" $qp)
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/orgs/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2211,7 +2211,7 @@ export def "msps-orgs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/orgs/($org_id)")
+  let full_url = (build-url $base ({msp_id: $msp_id, org_id: $org_id} | format pattern "/api/v1/msps/{msp_id}/orgs/{org_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2221,7 +2221,7 @@ export def "msps-orgs get" [
 #
 # GET /api/v1/msps/{msp_id}/search
 # operationId: searchMspOrgGroup
-export def "msps-search searchMspOrgGroup" [
+export def "msps-search list-msp-org-group" [
   msp_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2241,7 +2241,7 @@ export def "msps-search searchMspOrgGroup" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/search" $qp)
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2264,7 +2264,7 @@ export def "msps-ssoroles get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/ssoroles")
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/ssoroles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2275,7 +2275,7 @@ export def "msps-ssoroles get" [
 # POST /api/v1/msps/{msp_id}/ssoroles
 # operationId: createMspSsoRole
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list, views?: list}
-export def "msps-ssoroles createMspSsoRole" [
+export def "msps-ssoroles create" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2291,8 +2291,8 @@ export def "msps-ssoroles createMspSsoRole" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/ssoroles")
-  let body = {name: $name, privileges: $privileges} | compact
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/ssoroles"))
+  let body = {"name": $name, "privileges": $privileges} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2317,7 +2317,7 @@ export def "msps-ssoroles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/ssoroles/($ssorole_id)")
+  let full_url = (build-url $base ({msp_id: $msp_id, ssorole_id: $ssorole_id} | format pattern "/api/v1/msps/{msp_id}/ssoroles/{ssorole_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2328,7 +2328,7 @@ export def "msps-ssoroles delete" [
 # PUT /api/v1/msps/{msp_id}/ssoroles/{ssorole_id}
 # operationId: updateMspSsoRole
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list, views?: list}
-export def "msps-ssoroles updateMspSsoRole" [
+export def "msps-ssoroles update" [
   msp_id: string
   ssorole_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2345,8 +2345,8 @@ export def "msps-ssoroles updateMspSsoRole" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/ssoroles/($ssorole_id)")
-  let body = {name: $name, privileges: $privileges} | compact
+  let full_url = (build-url $base ({msp_id: $msp_id, ssorole_id: $ssorole_id} | format pattern "/api/v1/msps/{msp_id}/ssoroles/{ssorole_id}"))
+  let body = {"name": $name, "privileges": $privileges} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2370,7 +2370,7 @@ export def "msps-ssos get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/ssos")
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/ssos"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2380,7 +2380,7 @@ export def "msps-ssos get" [
 #
 # POST /api/v1/msps/{msp_id}/ssos
 # operationId: createMspSso
-export def "msps-ssos createMspSso" [
+export def "msps-ssos create" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2427,8 +2427,8 @@ export def "msps-ssos createMspSso" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/ssos")
-  let body = {custom_logout_url: $custom_logout_url, default_role: $default_role, domain: $domain, idp_cert: $idp_cert, idp_sign_algo: $idp_sign_algo, idp_sso_url: $idp_sso_url, idp_type: $idp_type, ignore_unmatched_roles: $ignore_unmatched_roles, issuer: $issuer, ldap_base_dn: $ldap_base_dn, ldap_bind_dn: $ldap_bind_dn, ldap_bind_password: $ldap_bind_password, ldap_certs: $ldap_certs, ldap_client_cert: $ldap_client_cert, ldap_client_key: $ldap_client_key, ldap_group_attr: $ldap_group_attr, ldap_group_dn: $ldap_group_dn, ldap_group_filter: $ldap_group_filter, ldap_server_hosts: $ldap_server_hosts, ldap_type: $ldap_type, ldap_user_filter: $ldap_user_filter, name: $name, nameid_format: $nameid_format, oauth_cc_client_id: $oauth_cc_client_id, oauth_cc_client_secret: $oauth_cc_client_secret, oauth_discovery_url: $oauth_discovery_url, oauth_ropc_client_id: $oauth_ropc_client_id, oauth_ropc_secret: $oauth_ropc_secret, oauth_tenant_id: $oauth_tenant_id, oauth_type: $oauth_type, role_attr_extraction: $role_attr_extraction, role_attr_from: $role_attr_from, type: $type} | compact
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/ssos"))
+  let body = {"custom_logout_url": $custom_logout_url, "default_role": $default_role, "domain": $domain, "idp_cert": $idp_cert, "idp_sign_algo": $idp_sign_algo, "idp_sso_url": $idp_sso_url, "idp_type": $idp_type, "ignore_unmatched_roles": $ignore_unmatched_roles, "issuer": $issuer, "ldap_base_dn": $ldap_base_dn, "ldap_bind_dn": $ldap_bind_dn, "ldap_bind_password": $ldap_bind_password, "ldap_certs": $ldap_certs, "ldap_client_cert": $ldap_client_cert, "ldap_client_key": $ldap_client_key, "ldap_group_attr": $ldap_group_attr, "ldap_group_dn": $ldap_group_dn, "ldap_group_filter": $ldap_group_filter, "ldap_server_hosts": $ldap_server_hosts, "ldap_type": $ldap_type, "ldap_user_filter": $ldap_user_filter, "name": $name, "nameid_format": $nameid_format, "oauth_cc_client_id": $oauth_cc_client_id, "oauth_cc_client_secret": $oauth_cc_client_secret, "oauth_discovery_url": $oauth_discovery_url, "oauth_ropc_client_id": $oauth_ropc_client_id, "oauth_ropc_secret": $oauth_ropc_secret, "oauth_tenant_id": $oauth_tenant_id, "oauth_type": $oauth_type, "role_attr_extraction": $role_attr_extraction, "role_attr_from": $role_attr_from, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2453,7 +2453,7 @@ export def "msps-ssos delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/ssos/($sso_id)")
+  let full_url = (build-url $base ({msp_id: $msp_id, sso_id: $sso_id} | format pattern "/api/v1/msps/{msp_id}/ssos/{sso_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2463,7 +2463,7 @@ export def "msps-ssos delete" [
 #
 # PUT /api/v1/msps/{msp_id}/ssos/{sso_id}
 # operationId: updateMspSso
-export def "msps-ssos updateMspSso" [
+export def "msps-ssos update" [
   msp_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2511,8 +2511,8 @@ export def "msps-ssos updateMspSso" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/ssos/($sso_id)")
-  let body = {custom_logout_url: $custom_logout_url, default_role: $default_role, domain: $domain, idp_cert: $idp_cert, idp_sign_algo: $idp_sign_algo, idp_sso_url: $idp_sso_url, idp_type: $idp_type, ignore_unmatched_roles: $ignore_unmatched_roles, issuer: $issuer, ldap_base_dn: $ldap_base_dn, ldap_bind_dn: $ldap_bind_dn, ldap_bind_password: $ldap_bind_password, ldap_certs: $ldap_certs, ldap_client_cert: $ldap_client_cert, ldap_client_key: $ldap_client_key, ldap_group_attr: $ldap_group_attr, ldap_group_dn: $ldap_group_dn, ldap_group_filter: $ldap_group_filter, ldap_server_hosts: $ldap_server_hosts, ldap_type: $ldap_type, ldap_user_filter: $ldap_user_filter, name: $name, nameid_format: $nameid_format, oauth_cc_client_id: $oauth_cc_client_id, oauth_cc_client_secret: $oauth_cc_client_secret, oauth_discovery_url: $oauth_discovery_url, oauth_ropc_client_id: $oauth_ropc_client_id, oauth_ropc_secret: $oauth_ropc_secret, oauth_tenant_id: $oauth_tenant_id, oauth_type: $oauth_type, role_attr_extraction: $role_attr_extraction, role_attr_from: $role_attr_from, type: $type} | compact
+  let full_url = (build-url $base ({msp_id: $msp_id, sso_id: $sso_id} | format pattern "/api/v1/msps/{msp_id}/ssos/{sso_id}"))
+  let body = {"custom_logout_url": $custom_logout_url, "default_role": $default_role, "domain": $domain, "idp_cert": $idp_cert, "idp_sign_algo": $idp_sign_algo, "idp_sso_url": $idp_sso_url, "idp_type": $idp_type, "ignore_unmatched_roles": $ignore_unmatched_roles, "issuer": $issuer, "ldap_base_dn": $ldap_base_dn, "ldap_bind_dn": $ldap_bind_dn, "ldap_bind_password": $ldap_bind_password, "ldap_certs": $ldap_certs, "ldap_client_cert": $ldap_client_cert, "ldap_client_key": $ldap_client_key, "ldap_group_attr": $ldap_group_attr, "ldap_group_dn": $ldap_group_dn, "ldap_group_filter": $ldap_group_filter, "ldap_server_hosts": $ldap_server_hosts, "ldap_type": $ldap_type, "ldap_user_filter": $ldap_user_filter, "name": $name, "nameid_format": $nameid_format, "oauth_cc_client_id": $oauth_cc_client_id, "oauth_cc_client_secret": $oauth_cc_client_secret, "oauth_discovery_url": $oauth_discovery_url, "oauth_ropc_client_id": $oauth_ropc_client_id, "oauth_ropc_secret": $oauth_ropc_secret, "oauth_tenant_id": $oauth_tenant_id, "oauth_type": $oauth_type, "role_attr_extraction": $role_attr_extraction, "role_attr_from": $role_attr_from, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2523,7 +2523,7 @@ export def "msps-ssos updateMspSso" [
 #
 # GET /api/v1/msps/{msp_id}/ssos/{sso_id}/failures
 # operationId: getMspSsoLatestFailures
-export def "msps-ssos-failures get" [
+export def "msps-ssos-failures get-msp-sso-latest" [
   msp_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2537,7 +2537,7 @@ export def "msps-ssos-failures get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/ssos/($sso_id)/failures")
+  let full_url = (build-url $base ({msp_id: $msp_id, sso_id: $sso_id} | format pattern "/api/v1/msps/{msp_id}/ssos/{sso_id}/failures"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2547,7 +2547,7 @@ export def "msps-ssos-failures get" [
 #
 # GET /api/v1/msps/{msp_id}/ssos/{sso_id}/metadata
 # operationId: getMspSsoSamlMetadata
-export def "msps-ssos-metadata get" [
+export def "msps-ssos-metadata get-msp-sso-saml" [
   msp_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2561,7 +2561,7 @@ export def "msps-ssos-metadata get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/ssos/($sso_id)/metadata")
+  let full_url = (build-url $base ({msp_id: $msp_id, sso_id: $sso_id} | format pattern "/api/v1/msps/{msp_id}/ssos/{sso_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2571,7 +2571,7 @@ export def "msps-ssos-metadata get" [
 #
 # GET /api/v1/msps/{msp_id}/ssos/{sso_id}/metadata.xml
 # operationId: downloadMspSsoSamlMetadata
-export def "msps-ssos-metadataxml downloadMspSsoSamlMetadata" [
+export def "msps-ssos-metadataxml download-msp-sso-saml-metadata" [
   msp_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2585,7 +2585,7 @@ export def "msps-ssos-metadataxml downloadMspSsoSamlMetadata" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/ssos/($sso_id)/metadata.xml")
+  let full_url = (build-url $base ({msp_id: $msp_id, sso_id: $sso_id} | format pattern "/api/v1/msps/{msp_id}/ssos/{sso_id}/metadata.xml"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2595,7 +2595,7 @@ export def "msps-ssos-metadataxml downloadMspSsoSamlMetadata" [
 #
 # GET /api/v1/msps/{msp_id}/stats/licenses
 # operationId: getMspOrgLicenses
-export def "msps-stats-licenses get" [
+export def "msps-stats-licenses get-msp-org" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2608,7 +2608,7 @@ export def "msps-stats-licenses get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/stats/licenses")
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/stats/licenses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2634,7 +2634,7 @@ export def "msps-stats-orgs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/stats/orgs" $qp)
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/stats/orgs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2661,7 +2661,7 @@ export def "msps-tickets get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/tickets" $qp)
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/tickets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2686,7 +2686,7 @@ export def "msps-tickets-count countMspTickets" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/msps/($msp_id)/tickets/count" $qp)
+  let full_url = (build-url $base ({msp_id: $msp_id} | format pattern "/api/v1/msps/{msp_id}/tickets/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2696,7 +2696,7 @@ export def "msps-tickets-count countMspTickets" [
 #
 # POST /api/v1/orgs
 # operationId: createOrg
-export def "orgs createOrg" [
+export def "orgs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2715,7 +2715,7 @@ export def "orgs createOrg" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/orgs")
-  let body = {alarmtemplate_id: $alarmtemplate_id, allow_mist: $allow_mist, name: $name, orggroup_ids: $orggroup_ids, session_expiry: $session_expiry} | compact
+  let body = {"alarmtemplate_id": $alarmtemplate_id, "allow_mist": $allow_mist, "name": $name, "orggroup_ids": $orggroup_ids, "session_expiry": $session_expiry} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2739,7 +2739,7 @@ export def "orgs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2749,7 +2749,7 @@ export def "orgs delete" [
 #
 # GET /api/v1/orgs/{org_id}
 # operationId: getOrgInfo
-export def "orgs get" [
+export def "orgs get-org-info" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2762,7 +2762,7 @@ export def "orgs get" [
 ]: nothing -> record<alarmtemplate_id: string, allow_mist: bool, created_time: float, id: string, modified_time: float, msp_id: string, msp_logo_url: string, msp_name: string, name: string, orggroup_ids: list<string>, session_expiry: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2772,7 +2772,7 @@ export def "orgs get" [
 #
 # PUT /api/v1/orgs/{org_id}
 # operationId: updateOrg
-export def "orgs updateOrg" [
+export def "orgs update" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2791,8 +2791,8 @@ export def "orgs updateOrg" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)")
-  let body = {alarmtemplate_id: $alarmtemplate_id, allow_mist: $allow_mist, name: $name, orggroup_ids: $orggroup_ids, session_expiry: $session_expiry} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}"))
+  let body = {"alarmtemplate_id": $alarmtemplate_id, "allow_mist": $allow_mist, "name": $name, "orggroup_ids": $orggroup_ids, "session_expiry": $session_expiry} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2803,7 +2803,7 @@ export def "orgs updateOrg" [
 #
 # GET /api/v1/orgs/{org_id}/128routers/register_cmd
 # operationId: getOrg128TRegistrationCommands
-export def "orgs-128routers-register-cmd get" [
+export def "orgs-128routers-register-cmd get-org128-t-registration-commands" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2816,7 +2816,7 @@ export def "orgs-128routers-register-cmd get" [
 ]: nothing -> record<conductor_cmd: string, registration_code: string, router_shell_cmd: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/128routers/register_cmd")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/128routers/register_cmd"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2839,7 +2839,7 @@ export def "orgs-admins get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/admins")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/admins"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2849,7 +2849,7 @@ export def "orgs-admins get" [
 #
 # DELETE /api/v1/orgs/{org_id}/admins/{admin_id}
 # operationId: revokeOrgAdmin
-export def "orgs-admins revokeOrgAdmin" [
+export def "orgs-admins delete" [
   org_id: string
   admin_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2863,7 +2863,7 @@ export def "orgs-admins revokeOrgAdmin" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/admins/($admin_id)")
+  let full_url = (build-url $base ({org_id: $org_id, admin_id: $admin_id} | format pattern "/api/v1/orgs/{org_id}/admins/{admin_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2874,7 +2874,7 @@ export def "orgs-admins revokeOrgAdmin" [
 # PUT /api/v1/orgs/{org_id}/admins/{admin_id}
 # operationId: updateOrgAdmin
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list, views?: list}
-export def "orgs-admins updateOrgAdmin" [
+export def "orgs-admins update" [
   org_id: string
   admin_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2895,8 +2895,8 @@ export def "orgs-admins updateOrgAdmin" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/admins/($admin_id)")
-  let body = {email: $email, first_name: $first_name, hours: $hours, last_name: $last_name, phone: $phone, phone2: $phone2} | compact
+  let full_url = (build-url $base ({org_id: $org_id, admin_id: $admin_id} | format pattern "/api/v1/orgs/{org_id}/admins/{admin_id}"))
+  let body = {"email": $email, "first_name": $first_name, "hours": $hours, "last_name": $last_name, "phone": $phone, "phone2": $phone2} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2923,8 +2923,8 @@ export def "orgs-alarms-ack multiAckOrgAlarms" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/alarms/ack")
-  let body = {alarm_ids: $alarm_ids, note: $note} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/alarms/ack"))
+  let body = {"alarm_ids": $alarm_ids, "note": $note} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2950,8 +2950,8 @@ export def "orgs-alarms-ack-all ackOrgAllAlarms" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/alarms/ack_all")
-  let body = {note: $note} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/alarms/ack_all"))
+  let body = {"note": $note} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2982,7 +2982,7 @@ export def "orgs-alarms-count countOrgAlarms" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/alarms/count" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/alarms/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2992,7 +2992,7 @@ export def "orgs-alarms-count countOrgAlarms" [
 #
 # GET /api/v1/orgs/{org_id}/alarms/search
 # operationId: searchOrgAlarms
-export def "orgs-alarms-search searchOrgAlarms" [
+export def "orgs-alarms-search list" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3012,7 +3012,7 @@ export def "orgs-alarms-search searchOrgAlarms" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "site_id" $site_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/alarms/search" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/alarms/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3038,8 +3038,8 @@ export def "orgs-alarms-unack multiUnackOrgAlarms" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/alarms/unack")
-  let body = {alarm_ids: $alarm_ids, note: $note} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/alarms/unack"))
+  let body = {"alarm_ids": $alarm_ids, "note": $note} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3065,8 +3065,8 @@ export def "orgs-alarms-unack-all unackOrgAllArlarms" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/alarms/unack_all")
-  let body = {note: $note} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/alarms/unack_all"))
+  let body = {"note": $note} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3093,8 +3093,8 @@ export def "orgs-alarms-ack ackOrgAlarm" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/alarms/($alarm_id)/ack")
-  let body = {note: $note} | compact
+  let full_url = (build-url $base ({org_id: $org_id, alarm_id: $alarm_id} | format pattern "/api/v1/orgs/{org_id}/alarms/{alarm_id}/ack"))
+  let body = {"note": $note} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3118,7 +3118,7 @@ export def "orgs-alarmtemplates list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/alarmtemplates")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/alarmtemplates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3129,7 +3129,7 @@ export def "orgs-alarmtemplates list" [
 # POST /api/v1/orgs/{org_id}/alarmtemplates
 # operationId: createOrgAlarmTemplate
 # --delivery shape: {additional_emails?: list, enabled: bool, to_org_admins?: bool, to_site_admins?: bool}
-export def "orgs-alarmtemplates createOrgAlarmTemplate" [
+export def "orgs-alarmtemplates create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3146,8 +3146,8 @@ export def "orgs-alarmtemplates createOrgAlarmTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/alarmtemplates")
-  let body = {delivery: $delivery, name: $name, rules: $rules} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/alarmtemplates"))
+  let body = {"delivery": $delivery, "name": $name, "rules": $rules} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3175,8 +3175,8 @@ export def "orgs-alarmtemplates-suppress suppressOrgAlarm" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/alarmtemplates/suppress")
-  let body = {applies: $applies, duration: $duration} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/alarmtemplates/suppress"))
+  let body = {"applies": $applies, "duration": $duration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3201,7 +3201,7 @@ export def "orgs-alarmtemplates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/alarmtemplates/($alarmtemplate_id)")
+  let full_url = (build-url $base ({org_id: $org_id, alarmtemplate_id: $alarmtemplate_id} | format pattern "/api/v1/orgs/{org_id}/alarmtemplates/{alarmtemplate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3225,7 +3225,7 @@ export def "orgs-alarmtemplates get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/alarmtemplates/($alarmtemplate_id)")
+  let full_url = (build-url $base ({org_id: $org_id, alarmtemplate_id: $alarmtemplate_id} | format pattern "/api/v1/orgs/{org_id}/alarmtemplates/{alarmtemplate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3236,7 +3236,7 @@ export def "orgs-alarmtemplates get" [
 # PUT /api/v1/orgs/{org_id}/alarmtemplates/{alarmtemplate_id}
 # operationId: updateOrgAlarmTemplate
 # --delivery shape: {additional_emails?: list, enabled: bool, to_org_admins?: bool, to_site_admins?: bool}
-export def "orgs-alarmtemplates updateOrgAlarmTemplate" [
+export def "orgs-alarmtemplates update" [
   org_id: string
   alarmtemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3254,8 +3254,8 @@ export def "orgs-alarmtemplates updateOrgAlarmTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/alarmtemplates/($alarmtemplate_id)")
-  let body = {delivery: $delivery, name: $name, rules: $rules} | compact
+  let full_url = (build-url $base ({org_id: $org_id, alarmtemplate_id: $alarmtemplate_id} | format pattern "/api/v1/orgs/{org_id}/alarmtemplates/{alarmtemplate_id}"))
+  let body = {"delivery": $delivery, "name": $name, "rules": $rules} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3279,7 +3279,7 @@ export def "orgs-apitokens list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/apitokens")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/apitokens"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3290,7 +3290,7 @@ export def "orgs-apitokens list" [
 # POST /api/v1/orgs/{org_id}/apitokens
 # operationId: createOrgApiToken
 # --privileges item shape: {role: "admin"|"write"|"read", scope: "site"|"org"|"sitegroup", site_id: string, sitegroup_id?: string}
-export def "orgs-apitokens createOrgApiToken" [
+export def "orgs-apitokens create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3306,8 +3306,8 @@ export def "orgs-apitokens createOrgApiToken" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/apitokens")
-  let body = {name: $name, privileges: $privileges} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/apitokens"))
+  let body = {"name": $name, "privileges": $privileges} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3332,7 +3332,7 @@ export def "orgs-apitokens delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/apitokens/($apitoken_id)")
+  let full_url = (build-url $base ({org_id: $org_id, apitoken_id: $apitoken_id} | format pattern "/api/v1/orgs/{org_id}/apitokens/{apitoken_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3356,7 +3356,7 @@ export def "orgs-apitokens get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/apitokens/($apitoken_id)")
+  let full_url = (build-url $base ({org_id: $org_id, apitoken_id: $apitoken_id} | format pattern "/api/v1/orgs/{org_id}/apitokens/{apitoken_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3367,7 +3367,7 @@ export def "orgs-apitokens get" [
 # PUT /api/v1/orgs/{org_id}/apitokens/{apitoken_id}
 # operationId: updateOrgApiToken
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list, views?: list}
-export def "orgs-apitokens updateOrgApiToken" [
+export def "orgs-apitokens update" [
   org_id: string
   apitoken_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3385,8 +3385,8 @@ export def "orgs-apitokens updateOrgApiToken" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/apitokens/($apitoken_id)")
-  let body = {created_by: $created_by, name: $name, privileges: $privileges} | compact
+  let full_url = (build-url $base ({org_id: $org_id, apitoken_id: $apitoken_id} | format pattern "/api/v1/orgs/{org_id}/apitokens/{apitoken_id}"))
+  let body = {"created_by": $created_by, "name": $name, "privileges": $privileges} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3410,7 +3410,7 @@ export def "orgs-aptemplates list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/aptemplates")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/aptemplates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3422,7 +3422,7 @@ export def "orgs-aptemplates list" [
 # operationId: createOrgAptemplate
 # --ap_matching shape: {enabled?: bool, rules?: list}
 # --wifi shape: {cisco_enabled?: bool, disable_11k?: bool, disable_radios_when_power_constrained?: bool, enable_arp_spoof?: bool, enable_shared_radio_scanning?: bool, enabled?: bool, locate_connected?: bool, locate_unconnected?: bool, mesh_allow_dfs?: bool, mesh_enable_crm?: bool, mesh_enabled?: bool, proxy_arp?: bool}
-export def "orgs-aptemplates createOrgAptemplate" [
+export def "orgs-aptemplates create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3438,8 +3438,8 @@ export def "orgs-aptemplates createOrgAptemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/aptemplates")
-  let body = {ap_matching: $ap_matching, wifi: $wifi} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/aptemplates"))
+  let body = {"ap_matching": $ap_matching, "wifi": $wifi} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3464,7 +3464,7 @@ export def "orgs-aptemplates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/aptemplates/($aptemplate_id)")
+  let full_url = (build-url $base ({org_id: $org_id, aptemplate_id: $aptemplate_id} | format pattern "/api/v1/orgs/{org_id}/aptemplates/{aptemplate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3488,7 +3488,7 @@ export def "orgs-aptemplates get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/aptemplates/($aptemplate_id)")
+  let full_url = (build-url $base ({org_id: $org_id, aptemplate_id: $aptemplate_id} | format pattern "/api/v1/orgs/{org_id}/aptemplates/{aptemplate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3500,7 +3500,7 @@ export def "orgs-aptemplates get" [
 # operationId: updateOrgAptemplate
 # --ap_matching shape: {enabled?: bool, rules?: list}
 # --wifi shape: {cisco_enabled?: bool, disable_11k?: bool, disable_radios_when_power_constrained?: bool, enable_arp_spoof?: bool, enable_shared_radio_scanning?: bool, enabled?: bool, locate_connected?: bool, locate_unconnected?: bool, mesh_allow_dfs?: bool, mesh_enable_crm?: bool, mesh_enabled?: bool, proxy_arp?: bool}
-export def "orgs-aptemplates updateOrgAptemplate" [
+export def "orgs-aptemplates update" [
   org_id: string
   aptemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3517,8 +3517,8 @@ export def "orgs-aptemplates updateOrgAptemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/aptemplates/($aptemplate_id)")
-  let body = {ap_matching: $ap_matching, wifi: $wifi} | compact
+  let full_url = (build-url $base ({org_id: $org_id, aptemplate_id: $aptemplate_id} | format pattern "/api/v1/orgs/{org_id}/aptemplates/{aptemplate_id}"))
+  let body = {"ap_matching": $ap_matching, "wifi": $wifi} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3542,7 +3542,7 @@ export def "orgs-assetfilters list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/assetfilters")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/assetfilters"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3552,7 +3552,7 @@ export def "orgs-assetfilters list" [
 #
 # POST /api/v1/orgs/{org_id}/assetfilters
 # operationId: createOrgAssetFilters
-export def "orgs-assetfilters createOrgAssetFilters" [
+export def "orgs-assetfilters create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3577,8 +3577,8 @@ export def "orgs-assetfilters createOrgAssetFilters" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/assetfilters")
-  let body = {ap_mac: $ap_mac, beam: $beam, disasbled: $disasbled, eddystone_uid_namespace: $eddystone_uid_namespace, eddystone_url: $eddystone_url, ibeacon_major: $ibeacon_major, ibeacon_uuid: $ibeacon_uuid, mfg_company_id: $mfg_company_id, name: $name, rssi: $rssi, service_uuid: $service_uuid} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/assetfilters"))
+  let body = {"ap_mac": $ap_mac, "beam": $beam, "disasbled": $disasbled, "eddystone_uid_namespace": $eddystone_uid_namespace, "eddystone_url": $eddystone_url, "ibeacon_major": $ibeacon_major, "ibeacon_uuid": $ibeacon_uuid, "mfg_company_id": $mfg_company_id, "name": $name, "rssi": $rssi, "service_uuid": $service_uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3603,7 +3603,7 @@ export def "orgs-assetfilters delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/assetfilters/($assetfilter_id)")
+  let full_url = (build-url $base ({org_id: $org_id, assetfilter_id: $assetfilter_id} | format pattern "/api/v1/orgs/{org_id}/assetfilters/{assetfilter_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3627,7 +3627,7 @@ export def "orgs-assetfilters get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/assetfilters/($assetfilter_id)")
+  let full_url = (build-url $base ({org_id: $org_id, assetfilter_id: $assetfilter_id} | format pattern "/api/v1/orgs/{org_id}/assetfilters/{assetfilter_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3637,7 +3637,7 @@ export def "orgs-assetfilters get" [
 #
 # PUT /api/v1/orgs/{org_id}/assetfilters/{assetfilter_id}
 # operationId: updateOrgAssetFilters
-export def "orgs-assetfilters updateOrgAssetFilters" [
+export def "orgs-assetfilters update" [
   org_id: string
   assetfilter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3663,8 +3663,8 @@ export def "orgs-assetfilters updateOrgAssetFilters" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/assetfilters/($assetfilter_id)")
-  let body = {ap_mac: $ap_mac, beam: $beam, disasbled: $disasbled, eddystone_uid_namespace: $eddystone_uid_namespace, eddystone_url: $eddystone_url, ibeacon_major: $ibeacon_major, ibeacon_uuid: $ibeacon_uuid, mfg_company_id: $mfg_company_id, name: $name, rssi: $rssi, service_uuid: $service_uuid} | compact
+  let full_url = (build-url $base ({org_id: $org_id, assetfilter_id: $assetfilter_id} | format pattern "/api/v1/orgs/{org_id}/assetfilters/{assetfilter_id}"))
+  let body = {"ap_mac": $ap_mac, "beam": $beam, "disasbled": $disasbled, "eddystone_uid_namespace": $eddystone_uid_namespace, "eddystone_url": $eddystone_url, "ibeacon_major": $ibeacon_major, "ibeacon_uuid": $ibeacon_uuid, "mfg_company_id": $mfg_company_id, "name": $name, "rssi": $rssi, "service_uuid": $service_uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3688,7 +3688,7 @@ export def "orgs-assets list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/assets")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/assets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3698,7 +3698,7 @@ export def "orgs-assets list" [
 #
 # POST /api/v1/orgs/{org_id}/assets
 # operationId: createOrgAsset
-export def "orgs-assets createOrgAsset" [
+export def "orgs-assets create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3716,8 +3716,8 @@ export def "orgs-assets createOrgAsset" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/assets")
-  let body = {mac: $mac, map_id: $map_id, name: $name, tag_id: $tag_id} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/assets"))
+  let body = {"mac": $mac, "map_id": $map_id, "name": $name, "tag_id": $tag_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3728,7 +3728,7 @@ export def "orgs-assets createOrgAsset" [
 #
 # POST /api/v1/orgs/{org_id}/assets/import
 # operationId: importOrgAssets
-export def "orgs-assets-import importOrgAssets" [
+export def "orgs-assets-import import" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3743,7 +3743,7 @@ export def "orgs-assets-import importOrgAssets" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/assets/import")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/assets/import"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3768,7 +3768,7 @@ export def "orgs-assets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/assets/($asset_id)")
+  let full_url = (build-url $base ({org_id: $org_id, asset_id: $asset_id} | format pattern "/api/v1/orgs/{org_id}/assets/{asset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3792,7 +3792,7 @@ export def "orgs-assets get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/assets/($asset_id)")
+  let full_url = (build-url $base ({org_id: $org_id, asset_id: $asset_id} | format pattern "/api/v1/orgs/{org_id}/assets/{asset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3802,7 +3802,7 @@ export def "orgs-assets get" [
 #
 # PUT /api/v1/orgs/{org_id}/assets/{asset_id}
 # operationId: updateOrgAsset
-export def "orgs-assets updateOrgAsset" [
+export def "orgs-assets update" [
   org_id: string
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3821,8 +3821,8 @@ export def "orgs-assets updateOrgAsset" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/assets/($asset_id)")
-  let body = {mac: $mac, map_id: $map_id, name: $name, tag_id: $tag_id} | compact
+  let full_url = (build-url $base ({org_id: $org_id, asset_id: $asset_id} | format pattern "/api/v1/orgs/{org_id}/assets/{asset_id}"))
+  let body = {"mac": $mac, "map_id": $map_id, "name": $name, "tag_id": $tag_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3848,7 +3848,7 @@ export def "orgs-call-events-count countOrgCallEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/call/events/count" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/call/events/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3858,7 +3858,7 @@ export def "orgs-call-events-count countOrgCallEvents" [
 #
 # GET /api/v1/orgs/{org_id}/call/events/search
 # operationId: searchOrgCallEvents
-export def "orgs-call-events-search searchOrgCallEvents" [
+export def "orgs-call-events-search list" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3876,7 +3876,7 @@ export def "orgs-call-events-search searchOrgCallEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "app" $app "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/call/events/search" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/call/events/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3886,7 +3886,7 @@ export def "orgs-call-events-search searchOrgCallEvents" [
 #
 # GET /api/v1/orgs/{org_id}/cert
 # operationId: getOrgCertificates
-export def "orgs-cert get" [
+export def "orgs-cert get-org-certificates" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3899,7 +3899,7 @@ export def "orgs-cert get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/cert")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/cert"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3922,7 +3922,7 @@ export def "orgs-cert-regenerate clearOrgCertificates" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/cert/regenerate")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/cert/regenerate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3948,8 +3948,8 @@ export def "orgs-claim claimOrgLicense" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/claim")
-  let body = {code: $code, type: $type} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/claim"))
+  let body = {"code": $code, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3979,7 +3979,7 @@ export def "orgs-clients-count countOrgClientsWireless" [
   --ap: string # AP mac where the client has connected to
   --vlan: string # vlan
   --ssid: string # SSID
-  --ip address: string # format: ipv4, e.g. 192.168.1.1
+  --ip-address: string # format: ipv4, e.g. 192.168.1.1
   --page: int # default: 1
   --limit: int # default: 100
   --start: int # default: 0
@@ -3988,8 +3988,8 @@ export def "orgs-clients-count countOrgClientsWireless" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "hostname" $hostname "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "os" $os "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "ip address" $ip address "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/clients/count" $qp)
+  let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "hostname" $hostname "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "os" $os "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "ip address" $ip_address "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/clients/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3999,7 +3999,7 @@ export def "orgs-clients-count countOrgClientsWireless" [
 #
 # GET /api/v1/orgs/{org_id}/clients/events/search
 # operationId: searchOrgClientsEvents
-export def "orgs-clients-events-search searchOrgClientsEvents" [
+export def "orgs-clients-events-search list" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4024,7 +4024,7 @@ export def "orgs-clients-events-search searchOrgClientsEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "reason_code" $reason_code "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "proto" $proto "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "wlan_id" $wlan_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/clients/events/search" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/clients/events/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4034,7 +4034,7 @@ export def "orgs-clients-events-search searchOrgClientsEvents" [
 #
 # GET /api/v1/orgs/{org_id}/clients/search
 # operationId: searchOrgClientsWireless
-export def "orgs-clients-search searchOrgClientsWireless" [
+export def "orgs-clients-search list-org-clients-wireless" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4046,7 +4046,7 @@ export def "orgs-clients-search searchOrgClientsWireless" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --site-id: string # Site ID
   --mac: string # partial / full MAC address
-  --ip address: string # format: ipv4, e.g. 192.168.1.1
+  --ip-address: string # format: ipv4, e.g. 192.168.1.1
   --hostname: string # partial / full hostname
   --device: string # device type, e.g. Mac, Nvidia, iPhone
   --os: string # os, e.g. Sierra, Yosemite, Windows 10
@@ -4064,8 +4064,8 @@ export def "orgs-clients-search searchOrgClientsWireless" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "site_id" $site_id "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "ip address" $ip address "scalar") (serialize-qp "hostname" $hostname "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "os" $os "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "psk_id" $psk_id "scalar") (serialize-qp "psk_name" $psk_name "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/clients/search" $qp)
+  let qp = [(serialize-qp "site_id" $site_id "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "ip address" $ip_address "scalar") (serialize-qp "hostname" $hostname "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "os" $os "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "psk_id" $psk_id "scalar") (serialize-qp "psk_name" $psk_name "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/clients/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4103,7 +4103,7 @@ export def "orgs-clients-sessions-count countOrgWirelessClientsSessions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "client_family" $client_family "scalar") (serialize-qp "client_manufacture" $client_manufacture "scalar") (serialize-qp "client_model" $client_model "scalar") (serialize-qp "client_os" $client_os "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "wlan_id" $wlan_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/clients/sessions/count" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/clients/sessions/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4113,7 +4113,7 @@ export def "orgs-clients-sessions-count countOrgWirelessClientsSessions" [
 #
 # GET /api/v1/orgs/{org_id}/clients/sessions/search
 # operationId: searchOrgClientWirelessSessions
-export def "orgs-clients-sessions-search searchOrgClientWirelessSessions" [
+export def "orgs-clients-sessions-search list-org-client-wireless" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4142,7 +4142,7 @@ export def "orgs-clients-sessions-search searchOrgClientWirelessSessions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ap" $ap "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "client_family" $client_family "scalar") (serialize-qp "client_manufacture" $client_manufacture "scalar") (serialize-qp "client_model" $client_model "scalar") (serialize-qp "client_username" $client_username "scalar") (serialize-qp "client_os" $client_os "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "wlan_id" $wlan_id "scalar") (serialize-qp "psk_id" $psk_id "scalar") (serialize-qp "psk_name" $psk_name "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/clients/sessions/search" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/clients/sessions/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4152,7 +4152,7 @@ export def "orgs-clients-sessions-search searchOrgClientWirelessSessions" [
 #
 # POST /api/v1/orgs/{org_id}/clone
 # operationId: cloneOrg
-export def "orgs-clone cloneOrg" [
+export def "orgs-clone clone" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4167,8 +4167,8 @@ export def "orgs-clone cloneOrg" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/clone")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/clone"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4179,7 +4179,7 @@ export def "orgs-clone cloneOrg" [
 #
 # GET /api/v1/orgs/{org_id}/crl
 # operationId: getOrgCrlFile
-export def "orgs-crl get" [
+export def "orgs-crl get-org-crl-file" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4192,7 +4192,7 @@ export def "orgs-crl get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/crl")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/crl"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4217,8 +4217,8 @@ export def "orgs-crl-truncate truncateOrgCrlFile" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/crl/truncate")
-  let body = {days: $days} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/crl/truncate"))
+  let body = {"days": $days} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4246,7 +4246,7 @@ export def "orgs-deviceprofiles list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/deviceprofiles" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/deviceprofiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4267,7 +4267,7 @@ export def "orgs-deviceprofiles list" [
 # --switch_config shape: {enabled?: bool, eth0?: record, eth1?: record, eth2?: record, eth3?: record, module?: record, wds?: record}
 # --usb_config shape: {cacert?: string, channel?: int, enabled?: bool, host?: string, port?: int, type?: "imagotag"|"solum"|"hanshow", verify_cert?: bool, vlan_id?: int}
 @deprecated --flag switch-config
-export def "orgs-deviceprofiles createOrgDeviceProfiles" [
+export def "orgs-deviceprofiles create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4308,8 +4308,8 @@ export def "orgs-deviceprofiles createOrgDeviceProfiles" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/deviceprofiles")
-  let body = {aeroscout: $aeroscout, ble_config: $ble_config, disable_eth1: $disable_eth1, disable_eth2: $disable_eth2, disable_eth3: $disable_eth3, disable_module: $disable_module, height: $height, iot_config: $iot_config, ip_config: $ip_config, led: $led, map_id: $map_id, mesh: $mesh, name: $name, notes: $notes, ntp_servers: $ntp_servers, orientation: $orientation, orientation_overwrite: $orientation_overwrite, poe_passthrough: $poe_passthrough, port_config: $port_config, pwr_config: $pwr_config, radio_config: $radio_config, switch_config: $switch_config, type: $type, usb_config: $usb_config, vars: $vars, x: $x, y: $y} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/deviceprofiles"))
+  let body = {"aeroscout": $aeroscout, "ble_config": $ble_config, "disable_eth1": $disable_eth1, "disable_eth2": $disable_eth2, "disable_eth3": $disable_eth3, "disable_module": $disable_module, "height": $height, "iot_config": $iot_config, "ip_config": $ip_config, "led": $led, "map_id": $map_id, "mesh": $mesh, "name": $name, "notes": $notes, "ntp_servers": $ntp_servers, "orientation": $orientation, "orientation_overwrite": $orientation_overwrite, "poe_passthrough": $poe_passthrough, "port_config": $port_config, "pwr_config": $pwr_config, "radio_config": $radio_config, "switch_config": $switch_config, "type": $type, "usb_config": $usb_config, "vars": $vars, "x": $x, "y": $y} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4334,7 +4334,7 @@ export def "orgs-deviceprofiles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/deviceprofiles/($deviceprofile_id)")
+  let full_url = (build-url $base ({org_id: $org_id, deviceprofile_id: $deviceprofile_id} | format pattern "/api/v1/orgs/{org_id}/deviceprofiles/{deviceprofile_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4358,7 +4358,7 @@ export def "orgs-deviceprofiles get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/deviceprofiles/($deviceprofile_id)")
+  let full_url = (build-url $base ({org_id: $org_id, deviceprofile_id: $deviceprofile_id} | format pattern "/api/v1/orgs/{org_id}/deviceprofiles/{deviceprofile_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4379,7 +4379,7 @@ export def "orgs-deviceprofiles get" [
 # --switch_config shape: {enabled?: bool, eth0?: record, eth1?: record, eth2?: record, eth3?: record, module?: record, wds?: record}
 # --usb_config shape: {cacert?: string, channel?: int, enabled?: bool, host?: string, port?: int, type?: "imagotag"|"solum"|"hanshow", verify_cert?: bool, vlan_id?: int}
 @deprecated --flag switch-config
-export def "orgs-deviceprofiles updateOrgDeviceProfile" [
+export def "orgs-deviceprofiles update" [
   org_id: string
   deviceprofile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4421,8 +4421,8 @@ export def "orgs-deviceprofiles updateOrgDeviceProfile" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/deviceprofiles/($deviceprofile_id)")
-  let body = {aeroscout: $aeroscout, ble_config: $ble_config, disable_eth1: $disable_eth1, disable_eth2: $disable_eth2, disable_eth3: $disable_eth3, disable_module: $disable_module, height: $height, iot_config: $iot_config, ip_config: $ip_config, led: $led, map_id: $map_id, mesh: $mesh, name: $name, notes: $notes, ntp_servers: $ntp_servers, orientation: $orientation, orientation_overwrite: $orientation_overwrite, poe_passthrough: $poe_passthrough, port_config: $port_config, pwr_config: $pwr_config, radio_config: $radio_config, switch_config: $switch_config, type: $type, usb_config: $usb_config, vars: $vars, x: $x, y: $y} | compact
+  let full_url = (build-url $base ({org_id: $org_id, deviceprofile_id: $deviceprofile_id} | format pattern "/api/v1/orgs/{org_id}/deviceprofiles/{deviceprofile_id}"))
+  let body = {"aeroscout": $aeroscout, "ble_config": $ble_config, "disable_eth1": $disable_eth1, "disable_eth2": $disable_eth2, "disable_eth3": $disable_eth3, "disable_module": $disable_module, "height": $height, "iot_config": $iot_config, "ip_config": $ip_config, "led": $led, "map_id": $map_id, "mesh": $mesh, "name": $name, "notes": $notes, "ntp_servers": $ntp_servers, "orientation": $orientation, "orientation_overwrite": $orientation_overwrite, "poe_passthrough": $poe_passthrough, "port_config": $port_config, "pwr_config": $pwr_config, "radio_config": $radio_config, "switch_config": $switch_config, "type": $type, "usb_config": $usb_config, "vars": $vars, "x": $x, "y": $y} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4449,8 +4449,8 @@ export def "orgs-deviceprofiles-assign assignOrgDeviceProfileToDevices" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/deviceprofiles/($deviceprofile_id)/assign")
-  let body = {macs: $macs} | compact
+  let full_url = (build-url $base ({org_id: $org_id, deviceprofile_id: $deviceprofile_id} | format pattern "/api/v1/orgs/{org_id}/deviceprofiles/{deviceprofile_id}/assign"))
+  let body = {"macs": $macs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4477,8 +4477,8 @@ export def "orgs-deviceprofiles-unassign unassignOrgDeviceProfilesFromDevices" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/deviceprofiles/($deviceprofile_id)/unassign")
-  let body = {macs: $macs} | compact
+  let full_url = (build-url $base ({org_id: $org_id, deviceprofile_id: $deviceprofile_id} | format pattern "/api/v1/orgs/{org_id}/deviceprofiles/{deviceprofile_id}/unassign"))
+  let body = {"macs": $macs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4502,7 +4502,7 @@ export def "orgs-devices get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/devices")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/devices"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4528,7 +4528,7 @@ export def "orgs-devices-count countOrgDevices" [
   --model: string # device model
   --mac: string # AP mac
   --version: string # version
-  --ip address: string # format: ipv4, e.g. 192.168.1.1
+  --ip-address: string # format: ipv4, e.g. 192.168.1.1
   --mxtunnel-status: string@mxtunnel-status-completer # MxTunnel status, up / down
   --mxedge-id: string # Mist Edge id, if AP is connecting to a Mist Edge
   --lldp-system-name: string # LLDP system name
@@ -4543,8 +4543,8 @@ export def "orgs-devices-count countOrgDevices" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "hostname" $hostname "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "ip address" $ip address "scalar") (serialize-qp "mxtunnel_status" $mxtunnel_status "scalar") (serialize-qp "mxedge_id" $mxedge_id "scalar") (serialize-qp "lldp_system_name" $lldp_system_name "scalar") (serialize-qp "lldp_system_desc" $lldp_system_desc "scalar") (serialize-qp "lldp_port_id" $lldp_port_id "scalar") (serialize-qp "lldp_mgmt_addr" $lldp_mgmt_addr "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/devices/count" $qp)
+  let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "hostname" $hostname "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "ip address" $ip_address "scalar") (serialize-qp "mxtunnel_status" $mxtunnel_status "scalar") (serialize-qp "mxedge_id" $mxedge_id "scalar") (serialize-qp "lldp_system_name" $lldp_system_name "scalar") (serialize-qp "lldp_system_desc" $lldp_system_desc "scalar") (serialize-qp "lldp_port_id" $lldp_port_id "scalar") (serialize-qp "lldp_mgmt_addr" $lldp_mgmt_addr "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/devices/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4581,7 +4581,7 @@ export def "orgs-devices-events-count countOrgDevicesEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "apfw" $apfw "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/devices/events/count" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/devices/events/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4591,7 +4591,7 @@ export def "orgs-devices-events-count countOrgDevicesEvents" [
 #
 # GET /api/v1/orgs/{org_id}/devices/events/search
 # operationId: searchOrgDevicesEvents
-export def "orgs-devices-events-search searchOrgDevicesEvents" [
+export def "orgs-devices-events-search list" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4614,7 +4614,7 @@ export def "orgs-devices-events-search searchOrgDevicesEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mac" $mac "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/devices/events/search" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/devices/events/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4643,7 +4643,7 @@ export def "orgs-devices-last-config-count countOrgDeviceLastConfigs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_type" $device_type "scalar") (serialize-qp "distinct" $distinct "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/devices/last_config/count" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/devices/last_config/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4653,7 +4653,7 @@ export def "orgs-devices-last-config-count countOrgDeviceLastConfigs" [
 #
 # GET /api/v1/orgs/{org_id}/devices/last_config/search
 # operationId: searchOrgDeviceLastConfigs
-export def "orgs-devices-last-config-search searchOrgDeviceLastConfigs" [
+export def "orgs-devices-last-config-search list" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4675,7 +4675,7 @@ export def "orgs-devices-last-config-search searchOrgDeviceLastConfigs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_type" $device_type "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/devices/last_config/search" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/devices/last_config/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4685,7 +4685,7 @@ export def "orgs-devices-last-config-search searchOrgDeviceLastConfigs" [
 #
 # GET /api/v1/orgs/{org_id}/devices/radio_macs
 # operationId: getOrgApsMacs
-export def "orgs-devices-radio-macs get" [
+export def "orgs-devices-radio-macs get-org-aps" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4698,7 +4698,7 @@ export def "orgs-devices-radio-macs get" [
 ]: nothing -> table<mac: string, radio_macs: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/devices/radio_macs")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/devices/radio_macs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4708,7 +4708,7 @@ export def "orgs-devices-radio-macs get" [
 #
 # GET /api/v1/orgs/{org_id}/devices/search
 # operationId: searchOrgDevices
-export def "orgs-devices-search searchOrgDevices" [
+export def "orgs-devices-search list" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4724,7 +4724,7 @@ export def "orgs-devices-search searchOrgDevices" [
   --mac: string # AP mac
   --version: string # version
   --power-constrained: oneof<nothing, bool> # power_constrained
-  --ip address: string # format: ipv4, e.g. 192.168.1.1
+  --ip-address: string # format: ipv4, e.g. 192.168.1.1
   --mxtunnel-status: string@mxtunnel-status-completer # MxTunnel status, up / down
   --mxedge-id: string # Mist Edge id, if AP is connecting to a Mist Edge
   --lldp-system-name: string # LLDP system name
@@ -4745,8 +4745,8 @@ export def "orgs-devices-search searchOrgDevices" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hostname" $hostname "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "power_constrained" $power_constrained "scalar") (serialize-qp "ip address" $ip address "scalar") (serialize-qp "mxtunnel_status" $mxtunnel_status "scalar") (serialize-qp "mxedge_id" $mxedge_id "scalar") (serialize-qp "lldp_system_name" $lldp_system_name "scalar") (serialize-qp "lldp_system_desc" $lldp_system_desc "scalar") (serialize-qp "lldp_port_id" $lldp_port_id "scalar") (serialize-qp "lldp_mgmt_addr" $lldp_mgmt_addr "scalar") (serialize-qp "band_24_bandwith" $band_24_bandwith "scalar") (serialize-qp "band_5_bandwith" $band_5_bandwith "scalar") (serialize-qp "band_6_bandwith" $band_6_bandwith "scalar") (serialize-qp "band_24_channel" $band_24_channel "scalar") (serialize-qp "band_5_channel" $band_5_channel "scalar") (serialize-qp "band_6_channel" $band_6_channel "scalar") (serialize-qp "eth0_port_speed" $eth0_port_speed "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/devices/search" $qp)
+  let qp = [(serialize-qp "hostname" $hostname "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "power_constrained" $power_constrained "scalar") (serialize-qp "ip address" $ip_address "scalar") (serialize-qp "mxtunnel_status" $mxtunnel_status "scalar") (serialize-qp "mxedge_id" $mxedge_id "scalar") (serialize-qp "lldp_system_name" $lldp_system_name "scalar") (serialize-qp "lldp_system_desc" $lldp_system_desc "scalar") (serialize-qp "lldp_port_id" $lldp_port_id "scalar") (serialize-qp "lldp_mgmt_addr" $lldp_mgmt_addr "scalar") (serialize-qp "band_24_bandwith" $band_24_bandwith "scalar") (serialize-qp "band_5_bandwith" $band_5_bandwith "scalar") (serialize-qp "band_6_bandwith" $band_6_bandwith "scalar") (serialize-qp "band_24_channel" $band_24_channel "scalar") (serialize-qp "band_5_channel" $band_5_channel "scalar") (serialize-qp "band_6_channel" $band_6_channel "scalar") (serialize-qp "eth0_port_speed" $eth0_port_speed "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/devices/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4769,7 +4769,7 @@ export def "orgs-devices-upgrade list" [
 ]: nothing -> table<id: string, upgrades: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/devices/upgrade")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/devices/upgrade"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4813,8 +4813,8 @@ export def "orgs-devices-upgrade upgradeOrgMultiSitesDevices" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/devices/upgrade")
-  let body = {canary_phases: $canary_phases, device_ids: $device_ids, enable_p2p: $enable_p2p, force: $force, max_failure_percentage: $max_failure_percentage, max_failures: $max_failures, models: $models, p2p_cluster_size: $p2p_cluster_size, p2p_parallelism: $p2p_parallelism, reboot: $reboot, reboot_at: $reboot_at, rrm_first_batch_percentage: $rrm_first_batch_percentage, rrm_max_batch_percentage: $rrm_max_batch_percentage, rrm_mesh_upgrade: $rrm_mesh_upgrade, rrm_node_order: $rrm_node_order, rrm_slow_ramp: $rrm_slow_ramp, snapshot: $snapshot, start_time: $start_time, strategy: $strategy, version: $version} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/devices/upgrade"))
+  let body = {"canary_phases": $canary_phases, "device_ids": $device_ids, "enable_p2p": $enable_p2p, "force": $force, "max_failure_percentage": $max_failure_percentage, "max_failures": $max_failures, "models": $models, "p2p_cluster_size": $p2p_cluster_size, "p2p_parallelism": $p2p_parallelism, "reboot": $reboot, "reboot_at": $reboot_at, "rrm_first_batch_percentage": $rrm_first_batch_percentage, "rrm_max_batch_percentage": $rrm_max_batch_percentage, "rrm_mesh_upgrade": $rrm_mesh_upgrade, "rrm_node_order": $rrm_node_order, "rrm_slow_ramp": $rrm_slow_ramp, "snapshot": $snapshot, "start_time": $start_time, "strategy": $strategy, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4825,7 +4825,7 @@ export def "orgs-devices-upgrade upgradeOrgMultiSitesDevices" [
 #
 # GET /api/v1/orgs/{org_id}/devices/upgrade/{upgrade_id}
 # operationId: getOrgMultiSitesUpgrade
-export def "orgs-devices-upgrade get" [
+export def "orgs-devices-upgrade get-org-multi-sites" [
   org_id: string
   upgrade_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4839,7 +4839,7 @@ export def "orgs-devices-upgrade get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/devices/upgrade/($upgrade_id)")
+  let full_url = (build-url $base ({org_id: $org_id, upgrade_id: $upgrade_id} | format pattern "/api/v1/orgs/{org_id}/devices/upgrade/{upgrade_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4849,7 +4849,7 @@ export def "orgs-devices-upgrade get" [
 #
 # GET /api/v1/orgs/{org_id}/evpn_topologies
 # operationId: getOrgEvpnTopologies
-export def "orgs-evpn-topologies list" [
+export def "orgs-evpn-topologies get" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4862,7 +4862,7 @@ export def "orgs-evpn-topologies list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/evpn_topologies")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/evpn_topologies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4873,7 +4873,7 @@ export def "orgs-evpn-topologies list" [
 # POST /api/v1/orgs/{org_id}/evpn_topologies
 # operationId: createOrgEvpnTopology
 # --switches item shape: {deviceprofile_id?: string, esilaglinks?: list, evpn_id?: int, mac?: string, pod?: int, role?: "core"|"distribution"|"access"|"collapsed-core"|"none"|"esilag-access", site_id?: string}
-export def "orgs-evpn-topologies createOrgEvpnTopology" [
+export def "orgs-evpn-topologies create-org-evpn-topology" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4890,8 +4890,8 @@ export def "orgs-evpn-topologies createOrgEvpnTopology" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/evpn_topologies")
-  let body = {name: $name, pod_names: $pod_names, switches: $switches} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/evpn_topologies"))
+  let body = {"name": $name, "pod_names": $pod_names, "switches": $switches} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4902,7 +4902,7 @@ export def "orgs-evpn-topologies createOrgEvpnTopology" [
 #
 # DELETE /api/v1/orgs/{org_id}/evpn_topologies/{evpn_topology_id}
 # operationId: deleteOrgEvpnTopology
-export def "orgs-evpn-topologies delete" [
+export def "orgs-evpn-topologies delete-org-evpn-topology" [
   org_id: string
   evpn_topology_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4916,7 +4916,7 @@ export def "orgs-evpn-topologies delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/evpn_topologies/($evpn_topology_id)")
+  let full_url = (build-url $base ({org_id: $org_id, evpn_topology_id: $evpn_topology_id} | format pattern "/api/v1/orgs/{org_id}/evpn_topologies/{evpn_topology_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4926,7 +4926,7 @@ export def "orgs-evpn-topologies delete" [
 #
 # GET /api/v1/orgs/{org_id}/evpn_topologies/{evpn_topology_id}
 # operationId: getOrgEvpnTolopogy
-export def "orgs-evpn-topologies get" [
+export def "orgs-evpn-topologies get-org-evpn-tolopogy" [
   org_id: string
   evpn_topology_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4940,7 +4940,7 @@ export def "orgs-evpn-topologies get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/evpn_topologies/($evpn_topology_id)")
+  let full_url = (build-url $base ({org_id: $org_id, evpn_topology_id: $evpn_topology_id} | format pattern "/api/v1/orgs/{org_id}/evpn_topologies/{evpn_topology_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4951,7 +4951,7 @@ export def "orgs-evpn-topologies get" [
 # PUT /api/v1/orgs/{org_id}/evpn_topologies/{evpn_topology_id}
 # operationId: updateOrgEvpnTopology
 # --switches item shape: {deviceprofile_id?: string, esilaglinks?: list, evpn_id?: int, mac?: string, pod?: int, role?: "core"|"distribution"|"access"|"collapsed-core"|"none"|"esilag-access", site_id?: string}
-export def "orgs-evpn-topologies updateOrgEvpnTopology" [
+export def "orgs-evpn-topologies update-org-evpn-topology" [
   org_id: string
   evpn_topology_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4969,8 +4969,8 @@ export def "orgs-evpn-topologies updateOrgEvpnTopology" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/evpn_topologies/($evpn_topology_id)")
-  let body = {name: $name, pod_names: $pod_names, switches: $switches} | compact
+  let full_url = (build-url $base ({org_id: $org_id, evpn_topology_id: $evpn_topology_id} | format pattern "/api/v1/orgs/{org_id}/evpn_topologies/{evpn_topology_id}"))
+  let body = {"name": $name, "pod_names": $pod_names, "switches": $switches} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4994,7 +4994,7 @@ export def "orgs-gatewaytemplates list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/gatewaytemplates")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/gatewaytemplates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5007,7 +5007,7 @@ export def "orgs-gatewaytemplates list" [
 # --gateway_matching shape: {enable?: bool, rules?: list}
 # --oob_ip_config shape: {dns?: list, dns_suffix?: list, gateway?: string, ip?: string, netmask?: string, network?: string, type?: "static"|"dynamic", use_mgmt_vrf?: bool, use_mgmt_vrf_for_host_out?: bool}
 # --service_policies item shape: {action?: "allow"|"deny", ewf?: list, idp?: record, local_routing?: bool, name?: string, path_preferences?: string, servicepolicy_id?: string, services?: list, tenants?: list}
-export def "orgs-gatewaytemplates createOrgGatewayTemplate" [
+export def "orgs-gatewaytemplates create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5036,8 +5036,8 @@ export def "orgs-gatewaytemplates createOrgGatewayTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/gatewaytemplates")
-  let body = {additional_config_cmds: $additional_config_cmds, bgp_config: $bgp_config, dhcpd_config: $dhcpd_config, extra_routes: $extra_routes, gateway_matching: $gateway_matching, ip_configs: $ip_configs, name: $name, networks: $networks, oob_ip_config: $oob_ip_config, path_preferences: $path_preferences, port_config: $port_config, routing_policies: $routing_policies, service_policies: $service_policies, tunnel_configs: $tunnel_configs, type: $type} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/gatewaytemplates"))
+  let body = {"additional_config_cmds": $additional_config_cmds, "bgp_config": $bgp_config, "dhcpd_config": $dhcpd_config, "extra_routes": $extra_routes, "gateway_matching": $gateway_matching, "ip_configs": $ip_configs, "name": $name, "networks": $networks, "oob_ip_config": $oob_ip_config, "path_preferences": $path_preferences, "port_config": $port_config, "routing_policies": $routing_policies, "service_policies": $service_policies, "tunnel_configs": $tunnel_configs, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5062,7 +5062,7 @@ export def "orgs-gatewaytemplates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/gatewaytemplates/($gatewaytemplate_id)")
+  let full_url = (build-url $base ({org_id: $org_id, gatewaytemplate_id: $gatewaytemplate_id} | format pattern "/api/v1/orgs/{org_id}/gatewaytemplates/{gatewaytemplate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5086,7 +5086,7 @@ export def "orgs-gatewaytemplates get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/gatewaytemplates/($gatewaytemplate_id)")
+  let full_url = (build-url $base ({org_id: $org_id, gatewaytemplate_id: $gatewaytemplate_id} | format pattern "/api/v1/orgs/{org_id}/gatewaytemplates/{gatewaytemplate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5099,7 +5099,7 @@ export def "orgs-gatewaytemplates get" [
 # --gateway_matching shape: {enable?: bool, rules?: list}
 # --oob_ip_config shape: {dns?: list, dns_suffix?: list, gateway?: string, ip?: string, netmask?: string, network?: string, type?: "static"|"dynamic", use_mgmt_vrf?: bool, use_mgmt_vrf_for_host_out?: bool}
 # --service_policies item shape: {action?: "allow"|"deny", ewf?: list, idp?: record, local_routing?: bool, name?: string, path_preferences?: string, servicepolicy_id?: string, services?: list, tenants?: list}
-export def "orgs-gatewaytemplates updateOrgGatewayTemplate" [
+export def "orgs-gatewaytemplates update" [
   org_id: string
   gatewaytemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5129,8 +5129,8 @@ export def "orgs-gatewaytemplates updateOrgGatewayTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/gatewaytemplates/($gatewaytemplate_id)")
-  let body = {additional_config_cmds: $additional_config_cmds, bgp_config: $bgp_config, dhcpd_config: $dhcpd_config, extra_routes: $extra_routes, gateway_matching: $gateway_matching, ip_configs: $ip_configs, name: $name, networks: $networks, oob_ip_config: $oob_ip_config, path_preferences: $path_preferences, port_config: $port_config, routing_policies: $routing_policies, service_policies: $service_policies, tunnel_configs: $tunnel_configs, type: $type} | compact
+  let full_url = (build-url $base ({org_id: $org_id, gatewaytemplate_id: $gatewaytemplate_id} | format pattern "/api/v1/orgs/{org_id}/gatewaytemplates/{gatewaytemplate_id}"))
+  let body = {"additional_config_cmds": $additional_config_cmds, "bgp_config": $bgp_config, "dhcpd_config": $dhcpd_config, "extra_routes": $extra_routes, "gateway_matching": $gateway_matching, "ip_configs": $ip_configs, "name": $name, "networks": $networks, "oob_ip_config": $oob_ip_config, "path_preferences": $path_preferences, "port_config": $port_config, "routing_policies": $routing_policies, "service_policies": $service_policies, "tunnel_configs": $tunnel_configs, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5141,7 +5141,7 @@ export def "orgs-gatewaytemplates updateOrgGatewayTemplate" [
 #
 # GET /api/v1/orgs/{org_id}/guests
 # operationId: getOrgGuestAuthorizations
-export def "orgs-guests list" [
+export def "orgs-guests get-org-guest-authorizations" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5154,7 +5154,7 @@ export def "orgs-guests list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/guests")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/guests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5184,7 +5184,7 @@ export def "orgs-guests-count countOrgGuestAuthorizations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/guests/count" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/guests/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5194,7 +5194,7 @@ export def "orgs-guests-count countOrgGuestAuthorizations" [
 #
 # GET /api/v1/orgs/{org_id}/guests/search
 # operationId: searchOrgGuestAuthorization
-export def "orgs-guests-search searchOrgGuestAuthorization" [
+export def "orgs-guests-search list-org-guest-authorization" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5215,7 +5215,7 @@ export def "orgs-guests-search searchOrgGuestAuthorization" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "wlan_id" $wlan_id "scalar") (serialize-qp "auth_method" $auth_method "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/guests/search" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/guests/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5225,7 +5225,7 @@ export def "orgs-guests-search searchOrgGuestAuthorization" [
 #
 # DELETE /api/v1/orgs/{org_id}/guests/{guest_mac}
 # operationId: deleteOrgGuestAuthorization
-export def "orgs-guests delete" [
+export def "orgs-guests delete-org-guest-authorization" [
   org_id: string
   guest_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5239,7 +5239,7 @@ export def "orgs-guests delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/guests/($guest_mac)")
+  let full_url = (build-url $base ({org_id: $org_id, guest_mac: $guest_mac} | format pattern "/api/v1/orgs/{org_id}/guests/{guest_mac}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5249,7 +5249,7 @@ export def "orgs-guests delete" [
 #
 # GET /api/v1/orgs/{org_id}/guests/{guest_mac}
 # operationId: getOrgGuestAuthorization
-export def "orgs-guests get" [
+export def "orgs-guests get-org-guest-authorization" [
   org_id: string
   guest_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5263,7 +5263,7 @@ export def "orgs-guests get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/guests/($guest_mac)")
+  let full_url = (build-url $base ({org_id: $org_id, guest_mac: $guest_mac} | format pattern "/api/v1/orgs/{org_id}/guests/{guest_mac}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5273,7 +5273,7 @@ export def "orgs-guests get" [
 #
 # PUT /api/v1/orgs/{org_id}/guests/{guest_mac}
 # operationId: updateOrgGuestAuthorization
-export def "orgs-guests updateOrgGuestAuthorization" [
+export def "orgs-guests update-org-guest-authorization" [
   org_id: string
   guest_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5300,8 +5300,8 @@ export def "orgs-guests updateOrgGuestAuthorization" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/guests/($guest_mac)")
-  let body = {authorized: $authorized, authorized_expiring_time: $authorized_expiring_time, authorized_time: $authorized_time, company: $company, email: $email, field1: $field1, field2: $field2, field3: $field3, field4: $field4, mac: $mac, minutes: $minutes, name: $name} | compact
+  let full_url = (build-url $base ({org_id: $org_id, guest_mac: $guest_mac} | format pattern "/api/v1/orgs/{org_id}/guests/{guest_mac}"))
+  let body = {"authorized": $authorized, "authorized_expiring_time": $authorized_expiring_time, "authorized_time": $authorized_time, "company": $company, "email": $email, "field1": $field1, "field2": $field2, "field3": $field3, "field4": $field4, "mac": $mac, "minutes": $minutes, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5333,7 +5333,7 @@ export def "orgs-insights-sites-sle get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sle" $sle "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/insights/sites-sle" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/insights/sites-sle") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5343,7 +5343,7 @@ export def "orgs-insights-sites-sle get" [
 #
 # GET /api/v1/orgs/{org_id}/insights/{metric}
 # operationId: getOrgSle
-export def "orgs-insights get" [
+export def "orgs-insights get-org-sle" [
   org_id: any
   metric: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -5363,7 +5363,7 @@ export def "orgs-insights get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sle" $sle "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/insights/($metric)" $qp)
+  let full_url = (build-url $base ({org_id: $org_id, metric: $metric} | format pattern "/api/v1/orgs/{org_id}/insights/{metric}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5397,7 +5397,7 @@ export def "orgs-inventory get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "serial" $serial "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "vc_mac" $vc_mac "scalar") (serialize-qp "vc" $vc "scalar") (serialize-qp "unassigned" $unassigned "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/inventory" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/inventory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5407,7 +5407,7 @@ export def "orgs-inventory get" [
 #
 # POST /api/v1/orgs/{org_id}/inventory
 # operationId: addOrgInventory
-export def "orgs-inventory addOrgInventory" [
+export def "orgs-inventory create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5422,7 +5422,7 @@ export def "orgs-inventory addOrgInventory" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/inventory")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/inventory"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5433,7 +5433,7 @@ export def "orgs-inventory addOrgInventory" [
 #
 # PUT /api/v1/orgs/{org_id}/inventory
 # operationId: updateOrgInventoryAssignment
-export def "orgs-inventory updateOrgInventoryAssignment" [
+export def "orgs-inventory update-org-inventory-assignment" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5454,8 +5454,8 @@ export def "orgs-inventory updateOrgInventoryAssignment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/inventory")
-  let body = {disable_auto_config: $disable_auto_config, macs: $macs, managed: $managed, no_reassign: $no_reassign, op: $op, serials: $serials, site_id: $site_id} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/inventory"))
+  let body = {"disable_auto_config": $disable_auto_config, "macs": $macs, "managed": $managed, "no_reassign": $no_reassign, "op": $op, "serials": $serials, "site_id": $site_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5481,7 +5481,7 @@ export def "orgs-inventory-reevaluate-auto-assignment reevaluateOrgAutoAssignmen
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/inventory/reevaluate_auto_assignment")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/inventory/reevaluate_auto_assignment"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5492,7 +5492,7 @@ export def "orgs-inventory-reevaluate-auto-assignment reevaluateOrgAutoAssignmen
 #
 # POST /api/v1/orgs/{org_id}/inventory/replace
 # operationId: replaceOrgDevices
-export def "orgs-inventory-replace replaceOrgDevices" [
+export def "orgs-inventory-replace update-org-devices" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5510,8 +5510,8 @@ export def "orgs-inventory-replace replaceOrgDevices" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/inventory/replace")
-  let body = {discard: $discard, inventory_mac: $inventory_mac, mac: $mac, site_id: $site_id} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/inventory/replace"))
+  let body = {"discard": $discard, "inventory_mac": $inventory_mac, "mac": $mac, "site_id": $site_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5543,8 +5543,8 @@ export def "orgs-invites inviteOrgAdmin" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/invites")
-  let body = {email: $email, first_name: $first_name, hours: $hours, last_name: $last_name, phone: $phone, phone2: $phone2} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/invites"))
+  let body = {"email": $email, "first_name": $first_name, "hours": $hours, "last_name": $last_name, "phone": $phone, "phone2": $phone2} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5569,7 +5569,7 @@ export def "orgs-invites uninviteOrgAdmin" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/invites/($invite_id)")
+  let full_url = (build-url $base ({org_id: $org_id, invite_id: $invite_id} | format pattern "/api/v1/orgs/{org_id}/invites/{invite_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5580,7 +5580,7 @@ export def "orgs-invites uninviteOrgAdmin" [
 # PUT /api/v1/orgs/{org_id}/invites/{invite_id}
 # operationId: updateOrgAdminInvite
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list, views?: list}
-export def "orgs-invites updateOrgAdminInvite" [
+export def "orgs-invites update-org-admin" [
   org_id: string
   invite_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5601,8 +5601,8 @@ export def "orgs-invites updateOrgAdminInvite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/invites/($invite_id)")
-  let body = {email: $email, first_name: $first_name, hours: $hours, last_name: $last_name, phone: $phone, phone2: $phone2} | compact
+  let full_url = (build-url $base ({org_id: $org_id, invite_id: $invite_id} | format pattern "/api/v1/orgs/{org_id}/invites/{invite_id}"))
+  let body = {"email": $email, "first_name": $first_name, "hours": $hours, "last_name": $last_name, "phone": $phone, "phone2": $phone2} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5632,7 +5632,7 @@ export def "orgs-jsi-devices get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "serial" $serial "scalar") (serialize-qp "mac" $mac "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/jsi/devices" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/jsi/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5655,7 +5655,7 @@ export def "orgs-jsi-devices-outbound-ssh-cmd adoptOrgJsiDevice" [
 ]: nothing -> record<cmd: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/jsi/devices/outbound_ssh_cmd")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/jsi/devices/outbound_ssh_cmd"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5665,7 +5665,7 @@ export def "orgs-jsi-devices-outbound-ssh-cmd adoptOrgJsiDevice" [
 #
 # POST /api/v1/orgs/{org_id}/jsi/devices/{device_mac}/shell
 # operationId: createOrgJsiDeviceShellSession
-export def "orgs-jsi-devices-shell createOrgJsiDeviceShellSession" [
+export def "orgs-jsi-devices-shell create-org-jsi-device-shell-session" [
   org_id: string
   device_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5679,7 +5679,7 @@ export def "orgs-jsi-devices-shell createOrgJsiDeviceShellSession" [
 ]: nothing -> record<session: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/jsi/devices/($device_mac)/shell")
+  let full_url = (build-url $base ({org_id: $org_id, device_mac: $device_mac} | format pattern "/api/v1/orgs/{org_id}/jsi/devices/{device_mac}/shell"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5705,8 +5705,8 @@ export def "orgs-jsi-devices-upgrade upgradeOrgJsiDevice" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/jsi/devices/($device_mac)/upgrade")
-  let body = {version: $version} | compact
+  let full_url = (build-url $base ({org_id: $org_id, device_mac: $device_mac} | format pattern "/api/v1/orgs/{org_id}/jsi/devices/{device_mac}/upgrade"))
+  let body = {"version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5717,7 +5717,7 @@ export def "orgs-jsi-devices-upgrade upgradeOrgJsiDevice" [
 #
 # GET /api/v1/orgs/{org_id}/jsi/inventory
 # operationId: getOrgJsiPastPurchases
-export def "orgs-jsi-inventory get" [
+export def "orgs-jsi-inventory get-org-jsi-past-purchases" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5735,7 +5735,7 @@ export def "orgs-jsi-inventory get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "serial" $serial "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/jsi/inventory" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/jsi/inventory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5747,7 +5747,7 @@ export def "orgs-jsi-inventory get" [
 # DEPRECATED
 # operationId: getOrgJunosDevicesRegistrationCommands
 @deprecated
-export def "orgs-junos-register-cmd get" [
+export def "orgs-junos-register-cmd get-org-junos-devices-registration-commands" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5760,7 +5760,7 @@ export def "orgs-junos-register-cmd get" [
 ]: nothing -> record<registration_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/junos/register_cmd")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/junos/register_cmd"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5770,7 +5770,7 @@ export def "orgs-junos-register-cmd get" [
 #
 # GET /api/v1/orgs/{org_id}/licenses
 # operationId: getOrgLicencesSummary
-export def "orgs-licenses get" [
+export def "orgs-licenses get-org-licences-summary" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5783,7 +5783,7 @@ export def "orgs-licenses get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/licenses")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/licenses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5793,7 +5793,7 @@ export def "orgs-licenses get" [
 #
 # PUT /api/v1/orgs/{org_id}/licenses
 # operationId: moveOrDeleteOrgLicenseToAnotherOrg
-export def "orgs-licenses moveOrDeleteOrgLicenseToAnotherOrg" [
+export def "orgs-licenses move-or-delete-org-license-to-another" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5813,8 +5813,8 @@ export def "orgs-licenses moveOrDeleteOrgLicenseToAnotherOrg" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/licenses")
-  let body = {amendment_id: $amendment_id, dst_org_id: $dst_org_id, notes: $notes, op: $op, quantity: $quantity, subscription_id: $subscription_id} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/licenses"))
+  let body = {"amendment_id": $amendment_id, "dst_org_id": $dst_org_id, "notes": $notes, "op": $op, "quantity": $quantity, "subscription_id": $subscription_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5825,7 +5825,7 @@ export def "orgs-licenses moveOrDeleteOrgLicenseToAnotherOrg" [
 #
 # GET /api/v1/orgs/{org_id}/licenses/usages
 # operationId: getOrgLicencesBySite
-export def "orgs-licenses-usages get" [
+export def "orgs-licenses-usages get-org-licences" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5838,7 +5838,7 @@ export def "orgs-licenses-usages get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/licenses/usages")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/licenses/usages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5870,7 +5870,7 @@ export def "orgs-logs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "site_id" $site_id "scalar") (serialize-qp "admin_name" $admin_name "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/logs" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5904,7 +5904,7 @@ export def "orgs-logs-count countOrgLogsByDistinctAttributes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "admin_id" $admin_id "scalar") (serialize-qp "admin_name" $admin_name "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/logs/count" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/logs/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5915,7 +5915,7 @@ export def "orgs-logs-count countOrgLogsByDistinctAttributes" [
 # POST /api/v1/orgs/{org_id}/maps/import
 # operationId: importOrgMaps
 # --json shape: {import_all_floorpans?: bool, import_height?: bool, import_orientation?: bool, site_id: string, vendor_name: "ekahau"|"ibwave"}
-export def "orgs-maps-import importOrgMaps" [
+export def "orgs-maps-import import" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5933,8 +5933,8 @@ export def "orgs-maps-import importOrgMaps" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/maps/import")
-  let body = {auto_deviceprofile_assignment: $auto_deviceprofile_assignment, csv: $csv, file: $file, json: $json} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/maps/import"))
+  let body = {"auto_deviceprofile_assignment": $auto_deviceprofile_assignment, "csv": $csv, "file": $file, "json": $json} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5945,7 +5945,7 @@ export def "orgs-maps-import importOrgMaps" [
 #
 # GET /api/v1/orgs/{org_id}/mxclusters
 # operationId: getOrgMxEdgeClusters
-export def "orgs-mxclusters list" [
+export def "orgs-mxclusters get-org-mx-edge-clusters" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5958,7 +5958,7 @@ export def "orgs-mxclusters list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxclusters")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/mxclusters"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5975,7 +5975,7 @@ export def "orgs-mxclusters list" [
 # --radsec_tls shape: {keypair?: string}
 # --tunterm_dhcpd_config shape: {enabled?: bool, servers?: list, type?: "relay"}
 # --tunterm_monitoring item shape: {host?: string, port?: int, protocol?: "arp"|"ping"|"tcp", timeout?: int}
-export def "orgs-mxclusters createOrgMxEdgeCluster" [
+export def "orgs-mxclusters create-org-mx-edge-cluster" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6003,8 +6003,8 @@ export def "orgs-mxclusters createOrgMxEdgeCluster" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxclusters")
-  let body = {mist_das: $mist_das, mist_nac: $mist_nac, name: $name, proxy: $proxy, radsec: $radsec, radsec_tls: $radsec_tls, tunterm_ap_subnets: $tunterm_ap_subnets, tunterm_dhcpd_config: $tunterm_dhcpd_config, tunterm_extra_routes: $tunterm_extra_routes, tunterm_hosts: $tunterm_hosts, tunterm_hosts_order: $tunterm_hosts_order, tunterm_hosts_selection: $tunterm_hosts_selection, tunterm_monitoring: $tunterm_monitoring, tunterm_monitoring_disabled: $tunterm_monitoring_disabled} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/mxclusters"))
+  let body = {"mist_das": $mist_das, "mist_nac": $mist_nac, "name": $name, "proxy": $proxy, "radsec": $radsec, "radsec_tls": $radsec_tls, "tunterm_ap_subnets": $tunterm_ap_subnets, "tunterm_dhcpd_config": $tunterm_dhcpd_config, "tunterm_extra_routes": $tunterm_extra_routes, "tunterm_hosts": $tunterm_hosts, "tunterm_hosts_order": $tunterm_hosts_order, "tunterm_hosts_selection": $tunterm_hosts_selection, "tunterm_monitoring": $tunterm_monitoring, "tunterm_monitoring_disabled": $tunterm_monitoring_disabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6015,7 +6015,7 @@ export def "orgs-mxclusters createOrgMxEdgeCluster" [
 #
 # DELETE /api/v1/orgs/{org_id}/mxclusters/{mxcluster_id}
 # operationId: deleteOrgMxEdgeCluster
-export def "orgs-mxclusters delete" [
+export def "orgs-mxclusters delete-org-mx-edge-cluster" [
   org_id: string
   mxcluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6029,7 +6029,7 @@ export def "orgs-mxclusters delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxclusters/($mxcluster_id)")
+  let full_url = (build-url $base ({org_id: $org_id, mxcluster_id: $mxcluster_id} | format pattern "/api/v1/orgs/{org_id}/mxclusters/{mxcluster_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6039,7 +6039,7 @@ export def "orgs-mxclusters delete" [
 #
 # GET /api/v1/orgs/{org_id}/mxclusters/{mxcluster_id}
 # operationId: getOrgMxEdgeCluster
-export def "orgs-mxclusters get" [
+export def "orgs-mxclusters get-org-mx-edge-cluster" [
   org_id: string
   mxcluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6053,7 +6053,7 @@ export def "orgs-mxclusters get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxclusters/($mxcluster_id)")
+  let full_url = (build-url $base ({org_id: $org_id, mxcluster_id: $mxcluster_id} | format pattern "/api/v1/orgs/{org_id}/mxclusters/{mxcluster_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6070,7 +6070,7 @@ export def "orgs-mxclusters get" [
 # --radsec_tls shape: {keypair?: string}
 # --tunterm_dhcpd_config shape: {enabled?: bool, servers?: list, type?: "relay"}
 # --tunterm_monitoring item shape: {host?: string, port?: int, protocol?: "arp"|"ping"|"tcp", timeout?: int}
-export def "orgs-mxclusters updateOrgMxEdgeCluster" [
+export def "orgs-mxclusters update-org-mx-edge-cluster" [
   org_id: string
   mxcluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6099,8 +6099,8 @@ export def "orgs-mxclusters updateOrgMxEdgeCluster" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxclusters/($mxcluster_id)")
-  let body = {mist_das: $mist_das, mist_nac: $mist_nac, name: $name, proxy: $proxy, radsec: $radsec, radsec_tls: $radsec_tls, tunterm_ap_subnets: $tunterm_ap_subnets, tunterm_dhcpd_config: $tunterm_dhcpd_config, tunterm_extra_routes: $tunterm_extra_routes, tunterm_hosts: $tunterm_hosts, tunterm_hosts_order: $tunterm_hosts_order, tunterm_hosts_selection: $tunterm_hosts_selection, tunterm_monitoring: $tunterm_monitoring, tunterm_monitoring_disabled: $tunterm_monitoring_disabled} | compact
+  let full_url = (build-url $base ({org_id: $org_id, mxcluster_id: $mxcluster_id} | format pattern "/api/v1/orgs/{org_id}/mxclusters/{mxcluster_id}"))
+  let body = {"mist_das": $mist_das, "mist_nac": $mist_nac, "name": $name, "proxy": $proxy, "radsec": $radsec, "radsec_tls": $radsec_tls, "tunterm_ap_subnets": $tunterm_ap_subnets, "tunterm_dhcpd_config": $tunterm_dhcpd_config, "tunterm_extra_routes": $tunterm_extra_routes, "tunterm_hosts": $tunterm_hosts, "tunterm_hosts_order": $tunterm_hosts_order, "tunterm_hosts_selection": $tunterm_hosts_selection, "tunterm_monitoring": $tunterm_monitoring, "tunterm_monitoring_disabled": $tunterm_monitoring_disabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6128,7 +6128,7 @@ export def "orgs-mxedges list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "for_sites" $for_sites "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/mxedges") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6148,7 +6148,7 @@ export def "orgs-mxedges list" [
 # --tunterm_port_config shape: {downstream_ports?: list, separate_upstream_downstream?: bool, upstream_port_vlan_id?: int, upstream_ports?: list}
 # --tunterm_switch_config shape: {enabled?: bool}
 # --versions shape: {mxagent?: string, tuntnerm?: string}
-export def "orgs-mxedges createOrgMxEdge" [
+export def "orgs-mxedges create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6179,8 +6179,8 @@ export def "orgs-mxedges createOrgMxEdge" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges")
-  let body = {model: $model, mxcluster_id: $mxcluster_id, mxedge_mgmt: $mxedge_mgmt, name: $name, ntp_servers: $ntp_servers, oob_ip_config: $oob_ip_config, proxy: $proxy, services: $services, tunterm_dhcpd_config: $tunterm_dhcpd_config, tunterm_extra_routes: $tunterm_extra_routes, tunterm_igmp_snooping_config: $tunterm_igmp_snooping_config, tunterm_ip_config: $tunterm_ip_config, tunterm_monitoring: $tunterm_monitoring, tunterm_other_ip_configs: $tunterm_other_ip_configs, tunterm_port_config: $tunterm_port_config, tunterm_switch_config: $tunterm_switch_config, versions: $versions} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/mxedges"))
+  let body = {"model": $model, "mxcluster_id": $mxcluster_id, "mxedge_mgmt": $mxedge_mgmt, "name": $name, "ntp_servers": $ntp_servers, "oob_ip_config": $oob_ip_config, "proxy": $proxy, "services": $services, "tunterm_dhcpd_config": $tunterm_dhcpd_config, "tunterm_extra_routes": $tunterm_extra_routes, "tunterm_igmp_snooping_config": $tunterm_igmp_snooping_config, "tunterm_ip_config": $tunterm_ip_config, "tunterm_monitoring": $tunterm_monitoring, "tunterm_other_ip_configs": $tunterm_other_ip_configs, "tunterm_port_config": $tunterm_port_config, "tunterm_switch_config": $tunterm_switch_config, "versions": $versions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6207,8 +6207,8 @@ export def "orgs-mxedges-assign assignOrgMxEdgeToSite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges/assign")
-  let body = {mxedge_ids: $mxedge_ids, site_id: $site_id} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/mxedges/assign"))
+  let body = {"mxedge_ids": $mxedge_ids, "site_id": $site_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6234,8 +6234,8 @@ export def "orgs-mxedges-claim claimOrgMxEdge" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges/claim")
-  let body = {code: $code} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/mxedges/claim"))
+  let body = {"code": $code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6261,8 +6261,8 @@ export def "orgs-mxedges-unassign unassignOrgMxEdgeFromSite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges/unassign")
-  let body = {mxedge_ids: $mxedge_ids} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/mxedges/unassign"))
+  let body = {"mxedge_ids": $mxedge_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6286,7 +6286,7 @@ export def "orgs-mxedges-upgrade list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges/upgrade")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/mxedges/upgrade"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6318,8 +6318,8 @@ export def "orgs-mxedges-upgrade upgradeOrgMxEdges" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges/upgrade")
-  let body = {allow_downgrades: $allow_downgrades, channel: $channel, distro: $distro, mxedge_ids: $mxedge_ids, strategy: $strategy, versions: $versions} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/mxedges/upgrade"))
+  let body = {"allow_downgrades": $allow_downgrades, "channel": $channel, "distro": $distro, "mxedge_ids": $mxedge_ids, "strategy": $strategy, "versions": $versions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6344,7 +6344,7 @@ export def "orgs-mxedges-upgrade get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges/upgrade/($upgrade_id)")
+  let full_url = (build-url $base ({org_id: $org_id, upgrade_id: $upgrade_id} | format pattern "/api/v1/orgs/{org_id}/mxedges/upgrade/{upgrade_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6354,7 +6354,7 @@ export def "orgs-mxedges-upgrade get" [
 #
 # GET /api/v1/orgs/{org_id}/mxedges/version
 # operationId: getOrgMxEdgeUpgradeInfo
-export def "orgs-mxedges-version get" [
+export def "orgs-mxedges-version get-org-mx-edge-upgrade-info" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6369,7 +6369,7 @@ export def "orgs-mxedges-version get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "channel" $channel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges/version" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/mxedges/version") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6393,7 +6393,7 @@ export def "orgs-mxedges delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges/($mxedge_id)")
+  let full_url = (build-url $base ({org_id: $org_id, mxedge_id: $mxedge_id} | format pattern "/api/v1/orgs/{org_id}/mxedges/{mxedge_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6417,7 +6417,7 @@ export def "orgs-mxedges get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges/($mxedge_id)")
+  let full_url = (build-url $base ({org_id: $org_id, mxedge_id: $mxedge_id} | format pattern "/api/v1/orgs/{org_id}/mxedges/{mxedge_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6437,7 +6437,7 @@ export def "orgs-mxedges get" [
 # --tunterm_port_config shape: {downstream_ports?: list, separate_upstream_downstream?: bool, upstream_port_vlan_id?: int, upstream_ports?: list}
 # --tunterm_switch_config shape: {enabled?: bool}
 # --versions shape: {mxagent?: string, tuntnerm?: string}
-export def "orgs-mxedges updateOrgMxEdge" [
+export def "orgs-mxedges update" [
   org_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6469,8 +6469,8 @@ export def "orgs-mxedges updateOrgMxEdge" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges/($mxedge_id)")
-  let body = {model: $model, mxcluster_id: $mxcluster_id, mxedge_mgmt: $mxedge_mgmt, name: $name, ntp_servers: $ntp_servers, oob_ip_config: $oob_ip_config, proxy: $proxy, services: $services, tunterm_dhcpd_config: $tunterm_dhcpd_config, tunterm_extra_routes: $tunterm_extra_routes, tunterm_igmp_snooping_config: $tunterm_igmp_snooping_config, tunterm_ip_config: $tunterm_ip_config, tunterm_monitoring: $tunterm_monitoring, tunterm_other_ip_configs: $tunterm_other_ip_configs, tunterm_port_config: $tunterm_port_config, tunterm_switch_config: $tunterm_switch_config, versions: $versions} | compact
+  let full_url = (build-url $base ({org_id: $org_id, mxedge_id: $mxedge_id} | format pattern "/api/v1/orgs/{org_id}/mxedges/{mxedge_id}"))
+  let body = {"model": $model, "mxcluster_id": $mxcluster_id, "mxedge_mgmt": $mxedge_mgmt, "name": $name, "ntp_servers": $ntp_servers, "oob_ip_config": $oob_ip_config, "proxy": $proxy, "services": $services, "tunterm_dhcpd_config": $tunterm_dhcpd_config, "tunterm_extra_routes": $tunterm_extra_routes, "tunterm_igmp_snooping_config": $tunterm_igmp_snooping_config, "tunterm_ip_config": $tunterm_ip_config, "tunterm_monitoring": $tunterm_monitoring, "tunterm_other_ip_configs": $tunterm_other_ip_configs, "tunterm_port_config": $tunterm_port_config, "tunterm_switch_config": $tunterm_switch_config, "versions": $versions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6481,7 +6481,7 @@ export def "orgs-mxedges updateOrgMxEdge" [
 #
 # POST /api/v1/orgs/{org_id}/mxedges/{mxedge_id}/restart
 # operationId: restartOrgMxEdge
-export def "orgs-mxedges-restart restartOrgMxEdge" [
+export def "orgs-mxedges-restart restart" [
   org_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6495,7 +6495,7 @@ export def "orgs-mxedges-restart restartOrgMxEdge" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges/($mxedge_id)/restart")
+  let full_url = (build-url $base ({org_id: $org_id, mxedge_id: $mxedge_id} | format pattern "/api/v1/orgs/{org_id}/mxedges/{mxedge_id}/restart"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6522,8 +6522,8 @@ export def "orgs-mxedges-services-tunterm-bounce-port bounceOrgMxEdgeDataPorts" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges/($mxedge_id)/services/tunterm/bounce_port")
-  let body = {hold_time: $hold_time, ports: $ports} | compact
+  let full_url = (build-url $base ({org_id: $org_id, mxedge_id: $mxedge_id} | format pattern "/api/v1/orgs/{org_id}/mxedges/{mxedge_id}/services/tunterm/bounce_port"))
+  let body = {"hold_time": $hold_time, "ports": $ports} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6550,7 +6550,7 @@ export def "orgs-mxedges-services controlOrgMxEdgeServices" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges/($mxedge_id)/services/($name)/($action)")
+  let full_url = (build-url $base ({org_id: $org_id, mxedge_id: $mxedge_id, name: $name, action: $action} | format pattern "/api/v1/orgs/{org_id}/mxedges/{mxedge_id}/services/{name}/{action}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6560,7 +6560,7 @@ export def "orgs-mxedges-services controlOrgMxEdgeServices" [
 #
 # POST /api/v1/orgs/{org_id}/mxedges/{mxedge_id}/support
 # operationId: uploadOrgMxEdgeSupportFiles
-export def "orgs-mxedges-support uploadOrgMxEdgeSupportFiles" [
+export def "orgs-mxedges-support upload-org-mx-edge-support-files" [
   org_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6574,7 +6574,7 @@ export def "orgs-mxedges-support uploadOrgMxEdgeSupportFiles" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges/($mxedge_id)/support")
+  let full_url = (build-url $base ({org_id: $org_id, mxedge_id: $mxedge_id} | format pattern "/api/v1/orgs/{org_id}/mxedges/{mxedge_id}/support"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6584,7 +6584,7 @@ export def "orgs-mxedges-support uploadOrgMxEdgeSupportFiles" [
 #
 # POST /api/v1/orgs/{org_id}/mxedges/{mxedge_id}/unregister
 # operationId: unregisterOrgMxEdge
-export def "orgs-mxedges-unregister unregisterOrgMxEdge" [
+export def "orgs-mxedges-unregister delete" [
   org_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6598,7 +6598,7 @@ export def "orgs-mxedges-unregister unregisterOrgMxEdge" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges/($mxedge_id)/unregister")
+  let full_url = (build-url $base ({org_id: $org_id, mxedge_id: $mxedge_id} | format pattern "/api/v1/orgs/{org_id}/mxedges/{mxedge_id}/unregister"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6627,8 +6627,8 @@ export def "orgs-mxedges-upgrade upgradeOrgMxEdge" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxedges/($mxedge_id)/upgrade")
-  let body = {channel: $channel, mxedge_ids: $mxedge_ids, versions: $versions} | compact
+  let full_url = (build-url $base ({org_id: $org_id, mxedge_id: $mxedge_id} | format pattern "/api/v1/orgs/{org_id}/mxedges/{mxedge_id}/upgrade"))
+  let body = {"channel": $channel, "mxedge_ids": $mxedge_ids, "versions": $versions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6652,7 +6652,7 @@ export def "orgs-mxtunnels list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxtunnels")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/mxtunnels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6664,7 +6664,7 @@ export def "orgs-mxtunnels list" [
 # operationId: createOrgMxTunnel
 # --auto_preemption shape: {day_of_week?: "any"|"mon"|"tue"|"wed"|"thu"|"fri"|"sat"|"sun", enabled?: bool, time_of_day?: string}
 # --ipsec shape: {dns_servers?: list, dns_suffix?: list, enabled?: bool, extra_routes?: list, split_tunnel?: bool, use_mxedge?: bool}
-export def "orgs-mxtunnels createOrgMxTunnel" [
+export def "orgs-mxtunnels create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6688,8 +6688,8 @@ export def "orgs-mxtunnels createOrgMxTunnel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxtunnels")
-  let body = {anchor_mxtunnel_ids: $anchor_mxtunnel_ids, auto_preemption: $auto_preemption, hello_interval: $hello_interval, hello_retries: $hello_retries, ipsec: $ipsec, mtu: $mtu, mxcluster_ids: $mxcluster_ids, name: $name, protocol: $protocol, vlan_ids: $vlan_ids} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/mxtunnels"))
+  let body = {"anchor_mxtunnel_ids": $anchor_mxtunnel_ids, "auto_preemption": $auto_preemption, "hello_interval": $hello_interval, "hello_retries": $hello_retries, "ipsec": $ipsec, "mtu": $mtu, "mxcluster_ids": $mxcluster_ids, "name": $name, "protocol": $protocol, "vlan_ids": $vlan_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6714,7 +6714,7 @@ export def "orgs-mxtunnels delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxtunnels/($mxtunnel_id)")
+  let full_url = (build-url $base ({org_id: $org_id, mxtunnel_id: $mxtunnel_id} | format pattern "/api/v1/orgs/{org_id}/mxtunnels/{mxtunnel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6738,7 +6738,7 @@ export def "orgs-mxtunnels get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxtunnels/($mxtunnel_id)")
+  let full_url = (build-url $base ({org_id: $org_id, mxtunnel_id: $mxtunnel_id} | format pattern "/api/v1/orgs/{org_id}/mxtunnels/{mxtunnel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6750,7 +6750,7 @@ export def "orgs-mxtunnels get" [
 # operationId: updateOrgMxTunnel
 # --auto_preemption shape: {day_of_week?: "any"|"mon"|"tue"|"wed"|"thu"|"fri"|"sat"|"sun", enabled?: bool, time_of_day?: string}
 # --ipsec shape: {dns_servers?: list, dns_suffix?: list, enabled?: bool, extra_routes?: list, split_tunnel?: bool, use_mxedge?: bool}
-export def "orgs-mxtunnels updateOrgMxTunnel" [
+export def "orgs-mxtunnels update" [
   org_id: string
   mxtunnel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6775,8 +6775,8 @@ export def "orgs-mxtunnels updateOrgMxTunnel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/mxtunnels/($mxtunnel_id)")
-  let body = {anchor_mxtunnel_ids: $anchor_mxtunnel_ids, auto_preemption: $auto_preemption, hello_interval: $hello_interval, hello_retries: $hello_retries, ipsec: $ipsec, mtu: $mtu, mxcluster_ids: $mxcluster_ids, name: $name, protocol: $protocol, vlan_ids: $vlan_ids} | compact
+  let full_url = (build-url $base ({org_id: $org_id, mxtunnel_id: $mxtunnel_id} | format pattern "/api/v1/orgs/{org_id}/mxtunnels/{mxtunnel_id}"))
+  let body = {"anchor_mxtunnel_ids": $anchor_mxtunnel_ids, "auto_preemption": $auto_preemption, "hello_interval": $hello_interval, "hello_retries": $hello_retries, "ipsec": $ipsec, "mtu": $mtu, "mxcluster_ids": $mxcluster_ids, "name": $name, "protocol": $protocol, "vlan_ids": $vlan_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6800,7 +6800,7 @@ export def "orgs-nacrules list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/nacrules")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/nacrules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6812,7 +6812,7 @@ export def "orgs-nacrules list" [
 # operationId: createOrgNacRule
 # --matching shape: {auth_type?: "cert"|"idp"|"mab"|"psk", nactags?: list, port_types?: list, site_ids?: list, sitegroup_ids?: list}
 # --not_matching shape: {auth_type?: "cert"|"idp"|"mab"|"psk", nactags?: list, port_types?: list, site_ids?: list, sitegroup_ids?: list}
-export def "orgs-nacrules createOrgNacRule" [
+export def "orgs-nacrules create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6833,8 +6833,8 @@ export def "orgs-nacrules createOrgNacRule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/nacrules")
-  let body = {action: $action, apply_tags: $apply_tags, enabled: $enabled, matching: $matching, name: $name, not_matching: $not_matching, order: $order} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/nacrules"))
+  let body = {"action": $action, "apply_tags": $apply_tags, "enabled": $enabled, "matching": $matching, "name": $name, "not_matching": $not_matching, "order": $order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6859,7 +6859,7 @@ export def "orgs-nacrules delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/nacrules/($nacrule_id)")
+  let full_url = (build-url $base ({org_id: $org_id, nacrule_id: $nacrule_id} | format pattern "/api/v1/orgs/{org_id}/nacrules/{nacrule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6883,7 +6883,7 @@ export def "orgs-nacrules get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/nacrules/($nacrule_id)")
+  let full_url = (build-url $base ({org_id: $org_id, nacrule_id: $nacrule_id} | format pattern "/api/v1/orgs/{org_id}/nacrules/{nacrule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6895,7 +6895,7 @@ export def "orgs-nacrules get" [
 # operationId: updateOrgNacRule
 # --matching shape: {auth_type?: "cert"|"idp"|"mab"|"psk", nactags?: list, port_types?: list, site_ids?: list, sitegroup_ids?: list}
 # --not_matching shape: {auth_type?: "cert"|"idp"|"mab"|"psk", nactags?: list, port_types?: list, site_ids?: list, sitegroup_ids?: list}
-export def "orgs-nacrules updateOrgNacRule" [
+export def "orgs-nacrules update" [
   org_id: string
   nacrule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6917,8 +6917,8 @@ export def "orgs-nacrules updateOrgNacRule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/nacrules/($nacrule_id)")
-  let body = {action: $action, apply_tags: $apply_tags, enabled: $enabled, matching: $matching, name: $name, not_matching: $not_matching, order: $order} | compact
+  let full_url = (build-url $base ({org_id: $org_id, nacrule_id: $nacrule_id} | format pattern "/api/v1/orgs/{org_id}/nacrules/{nacrule_id}"))
+  let body = {"action": $action, "apply_tags": $apply_tags, "enabled": $enabled, "matching": $matching, "name": $name, "not_matching": $not_matching, "order": $order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6942,7 +6942,7 @@ export def "orgs-nactags list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/nactags")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/nactags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6952,7 +6952,7 @@ export def "orgs-nactags list" [
 #
 # POST /api/v1/orgs/{org_id}/nactags
 # operationId: createOrgNacTag
-export def "orgs-nactags createOrgNacTag" [
+export def "orgs-nactags create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6973,8 +6973,8 @@ export def "orgs-nactags createOrgNacTag" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/nactags")
-  let body = {gbp_tag: $gbp_tag, match: $body_match, name: $name, radius_group: $radius_group, type: $type, values: $values, vlan: $vlan} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/nactags"))
+  let body = {"gbp_tag": $gbp_tag, "match": $body_match, "name": $name, "radius_group": $radius_group, "type": $type, "values": $values, "vlan": $vlan} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6985,7 +6985,7 @@ export def "orgs-nactags createOrgNacTag" [
 #
 # DELETE /api/v1/orgs/{org_id}/nactags/{nactag_id}
 # operationId: DeleteOrgNacTag
-export def "orgs-nactags DeleteOrgNacTag" [
+export def "orgs-nactags delete" [
   org_id: string
   nactag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6999,7 +6999,7 @@ export def "orgs-nactags DeleteOrgNacTag" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/nactags/($nactag_id)")
+  let full_url = (build-url $base ({org_id: $org_id, nactag_id: $nactag_id} | format pattern "/api/v1/orgs/{org_id}/nactags/{nactag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7023,7 +7023,7 @@ export def "orgs-nactags get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/nactags/($nactag_id)")
+  let full_url = (build-url $base ({org_id: $org_id, nactag_id: $nactag_id} | format pattern "/api/v1/orgs/{org_id}/nactags/{nactag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7033,7 +7033,7 @@ export def "orgs-nactags get" [
 #
 # PUT /api/v1/orgs/{org_id}/nactags/{nactag_id}
 # operationId: updateOrgNacTag
-export def "orgs-nactags updateOrgNacTag" [
+export def "orgs-nactags update" [
   org_id: string
   nactag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7055,8 +7055,8 @@ export def "orgs-nactags updateOrgNacTag" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/nactags/($nactag_id)")
-  let body = {gbp_tag: $gbp_tag, match: $body_match, name: $name, radius_group: $radius_group, type: $type, values: $values, vlan: $vlan} | compact
+  let full_url = (build-url $base ({org_id: $org_id, nactag_id: $nactag_id} | format pattern "/api/v1/orgs/{org_id}/nactags/{nactag_id}"))
+  let body = {"gbp_tag": $gbp_tag, "match": $body_match, "name": $name, "radius_group": $radius_group, "type": $type, "values": $values, "vlan": $vlan} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7080,7 +7080,7 @@ export def "orgs-networks list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/networks")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/networks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7092,7 +7092,7 @@ export def "orgs-networks list" [
 # operationId: createOrgNetwork
 # --internal_access shape: {enabled?: bool}
 # --internet_access shape: {create_simple_service_policy?: bool, destination_nat?: record, enabled?: bool, restricted?: bool, static_nat?: record}
-export def "orgs-networks createOrgNetwork" [
+export def "orgs-networks create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7117,8 +7117,8 @@ export def "orgs-networks createOrgNetwork" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/networks")
-  let body = {disallow_mist_services: $disallow_mist_services, gateway: $gateway, hosts: $hosts, internal_access: $internal_access, internet_access: $internet_access, isolation: $isolation, name: $name, subnet: $subnet, tenants: $tenants, vlan_id: $vlan_id, vpn_access: $vpn_access} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/networks"))
+  let body = {"disallow_mist_services": $disallow_mist_services, "gateway": $gateway, "hosts": $hosts, "internal_access": $internal_access, "internet_access": $internet_access, "isolation": $isolation, "name": $name, "subnet": $subnet, "tenants": $tenants, "vlan_id": $vlan_id, "vpn_access": $vpn_access} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7143,7 +7143,7 @@ export def "orgs-networks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/networks/($network_id)")
+  let full_url = (build-url $base ({org_id: $org_id, network_id: $network_id} | format pattern "/api/v1/orgs/{org_id}/networks/{network_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7167,7 +7167,7 @@ export def "orgs-networks get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/networks/($network_id)")
+  let full_url = (build-url $base ({org_id: $org_id, network_id: $network_id} | format pattern "/api/v1/orgs/{org_id}/networks/{network_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7179,7 +7179,7 @@ export def "orgs-networks get" [
 # operationId: updateOrgNetwork
 # --internal_access shape: {enabled?: bool}
 # --internet_access shape: {create_simple_service_policy?: bool, destination_nat?: record, enabled?: bool, restricted?: bool, static_nat?: record}
-export def "orgs-networks updateOrgNetwork" [
+export def "orgs-networks update" [
   org_id: string
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7205,8 +7205,8 @@ export def "orgs-networks updateOrgNetwork" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/networks/($network_id)")
-  let body = {disallow_mist_services: $disallow_mist_services, gateway: $gateway, hosts: $hosts, internal_access: $internal_access, internet_access: $internet_access, isolation: $isolation, name: $name, subnet: $subnet, tenants: $tenants, vlan_id: $vlan_id, vpn_access: $vpn_access} | compact
+  let full_url = (build-url $base ({org_id: $org_id, network_id: $network_id} | format pattern "/api/v1/orgs/{org_id}/networks/{network_id}"))
+  let body = {"disallow_mist_services": $disallow_mist_services, "gateway": $gateway, "hosts": $hosts, "internal_access": $internal_access, "internet_access": $internet_access, "isolation": $isolation, "name": $name, "subnet": $subnet, "tenants": $tenants, "vlan_id": $vlan_id, "vpn_access": $vpn_access} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7230,7 +7230,7 @@ export def "orgs-networktemplates list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/networktemplates")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/networktemplates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7249,7 +7249,7 @@ export def "orgs-networktemplates list" [
 # --switch_matching shape: {enable?: bool, rules?: list}
 # --switch_mgmt shape: {config_revert?: int, protect_re?: record, root_password?: string, tacacs?: record}
 # --vrf_config shape: {enabled?: bool}
-export def "orgs-networktemplates createOrgNetworkTemplate" [
+export def "orgs-networktemplates create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7281,8 +7281,8 @@ export def "orgs-networktemplates createOrgNetworkTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/networktemplates")
-  let body = {additional_config_cmds: $additional_config_cmds, dhcp_snooping: $dhcp_snooping, dns_servers: $dns_servers, dns_suffix: $dns_suffix, extra_routes: $extra_routes, group_tags: $group_tags, mist_nac: $mist_nac, name: $name, networks: $networks, ntp_servers: $ntp_servers, port_usages: $port_usages, radius_config: $radius_config, remote_syslog: $remote_syslog, snmp_config: $snmp_config, switch_matching: $switch_matching, switch_mgmt: $switch_mgmt, vrf_config: $vrf_config, vrf_instances: $vrf_instances} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/networktemplates"))
+  let body = {"additional_config_cmds": $additional_config_cmds, "dhcp_snooping": $dhcp_snooping, "dns_servers": $dns_servers, "dns_suffix": $dns_suffix, "extra_routes": $extra_routes, "group_tags": $group_tags, "mist_nac": $mist_nac, "name": $name, "networks": $networks, "ntp_servers": $ntp_servers, "port_usages": $port_usages, "radius_config": $radius_config, "remote_syslog": $remote_syslog, "snmp_config": $snmp_config, "switch_matching": $switch_matching, "switch_mgmt": $switch_mgmt, "vrf_config": $vrf_config, "vrf_instances": $vrf_instances} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7307,7 +7307,7 @@ export def "orgs-networktemplates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/networktemplates/($networktemplate_id)")
+  let full_url = (build-url $base ({org_id: $org_id, networktemplate_id: $networktemplate_id} | format pattern "/api/v1/orgs/{org_id}/networktemplates/{networktemplate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7331,7 +7331,7 @@ export def "orgs-networktemplates get" [
 ]: nothing -> record<additional_config_cmds: list<string>, created_time: float, dhcp_snooping: record<all_networks: bool, enable_arp_spoof_check: bool, enable_ip_source_guard: bool, enabled: bool, networks: list<string>>, dns_servers: list<string>, dns_suffix: list<string>, extra_routes: record, group_tags: record, id: string, mist_nac: record<enabled: bool, network: string>, modified_time: float, name: string, networks: record, ntp_servers: list<string>, org_id: string, port_usages: record<dynamic: record<mode: string, reset_default_when: string, rules: list>>, radius_config: record<acct_interim_interval: int, acct_servers: list<record>, auth_servers: list<record>, auth_servers_retries: int, auth_servers_timeout: int, coa_enabled: bool, coa_port: int, network: string, source_ip: string>, remote_syslog: record<archive: record<files: int, size: string>, console: record<contents: list>, enabled: bool, files: list<record>, network: string, send_to_all_servers: bool, servers: list<record>, time_format: string, users: list<record>>, snmp_config: record<client_list: list<record>, contact: string, description: string, enabled: bool, engine_id: string, location: string, name: string, trap_groups: list<record>, v2c_config: list<record>, v3_config: record<notify: list, notify_filter: list, target_address: list, target_parameters: list, usm: record, vacm: record>, views: record<include: bool, oid: string, view_name: string>>, switch_matching: record<enable: bool, rules: list<record>>, switch_mgmt: record<config_revert: int, protect_re: record<enabled: bool>, root_password: string, tacacs: record<acct_servers: list, enabled: bool, network: string, tacplus_servers: list>>, vrf_config: record<enabled: bool>, vrf_instances: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/networktemplates/($networktemplate_id)")
+  let full_url = (build-url $base ({org_id: $org_id, networktemplate_id: $networktemplate_id} | format pattern "/api/v1/orgs/{org_id}/networktemplates/{networktemplate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7350,7 +7350,7 @@ export def "orgs-networktemplates get" [
 # --switch_matching shape: {enable?: bool, rules?: list}
 # --switch_mgmt shape: {config_revert?: int, protect_re?: record, root_password?: string, tacacs?: record}
 # --vrf_config shape: {enabled?: bool}
-export def "orgs-networktemplates updateOrgNetworkTemplates" [
+export def "orgs-networktemplates update" [
   org_id: string
   networktemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7383,8 +7383,8 @@ export def "orgs-networktemplates updateOrgNetworkTemplates" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/networktemplates/($networktemplate_id)")
-  let body = {additional_config_cmds: $additional_config_cmds, dhcp_snooping: $dhcp_snooping, dns_servers: $dns_servers, dns_suffix: $dns_suffix, extra_routes: $extra_routes, group_tags: $group_tags, mist_nac: $mist_nac, name: $name, networks: $networks, ntp_servers: $ntp_servers, port_usages: $port_usages, radius_config: $radius_config, remote_syslog: $remote_syslog, snmp_config: $snmp_config, switch_matching: $switch_matching, switch_mgmt: $switch_mgmt, vrf_config: $vrf_config, vrf_instances: $vrf_instances} | compact
+  let full_url = (build-url $base ({org_id: $org_id, networktemplate_id: $networktemplate_id} | format pattern "/api/v1/orgs/{org_id}/networktemplates/{networktemplate_id}"))
+  let body = {"additional_config_cmds": $additional_config_cmds, "dhcp_snooping": $dhcp_snooping, "dns_servers": $dns_servers, "dns_suffix": $dns_suffix, "extra_routes": $extra_routes, "group_tags": $group_tags, "mist_nac": $mist_nac, "name": $name, "networks": $networks, "ntp_servers": $ntp_servers, "port_usages": $port_usages, "radius_config": $radius_config, "remote_syslog": $remote_syslog, "snmp_config": $snmp_config, "switch_matching": $switch_matching, "switch_mgmt": $switch_mgmt, "vrf_config": $vrf_config, "vrf_instances": $vrf_instances} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7395,7 +7395,7 @@ export def "orgs-networktemplates updateOrgNetworkTemplates" [
 #
 # GET /api/v1/orgs/{org_id}/ocdevices/outbound_ssh_cmd
 # operationId: getOrgJuniperDevicesCommand
-export def "orgs-ocdevices-outbound-ssh-cmd get" [
+export def "orgs-ocdevices-outbound-ssh-cmd get-org-juniper-devices-command" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7410,7 +7410,7 @@ export def "orgs-ocdevices-outbound-ssh-cmd get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ocdevices/outbound_ssh_cmd" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/ocdevices/outbound_ssh_cmd") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7441,7 +7441,7 @@ export def "orgs-otherdevices list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vendor" $vendor "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "serial" $serial "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/otherdevices" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/otherdevices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7451,7 +7451,7 @@ export def "orgs-otherdevices list" [
 #
 # PUT /api/v1/orgs/{org_id}/otherdevices
 # operationId: updateOrgOtherDevices
-export def "orgs-otherdevices updateOrgOtherDevices" [
+export def "orgs-otherdevices update-by-org_id" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7468,8 +7468,8 @@ export def "orgs-otherdevices updateOrgOtherDevices" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/otherdevices")
-  let body = {device_mac: $device_mac, macs: $macs, site_id: $site_id} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/otherdevices"))
+  let body = {"device_mac": $device_mac, "macs": $macs, "site_id": $site_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7494,7 +7494,7 @@ export def "orgs-otherdevices delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/otherdevices/($device_mac)")
+  let full_url = (build-url $base ({org_id: $org_id, device_mac: $device_mac} | format pattern "/api/v1/orgs/{org_id}/otherdevices/{device_mac}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7518,7 +7518,7 @@ export def "orgs-otherdevices get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/otherdevices/($device_mac)")
+  let full_url = (build-url $base ({org_id: $org_id, device_mac: $device_mac} | format pattern "/api/v1/orgs/{org_id}/otherdevices/{device_mac}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7528,7 +7528,7 @@ export def "orgs-otherdevices get" [
 #
 # PUT /api/v1/orgs/{org_id}/otherdevices/{device_mac}
 # operationId: updateOrgOtherDevice
-export def "orgs-otherdevices updateOrgOtherDevice" [
+export def "orgs-otherdevices update-by-org_id-device_mac" [
   org_id: string
   device_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7545,8 +7545,8 @@ export def "orgs-otherdevices updateOrgOtherDevice" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/otherdevices/($device_mac)")
-  let body = {device_mac: $body_device_mac, site_id: $site_id} | compact
+  let full_url = (build-url $base ({org_id: $org_id, device_mac: $device_mac} | format pattern "/api/v1/orgs/{org_id}/otherdevices/{device_mac}"))
+  let body = {"device_mac": $body_device_mac, "site_id": $site_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7570,7 +7570,7 @@ export def "orgs-pma-dashboards get" [
 ]: nothing -> table<name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/pma/dashboards")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/pma/dashboards"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7593,7 +7593,7 @@ export def "orgs-pskportals list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/pskportals")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/pskportals"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7605,7 +7605,7 @@ export def "orgs-pskportals list" [
 # operationId: createOrgPskPortal
 # --passphrase_rules shape: {alphaberts_enabled?: bool, length?: int, max_length?: int, min_length?: int, numerics_enabled?: bool, symbols?: string, symbols_enabled?: bool}
 # --sso shape: {allowed_roles?: list, idp_cert?: string, idp_sign_algo?: string, idp_sso_url?: string, issuer?: string, nameid_format?: string, role_mapping?: record, use_sso_role_for_psk_role?: bool}
-export def "orgs-pskportals createOrgPskPortal" [
+export def "orgs-pskportals create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7638,8 +7638,8 @@ export def "orgs-pskportals createOrgPskPortal" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/pskportals")
-  let body = {auth: $body_auth, bg_image_url: $bg_image_url, cleanup_psk: $cleanup_psk, expire_time: $expire_time, expiry_notification_time: $expiry_notification_time, hide_psks_created_by_other_admins: $hide_psks_created_by_other_admins, max_usage: $max_usage, name: $name, notify_expiry: $notify_expiry, notify_on_create_or_edit: $notify_on_create_or_edit, passphrase_rules: $passphrase_rules, required_fields: $required_fields, role: $role, ssid: $ssid, sso: $sso, template_url: $template_url, thumbnail_url: $thumbnail_url, type: $type, vlan_id: $vlan_id} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/pskportals"))
+  let body = {"auth": $body_auth, "bg_image_url": $bg_image_url, "cleanup_psk": $cleanup_psk, "expire_time": $expire_time, "expiry_notification_time": $expiry_notification_time, "hide_psks_created_by_other_admins": $hide_psks_created_by_other_admins, "max_usage": $max_usage, "name": $name, "notify_expiry": $notify_expiry, "notify_on_create_or_edit": $notify_on_create_or_edit, "passphrase_rules": $passphrase_rules, "required_fields": $required_fields, "role": $role, "ssid": $ssid, "sso": $sso, "template_url": $template_url, "thumbnail_url": $thumbnail_url, "type": $type, "vlan_id": $vlan_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7664,7 +7664,7 @@ export def "orgs-pskportals delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/pskportals/($pskportal_id)")
+  let full_url = (build-url $base ({org_id: $org_id, pskportal_id: $pskportal_id} | format pattern "/api/v1/orgs/{org_id}/pskportals/{pskportal_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7688,7 +7688,7 @@ export def "orgs-pskportals get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/pskportals/($pskportal_id)")
+  let full_url = (build-url $base ({org_id: $org_id, pskportal_id: $pskportal_id} | format pattern "/api/v1/orgs/{org_id}/pskportals/{pskportal_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7700,7 +7700,7 @@ export def "orgs-pskportals get" [
 # operationId: updateOrgPskPortal
 # --passphrase_rules shape: {alphaberts_enabled?: bool, length?: int, max_length?: int, min_length?: int, numerics_enabled?: bool, symbols?: string, symbols_enabled?: bool}
 # --sso shape: {allowed_roles?: list, idp_cert?: string, idp_sign_algo?: string, idp_sso_url?: string, issuer?: string, nameid_format?: string, role_mapping?: record, use_sso_role_for_psk_role?: bool}
-export def "orgs-pskportals updateOrgPskPortal" [
+export def "orgs-pskportals update" [
   org_id: string
   pskportal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7734,8 +7734,8 @@ export def "orgs-pskportals updateOrgPskPortal" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/pskportals/($pskportal_id)")
-  let body = {auth: $body_auth, bg_image_url: $bg_image_url, cleanup_psk: $cleanup_psk, expire_time: $expire_time, expiry_notification_time: $expiry_notification_time, hide_psks_created_by_other_admins: $hide_psks_created_by_other_admins, max_usage: $max_usage, name: $name, notify_expiry: $notify_expiry, notify_on_create_or_edit: $notify_on_create_or_edit, passphrase_rules: $passphrase_rules, required_fields: $required_fields, role: $role, ssid: $ssid, sso: $sso, template_url: $template_url, thumbnail_url: $thumbnail_url, type: $type, vlan_id: $vlan_id} | compact
+  let full_url = (build-url $base ({org_id: $org_id, pskportal_id: $pskportal_id} | format pattern "/api/v1/orgs/{org_id}/pskportals/{pskportal_id}"))
+  let body = {"auth": $body_auth, "bg_image_url": $bg_image_url, "cleanup_psk": $cleanup_psk, "expire_time": $expire_time, "expiry_notification_time": $expiry_notification_time, "hide_psks_created_by_other_admins": $hide_psks_created_by_other_admins, "max_usage": $max_usage, "name": $name, "notify_expiry": $notify_expiry, "notify_on_create_or_edit": $notify_on_create_or_edit, "passphrase_rules": $passphrase_rules, "required_fields": $required_fields, "role": $role, "ssid": $ssid, "sso": $sso, "template_url": $template_url, "thumbnail_url": $thumbnail_url, "type": $type, "vlan_id": $vlan_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7765,7 +7765,7 @@ export def "orgs-psks list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/psks" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/psks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7775,7 +7775,7 @@ export def "orgs-psks list" [
 #
 # POST /api/v1/orgs/{org_id}/psks
 # operationId: createOrgPsk
-export def "orgs-psks createOrgPsk" [
+export def "orgs-psks create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7806,8 +7806,8 @@ export def "orgs-psks createOrgPsk" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "upsert" $upsert "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/psks" $qp)
-  let body = {email: $email, expire_time: $expire_time, expiry_notification_time: $expiry_notification_time, mac: $mac, max_usage: $max_usage, name: $name, note: $note, notify_expiry: $notify_expiry, notify_on_create_or_edit: $notify_on_create_or_edit, old_passphrase: $old_passphrase, passphrase: $passphrase, role: $role, ssid: $ssid, usage: $usage, vlan_id: $vlan_id} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/psks") $qp)
+  let body = {"email": $email, "expire_time": $expire_time, "expiry_notification_time": $expiry_notification_time, "mac": $mac, "max_usage": $max_usage, "name": $name, "note": $note, "notify_expiry": $notify_expiry, "notify_on_create_or_edit": $notify_on_create_or_edit, "old_passphrase": $old_passphrase, "passphrase": $passphrase, "role": $role, "ssid": $ssid, "usage": $usage, "vlan_id": $vlan_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7818,7 +7818,7 @@ export def "orgs-psks createOrgPsk" [
 #
 # PUT /api/v1/orgs/{org_id}/psks
 # operationId: updateOrgMultiPsks
-export def "orgs-psks updateOrgMultiPsks" [
+export def "orgs-psks update-org-multi" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7833,7 +7833,7 @@ export def "orgs-psks updateOrgMultiPsks" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/psks")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/psks"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7844,7 +7844,7 @@ export def "orgs-psks updateOrgMultiPsks" [
 #
 # POST /api/v1/orgs/{org_id}/psks/import
 # operationId: importOrgPsks
-export def "orgs-psks-import importOrgPsks" [
+export def "orgs-psks-import import" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7859,7 +7859,7 @@ export def "orgs-psks-import importOrgPsks" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/psks/import")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/psks/import"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7884,7 +7884,7 @@ export def "orgs-psks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/psks/($psk_id)")
+  let full_url = (build-url $base ({org_id: $org_id, psk_id: $psk_id} | format pattern "/api/v1/orgs/{org_id}/psks/{psk_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7908,7 +7908,7 @@ export def "orgs-psks get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/psks/($psk_id)")
+  let full_url = (build-url $base ({org_id: $org_id, psk_id: $psk_id} | format pattern "/api/v1/orgs/{org_id}/psks/{psk_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7918,7 +7918,7 @@ export def "orgs-psks get" [
 #
 # PUT /api/v1/orgs/{org_id}/psks/{psk_id}
 # operationId: updateOrgPsk
-export def "orgs-psks updateOrgPsk" [
+export def "orgs-psks update" [
   org_id: string
   psk_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7948,8 +7948,8 @@ export def "orgs-psks updateOrgPsk" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/psks/($psk_id)")
-  let body = {email: $email, expire_time: $expire_time, expiry_notification_time: $expiry_notification_time, mac: $mac, max_usage: $max_usage, name: $name, note: $note, notify_expiry: $notify_expiry, notify_on_create_or_edit: $notify_on_create_or_edit, old_passphrase: $old_passphrase, passphrase: $passphrase, role: $role, ssid: $ssid, usage: $usage, vlan_id: $vlan_id} | compact
+  let full_url = (build-url $base ({org_id: $org_id, psk_id: $psk_id} | format pattern "/api/v1/orgs/{org_id}/psks/{psk_id}"))
+  let body = {"email": $email, "expire_time": $expire_time, "expiry_notification_time": $expiry_notification_time, "mac": $mac, "max_usage": $max_usage, "name": $name, "note": $note, "notify_expiry": $notify_expiry, "notify_on_create_or_edit": $notify_on_create_or_edit, "old_passphrase": $old_passphrase, "passphrase": $passphrase, "role": $role, "ssid": $ssid, "usage": $usage, "vlan_id": $vlan_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7960,7 +7960,7 @@ export def "orgs-psks updateOrgPsk" [
 #
 # POST /api/v1/orgs/{org_id}/psks/{psk_id}/delete_old_passphrase
 # operationId: deleteOrgPskOldPassphrase
-export def "orgs-psks-delete-old-passphrase post" [
+export def "orgs-psks-delete-old-passphrase delete" [
   org_id: string
   psk_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7976,7 +7976,7 @@ export def "orgs-psks-delete-old-passphrase post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/psks/($psk_id)/delete_old_passphrase")
+  let full_url = (build-url $base ({org_id: $org_id, psk_id: $psk_id} | format pattern "/api/v1/orgs/{org_id}/psks/{psk_id}/delete_old_passphrase"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8000,7 +8000,7 @@ export def "orgs-rftemplates list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/rftemplates")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/rftemplates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8013,7 +8013,7 @@ export def "orgs-rftemplates list" [
 # --band_24 shape: {allow_rrm_disable?: bool, ant_gain?: int, antenna_mode?: "default"|"1x1"|"2x2"|"3x3"|"4x4", bandwidth?: "20"|"40"|"80", channel?: int, channels?: list, disabled?: bool, power?: int, power_max?: int, power_min?: int, preamble?: "short"|"long"|"auto", usage?: "24"|"5"|"rrm"}
 # --band_5 shape: {allow_rrm_disable?: bool, ant_gain?: int, antenna_mode?: "default"|"1x1"|"2x2"|"3x3"|"4x4", bandwidth?: "20"|"40"|"80", channel?: int, channels?: list, disabled?: bool, power?: int, power_max?: int, power_min?: int, preamble?: "short"|"long"|"auto", usage?: "24"|"5"|"rrm"}
 # --band_5_on_24_radio shape: {allow_rrm_disable?: bool, ant_gain?: int, antenna_mode?: "default"|"1x1"|"2x2"|"3x3"|"4x4", bandwidth?: "20"|"40"|"80", channel?: int, channels?: list, disabled?: bool, power?: int, power_max?: int, power_min?: int, preamble?: "short"|"long"|"auto", usage?: "24"|"5"|"rrm"}
-export def "orgs-rftemplates createOrgRfTemplate" [
+export def "orgs-rftemplates create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8037,8 +8037,8 @@ export def "orgs-rftemplates createOrgRfTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/rftemplates")
-  let body = {ant_gain_24: $ant_gain_24, ant_gain_5: $ant_gain_5, band_24: $band_24, band_24_usage: $band_24_usage, band_5: $band_5, band_5_on_24_radio: $band_5_on_24_radio, country_code: $country_code, model_specific: $model_specific, name: $name, scanning_enabled: $scanning_enabled} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/rftemplates"))
+  let body = {"ant_gain_24": $ant_gain_24, "ant_gain_5": $ant_gain_5, "band_24": $band_24, "band_24_usage": $band_24_usage, "band_5": $band_5, "band_5_on_24_radio": $band_5_on_24_radio, "country_code": $country_code, "model_specific": $model_specific, "name": $name, "scanning_enabled": $scanning_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8063,7 +8063,7 @@ export def "orgs-rftemplates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/rftemplates/($rftemplate_id)")
+  let full_url = (build-url $base ({org_id: $org_id, rftemplate_id: $rftemplate_id} | format pattern "/api/v1/orgs/{org_id}/rftemplates/{rftemplate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8087,7 +8087,7 @@ export def "orgs-rftemplates get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/rftemplates/($rftemplate_id)")
+  let full_url = (build-url $base ({org_id: $org_id, rftemplate_id: $rftemplate_id} | format pattern "/api/v1/orgs/{org_id}/rftemplates/{rftemplate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8100,7 +8100,7 @@ export def "orgs-rftemplates get" [
 # --band_24 shape: {allow_rrm_disable?: bool, ant_gain?: int, antenna_mode?: "default"|"1x1"|"2x2"|"3x3"|"4x4", bandwidth?: "20"|"40"|"80", channel?: int, channels?: list, disabled?: bool, power?: int, power_max?: int, power_min?: int, preamble?: "short"|"long"|"auto", usage?: "24"|"5"|"rrm"}
 # --band_5 shape: {allow_rrm_disable?: bool, ant_gain?: int, antenna_mode?: "default"|"1x1"|"2x2"|"3x3"|"4x4", bandwidth?: "20"|"40"|"80", channel?: int, channels?: list, disabled?: bool, power?: int, power_max?: int, power_min?: int, preamble?: "short"|"long"|"auto", usage?: "24"|"5"|"rrm"}
 # --band_5_on_24_radio shape: {allow_rrm_disable?: bool, ant_gain?: int, antenna_mode?: "default"|"1x1"|"2x2"|"3x3"|"4x4", bandwidth?: "20"|"40"|"80", channel?: int, channels?: list, disabled?: bool, power?: int, power_max?: int, power_min?: int, preamble?: "short"|"long"|"auto", usage?: "24"|"5"|"rrm"}
-export def "orgs-rftemplates updateOrgRfTemplate" [
+export def "orgs-rftemplates update" [
   org_id: string
   rftemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8125,8 +8125,8 @@ export def "orgs-rftemplates updateOrgRfTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/rftemplates/($rftemplate_id)")
-  let body = {ant_gain_24: $ant_gain_24, ant_gain_5: $ant_gain_5, band_24: $band_24, band_24_usage: $band_24_usage, band_5: $band_5, band_5_on_24_radio: $band_5_on_24_radio, country_code: $country_code, model_specific: $model_specific, name: $name, scanning_enabled: $scanning_enabled} | compact
+  let full_url = (build-url $base ({org_id: $org_id, rftemplate_id: $rftemplate_id} | format pattern "/api/v1/orgs/{org_id}/rftemplates/{rftemplate_id}"))
+  let body = {"ant_gain_24": $ant_gain_24, "ant_gain_5": $ant_gain_5, "band_24": $band_24, "band_24_usage": $band_24_usage, "band_5": $band_5, "band_5_on_24_radio": $band_5_on_24_radio, "country_code": $country_code, "model_specific": $model_specific, "name": $name, "scanning_enabled": $scanning_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8137,7 +8137,7 @@ export def "orgs-rftemplates updateOrgRfTemplate" [
 #
 # PUT /api/v1/orgs/{org_id}/sdkclients/{sdkclient_id}
 # operationId: updateSdkClient
-export def "orgs-sdkclients updateSdkClient" [
+export def "orgs-sdkclients update" [
   org_id: string
   sdkclient_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8153,8 +8153,8 @@ export def "orgs-sdkclients updateSdkClient" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sdkclients/($sdkclient_id)")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({org_id: $org_id, sdkclient_id: $sdkclient_id} | format pattern "/api/v1/orgs/{org_id}/sdkclients/{sdkclient_id}"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8178,7 +8178,7 @@ export def "orgs-sdkinvites list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sdkinvites")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/sdkinvites"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8188,7 +8188,7 @@ export def "orgs-sdkinvites list" [
 #
 # POST /api/v1/orgs/{org_id}/sdkinvites
 # operationId: createSdkInvite
-export def "orgs-sdkinvites createSdkInvite" [
+export def "orgs-sdkinvites create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8207,8 +8207,8 @@ export def "orgs-sdkinvites createSdkInvite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sdkinvites")
-  let body = {enabled: $enabled, expire_time: $expire_time, name: $name, quota: $quota, quota_limited: $quota_limited} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/sdkinvites"))
+  let body = {"enabled": $enabled, "expire_time": $expire_time, "name": $name, "quota": $quota, "quota_limited": $quota_limited} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8219,7 +8219,7 @@ export def "orgs-sdkinvites createSdkInvite" [
 #
 # DELETE /api/v1/orgs/{org_id}/sdkinvites/{sdkinvite_id}
 # operationId: revokeSdkInvite
-export def "orgs-sdkinvites revokeSdkInvite" [
+export def "orgs-sdkinvites delete" [
   org_id: string
   sdkinvite_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8233,7 +8233,7 @@ export def "orgs-sdkinvites revokeSdkInvite" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sdkinvites/($sdkinvite_id)")
+  let full_url = (build-url $base ({org_id: $org_id, sdkinvite_id: $sdkinvite_id} | format pattern "/api/v1/orgs/{org_id}/sdkinvites/{sdkinvite_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8257,7 +8257,7 @@ export def "orgs-sdkinvites get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sdkinvites/($sdkinvite_id)")
+  let full_url = (build-url $base ({org_id: $org_id, sdkinvite_id: $sdkinvite_id} | format pattern "/api/v1/orgs/{org_id}/sdkinvites/{sdkinvite_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8267,7 +8267,7 @@ export def "orgs-sdkinvites get" [
 #
 # PUT /api/v1/orgs/{org_id}/sdkinvites/{sdkinvite_id}
 # operationId: updateSdkInvite
-export def "orgs-sdkinvites updateSdkInvite" [
+export def "orgs-sdkinvites update" [
   org_id: string
   sdkinvite_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8287,8 +8287,8 @@ export def "orgs-sdkinvites updateSdkInvite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sdkinvites/($sdkinvite_id)")
-  let body = {enabled: $enabled, expire_time: $expire_time, name: $name, quota: $quota, quota_limited: $quota_limited} | compact
+  let full_url = (build-url $base ({org_id: $org_id, sdkinvite_id: $sdkinvite_id} | format pattern "/api/v1/orgs/{org_id}/sdkinvites/{sdkinvite_id}"))
+  let body = {"enabled": $enabled, "expire_time": $expire_time, "name": $name, "quota": $quota, "quota_limited": $quota_limited} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8299,7 +8299,7 @@ export def "orgs-sdkinvites updateSdkInvite" [
 #
 # POST /api/v1/orgs/{org_id}/sdkinvites/{sdkinvite_id}/email
 # operationId: sendSdkInviteEmail
-export def "orgs-sdkinvites-email sendSdkInviteEmail" [
+export def "orgs-sdkinvites-email send" [
   org_id: string
   sdkinvite_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8315,8 +8315,8 @@ export def "orgs-sdkinvites-email sendSdkInviteEmail" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sdkinvites/($sdkinvite_id)/email")
-  let body = {email: $email} | compact
+  let full_url = (build-url $base ({org_id: $org_id, sdkinvite_id: $sdkinvite_id} | format pattern "/api/v1/orgs/{org_id}/sdkinvites/{sdkinvite_id}/email"))
+  let body = {"email": $email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8341,7 +8341,7 @@ export def "orgs-sdkinvites-qrcode get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sdkinvites/($sdkinvite_id)/qrcode")
+  let full_url = (build-url $base ({org_id: $org_id, sdkinvite_id: $sdkinvite_id} | format pattern "/api/v1/orgs/{org_id}/sdkinvites/{sdkinvite_id}/qrcode"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8351,7 +8351,7 @@ export def "orgs-sdkinvites-qrcode get" [
 #
 # POST /api/v1/orgs/{org_id}/sdkinvites/{sdkinvite_id}/sms
 # operationId: sendSdkInviteSms
-export def "orgs-sdkinvites-sms sendSdkInviteSms" [
+export def "orgs-sdkinvites-sms send" [
   org_id: string
   sdkinvite_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8367,8 +8367,8 @@ export def "orgs-sdkinvites-sms sendSdkInviteSms" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sdkinvites/($sdkinvite_id)/sms")
-  let body = {number: $number} | compact
+  let full_url = (build-url $base ({org_id: $org_id, sdkinvite_id: $sdkinvite_id} | format pattern "/api/v1/orgs/{org_id}/sdkinvites/{sdkinvite_id}/sms"))
+  let body = {"number": $number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8392,7 +8392,7 @@ export def "orgs-sdktemplates list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sdktemplates")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/sdktemplates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8402,7 +8402,7 @@ export def "orgs-sdktemplates list" [
 #
 # POST /api/v1/orgs/{org_id}/sdktemplates
 # operationId: createSdkTemplate
-export def "orgs-sdktemplates createSdkTemplate" [
+export def "orgs-sdktemplates create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8423,8 +8423,8 @@ export def "orgs-sdktemplates createSdkTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sdktemplates")
-  let body = {bg_image: $bg_image, btn_flr_bgcolor: $btn_flr_bgcolor, default: $default, header_txt: $header_txt, name: $name, search_txtcolor: $search_txtcolor, welcome_msg: $welcome_msg} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/sdktemplates"))
+  let body = {"bg_image": $bg_image, "btn_flr_bgcolor": $btn_flr_bgcolor, "default": $default, "header_txt": $header_txt, "name": $name, "search_txtcolor": $search_txtcolor, "welcome_msg": $welcome_msg} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8449,7 +8449,7 @@ export def "orgs-sdktemplates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sdktemplates/($sdktemplate_id)")
+  let full_url = (build-url $base ({org_id: $org_id, sdktemplate_id: $sdktemplate_id} | format pattern "/api/v1/orgs/{org_id}/sdktemplates/{sdktemplate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8473,7 +8473,7 @@ export def "orgs-sdktemplates get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sdktemplates/($sdktemplate_id)")
+  let full_url = (build-url $base ({org_id: $org_id, sdktemplate_id: $sdktemplate_id} | format pattern "/api/v1/orgs/{org_id}/sdktemplates/{sdktemplate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8483,7 +8483,7 @@ export def "orgs-sdktemplates get" [
 #
 # PUT /api/v1/orgs/{org_id}/sdktemplates/{sdktemplate_id}
 # operationId: updateSdkTemplate
-export def "orgs-sdktemplates updateSdkTemplate" [
+export def "orgs-sdktemplates update" [
   org_id: string
   sdktemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8505,8 +8505,8 @@ export def "orgs-sdktemplates updateSdkTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sdktemplates/($sdktemplate_id)")
-  let body = {bg_image: $bg_image, btn_flr_bgcolor: $btn_flr_bgcolor, default: $default, header_txt: $header_txt, name: $name, search_txtcolor: $search_txtcolor, welcome_msg: $welcome_msg} | compact
+  let full_url = (build-url $base ({org_id: $org_id, sdktemplate_id: $sdktemplate_id} | format pattern "/api/v1/orgs/{org_id}/sdktemplates/{sdktemplate_id}"))
+  let body = {"bg_image": $bg_image, "btn_flr_bgcolor": $btn_flr_bgcolor, "default": $default, "header_txt": $header_txt, "name": $name, "search_txtcolor": $search_txtcolor, "welcome_msg": $welcome_msg} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8517,7 +8517,7 @@ export def "orgs-sdktemplates updateSdkTemplate" [
 #
 # GET /api/v1/orgs/{org_id}/secpolicies
 # operationId: getOrgSecPolicies
-export def "orgs-secpolicies list" [
+export def "orgs-secpolicies get" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8530,7 +8530,7 @@ export def "orgs-secpolicies list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/secpolicies")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/secpolicies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8541,7 +8541,7 @@ export def "orgs-secpolicies list" [
 # POST /api/v1/orgs/{org_id}/secpolicies
 # operationId: createOrgSecPolicies
 # --wlans item shape: {acct_interim_interval?: int, acct_servers?: list, airwatch?: record, allow_ipv6_ndp?: bool, allow_mdns?: bool, allow_ssdp?: bool, ap_ids?: list, app_limit?: record, app_qos?: record, apply_to?: "site"|"wxtags"|"aps", arp_filter?: bool, auth?: record, auth_server_selection?: "ordered"|"unordered", auth_servers?: list, auth_servers_nas_id?: string, auth_servers_nas_ip?: string, auth_servers_retries?: int, auth_servers_timeout?: int, band?: string, band_steer?: bool, band_steer_force_band5?: bool, bands?: list, block_blacklist_clients?: bool, bonjour?: record, cisco_cwa?: record, client_limit_down?: int, client_limit_down_enabled?: bool, client_limit_up?: int, client_limit_up_enabled?: bool, coa_servers?: list, disable_11ax?: bool, disable_ht_vht_rates?: bool, disable_uapsd?: bool, disable_v1_roam_notify?: bool, disable_v2_roam_notify?: bool, disable_wmm?: bool, dns_server_rewrite?: record, dtim?: int, dynamic_psk?: record, dynamic_vlan?: record, enable_local_keycaching?: bool, enable_wireless_bridging?: bool, enabled?: bool, hide_ssid?: bool, hostname_ie?: bool, hotspot20?: record, interface?: "all"|"eth0"|"eth1"|"eth2"|"eth3"|"wxtunnel"|"mxtunnel"|"site_mxedge", isolation?: bool, l2_isolation?: bool, legacy_overds?: bool, limit_bcast?: bool, limit_probe_response?: bool, max_idletime?: int, mist_nac?: record, mxtunnel?: record, mxtunnel_id?: string, mxtunnel_name?: string, no_static_dns?: bool, no_static_ip?: bool, portal?: record, portal_allowed_hostnames?: list, portal_allowed_subnets?: list, portal_api_secret?: string, portal_denied_hostnames?: list, portal_image?: string, portal_sso_url?: string, portal_template_url?: string, qos?: record, radsec?: record, rateset?: record, roam_mode?: "none"|"NONE"|"OKC"|"11r", schedule?: record, sle_excluded?: bool, ssid: string, template_id?: string, thumbnail?: string, use_eapol_v1?: bool, vlan_enabled?: bool, vlan_id?: int, vlan_ids?: list, vlan_pooling?: bool, wlan_limit_down?: int, wlan_limit_down_enabled?: bool, wlan_limit_up?: int, wlan_limit_up_enabled?: bool, wxtag_ids?: list, wxtunnel_id?: string, wxtunnel_remote_id?: string}
-export def "orgs-secpolicies createOrgSecPolicies" [
+export def "orgs-secpolicies create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8557,8 +8557,8 @@ export def "orgs-secpolicies createOrgSecPolicies" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/secpolicies")
-  let body = {name: $name, wlans: $wlans} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/secpolicies"))
+  let body = {"name": $name, "wlans": $wlans} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8569,7 +8569,7 @@ export def "orgs-secpolicies createOrgSecPolicies" [
 #
 # DELETE /api/v1/orgs/{org_id}/secpolicies/{secpolicy_id}
 # operationId: deleteOrgSecPolicy
-export def "orgs-secpolicies delete" [
+export def "orgs-secpolicies delete-org-sec-policy" [
   org_id: string
   secpolicy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8583,7 +8583,7 @@ export def "orgs-secpolicies delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/secpolicies/($secpolicy_id)")
+  let full_url = (build-url $base ({org_id: $org_id, secpolicy_id: $secpolicy_id} | format pattern "/api/v1/orgs/{org_id}/secpolicies/{secpolicy_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8593,7 +8593,7 @@ export def "orgs-secpolicies delete" [
 #
 # GET /api/v1/orgs/{org_id}/secpolicies/{secpolicy_id}
 # operationId: getOrgSecPolicy
-export def "orgs-secpolicies get" [
+export def "orgs-secpolicies get-org-sec-policy" [
   org_id: string
   secpolicy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8607,7 +8607,7 @@ export def "orgs-secpolicies get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/secpolicies/($secpolicy_id)")
+  let full_url = (build-url $base ({org_id: $org_id, secpolicy_id: $secpolicy_id} | format pattern "/api/v1/orgs/{org_id}/secpolicies/{secpolicy_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8618,7 +8618,7 @@ export def "orgs-secpolicies get" [
 # PUT /api/v1/orgs/{org_id}/secpolicies/{secpolicy_id}
 # operationId: updateOrgSecPolicies
 # --wlans item shape: {acct_interim_interval?: int, acct_servers?: list, airwatch?: record, allow_ipv6_ndp?: bool, allow_mdns?: bool, allow_ssdp?: bool, ap_ids?: list, app_limit?: record, app_qos?: record, apply_to?: "site"|"wxtags"|"aps", arp_filter?: bool, auth?: record, auth_server_selection?: "ordered"|"unordered", auth_servers?: list, auth_servers_nas_id?: string, auth_servers_nas_ip?: string, auth_servers_retries?: int, auth_servers_timeout?: int, band?: string, band_steer?: bool, band_steer_force_band5?: bool, bands?: list, block_blacklist_clients?: bool, bonjour?: record, cisco_cwa?: record, client_limit_down?: int, client_limit_down_enabled?: bool, client_limit_up?: int, client_limit_up_enabled?: bool, coa_servers?: list, disable_11ax?: bool, disable_ht_vht_rates?: bool, disable_uapsd?: bool, disable_v1_roam_notify?: bool, disable_v2_roam_notify?: bool, disable_wmm?: bool, dns_server_rewrite?: record, dtim?: int, dynamic_psk?: record, dynamic_vlan?: record, enable_local_keycaching?: bool, enable_wireless_bridging?: bool, enabled?: bool, hide_ssid?: bool, hostname_ie?: bool, hotspot20?: record, interface?: "all"|"eth0"|"eth1"|"eth2"|"eth3"|"wxtunnel"|"mxtunnel"|"site_mxedge", isolation?: bool, l2_isolation?: bool, legacy_overds?: bool, limit_bcast?: bool, limit_probe_response?: bool, max_idletime?: int, mist_nac?: record, mxtunnel?: record, mxtunnel_id?: string, mxtunnel_name?: string, no_static_dns?: bool, no_static_ip?: bool, portal?: record, portal_allowed_hostnames?: list, portal_allowed_subnets?: list, portal_api_secret?: string, portal_denied_hostnames?: list, portal_image?: string, portal_sso_url?: string, portal_template_url?: string, qos?: record, radsec?: record, rateset?: record, roam_mode?: "none"|"NONE"|"OKC"|"11r", schedule?: record, sle_excluded?: bool, ssid: string, template_id?: string, thumbnail?: string, use_eapol_v1?: bool, vlan_enabled?: bool, vlan_id?: int, vlan_ids?: list, vlan_pooling?: bool, wlan_limit_down?: int, wlan_limit_down_enabled?: bool, wlan_limit_up?: int, wlan_limit_up_enabled?: bool, wxtag_ids?: list, wxtunnel_id?: string, wxtunnel_remote_id?: string}
-export def "orgs-secpolicies updateOrgSecPolicies" [
+export def "orgs-secpolicies update" [
   org_id: string
   secpolicy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8635,8 +8635,8 @@ export def "orgs-secpolicies updateOrgSecPolicies" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/secpolicies/($secpolicy_id)")
-  let body = {name: $name, wlans: $wlans} | compact
+  let full_url = (build-url $base ({org_id: $org_id, secpolicy_id: $secpolicy_id} | format pattern "/api/v1/orgs/{org_id}/secpolicies/{secpolicy_id}"))
+  let body = {"name": $name, "wlans": $wlans} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8647,7 +8647,7 @@ export def "orgs-secpolicies updateOrgSecPolicies" [
 #
 # GET /api/v1/orgs/{org_id}/servicepolicies
 # operationId: getOrgServicePolicies
-export def "orgs-servicepolicies list" [
+export def "orgs-servicepolicies get" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8660,7 +8660,7 @@ export def "orgs-servicepolicies list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/servicepolicies")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/servicepolicies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8670,7 +8670,7 @@ export def "orgs-servicepolicies list" [
 #
 # POST /api/v1/orgs/{org_id}/servicepolicies
 # operationId: createOrgServicePolicy
-export def "orgs-servicepolicies createOrgServicePolicy" [
+export def "orgs-servicepolicies create-org-service-policy" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8688,8 +8688,8 @@ export def "orgs-servicepolicies createOrgServicePolicy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/servicepolicies")
-  let body = {action: $action, name: $name, services: $services, tenants: $tenants} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/servicepolicies"))
+  let body = {"action": $action, "name": $name, "services": $services, "tenants": $tenants} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8700,7 +8700,7 @@ export def "orgs-servicepolicies createOrgServicePolicy" [
 #
 # DELETE /api/v1/orgs/{org_id}/servicepolicies/{servicepolicy_id}
 # operationId: deleteOrgServicePolicy
-export def "orgs-servicepolicies delete" [
+export def "orgs-servicepolicies delete-org-service-policy" [
   org_id: string
   servicepolicy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8714,7 +8714,7 @@ export def "orgs-servicepolicies delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/servicepolicies/($servicepolicy_id)")
+  let full_url = (build-url $base ({org_id: $org_id, servicepolicy_id: $servicepolicy_id} | format pattern "/api/v1/orgs/{org_id}/servicepolicies/{servicepolicy_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8724,7 +8724,7 @@ export def "orgs-servicepolicies delete" [
 #
 # GET /api/v1/orgs/{org_id}/servicepolicies/{servicepolicy_id}
 # operationId: getOrgServicePolicy
-export def "orgs-servicepolicies get" [
+export def "orgs-servicepolicies get-org-service-policy" [
   org_id: string
   servicepolicy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8738,7 +8738,7 @@ export def "orgs-servicepolicies get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/servicepolicies/($servicepolicy_id)")
+  let full_url = (build-url $base ({org_id: $org_id, servicepolicy_id: $servicepolicy_id} | format pattern "/api/v1/orgs/{org_id}/servicepolicies/{servicepolicy_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8748,7 +8748,7 @@ export def "orgs-servicepolicies get" [
 #
 # PUT /api/v1/orgs/{org_id}/servicepolicies/{servicepolicy_id}
 # operationId: updateOrgServicePolicy
-export def "orgs-servicepolicies updateOrgServicePolicy" [
+export def "orgs-servicepolicies update-org-service-policy" [
   org_id: string
   servicepolicy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8767,8 +8767,8 @@ export def "orgs-servicepolicies updateOrgServicePolicy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/servicepolicies/($servicepolicy_id)")
-  let body = {action: $action, name: $name, services: $services, tenants: $tenants} | compact
+  let full_url = (build-url $base ({org_id: $org_id, servicepolicy_id: $servicepolicy_id} | format pattern "/api/v1/orgs/{org_id}/servicepolicies/{servicepolicy_id}"))
+  let body = {"action": $action, "name": $name, "services": $services, "tenants": $tenants} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8792,7 +8792,7 @@ export def "orgs-services list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/services")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/services"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8803,7 +8803,7 @@ export def "orgs-services list" [
 # POST /api/v1/orgs/{org_id}/services
 # operationId: createOrgService
 # --specs item shape: {port_range?: int, protocol?: string}
-export def "orgs-services createOrgService" [
+export def "orgs-services create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8835,8 +8835,8 @@ export def "orgs-services createOrgService" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/services")
-  let body = {addresses: $addresses, app_caetgories: $app_caetgories, apps: $apps, description: $description, dscp: $dscp, failover_policy: $failover_policy, hostnames: $hostnames, id: $id, max_jitter: $max_jitter, max_latency: $max_latency, max_loss: $max_loss, name: $name, sle_enabled: $sle_enabled, specs: $specs, traffic_class: $traffic_class, traffic_type: $traffic_type, type: $type, vpn_name: $vpn_name} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/services"))
+  let body = {"addresses": $addresses, "app_caetgories": $app_caetgories, "apps": $apps, "description": $description, "dscp": $dscp, "failover_policy": $failover_policy, "hostnames": $hostnames, "id": $id, "max_jitter": $max_jitter, "max_latency": $max_latency, "max_loss": $max_loss, "name": $name, "sle_enabled": $sle_enabled, "specs": $specs, "traffic_class": $traffic_class, "traffic_type": $traffic_type, "type": $type, "vpn_name": $vpn_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8861,7 +8861,7 @@ export def "orgs-services delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/services/($service_id)")
+  let full_url = (build-url $base ({org_id: $org_id, service_id: $service_id} | format pattern "/api/v1/orgs/{org_id}/services/{service_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8885,7 +8885,7 @@ export def "orgs-services get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/services/($service_id)")
+  let full_url = (build-url $base ({org_id: $org_id, service_id: $service_id} | format pattern "/api/v1/orgs/{org_id}/services/{service_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8896,7 +8896,7 @@ export def "orgs-services get" [
 # PUT /api/v1/orgs/{org_id}/services/{service_id}
 # operationId: updateOrgService
 # --specs item shape: {port_range?: int, protocol?: string}
-export def "orgs-services updateOrgService" [
+export def "orgs-services update" [
   org_id: string
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8929,8 +8929,8 @@ export def "orgs-services updateOrgService" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/services/($service_id)")
-  let body = {addresses: $addresses, app_caetgories: $app_caetgories, apps: $apps, description: $description, dscp: $dscp, failover_policy: $failover_policy, hostnames: $hostnames, id: $id, max_jitter: $max_jitter, max_latency: $max_latency, max_loss: $max_loss, name: $name, sle_enabled: $sle_enabled, specs: $specs, traffic_class: $traffic_class, traffic_type: $traffic_type, type: $type, vpn_name: $vpn_name} | compact
+  let full_url = (build-url $base ({org_id: $org_id, service_id: $service_id} | format pattern "/api/v1/orgs/{org_id}/services/{service_id}"))
+  let body = {"addresses": $addresses, "app_caetgories": $app_caetgories, "apps": $apps, "description": $description, "dscp": $dscp, "failover_policy": $failover_policy, "hostnames": $hostnames, "id": $id, "max_jitter": $max_jitter, "max_latency": $max_latency, "max_loss": $max_loss, "name": $name, "sle_enabled": $sle_enabled, "specs": $specs, "traffic_class": $traffic_class, "traffic_type": $traffic_type, "type": $type, "vpn_name": $vpn_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8954,7 +8954,7 @@ export def "orgs-setting get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/setting")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/setting"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8984,7 +8984,7 @@ export def "orgs-setting get" [
 # --simple_alert shape: {arp_failure?: record, dhcp_failure?: record, dns_failure?: record}
 # --switch_mgmt shape: {ap_affinity_threshold?: int}
 # --vpn_options shape: {as_base?: int}
-export def "orgs-setting updateOrgSettings" [
+export def "orgs-setting update" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9024,8 +9024,8 @@ export def "orgs-setting updateOrgSettings" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/setting")
-  let body = {auto_device_naming: $auto_device_naming, auto_deviceprofile_assignment: $auto_deviceprofile_assignment, auto_site_assignment: $auto_site_assignment, cacerts: $cacerts, celona: $celona, cloudshark: $cloudshark, cradlepoint: $cradlepoint, device_cert: $device_cert, device_updown_threshold: $device_updown_threshold, disable_pcap: $disable_pcap, gateway_mgmt: $gateway_mgmt, installer: $installer, juniper: $juniper, mgmt: $mgmt, mist_nac: $mist_nac, mxedge_mgmt: $mxedge_mgmt, password_policy: $password_policy, pcap: $pcap, pcap_bucket_verified: $pcap_bucket_verified, remote_syslog: $remote_syslog, security: $security, simple_alert: $simple_alert, switch_mgmt: $switch_mgmt, tags: $tags, ui_idle_timeout: $ui_idle_timeout, vpn_options: $vpn_options} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/setting"))
+  let body = {"auto_device_naming": $auto_device_naming, "auto_deviceprofile_assignment": $auto_deviceprofile_assignment, "auto_site_assignment": $auto_site_assignment, "cacerts": $cacerts, "celona": $celona, "cloudshark": $cloudshark, "cradlepoint": $cradlepoint, "device_cert": $device_cert, "device_updown_threshold": $device_updown_threshold, "disable_pcap": $disable_pcap, "gateway_mgmt": $gateway_mgmt, "installer": $installer, "juniper": $juniper, "mgmt": $mgmt, "mist_nac": $mist_nac, "mxedge_mgmt": $mxedge_mgmt, "password_policy": $password_policy, "pcap": $pcap, "pcap_bucket_verified": $pcap_bucket_verified, "remote_syslog": $remote_syslog, "security": $security, "simple_alert": $simple_alert, "switch_mgmt": $switch_mgmt, "tags": $tags, "ui_idle_timeout": $ui_idle_timeout, "vpn_options": $vpn_options} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9036,7 +9036,7 @@ export def "orgs-setting updateOrgSettings" [
 #
 # DELETE /api/v1/orgs/{org_id}/setting/blacklist
 # operationId: deleteOrgClientsBlocklist
-export def "orgs-setting-blacklist delete" [
+export def "orgs-setting-blacklist delete-org-clients-blocklist" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9049,7 +9049,7 @@ export def "orgs-setting-blacklist delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/setting/blacklist")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/setting/blacklist"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9059,7 +9059,7 @@ export def "orgs-setting-blacklist delete" [
 #
 # POST /api/v1/orgs/{org_id}/setting/blacklist
 # operationId: createOrgClientsBlocklist
-export def "orgs-setting-blacklist createOrgClientsBlocklist" [
+export def "orgs-setting-blacklist create-org-clients-blocklist" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9074,8 +9074,8 @@ export def "orgs-setting-blacklist createOrgClientsBlocklist" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/setting/blacklist")
-  let body = {macs: $macs} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/setting/blacklist"))
+  let body = {"macs": $macs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9104,8 +9104,8 @@ export def "orgs-setting-cradlepoint-setup setupOrgCradlepointConnectionToMist" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/setting/cradlepoint/setup")
-  let body = {cp_api_id: $cp_api_id, cp_api_key: $cp_api_key, ecm_api_id: $ecm_api_id, ecm_api_key: $ecm_api_key} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/setting/cradlepoint/setup"))
+  let body = {"cp_api_id": $cp_api_id, "cp_api_key": $cp_api_key, "ecm_api_id": $ecm_api_id, "ecm_api_key": $ecm_api_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9116,7 +9116,7 @@ export def "orgs-setting-cradlepoint-setup setupOrgCradlepointConnectionToMist" 
 #
 # POST /api/v1/orgs/{org_id}/setting/cradlepoint/sync
 # operationId: syncOrgCradlepointRouters
-export def "orgs-setting-cradlepoint-sync syncOrgCradlepointRouters" [
+export def "orgs-setting-cradlepoint-sync sync-org-cradlepoint-routers" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9129,7 +9129,7 @@ export def "orgs-setting-cradlepoint-sync syncOrgCradlepointRouters" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/setting/cradlepoint/sync")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/setting/cradlepoint/sync"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9155,8 +9155,8 @@ export def "orgs-setting-juniper-link-accounts linkOrgToJuniperJuniperAccount" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/setting/juniper/link_accounts")
-  let body = {password: $password, username: $username} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/setting/juniper/link_accounts"))
+  let body = {"password": $password, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9183,8 +9183,8 @@ export def "orgs-setting-juniper-linked-account unlinkOrgFromJuniperCustomerId" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/setting/juniper/linked_account")
-  let body = {account_name: $account_name, linked_by: $linked_by} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/setting/juniper/linked_account"))
+  let body = {"account_name": $account_name, "linked_by": $linked_by} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9210,8 +9210,8 @@ export def "orgs-setting-pcap-bucket-setup setOrgCustomBucket" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/setting/pcap_bucket/setup")
-  let body = {bucket: $bucket} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/setting/pcap_bucket/setup"))
+  let body = {"bucket": $bucket} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9222,7 +9222,7 @@ export def "orgs-setting-pcap-bucket-setup setOrgCustomBucket" [
 #
 # POST /api/v1/orgs/{org_id}/setting/pcap_bucket/verify
 # operationId: verifyOrgCustomBucket
-export def "orgs-setting-pcap-bucket-verify verifyOrgCustomBucket" [
+export def "orgs-setting-pcap-bucket-verify verify-org-custom" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9238,8 +9238,8 @@ export def "orgs-setting-pcap-bucket-verify verifyOrgCustomBucket" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/setting/pcap_bucket/verify")
-  let body = {bucket: $bucket, verify_token: $verify_token} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/setting/pcap_bucket/verify"))
+  let body = {"bucket": $bucket, "verify_token": $verify_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9268,8 +9268,8 @@ export def "orgs-setting-zscaler-setup setupOrgZscalerCredential" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/setting/zscaler/setup")
-  let body = {cloud_name: $cloud_name, partner_key: $partner_key, password: $password, username: $username} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/setting/zscaler/setup"))
+  let body = {"cloud_name": $cloud_name, "partner_key": $partner_key, "password": $password, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9296,7 +9296,7 @@ export def "orgs-setting-link deprecated-by-org_id-app_name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/setting/($app_name)/link")
+  let full_url = (build-url $base ({org_id: $org_id, app_name: $app_name} | format pattern "/api/v1/orgs/{org_id}/setting/{app_name}/link"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9324,7 +9324,7 @@ export def "orgs-setting-link deprecated-by-org_id-app_name-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "forward" $forward "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/setting/($app_name)/link" $qp)
+  let full_url = (build-url $base ({org_id: $org_id, app_name: $app_name} | format pattern "/api/v1/orgs/{org_id}/setting/{app_name}/link") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9334,7 +9334,7 @@ export def "orgs-setting-link deprecated-by-org_id-app_name-1" [
 #
 # DELETE /api/v1/orgs/{org_id}/setting/{app_name}/link_accounts
 # operationId: deleteOrgOauthAppAuthorization
-export def "orgs-setting-link-accounts delete" [
+export def "orgs-setting-link-accounts delete-org-oauth-app-authorization" [
   org_id: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9350,8 +9350,8 @@ export def "orgs-setting-link-accounts delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/setting/($app_name)/link_accounts")
-  let body = {account_id: $account_id} | compact
+  let full_url = (build-url $base ({org_id: $org_id, app_name: $app_name} | format pattern "/api/v1/orgs/{org_id}/setting/{app_name}/link_accounts"))
+  let body = {"account_id": $account_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9362,7 +9362,7 @@ export def "orgs-setting-link-accounts delete" [
 #
 # GET /api/v1/orgs/{org_id}/setting/{app_name}/link_accounts
 # operationId: getOrgOauthAppLinkedStatus
-export def "orgs-setting-link-accounts get" [
+export def "orgs-setting-link-accounts get-org-oauth-app-linked-status" [
   org_id: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9378,7 +9378,7 @@ export def "orgs-setting-link-accounts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "forward" $forward "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/setting/($app_name)/link_accounts" $qp)
+  let full_url = (build-url $base ({org_id: $org_id, app_name: $app_name} | format pattern "/api/v1/orgs/{org_id}/setting/{app_name}/link_accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9401,7 +9401,7 @@ export def "orgs-sitegroups list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sitegroups")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/sitegroups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9411,7 +9411,7 @@ export def "orgs-sitegroups list" [
 #
 # POST /api/v1/orgs/{org_id}/sitegroups
 # operationId: createOrgSiteGroup
-export def "orgs-sitegroups createOrgSiteGroup" [
+export def "orgs-sitegroups create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9427,8 +9427,8 @@ export def "orgs-sitegroups createOrgSiteGroup" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sitegroups")
-  let body = {name: $name, site_ids: $site_ids} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/sitegroups"))
+  let body = {"name": $name, "site_ids": $site_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9453,7 +9453,7 @@ export def "orgs-sitegroups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sitegroups/($sitegroup_id)")
+  let full_url = (build-url $base ({org_id: $org_id, sitegroup_id: $sitegroup_id} | format pattern "/api/v1/orgs/{org_id}/sitegroups/{sitegroup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9477,7 +9477,7 @@ export def "orgs-sitegroups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sitegroups/($sitegroup_id)")
+  let full_url = (build-url $base ({org_id: $org_id, sitegroup_id: $sitegroup_id} | format pattern "/api/v1/orgs/{org_id}/sitegroups/{sitegroup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9487,7 +9487,7 @@ export def "orgs-sitegroups get" [
 #
 # PUT /api/v1/orgs/{org_id}/sitegroups/{sitegroup_id}
 # operationId: updateOrgSiteGroup
-export def "orgs-sitegroups updateOrgSiteGroup" [
+export def "orgs-sitegroups update" [
   org_id: string
   sitegroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9504,8 +9504,8 @@ export def "orgs-sitegroups updateOrgSiteGroup" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sitegroups/($sitegroup_id)")
-  let body = {id: $id, name: $name} | compact
+  let full_url = (build-url $base ({org_id: $org_id, sitegroup_id: $sitegroup_id} | format pattern "/api/v1/orgs/{org_id}/sitegroups/{sitegroup_id}"))
+  let body = {"id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9532,7 +9532,7 @@ export def "orgs-sites get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sites" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/sites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9543,7 +9543,7 @@ export def "orgs-sites get" [
 # POST /api/v1/orgs/{org_id}/sites
 # operationId: createOrgSite
 # --latlng shape: {lat?: float, lng?: float}
-export def "orgs-sites createOrgSite" [
+export def "orgs-sites create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9571,8 +9571,8 @@ export def "orgs-sites createOrgSite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sites")
-  let body = {: $body_param, address: $address, alarmtemplate_id: $alarmtemplate_id, aptemplate_id: $aptemplate_id, country_code: $country_code, gatewaytemplate_id: $gatewaytemplate_id, latlng: $latlng, name: $name, networktemplate_id: $networktemplate_id, notes: $notes, rftemplate_id: $rftemplate_id, secpolicy_id: $secpolicy_id, sitegroup_ids: $sitegroup_ids, timezone: $timezone} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/sites"))
+  let body = {"field-1": $body_param, "address": $address, "alarmtemplate_id": $alarmtemplate_id, "aptemplate_id": $aptemplate_id, "country_code": $country_code, "gatewaytemplate_id": $gatewaytemplate_id, "latlng": $latlng, "name": $name, "networktemplate_id": $networktemplate_id, "notes": $notes, "rftemplate_id": $rftemplate_id, "secpolicy_id": $secpolicy_id, "sitegroup_ids": $sitegroup_ids, "timezone": $timezone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9603,7 +9603,7 @@ export def "orgs-sites-count countOrgSites" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sites/count" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/sites/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9613,7 +9613,7 @@ export def "orgs-sites-count countOrgSites" [
 #
 # GET /api/v1/orgs/{org_id}/sites/search
 # operationId: searchOrgSites
-export def "orgs-sites-search searchOrgSites" [
+export def "orgs-sites-search list" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9647,7 +9647,7 @@ export def "orgs-sites-search searchOrgSites" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "analytic_enabled" $analytic_enabled "scalar") (serialize-qp "app_waking" $app_waking "scalar") (serialize-qp "asset_enabled" $asset_enabled "scalar") (serialize-qp "auto_upgrade_enabled" $auto_upgrade_enabled "scalar") (serialize-qp "auto_upgrade_version" $auto_upgrade_version "scalar") (serialize-qp "country_code" $country_code "scalar") (serialize-qp "honeypot_enabled" $honeypot_enabled "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "locate_unconnected" $locate_unconnected "scalar") (serialize-qp "mesh_enabled" $mesh_enabled "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "rogue_enabled" $rogue_enabled "scalar") (serialize-qp "remote_syslog_enabled" $remote_syslog_enabled "scalar") (serialize-qp "rtsa_enabled" $rtsa_enabled "scalar") (serialize-qp "vna_enabled" $vna_enabled "scalar") (serialize-qp "wifi_enabled" $wifi_enabled "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sites/search" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/sites/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9657,7 +9657,7 @@ export def "orgs-sites-search searchOrgSites" [
 #
 # POST /api/v1/orgs/{org_id}/sites/{site_name}/maps/import
 # operationId: importOrgMapToSite
-export def "orgs-sites-maps-import importOrgMapToSite" [
+export def "orgs-sites-maps-import import-org-map-to" [
   org_id: string
   site_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9674,8 +9674,8 @@ export def "orgs-sites-maps-import importOrgMapToSite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sites/($site_name)/maps/import")
-  let body = {csl: $csl, file: $file} | compact
+  let full_url = (build-url $base ({org_id: $org_id, site_name: $site_name} | format pattern "/api/v1/orgs/{org_id}/sites/{site_name}/maps/import"))
+  let body = {"csl": $csl, "file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9699,7 +9699,7 @@ export def "orgs-sitetemplates list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sitetemplates")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/sitetemplates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9711,7 +9711,7 @@ export def "orgs-sitetemplates list" [
 # operationId: createOrgSiteTemplates
 # --auto_upgrade shape: {day_of_week?: string, enabled?: bool, time_of_day?: string, version?: string}
 # --vars shape: {SSID_STR?: string, VLAN_ID?: string}
-export def "orgs-sitetemplates createOrgSiteTemplates" [
+export def "orgs-sitetemplates create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9728,8 +9728,8 @@ export def "orgs-sitetemplates createOrgSiteTemplates" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sitetemplates")
-  let body = {auto_upgrade: $auto_upgrade, name: $name, vars: $vars} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/sitetemplates"))
+  let body = {"auto_upgrade": $auto_upgrade, "name": $name, "vars": $vars} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9754,7 +9754,7 @@ export def "orgs-sitetemplates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sitetemplates/($sitetemplate_id)")
+  let full_url = (build-url $base ({org_id: $org_id, sitetemplate_id: $sitetemplate_id} | format pattern "/api/v1/orgs/{org_id}/sitetemplates/{sitetemplate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9778,7 +9778,7 @@ export def "orgs-sitetemplates get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sitetemplates/($sitetemplate_id)")
+  let full_url = (build-url $base ({org_id: $org_id, sitetemplate_id: $sitetemplate_id} | format pattern "/api/v1/orgs/{org_id}/sitetemplates/{sitetemplate_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9790,7 +9790,7 @@ export def "orgs-sitetemplates get" [
 # operationId: updateOrgSiteTemplate
 # --auto_upgrade shape: {day_of_week?: string, enabled?: bool, time_of_day?: string, version?: string}
 # --vars shape: {SSID_STR?: string, VLAN_ID?: string}
-export def "orgs-sitetemplates updateOrgSiteTemplate" [
+export def "orgs-sitetemplates update" [
   org_id: string
   sitetemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9808,8 +9808,8 @@ export def "orgs-sitetemplates updateOrgSiteTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/sitetemplates/($sitetemplate_id)")
-  let body = {auto_upgrade: $auto_upgrade, name: $name, vars: $vars} | compact
+  let full_url = (build-url $base ({org_id: $org_id, sitetemplate_id: $sitetemplate_id} | format pattern "/api/v1/orgs/{org_id}/sitetemplates/{sitetemplate_id}"))
+  let body = {"auto_upgrade": $auto_upgrade, "name": $name, "vars": $vars} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9833,7 +9833,7 @@ export def "orgs-ssoroles list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssoroles")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/ssoroles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9844,7 +9844,7 @@ export def "orgs-ssoroles list" [
 # POST /api/v1/orgs/{org_id}/ssoroles
 # operationId: createOrgSsoRole
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list, views?: list}
-export def "orgs-ssoroles createOrgSsoRole" [
+export def "orgs-ssoroles create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9860,8 +9860,8 @@ export def "orgs-ssoroles createOrgSsoRole" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssoroles")
-  let body = {name: $name, privileges: $privileges} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/ssoroles"))
+  let body = {"name": $name, "privileges": $privileges} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9886,7 +9886,7 @@ export def "orgs-ssoroles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssoroles/($ssorole_id)")
+  let full_url = (build-url $base ({org_id: $org_id, ssorole_id: $ssorole_id} | format pattern "/api/v1/orgs/{org_id}/ssoroles/{ssorole_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9910,7 +9910,7 @@ export def "orgs-ssoroles get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssoroles/($ssorole_id)")
+  let full_url = (build-url $base ({org_id: $org_id, ssorole_id: $ssorole_id} | format pattern "/api/v1/orgs/{org_id}/ssoroles/{ssorole_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9921,7 +9921,7 @@ export def "orgs-ssoroles get" [
 # PUT /api/v1/orgs/{org_id}/ssoroles/{ssorole_id}
 # operationId: updateOrgSsoRole
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list, views?: list}
-export def "orgs-ssoroles updateOrgSsoRole" [
+export def "orgs-ssoroles update" [
   org_id: string
   ssorole_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9938,8 +9938,8 @@ export def "orgs-ssoroles updateOrgSsoRole" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssoroles/($ssorole_id)")
-  let body = {name: $name, privileges: $privileges} | compact
+  let full_url = (build-url $base ({org_id: $org_id, ssorole_id: $ssorole_id} | format pattern "/api/v1/orgs/{org_id}/ssoroles/{ssorole_id}"))
+  let body = {"name": $name, "privileges": $privileges} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9963,7 +9963,7 @@ export def "orgs-ssos list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssos")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/ssos"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9973,7 +9973,7 @@ export def "orgs-ssos list" [
 #
 # POST /api/v1/orgs/{org_id}/ssos
 # operationId: createOrgSso
-export def "orgs-ssos createOrgSso" [
+export def "orgs-ssos create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10020,8 +10020,8 @@ export def "orgs-ssos createOrgSso" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssos")
-  let body = {custom_logout_url: $custom_logout_url, default_role: $default_role, domain: $domain, idp_cert: $idp_cert, idp_sign_algo: $idp_sign_algo, idp_sso_url: $idp_sso_url, idp_type: $idp_type, ignore_unmatched_roles: $ignore_unmatched_roles, issuer: $issuer, ldap_base_dn: $ldap_base_dn, ldap_bind_dn: $ldap_bind_dn, ldap_bind_password: $ldap_bind_password, ldap_certs: $ldap_certs, ldap_client_cert: $ldap_client_cert, ldap_client_key: $ldap_client_key, ldap_group_attr: $ldap_group_attr, ldap_group_dn: $ldap_group_dn, ldap_group_filter: $ldap_group_filter, ldap_server_hosts: $ldap_server_hosts, ldap_type: $ldap_type, ldap_user_filter: $ldap_user_filter, name: $name, nameid_format: $nameid_format, oauth_cc_client_id: $oauth_cc_client_id, oauth_cc_client_secret: $oauth_cc_client_secret, oauth_discovery_url: $oauth_discovery_url, oauth_ropc_client_id: $oauth_ropc_client_id, oauth_ropc_secret: $oauth_ropc_secret, oauth_tenant_id: $oauth_tenant_id, oauth_type: $oauth_type, role_attr_extraction: $role_attr_extraction, role_attr_from: $role_attr_from, type: $type} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/ssos"))
+  let body = {"custom_logout_url": $custom_logout_url, "default_role": $default_role, "domain": $domain, "idp_cert": $idp_cert, "idp_sign_algo": $idp_sign_algo, "idp_sso_url": $idp_sso_url, "idp_type": $idp_type, "ignore_unmatched_roles": $ignore_unmatched_roles, "issuer": $issuer, "ldap_base_dn": $ldap_base_dn, "ldap_bind_dn": $ldap_bind_dn, "ldap_bind_password": $ldap_bind_password, "ldap_certs": $ldap_certs, "ldap_client_cert": $ldap_client_cert, "ldap_client_key": $ldap_client_key, "ldap_group_attr": $ldap_group_attr, "ldap_group_dn": $ldap_group_dn, "ldap_group_filter": $ldap_group_filter, "ldap_server_hosts": $ldap_server_hosts, "ldap_type": $ldap_type, "ldap_user_filter": $ldap_user_filter, "name": $name, "nameid_format": $nameid_format, "oauth_cc_client_id": $oauth_cc_client_id, "oauth_cc_client_secret": $oauth_cc_client_secret, "oauth_discovery_url": $oauth_discovery_url, "oauth_ropc_client_id": $oauth_ropc_client_id, "oauth_ropc_secret": $oauth_ropc_secret, "oauth_tenant_id": $oauth_tenant_id, "oauth_type": $oauth_type, "role_attr_extraction": $role_attr_extraction, "role_attr_from": $role_attr_from, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10046,7 +10046,7 @@ export def "orgs-ssos delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssos/($sso_id)")
+  let full_url = (build-url $base ({org_id: $org_id, sso_id: $sso_id} | format pattern "/api/v1/orgs/{org_id}/ssos/{sso_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10070,7 +10070,7 @@ export def "orgs-ssos get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssos/($sso_id)")
+  let full_url = (build-url $base ({org_id: $org_id, sso_id: $sso_id} | format pattern "/api/v1/orgs/{org_id}/ssos/{sso_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10080,7 +10080,7 @@ export def "orgs-ssos get" [
 #
 # PUT /api/v1/orgs/{org_id}/ssos/{sso_id}
 # operationId: updateOrgSso
-export def "orgs-ssos updateOrgSso" [
+export def "orgs-ssos update" [
   org_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10128,8 +10128,8 @@ export def "orgs-ssos updateOrgSso" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssos/($sso_id)")
-  let body = {custom_logout_url: $custom_logout_url, default_role: $default_role, domain: $domain, idp_cert: $idp_cert, idp_sign_algo: $idp_sign_algo, idp_sso_url: $idp_sso_url, idp_type: $idp_type, ignore_unmatched_roles: $ignore_unmatched_roles, issuer: $issuer, ldap_base_dn: $ldap_base_dn, ldap_bind_dn: $ldap_bind_dn, ldap_bind_password: $ldap_bind_password, ldap_certs: $ldap_certs, ldap_client_cert: $ldap_client_cert, ldap_client_key: $ldap_client_key, ldap_group_attr: $ldap_group_attr, ldap_group_dn: $ldap_group_dn, ldap_group_filter: $ldap_group_filter, ldap_server_hosts: $ldap_server_hosts, ldap_type: $ldap_type, ldap_user_filter: $ldap_user_filter, name: $name, nameid_format: $nameid_format, oauth_cc_client_id: $oauth_cc_client_id, oauth_cc_client_secret: $oauth_cc_client_secret, oauth_discovery_url: $oauth_discovery_url, oauth_ropc_client_id: $oauth_ropc_client_id, oauth_ropc_secret: $oauth_ropc_secret, oauth_tenant_id: $oauth_tenant_id, oauth_type: $oauth_type, role_attr_extraction: $role_attr_extraction, role_attr_from: $role_attr_from, type: $type} | compact
+  let full_url = (build-url $base ({org_id: $org_id, sso_id: $sso_id} | format pattern "/api/v1/orgs/{org_id}/ssos/{sso_id}"))
+  let body = {"custom_logout_url": $custom_logout_url, "default_role": $default_role, "domain": $domain, "idp_cert": $idp_cert, "idp_sign_algo": $idp_sign_algo, "idp_sso_url": $idp_sso_url, "idp_type": $idp_type, "ignore_unmatched_roles": $ignore_unmatched_roles, "issuer": $issuer, "ldap_base_dn": $ldap_base_dn, "ldap_bind_dn": $ldap_bind_dn, "ldap_bind_password": $ldap_bind_password, "ldap_certs": $ldap_certs, "ldap_client_cert": $ldap_client_cert, "ldap_client_key": $ldap_client_key, "ldap_group_attr": $ldap_group_attr, "ldap_group_dn": $ldap_group_dn, "ldap_group_filter": $ldap_group_filter, "ldap_server_hosts": $ldap_server_hosts, "ldap_type": $ldap_type, "ldap_user_filter": $ldap_user_filter, "name": $name, "nameid_format": $nameid_format, "oauth_cc_client_id": $oauth_cc_client_id, "oauth_cc_client_secret": $oauth_cc_client_secret, "oauth_discovery_url": $oauth_discovery_url, "oauth_ropc_client_id": $oauth_ropc_client_id, "oauth_ropc_secret": $oauth_ropc_secret, "oauth_tenant_id": $oauth_tenant_id, "oauth_type": $oauth_type, "role_attr_extraction": $role_attr_extraction, "role_attr_from": $role_attr_from, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10140,7 +10140,7 @@ export def "orgs-ssos updateOrgSso" [
 #
 # GET /api/v1/orgs/{org_id}/ssos/{sso_id}/failures
 # operationId: getOrgSsoLatestFailures
-export def "orgs-ssos-failures get" [
+export def "orgs-ssos-failures get-org-sso-latest" [
   org_id: any
   sso_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -10160,7 +10160,7 @@ export def "orgs-ssos-failures get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssos/($sso_id)/failures" $qp)
+  let full_url = (build-url $base ({org_id: $org_id, sso_id: $sso_id} | format pattern "/api/v1/orgs/{org_id}/ssos/{sso_id}/failures") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10170,7 +10170,7 @@ export def "orgs-ssos-failures get" [
 #
 # GET /api/v1/orgs/{org_id}/ssos/{sso_id}/metadata
 # operationId: getOrgSsoSamlMetadata
-export def "orgs-ssos-metadata get" [
+export def "orgs-ssos-metadata get-org-sso-saml" [
   org_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10184,7 +10184,7 @@ export def "orgs-ssos-metadata get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssos/($sso_id)/metadata")
+  let full_url = (build-url $base ({org_id: $org_id, sso_id: $sso_id} | format pattern "/api/v1/orgs/{org_id}/ssos/{sso_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10194,7 +10194,7 @@ export def "orgs-ssos-metadata get" [
 #
 # GET /api/v1/orgs/{org_id}/ssos/{sso_id}/metadata.xml
 # operationId: downloadOrgSsoSamlMetadata
-export def "orgs-ssos-metadataxml downloadOrgSsoSamlMetadata" [
+export def "orgs-ssos-metadataxml download-org-sso-saml-metadata" [
   org_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10208,7 +10208,7 @@ export def "orgs-ssos-metadataxml downloadOrgSsoSamlMetadata" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssos/($sso_id)/metadata.xml")
+  let full_url = (build-url $base ({org_id: $org_id, sso_id: $sso_id} | format pattern "/api/v1/orgs/{org_id}/ssos/{sso_id}/metadata.xml"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10231,7 +10231,7 @@ export def "orgs-ssr-upgrade get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssr/upgrade")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/ssr/upgrade"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10261,8 +10261,8 @@ export def "orgs-ssr-upgrade upgradeOrgSsrs" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssr/upgrade")
-  let body = {channel: $channel, device_ids: $device_ids, reboot_at: $reboot_at, start_time: $start_time, strategy: $strategy, version: $version} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/ssr/upgrade"))
+  let body = {"channel": $channel, "device_ids": $device_ids, "reboot_at": $reboot_at, "start_time": $start_time, "strategy": $strategy, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10273,7 +10273,7 @@ export def "orgs-ssr-upgrade upgradeOrgSsrs" [
 #
 # POST /api/v1/orgs/{org_id}/ssr/upgrade/{upgrade_id}/cancel
 # operationId: cancelOrgSsrUpgrade
-export def "orgs-ssr-upgrade-cancel cancelOrgSsrUpgrade" [
+export def "orgs-ssr-upgrade-cancel cancel" [
   org_id: string
   upgrade_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10289,7 +10289,7 @@ export def "orgs-ssr-upgrade-cancel cancelOrgSsrUpgrade" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssr/upgrade/($upgrade_id)/cancel")
+  let full_url = (build-url $base ({org_id: $org_id, upgrade_id: $upgrade_id} | format pattern "/api/v1/orgs/{org_id}/ssr/upgrade/{upgrade_id}/cancel"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10300,7 +10300,7 @@ export def "orgs-ssr-upgrade-cancel cancelOrgSsrUpgrade" [
 #
 # GET /api/v1/orgs/{org_id}/ssr/versions
 # operationId: getOrgSsrUpgradeInfo
-export def "orgs-ssr-versions get" [
+export def "orgs-ssr-versions get-org-ssr-upgrade-info" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10315,7 +10315,7 @@ export def "orgs-ssr-versions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "channel" $channel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/ssr/versions" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/ssr/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10344,7 +10344,7 @@ export def "orgs-stats get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/stats" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/stats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10373,7 +10373,7 @@ export def "orgs-stats-assets get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/stats/assets" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/stats/assets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10398,7 +10398,7 @@ export def "orgs-stats-assets-count countOrgAssetsByDistanceField" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/stats/assets/count" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/stats/assets/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10408,7 +10408,7 @@ export def "orgs-stats-assets-count countOrgAssetsByDistanceField" [
 #
 # GET /api/v1/orgs/{org_id}/stats/assets/search
 # operationId: searchOrgAssets
-export def "orgs-stats-assets-search searchOrgAssets" [
+export def "orgs-stats-assets-search list" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10440,7 +10440,7 @@ export def "orgs-stats-assets-search searchOrgAssets" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "site_id" $site_id "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "device_name" $device_name "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "map_id" $map_id "scalar") (serialize-qp "ibeacon_uuid" $ibeacon_uuid "scalar") (serialize-qp "ibeacon_major" $ibeacon_major "scalar") (serialize-qp "ibeacon_minor" $ibeacon_minor "scalar") (serialize-qp "eddystone_uid_namespace" $eddystone_uid_namespace "scalar") (serialize-qp "eddystone_uid_instance" $eddystone_uid_instance "scalar") (serialize-qp "eddystone_url" $eddystone_url "scalar") (serialize-qp "ap_mac" $ap_mac "scalar") (serialize-qp "beam" $beam "scalar") (serialize-qp "rssi" $rssi "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/stats/assets/search" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/stats/assets/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10463,7 +10463,7 @@ export def "orgs-stats-bgp-peers-count countOrgBgpStats" [
 ]: nothing -> record<distinct: string, end: float, limit: int, results: table<count: int, mac: string>, start: float, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/stats/bgp_peers/count")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/stats/bgp_peers/count"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10473,7 +10473,7 @@ export def "orgs-stats-bgp-peers-count countOrgBgpStats" [
 #
 # GET /api/v1/orgs/{org_id}/stats/bgp_peers/search
 # operationId: searchOrgBgpStats
-export def "orgs-stats-bgp-peers-search searchOrgBgpStats" [
+export def "orgs-stats-bgp-peers-search list" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10486,7 +10486,7 @@ export def "orgs-stats-bgp-peers-search searchOrgBgpStats" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/stats/bgp_peers/search")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/stats/bgp_peers/search"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10521,7 +10521,7 @@ export def "orgs-stats-devices get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "evpntopo_id" $evpntopo_id "scalar") (serialize-qp "evpn_unused" $evpn_unused "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/stats/devices" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/stats/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10551,7 +10551,7 @@ export def "orgs-stats-mxedges list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "for_site" $for_site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/stats/mxedges" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/stats/mxedges") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10575,7 +10575,7 @@ export def "orgs-stats-mxedges get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/stats/mxedges/($mxedge_id)")
+  let full_url = (build-url $base ({org_id: $org_id, mxedge_id: $mxedge_id} | format pattern "/api/v1/orgs/{org_id}/stats/mxedges/{mxedge_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10599,7 +10599,7 @@ export def "orgs-stats-otherdevices get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/stats/otherdevices/($device_mac)")
+  let full_url = (build-url $base ({org_id: $org_id, device_mac: $device_mac} | format pattern "/api/v1/orgs/{org_id}/stats/otherdevices/{device_mac}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10609,7 +10609,7 @@ export def "orgs-stats-otherdevices get" [
 #
 # GET /api/v1/orgs/{org_id}/stats/ports/search
 # operationId: searchOrgSwOrGwPorts
-export def "orgs-stats-ports-search searchOrgSwOrGwPorts" [
+export def "orgs-stats-ports-search list-org-sw-or-gw" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10656,7 +10656,7 @@ export def "orgs-stats-ports-search searchOrgSwOrGwPorts" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full_duplex" $full_duplex "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "neighbor_mac" $neighbor_mac "scalar") (serialize-qp "neighbor_port_desc" $neighbor_port_desc "scalar") (serialize-qp "neighbor_system_name" $neighbor_system_name "scalar") (serialize-qp "poe_disabled" $poe_disabled "scalar") (serialize-qp "poe_mode" $poe_mode "scalar") (serialize-qp "poe_on" $poe_on "scalar") (serialize-qp "port_id" $port_id "scalar") (serialize-qp "port_mac" $port_mac "scalar") (serialize-qp "power_draw" $power_draw "scalar") (serialize-qp "tx_pkts" $tx_pkts "scalar") (serialize-qp "rx_pkts" $rx_pkts "scalar") (serialize-qp "rx_bytes" $rx_bytes "scalar") (serialize-qp "tx_bps" $tx_bps "scalar") (serialize-qp "rx_bps" $rx_bps "scalar") (serialize-qp "tx_errors" $tx_errors "scalar") (serialize-qp "rx_errors" $rx_errors "scalar") (serialize-qp "tx_mcast_pkts" $tx_mcast_pkts "scalar") (serialize-qp "tx_bcast_pkts" $tx_bcast_pkts "scalar") (serialize-qp "rx_mcast_pkts" $rx_mcast_pkts "scalar") (serialize-qp "rx_bcast_pkts" $rx_bcast_pkts "scalar") (serialize-qp "speed" $speed "scalar") (serialize-qp "mac_limit" $mac_limit "scalar") (serialize-qp "mac_count" $mac_count "scalar") (serialize-qp "up" $up "scalar") (serialize-qp "stp_state" $stp_state "scalar") (serialize-qp "stp_role" $stp_role "scalar") (serialize-qp "auth_state" $auth_state "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/stats/ports/search" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/stats/ports/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10711,7 +10711,7 @@ export def "orgs-stats-switch-ports-count countOrgByDisctinctAttributesOfSwitchP
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "full_duplex" $full_duplex "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "neighbor_mac" $neighbor_mac "scalar") (serialize-qp "neighbor_port_desc" $neighbor_port_desc "scalar") (serialize-qp "neighbor_system_name" $neighbor_system_name "scalar") (serialize-qp "poe_disabled" $poe_disabled "scalar") (serialize-qp "poe_mode" $poe_mode "scalar") (serialize-qp "poe_on" $poe_on "scalar") (serialize-qp "port_id" $port_id "scalar") (serialize-qp "port_mac" $port_mac "scalar") (serialize-qp "power_draw" $power_draw "scalar") (serialize-qp "tx_pkts" $tx_pkts "scalar") (serialize-qp "rx_pkts" $rx_pkts "scalar") (serialize-qp "rx_bytes" $rx_bytes "scalar") (serialize-qp "tx_bps" $tx_bps "scalar") (serialize-qp "rx_bps" $rx_bps "scalar") (serialize-qp "tx_mcast_pkts" $tx_mcast_pkts "scalar") (serialize-qp "tx_bcast_pkts" $tx_bcast_pkts "scalar") (serialize-qp "rx_mcast_pkts" $rx_mcast_pkts "scalar") (serialize-qp "rx_bcast_pkts" $rx_bcast_pkts "scalar") (serialize-qp "speed" $speed "scalar") (serialize-qp "stp_state" $stp_state "scalar") (serialize-qp "stp_role" $stp_role "scalar") (serialize-qp "auth_state" $auth_state "scalar") (serialize-qp "up" $up "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/stats/switch_ports/count" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/stats/switch_ports/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10737,7 +10737,7 @@ export def "orgs-stats-tunnels-count countOrgTunnelsStats" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/stats/tunnels/count" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/stats/tunnels/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10747,7 +10747,7 @@ export def "orgs-stats-tunnels-count countOrgTunnelsStats" [
 #
 # GET /api/v1/orgs/{org_id}/stats/tunnels/search
 # operationId: searchOrgTunnelsStats
-export def "orgs-stats-tunnels-search searchOrgTunnelsStats" [
+export def "orgs-stats-tunnels-search list" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10781,7 +10781,7 @@ export def "orgs-stats-tunnels-search searchOrgTunnelsStats" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mxcluster_id" $mxcluster_id "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "wxtunnel_id" $wxtunnel_id "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "node" $node "scalar") (serialize-qp "peer_ip" $peer_ip "scalar") (serialize-qp "peer_host" $peer_host "scalar") (serialize-qp "ip" $ip "scalar") (serialize-qp "tunnel_name" $tunnel_name "scalar") (serialize-qp "protocol" $protocol "scalar") (serialize-qp "auth_algo" $auth_algo "scalar") (serialize-qp "encrypt_algo" $encrypt_algo "scalar") (serialize-qp "ike_version" $ike_version "scalar") (serialize-qp "up" $up "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/stats/tunnels/search" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/stats/tunnels/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10811,7 +10811,7 @@ export def "orgs-stats-vpn-peers-count countOrgPeerPathStats" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/stats/vpn_peers/count" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/stats/vpn_peers/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10821,7 +10821,7 @@ export def "orgs-stats-vpn-peers-count countOrgPeerPathStats" [
 #
 # GET /api/v1/orgs/{org_id}/stats/vpn_peers/search
 # operationId: searchOrgPeerPathStats
-export def "orgs-stats-vpn-peers-search searchOrgPeerPathStats" [
+export def "orgs-stats-vpn-peers-search list-org-peer-path" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10839,7 +10839,7 @@ export def "orgs-stats-vpn-peers-search searchOrgPeerPathStats" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/stats/vpn_peers/search" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/stats/vpn_peers/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10849,7 +10849,7 @@ export def "orgs-stats-vpn-peers-search searchOrgPeerPathStats" [
 #
 # DELETE /api/v1/orgs/{org_id}/subscriptions
 # operationId: unsubscribeOrgAlarmsReports
-export def "orgs-subscriptions unsubscribeOrgAlarmsReports" [
+export def "orgs-subscriptions unsubscribe-org-alarms-reports" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10862,7 +10862,7 @@ export def "orgs-subscriptions unsubscribeOrgAlarmsReports" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/subscriptions")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/subscriptions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10872,7 +10872,7 @@ export def "orgs-subscriptions unsubscribeOrgAlarmsReports" [
 #
 # POST /api/v1/orgs/{org_id}/subscriptions
 # operationId: subscribeOrgAlarmsReports
-export def "orgs-subscriptions subscribeOrgAlarmsReports" [
+export def "orgs-subscriptions subscribe-org-alarms-reports" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10885,7 +10885,7 @@ export def "orgs-subscriptions subscribeOrgAlarmsReports" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/subscriptions")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/subscriptions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10908,7 +10908,7 @@ export def "orgs-templates list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/templates")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/templates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10920,7 +10920,7 @@ export def "orgs-templates list" [
 # operationId: createOrgTemplate
 # --applies shape: {org_id?: string, site_ids?: list, sitegroup_ids?: list}
 # --exceptions shape: {site_ids?: list, sitegroup_ids?: list}
-export def "orgs-templates createOrgTemplate" [
+export def "orgs-templates create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10939,8 +10939,8 @@ export def "orgs-templates createOrgTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/templates")
-  let body = {applies: $applies, deviceprofile_ids: $deviceprofile_ids, exceptions: $exceptions, filter_by_deviceprofile: $filter_by_deviceprofile, name: $name} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/templates"))
+  let body = {"applies": $applies, "deviceprofile_ids": $deviceprofile_ids, "exceptions": $exceptions, "filter_by_deviceprofile": $filter_by_deviceprofile, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10965,7 +10965,7 @@ export def "orgs-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/templates/($template_id)")
+  let full_url = (build-url $base ({org_id: $org_id, template_id: $template_id} | format pattern "/api/v1/orgs/{org_id}/templates/{template_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10989,7 +10989,7 @@ export def "orgs-templates get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/templates/($template_id)")
+  let full_url = (build-url $base ({org_id: $org_id, template_id: $template_id} | format pattern "/api/v1/orgs/{org_id}/templates/{template_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11001,7 +11001,7 @@ export def "orgs-templates get" [
 # operationId: updateOrgTemplate
 # --applies shape: {org_id?: string, site_ids?: list, sitegroup_ids?: list}
 # --exceptions shape: {site_ids?: list, sitegroup_ids?: list}
-export def "orgs-templates updateOrgTemplate" [
+export def "orgs-templates update" [
   org_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11021,8 +11021,8 @@ export def "orgs-templates updateOrgTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/templates/($template_id)")
-  let body = {applies: $applies, deviceprofile_ids: $deviceprofile_ids, exceptions: $exceptions, filter_by_deviceprofile: $filter_by_deviceprofile, name: $name} | compact
+  let full_url = (build-url $base ({org_id: $org_id, template_id: $template_id} | format pattern "/api/v1/orgs/{org_id}/templates/{template_id}"))
+  let body = {"applies": $applies, "deviceprofile_ids": $deviceprofile_ids, "exceptions": $exceptions, "filter_by_deviceprofile": $filter_by_deviceprofile, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11033,7 +11033,7 @@ export def "orgs-templates updateOrgTemplate" [
 #
 # POST /api/v1/orgs/{org_id}/templates/{template_id}/clone
 # operationId: cloneOrgTemplate
-export def "orgs-templates-clone cloneOrgTemplate" [
+export def "orgs-templates-clone clone" [
   org_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11049,8 +11049,8 @@ export def "orgs-templates-clone cloneOrgTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/templates/($template_id)/clone")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({org_id: $org_id, template_id: $template_id} | format pattern "/api/v1/orgs/{org_id}/templates/{template_id}/clone"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11078,7 +11078,7 @@ export def "orgs-tickets list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/tickets" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/tickets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11089,7 +11089,7 @@ export def "orgs-tickets list" [
 # POST /api/v1/orgs/{org_id}/tickets
 # operationId: createOrgTicket
 # --comments item shape: {attachments?: list, author: string, comment: string, created_at: int}
-export def "orgs-tickets createOrgTicket" [
+export def "orgs-tickets create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11108,8 +11108,8 @@ export def "orgs-tickets createOrgTicket" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/tickets")
-  let body = {comments: $comments, requester_email: $requester_email, status: $status, subject: $subject, type: $type} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/tickets"))
+  let body = {"comments": $comments, "requester_email": $requester_email, "status": $status, "subject": $subject, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11135,7 +11135,7 @@ export def "orgs-tickets-count countOrgTickets" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/tickets/count" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/tickets/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11159,7 +11159,7 @@ export def "orgs-tickets get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/tickets/($ticket_id)")
+  let full_url = (build-url $base ({org_id: $org_id, ticket_id: $ticket_id} | format pattern "/api/v1/orgs/{org_id}/tickets/{ticket_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11170,7 +11170,7 @@ export def "orgs-tickets get" [
 # PUT /api/v1/orgs/{org_id}/tickets/{ticket_id}
 # operationId: updateOrgTicket
 # --comments item shape: {attachments?: list, author: string, comment: string, created_at: int}
-export def "orgs-tickets updateOrgTicket" [
+export def "orgs-tickets update" [
   org_id: string
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11190,8 +11190,8 @@ export def "orgs-tickets updateOrgTicket" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/tickets/($ticket_id)")
-  let body = {comments: $comments, requester_email: $requester_email, status: $status, subject: $subject, type: $type} | compact
+  let full_url = (build-url $base ({org_id: $org_id, ticket_id: $ticket_id} | format pattern "/api/v1/orgs/{org_id}/tickets/{ticket_id}"))
+  let body = {"comments": $comments, "requester_email": $requester_email, "status": $status, "subject": $subject, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11202,7 +11202,7 @@ export def "orgs-tickets updateOrgTicket" [
 #
 # POST /api/v1/orgs/{org_id}/tickets/{ticket_id}/comments
 # operationId: addOrgTicketComment
-export def "orgs-tickets-comments addOrgTicketComment" [
+export def "orgs-tickets-comments create" [
   org_id: string
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11218,8 +11218,8 @@ export def "orgs-tickets-comments addOrgTicketComment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/tickets/($ticket_id)/comments")
-  let body = {comment: $comment} | compact
+  let full_url = (build-url $base ({org_id: $org_id, ticket_id: $ticket_id} | format pattern "/api/v1/orgs/{org_id}/tickets/{ticket_id}/comments"))
+  let body = {"comment": $comment} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11249,7 +11249,7 @@ export def "orgs-troubleshoot troubleshootOrgClient" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mac" $mac "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/troubleshoot" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/troubleshoot") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11272,7 +11272,7 @@ export def "orgs-vpns list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/vpns")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/vpns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11282,7 +11282,7 @@ export def "orgs-vpns list" [
 #
 # POST /api/v1/orgs/{org_id}/vpns
 # operationId: createOrgVpns
-export def "orgs-vpns createOrgVpns" [
+export def "orgs-vpns create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11299,8 +11299,8 @@ export def "orgs-vpns createOrgVpns" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/vpns")
-  let body = {created_time: $created_time, name: $name, paths: $paths} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/vpns"))
+  let body = {"created_time": $created_time, "name": $name, "paths": $paths} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11325,7 +11325,7 @@ export def "orgs-vpns delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/vpns/($vpn_id)")
+  let full_url = (build-url $base ({org_id: $org_id, vpn_id: $vpn_id} | format pattern "/api/v1/orgs/{org_id}/vpns/{vpn_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11349,7 +11349,7 @@ export def "orgs-vpns get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/vpns/($vpn_id)")
+  let full_url = (build-url $base ({org_id: $org_id, vpn_id: $vpn_id} | format pattern "/api/v1/orgs/{org_id}/vpns/{vpn_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11359,7 +11359,7 @@ export def "orgs-vpns get" [
 #
 # PUT /api/v1/orgs/{org_id}/vpns/{vpn_id}
 # operationId: updateOrgVpn
-export def "orgs-vpns updateOrgVpn" [
+export def "orgs-vpns update" [
   org_id: string
   vpn_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11377,8 +11377,8 @@ export def "orgs-vpns updateOrgVpn" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/vpns/($vpn_id)")
-  let body = {created_time: $created_time, name: $name, paths: $paths} | compact
+  let full_url = (build-url $base ({org_id: $org_id, vpn_id: $vpn_id} | format pattern "/api/v1/orgs/{org_id}/vpns/{vpn_id}"))
+  let body = {"created_time": $created_time, "name": $name, "paths": $paths} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11402,7 +11402,7 @@ export def "orgs-webhooks list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/webhooks")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/webhooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11412,7 +11412,7 @@ export def "orgs-webhooks list" [
 #
 # POST /api/v1/orgs/{org_id}/webhooks
 # operationId: createOrgWebhook
-export def "orgs-webhooks createOrgWebhook" [
+export def "orgs-webhooks create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11435,8 +11435,8 @@ export def "orgs-webhooks createOrgWebhook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/webhooks")
-  let body = {enabled: $enabled, headers: $headers, name: $name, secret: $secret, splunk_token: $splunk_token, topics: $topics, type: $type, url: $body_url, verify_cert: $verify_cert} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/webhooks"))
+  let body = {"enabled": $enabled, "headers": $headers, "name": $name, "secret": $secret, "splunk_token": $splunk_token, "topics": $topics, "type": $type, "url": $body_url, "verify_cert": $verify_cert} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11461,7 +11461,7 @@ export def "orgs-webhooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/webhooks/($webhook_id)")
+  let full_url = (build-url $base ({org_id: $org_id, webhook_id: $webhook_id} | format pattern "/api/v1/orgs/{org_id}/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11485,7 +11485,7 @@ export def "orgs-webhooks get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/webhooks/($webhook_id)")
+  let full_url = (build-url $base ({org_id: $org_id, webhook_id: $webhook_id} | format pattern "/api/v1/orgs/{org_id}/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11495,7 +11495,7 @@ export def "orgs-webhooks get" [
 #
 # PUT /api/v1/orgs/{org_id}/webhooks/{webhook_id}
 # operationId: updateOrgWebhook
-export def "orgs-webhooks updateOrgWebhook" [
+export def "orgs-webhooks update" [
   org_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11519,8 +11519,8 @@ export def "orgs-webhooks updateOrgWebhook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/webhooks/($webhook_id)")
-  let body = {enabled: $enabled, headers: $headers, name: $name, secret: $secret, splunk_token: $splunk_token, topics: $topics, type: $type, url: $body_url, verify_cert: $verify_cert} | compact
+  let full_url = (build-url $base ({org_id: $org_id, webhook_id: $webhook_id} | format pattern "/api/v1/orgs/{org_id}/webhooks/{webhook_id}"))
+  let body = {"enabled": $enabled, "headers": $headers, "name": $name, "secret": $secret, "splunk_token": $splunk_token, "topics": $topics, "type": $type, "url": $body_url, "verify_cert": $verify_cert} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11551,7 +11551,7 @@ export def "orgs-wired-clients-count countOrgClientsWired" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wired_clients/count" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/wired_clients/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11561,7 +11561,7 @@ export def "orgs-wired-clients-count countOrgClientsWired" [
 #
 # GET /api/v1/orgs/{org_id}/wired_clients/search
 # operationId: searchOrgClientsWired
-export def "orgs-wired-clients-search searchOrgClientsWired" [
+export def "orgs-wired-clients-search list" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11587,7 +11587,7 @@ export def "orgs-wired-clients-search searchOrgClientsWired" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "site_id" $site_id "scalar") (serialize-qp "device_mac" $device_mac "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "port_id" $port_id "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "ip" $ip "scalar") (serialize-qp "manufacture" $manufacture "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wired_clients/search" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/wired_clients/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11610,7 +11610,7 @@ export def "orgs-wlans list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wlans")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/wlans"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11640,7 +11640,7 @@ export def "orgs-wlans list" [
 # --rateset shape: {5?: record, 24?: record}
 # --schedule shape: {enabled?: bool, hours?: record}
 @deprecated --flag band
-export def "orgs-wlans createOrgWlan" [
+export def "orgs-wlans create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11742,8 +11742,8 @@ export def "orgs-wlans createOrgWlan" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wlans")
-  let body = {acct_interim_interval: $acct_interim_interval, acct_servers: $acct_servers, airwatch: $airwatch, allow_ipv6_ndp: $allow_ipv6_ndp, allow_mdns: $allow_mdns, allow_ssdp: $allow_ssdp, ap_ids: $ap_ids, app_limit: $app_limit, app_qos: $app_qos, apply_to: $apply_to, arp_filter: $arp_filter, auth: $body_auth, auth_server_selection: $auth_server_selection, auth_servers: $auth_servers, auth_servers_nas_id: $auth_servers_nas_id, auth_servers_nas_ip: $auth_servers_nas_ip, auth_servers_retries: $auth_servers_retries, auth_servers_timeout: $auth_servers_timeout, band: $band, band_steer: $band_steer, band_steer_force_band5: $band_steer_force_band5, bands: $bands, block_blacklist_clients: $block_blacklist_clients, bonjour: $bonjour, cisco_cwa: $cisco_cwa, client_limit_down: $client_limit_down, client_limit_down_enabled: $client_limit_down_enabled, client_limit_up: $client_limit_up, client_limit_up_enabled: $client_limit_up_enabled, coa_servers: $coa_servers, disable_11ax: $disable_11ax, disable_ht_vht_rates: $disable_ht_vht_rates, disable_uapsd: $disable_uapsd, disable_v1_roam_notify: $disable_v1_roam_notify, disable_v2_roam_notify: $disable_v2_roam_notify, disable_wmm: $disable_wmm, dns_server_rewrite: $dns_server_rewrite, dtim: $dtim, dynamic_psk: $dynamic_psk, dynamic_vlan: $dynamic_vlan, enable_local_keycaching: $enable_local_keycaching, enable_wireless_bridging: $enable_wireless_bridging, enabled: $enabled, hide_ssid: $hide_ssid, hostname_ie: $hostname_ie, hotspot20: $hotspot20, interface: $interface, isolation: $isolation, l2_isolation: $l2_isolation, legacy_overds: $legacy_overds, limit_bcast: $limit_bcast, limit_probe_response: $limit_probe_response, max_idletime: $max_idletime, mist_nac: $mist_nac, mxtunnel: $mxtunnel, mxtunnel_id: $mxtunnel_id, mxtunnel_name: $mxtunnel_name, no_static_dns: $no_static_dns, no_static_ip: $no_static_ip, portal: $portal, portal_allowed_hostnames: $portal_allowed_hostnames, portal_allowed_subnets: $portal_allowed_subnets, portal_api_secret: $portal_api_secret, portal_denied_hostnames: $portal_denied_hostnames, portal_image: $portal_image, portal_sso_url: $portal_sso_url, portal_template_url: $portal_template_url, qos: $qos, radsec: $radsec, rateset: $rateset, roam_mode: $roam_mode, schedule: $schedule, sle_excluded: $sle_excluded, ssid: $ssid, template_id: $template_id, thumbnail: $thumbnail, use_eapol_v1: $use_eapol_v1, vlan_enabled: $vlan_enabled, vlan_id: $vlan_id, vlan_ids: $vlan_ids, vlan_pooling: $vlan_pooling, wlan_limit_down: $wlan_limit_down, wlan_limit_down_enabled: $wlan_limit_down_enabled, wlan_limit_up: $wlan_limit_up, wlan_limit_up_enabled: $wlan_limit_up_enabled, wxtag_ids: $wxtag_ids, wxtunnel_id: $wxtunnel_id, wxtunnel_remote_id: $wxtunnel_remote_id} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/wlans"))
+  let body = {"acct_interim_interval": $acct_interim_interval, "acct_servers": $acct_servers, "airwatch": $airwatch, "allow_ipv6_ndp": $allow_ipv6_ndp, "allow_mdns": $allow_mdns, "allow_ssdp": $allow_ssdp, "ap_ids": $ap_ids, "app_limit": $app_limit, "app_qos": $app_qos, "apply_to": $apply_to, "arp_filter": $arp_filter, "auth": $body_auth, "auth_server_selection": $auth_server_selection, "auth_servers": $auth_servers, "auth_servers_nas_id": $auth_servers_nas_id, "auth_servers_nas_ip": $auth_servers_nas_ip, "auth_servers_retries": $auth_servers_retries, "auth_servers_timeout": $auth_servers_timeout, "band": $band, "band_steer": $band_steer, "band_steer_force_band5": $band_steer_force_band5, "bands": $bands, "block_blacklist_clients": $block_blacklist_clients, "bonjour": $bonjour, "cisco_cwa": $cisco_cwa, "client_limit_down": $client_limit_down, "client_limit_down_enabled": $client_limit_down_enabled, "client_limit_up": $client_limit_up, "client_limit_up_enabled": $client_limit_up_enabled, "coa_servers": $coa_servers, "disable_11ax": $disable_11ax, "disable_ht_vht_rates": $disable_ht_vht_rates, "disable_uapsd": $disable_uapsd, "disable_v1_roam_notify": $disable_v1_roam_notify, "disable_v2_roam_notify": $disable_v2_roam_notify, "disable_wmm": $disable_wmm, "dns_server_rewrite": $dns_server_rewrite, "dtim": $dtim, "dynamic_psk": $dynamic_psk, "dynamic_vlan": $dynamic_vlan, "enable_local_keycaching": $enable_local_keycaching, "enable_wireless_bridging": $enable_wireless_bridging, "enabled": $enabled, "hide_ssid": $hide_ssid, "hostname_ie": $hostname_ie, "hotspot20": $hotspot20, "interface": $interface, "isolation": $isolation, "l2_isolation": $l2_isolation, "legacy_overds": $legacy_overds, "limit_bcast": $limit_bcast, "limit_probe_response": $limit_probe_response, "max_idletime": $max_idletime, "mist_nac": $mist_nac, "mxtunnel": $mxtunnel, "mxtunnel_id": $mxtunnel_id, "mxtunnel_name": $mxtunnel_name, "no_static_dns": $no_static_dns, "no_static_ip": $no_static_ip, "portal": $portal, "portal_allowed_hostnames": $portal_allowed_hostnames, "portal_allowed_subnets": $portal_allowed_subnets, "portal_api_secret": $portal_api_secret, "portal_denied_hostnames": $portal_denied_hostnames, "portal_image": $portal_image, "portal_sso_url": $portal_sso_url, "portal_template_url": $portal_template_url, "qos": $qos, "radsec": $radsec, "rateset": $rateset, "roam_mode": $roam_mode, "schedule": $schedule, "sle_excluded": $sle_excluded, "ssid": $ssid, "template_id": $template_id, "thumbnail": $thumbnail, "use_eapol_v1": $use_eapol_v1, "vlan_enabled": $vlan_enabled, "vlan_id": $vlan_id, "vlan_ids": $vlan_ids, "vlan_pooling": $vlan_pooling, "wlan_limit_down": $wlan_limit_down, "wlan_limit_down_enabled": $wlan_limit_down_enabled, "wlan_limit_up": $wlan_limit_up, "wlan_limit_up_enabled": $wlan_limit_up_enabled, "wxtag_ids": $wxtag_ids, "wxtunnel_id": $wxtunnel_id, "wxtunnel_remote_id": $wxtunnel_remote_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11769,7 +11769,7 @@ export def "orgs-wlans-derived get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resolve" $resolve "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wlans/derived" $qp)
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/wlans/derived") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11793,7 +11793,7 @@ export def "orgs-wlans delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wlans/($wlan_id)")
+  let full_url = (build-url $base ({org_id: $org_id, wlan_id: $wlan_id} | format pattern "/api/v1/orgs/{org_id}/wlans/{wlan_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11817,7 +11817,7 @@ export def "orgs-wlans get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wlans/($wlan_id)")
+  let full_url = (build-url $base ({org_id: $org_id, wlan_id: $wlan_id} | format pattern "/api/v1/orgs/{org_id}/wlans/{wlan_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11847,7 +11847,7 @@ export def "orgs-wlans get" [
 # --rateset shape: {5?: record, 24?: record}
 # --schedule shape: {enabled?: bool, hours?: record}
 @deprecated --flag band
-export def "orgs-wlans updateOrgWlan" [
+export def "orgs-wlans update" [
   org_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11950,8 +11950,8 @@ export def "orgs-wlans updateOrgWlan" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wlans/($wlan_id)")
-  let body = {acct_interim_interval: $acct_interim_interval, acct_servers: $acct_servers, airwatch: $airwatch, allow_ipv6_ndp: $allow_ipv6_ndp, allow_mdns: $allow_mdns, allow_ssdp: $allow_ssdp, ap_ids: $ap_ids, app_limit: $app_limit, app_qos: $app_qos, apply_to: $apply_to, arp_filter: $arp_filter, auth: $body_auth, auth_server_selection: $auth_server_selection, auth_servers: $auth_servers, auth_servers_nas_id: $auth_servers_nas_id, auth_servers_nas_ip: $auth_servers_nas_ip, auth_servers_retries: $auth_servers_retries, auth_servers_timeout: $auth_servers_timeout, band: $band, band_steer: $band_steer, band_steer_force_band5: $band_steer_force_band5, bands: $bands, block_blacklist_clients: $block_blacklist_clients, bonjour: $bonjour, cisco_cwa: $cisco_cwa, client_limit_down: $client_limit_down, client_limit_down_enabled: $client_limit_down_enabled, client_limit_up: $client_limit_up, client_limit_up_enabled: $client_limit_up_enabled, coa_servers: $coa_servers, disable_11ax: $disable_11ax, disable_ht_vht_rates: $disable_ht_vht_rates, disable_uapsd: $disable_uapsd, disable_v1_roam_notify: $disable_v1_roam_notify, disable_v2_roam_notify: $disable_v2_roam_notify, disable_wmm: $disable_wmm, dns_server_rewrite: $dns_server_rewrite, dtim: $dtim, dynamic_psk: $dynamic_psk, dynamic_vlan: $dynamic_vlan, enable_local_keycaching: $enable_local_keycaching, enable_wireless_bridging: $enable_wireless_bridging, enabled: $enabled, hide_ssid: $hide_ssid, hostname_ie: $hostname_ie, hotspot20: $hotspot20, interface: $interface, isolation: $isolation, l2_isolation: $l2_isolation, legacy_overds: $legacy_overds, limit_bcast: $limit_bcast, limit_probe_response: $limit_probe_response, max_idletime: $max_idletime, mist_nac: $mist_nac, mxtunnel: $mxtunnel, mxtunnel_id: $mxtunnel_id, mxtunnel_name: $mxtunnel_name, no_static_dns: $no_static_dns, no_static_ip: $no_static_ip, portal: $portal, portal_allowed_hostnames: $portal_allowed_hostnames, portal_allowed_subnets: $portal_allowed_subnets, portal_api_secret: $portal_api_secret, portal_denied_hostnames: $portal_denied_hostnames, portal_image: $portal_image, portal_sso_url: $portal_sso_url, portal_template_url: $portal_template_url, qos: $qos, radsec: $radsec, rateset: $rateset, roam_mode: $roam_mode, schedule: $schedule, sle_excluded: $sle_excluded, ssid: $ssid, template_id: $template_id, thumbnail: $thumbnail, use_eapol_v1: $use_eapol_v1, vlan_enabled: $vlan_enabled, vlan_id: $vlan_id, vlan_ids: $vlan_ids, vlan_pooling: $vlan_pooling, wlan_limit_down: $wlan_limit_down, wlan_limit_down_enabled: $wlan_limit_down_enabled, wlan_limit_up: $wlan_limit_up, wlan_limit_up_enabled: $wlan_limit_up_enabled, wxtag_ids: $wxtag_ids, wxtunnel_id: $wxtunnel_id, wxtunnel_remote_id: $wxtunnel_remote_id} | compact
+  let full_url = (build-url $base ({org_id: $org_id, wlan_id: $wlan_id} | format pattern "/api/v1/orgs/{org_id}/wlans/{wlan_id}"))
+  let body = {"acct_interim_interval": $acct_interim_interval, "acct_servers": $acct_servers, "airwatch": $airwatch, "allow_ipv6_ndp": $allow_ipv6_ndp, "allow_mdns": $allow_mdns, "allow_ssdp": $allow_ssdp, "ap_ids": $ap_ids, "app_limit": $app_limit, "app_qos": $app_qos, "apply_to": $apply_to, "arp_filter": $arp_filter, "auth": $body_auth, "auth_server_selection": $auth_server_selection, "auth_servers": $auth_servers, "auth_servers_nas_id": $auth_servers_nas_id, "auth_servers_nas_ip": $auth_servers_nas_ip, "auth_servers_retries": $auth_servers_retries, "auth_servers_timeout": $auth_servers_timeout, "band": $band, "band_steer": $band_steer, "band_steer_force_band5": $band_steer_force_band5, "bands": $bands, "block_blacklist_clients": $block_blacklist_clients, "bonjour": $bonjour, "cisco_cwa": $cisco_cwa, "client_limit_down": $client_limit_down, "client_limit_down_enabled": $client_limit_down_enabled, "client_limit_up": $client_limit_up, "client_limit_up_enabled": $client_limit_up_enabled, "coa_servers": $coa_servers, "disable_11ax": $disable_11ax, "disable_ht_vht_rates": $disable_ht_vht_rates, "disable_uapsd": $disable_uapsd, "disable_v1_roam_notify": $disable_v1_roam_notify, "disable_v2_roam_notify": $disable_v2_roam_notify, "disable_wmm": $disable_wmm, "dns_server_rewrite": $dns_server_rewrite, "dtim": $dtim, "dynamic_psk": $dynamic_psk, "dynamic_vlan": $dynamic_vlan, "enable_local_keycaching": $enable_local_keycaching, "enable_wireless_bridging": $enable_wireless_bridging, "enabled": $enabled, "hide_ssid": $hide_ssid, "hostname_ie": $hostname_ie, "hotspot20": $hotspot20, "interface": $interface, "isolation": $isolation, "l2_isolation": $l2_isolation, "legacy_overds": $legacy_overds, "limit_bcast": $limit_bcast, "limit_probe_response": $limit_probe_response, "max_idletime": $max_idletime, "mist_nac": $mist_nac, "mxtunnel": $mxtunnel, "mxtunnel_id": $mxtunnel_id, "mxtunnel_name": $mxtunnel_name, "no_static_dns": $no_static_dns, "no_static_ip": $no_static_ip, "portal": $portal, "portal_allowed_hostnames": $portal_allowed_hostnames, "portal_allowed_subnets": $portal_allowed_subnets, "portal_api_secret": $portal_api_secret, "portal_denied_hostnames": $portal_denied_hostnames, "portal_image": $portal_image, "portal_sso_url": $portal_sso_url, "portal_template_url": $portal_template_url, "qos": $qos, "radsec": $radsec, "rateset": $rateset, "roam_mode": $roam_mode, "schedule": $schedule, "sle_excluded": $sle_excluded, "ssid": $ssid, "template_id": $template_id, "thumbnail": $thumbnail, "use_eapol_v1": $use_eapol_v1, "vlan_enabled": $vlan_enabled, "vlan_id": $vlan_id, "vlan_ids": $vlan_ids, "vlan_pooling": $vlan_pooling, "wlan_limit_down": $wlan_limit_down, "wlan_limit_down_enabled": $wlan_limit_down_enabled, "wlan_limit_up": $wlan_limit_up, "wlan_limit_up_enabled": $wlan_limit_up_enabled, "wxtag_ids": $wxtag_ids, "wxtunnel_id": $wxtunnel_id, "wxtunnel_remote_id": $wxtunnel_remote_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11976,7 +11976,7 @@ export def "orgs-wlans-portal-image delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wlans/($wlan_id)/portal_image")
+  let full_url = (build-url $base ({org_id: $org_id, wlan_id: $wlan_id} | format pattern "/api/v1/orgs/{org_id}/wlans/{wlan_id}/portal_image"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11986,7 +11986,7 @@ export def "orgs-wlans-portal-image delete" [
 #
 # POST /api/v1/orgs/{org_id}/wlans/{wlan_id}/portal_image
 # operationId: uploadOrgWlanPortalImage
-export def "orgs-wlans-portal-image uploadOrgWlanPortalImage" [
+export def "orgs-wlans-portal-image upload" [
   org_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12003,8 +12003,8 @@ export def "orgs-wlans-portal-image uploadOrgWlanPortalImage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wlans/($wlan_id)/portal_image")
-  let body = {file: $file, json: $json} | compact
+  let full_url = (build-url $base ({org_id: $org_id, wlan_id: $wlan_id} | format pattern "/api/v1/orgs/{org_id}/wlans/{wlan_id}/portal_image"))
+  let body = {"file": $file, "json": $json} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12015,7 +12015,7 @@ export def "orgs-wlans-portal-image uploadOrgWlanPortalImage" [
 #
 # PUT /api/v1/orgs/{org_id}/wlans/{wlan_id}/portal_template
 # operationId: updateOrgWlanPortalTemplate
-export def "orgs-wlans-portal-template updateOrgWlanPortalTemplate" [
+export def "orgs-wlans-portal-template update" [
   org_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12026,126 +12026,126 @@ export def "orgs-wlans-portal-template updateOrgWlanPortalTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accessCodeAlternateEmail: string # “Please provide valid alternate email”
+  --access-code-alternate-email: string # “Please provide valid alternate email”
   --alignment: string # defines alignment on portal. “left” is default.
-  --authButtonAmazon: string # label for Amazon auth button
-  --authButtonAzure: string # label for Azure auth button
-  --authButtonEmail: string # label for Email auth button
-  --authButtonFacebook: string # label for Facebook auth button
-  --authButtonGoogle: string # label for Google auth button
-  --authButtonMicrosoft: string # label for Microsoft auth button
-  --authButtonPassphrase: string # label for passphrase auth button
-  --authButtonSms: string # label for SMS auth button
-  --authButtonSponsor: string # label for Sponsor auth button
-  --authLabel: string # “Connect to WiFi with”
-  --backLink: string # label of the link to go back to /logon
+  --auth-button-amazon: string # label for Amazon auth button
+  --auth-button-azure: string # label for Azure auth button
+  --auth-button-email: string # label for Email auth button
+  --auth-button-facebook: string # label for Facebook auth button
+  --auth-button-google: string # label for Google auth button
+  --auth-button-microsoft: string # label for Microsoft auth button
+  --auth-button-passphrase: string # label for passphrase auth button
+  --auth-button-sms: string # label for SMS auth button
+  --auth-button-sponsor: string # label for Sponsor auth button
+  --auth-label: string # “Connect to WiFi with”
+  --back-link: string # label of the link to go back to /logon
   --color: string # “#1074bc”
-  --colorDark: string # “#0b5183”
-  --colorLight: string # “#3589c6”
+  --color-dark: string # “#0b5183”
+  --color-light: string # “#3589c6”
   --company: oneof<nothing, bool> # whether company field is required (default: false)
-  --companyError: string # error message when company not provided
-  --companyLabel: string # label of company field
+  --company-error: string # error message when company not provided
+  --company-label: string # label of company field
   --email: oneof<nothing, bool> # whether email field is required (default: false)
-  --emailAccessDomainError: string # error message when a user has valid social login but doesn’t match specified email domains.
-  --emailCancel: string # Label for cancel confirmation code submission using email auth
-  --emailCodeCancel: string
-  --emailCodeError: string # “Please provide valid alternate email”
-  --emailCodeFieldLabel: string # “Confirmation Code”
-  --emailCodeMessage: string # “Enter the access number that was sent to your email address.”
-  --emailCodeSubmit: string # “Sign In
-  --emailCodeTitle: string # “Access Code”
-  --emailError: string # error message when email not provided
-  --emailFieldLabel: string # “Enter your email address”
-  --emailLabel: string # label of email field
-  --emailMessage: string # “We will email you an authentication code which you can use to connect to the WiFi network.”
-  --emailSubmit: string # Label for confirmation code submit button using email auth
-  --emailTitle: string # “Sign in with Email”
+  --email-access-domain-error: string # error message when a user has valid social login but doesn’t match specified email domains.
+  --email-cancel: string # Label for cancel confirmation code submission using email auth
+  --email-code-cancel: string
+  --email-code-error: string # “Please provide valid alternate email”
+  --email-code-field-label: string # “Confirmation Code”
+  --email-code-message: string # “Enter the access number that was sent to your email address.”
+  --email-code-submit: string # “Sign In
+  --email-code-title: string # “Access Code”
+  --email-error: string # error message when email not provided
+  --email-field-label: string # “Enter your email address”
+  --email-label: string # label of email field
+  --email-message: string # “We will email you an authentication code which you can use to connect to the WiFi network.”
+  --email-submit: string # Label for confirmation code submit button using email auth
+  --email-title: string # “Sign in with Email”
   --field1: oneof<nothing, bool> # whether to ask field1
-  --field1Error: string # error message when field1 not provided
-  --field1Label: string # label of field1
-  --field1Required: oneof<nothing, bool> # whether field1 is required field
+  --field1-error: string # error message when field1 not provided
+  --field1-label: string # label of field1
+  --field1-required: oneof<nothing, bool> # whether field1 is required field
   --field2: oneof<nothing, bool> # whether to ask field2
-  --field2Error: string # error message when field2 not provided
-  --field2Label: string # label of field2
-  --field2Required: oneof<nothing, bool> # whether field2 is required field
+  --field2-error: string # error message when field2 not provided
+  --field2-label: string # label of field2
+  --field2-required: oneof<nothing, bool> # whether field2 is required field
   --field3: oneof<nothing, bool> # whether to ask field3
-  --field3Error: string # error message when field3 not provided
-  --field3Label: string # label of field3
-  --field3Required: oneof<nothing, bool> # whether field3 is required field
+  --field3-error: string # error message when field3 not provided
+  --field3-label: string # label of field3
+  --field3-required: oneof<nothing, bool> # whether field3 is required field
   --field4: oneof<nothing, bool> # whether to ask field4
-  --field4Error: string # error message when field4 not provided
-  --field4Label: string # label of field4
-  --field4Required: oneof<nothing, bool> # whether field4 is required field
+  --field4-error: string # error message when field4 not provided
+  --field4-label: string # label of field4
+  --field4-required: oneof<nothing, bool> # whether field4 is required field
   --message: string # “Please enjoy the complimentary Wifi”
   --name: oneof<nothing, bool> # whether name field is required (default: false)
-  --nameError: string # error message when name not provided
-  --nameLabel: string # label of name field
+  --name-error: string # error message when name not provided
+  --name-label: string # label of name field
   --optout: oneof<nothing, bool> # whether to display “Do Not Store My Personal Information”
-  --optoutLabel: string # label for “Do Not Store My Personal Information”
-  pageTitle: string # “Welcome”
-  --passphraseCancel: string # “Cancel”
-  --passphraseError: string # error message when invalid passphrase is provided
-  --passphraseLabel: string # Passphrase
-  --passphraseMessage: string # “Login using passphrase”
-  --passphraseSubmit: string # “Sign in”
-  --passphraseTitle: string # Title for passphrase details page
-  --poweredBy: oneof<nothing, bool> # whether to show “Powered by Mist” (default: true)
-  --requiredFieldLabel: string # label to denote required field
-  --signInLabel: string # label of the button to /signin
-  --smsCarrierDefault: string # “Please Select”
-  --smsCarrierError: string # “Please select a mobile carrier”
-  --smsCarrierFieldLabel: string # label for mobile carrier drop-down list
-  --smsCodeCancel: string # Label for cancel confirmation code submission
-  --smsCodeError: string # error message when confirmation code is invalid
-  --smsCodeFieldLabel: string # “Confirmation Code”
-  --smsCodeMessage: string # “Enter the confirmation code”
-  --smsCodeSubmit: string # Label for confirmation code submit button
-  --smsCodeTitle: string # “Access Code”
-  --smsCountryFieldLabel: string # “Country Code”
-  --smsCountryFormat: string # “+1”
-  --smsHaveAccessCode: string # Label for checkbox to specify that the user has access code
-  --smsMessageFormat: string # format of access code sms message. {{code}} and {{duration}} are place holders and should be retained as is.
-  --smsNumberCancel: string # label for canceling mobile details for SMS auth
-  --smsNumberError: string # “Invalid Mobile Number”
-  --smsNumberFieldLabel: string # label for field to provide mobile number
-  --smsNumberFormat: string # “2125551212 (digits only)”
-  --smsNumberMessage: string # “We will send an access code to your mobile number which you can use to connect to the WiFi network. Message and data rates may apply.”
-  --smsNumberSubmit: string # label for submit button for code generation
-  --smsNumberTitle: string # Title for phone number details
-  --smsUsernameFormat: string # “username”
-  --smsValidityDuration: int # how long confirmation code should be considered valid (in minutes)
-  --sponsorBackLink: string # “Go back and edit request form”
-  --sponsorCancel: string # “Cancel”
-  --sponsorEmail: string # label for Sponsor Email
-  --sponsorEmailError: string # “Please provide valid sponsor email”
-  --sponsorEmailTemplate: string # html template to replace/override default sponsor email template  Sponsor Email Template supports following template variables:   * `approve_url`: Renders URL to approve the request; optionally &minutes=N query param can be appended to change the Authorization period of the guest, where N is a valid integer denoting number of minutes a guest remains authorized  * `deny_url`: Renders URL to reject the request  * `guest_email`: Renders Email ID of the guest  * `guest_name`: Renders Name of the guest  * `field1`: Renders value of the Custom Field 1  * `field2`: Renders value of the Custom Field 2  * `sponsor_link_validity_duration`: Renders validity time of the request (i.e. Approve/Deny URL)  * `auth_expire_minutes`: Renders Wlan-level configured Guest Authorization Expiration time period (in minutes), If not configured then default (1 day in minutes)
-  --sponsorInfoApproved: string # “Your request was approved by”
-  --sponsorInfoDenied: string # “Your request was denied by”
-  --sponsorInfoPending: string # “Your notification has been sent to”
-  --sponsorName: string # label for Sponsor Name
-  --sponsorNameError: string # “Please provide sponsor’s name”
-  --sponsorNotePending: string # “Please wait for them to acknowledge.”
-  --sponsorRequestAccess: string # ‘submit button label request Wifi Access and notify sponsor about guest request
-  --sponsorSelectEmail: string # “Select Sponsor”
-  --sponsorStatusApproved: string # text to display if sponsor approves request
-  --sponsorStatusDenied: string # text to display when sponsor denies request
-  --sponsorStatusPending: string # text to display if request is still pending
-  --sponsorSubmit: string # submit button label to notify sponsor about guest request
-  --sponsorsError: string # “Please select a sponsor”
-  --sponsorsInfoApproved: string # “Your request was approved”
-  --sponsorsInfoDenied: string # “Your request was denied”
-  --sponsorsInfoPending: string # “Your notification has been sent to the sponsors”
+  --optout-label: string # label for “Do Not Store My Personal Information”
+  page_title: string # “Welcome”
+  --passphrase-cancel: string # “Cancel”
+  --passphrase-error: string # error message when invalid passphrase is provided
+  --passphrase-label: string # Passphrase
+  --passphrase-message: string # “Login using passphrase”
+  --passphrase-submit: string # “Sign in”
+  --passphrase-title: string # Title for passphrase details page
+  --powered-by: oneof<nothing, bool> # whether to show “Powered by Mist” (default: true)
+  --required-field-label: string # label to denote required field
+  --sign-in-label: string # label of the button to /signin
+  --sms-carrier-default: string # “Please Select”
+  --sms-carrier-error: string # “Please select a mobile carrier”
+  --sms-carrier-field-label: string # label for mobile carrier drop-down list
+  --sms-code-cancel: string # Label for cancel confirmation code submission
+  --sms-code-error: string # error message when confirmation code is invalid
+  --sms-code-field-label: string # “Confirmation Code”
+  --sms-code-message: string # “Enter the confirmation code”
+  --sms-code-submit: string # Label for confirmation code submit button
+  --sms-code-title: string # “Access Code”
+  --sms-country-field-label: string # “Country Code”
+  --sms-country-format: string # “+1”
+  --sms-have-access-code: string # Label for checkbox to specify that the user has access code
+  --sms-message-format: string # format of access code sms message. {{code}} and {{duration}} are place holders and should be retained as is.
+  --sms-number-cancel: string # label for canceling mobile details for SMS auth
+  --sms-number-error: string # “Invalid Mobile Number”
+  --sms-number-field-label: string # label for field to provide mobile number
+  --sms-number-format: string # “2125551212 (digits only)”
+  --sms-number-message: string # “We will send an access code to your mobile number which you can use to connect to the WiFi network. Message and data rates may apply.”
+  --sms-number-submit: string # label for submit button for code generation
+  --sms-number-title: string # Title for phone number details
+  --sms-username-format: string # “username”
+  --sms-validity-duration: int # how long confirmation code should be considered valid (in minutes)
+  --sponsor-back-link: string # “Go back and edit request form”
+  --sponsor-cancel: string # “Cancel”
+  --sponsor-email: string # label for Sponsor Email
+  --sponsor-email-error: string # “Please provide valid sponsor email”
+  --sponsor-email-template: string # html template to replace/override default sponsor email template  Sponsor Email Template supports following template variables:   * `approve_url`: Renders URL to approve the request; optionally &minutes=N query param can be appended to change the Authorization period of the guest, where N is a valid integer denoting number of minutes a guest remains authorized  * `deny_url`: Renders URL to reject the request  * `guest_email`: Renders Email ID of the guest  * `guest_name`: Renders Name of the guest  * `field1`: Renders value of the Custom Field 1  * `field2`: Renders value of the Custom Field 2  * `sponsor_link_validity_duration`: Renders validity time of the request (i.e. Approve/Deny URL)  * `auth_expire_minutes`: Renders Wlan-level configured Guest Authorization Expiration time period (in minutes), If not configured then default (1 day in minutes)
+  --sponsor-info-approved: string # “Your request was approved by”
+  --sponsor-info-denied: string # “Your request was denied by”
+  --sponsor-info-pending: string # “Your notification has been sent to”
+  --sponsor-name: string # label for Sponsor Name
+  --sponsor-name-error: string # “Please provide sponsor’s name”
+  --sponsor-note-pending: string # “Please wait for them to acknowledge.”
+  --sponsor-request-access: string # ‘submit button label request Wifi Access and notify sponsor about guest request
+  --sponsor-select-email: string # “Select Sponsor”
+  --sponsor-status-approved: string # text to display if sponsor approves request
+  --sponsor-status-denied: string # text to display when sponsor denies request
+  --sponsor-status-pending: string # text to display if request is still pending
+  --sponsor-submit: string # submit button label to notify sponsor about guest request
+  --sponsors-error: string # “Please select a sponsor”
+  --sponsors-info-approved: string # “Your request was approved”
+  --sponsors-info-denied: string # “Your request was denied”
+  --sponsors-info-pending: string # “Your notification has been sent to the sponsors”
   --tos: oneof<nothing, bool> # default: true
-  --tosAcceptLabel: string # prefix of the label of the link to go to /tos
-  --tosError: string # error message when tos not accepted
-  --tosLink: string # label of the link to go to /tos
-  --tosText: string # text of the Terms of Service
+  --tos-accept-label: string # prefix of the label of the link to go to /tos
+  --tos-error: string # error message when tos not accepted
+  --tos-link: string # label of the link to go to /tos
+  --tos-text: string # text of the Terms of Service
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wlans/($wlan_id)/portal_template")
-  let body = {accessCodeAlternateEmail: $accessCodeAlternateEmail, alignment: $alignment, authButtonAmazon: $authButtonAmazon, authButtonAzure: $authButtonAzure, authButtonEmail: $authButtonEmail, authButtonFacebook: $authButtonFacebook, authButtonGoogle: $authButtonGoogle, authButtonMicrosoft: $authButtonMicrosoft, authButtonPassphrase: $authButtonPassphrase, authButtonSms: $authButtonSms, authButtonSponsor: $authButtonSponsor, authLabel: $authLabel, backLink: $backLink, color: $color, colorDark: $colorDark, colorLight: $colorLight, company: $company, companyError: $companyError, companyLabel: $companyLabel, email: $email, emailAccessDomainError: $emailAccessDomainError, emailCancel: $emailCancel, emailCodeCancel: $emailCodeCancel, emailCodeError: $emailCodeError, emailCodeFieldLabel: $emailCodeFieldLabel, emailCodeMessage: $emailCodeMessage, emailCodeSubmit: $emailCodeSubmit, emailCodeTitle: $emailCodeTitle, emailError: $emailError, emailFieldLabel: $emailFieldLabel, emailLabel: $emailLabel, emailMessage: $emailMessage, emailSubmit: $emailSubmit, emailTitle: $emailTitle, field1: $field1, field1Error: $field1Error, field1Label: $field1Label, field1Required: $field1Required, field2: $field2, field2Error: $field2Error, field2Label: $field2Label, field2Required: $field2Required, field3: $field3, field3Error: $field3Error, field3Label: $field3Label, field3Required: $field3Required, field4: $field4, field4Error: $field4Error, field4Label: $field4Label, field4Required: $field4Required, message: $message, name: $name, nameError: $nameError, nameLabel: $nameLabel, optout: $optout, optoutLabel: $optoutLabel, pageTitle: $pageTitle, passphraseCancel: $passphraseCancel, passphraseError: $passphraseError, passphraseLabel: $passphraseLabel, passphraseMessage: $passphraseMessage, passphraseSubmit: $passphraseSubmit, passphraseTitle: $passphraseTitle, poweredBy: $poweredBy, requiredFieldLabel: $requiredFieldLabel, signInLabel: $signInLabel, smsCarrierDefault: $smsCarrierDefault, smsCarrierError: $smsCarrierError, smsCarrierFieldLabel: $smsCarrierFieldLabel, smsCodeCancel: $smsCodeCancel, smsCodeError: $smsCodeError, smsCodeFieldLabel: $smsCodeFieldLabel, smsCodeMessage: $smsCodeMessage, smsCodeSubmit: $smsCodeSubmit, smsCodeTitle: $smsCodeTitle, smsCountryFieldLabel: $smsCountryFieldLabel, smsCountryFormat: $smsCountryFormat, smsHaveAccessCode: $smsHaveAccessCode, smsMessageFormat: $smsMessageFormat, smsNumberCancel: $smsNumberCancel, smsNumberError: $smsNumberError, smsNumberFieldLabel: $smsNumberFieldLabel, smsNumberFormat: $smsNumberFormat, smsNumberMessage: $smsNumberMessage, smsNumberSubmit: $smsNumberSubmit, smsNumberTitle: $smsNumberTitle, smsUsernameFormat: $smsUsernameFormat, smsValidityDuration: $smsValidityDuration, sponsorBackLink: $sponsorBackLink, sponsorCancel: $sponsorCancel, sponsorEmail: $sponsorEmail, sponsorEmailError: $sponsorEmailError, sponsorEmailTemplate: $sponsorEmailTemplate, sponsorInfoApproved: $sponsorInfoApproved, sponsorInfoDenied: $sponsorInfoDenied, sponsorInfoPending: $sponsorInfoPending, sponsorName: $sponsorName, sponsorNameError: $sponsorNameError, sponsorNotePending: $sponsorNotePending, sponsorRequestAccess: $sponsorRequestAccess, sponsorSelectEmail: $sponsorSelectEmail, sponsorStatusApproved: $sponsorStatusApproved, sponsorStatusDenied: $sponsorStatusDenied, sponsorStatusPending: $sponsorStatusPending, sponsorSubmit: $sponsorSubmit, sponsorsError: $sponsorsError, sponsorsInfoApproved: $sponsorsInfoApproved, sponsorsInfoDenied: $sponsorsInfoDenied, sponsorsInfoPending: $sponsorsInfoPending, tos: $tos, tosAcceptLabel: $tosAcceptLabel, tosError: $tosError, tosLink: $tosLink, tosText: $tosText} | compact
+  let full_url = (build-url $base ({org_id: $org_id, wlan_id: $wlan_id} | format pattern "/api/v1/orgs/{org_id}/wlans/{wlan_id}/portal_template"))
+  let body = {"accessCodeAlternateEmail": $access_code_alternate_email, "alignment": $alignment, "authButtonAmazon": $auth_button_amazon, "authButtonAzure": $auth_button_azure, "authButtonEmail": $auth_button_email, "authButtonFacebook": $auth_button_facebook, "authButtonGoogle": $auth_button_google, "authButtonMicrosoft": $auth_button_microsoft, "authButtonPassphrase": $auth_button_passphrase, "authButtonSms": $auth_button_sms, "authButtonSponsor": $auth_button_sponsor, "authLabel": $auth_label, "backLink": $back_link, "color": $color, "colorDark": $color_dark, "colorLight": $color_light, "company": $company, "companyError": $company_error, "companyLabel": $company_label, "email": $email, "emailAccessDomainError": $email_access_domain_error, "emailCancel": $email_cancel, "emailCodeCancel": $email_code_cancel, "emailCodeError": $email_code_error, "emailCodeFieldLabel": $email_code_field_label, "emailCodeMessage": $email_code_message, "emailCodeSubmit": $email_code_submit, "emailCodeTitle": $email_code_title, "emailError": $email_error, "emailFieldLabel": $email_field_label, "emailLabel": $email_label, "emailMessage": $email_message, "emailSubmit": $email_submit, "emailTitle": $email_title, "field1": $field1, "field1Error": $field1_error, "field1Label": $field1_label, "field1Required": $field1_required, "field2": $field2, "field2Error": $field2_error, "field2Label": $field2_label, "field2Required": $field2_required, "field3": $field3, "field3Error": $field3_error, "field3Label": $field3_label, "field3Required": $field3_required, "field4": $field4, "field4Error": $field4_error, "field4Label": $field4_label, "field4Required": $field4_required, "message": $message, "name": $name, "nameError": $name_error, "nameLabel": $name_label, "optout": $optout, "optoutLabel": $optout_label, "pageTitle": $page_title, "passphraseCancel": $passphrase_cancel, "passphraseError": $passphrase_error, "passphraseLabel": $passphrase_label, "passphraseMessage": $passphrase_message, "passphraseSubmit": $passphrase_submit, "passphraseTitle": $passphrase_title, "poweredBy": $powered_by, "requiredFieldLabel": $required_field_label, "signInLabel": $sign_in_label, "smsCarrierDefault": $sms_carrier_default, "smsCarrierError": $sms_carrier_error, "smsCarrierFieldLabel": $sms_carrier_field_label, "smsCodeCancel": $sms_code_cancel, "smsCodeError": $sms_code_error, "smsCodeFieldLabel": $sms_code_field_label, "smsCodeMessage": $sms_code_message, "smsCodeSubmit": $sms_code_submit, "smsCodeTitle": $sms_code_title, "smsCountryFieldLabel": $sms_country_field_label, "smsCountryFormat": $sms_country_format, "smsHaveAccessCode": $sms_have_access_code, "smsMessageFormat": $sms_message_format, "smsNumberCancel": $sms_number_cancel, "smsNumberError": $sms_number_error, "smsNumberFieldLabel": $sms_number_field_label, "smsNumberFormat": $sms_number_format, "smsNumberMessage": $sms_number_message, "smsNumberSubmit": $sms_number_submit, "smsNumberTitle": $sms_number_title, "smsUsernameFormat": $sms_username_format, "smsValidityDuration": $sms_validity_duration, "sponsorBackLink": $sponsor_back_link, "sponsorCancel": $sponsor_cancel, "sponsorEmail": $sponsor_email, "sponsorEmailError": $sponsor_email_error, "sponsorEmailTemplate": $sponsor_email_template, "sponsorInfoApproved": $sponsor_info_approved, "sponsorInfoDenied": $sponsor_info_denied, "sponsorInfoPending": $sponsor_info_pending, "sponsorName": $sponsor_name, "sponsorNameError": $sponsor_name_error, "sponsorNotePending": $sponsor_note_pending, "sponsorRequestAccess": $sponsor_request_access, "sponsorSelectEmail": $sponsor_select_email, "sponsorStatusApproved": $sponsor_status_approved, "sponsorStatusDenied": $sponsor_status_denied, "sponsorStatusPending": $sponsor_status_pending, "sponsorSubmit": $sponsor_submit, "sponsorsError": $sponsors_error, "sponsorsInfoApproved": $sponsors_info_approved, "sponsorsInfoDenied": $sponsors_info_denied, "sponsorsInfoPending": $sponsors_info_pending, "tos": $tos, "tosAcceptLabel": $tos_accept_label, "tosError": $tos_error, "tosLink": $tos_link, "tosText": $tos_text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12169,7 +12169,7 @@ export def "orgs-wxrules list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxrules")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/wxrules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12179,7 +12179,7 @@ export def "orgs-wxrules list" [
 #
 # POST /api/v1/orgs/{org_id}/wxrules
 # operationId: createOrgWxRule
-export def "orgs-wxrules createOrgWxRule" [
+export def "orgs-wxrules create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12201,8 +12201,8 @@ export def "orgs-wxrules createOrgWxRule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxrules")
-  let body = {action: $action, blocked_apps: $blocked_apps, dst_allow_wxtags: $dst_allow_wxtags, dst_deny_wxtags: $dst_deny_wxtags, enabled: $enabled, order: $order, org_id: $body_org_id, src_wxtags: $src_wxtags} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/wxrules"))
+  let body = {"action": $action, "blocked_apps": $blocked_apps, "dst_allow_wxtags": $dst_allow_wxtags, "dst_deny_wxtags": $dst_deny_wxtags, "enabled": $enabled, "order": $order, "org_id": $body_org_id, "src_wxtags": $src_wxtags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12226,7 +12226,7 @@ export def "orgs-wxrules-derived get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxrules/derived")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/wxrules/derived"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12250,7 +12250,7 @@ export def "orgs-wxrules delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxrules/($wxrules_id)")
+  let full_url = (build-url $base ({org_id: $org_id, wxrules_id: $wxrules_id} | format pattern "/api/v1/orgs/{org_id}/wxrules/{wxrules_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12274,7 +12274,7 @@ export def "orgs-wxrules get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxrules/($wxrules_id)")
+  let full_url = (build-url $base ({org_id: $org_id, wxrules_id: $wxrules_id} | format pattern "/api/v1/orgs/{org_id}/wxrules/{wxrules_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12284,7 +12284,7 @@ export def "orgs-wxrules get" [
 #
 # PUT /api/v1/orgs/{org_id}/wxrules/{wxrules_id}
 # operationId: updateOrgWxRule
-export def "orgs-wxrules updateOrgWxRule" [
+export def "orgs-wxrules update" [
   org_id: string
   wxrules_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12307,8 +12307,8 @@ export def "orgs-wxrules updateOrgWxRule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxrules/($wxrules_id)")
-  let body = {action: $action, blocked_apps: $blocked_apps, dst_allow_wxtags: $dst_allow_wxtags, dst_deny_wxtags: $dst_deny_wxtags, enabled: $enabled, order: $order, org_id: $body_org_id, src_wxtags: $src_wxtags} | compact
+  let full_url = (build-url $base ({org_id: $org_id, wxrules_id: $wxrules_id} | format pattern "/api/v1/orgs/{org_id}/wxrules/{wxrules_id}"))
+  let body = {"action": $action, "blocked_apps": $blocked_apps, "dst_allow_wxtags": $dst_allow_wxtags, "dst_deny_wxtags": $dst_deny_wxtags, "enabled": $enabled, "order": $order, "org_id": $body_org_id, "src_wxtags": $src_wxtags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12332,7 +12332,7 @@ export def "orgs-wxtags list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxtags")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/wxtags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12343,7 +12343,7 @@ export def "orgs-wxtags list" [
 # POST /api/v1/orgs/{org_id}/wxtags
 # operationId: createOrgWxTag
 # --specs item shape: {port_range?: string, protocol?: string, subnets?: list}
-export def "orgs-wxtags createOrgWxTag" [
+export def "orgs-wxtags create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12368,8 +12368,8 @@ export def "orgs-wxtags createOrgWxTag" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxtags")
-  let body = {last_ips: $last_ips, mac: $mac, match: $body_match, name: $name, op: $op, resource_mac: $resource_mac, services: $services, specs: $specs, subnet: $subnet, type: $type, values: $values} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/wxtags"))
+  let body = {"last_ips": $last_ips, "mac": $mac, "match": $body_match, "name": $name, "op": $op, "resource_mac": $resource_mac, "services": $services, "specs": $specs, "subnet": $subnet, "type": $type, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12380,7 +12380,7 @@ export def "orgs-wxtags createOrgWxTag" [
 #
 # GET /api/v1/orgs/{org_id}/wxtags/apps
 # operationId: getOrgApplicationList
-export def "orgs-wxtags-apps get" [
+export def "orgs-wxtags-apps get-org-application-list" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12393,7 +12393,7 @@ export def "orgs-wxtags-apps get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxtags/apps")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/wxtags/apps"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12417,7 +12417,7 @@ export def "orgs-wxtags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxtags/($wxtag_id)")
+  let full_url = (build-url $base ({org_id: $org_id, wxtag_id: $wxtag_id} | format pattern "/api/v1/orgs/{org_id}/wxtags/{wxtag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12441,7 +12441,7 @@ export def "orgs-wxtags get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxtags/($wxtag_id)")
+  let full_url = (build-url $base ({org_id: $org_id, wxtag_id: $wxtag_id} | format pattern "/api/v1/orgs/{org_id}/wxtags/{wxtag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12452,7 +12452,7 @@ export def "orgs-wxtags get" [
 # PUT /api/v1/orgs/{org_id}/wxtags/{wxtag_id}
 # operationId: updateOrgWxTag
 # --specs item shape: {port_range?: string, protocol?: string, subnets?: list}
-export def "orgs-wxtags updateOrgWxTag" [
+export def "orgs-wxtags update" [
   org_id: string
   wxtag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12478,8 +12478,8 @@ export def "orgs-wxtags updateOrgWxTag" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxtags/($wxtag_id)")
-  let body = {last_ips: $last_ips, mac: $mac, match: $body_match, name: $name, op: $op, resource_mac: $resource_mac, services: $services, specs: $specs, subnet: $subnet, type: $type, values: $values} | compact
+  let full_url = (build-url $base ({org_id: $org_id, wxtag_id: $wxtag_id} | format pattern "/api/v1/orgs/{org_id}/wxtags/{wxtag_id}"))
+  let body = {"last_ips": $last_ips, "mac": $mac, "match": $body_match, "name": $name, "op": $op, "resource_mac": $resource_mac, "services": $services, "specs": $specs, "subnet": $subnet, "type": $type, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12490,7 +12490,7 @@ export def "orgs-wxtags updateOrgWxTag" [
 #
 # GET /api/v1/orgs/{org_id}/wxtags/{wxtag_id}/clients
 # operationId: getOrgCurrentMatchingClientsOfAWxTag
-export def "orgs-wxtags-clients get" [
+export def "orgs-wxtags-clients get-org-current-matching-clients-of-a" [
   org_id: string
   wxtag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12504,7 +12504,7 @@ export def "orgs-wxtags-clients get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxtags/($wxtag_id)/clients")
+  let full_url = (build-url $base ({org_id: $org_id, wxtag_id: $wxtag_id} | format pattern "/api/v1/orgs/{org_id}/wxtags/{wxtag_id}/clients"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12527,7 +12527,7 @@ export def "orgs-wxtunnels list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxtunnels")
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/wxtunnels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12540,7 +12540,7 @@ export def "orgs-wxtunnels list" [
 # --dmvpn shape: {enabled?: bool, holding_time?: int, host_routes?: list}
 # --ipsec shape: {enabled?: bool, psk: string}
 # --sessions item shape: {ap_as_session_id?: string, comment?: string, enable_cookie?: bool, ethertype?: "ethernet"|"vlan", local_session_id?: int, pseudo_802.1ad_enabled?: bool, remote_id?: string, remote_session_id?: int, use_ap_as_session_ids?: bool}
-export def "orgs-wxtunnels createOrgWxTunnel" [
+export def "orgs-wxtunnels create" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12570,8 +12570,8 @@ export def "orgs-wxtunnels createOrgWxTunnel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxtunnels")
-  let body = {dmvpn: $dmvpn, for_mgmt: $for_mgmt, hello_interval: $hello_interval, hello_retries: $hello_retries, hostname: $hostname, ipsec: $ipsec, is_static: $is_static, mtu: $mtu, name: $name, org_id: $body_org_id, peers: $peers, router_id: $router_id, secret: $secret, sessions: $sessions, udp_port: $udp_port, use_udp: $use_udp} | compact
+  let full_url = (build-url $base ({org_id: $org_id} | format pattern "/api/v1/orgs/{org_id}/wxtunnels"))
+  let body = {"dmvpn": $dmvpn, "for_mgmt": $for_mgmt, "hello_interval": $hello_interval, "hello_retries": $hello_retries, "hostname": $hostname, "ipsec": $ipsec, "is_static": $is_static, "mtu": $mtu, "name": $name, "org_id": $body_org_id, "peers": $peers, "router_id": $router_id, "secret": $secret, "sessions": $sessions, "udp_port": $udp_port, "use_udp": $use_udp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12596,7 +12596,7 @@ export def "orgs-wxtunnels delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxtunnels/($wxtunnel_id)")
+  let full_url = (build-url $base ({org_id: $org_id, wxtunnel_id: $wxtunnel_id} | format pattern "/api/v1/orgs/{org_id}/wxtunnels/{wxtunnel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12620,7 +12620,7 @@ export def "orgs-wxtunnels get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxtunnels/($wxtunnel_id)")
+  let full_url = (build-url $base ({org_id: $org_id, wxtunnel_id: $wxtunnel_id} | format pattern "/api/v1/orgs/{org_id}/wxtunnels/{wxtunnel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12633,7 +12633,7 @@ export def "orgs-wxtunnels get" [
 # --dmvpn shape: {enabled?: bool, holding_time?: int, host_routes?: list}
 # --ipsec shape: {enabled?: bool, psk: string}
 # --sessions item shape: {ap_as_session_id?: string, comment?: string, enable_cookie?: bool, ethertype?: "ethernet"|"vlan", local_session_id?: int, pseudo_802.1ad_enabled?: bool, remote_id?: string, remote_session_id?: int, use_ap_as_session_ids?: bool}
-export def "orgs-wxtunnels updateOrgWxTunnel" [
+export def "orgs-wxtunnels update" [
   org_id: string
   wxtunnel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12664,8 +12664,8 @@ export def "orgs-wxtunnels updateOrgWxTunnel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/orgs/($org_id)/wxtunnels/($wxtunnel_id)")
-  let body = {dmvpn: $dmvpn, for_mgmt: $for_mgmt, hello_interval: $hello_interval, hello_retries: $hello_retries, hostname: $hostname, ipsec: $ipsec, is_static: $is_static, mtu: $mtu, name: $name, org_id: $body_org_id, peers: $peers, router_id: $router_id, secret: $secret, sessions: $sessions, udp_port: $udp_port, use_udp: $use_udp} | compact
+  let full_url = (build-url $base ({org_id: $org_id, wxtunnel_id: $wxtunnel_id} | format pattern "/api/v1/orgs/{org_id}/wxtunnels/{wxtunnel_id}"))
+  let body = {"dmvpn": $dmvpn, "for_mgmt": $for_mgmt, "hello_interval": $hello_interval, "hello_retries": $hello_retries, "hostname": $hostname, "ipsec": $ipsec, "is_static": $is_static, "mtu": $mtu, "name": $name, "org_id": $body_org_id, "peers": $peers, "router_id": $router_id, "secret": $secret, "sessions": $sessions, "udp_port": $udp_port, "use_udp": $use_udp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12692,7 +12692,7 @@ export def "recover recoverPassword" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/recover")
-  let body = {email: $email, recaptcha: $recaptcha} | compact
+  let body = {"email": $email, "recaptcha": $recaptcha} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12703,8 +12703,8 @@ export def "recover recoverPassword" [
 #
 # POST /api/v1/recover/verify/{token}
 # operationId: verifyRecoverPasssword
-export def "recover-verify verifyRecoverPasssword" [
-  token: string
+export def "recover-verify verify-recover-passsword" [
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12716,7 +12716,7 @@ export def "recover-verify verifyRecoverPasssword" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/recover/verify/($token)")
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/api/v1/recover/verify/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12726,7 +12726,7 @@ export def "recover-verify verifyRecoverPasssword" [
 #
 # POST /api/v1/register
 # operationId: registerNewAdmin
-export def "register registerNewAdmin" [
+export def "register create-new-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12751,7 +12751,7 @@ export def "register registerNewAdmin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/register")
-  let body = {account_only: $account_only, allow_mist: $allow_mist, email: $email, first_name: $first_name, invite_code: $invite_code, last_name: $last_name, org_name: $org_name, password: $password, recaptcha: $recaptcha, referer_invite_token: $referer_invite_token, return_to: $return_to} | compact
+  let body = {"account_only": $account_only, "allow_mist": $allow_mist, "email": $email, "first_name": $first_name, "invite_code": $invite_code, "last_name": $last_name, "org_name": $org_name, "password": $password, "recaptcha": $recaptcha, "referer_invite_token": $referer_invite_token, "return_to": $return_to} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12762,8 +12762,8 @@ export def "register registerNewAdmin" [
 #
 # POST /api/v1/register/verify/{token}
 # operationId: verifyRegistration
-export def "register-verify verifyRegistration" [
-  token: string
+export def "register-verify verify-registration" [
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12775,7 +12775,7 @@ export def "register-verify verifyRegistration" [
 ]: nothing -> record<detail: string, invite_not_applied: bool, min_length: int, return_to: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/register/verify/($token)")
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/api/v1/register/verify/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12830,7 +12830,7 @@ export def "self get" [
 # PUT /api/v1/self
 # operationId: updateSelf
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list, views?: list}
-export def "self updateSelf" [
+export def "self update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12850,7 +12850,7 @@ export def "self updateSelf" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/self")
-  let body = {email: $email, first_name: $first_name, hours: $hours, last_name: $last_name, phone: $phone, phone2: $phone2} | compact
+  let body = {"email": $email, "first_name": $first_name, "hours": $hours, "last_name": $last_name, "phone": $phone, "phone2": $phone2} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12883,7 +12883,7 @@ export def "self-apitokens get" [
 #
 # POST /api/v1/self/apitokens
 # operationId: createApiToken
-export def "self-apitokens createApiToken" [
+export def "self-apitokens create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12898,7 +12898,7 @@ export def "self-apitokens createApiToken" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/self/apitokens")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12922,7 +12922,7 @@ export def "self-apitokens delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/self/apitokens/($apitoken_id)")
+  let full_url = (build-url $base ({apitoken_id: $apitoken_id} | format pattern "/api/v1/self/apitokens/{apitoken_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12932,7 +12932,7 @@ export def "self-apitokens delete" [
 #
 # GET /api/v1/self/logs
 # operationId: getSelfAuditLogs
-export def "self-logs get" [
+export def "self-logs get-self-audit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12960,7 +12960,7 @@ export def "self-logs get" [
 #
 # GET /api/v1/self/oauth/{provider}
 # operationId: getOAuth2UrlForLinking
-export def "self-oauth get" [
+export def "self-oauth get-o-auth2-url-for-linking" [
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12975,7 +12975,7 @@ export def "self-oauth get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "forward" $forward "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/self/oauth/($provider)" $qp)
+  let full_url = (build-url $base ({provider: $provider} | format pattern "/api/v1/self/oauth/{provider}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13000,8 +13000,8 @@ export def "self-oauth linkOAuth2MistAccount" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/self/oauth/($provider)")
-  let body = {code: $code} | compact
+  let full_url = (build-url $base ({provider: $provider} | format pattern "/api/v1/self/oauth/{provider}"))
+  let body = {"code": $code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13012,7 +13012,7 @@ export def "self-oauth linkOAuth2MistAccount" [
 #
 # GET /api/v1/self/subscriptions
 # operationId: getAlarmSubscriptions
-export def "self-subscriptions get" [
+export def "self-subscriptions get-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13058,7 +13058,7 @@ export def "self-two-factor-token generateQrCodeForVerification" [
 #
 # POST /api/v1/self/two_factor/verify
 # operationId: verifyTwoFactor
-export def "self-two-factor-verify verifyTwoFactor" [
+export def "self-two-factor-verify verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13073,7 +13073,7 @@ export def "self-two-factor-verify verifyTwoFactor" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/self/two_factor/verify")
-  let body = {two_factor: $two_factor} | compact
+  let body = {"two_factor": $two_factor} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13084,7 +13084,7 @@ export def "self-two-factor-verify verifyTwoFactor" [
 #
 # POST /api/v1/self/update
 # operationId: updateSelfEmail
-export def "self-update updateSelfEmail" [
+export def "self-update update-self-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13099,7 +13099,7 @@ export def "self-update updateSelfEmail" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/self/update")
-  let body = {email: $email} | compact
+  let body = {"email": $email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13110,8 +13110,8 @@ export def "self-update updateSelfEmail" [
 #
 # GET /api/v1/self/update/verify/{token}
 # operationId: verifySelfEmail
-export def "self-update-verify verifySelfEmail" [
-  token: string
+export def "self-update-verify verify-self-email" [
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13123,7 +13123,7 @@ export def "self-update-verify verifySelfEmail" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/self/update/verify/($token)")
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/api/v1/self/update/verify/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13146,7 +13146,7 @@ export def "sites delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13156,7 +13156,7 @@ export def "sites delete" [
 #
 # GET /api/v1/sites/{site_id}
 # operationId: getSiteInfo
-export def "sites get" [
+export def "sites get-site-info" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13169,7 +13169,7 @@ export def "sites get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13180,7 +13180,7 @@ export def "sites get" [
 # PUT /api/v1/sites/{site_id}
 # operationId: updateSiteInfo
 # --latlng shape: {lat?: float, lng?: float}
-export def "sites updateSiteInfo" [
+export def "sites update-site-info" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13208,8 +13208,8 @@ export def "sites updateSiteInfo" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)")
-  let body = {: $body_param, address: $address, alarmtemplate_id: $alarmtemplate_id, aptemplate_id: $aptemplate_id, country_code: $country_code, gatewaytemplate_id: $gatewaytemplate_id, latlng: $latlng, name: $name, networktemplate_id: $networktemplate_id, notes: $notes, rftemplate_id: $rftemplate_id, secpolicy_id: $secpolicy_id, sitegroup_ids: $sitegroup_ids, timezone: $timezone} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}"))
+  let body = {"field-1": $body_param, "address": $address, "alarmtemplate_id": $alarmtemplate_id, "aptemplate_id": $aptemplate_id, "country_code": $country_code, "gatewaytemplate_id": $gatewaytemplate_id, "latlng": $latlng, "name": $name, "networktemplate_id": $networktemplate_id, "notes": $notes, "rftemplate_id": $rftemplate_id, "secpolicy_id": $secpolicy_id, "sitegroup_ids": $sitegroup_ids, "timezone": $timezone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13236,8 +13236,8 @@ export def "sites-alarms-ack multiAckSiteAlarms" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/alarms/ack")
-  let body = {alarm_ids: $alarm_ids, note: $note} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/alarms/ack"))
+  let body = {"alarm_ids": $alarm_ids, "note": $note} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13263,8 +13263,8 @@ export def "sites-alarms-ack-all ackSiteAllAlarms" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/alarms/ack_all")
-  let body = {note: $note} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/alarms/ack_all"))
+  let body = {"note": $note} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13300,7 +13300,7 @@ export def "sites-alarms-count countSiteAlarms" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "ack_admin_name" $ack_admin_name "scalar") (serialize-qp "acked" $acked "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/alarms/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/alarms/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13310,7 +13310,7 @@ export def "sites-alarms-count countSiteAlarms" [
 #
 # GET /api/v1/sites/{site_id}/alarms/search
 # operationId: searchSiteAlarms
-export def "sites-alarms-search searchSiteAlarms" [
+export def "sites-alarms-search list" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13333,7 +13333,7 @@ export def "sites-alarms-search searchSiteAlarms" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "ack_admin_name" $ack_admin_name "scalar") (serialize-qp "acked" $acked "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/alarms/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/alarms/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13359,8 +13359,8 @@ export def "sites-alarms-unack multiUnackSiteAlarms" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/alarms/unack")
-  let body = {alarm_ids: $alarm_ids, note: $note} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/alarms/unack"))
+  let body = {"alarm_ids": $alarm_ids, "note": $note} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13386,8 +13386,8 @@ export def "sites-alarms-unack-all unackSiteAllArlarms" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/alarms/unack_all")
-  let body = {note: $note} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/alarms/unack_all"))
+  let body = {"note": $note} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13414,8 +13414,8 @@ export def "sites-alarms-ack ackSiteAlarm" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/alarms/($alarm_id)/ack")
-  let body = {note: $note} | compact
+  let full_url = (build-url $base ({site_id: $site_id, alarm_id: $alarm_id} | format pattern "/api/v1/sites/{site_id}/alarms/{alarm_id}/ack"))
+  let body = {"note": $note} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13442,8 +13442,8 @@ export def "sites-alarms-unack unackSiteAlarm" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/alarms/($alarm_id)/unack")
-  let body = {note: $note} | compact
+  let full_url = (build-url $base ({site_id: $site_id, alarm_id: $alarm_id} | format pattern "/api/v1/sites/{site_id}/alarms/{alarm_id}/unack"))
+  let body = {"note": $note} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13454,7 +13454,7 @@ export def "sites-alarms-unack unackSiteAlarm" [
 #
 # GET /api/v1/sites/{site_id}/anomaly/client/{client_mac}/{metric}
 # operationId: getSiteAnomalyEventsForClient
-export def "sites-anomaly-client get" [
+export def "sites-anomaly-client get-site-anomaly-events-for" [
   site_id: string
   client_mac: string
   metric: string
@@ -13469,7 +13469,7 @@ export def "sites-anomaly-client get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/anomaly/client/($client_mac)/($metric)")
+  let full_url = (build-url $base ({site_id: $site_id, client_mac: $client_mac, metric: $metric} | format pattern "/api/v1/sites/{site_id}/anomaly/client/{client_mac}/{metric}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13479,10 +13479,10 @@ export def "sites-anomaly-client get" [
 #
 # GET /api/v1/sites/{site_id}/anomaly/device/{device_mac}/{metric}
 # operationId: getSiteAnomalyEventsforDevice
-export def "sites-anomaly-device get" [
+export def "sites-anomaly-device get-site-anomaly-eventsfor" [
   site_id: string
-  metric: string
   device_mac: string
+  metric: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13494,7 +13494,7 @@ export def "sites-anomaly-device get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/anomaly/device/($device_mac)/($metric)")
+  let full_url = (build-url $base ({site_id: $site_id, device_mac: $device_mac, metric: $metric} | format pattern "/api/v1/sites/{site_id}/anomaly/device/{device_mac}/{metric}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13504,7 +13504,7 @@ export def "sites-anomaly-device get" [
 #
 # GET /api/v1/sites/{site_id}/anomaly/{metric}
 # operationId: getSiteAnomalyEvents
-export def "sites-anomaly get" [
+export def "sites-anomaly get-site-anomaly-events" [
   site_id: string
   metric: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13518,7 +13518,7 @@ export def "sites-anomaly get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/anomaly/($metric)")
+  let full_url = (build-url $base ({site_id: $site_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/anomaly/{metric}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13541,7 +13541,7 @@ export def "sites-apps get" [
 ]: nothing -> table<group: string, key: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/apps")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/apps"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13564,7 +13564,7 @@ export def "sites-assetfilters list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/assetfilters")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/assetfilters"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13574,7 +13574,7 @@ export def "sites-assetfilters list" [
 #
 # POST /api/v1/sites/{site_id}/assetfilters
 # operationId: createSiteAssetFilters
-export def "sites-assetfilters createSiteAssetFilters" [
+export def "sites-assetfilters create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13599,8 +13599,8 @@ export def "sites-assetfilters createSiteAssetFilters" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/assetfilters")
-  let body = {ap_mac: $ap_mac, beam: $beam, disasbled: $disasbled, eddystone_uid_namespace: $eddystone_uid_namespace, eddystone_url: $eddystone_url, ibeacon_major: $ibeacon_major, ibeacon_uuid: $ibeacon_uuid, mfg_company_id: $mfg_company_id, name: $name, rssi: $rssi, service_uuid: $service_uuid} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/assetfilters"))
+  let body = {"ap_mac": $ap_mac, "beam": $beam, "disasbled": $disasbled, "eddystone_uid_namespace": $eddystone_uid_namespace, "eddystone_url": $eddystone_url, "ibeacon_major": $ibeacon_major, "ibeacon_uuid": $ibeacon_uuid, "mfg_company_id": $mfg_company_id, "name": $name, "rssi": $rssi, "service_uuid": $service_uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13625,7 +13625,7 @@ export def "sites-assetfilters delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/assetfilters/($assetfilter_id)")
+  let full_url = (build-url $base ({site_id: $site_id, assetfilter_id: $assetfilter_id} | format pattern "/api/v1/sites/{site_id}/assetfilters/{assetfilter_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13649,7 +13649,7 @@ export def "sites-assetfilters get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/assetfilters/($assetfilter_id)")
+  let full_url = (build-url $base ({site_id: $site_id, assetfilter_id: $assetfilter_id} | format pattern "/api/v1/sites/{site_id}/assetfilters/{assetfilter_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13659,7 +13659,7 @@ export def "sites-assetfilters get" [
 #
 # PUT /api/v1/sites/{site_id}/assetfilters/{assetfilter_id}
 # operationId: updateSiteAssetFilter
-export def "sites-assetfilters updateSiteAssetFilter" [
+export def "sites-assetfilters update" [
   site_id: string
   assetfilter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13685,8 +13685,8 @@ export def "sites-assetfilters updateSiteAssetFilter" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/assetfilters/($assetfilter_id)")
-  let body = {ap_mac: $ap_mac, beam: $beam, disasbled: $disasbled, eddystone_uid_namespace: $eddystone_uid_namespace, eddystone_url: $eddystone_url, ibeacon_major: $ibeacon_major, ibeacon_uuid: $ibeacon_uuid, mfg_company_id: $mfg_company_id, name: $name, rssi: $rssi, service_uuid: $service_uuid} | compact
+  let full_url = (build-url $base ({site_id: $site_id, assetfilter_id: $assetfilter_id} | format pattern "/api/v1/sites/{site_id}/assetfilters/{assetfilter_id}"))
+  let body = {"ap_mac": $ap_mac, "beam": $beam, "disasbled": $disasbled, "eddystone_uid_namespace": $eddystone_uid_namespace, "eddystone_url": $eddystone_url, "ibeacon_major": $ibeacon_major, "ibeacon_uuid": $ibeacon_uuid, "mfg_company_id": $mfg_company_id, "name": $name, "rssi": $rssi, "service_uuid": $service_uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13710,7 +13710,7 @@ export def "sites-assets list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/assets")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/assets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13720,7 +13720,7 @@ export def "sites-assets list" [
 #
 # POST /api/v1/sites/{site_id}/assets
 # operationId: createSiteAsset
-export def "sites-assets createSiteAsset" [
+export def "sites-assets create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13738,8 +13738,8 @@ export def "sites-assets createSiteAsset" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/assets")
-  let body = {mac: $mac, map_id: $map_id, name: $name, tag_id: $tag_id} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/assets"))
+  let body = {"mac": $mac, "map_id": $map_id, "name": $name, "tag_id": $tag_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13750,7 +13750,7 @@ export def "sites-assets createSiteAsset" [
 #
 # POST /api/v1/sites/{site_id}/assets/import
 # operationId: importSiteAssets
-export def "sites-assets-import importSiteAssets" [
+export def "sites-assets-import import" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13767,7 +13767,7 @@ export def "sites-assets-import importSiteAssets" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "upsert" $upsert "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/assets/import" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/assets/import") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13792,7 +13792,7 @@ export def "sites-assets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/assets/($asset_id)")
+  let full_url = (build-url $base ({site_id: $site_id, asset_id: $asset_id} | format pattern "/api/v1/sites/{site_id}/assets/{asset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13816,7 +13816,7 @@ export def "sites-assets get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/assets/($asset_id)")
+  let full_url = (build-url $base ({site_id: $site_id, asset_id: $asset_id} | format pattern "/api/v1/sites/{site_id}/assets/{asset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13826,7 +13826,7 @@ export def "sites-assets get" [
 #
 # PUT /api/v1/sites/{site_id}/assets/{asset_id}
 # operationId: updateSiteAsset
-export def "sites-assets updateSiteAsset" [
+export def "sites-assets update" [
   site_id: string
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13845,8 +13845,8 @@ export def "sites-assets updateSiteAsset" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/assets/($asset_id)")
-  let body = {mac: $mac, map_id: $map_id, name: $name, tag_id: $tag_id} | compact
+  let full_url = (build-url $base ({site_id: $site_id, asset_id: $asset_id} | format pattern "/api/v1/sites/{site_id}/assets/{asset_id}"))
+  let body = {"mac": $mac, "map_id": $map_id, "name": $name, "tag_id": $tag_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13870,7 +13870,7 @@ export def "sites-beacons list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/beacons")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/beacons"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13880,7 +13880,7 @@ export def "sites-beacons list" [
 #
 # POST /api/v1/sites/{site_id}/beacons
 # operationId: createSiteBeacon
-export def "sites-beacons createSiteBeacon" [
+export def "sites-beacons create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13907,8 +13907,8 @@ export def "sites-beacons createSiteBeacon" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/beacons")
-  let body = {eddystone_instance: $eddystone_instance, eddystone_namespace: $eddystone_namespace, eddystone_url: $eddystone_url, ibeacon_major: $ibeacon_major, ibeacon_minor: $ibeacon_minor, ibeacon_uuid: $ibeacon_uuid, mac: $mac, map_id: $map_id, name: $name, power: $power, type: $type, x: $x, y: $y} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/beacons"))
+  let body = {"eddystone_instance": $eddystone_instance, "eddystone_namespace": $eddystone_namespace, "eddystone_url": $eddystone_url, "ibeacon_major": $ibeacon_major, "ibeacon_minor": $ibeacon_minor, "ibeacon_uuid": $ibeacon_uuid, "mac": $mac, "map_id": $map_id, "name": $name, "power": $power, "type": $type, "x": $x, "y": $y} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13933,7 +13933,7 @@ export def "sites-beacons delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/beacons/($beacon_id)")
+  let full_url = (build-url $base ({site_id: $site_id, beacon_id: $beacon_id} | format pattern "/api/v1/sites/{site_id}/beacons/{beacon_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13957,7 +13957,7 @@ export def "sites-beacons get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/beacons/($beacon_id)")
+  let full_url = (build-url $base ({site_id: $site_id, beacon_id: $beacon_id} | format pattern "/api/v1/sites/{site_id}/beacons/{beacon_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13967,7 +13967,7 @@ export def "sites-beacons get" [
 #
 # PUT /api/v1/sites/{site_id}/beacons/{beacon_id}
 # operationId: updateSiteBeacons
-export def "sites-beacons updateSiteBeacons" [
+export def "sites-beacons update" [
   site_id: string
   beacon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13995,8 +13995,8 @@ export def "sites-beacons updateSiteBeacons" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/beacons/($beacon_id)")
-  let body = {eddystone_instance: $eddystone_instance, eddystone_namespace: $eddystone_namespace, eddystone_url: $eddystone_url, ibeacon_major: $ibeacon_major, ibeacon_minor: $ibeacon_minor, ibeacon_uuid: $ibeacon_uuid, mac: $mac, map_id: $map_id, name: $name, power: $power, type: $type, x: $x, y: $y} | compact
+  let full_url = (build-url $base ({site_id: $site_id, beacon_id: $beacon_id} | format pattern "/api/v1/sites/{site_id}/beacons/{beacon_id}"))
+  let body = {"eddystone_instance": $eddystone_instance, "eddystone_namespace": $eddystone_namespace, "eddystone_url": $eddystone_url, "ibeacon_major": $ibeacon_major, "ibeacon_minor": $ibeacon_minor, "ibeacon_uuid": $ibeacon_uuid, "mac": $mac, "map_id": $map_id, "name": $name, "power": $power, "type": $type, "x": $x, "y": $y} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -14022,7 +14022,7 @@ export def "sites-call-events-count countSiteCallEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/call/events/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/call/events/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14032,7 +14032,7 @@ export def "sites-call-events-count countSiteCallEvents" [
 #
 # GET /api/v1/sites/{site_id}/call/events/search
 # operationId: searchSiteCallEvents
-export def "sites-call-events-search searchSiteCallEvents" [
+export def "sites-call-events-search list" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14050,7 +14050,7 @@ export def "sites-call-events-search searchSiteCallEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "app" $app "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/call/events/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/call/events/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14073,7 +14073,7 @@ export def "sites-clients-count countSiteByDistinctAttributesOfClients" [
   --distinct: string@distinct-completer-4 # default: device, e.g. hostname
   --ssid: string
   --ap: string
-  --ip address: string # format: ipv4, e.g. 192.168.1.1
+  --ip-address: string # format: ipv4, e.g. 192.168.1.1
   --vlan: string
   --hostname: string
   --os: string
@@ -14087,8 +14087,8 @@ export def "sites-clients-count countSiteByDistinctAttributesOfClients" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "ip address" $ip address "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "hostname" $hostname "scalar") (serialize-qp "os" $os "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/clients/count" $qp)
+  let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "ip address" $ip_address "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "hostname" $hostname "scalar") (serialize-qp "os" $os "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/clients/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14113,7 +14113,7 @@ export def "sites-clients-disconnect disconnectSiteMultipleClients" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/clients/disconnect")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/clients/disconnect"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -14151,7 +14151,7 @@ export def "sites-clients-events-count countSiteByDistinctAttributesOfClientsEve
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "reason_code" $reason_code "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "proto" $proto "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "wlan_id" $wlan_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/clients/events/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/clients/events/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14161,7 +14161,7 @@ export def "sites-clients-events-count countSiteByDistinctAttributesOfClientsEve
 #
 # GET /api/v1/sites/{site_id}/clients/events/search
 # operationId: searchSiteClientsEvents
-export def "sites-clients-events-search searchSiteClientsEvents" [
+export def "sites-clients-events-search list" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14186,7 +14186,7 @@ export def "sites-clients-events-search searchSiteClientsEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "reason_code" $reason_code "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "proto" $proto "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "wlan_id" $wlan_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/clients/events/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/clients/events/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14196,7 +14196,7 @@ export def "sites-clients-events-search searchSiteClientsEvents" [
 #
 # GET /api/v1/sites/{site_id}/clients/search
 # operationId: searchSiteClientsWireless
-export def "sites-clients-search searchSiteClientsWireless" [
+export def "sites-clients-search list-site-clients-wireless" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14207,7 +14207,7 @@ export def "sites-clients-search searchSiteClientsWireless" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --mac: string # partial / full MAC address
-  --ip address: string # format: ipv4, e.g. 192.168.1.1
+  --ip-address: string # format: ipv4, e.g. 192.168.1.1
   --hostname: string # partial / full hostname
   --device: string # device type, e.g. Mac, Nvidia, iPhone
   --os: string # os, e.g. Sierra, Yosemite, Windows 10
@@ -14222,8 +14222,8 @@ export def "sites-clients-search searchSiteClientsWireless" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "mac" $mac "scalar") (serialize-qp "ip address" $ip address "scalar") (serialize-qp "hostname" $hostname "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "os" $os "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/clients/search" $qp)
+  let qp = [(serialize-qp "mac" $mac "scalar") (serialize-qp "ip address" $ip_address "scalar") (serialize-qp "hostname" $hostname "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "os" $os "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/clients/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14261,7 +14261,7 @@ export def "sites-clients-sessions-count countSiteByDistinctAttributesOfClientSe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "ap" $ap "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "client_family" $client_family "scalar") (serialize-qp "client_manufacture" $client_manufacture "scalar") (serialize-qp "client_model" $client_model "scalar") (serialize-qp "client_os" $client_os "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "wlan_id" $wlan_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/clients/sessions/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/clients/sessions/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14271,7 +14271,7 @@ export def "sites-clients-sessions-count countSiteByDistinctAttributesOfClientSe
 #
 # GET /api/v1/sites/{site_id}/clients/sessions/search
 # operationId: searchSiteClientWirelessSessions
-export def "sites-clients-sessions-search searchSiteClientWirelessSessions" [
+export def "sites-clients-sessions-search list-site-client-wireless" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14300,7 +14300,7 @@ export def "sites-clients-sessions-search searchSiteClientWirelessSessions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ap" $ap "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "client_family" $client_family "scalar") (serialize-qp "client_manufacture" $client_manufacture "scalar") (serialize-qp "client_model" $client_model "scalar") (serialize-qp "client_username" $client_username "scalar") (serialize-qp "client_os" $client_os "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "wlan_id" $wlan_id "scalar") (serialize-qp "psk_id" $psk_id "scalar") (serialize-qp "psk_name" $psk_name "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/clients/sessions/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/clients/sessions/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14325,7 +14325,7 @@ export def "sites-clients-unauthorize unauthorizeSiteMultipleClients" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/clients/unauthorize")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/clients/unauthorize"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -14350,7 +14350,7 @@ export def "sites-clients-disconnect disconnectSiteClient" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/clients/($client_mac)/disconnect")
+  let full_url = (build-url $base ({site_id: $site_id, client_mac: $client_mac} | format pattern "/api/v1/sites/{site_id}/clients/{client_mac}/disconnect"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14360,7 +14360,7 @@ export def "sites-clients-disconnect disconnectSiteClient" [
 #
 # GET /api/v1/sites/{site_id}/clients/{client_mac}/events
 # operationId: getSiteEventsForClient
-export def "sites-clients-events get" [
+export def "sites-clients-events get-site-events-for" [
   site_id: any
   client_mac: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -14386,7 +14386,7 @@ export def "sites-clients-events get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "proto" $proto "scalar") (serialize-qp "band" $band "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "wlan_id" $wlan_id "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/clients/($client_mac)/events" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, client_mac: $client_mac} | format pattern "/api/v1/sites/{site_id}/clients/{client_mac}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14410,7 +14410,7 @@ export def "sites-clients-unauthorize unauthorizeSiteClient" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/clients/($client_mac)/unauthorize")
+  let full_url = (build-url $base ({site_id: $site_id, client_mac: $client_mac} | format pattern "/api/v1/sites/{site_id}/clients/{client_mac}/unauthorize"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14438,7 +14438,7 @@ export def "sites-devices list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14475,7 +14475,7 @@ export def "sites-devices list" [
 # --vrf_config shape: {enabled?: bool}
 # --vrrp_config shape: {enabled?: bool, groups?: record}
 # --dhcpd_config shape: {enabled?: bool}
-export def "sites-devices createSiteDevice" [
+export def "sites-devices create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14545,8 +14545,8 @@ export def "sites-devices createSiteDevice" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices")
-  let body = {aeroscout: $aeroscout, ble_config: $ble_config, centrak: $centrak, client_bridge: $client_bridge, deviceprofile_id: $deviceprofile_id, disable_eth1: $disable_eth1, disable_eth2: $disable_eth2, disable_eth3: $disable_eth3, disable_module: $disable_module, height: $height, image1_url: $image1_url, image2_url: $image2_url, image3_url: $image3_url, iot_config: $iot_config, ip_config: $ip_config, led: $led, locked: $locked, map_id: $map_id, mesh: $mesh, name: $name, notes: $notes, ntp_servers: $ntp_servers, orientation: $orientation, poe_passthrough: $poe_passthrough, port_config: $port_config, pwr_config: $pwr_config, radio_config: $radio_config, uplink_port_config: $uplink_port_config, usb_config: $usb_config, vars: $vars, x: $x, y: $y, acl_policies: $acl_policies, acl_tags: $acl_tags, additional_config_cmds: $additional_config_cmds, dhcp_config: $dhcp_config, dhcp_snooping: $dhcp_snooping, disable_auto_config: $disable_auto_config, dns_servers: $dns_servers, dns_suffix: $dns_suffix, evpn_config: $evpn_config, extra_routes: $extra_routes, managed: $managed, networks: $networks, oob_ip_config: $oob_ip_config, ospf_config: $ospf_config, other_ip_configs: $other_ip_configs, port_mirroring: $port_mirroring, port_usages: $port_usages, radius_config: $radius_config, role: $role, router_id: $router_id, virtual_chassis: $virtual_chassis, vrf_config: $vrf_config, vrrp_config: $vrrp_config, dhcpd_config: $dhcpd_config} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices"))
+  let body = {"aeroscout": $aeroscout, "ble_config": $ble_config, "centrak": $centrak, "client_bridge": $client_bridge, "deviceprofile_id": $deviceprofile_id, "disable_eth1": $disable_eth1, "disable_eth2": $disable_eth2, "disable_eth3": $disable_eth3, "disable_module": $disable_module, "height": $height, "image1_url": $image1_url, "image2_url": $image2_url, "image3_url": $image3_url, "iot_config": $iot_config, "ip_config": $ip_config, "led": $led, "locked": $locked, "map_id": $map_id, "mesh": $mesh, "name": $name, "notes": $notes, "ntp_servers": $ntp_servers, "orientation": $orientation, "poe_passthrough": $poe_passthrough, "port_config": $port_config, "pwr_config": $pwr_config, "radio_config": $radio_config, "uplink_port_config": $uplink_port_config, "usb_config": $usb_config, "vars": $vars, "x": $x, "y": $y, "acl_policies": $acl_policies, "acl_tags": $acl_tags, "additional_config_cmds": $additional_config_cmds, "dhcp_config": $dhcp_config, "dhcp_snooping": $dhcp_snooping, "disable_auto_config": $disable_auto_config, "dns_servers": $dns_servers, "dns_suffix": $dns_suffix, "evpn_config": $evpn_config, "extra_routes": $extra_routes, "managed": $managed, "networks": $networks, "oob_ip_config": $oob_ip_config, "ospf_config": $ospf_config, "other_ip_configs": $other_ip_configs, "port_mirroring": $port_mirroring, "port_usages": $port_usages, "radius_config": $radius_config, "role": $role, "router_id": $router_id, "virtual_chassis": $virtual_chassis, "vrf_config": $vrf_config, "vrrp_config": $vrrp_config, "dhcpd_config": $dhcpd_config} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -14557,7 +14557,7 @@ export def "sites-devices createSiteDevice" [
 #
 # GET /api/v1/sites/{site_id}/devices/ap_channels
 # operationId: getSiteDeviceRadioChannels
-export def "sites-devices-ap-channels get" [
+export def "sites-devices-ap-channels get-site-device-radio" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14572,7 +14572,7 @@ export def "sites-devices-ap-channels get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country_code" $country_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/ap_channels" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/ap_channels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14603,7 +14603,7 @@ export def "sites-devices-config-history-count countSiteDeviceConfigHistory" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/config_history/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/config_history/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14613,7 +14613,7 @@ export def "sites-devices-config-history-count countSiteDeviceConfigHistory" [
 #
 # GET /api/v1/sites/{site_id}/devices/config_history/search
 # operationId: searchSiteDeviceConfigHistory
-export def "sites-devices-config-history-search searchSiteDeviceConfigHistory" [
+export def "sites-devices-config-history-search list" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14633,7 +14633,7 @@ export def "sites-devices-config-history-search searchSiteDeviceConfigHistory" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_type" $device_type "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/config_history/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/config_history/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14674,7 +14674,7 @@ export def "sites-devices-count countSiteDevices" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "hostname" $hostname "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "mxtunnel_status" $mxtunnel_status "scalar") (serialize-qp "mxedge_id" $mxedge_id "scalar") (serialize-qp "lldp_system_name" $lldp_system_name "scalar") (serialize-qp "lldp_system_desc" $lldp_system_desc "scalar") (serialize-qp "lldp_port_id" $lldp_port_id "scalar") (serialize-qp "lldp_mgmt_addr" $lldp_mgmt_addr "scalar") (serialize-qp "map_id" $map_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14707,7 +14707,7 @@ export def "sites-devices-events-count countSiteDeviceEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "type_code" $type_code "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/events/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/events/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14717,7 +14717,7 @@ export def "sites-devices-events-count countSiteDeviceEvents" [
 #
 # GET /api/v1/sites/{site_id}/devices/events/search
 # operationId: searchSiteDevicesEvents
-export def "sites-devices-events-search searchSiteDevicesEvents" [
+export def "sites-devices-events-search list" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14741,7 +14741,7 @@ export def "sites-devices-events-search searchSiteDevicesEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_type" $device_type "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/events/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/events/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14751,7 +14751,7 @@ export def "sites-devices-events-search searchSiteDevicesEvents" [
 #
 # GET /api/v1/sites/{site_id}/devices/export
 # operationId: exportSiteDevices
-export def "sites-devices-export exportSiteDevices" [
+export def "sites-devices-export export" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14764,7 +14764,7 @@ export def "sites-devices-export exportSiteDevices" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/export")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/export"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14774,7 +14774,7 @@ export def "sites-devices-export exportSiteDevices" [
 #
 # POST /api/v1/sites/{site_id}/devices/import
 # operationId: importSiteDevices
-export def "sites-devices-import importSiteDevices" [
+export def "sites-devices-import import" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14789,7 +14789,7 @@ export def "sites-devices-import importSiteDevices" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/import")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/import"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -14820,7 +14820,7 @@ export def "sites-devices-last-config-count countSiteDeviceLastConfig" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/last_config/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/last_config/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14830,7 +14830,7 @@ export def "sites-devices-last-config-count countSiteDeviceLastConfig" [
 #
 # GET /api/v1/sites/{site_id}/devices/last_config/search
 # operationId: searchSiteDeviceLastConfigs
-export def "sites-devices-last-config-search searchSiteDeviceLastConfigs" [
+export def "sites-devices-last-config-search list" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14852,7 +14852,7 @@ export def "sites-devices-last-config-search searchSiteDeviceLastConfigs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_type" $device_type "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/last_config/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/last_config/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14875,7 +14875,7 @@ export def "sites-devices-reprovision reprovisionSiteAllAps" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/reprovision")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/reprovision"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14885,7 +14885,7 @@ export def "sites-devices-reprovision reprovisionSiteAllAps" [
 #
 # POST /api/v1/sites/{site_id}/devices/reset_radio_config
 # operationId: resetSiteAllApsToUseRrm
-export def "sites-devices-reset-radio-config resetSiteAllApsToUseRrm" [
+export def "sites-devices-reset-radio-config reset-site-all-aps-to-use-rrm" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14901,8 +14901,8 @@ export def "sites-devices-reset-radio-config resetSiteAllApsToUseRrm" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/reset_radio_config")
-  let body = {bands: $bands, force: $force} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/reset_radio_config"))
+  let body = {"bands": $bands, "force": $force} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -14929,8 +14929,8 @@ export def "sites-devices-restart multiRestartSiteDevices" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/restart")
-  let body = {device_ids: $device_ids, node: $node} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/restart"))
+  let body = {"device_ids": $device_ids, "node": $node} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -14941,7 +14941,7 @@ export def "sites-devices-restart multiRestartSiteDevices" [
 #
 # GET /api/v1/sites/{site_id}/devices/search
 # operationId: searchSiteDevices
-export def "sites-devices-search searchSiteDevices" [
+export def "sites-devices-search list" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14957,7 +14957,7 @@ export def "sites-devices-search searchSiteDevices" [
   --mac: string # device MAC
   --version: string # version
   --power-constrained: oneof<nothing, bool> # power_constrained
-  --ip address: string # format: ipv4, e.g. 192.168.1.1
+  --ip-address: string # format: ipv4, e.g. 192.168.1.1
   --mxtunnel-status: string@mxtunnel-status-completer # MxTunnel status, up / down
   --mxedge-id: string # Mist Edge id, if AP is connecting to a Mist Edge (format: uuid)
   --lldp-system-name: string # LLDP system name
@@ -14978,8 +14978,8 @@ export def "sites-devices-search searchSiteDevices" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hostname" $hostname "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "power_constrained" $power_constrained "scalar") (serialize-qp "ip address" $ip address "scalar") (serialize-qp "mxtunnel_status" $mxtunnel_status "scalar") (serialize-qp "mxedge_id" $mxedge_id "scalar") (serialize-qp "lldp_system_name" $lldp_system_name "scalar") (serialize-qp "lldp_system_desc" $lldp_system_desc "scalar") (serialize-qp "lldp_port_id" $lldp_port_id "scalar") (serialize-qp "lldp_mgmt_addr" $lldp_mgmt_addr "scalar") (serialize-qp "band_24_channel" $band_24_channel "scalar") (serialize-qp "band_5_channel" $band_5_channel "scalar") (serialize-qp "band_6_channel" $band_6_channel "scalar") (serialize-qp "eth0_port_speed" $eth0_port_speed "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "desc-sort" $desc_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/search" $qp)
+  let qp = [(serialize-qp "hostname" $hostname "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "power_constrained" $power_constrained "scalar") (serialize-qp "ip address" $ip_address "scalar") (serialize-qp "mxtunnel_status" $mxtunnel_status "scalar") (serialize-qp "mxedge_id" $mxedge_id "scalar") (serialize-qp "lldp_system_name" $lldp_system_name "scalar") (serialize-qp "lldp_system_desc" $lldp_system_desc "scalar") (serialize-qp "lldp_port_id" $lldp_port_id "scalar") (serialize-qp "lldp_mgmt_addr" $lldp_mgmt_addr "scalar") (serialize-qp "band_24_channel" $band_24_channel "scalar") (serialize-qp "band_5_channel" $band_5_channel "scalar") (serialize-qp "band_6_channel" $band_6_channel "scalar") (serialize-qp "eth0_port_speed" $eth0_port_speed "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "desc-sort" $desc_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15004,7 +15004,7 @@ export def "sites-devices-upgrade list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/upgrade" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/upgrade") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15048,8 +15048,8 @@ export def "sites-devices-upgrade multiUpgradeSiteDevices" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/upgrade")
-  let body = {canary_phases: $canary_phases, device_ids: $device_ids, enable_p2p: $enable_p2p, force: $force, max_failure_percentage: $max_failure_percentage, max_failures: $max_failures, models: $models, p2p_cluster_size: $p2p_cluster_size, p2p_parallelism: $p2p_parallelism, reboot: $reboot, reboot_at: $reboot_at, rrm_first_batch_percentage: $rrm_first_batch_percentage, rrm_max_batch_percentage: $rrm_max_batch_percentage, rrm_mesh_upgrade: $rrm_mesh_upgrade, rrm_node_order: $rrm_node_order, rrm_slow_ramp: $rrm_slow_ramp, snapshot: $snapshot, start_time: $start_time, strategy: $strategy, version: $version} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/upgrade"))
+  let body = {"canary_phases": $canary_phases, "device_ids": $device_ids, "enable_p2p": $enable_p2p, "force": $force, "max_failure_percentage": $max_failure_percentage, "max_failures": $max_failures, "models": $models, "p2p_cluster_size": $p2p_cluster_size, "p2p_parallelism": $p2p_parallelism, "reboot": $reboot, "reboot_at": $reboot_at, "rrm_first_batch_percentage": $rrm_first_batch_percentage, "rrm_max_batch_percentage": $rrm_max_batch_percentage, "rrm_mesh_upgrade": $rrm_mesh_upgrade, "rrm_node_order": $rrm_node_order, "rrm_slow_ramp": $rrm_slow_ramp, "snapshot": $snapshot, "start_time": $start_time, "strategy": $strategy, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15074,7 +15074,7 @@ export def "sites-devices-upgrade get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/upgrade/($upgrade_id)")
+  let full_url = (build-url $base ({site_id: $site_id, upgrade_id: $upgrade_id} | format pattern "/api/v1/sites/{site_id}/devices/upgrade/{upgrade_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15084,7 +15084,7 @@ export def "sites-devices-upgrade get" [
 #
 # POST /api/v1/sites/{site_id}/devices/upgrade/{upgrade_id}/cancel
 # operationId: cancelSiteDeviceUpgrade
-export def "sites-devices-upgrade-cancel cancelSiteDeviceUpgrade" [
+export def "sites-devices-upgrade-cancel cancel" [
   site_id: string
   upgrade_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15098,7 +15098,7 @@ export def "sites-devices-upgrade-cancel cancelSiteDeviceUpgrade" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/upgrade/($upgrade_id)/cancel")
+  let full_url = (build-url $base ({site_id: $site_id, upgrade_id: $upgrade_id} | format pattern "/api/v1/sites/{site_id}/devices/upgrade/{upgrade_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15108,7 +15108,7 @@ export def "sites-devices-upgrade-cancel cancelSiteDeviceUpgrade" [
 #
 # GET /api/v1/sites/{site_id}/devices/versions
 # operationId: getSiteAvailableDeviceVersions
-export def "sites-devices-versions get" [
+export def "sites-devices-versions get-site-available" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15123,7 +15123,7 @@ export def "sites-devices-versions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/versions" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15148,8 +15148,8 @@ export def "sites-devices-zerioze zeroizeSiteFipsAllAps" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/zerioze")
-  let body = {password: $password} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/devices/zerioze"))
+  let body = {"password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15174,7 +15174,7 @@ export def "sites-devices delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15198,7 +15198,7 @@ export def "sites-devices get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15235,7 +15235,7 @@ export def "sites-devices get" [
 # --vrf_config shape: {enabled?: bool}
 # --vrrp_config shape: {enabled?: bool, groups?: record}
 # --dhcpd_config shape: {enabled?: bool}
-export def "sites-devices updateSiteDevice" [
+export def "sites-devices update" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15306,8 +15306,8 @@ export def "sites-devices updateSiteDevice" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)")
-  let body = {aeroscout: $aeroscout, ble_config: $ble_config, centrak: $centrak, client_bridge: $client_bridge, deviceprofile_id: $deviceprofile_id, disable_eth1: $disable_eth1, disable_eth2: $disable_eth2, disable_eth3: $disable_eth3, disable_module: $disable_module, height: $height, image1_url: $image1_url, image2_url: $image2_url, image3_url: $image3_url, iot_config: $iot_config, ip_config: $ip_config, led: $led, locked: $locked, map_id: $map_id, mesh: $mesh, name: $name, notes: $notes, ntp_servers: $ntp_servers, orientation: $orientation, poe_passthrough: $poe_passthrough, port_config: $port_config, pwr_config: $pwr_config, radio_config: $radio_config, uplink_port_config: $uplink_port_config, usb_config: $usb_config, vars: $vars, x: $x, y: $y, acl_policies: $acl_policies, acl_tags: $acl_tags, additional_config_cmds: $additional_config_cmds, dhcp_config: $dhcp_config, dhcp_snooping: $dhcp_snooping, disable_auto_config: $disable_auto_config, dns_servers: $dns_servers, dns_suffix: $dns_suffix, evpn_config: $evpn_config, extra_routes: $extra_routes, managed: $managed, networks: $networks, oob_ip_config: $oob_ip_config, ospf_config: $ospf_config, other_ip_configs: $other_ip_configs, port_mirroring: $port_mirroring, port_usages: $port_usages, radius_config: $radius_config, role: $role, router_id: $router_id, virtual_chassis: $virtual_chassis, vrf_config: $vrf_config, vrrp_config: $vrrp_config, dhcpd_config: $dhcpd_config} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}"))
+  let body = {"aeroscout": $aeroscout, "ble_config": $ble_config, "centrak": $centrak, "client_bridge": $client_bridge, "deviceprofile_id": $deviceprofile_id, "disable_eth1": $disable_eth1, "disable_eth2": $disable_eth2, "disable_eth3": $disable_eth3, "disable_module": $disable_module, "height": $height, "image1_url": $image1_url, "image2_url": $image2_url, "image3_url": $image3_url, "iot_config": $iot_config, "ip_config": $ip_config, "led": $led, "locked": $locked, "map_id": $map_id, "mesh": $mesh, "name": $name, "notes": $notes, "ntp_servers": $ntp_servers, "orientation": $orientation, "poe_passthrough": $poe_passthrough, "port_config": $port_config, "pwr_config": $pwr_config, "radio_config": $radio_config, "uplink_port_config": $uplink_port_config, "usb_config": $usb_config, "vars": $vars, "x": $x, "y": $y, "acl_policies": $acl_policies, "acl_tags": $acl_tags, "additional_config_cmds": $additional_config_cmds, "dhcp_config": $dhcp_config, "dhcp_snooping": $dhcp_snooping, "disable_auto_config": $disable_auto_config, "dns_servers": $dns_servers, "dns_suffix": $dns_suffix, "evpn_config": $evpn_config, "extra_routes": $extra_routes, "managed": $managed, "networks": $networks, "oob_ip_config": $oob_ip_config, "ospf_config": $ospf_config, "other_ip_configs": $other_ip_configs, "port_mirroring": $port_mirroring, "port_usages": $port_usages, "radius_config": $radius_config, "role": $role, "router_id": $router_id, "virtual_chassis": $virtual_chassis, "vrf_config": $vrf_config, "vrrp_config": $vrrp_config, "dhcpd_config": $dhcpd_config} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15332,7 +15332,7 @@ export def "sites-devices-arp arpFromDevice" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/arp")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/arp"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15359,8 +15359,8 @@ export def "sites-devices-bounce-port portsBounceFromSwitch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/bounce_port")
-  let body = {port: $port, ports: $ports} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/bounce_port"))
+  let body = {"port": $port, "ports": $ports} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15387,8 +15387,8 @@ export def "sites-devices-cable-test cableTestFromSwitch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/cable_test")
-  let body = {port: $port} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/cable_test"))
+  let body = {"port": $port} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15399,7 +15399,7 @@ export def "sites-devices-cable-test cableTestFromSwitch" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/check_radius_server
 # operationId: startSiteSwitchRadiusSyntheticTest
-export def "sites-devices-check-radius-server startSiteSwitchRadiusSyntheticTest" [
+export def "sites-devices-check-radius-server start-site-switch-radius-synthetic-test" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15417,8 +15417,8 @@ export def "sites-devices-check-radius-server startSiteSwitchRadiusSyntheticTest
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/check_radius_server")
-  let body = {password: $password, profile: $profile, user: $user} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/check_radius_server"))
+  let body = {"password": $password, "profile": $profile, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15445,7 +15445,7 @@ export def "sites-devices-clear-arp clearSiteSsrArpCache" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/clear_arp")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/clear_arp"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15474,8 +15474,8 @@ export def "sites-devices-clear-bgp clearSiteSsrBgpRoutes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/clear_bgp")
-  let body = {neighbor: $neighbor, type: $type, vrf: $vrf} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/clear_bgp"))
+  let body = {"neighbor": $neighbor, "type": $type, "vrf": $vrf} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15502,8 +15502,8 @@ export def "sites-devices-clear-bpdu-error clearBpduErrosFromPortsOnSwitch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/clear_bpdu_error")
-  let body = {port: $port} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/clear_bpdu_error"))
+  let body = {"port": $port} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15530,8 +15530,8 @@ export def "sites-devices-clear-macs clearAllLearnedMacsFromPortOnSwitch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/clear_macs")
-  let body = {ports: $ports} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/clear_macs"))
+  let body = {"ports": $ports} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15558,7 +15558,7 @@ export def "sites-devices-config-cmd get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/config_cmd" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/config_cmd") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15568,7 +15568,7 @@ export def "sites-devices-config-cmd get" [
 #
 # DELETE /api/v1/sites/{site_id}/devices/{device_id}/ha
 # operationId: deleteSiteDeviceHaCluster
-export def "sites-devices-ha delete" [
+export def "sites-devices-ha delete-site-device-ha-cluster" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15582,7 +15582,7 @@ export def "sites-devices-ha delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/ha")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/ha"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15593,7 +15593,7 @@ export def "sites-devices-ha delete" [
 # POST /api/v1/sites/{site_id}/devices/{device_id}/ha
 # operationId: createSiteDeviceHaCluster
 # --nodes item shape: {mac: string}
-export def "sites-devices-ha createSiteDeviceHaCluster" [
+export def "sites-devices-ha create-site-device-ha-cluster" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15609,8 +15609,8 @@ export def "sites-devices-ha createSiteDeviceHaCluster" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/ha")
-  let body = {nodes: $nodes} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/ha"))
+  let body = {"nodes": $nodes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15640,8 +15640,8 @@ export def "sites-devices-ha swapSiteDeviceHaClusterNode" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/ha")
-  let body = {mac: $mac, op: $op} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/ha"))
+  let body = {"mac": $mac, "op": $op} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15667,7 +15667,7 @@ export def "sites-devices-image-image-number delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/image($image_number)")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id, image_number: $image_number} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/image{image_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15677,7 +15677,7 @@ export def "sites-devices-image-image-number delete" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/image{image_number}
 # operationId: addSiteDeviceImage
-export def "sites-devices-image-image-number addSiteDeviceImage" [
+export def "sites-devices-image-image-number create" [
   site_id: string
   device_id: string
   image_number: int
@@ -15695,8 +15695,8 @@ export def "sites-devices-image-image-number addSiteDeviceImage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/image($image_number)")
-  let body = {file: $file, json: $json} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id, image_number: $image_number} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/image{image_number}"))
+  let body = {"file": $file, "json": $json} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15707,7 +15707,7 @@ export def "sites-devices-image-image-number addSiteDeviceImage" [
 #
 # GET /api/v1/sites/{site_id}/devices/{device_id}/iot
 # operationId: getSiteDeviceIotPort
-export def "sites-devices-iot get" [
+export def "sites-devices-iot get-site-device-iot-port" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15721,7 +15721,7 @@ export def "sites-devices-iot get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/iot")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/iot"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15747,7 +15747,7 @@ export def "sites-devices-iot setSiteDeviceIotPort" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/iot")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/iot"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15758,7 +15758,7 @@ export def "sites-devices-iot setSiteDeviceIotPort" [
 #
 # DELETE /api/v1/sites/{site_id}/devices/{device_id}/local_port_config
 # operationId: deleteSiteLocalSwitchPortConfig
-export def "sites-devices-local-port-config delete" [
+export def "sites-devices-local-port-config delete-site-local-switch" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15772,7 +15772,7 @@ export def "sites-devices-local-port-config delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/local_port_config")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/local_port_config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15782,7 +15782,7 @@ export def "sites-devices-local-port-config delete" [
 #
 # PUT /api/v1/sites/{site_id}/devices/{device_id}/local_port_config
 # operationId: updateSiteLocalSwitchPortConfig
-export def "sites-devices-local-port-config updateSiteLocalSwitchPortConfig" [
+export def "sites-devices-local-port-config update-site-local-switch" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15811,8 +15811,8 @@ export def "sites-devices-local-port-config updateSiteLocalSwitchPortConfig" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/local_port_config")
-  let body = {ae_disable_lacp: $ae_disable_lacp, ae_idx: $ae_idx, aggregated: $aggregated, critical: $critical, description: $description, disable_autoneg: $disable_autoneg, duplex: $duplex, dynamic_usage: $dynamic_usage, esilag: $esilag, mtu: $mtu, no_local_overwrite: $no_local_overwrite, poe_disabled: $poe_disabled, speed: $speed, usage: $usage} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/local_port_config"))
+  let body = {"ae_disable_lacp": $ae_disable_lacp, "ae_idx": $ae_idx, "aggregated": $aggregated, "critical": $critical, "description": $description, "disable_autoneg": $disable_autoneg, "duplex": $duplex, "dynamic_usage": $dynamic_usage, "esilag": $esilag, "mtu": $mtu, "no_local_overwrite": $no_local_overwrite, "poe_disabled": $poe_disabled, "speed": $speed, "usage": $usage} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15823,7 +15823,7 @@ export def "sites-devices-local-port-config updateSiteLocalSwitchPortConfig" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/locate
 # operationId: startSiteLocateDevice
-export def "sites-devices-locate startSiteLocateDevice" [
+export def "sites-devices-locate start" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15837,7 +15837,7 @@ export def "sites-devices-locate startSiteLocateDevice" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/locate")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/locate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15847,7 +15847,7 @@ export def "sites-devices-locate startSiteLocateDevice" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/ping
 # operationId: pingFromDevice
-export def "sites-devices-ping pingFromDevice" [
+export def "sites-devices-ping ping-from" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15866,8 +15866,8 @@ export def "sites-devices-ping pingFromDevice" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/ping")
-  let body = {count: $count, egress_interface: $egress_interface, host: $host, size: $size} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/ping"))
+  let body = {"count": $count, "egress_interface": $egress_interface, "host": $host, "size": $size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15892,7 +15892,7 @@ export def "sites-devices-poll-stats pollSiteSwitchStats" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/poll_stats")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/poll_stats"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15918,8 +15918,8 @@ export def "sites-devices-release-dhcp releaseSiteSsrDhcpLease" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/release_dhcp")
-  let body = {port: $port} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/release_dhcp"))
+  let body = {"port": $port} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15930,7 +15930,7 @@ export def "sites-devices-release-dhcp releaseSiteSsrDhcpLease" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/request_ztp_password
 # operationId: getSiteDeviceZtpPassword
-export def "sites-devices-request-ztp-password post" [
+export def "sites-devices-request-ztp-password get" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15944,7 +15944,7 @@ export def "sites-devices-request-ztp-password post" [
 ]: nothing -> record<root_password: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/request_ztp_password")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/request_ztp_password"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15954,7 +15954,7 @@ export def "sites-devices-request-ztp-password post" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/resolve_dns
 # operationId: testSiteSsrDnsResolution
-export def "sites-devices-resolve-dns testSiteSsrDnsResolution" [
+export def "sites-devices-resolve-dns test-site-ssr-dns-resolution" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15968,7 +15968,7 @@ export def "sites-devices-resolve-dns testSiteSsrDnsResolution" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/resolve_dns")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/resolve_dns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -15978,7 +15978,7 @@ export def "sites-devices-resolve-dns testSiteSsrDnsResolution" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/restart
 # operationId: restartSiteDevice
-export def "sites-devices-restart restartSiteDevice" [
+export def "sites-devices-restart restart" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15995,8 +15995,8 @@ export def "sites-devices-restart restartSiteDevice" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/restart")
-  let body = {member: $member, node: $node} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/restart"))
+  let body = {"member": $member, "node": $node} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -16027,8 +16027,8 @@ export def "sites-devices-service-ping servicePingFromSsr" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/service_ping")
-  let body = {count: $count, host: $host, service: $service, size: $size, tenant: $tenant} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/service_ping"))
+  let body = {"count": $count, "host": $host, "service": $service, "size": $size, "tenant": $tenant} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -16039,7 +16039,7 @@ export def "sites-devices-service-ping servicePingFromSsr" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/show_route
 # operationId: getSiteSsrAndSrxRoutes
-export def "sites-devices-show-route post" [
+export def "sites-devices-show-route get-site-ssr-and-srx" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16059,8 +16059,8 @@ export def "sites-devices-show-route post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/show_route")
-  let body = {neighbor: $neighbor, prefix: $prefix, protocol: $protocol, route: $route, vrf_name: $vrf_name} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/show_route"))
+  let body = {"neighbor": $neighbor, "prefix": $prefix, "protocol": $protocol, "route": $route, "vrf_name": $vrf_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -16071,7 +16071,7 @@ export def "sites-devices-show-route post" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/show_session
 # operationId: getSiteSsrAndSrxSessions
-export def "sites-devices-show-session post" [
+export def "sites-devices-show-session get-site-ssr-and-srx" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16087,8 +16087,8 @@ export def "sites-devices-show-session post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/show_session")
-  let body = {service_name: $service_name} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/show_session"))
+  let body = {"service_name": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -16099,7 +16099,7 @@ export def "sites-devices-show-session post" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/snapshot
 # operationId: createSiteDeviceSnapshot
-export def "sites-devices-snapshot createSiteDeviceSnapshot" [
+export def "sites-devices-snapshot create" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16113,7 +16113,7 @@ export def "sites-devices-snapshot createSiteDeviceSnapshot" [
 ]: nothing -> record<status_id: string, staus: string, timestamp: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/snapshot")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/snapshot"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16123,7 +16123,7 @@ export def "sites-devices-snapshot createSiteDeviceSnapshot" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/support
 # operationId: uploadSiteDeviceSupportFile
-export def "sites-devices-support uploadSiteDeviceSupportFile" [
+export def "sites-devices-support upload-site-device-support-file" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16141,8 +16141,8 @@ export def "sites-devices-support uploadSiteDeviceSupportFile" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/support")
-  let body = {info: $info, node: $node, num_messages_files: $num_messages_files} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/support"))
+  let body = {"info": $info, "node": $node, "num_messages_files": $num_messages_files} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -16153,7 +16153,7 @@ export def "sites-devices-support uploadSiteDeviceSupportFile" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/synthetic_test
 # operationId: StartSiteDeviceSyntheticTest
-export def "sites-devices-synthetic-test StartSiteDeviceSyntheticTest" [
+export def "sites-devices-synthetic-test start" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16175,8 +16175,8 @@ export def "sites-devices-synthetic-test StartSiteDeviceSyntheticTest" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/synthetic_test")
-  let body = {hostname: $hostname, ip: $ip, password: $password, type: $type, url: $body_url, username: $username, vlan_id: $vlan_id} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/synthetic_test"))
+  let body = {"hostname": $hostname, "ip": $ip, "password": $password, "type": $type, "url": $body_url, "username": $username, "vlan_id": $vlan_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -16206,8 +16206,8 @@ export def "sites-devices-traceroute tracerouteFromDevice" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/traceroute")
-  let body = {host: $host, port: $port, protocol: $protocol, timeout: $timeout} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/traceroute"))
+  let body = {"host": $host, "port": $port, "protocol": $protocol, "timeout": $timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -16218,7 +16218,7 @@ export def "sites-devices-traceroute tracerouteFromDevice" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/unlocate
 # operationId: stopSiteLocateDevice
-export def "sites-devices-unlocate stopSiteLocateDevice" [
+export def "sites-devices-unlocate stop-site-locate" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16232,7 +16232,7 @@ export def "sites-devices-unlocate stopSiteLocateDevice" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/unlocate")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/unlocate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16258,8 +16258,8 @@ export def "sites-devices-upgrade upgradeSiteDevice" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/upgrade")
-  let body = {version: $version} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/upgrade"))
+  let body = {"version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -16270,7 +16270,7 @@ export def "sites-devices-upgrade upgradeSiteDevice" [
 #
 # DELETE /api/v1/sites/{site_id}/devices/{device_id}/vc
 # operationId: deleteSiteVirtualChassis
-export def "sites-devices-vc delete" [
+export def "sites-devices-vc delete-site-virtual-chassis" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16284,7 +16284,7 @@ export def "sites-devices-vc delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/vc")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/vc"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16294,7 +16294,7 @@ export def "sites-devices-vc delete" [
 #
 # GET /api/v1/sites/{site_id}/devices/{device_id}/vc
 # operationId: getSiteVirtualChassis
-export def "sites-devices-vc get" [
+export def "sites-devices-vc get-site-virtual-chassis" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16308,7 +16308,7 @@ export def "sites-devices-vc get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/vc")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/vc"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16319,7 +16319,7 @@ export def "sites-devices-vc get" [
 # POST /api/v1/sites/{site_id}/devices/{device_id}/vc
 # operationId: createSiteVirtualChassis
 # --members item shape: {mac?: string, member?: int, vc_ports?: list, vc_role?: "master"|"backup"|"linecard"}
-export def "sites-devices-vc createSiteVirtualChassis" [
+export def "sites-devices-vc create-site-virtual-chassis" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16338,8 +16338,8 @@ export def "sites-devices-vc createSiteVirtualChassis" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/vc")
-  let body = {member: $member, members: $members, new-member: $new_member, op: $op} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/vc"))
+  let body = {"member": $member, "members": $members, "new-member": $new_member, "op": $op} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -16351,7 +16351,7 @@ export def "sites-devices-vc createSiteVirtualChassis" [
 # PUT /api/v1/sites/{site_id}/devices/{device_id}/vc
 # operationId: updateSiteVirtualChassisMember
 # --members item shape: {mac?: string, member?: int, vc_ports?: list, vc_role?: "master"|"backup"|"linecard"}
-export def "sites-devices-vc updateSiteVirtualChassisMember" [
+export def "sites-devices-vc update-site-virtual-chassis-member" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16370,8 +16370,8 @@ export def "sites-devices-vc updateSiteVirtualChassisMember" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/vc")
-  let body = {member: $member, members: $members, new-member: $new_member, op: $op} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/vc"))
+  let body = {"member": $member, "members": $members, "new-member": $new_member, "op": $op} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -16400,8 +16400,8 @@ export def "sites-devices-vc-vc-port setSiteVcPort" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/devices/($device_id)/vc/vc_port")
-  let body = {members: $members, op: $op} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/devices/{device_id}/vc/vc_port"))
+  let body = {"members": $members, "op": $op} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -16412,7 +16412,7 @@ export def "sites-devices-vc-vc-port setSiteVcPort" [
 #
 # GET /api/v1/sites/{site_id}/events/fast_roam
 # operationId: getSiteRoamingEvents
-export def "sites-events-fast-roam get" [
+export def "sites-events-fast-roam get-site-roaming" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16432,7 +16432,7 @@ export def "sites-events-fast-roam get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/events/fast_roam" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/events/fast_roam") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16461,7 +16461,7 @@ export def "sites-events-interference get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/events/interference" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/events/interference") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16491,7 +16491,7 @@ export def "sites-events-system-count countSiteSystemEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/events/system/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/events/system/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16501,7 +16501,7 @@ export def "sites-events-system-count countSiteSystemEvents" [
 #
 # GET /api/v1/sites/{site_id}/events/system/search
 # operationId: searchSiteSystemEvents
-export def "sites-events-system-search searchSiteSystemEvents" [
+export def "sites-events-system-search list" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16520,7 +16520,7 @@ export def "sites-events-system-search searchSiteSystemEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/events/system/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/events/system/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16530,7 +16530,7 @@ export def "sites-events-system-search searchSiteSystemEvents" [
 #
 # GET /api/v1/sites/{site_id}/evpn_topologies
 # operationId: getSiteEvpnTopologies
-export def "sites-evpn-topologies list" [
+export def "sites-evpn-topologies get" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16543,7 +16543,7 @@ export def "sites-evpn-topologies list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/evpn_topologies")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/evpn_topologies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16554,7 +16554,7 @@ export def "sites-evpn-topologies list" [
 # POST /api/v1/sites/{site_id}/evpn_topologies
 # operationId: createSiteEvpnTopology
 # --switches item shape: {deviceprofile_id?: string, esilaglinks?: list, evpn_id?: int, mac?: string, pod?: int, role?: "core"|"distribution"|"access"|"collapsed-core"|"none"|"esilag-access", site_id?: string}
-export def "sites-evpn-topologies createSiteEvpnTopology" [
+export def "sites-evpn-topologies create-site-evpn-topology" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16571,8 +16571,8 @@ export def "sites-evpn-topologies createSiteEvpnTopology" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/evpn_topologies")
-  let body = {name: $name, pod_names: $pod_names, switches: $switches} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/evpn_topologies"))
+  let body = {"name": $name, "pod_names": $pod_names, "switches": $switches} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -16583,7 +16583,7 @@ export def "sites-evpn-topologies createSiteEvpnTopology" [
 #
 # DELETE /api/v1/sites/{site_id}/evpn_topologies/{evpn_topology_id}
 # operationId: deleteSiteEvpnTopology
-export def "sites-evpn-topologies delete" [
+export def "sites-evpn-topologies delete-site-evpn-topology" [
   site_id: string
   evpn_topology_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16597,7 +16597,7 @@ export def "sites-evpn-topologies delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/evpn_topologies/($evpn_topology_id)")
+  let full_url = (build-url $base ({site_id: $site_id, evpn_topology_id: $evpn_topology_id} | format pattern "/api/v1/sites/{site_id}/evpn_topologies/{evpn_topology_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16607,7 +16607,7 @@ export def "sites-evpn-topologies delete" [
 #
 # GET /api/v1/sites/{site_id}/evpn_topologies/{evpn_topology_id}
 # operationId: getSiteEvpnTolopogy
-export def "sites-evpn-topologies get" [
+export def "sites-evpn-topologies get-site-evpn-tolopogy" [
   site_id: string
   evpn_topology_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16621,7 +16621,7 @@ export def "sites-evpn-topologies get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/evpn_topologies/($evpn_topology_id)")
+  let full_url = (build-url $base ({site_id: $site_id, evpn_topology_id: $evpn_topology_id} | format pattern "/api/v1/sites/{site_id}/evpn_topologies/{evpn_topology_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16632,7 +16632,7 @@ export def "sites-evpn-topologies get" [
 # PUT /api/v1/sites/{site_id}/evpn_topologies/{evpn_topology_id}
 # operationId: updateSiteEvpnTopology
 # --switches item shape: {deviceprofile_id?: string, esilaglinks?: list, evpn_id?: int, mac?: string, pod?: int, role?: "core"|"distribution"|"access"|"collapsed-core"|"none"|"esilag-access", site_id?: string}
-export def "sites-evpn-topologies updateSiteEvpnTopology" [
+export def "sites-evpn-topologies update-site-evpn-topology" [
   site_id: string
   evpn_topology_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16650,8 +16650,8 @@ export def "sites-evpn-topologies updateSiteEvpnTopology" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/evpn_topologies/($evpn_topology_id)")
-  let body = {name: $name, pod_names: $pod_names, switches: $switches} | compact
+  let full_url = (build-url $base ({site_id: $site_id, evpn_topology_id: $evpn_topology_id} | format pattern "/api/v1/sites/{site_id}/evpn_topologies/{evpn_topology_id}"))
+  let body = {"name": $name, "pod_names": $pod_names, "switches": $switches} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -16662,7 +16662,7 @@ export def "sites-evpn-topologies updateSiteEvpnTopology" [
 #
 # GET /api/v1/sites/{site_id}/guests
 # operationId: getSiteAllGuestAuthorizations
-export def "sites-guests list" [
+export def "sites-guests get-site-all-guest-authorizations" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16677,7 +16677,7 @@ export def "sites-guests list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "wlan_id" $wlan_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/guests" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/guests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16707,7 +16707,7 @@ export def "sites-guests-count countSiteGuestAuthorizations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/guests/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/guests/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16717,7 +16717,7 @@ export def "sites-guests-count countSiteGuestAuthorizations" [
 #
 # GET /api/v1/sites/{site_id}/guests/search
 # operationId: searchSiteGuestAuthorization
-export def "sites-guests-search searchSiteGuestAuthorization" [
+export def "sites-guests-search list-site-guest-authorization" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16738,7 +16738,7 @@ export def "sites-guests-search searchSiteGuestAuthorization" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "wlan_id" $wlan_id "scalar") (serialize-qp "auth_method" $auth_method "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/guests/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/guests/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16748,7 +16748,7 @@ export def "sites-guests-search searchSiteGuestAuthorization" [
 #
 # DELETE /api/v1/sites/{site_id}/guests/{guest_mac}
 # operationId: deleteSiteGuestAuthorization
-export def "sites-guests delete" [
+export def "sites-guests delete-site-guest-authorization" [
   site_id: string
   guest_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16762,7 +16762,7 @@ export def "sites-guests delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/guests/($guest_mac)")
+  let full_url = (build-url $base ({site_id: $site_id, guest_mac: $guest_mac} | format pattern "/api/v1/sites/{site_id}/guests/{guest_mac}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16772,7 +16772,7 @@ export def "sites-guests delete" [
 #
 # GET /api/v1/sites/{site_id}/guests/{guest_mac}
 # operationId: getSiteGuestAuthorization
-export def "sites-guests get" [
+export def "sites-guests get-site-guest-authorization" [
   site_id: string
   guest_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16786,7 +16786,7 @@ export def "sites-guests get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/guests/($guest_mac)")
+  let full_url = (build-url $base ({site_id: $site_id, guest_mac: $guest_mac} | format pattern "/api/v1/sites/{site_id}/guests/{guest_mac}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16796,7 +16796,7 @@ export def "sites-guests get" [
 #
 # PUT /api/v1/sites/{site_id}/guests/{guest_mac}
 # operationId: updateSiteGuestAuthorization
-export def "sites-guests updateSiteGuestAuthorization" [
+export def "sites-guests update-site-guest-authorization" [
   site_id: string
   guest_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16823,8 +16823,8 @@ export def "sites-guests updateSiteGuestAuthorization" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/guests/($guest_mac)")
-  let body = {authorized: $authorized, authorized_expiring_time: $authorized_expiring_time, authorized_time: $authorized_time, company: $company, email: $email, field1: $field1, field2: $field2, field3: $field3, field4: $field4, mac: $mac, minutes: $minutes, name: $name} | compact
+  let full_url = (build-url $base ({site_id: $site_id, guest_mac: $guest_mac} | format pattern "/api/v1/sites/{site_id}/guests/{guest_mac}"))
+  let body = {"authorized": $authorized, "authorized_expiring_time": $authorized_expiring_time, "authorized_time": $authorized_time, "company": $company, "email": $email, "field1": $field1, "field2": $field2, "field3": $field3, "field4": $field4, "mac": $mac, "minutes": $minutes, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -16835,7 +16835,7 @@ export def "sites-guests updateSiteGuestAuthorization" [
 #
 # GET /api/v1/sites/{site_id}/insights/client/{client_mac}/{metric}
 # operationId: getSiteInsightMetricsForClient
-export def "sites-insights-client get" [
+export def "sites-insights-client get-site-insight-for" [
   site_id: any
   client_mac: any
   metric: any
@@ -16857,7 +16857,7 @@ export def "sites-insights-client get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/insights/client/($client_mac)/($metric)" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, client_mac: $client_mac, metric: $metric} | format pattern "/api/v1/sites/{site_id}/insights/client/{client_mac}/{metric}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16867,7 +16867,7 @@ export def "sites-insights-client get" [
 #
 # GET /api/v1/sites/{site_id}/insights/device/{device_mac}/{metric}
 # operationId: getSiteInsightMetricsForDevice
-export def "sites-insights-device get" [
+export def "sites-insights-device get-site-insight-for" [
   site_id: any
   device_mac: any
   metric: any
@@ -16889,7 +16889,7 @@ export def "sites-insights-device get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/insights/device/($device_mac)/($metric)" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, device_mac: $device_mac, metric: $metric} | format pattern "/api/v1/sites/{site_id}/insights/device/{device_mac}/{metric}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16899,7 +16899,7 @@ export def "sites-insights-device get" [
 #
 # GET /api/v1/sites/{site_id}/insights/rogues
 # operationId: getSiteRogueAPs
-export def "sites-insights-rogues get" [
+export def "sites-insights-rogues get-site-rogue-a-ps" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16919,7 +16919,7 @@ export def "sites-insights-rogues get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/insights/rogues" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/insights/rogues") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16948,7 +16948,7 @@ export def "sites-insights-rogues-clients get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/insights/rogues/clients" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/insights/rogues/clients") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -16979,7 +16979,7 @@ export def "sites-insights get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/insights/($metric)" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/insights/{metric}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17002,7 +17002,7 @@ export def "sites-licenses-usages get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/licenses/usages")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/licenses/usages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17012,7 +17012,7 @@ export def "sites-licenses-usages get" [
 #
 # GET /api/v1/sites/{site_id}/location/coverage
 # operationId: getSiteBeamCoverageOverview
-export def "sites-location-coverage get" [
+export def "sites-location-coverage get-site-beam-coverage-overview" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17033,7 +17033,7 @@ export def "sites-location-coverage get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "map_id" $map_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "client_type" $client_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/location/coverage" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/location/coverage") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17043,7 +17043,7 @@ export def "sites-location-coverage get" [
 #
 # GET /api/v1/sites/{site_id}/location/ml/current
 # operationId: getSiteMachineLearningCurrentStat
-export def "sites-location-ml-current get" [
+export def "sites-location-ml-current get-site-machine-learning-current-stat" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17058,7 +17058,7 @@ export def "sites-location-ml-current get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "map_id" $map_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/location/ml/current" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/location/ml/current") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17068,7 +17068,7 @@ export def "sites-location-ml-current get" [
 #
 # GET /api/v1/sites/{site_id}/location/ml/defaults
 # operationId: getSiteDefaultPlfForModels
-export def "sites-location-ml-defaults get" [
+export def "sites-location-ml-defaults get-site-default-plf-for-models" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17081,7 +17081,7 @@ export def "sites-location-ml-defaults get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/location/ml/defaults")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/location/ml/defaults"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17105,7 +17105,7 @@ export def "sites-location-ml-device clearSiteMlOverwriteForDevice" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/location/ml/device/($device_id)")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/location/ml/device/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17131,7 +17131,7 @@ export def "sites-location-ml-device overwriteSiteMlForDevice" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/location/ml/device/($device_id)")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/location/ml/device/{device_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -17156,7 +17156,7 @@ export def "sites-location-ml-map clearSiteMlOverwriteForMap" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/location/ml/map/($map_id)")
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/location/ml/map/{map_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17182,7 +17182,7 @@ export def "sites-location-ml-map overwriteSiteMlForMap" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/location/ml/map/($map_id)")
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/location/ml/map/{map_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -17193,7 +17193,7 @@ export def "sites-location-ml-map overwriteSiteMlForMap" [
 #
 # POST /api/v1/sites/{site_id}/location/ml/reset/map/{map_id}
 # operationId: resetSiteMlStatsByMap
-export def "sites-location-ml-reset-map resetSiteMlStatsByMap" [
+export def "sites-location-ml-reset-map reset-site-ml-stats" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17207,7 +17207,7 @@ export def "sites-location-ml-reset-map resetSiteMlStatsByMap" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/location/ml/reset/map/($map_id)")
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/location/ml/reset/map/{map_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17217,7 +17217,7 @@ export def "sites-location-ml-reset-map resetSiteMlStatsByMap" [
 #
 # GET /api/v1/sites/{site_id}/location/ml/updates
 # operationId: getSiteMachineLearningEvents
-export def "sites-location-ml-updates get" [
+export def "sites-location-ml-updates get-site-machine-learning-events" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17238,7 +17238,7 @@ export def "sites-location-ml-updates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "map_ip" $map_ip "scalar") (serialize-qp "client_type" $client_type "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/location/ml/updates" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/location/ml/updates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17261,7 +17261,7 @@ export def "sites-maps list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/maps"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17277,7 +17277,7 @@ export def "sites-maps list" [
 # --wall_path shape: {coordinate?: string, name?: string, nodes?: list}
 # --wayfinding shape: {micello?: record, snap_to_path?: bool}
 # --wayfinding_path shape: {coordinate?: string, nodes?: list}
-export def "sites-maps createSiteMap" [
+export def "sites-maps create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17313,8 +17313,8 @@ export def "sites-maps createSiteMap" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps")
-  let body = {flags: $flags, height: $height, height_m: $height_m, latlng_br: $latlng_br, latlng_tl: $latlng_tl, locked: $locked, name: $name, occupancy_limit: $occupancy_limit, orientation: $orientation, origin_x: $origin_x, origin_y: $origin_y, ppm: $ppm, sitesurvey_path: $sitesurvey_path, type: $type, use_auto_orientation: $use_auto_orientation, use_auto_placement: $use_auto_placement, view: $view, wall_path: $wall_path, wayfinding: $wayfinding, wayfinding_path: $wayfinding_path, width: $width, width_m: $width_m} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/maps"))
+  let body = {"flags": $flags, "height": $height, "height_m": $height_m, "latlng_br": $latlng_br, "latlng_tl": $latlng_tl, "locked": $locked, "name": $name, "occupancy_limit": $occupancy_limit, "orientation": $orientation, "origin_x": $origin_x, "origin_y": $origin_y, "ppm": $ppm, "sitesurvey_path": $sitesurvey_path, "type": $type, "use_auto_orientation": $use_auto_orientation, "use_auto_placement": $use_auto_placement, "view": $view, "wall_path": $wall_path, "wayfinding": $wayfinding, "wayfinding_path": $wayfinding_path, "width": $width, "width_m": $width_m} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -17326,7 +17326,7 @@ export def "sites-maps createSiteMap" [
 # POST /api/v1/sites/{site_id}/maps/import
 # operationId: importSiteMaps
 # --json shape: {import_all_floorpans?: bool, import_height?: bool, import_orientation?: bool, site_id: string, vendor_name: "ekahau"|"ibwave"}
-export def "sites-maps-import importSiteMaps" [
+export def "sites-maps-import import" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17344,8 +17344,8 @@ export def "sites-maps-import importSiteMaps" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/import")
-  let body = {auto_deviceprofile_assignment: $auto_deviceprofile_assignment, csv: $csv, file: $file, json: $json} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/maps/import"))
+  let body = {"auto_deviceprofile_assignment": $auto_deviceprofile_assignment, "csv": $csv, "file": $file, "json": $json} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -17370,7 +17370,7 @@ export def "sites-maps delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)")
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17394,7 +17394,7 @@ export def "sites-maps get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)")
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17410,7 +17410,7 @@ export def "sites-maps get" [
 # --wall_path shape: {coordinate?: string, name?: string, nodes?: list}
 # --wayfinding shape: {micello?: record, snap_to_path?: bool}
 # --wayfinding_path shape: {coordinate?: string, nodes?: list}
-export def "sites-maps updateSiteMap" [
+export def "sites-maps update" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17447,8 +17447,8 @@ export def "sites-maps updateSiteMap" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)")
-  let body = {flags: $flags, height: $height, height_m: $height_m, latlng_br: $latlng_br, latlng_tl: $latlng_tl, locked: $locked, name: $name, occupancy_limit: $occupancy_limit, orientation: $orientation, origin_x: $origin_x, origin_y: $origin_y, ppm: $ppm, sitesurvey_path: $sitesurvey_path, type: $type, use_auto_orientation: $use_auto_orientation, use_auto_placement: $use_auto_placement, view: $view, wall_path: $wall_path, wayfinding: $wayfinding, wayfinding_path: $wayfinding_path, width: $width, width_m: $width_m} | compact
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}"))
+  let body = {"flags": $flags, "height": $height, "height_m": $height_m, "latlng_br": $latlng_br, "latlng_tl": $latlng_tl, "locked": $locked, "name": $name, "occupancy_limit": $occupancy_limit, "orientation": $orientation, "origin_x": $origin_x, "origin_y": $origin_y, "ppm": $ppm, "sitesurvey_path": $sitesurvey_path, "type": $type, "use_auto_orientation": $use_auto_orientation, "use_auto_placement": $use_auto_placement, "view": $view, "wall_path": $wall_path, "wayfinding": $wayfinding, "wayfinding_path": $wayfinding_path, "width": $width, "width_m": $width_m} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -17459,9 +17459,9 @@ export def "sites-maps updateSiteMap" [
 #
 # DELETE /api/v1/sites/{site_id}/maps/{map_id}/auto_orient
 # operationId: deleteSiteApAutoOrientation
-export def "sites-maps-auto-orient delete" [
-  map_id: string
+export def "sites-maps-auto-orient delete-site-ap-auto-orientation" [
   site_id: string
+  map_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17473,7 +17473,7 @@ export def "sites-maps-auto-orient delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)/auto_orient")
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}/auto_orient"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17483,9 +17483,9 @@ export def "sites-maps-auto-orient delete" [
 #
 # POST /api/v1/sites/{site_id}/maps/{map_id}/auto_orient
 # operationId: startSiteApAutoOrientation
-export def "sites-maps-auto-orient startSiteApAutoOrientation" [
-  map_id: string
+export def "sites-maps-auto-orient start-site-ap-auto-orientation" [
   site_id: string
+  map_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17497,7 +17497,7 @@ export def "sites-maps-auto-orient startSiteApAutoOrientation" [
 ]: nothing -> record<state: string, time_queued: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)/auto_orient")
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}/auto_orient"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17507,7 +17507,7 @@ export def "sites-maps-auto-orient startSiteApAutoOrientation" [
 #
 # DELETE /api/v1/sites/{site_id}/maps/{map_id}/auto_placement
 # operationId: deleteSiteApAutoplacement
-export def "sites-maps-auto-placement delete" [
+export def "sites-maps-auto-placement delete-site-ap-autoplacement" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17521,7 +17521,7 @@ export def "sites-maps-auto-placement delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)/auto_placement")
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}/auto_placement"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17531,7 +17531,7 @@ export def "sites-maps-auto-placement delete" [
 #
 # GET /api/v1/sites/{site_id}/maps/{map_id}/auto_placement
 # operationId: getSiteApAutoPlacement
-export def "sites-maps-auto-placement get" [
+export def "sites-maps-auto-placement get-site-ap" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17545,7 +17545,7 @@ export def "sites-maps-auto-placement get" [
 ]: nothing -> record<estimated_time_left: float, state: string, time_queued: float, time_stopped: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)/auto_placement")
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}/auto_placement"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17572,8 +17572,8 @@ export def "sites-maps-auto-placement runSiteApAutoplacement" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)/auto_placement")
-  let body = {device_ids: $device_ids, force_collection: $force_collection} | compact
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}/auto_placement"))
+  let body = {"device_ids": $device_ids, "force_collection": $force_collection} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -17600,8 +17600,8 @@ export def "sites-maps-clear-auto-orient clearSiteApAutoOrient" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)/clear_auto_orient")
-  let body = {device_ids: $device_ids} | compact
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}/clear_auto_orient"))
+  let body = {"device_ids": $device_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -17628,8 +17628,8 @@ export def "sites-maps-clear-autoplacement clearSiteApAutoplacement" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)/clear_autoplacement")
-  let body = {device_ids: $device_ids} | compact
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}/clear_autoplacement"))
+  let body = {"device_ids": $device_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -17654,7 +17654,7 @@ export def "sites-maps-image delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)/image")
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}/image"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17664,7 +17664,7 @@ export def "sites-maps-image delete" [
 #
 # POST /api/v1/sites/{site_id}/maps/{map_id}/image
 # operationId: addSiteMapImage
-export def "sites-maps-image addSiteMapImage" [
+export def "sites-maps-image create" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17681,8 +17681,8 @@ export def "sites-maps-image addSiteMapImage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)/image")
-  let body = {file: $file, json: $json} | compact
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}/image"))
+  let body = {"file": $file, "json": $json} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -17694,7 +17694,7 @@ export def "sites-maps-image addSiteMapImage" [
 # POST /api/v1/sites/{site_id}/maps/{map_id}/replace
 # operationId: replaceSiteMapImage
 # --json shape: {transform?: record}
-export def "sites-maps-replace replaceSiteMapImage" [
+export def "sites-maps-replace update-site-map-image" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17711,8 +17711,8 @@ export def "sites-maps-replace replaceSiteMapImage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)/replace")
-  let body = {file: $file, json: $json} | compact
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}/replace"))
+  let body = {"file": $file, "json": $json} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -17741,8 +17741,8 @@ export def "sites-maps-revert-auto-orient revertSiteApAutoOrient" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)/revert_auto_orient")
-  let body = {device_ids: $device_ids} | compact
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}/revert_auto_orient"))
+  let body = {"device_ids": $device_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -17771,8 +17771,8 @@ export def "sites-maps-revert-autoplacement revertSiteApAutoplacement" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)/revert_autoplacement")
-  let body = {device_ids: $device_ids} | compact
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}/revert_autoplacement"))
+  let body = {"device_ids": $device_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -17799,8 +17799,8 @@ export def "sites-maps-set-map bulkAssignSiteApsToMap" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)/set_map")
-  let body = {device_ids: $device_ids} | compact
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}/set_map"))
+  let body = {"device_ids": $device_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -17811,7 +17811,7 @@ export def "sites-maps-set-map bulkAssignSiteApsToMap" [
 #
 # POST /api/v1/sites/{site_id}/maps/{map_id}/wayfinding/import
 # operationId: importSiteWayfindings
-export def "sites-maps-wayfinding-import importSiteWayfindings" [
+export def "sites-maps-wayfinding-import import" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17837,8 +17837,8 @@ export def "sites-maps-wayfinding-import importSiteWayfindings" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/maps/($map_id)/wayfinding/import")
-  let body = {client_id: $client_id, client_secret: $client_secret, customer_id: $customer_id, endpoint_url: $endpoint_url, map_id: $body_map_id, mmpp: $mmpp, ppm: $ppm, vendor_name: $vendor_name, venue_id: $venue_id, account_key: $account_key, default_level_id: $default_level_id} | compact
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/maps/{map_id}/wayfinding/import"))
+  let body = {"client_id": $client_id, "client_secret": $client_secret, "customer_id": $customer_id, "endpoint_url": $endpoint_url, "map_id": $body_map_id, "mmpp": $mmpp, "ppm": $ppm, "vendor_name": $vendor_name, "venue_id": $venue_id, "account_key": $account_key, "default_level_id": $default_level_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -17862,7 +17862,7 @@ export def "sites-mxedges list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/mxedges")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/mxedges"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17882,7 +17882,7 @@ export def "sites-mxedges list" [
 # --tunterm_port_config shape: {downstream_ports?: list, separate_upstream_downstream?: bool, upstream_port_vlan_id?: int, upstream_ports?: list}
 # --tunterm_switch_config shape: {enabled?: bool}
 # --versions shape: {mxagent?: string, tuntnerm?: string}
-export def "sites-mxedges createSiteMxEdge" [
+export def "sites-mxedges create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17913,8 +17913,8 @@ export def "sites-mxedges createSiteMxEdge" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/mxedges")
-  let body = {model: $model, mxcluster_id: $mxcluster_id, mxedge_mgmt: $mxedge_mgmt, name: $name, ntp_servers: $ntp_servers, oob_ip_config: $oob_ip_config, proxy: $proxy, services: $services, tunterm_dhcpd_config: $tunterm_dhcpd_config, tunterm_extra_routes: $tunterm_extra_routes, tunterm_igmp_snooping_config: $tunterm_igmp_snooping_config, tunterm_ip_config: $tunterm_ip_config, tunterm_monitoring: $tunterm_monitoring, tunterm_other_ip_configs: $tunterm_other_ip_configs, tunterm_port_config: $tunterm_port_config, tunterm_switch_config: $tunterm_switch_config, versions: $versions} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/mxedges"))
+  let body = {"model": $model, "mxcluster_id": $mxcluster_id, "mxedge_mgmt": $mxedge_mgmt, "name": $name, "ntp_servers": $ntp_servers, "oob_ip_config": $oob_ip_config, "proxy": $proxy, "services": $services, "tunterm_dhcpd_config": $tunterm_dhcpd_config, "tunterm_extra_routes": $tunterm_extra_routes, "tunterm_igmp_snooping_config": $tunterm_igmp_snooping_config, "tunterm_ip_config": $tunterm_ip_config, "tunterm_monitoring": $tunterm_monitoring, "tunterm_other_ip_configs": $tunterm_other_ip_configs, "tunterm_port_config": $tunterm_port_config, "tunterm_switch_config": $tunterm_switch_config, "versions": $versions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -17939,7 +17939,7 @@ export def "sites-mxedges delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/mxedges/($mxedge_id)")
+  let full_url = (build-url $base ({site_id: $site_id, mxedge_id: $mxedge_id} | format pattern "/api/v1/sites/{site_id}/mxedges/{mxedge_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17963,7 +17963,7 @@ export def "sites-mxedges get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/mxedges/($mxedge_id)")
+  let full_url = (build-url $base ({site_id: $site_id, mxedge_id: $mxedge_id} | format pattern "/api/v1/sites/{site_id}/mxedges/{mxedge_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -17983,7 +17983,7 @@ export def "sites-mxedges get" [
 # --tunterm_port_config shape: {downstream_ports?: list, separate_upstream_downstream?: bool, upstream_port_vlan_id?: int, upstream_ports?: list}
 # --tunterm_switch_config shape: {enabled?: bool}
 # --versions shape: {mxagent?: string, tuntnerm?: string}
-export def "sites-mxedges updateSiteMxEdge" [
+export def "sites-mxedges update" [
   site_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18015,8 +18015,8 @@ export def "sites-mxedges updateSiteMxEdge" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/mxedges/($mxedge_id)")
-  let body = {model: $model, mxcluster_id: $mxcluster_id, mxedge_mgmt: $mxedge_mgmt, name: $name, ntp_servers: $ntp_servers, oob_ip_config: $oob_ip_config, proxy: $proxy, services: $services, tunterm_dhcpd_config: $tunterm_dhcpd_config, tunterm_extra_routes: $tunterm_extra_routes, tunterm_igmp_snooping_config: $tunterm_igmp_snooping_config, tunterm_ip_config: $tunterm_ip_config, tunterm_monitoring: $tunterm_monitoring, tunterm_other_ip_configs: $tunterm_other_ip_configs, tunterm_port_config: $tunterm_port_config, tunterm_switch_config: $tunterm_switch_config, versions: $versions} | compact
+  let full_url = (build-url $base ({site_id: $site_id, mxedge_id: $mxedge_id} | format pattern "/api/v1/sites/{site_id}/mxedges/{mxedge_id}"))
+  let body = {"model": $model, "mxcluster_id": $mxcluster_id, "mxedge_mgmt": $mxedge_mgmt, "name": $name, "ntp_servers": $ntp_servers, "oob_ip_config": $oob_ip_config, "proxy": $proxy, "services": $services, "tunterm_dhcpd_config": $tunterm_dhcpd_config, "tunterm_extra_routes": $tunterm_extra_routes, "tunterm_igmp_snooping_config": $tunterm_igmp_snooping_config, "tunterm_ip_config": $tunterm_ip_config, "tunterm_monitoring": $tunterm_monitoring, "tunterm_other_ip_configs": $tunterm_other_ip_configs, "tunterm_port_config": $tunterm_port_config, "tunterm_switch_config": $tunterm_switch_config, "versions": $versions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -18027,7 +18027,7 @@ export def "sites-mxedges updateSiteMxEdge" [
 #
 # POST /api/v1/sites/{site_id}/mxedges/{mxedge_id}/support
 # operationId: uploadSiteMxEdgeSupportFiles
-export def "sites-mxedges-support uploadSiteMxEdgeSupportFiles" [
+export def "sites-mxedges-support upload-site-mx-edge-support-files" [
   site_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18041,7 +18041,7 @@ export def "sites-mxedges-support uploadSiteMxEdgeSupportFiles" [
 ]: nothing -> record<created_time: int, for_site: bool, id: string, magic: string, model: string, modified_time: int, mxagent_registered: bool, mxcluster_id: string, name: string, org_id: string, services: list<string>, site_id: string, status: string, tunterm_ip_config: record<gateway: string, ip: string, netmask: string>, tunterm_port_config: record<downstream_ports: list<string>, separate_upstream_downstream: bool, upstream_ports: list<string>>, tunterm_registered: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/mxedges/($mxedge_id)/support")
+  let full_url = (build-url $base ({site_id: $site_id, mxedge_id: $mxedge_id} | format pattern "/api/v1/sites/{site_id}/mxedges/{mxedge_id}/support"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18065,7 +18065,7 @@ export def "sites-mxtunnels-preempt-aps preemptSitesMxTunnel" [
 ]: nothing -> record<preempted_aps: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/mxtunnels/($mxtunnel_id)/preempt_aps")
+  let full_url = (build-url $base ({site_id: $site_id, mxtunnel_id: $mxtunnel_id} | format pattern "/api/v1/sites/{site_id}/mxtunnels/{mxtunnel_id}/preempt_aps"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18096,7 +18096,7 @@ export def "sites-otherdevices get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vendor" $vendor "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "serial" $serial "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/otherdevices" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/otherdevices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18106,7 +18106,7 @@ export def "sites-otherdevices get" [
 #
 # GET /api/v1/sites/{site_id}/pcaps
 # operationId: getSitePacketCaptures
-export def "sites-pcaps get" [
+export def "sites-pcaps get-site-packet-captures" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18126,7 +18126,7 @@ export def "sites-pcaps get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "client_mac" $client_mac "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/pcaps" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/pcaps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18136,7 +18136,7 @@ export def "sites-pcaps get" [
 #
 # DELETE /api/v1/sites/{site_id}/pcaps/capture
 # operationId: stopSitePacketCapture
-export def "sites-pcaps-capture stopSitePacketCapture" [
+export def "sites-pcaps-capture stop-site-packet" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18149,7 +18149,7 @@ export def "sites-pcaps-capture stopSitePacketCapture" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/pcaps/capture")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/pcaps/capture"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18159,7 +18159,7 @@ export def "sites-pcaps-capture stopSitePacketCapture" [
 #
 # GET /api/v1/sites/{site_id}/pcaps/capture
 # operationId: getSiteCapturingStatus
-export def "sites-pcaps-capture get" [
+export def "sites-pcaps-capture get-site-capturing-status" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18172,7 +18172,7 @@ export def "sites-pcaps-capture get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/pcaps/capture")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/pcaps/capture"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18182,7 +18182,7 @@ export def "sites-pcaps-capture get" [
 #
 # POST /api/v1/sites/{site_id}/pcaps/capture
 # operationId: startSitePacketCapture
-export def "sites-pcaps-capture startSitePacketCapture" [
+export def "sites-pcaps-capture start-site-packet" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18215,8 +18215,8 @@ export def "sites-pcaps-capture startSitePacketCapture" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/pcaps/capture")
-  let body = {ap_mac: $ap_mac, client_mac: $client_mac, duration: $duration, includes_mcast: $includes_mcast, max_pkt_len: $max_pkt_len, num_packets: $num_packets, ssid: $ssid, type: $type, format: $format, tcpdump_expression: $tcpdump_expression, band: $band, wlan_id: $wlan_id, radiotap_tcpdump_expression: $radiotap_tcpdump_expression, wired_tcpdump_expression: $wired_tcpdump_expression, wireless_tcpdump_expression: $wireless_tcpdump_expression, gateways: $gateways, channel: $channel, width: $width, switches: $switches} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/pcaps/capture"))
+  let body = {"ap_mac": $ap_mac, "client_mac": $client_mac, "duration": $duration, "includes_mcast": $includes_mcast, "max_pkt_len": $max_pkt_len, "num_packets": $num_packets, "ssid": $ssid, "type": $type, "format": $format, "tcpdump_expression": $tcpdump_expression, "band": $band, "wlan_id": $wlan_id, "radiotap_tcpdump_expression": $radiotap_tcpdump_expression, "wired_tcpdump_expression": $wired_tcpdump_expression, "wireless_tcpdump_expression": $wireless_tcpdump_expression, "gateways": $gateways, "channel": $channel, "width": $width, "switches": $switches} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -18246,7 +18246,7 @@ export def "sites-psks list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ssid" $ssid "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/psks" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/psks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18256,7 +18256,7 @@ export def "sites-psks list" [
 #
 # POST /api/v1/sites/{site_id}/psks
 # operationId: createSitePsk
-export def "sites-psks createSitePsk" [
+export def "sites-psks create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18285,8 +18285,8 @@ export def "sites-psks createSitePsk" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/psks")
-  let body = {email: $email, expire_time: $expire_time, expiry_notification_time: $expiry_notification_time, mac: $mac, max_usage: $max_usage, name: $name, note: $note, notify_expiry: $notify_expiry, notify_on_create_or_edit: $notify_on_create_or_edit, old_passphrase: $old_passphrase, passphrase: $passphrase, role: $role, ssid: $ssid, usage: $usage, vlan_id: $vlan_id} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/psks"))
+  let body = {"email": $email, "expire_time": $expire_time, "expiry_notification_time": $expiry_notification_time, "mac": $mac, "max_usage": $max_usage, "name": $name, "note": $note, "notify_expiry": $notify_expiry, "notify_on_create_or_edit": $notify_on_create_or_edit, "old_passphrase": $old_passphrase, "passphrase": $passphrase, "role": $role, "ssid": $ssid, "usage": $usage, "vlan_id": $vlan_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -18297,7 +18297,7 @@ export def "sites-psks createSitePsk" [
 #
 # PUT /api/v1/sites/{site_id}/psks
 # operationId: updateSitePsks
-export def "sites-psks updateSitePsks" [
+export def "sites-psks update-by-site_id" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18312,7 +18312,7 @@ export def "sites-psks updateSitePsks" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/psks")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/psks"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -18323,7 +18323,7 @@ export def "sites-psks updateSitePsks" [
 #
 # POST /api/v1/sites/{site_id}/psks/import
 # operationId: importSitePsks
-export def "sites-psks-import importSitePsks" [
+export def "sites-psks-import import" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18338,7 +18338,7 @@ export def "sites-psks-import importSitePsks" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/psks/import")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/psks/import"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -18363,7 +18363,7 @@ export def "sites-psks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/psks/($psk_id)")
+  let full_url = (build-url $base ({site_id: $site_id, psk_id: $psk_id} | format pattern "/api/v1/sites/{site_id}/psks/{psk_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18387,7 +18387,7 @@ export def "sites-psks get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/psks/($psk_id)")
+  let full_url = (build-url $base ({site_id: $site_id, psk_id: $psk_id} | format pattern "/api/v1/sites/{site_id}/psks/{psk_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18397,7 +18397,7 @@ export def "sites-psks get" [
 #
 # PUT /api/v1/sites/{site_id}/psks/{psk_id}
 # operationId: updateSitePsk
-export def "sites-psks updateSitePsk" [
+export def "sites-psks update-by-site_id-psk_id" [
   site_id: string
   psk_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18427,8 +18427,8 @@ export def "sites-psks updateSitePsk" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/psks/($psk_id)")
-  let body = {email: $email, expire_time: $expire_time, expiry_notification_time: $expiry_notification_time, mac: $mac, max_usage: $max_usage, name: $name, note: $note, notify_expiry: $notify_expiry, notify_on_create_or_edit: $notify_on_create_or_edit, old_passphrase: $old_passphrase, passphrase: $passphrase, role: $role, ssid: $ssid, usage: $usage, vlan_id: $vlan_id} | compact
+  let full_url = (build-url $base ({site_id: $site_id, psk_id: $psk_id} | format pattern "/api/v1/sites/{site_id}/psks/{psk_id}"))
+  let body = {"email": $email, "expire_time": $expire_time, "expiry_notification_time": $expiry_notification_time, "mac": $mac, "max_usage": $max_usage, "name": $name, "note": $note, "notify_expiry": $notify_expiry, "notify_on_create_or_edit": $notify_on_create_or_edit, "old_passphrase": $old_passphrase, "passphrase": $passphrase, "role": $role, "ssid": $ssid, "usage": $usage, "vlan_id": $vlan_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -18439,7 +18439,7 @@ export def "sites-psks updateSitePsk" [
 #
 # GET /api/v1/sites/{site_id}/rfdiags
 # operationId: getSiteSiteRfdiagRecording
-export def "sites-rfdiags list" [
+export def "sites-rfdiags get-site-site-rfdiag-recording" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18458,7 +18458,7 @@ export def "sites-rfdiags list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rfdiags" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/rfdiags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18468,7 +18468,7 @@ export def "sites-rfdiags list" [
 #
 # POST /api/v1/sites/{site_id}/rfdiags
 # operationId: startSiteRecording
-export def "sites-rfdiags startSiteRecording" [
+export def "sites-rfdiags start-site-recording" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18487,8 +18487,8 @@ export def "sites-rfdiags startSiteRecording" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rfdiags")
-  let body = {duration: $duration, mac: $mac, name: $name, sdkclient_id: $sdkclient_id, type: $type} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/rfdiags"))
+  let body = {"duration": $duration, "mac": $mac, "name": $name, "sdkclient_id": $sdkclient_id, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -18499,7 +18499,7 @@ export def "sites-rfdiags startSiteRecording" [
 #
 # DELETE /api/v1/sites/{site_id}/rfdiags/{rfdiag_id}
 # operationId: deleteSiteRfdiagRecording
-export def "sites-rfdiags delete" [
+export def "sites-rfdiags delete-site-rfdiag-recording" [
   site_id: string
   rfdiag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18513,7 +18513,7 @@ export def "sites-rfdiags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rfdiags/($rfdiag_id)")
+  let full_url = (build-url $base ({site_id: $site_id, rfdiag_id: $rfdiag_id} | format pattern "/api/v1/sites/{site_id}/rfdiags/{rfdiag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18523,7 +18523,7 @@ export def "sites-rfdiags delete" [
 #
 # GET /api/v1/sites/{site_id}/rfdiags/{rfdiag_id}
 # operationId: getSiteRfdiagRecording
-export def "sites-rfdiags get" [
+export def "sites-rfdiags get-site-rfdiag-recording" [
   site_id: string
   rfdiag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18537,7 +18537,7 @@ export def "sites-rfdiags get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rfdiags/($rfdiag_id)")
+  let full_url = (build-url $base ({site_id: $site_id, rfdiag_id: $rfdiag_id} | format pattern "/api/v1/sites/{site_id}/rfdiags/{rfdiag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18547,7 +18547,7 @@ export def "sites-rfdiags get" [
 #
 # PUT /api/v1/sites/{site_id}/rfdiags/{rfdiag_id}
 # operationId: updateSiteRfdiagRecording
-export def "sites-rfdiags updateSiteRfdiagRecording" [
+export def "sites-rfdiags update-site-rfdiag-recording" [
   site_id: string
   rfdiag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18567,8 +18567,8 @@ export def "sites-rfdiags updateSiteRfdiagRecording" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rfdiags/($rfdiag_id)")
-  let body = {duration: $duration, mac: $mac, name: $name, sdkclient_id: $sdkclient_id, type: $type} | compact
+  let full_url = (build-url $base ({site_id: $site_id, rfdiag_id: $rfdiag_id} | format pattern "/api/v1/sites/{site_id}/rfdiags/{rfdiag_id}"))
+  let body = {"duration": $duration, "mac": $mac, "name": $name, "sdkclient_id": $sdkclient_id, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -18579,7 +18579,7 @@ export def "sites-rfdiags updateSiteRfdiagRecording" [
 #
 # GET /api/v1/sites/{site_id}/rfdiags/{rfdiag_id}/download
 # operationId: downloadSiteRfdiagRecording
-export def "sites-rfdiags-download downloadSiteRfdiagRecording" [
+export def "sites-rfdiags-download download-site-rfdiag-recording" [
   site_id: string
   rfdiag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18593,7 +18593,7 @@ export def "sites-rfdiags-download downloadSiteRfdiagRecording" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rfdiags/($rfdiag_id)/download")
+  let full_url = (build-url $base ({site_id: $site_id, rfdiag_id: $rfdiag_id} | format pattern "/api/v1/sites/{site_id}/rfdiags/{rfdiag_id}/download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18603,7 +18603,7 @@ export def "sites-rfdiags-download downloadSiteRfdiagRecording" [
 #
 # POST /api/v1/sites/{site_id}/rfdiags/{rfdiag_id}/stop
 # operationId: stopSiteRfdiagRecording
-export def "sites-rfdiags-stop stopSiteRfdiagRecording" [
+export def "sites-rfdiags-stop stop-site-rfdiag-recording" [
   site_id: string
   rfdiag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18617,7 +18617,7 @@ export def "sites-rfdiags-stop stopSiteRfdiagRecording" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rfdiags/($rfdiag_id)/stop")
+  let full_url = (build-url $base ({site_id: $site_id, rfdiag_id: $rfdiag_id} | format pattern "/api/v1/sites/{site_id}/rfdiags/{rfdiag_id}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18653,7 +18653,7 @@ export def "sites-rogues-events-count countSiteRogueEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "bssid" $bssid "scalar") (serialize-qp "ap_mac" $ap_mac "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "seen_on_lan" $seen_on_lan "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rogues/events/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/rogues/events/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18663,7 +18663,7 @@ export def "sites-rogues-events-count countSiteRogueEvents" [
 #
 # GET /api/v1/sites/{site_id}/rogues/events/search
 # operationId: searchSiteRogueEvents
-export def "sites-rogues-events-search searchSiteRogueEvents" [
+export def "sites-rogues-events-search list" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18687,7 +18687,7 @@ export def "sites-rogues-events-search searchSiteRogueEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "ssid" $ssid "scalar") (serialize-qp "bssid" $bssid "scalar") (serialize-qp "ap_mac" $ap_mac "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "seen_on_lan" $seen_on_lan "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rogues/events/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/rogues/events/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18697,7 +18697,7 @@ export def "sites-rogues-events-search searchSiteRogueEvents" [
 #
 # GET /api/v1/sites/{site_id}/rogues/{rogue_bssid}
 # operationId: getSiteRogueAP
-export def "sites-rogues get" [
+export def "sites-rogues get-site-rogue-ap" [
   site_id: string
   rogue_bssid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18711,7 +18711,7 @@ export def "sites-rogues get" [
 ]: nothing -> record<manufacture: string, seen_as_client: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rogues/($rogue_bssid)")
+  let full_url = (build-url $base ({site_id: $site_id, rogue_bssid: $rogue_bssid} | format pattern "/api/v1/sites/{site_id}/rogues/{rogue_bssid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18735,7 +18735,7 @@ export def "sites-rogues-deauth-clients deauthSiteClientsConnectedToARogue" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rogues/($rogue_bssid)/deauth_clients")
+  let full_url = (build-url $base ({site_id: $site_id, rogue_bssid: $rogue_bssid} | format pattern "/api/v1/sites/{site_id}/rogues/{rogue_bssid}/deauth_clients"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18745,7 +18745,7 @@ export def "sites-rogues-deauth-clients deauthSiteClientsConnectedToARogue" [
 #
 # GET /api/v1/sites/{site_id}/rrm/current
 # operationId: getSiteCurrentChannelPlanning
-export def "sites-rrm-current get" [
+export def "sites-rrm-current get-site-current-channel-planning" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18758,7 +18758,7 @@ export def "sites-rrm-current get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rrm/current")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/rrm/current"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18768,7 +18768,7 @@ export def "sites-rrm-current get" [
 #
 # GET /api/v1/sites/{site_id}/rrm/current/devices/{device_id}/band/{band}
 # operationId: getSiteCurrentRrmConsiderationsForAnApOnASpecificBand
-export def "sites-rrm-current-devices-band get" [
+export def "sites-rrm-current-devices-band get-site-current-rrm-considerations-for-an-ap-on-a-specific" [
   site_id: string
   device_id: string
   band: string
@@ -18783,7 +18783,7 @@ export def "sites-rrm-current-devices-band get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rrm/current/devices/($device_id)/band/($band)")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id, band: $band} | format pattern "/api/v1/sites/{site_id}/rrm/current/devices/{device_id}/band/{band}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18813,7 +18813,7 @@ export def "sites-rrm-events get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "band" $band "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rrm/events" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/rrm/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18838,8 +18838,8 @@ export def "sites-rrm-optimize optimizeSiteRrm" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rrm/optimize")
-  let body = {bands: $bands} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/rrm/optimize"))
+  let body = {"bands": $bands} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -18863,7 +18863,7 @@ export def "sites-rssizones list" [
 ]: nothing -> table<created_time: float, devices: list<record>, for_site: bool, id: string, modified_time: float, name: string, org_id: string, site_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rssizones")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/rssizones"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18874,7 +18874,7 @@ export def "sites-rssizones list" [
 # POST /api/v1/sites/{site_id}/rssizones
 # operationId: createSiteRssiZone
 # --devices item shape: {device_id: string, rssi: int}
-export def "sites-rssizones createSiteRssiZone" [
+export def "sites-rssizones create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18890,8 +18890,8 @@ export def "sites-rssizones createSiteRssiZone" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rssizones")
-  let body = {devices: $devices, name: $name} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/rssizones"))
+  let body = {"devices": $devices, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -18916,7 +18916,7 @@ export def "sites-rssizones delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rssizones/($rssizone_id)")
+  let full_url = (build-url $base ({site_id: $site_id, rssizone_id: $rssizone_id} | format pattern "/api/v1/sites/{site_id}/rssizones/{rssizone_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18940,7 +18940,7 @@ export def "sites-rssizones get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rssizones/($rssizone_id)")
+  let full_url = (build-url $base ({site_id: $site_id, rssizone_id: $rssizone_id} | format pattern "/api/v1/sites/{site_id}/rssizones/{rssizone_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -18951,7 +18951,7 @@ export def "sites-rssizones get" [
 # PUT /api/v1/sites/{site_id}/rssizones/{rssizone_id}
 # operationId: updateSiteRssiZone
 # --devices item shape: {device_id: string, rssi: int}
-export def "sites-rssizones updateSiteRssiZone" [
+export def "sites-rssizones update" [
   site_id: string
   rssizone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18968,8 +18968,8 @@ export def "sites-rssizones updateSiteRssiZone" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/rssizones/($rssizone_id)")
-  let body = {devices: $devices, name: $name} | compact
+  let full_url = (build-url $base ({site_id: $site_id, rssizone_id: $rssizone_id} | format pattern "/api/v1/sites/{site_id}/rssizones/{rssizone_id}"))
+  let body = {"devices": $devices, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -18993,7 +18993,7 @@ export def "sites-setting get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/setting")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/setting"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19039,7 +19039,7 @@ export def "sites-setting get" [
 # --wifi shape: {cisco_enabled?: bool, disable_11k?: bool, disable_radios_when_power_constrained?: bool, enable_arp_spoof_check?: bool, enable_channel_144?: bool, enable_shared_radio_scanning?: bool, enable_vna?: bool, enabled?: bool, locate_connected?: bool, locate_unconnected?: bool, mesh_allow_dfs?: bool, mesh_enable_crm?: bool, mesh_enabled?: bool, mesh_psk?: string, mesh_ssid?: string, proxy_arp?: "default"|"enabled"|"disabled"}
 # --wired_vna shape: {enabled?: bool}
 # --zone_occupancy_alert shape: {email_notifiers?: list, enabled?: bool, threshold?: int}
-export def "sites-setting updateSiteSettings" [
+export def "sites-setting update" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19108,8 +19108,8 @@ export def "sites-setting updateSiteSettings" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/setting")
-  let body = {additional_config_cmds: $additional_config_cmds, analytic: $analytic, ap_matching: $ap_matching, ap_port_config: $ap_port_config, auto_placement: $auto_placement, auto_preemption: $auto_preemption, auto_upgrade: $auto_upgrade, ble_config: $ble_config, config_auto_revert: $config_auto_revert, device_updown_threshold: $device_updown_threshold, dns_servers: $dns_servers, dns_suffix: $dns_suffix, enable_channel_144: $enable_channel_144, engagement: $engagement, evpn_options: $evpn_options, flags: $flags, gateway_additional_config_cmds: $gateway_additional_config_cmds, gateway_mgmt: $gateway_mgmt, led: $led, mxedge: $mxedge, mxedge_mgmt: $mxedge_mgmt, mxtunnels: $mxtunnels, networks: $networks, ntp_servers: $ntp_servers, occupancy: $occupancy, ospf_areas: $ospf_areas, persist_config_on_device: $persist_config_on_device, port_usages: $port_usages, proxy: $proxy, radio_config: $radio_config, radius_config: $radius_config, remote_syslog: $remote_syslog, report_gatt: $report_gatt, rogue: $rogue, rtsa: $rtsa, simple_alert: $simple_alert, skyatp: $skyatp, srx_app: $srx_app, ssh_keys: $ssh_keys, ssr: $ssr, status_portal: $status_portal, switch_matching: $switch_matching, switch_mgmt: $switch_mgmt, track_anonymous_devices: $track_anonymous_devices, tunterm_monitoring: $tunterm_monitoring, tunterm_monitoring_disabled: $tunterm_monitoring_disabled, vars: $vars, vna: $vna, vrf_instances: $vrf_instances, vrrp_groups: $vrrp_groups, wan_vna: $wan_vna, wids: $wids, wifi: $wifi, wired_vna: $wired_vna, zone_occupancy_alert: $zone_occupancy_alert} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/setting"))
+  let body = {"additional_config_cmds": $additional_config_cmds, "analytic": $analytic, "ap_matching": $ap_matching, "ap_port_config": $ap_port_config, "auto_placement": $auto_placement, "auto_preemption": $auto_preemption, "auto_upgrade": $auto_upgrade, "ble_config": $ble_config, "config_auto_revert": $config_auto_revert, "device_updown_threshold": $device_updown_threshold, "dns_servers": $dns_servers, "dns_suffix": $dns_suffix, "enable_channel_144": $enable_channel_144, "engagement": $engagement, "evpn_options": $evpn_options, "flags": $flags, "gateway_additional_config_cmds": $gateway_additional_config_cmds, "gateway_mgmt": $gateway_mgmt, "led": $led, "mxedge": $mxedge, "mxedge_mgmt": $mxedge_mgmt, "mxtunnels": $mxtunnels, "networks": $networks, "ntp_servers": $ntp_servers, "occupancy": $occupancy, "ospf_areas": $ospf_areas, "persist_config_on_device": $persist_config_on_device, "port_usages": $port_usages, "proxy": $proxy, "radio_config": $radio_config, "radius_config": $radius_config, "remote_syslog": $remote_syslog, "report_gatt": $report_gatt, "rogue": $rogue, "rtsa": $rtsa, "simple_alert": $simple_alert, "skyatp": $skyatp, "srx_app": $srx_app, "ssh_keys": $ssh_keys, "ssr": $ssr, "status_portal": $status_portal, "switch_matching": $switch_matching, "switch_mgmt": $switch_mgmt, "track_anonymous_devices": $track_anonymous_devices, "tunterm_monitoring": $tunterm_monitoring, "tunterm_monitoring_disabled": $tunterm_monitoring_disabled, "vars": $vars, "vna": $vna, "vrf_instances": $vrf_instances, "vrrp_groups": $vrrp_groups, "wan_vna": $wan_vna, "wids": $wids, "wifi": $wifi, "wired_vna": $wired_vna, "zone_occupancy_alert": $zone_occupancy_alert} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -19120,7 +19120,7 @@ export def "sites-setting updateSiteSettings" [
 #
 # DELETE /api/v1/sites/{site_id}/setting/blacklist
 # operationId: deleteSiteClientsBlocklist
-export def "sites-setting-blacklist delete" [
+export def "sites-setting-blacklist delete-site-clients-blocklist" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19133,7 +19133,7 @@ export def "sites-setting-blacklist delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/setting/blacklist")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/setting/blacklist"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19143,7 +19143,7 @@ export def "sites-setting-blacklist delete" [
 #
 # POST /api/v1/sites/{site_id}/setting/blacklist
 # operationId: createSiteClientsBlocklist
-export def "sites-setting-blacklist createSiteClientsBlocklist" [
+export def "sites-setting-blacklist create-site-clients-blocklist" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19158,8 +19158,8 @@ export def "sites-setting-blacklist createSiteClientsBlocklist" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/setting/blacklist")
-  let body = {macs: $macs} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/setting/blacklist"))
+  let body = {"macs": $macs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -19183,7 +19183,7 @@ export def "sites-setting-watched-station delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/setting/watched_station")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/setting/watched_station"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19193,7 +19193,7 @@ export def "sites-setting-watched-station delete" [
 #
 # POST /api/v1/sites/{site_id}/setting/watched_station
 # operationId: createSiteWatchedStations
-export def "sites-setting-watched-station createSiteWatchedStations" [
+export def "sites-setting-watched-station create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19208,8 +19208,8 @@ export def "sites-setting-watched-station createSiteWatchedStations" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/setting/watched_station")
-  let body = {macs: $macs} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/setting/watched_station"))
+  let body = {"macs": $macs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -19220,7 +19220,7 @@ export def "sites-setting-watched-station createSiteWatchedStations" [
 #
 # DELETE /api/v1/sites/{site_id}/setting/whitelist
 # operationId: deleteSiteClientsAllowlist
-export def "sites-setting-whitelist delete" [
+export def "sites-setting-whitelist delete-site-clients-allowlist" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19233,7 +19233,7 @@ export def "sites-setting-whitelist delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/setting/whitelist")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/setting/whitelist"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19243,7 +19243,7 @@ export def "sites-setting-whitelist delete" [
 #
 # POST /api/v1/sites/{site_id}/setting/whitelist
 # operationId: createSiteClientsAllowlist
-export def "sites-setting-whitelist createSiteClientsAllowlist" [
+export def "sites-setting-whitelist create-site-clients-allowlist" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19258,8 +19258,8 @@ export def "sites-setting-whitelist createSiteClientsAllowlist" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/setting/whitelist")
-  let body = {macs: $macs} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/setting/whitelist"))
+  let body = {"macs": $macs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -19285,7 +19285,7 @@ export def "sites-skyatp-events-count countSiteByDistringAttributesOfSkyatpEvent
   --mac: string # client MAC
   --device-mac: string # device MAC
   --threat-level: int # threat level
-  --ip address: string # format: ipv4, e.g. 192.168.1.1
+  --ip-address: string # format: ipv4, e.g. 192.168.1.1
   --page: int # default: 1
   --limit: int # default: 100
   --start: int # default: 0
@@ -19294,8 +19294,8 @@ export def "sites-skyatp-events-count countSiteByDistringAttributesOfSkyatpEvent
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "device_mac" $device_mac "scalar") (serialize-qp "threat_level" $threat_level "scalar") (serialize-qp "ip address" $ip address "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/skyatp/events/count" $qp)
+  let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "device_mac" $device_mac "scalar") (serialize-qp "threat_level" $threat_level "scalar") (serialize-qp "ip address" $ip_address "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/skyatp/events/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19305,7 +19305,7 @@ export def "sites-skyatp-events-count countSiteByDistringAttributesOfSkyatpEvent
 #
 # GET /api/v1/sites/{site_id}/skyatp/events/search
 # operationId: searchSiteSkyatpEvents
-export def "sites-skyatp-events-search searchSiteSkyatpEvents" [
+export def "sites-skyatp-events-search list" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19319,7 +19319,7 @@ export def "sites-skyatp-events-search searchSiteSkyatpEvents" [
   --mac: string # client MAC
   --device-mac: string # device MAC
   --threat-level: int # threat level
-  --ip address: string # format: ipv4, e.g. 192.168.1.1
+  --ip-address: string # format: ipv4, e.g. 192.168.1.1
   --limit: int # default: 100
   --start: int # default: 0
   --end: int # default: 0
@@ -19327,8 +19327,8 @@ export def "sites-skyatp-events-search searchSiteSkyatpEvents" [
 ]: nothing -> record<end: int, limit: int, next: string, results: table<device_mac: string, for_site: bool, ip: string, mac: string, org_id: string, site_id: string, threat_level: int, timestamp: float, type: string>, start: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "device_mac" $device_mac "scalar") (serialize-qp "threat_level" $threat_level "scalar") (serialize-qp "ip address" $ip address "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/skyatp/events/search" $qp)
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "device_mac" $device_mac "scalar") (serialize-qp "threat_level" $threat_level "scalar") (serialize-qp "ip address" $ip_address "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/skyatp/events/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19338,12 +19338,12 @@ export def "sites-skyatp-events-search searchSiteSkyatpEvents" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/classifier/{classifier}/summary
 # operationId: getSiteSleClassifierDetails
-export def "sites-sle-metric-classifier-summary get" [
+export def "sites-sle-metric-classifier-summary get-site-sle-details" [
+  site_id: any
   scope: string
   scope_id: string
   metric: string
   classifier: string
-  site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19359,7 +19359,7 @@ export def "sites-sle-metric-classifier-summary get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/classifier/($classifier)/summary" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id, metric: $metric, classifier: $classifier} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/classifier/{classifier}/summary") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19385,7 +19385,7 @@ export def "sites-sle-metric-classifiers get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/classifiers")
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/classifiers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19396,10 +19396,10 @@ export def "sites-sle-metric-classifiers get" [
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/histogram
 # operationId: getSiteSleHistogram
 export def "sites-sle-metric-histogram get" [
+  site_id: any
   scope: string
   scope_id: string
   metric: string
-  site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19415,7 +19415,7 @@ export def "sites-sle-metric-histogram get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/histogram" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/histogram") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19426,10 +19426,10 @@ export def "sites-sle-metric-histogram get" [
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impact-summary
 # operationId: getSiteSleImpactSummary
 export def "sites-sle-metric-impact-summary get" [
+  site_id: any
   scope: string
   scope_id: string
   metric: string
-  site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19447,7 +19447,7 @@ export def "sites-sle-metric-impact-summary get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "classifier" $classifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/impact-summary" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impact-summary") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19458,10 +19458,10 @@ export def "sites-sle-metric-impact-summary get" [
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-applications
 # operationId: getSiteSleImpactedApplications
 export def "sites-sle-metric-impacted-applications get" [
+  site_id: any
   scope: string
   scope_id: string
   metric: string
-  site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19478,7 +19478,7 @@ export def "sites-sle-metric-impacted-applications get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "classifier" $classifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/impacted-applications" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-applications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19489,10 +19489,10 @@ export def "sites-sle-metric-impacted-applications get" [
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-aps
 # operationId: getSiteSleImpactedAps
 export def "sites-sle-metric-impacted-aps get" [
+  site_id: any
   scope: string
   scope_id: string
   metric: string
-  site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19509,7 +19509,7 @@ export def "sites-sle-metric-impacted-aps get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "classifier" $classifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/impacted-aps" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-aps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19520,10 +19520,10 @@ export def "sites-sle-metric-impacted-aps get" [
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-chassis
 # operationId: getSiteSleImpactedChassis
 export def "sites-sle-metric-impacted-chassis get" [
+  site_id: any
   scope: string
   scope_id: string
   metric: string
-  site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19540,7 +19540,7 @@ export def "sites-sle-metric-impacted-chassis get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "classifier" $classifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/impacted-chassis" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-chassis") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19550,11 +19550,11 @@ export def "sites-sle-metric-impacted-chassis get" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-clients
 # operationId: getSiteSleImpactedWiredClients
-export def "sites-sle-metric-impacted-clients get" [
+export def "sites-sle-metric-impacted-clients get-site-sle-impacted-wired" [
+  site_id: any
   scope: string
   scope_id: string
   metric: string
-  site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19571,7 +19571,7 @@ export def "sites-sle-metric-impacted-clients get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "classifier" $classifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/impacted-clients" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-clients") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19582,10 +19582,10 @@ export def "sites-sle-metric-impacted-clients get" [
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-gateways
 # operationId: getSiteSleImpactedGateways
 export def "sites-sle-metric-impacted-gateways get" [
+  site_id: any
   scope: string
   scope_id: string
   metric: string
-  site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19602,7 +19602,7 @@ export def "sites-sle-metric-impacted-gateways get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "classifier" $classifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/impacted-gateways" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-gateways") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19613,10 +19613,10 @@ export def "sites-sle-metric-impacted-gateways get" [
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-interfaces
 # operationId: getSiteSleImpactedInterfaces
 export def "sites-sle-metric-impacted-interfaces get" [
+  site_id: any
   scope: string
   scope_id: string
   metric: string
-  site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19633,7 +19633,7 @@ export def "sites-sle-metric-impacted-interfaces get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "classifier" $classifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/impacted-interfaces" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-interfaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19644,10 +19644,10 @@ export def "sites-sle-metric-impacted-interfaces get" [
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-switches
 # operationId: getSiteSleImpactedSwitches
 export def "sites-sle-metric-impacted-switches get" [
+  site_id: any
   scope: string
   scope_id: string
   metric: string
-  site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19664,7 +19664,7 @@ export def "sites-sle-metric-impacted-switches get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "classifier" $classifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/impacted-switches" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-switches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19674,11 +19674,11 @@ export def "sites-sle-metric-impacted-switches get" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-users
 # operationId: getSiteSleImpactedWirelessClients
-export def "sites-sle-metric-impacted-users get" [
+export def "sites-sle-metric-impacted-users get-site-sle-impacted-wireless-clients" [
+  site_id: any
   scope: string
   scope_id: string
   metric: string
-  site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19695,7 +19695,7 @@ export def "sites-sle-metric-impacted-users get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "classifier" $classifier "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/impacted-users" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19706,10 +19706,10 @@ export def "sites-sle-metric-impacted-users get" [
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/summary
 # operationId: getSiteSleSummary
 export def "sites-sle-metric-summary get" [
+  site_id: any
   scope: string
   scope_id: string
   metric: string
-  site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19725,7 +19725,7 @@ export def "sites-sle-metric-summary get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/summary" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/summary") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19751,7 +19751,7 @@ export def "sites-sle-metric-threshold get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/threshold")
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/threshold"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19761,7 +19761,7 @@ export def "sites-sle-metric-threshold get" [
 #
 # POST /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/threshold
 # operationId: replaceSiteSleThreshold
-export def "sites-sle-metric-threshold replaceSiteSleThreshold" [
+export def "sites-sle-metric-threshold update-by-site_id-scope-scope_id-metric" [
   site_id: string
   scope: string
   scope_id: string
@@ -19780,8 +19780,8 @@ export def "sites-sle-metric-threshold replaceSiteSleThreshold" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/threshold")
-  let body = {maximum: $maximum, minimum: $minimum} | compact
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/threshold"))
+  let body = {"maximum": $maximum, "minimum": $minimum} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -19792,7 +19792,7 @@ export def "sites-sle-metric-threshold replaceSiteSleThreshold" [
 #
 # PUT /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/threshold
 # operationId: updateSiteSleThreshold
-export def "sites-sle-metric-threshold updateSiteSleThreshold" [
+export def "sites-sle-metric-threshold update-by-site_id-scope-scope_id-metric-1" [
   site_id: string
   scope: string
   scope_id: string
@@ -19811,8 +19811,8 @@ export def "sites-sle-metric-threshold updateSiteSleThreshold" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metric/($metric)/threshold")
-  let body = {maximum: $maximum, minimum: $minimum} | compact
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id, metric: $metric} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/threshold"))
+  let body = {"maximum": $maximum, "minimum": $minimum} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -19838,7 +19838,7 @@ export def "sites-sle-metrics get" [
 ]: nothing -> record<enabled: list<string>, supported: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/sle/($scope)/($scope_id)/metrics")
+  let full_url = (build-url $base ({site_id: $site_id, scope: $scope, scope_id: $scope_id} | format pattern "/api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metrics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19862,7 +19862,7 @@ export def "sites-ssr-upgrade get" [
 ]: nothing -> record<channel: string, device_type: string, id: string, status: string, targets: record<failed: list<string>, queued: list<string>, success: list<string>, upgrading: list<string>>, versions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/ssr/upgrade/($upgrade_id)")
+  let full_url = (build-url $base ({site_id: $site_id, upgrade_id: $upgrade_id} | format pattern "/api/v1/sites/{site_id}/ssr/upgrade/{upgrade_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19891,8 +19891,8 @@ export def "sites-ssr-upgrade upgradeSiteSsr" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/ssr/($device_id)/upgrade")
-  let body = {channel: $channel, reboot_at: $reboot_at, start_time: $start_time, version: $version} | compact
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/ssr/{device_id}/upgrade"))
+  let body = {"channel": $channel, "reboot_at": $reboot_at, "start_time": $start_time, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -19903,7 +19903,7 @@ export def "sites-ssr-upgrade upgradeSiteSsr" [
 #
 # GET /api/v1/sites/{site_id}/stats
 # operationId: getSiteStats
-export def "sites-stats get-by-site_id" [
+export def "sites-stats get" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19916,7 +19916,7 @@ export def "sites-stats get-by-site_id" [
 ]: nothing -> record<address: string, alarmtemplate_id: string, country_code: string, created_time: float, id: string, lat: float, latlng: record<lat: float, lng: float>, lng: float, modified_time: float, msp_id: string, name: string, networktemplate_id: string, num_ap: int, num_ap_connected: int, num_clients: int, num_devices: int, num_devices_connected: int, num_gateway: int, num_gateway_connected: int, num_switch: int, num_switch_connected: int, org_id: string, rftemplate_id: string, secpolicy_id: any, sitegroup_ids: list<string>, timezone: string, tzoffset: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19944,7 +19944,7 @@ export def "sites-stats-apps-count countSiteApps" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "device_mac" $device_mac "scalar") (serialize-qp "app" $app "scalar") (serialize-qp "wired" $wired "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/apps/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/apps/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -19973,7 +19973,7 @@ export def "sites-stats-assets get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/assets" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/assets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20000,7 +20000,7 @@ export def "sites-stats-assets-asset-id get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/assets/asset_id" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/assets/asset_id") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20025,7 +20025,7 @@ export def "sites-stats-assets-count countSiteAssets" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/assets/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/assets/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20035,7 +20035,7 @@ export def "sites-stats-assets-count countSiteAssets" [
 #
 # GET /api/v1/sites/{site_id}/stats/assets/search
 # operationId: searchSiteAssets
-export def "sites-stats-assets-search searchSiteAssets" [
+export def "sites-stats-assets-search list" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20067,7 +20067,7 @@ export def "sites-stats-assets-search searchSiteAssets" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mac" $mac "scalar") (serialize-qp "map_id" $map_id "scalar") (serialize-qp "ibeacon_uuid" $ibeacon_uuid "scalar") (serialize-qp "ibeacon_major" $ibeacon_major "scalar") (serialize-qp "ibeacon_minor" $ibeacon_minor "scalar") (serialize-qp "eddystone_uid_namespace" $eddystone_uid_namespace "scalar") (serialize-qp "eddystone_uid_instance" $eddystone_uid_instance "scalar") (serialize-qp "eddystone_url" $eddystone_url "scalar") (serialize-qp "device_name" $device_name "scalar") (serialize-qp "by" $by "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "ap_mac" $ap_mac "scalar") (serialize-qp "beam" $beam "scalar") (serialize-qp "rssi" $rssi "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/assets/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/assets/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20096,7 +20096,7 @@ export def "sites-stats-beacons get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/beacons" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/beacons") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20122,7 +20122,7 @@ export def "sites-stats-bgp-peers-count countSiteBgpStats" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "distinct" $distinct "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/bgp_peers/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/bgp_peers/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20132,7 +20132,7 @@ export def "sites-stats-bgp-peers-count countSiteBgpStats" [
 #
 # GET /api/v1/sites/{site_id}/stats/bgp_peers/search
 # operationId: searchSiteBgpStats
-export def "sites-stats-bgp-peers-search searchSiteBgpStats" [
+export def "sites-stats-bgp-peers-search list" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20145,7 +20145,7 @@ export def "sites-stats-bgp-peers-search searchSiteBgpStats" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/bgp_peers/search")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/bgp_peers/search"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20173,7 +20173,7 @@ export def "sites-stats-calls-count countSiteCalls" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distrinct" $distrinct "scalar") (serialize-qp "app" $app "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/calls/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/calls/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20183,7 +20183,7 @@ export def "sites-stats-calls-count countSiteCalls" [
 #
 # GET /api/v1/sites/{site_id}/stats/calls/search
 # operationId: searchSiteCalls
-export def "sites-stats-calls-search searchSiteCalls" [
+export def "sites-stats-calls-search list" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20203,7 +20203,7 @@ export def "sites-stats-calls-search searchSiteCalls" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mac" $mac "scalar") (serialize-qp "app" $app "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/calls/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/calls/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20228,7 +20228,7 @@ export def "sites-stats-clients list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "wired" $wired "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/clients" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/clients") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20254,7 +20254,7 @@ export def "sites-stats-clients get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "wired" $wired "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/clients/($client_mac)" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, client_mac: $client_mac} | format pattern "/api/v1/sites/{site_id}/stats/clients/{client_mac}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20285,7 +20285,7 @@ export def "sites-stats-devices list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/devices" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20309,7 +20309,7 @@ export def "sites-stats-devices get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/devices/($device_id)")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/stats/devices/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20319,7 +20319,7 @@ export def "sites-stats-devices get" [
 #
 # GET /api/v1/sites/{site_id}/stats/devices/{device_id}/clients
 # operationId: getSiteAllClientsStatsByDevice
-export def "sites-stats-devices-clients get" [
+export def "sites-stats-devices-clients get-site-all" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20333,7 +20333,7 @@ export def "sites-stats-devices-clients get" [
 ]: nothing -> table<_ttl: float, accuracy: int, airespace_ifname: string, airwatch: record<authorized: bool>, ap_id: string, ap_mac: string, band: string, channel: int, dual_band: bool, family: string, guest: record<authorized: bool, authorized_expiring_time: float, authorized_time: float, company: string, email: string, field1: string, name: string>, hostname: string, idle_time: float, ip: string, ip6: string, is_guest: bool, key_mgmt: string, last_seen: float, mac: string, manufacture: string, map_id: string, model: string, num_locating_aps: int, os: string, power_saving: bool, proto: string, psk_id: string, rssi: float, rx_bps: float, rx_bytes: float, rx_packets: float, rx_rate: float, rx_retries: float, snr: float, ssid: string, tx_bps: float, tx_bytes: float, tx_packets: float, tx_rate: float, tx_retries: float, type: string, uptime: float, username: string, vlan_id: int, wlan_id: string, x: float, x_m: float, y: float, y_m: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/devices/($device_id)/clients")
+  let full_url = (build-url $base ({site_id: $site_id, device_id: $device_id} | format pattern "/api/v1/sites/{site_id}/stats/devices/{device_id}/clients"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20362,7 +20362,7 @@ export def "sites-stats-discovered-assets get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/discovered_assets" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/discovered_assets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20372,7 +20372,7 @@ export def "sites-stats-discovered-assets get" [
 #
 # GET /api/v1/sites/{site_id}/stats/discovered_switch_metrics/search
 # operationId: searchSiteDiscoveredSwitchesMetrics
-export def "sites-stats-discovered-switch-metrics-search searchSiteDiscoveredSwitchesMetrics" [
+export def "sites-stats-discovered-switch-metrics-search list-site-discovered-switches" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20392,7 +20392,7 @@ export def "sites-stats-discovered-switch-metrics-search searchSiteDiscoveredSwi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/discovered_switch_metrics/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/discovered_switch_metrics/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20422,7 +20422,7 @@ export def "sites-stats-discovered-switches-count countSiteDiscoveredSwitches" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/discovered_switches/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/discovered_switches/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20448,7 +20448,7 @@ export def "sites-stats-discovered-switches-metrics get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "threshold" $threshold "scalar") (serialize-qp "system_name" $system_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/discovered_switches/metrics" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/discovered_switches/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20458,7 +20458,7 @@ export def "sites-stats-discovered-switches-metrics get" [
 #
 # GET /api/v1/sites/{site_id}/stats/discovered_switches/search
 # operationId: searchSiteDiscoveredSwitches
-export def "sites-stats-discovered-switches-search searchSiteDiscoveredSwitches" [
+export def "sites-stats-discovered-switches-search list" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20482,7 +20482,7 @@ export def "sites-stats-discovered-switches-search searchSiteDiscoveredSwitches"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "adopted" $adopted "scalar") (serialize-qp "system_name" $system_name "scalar") (serialize-qp "hostname" $hostname "scalar") (serialize-qp "vendor" $vendor "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/discovered_switches/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/discovered_switches/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20492,7 +20492,7 @@ export def "sites-stats-discovered-switches-search searchSiteDiscoveredSwitches"
 #
 # GET /api/v1/sites/{site_id}/stats/filtered_assets
 # operationId: getSiteAssetsOfInterest
-export def "sites-stats-filtered-assets get" [
+export def "sites-stats-filtered-assets get-site-assets-of-interest" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20511,7 +20511,7 @@ export def "sites-stats-filtered-assets get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "duration" $duration "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/filtered_assets" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/filtered_assets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20534,7 +20534,7 @@ export def "sites-stats-gateways-metrics get" [
 ]: nothing -> record<config_success: float, version_compliance: record<major_version: record, score: float, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/gateways/metrics")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/gateways/metrics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20564,7 +20564,7 @@ export def "sites-stats-maps-clients get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/maps/($map_id)/clients" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/stats/maps/{map_id}/clients") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20588,7 +20588,7 @@ export def "sites-stats-maps-discovered-assets get" [
 ]: nothing -> table<battery_voltage: float, eddystone_uid_instance: string, eddystone_uid_namespace: string, eddystone_url_url: string, ibeacon_major: int, ibeacon_minor: int, ibeacon_uuid: string, last_seen: float, mac: string, map_id: string, name: string, rssizones: list<record>, x: float, y: float, zones: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/maps/($map_id)/discovered_assets")
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/stats/maps/{map_id}/discovered_assets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20598,7 +20598,7 @@ export def "sites-stats-maps-discovered-assets get" [
 #
 # GET /api/v1/sites/{site_id}/stats/maps/{map_id}/sdkclients
 # operationId: getSiteSdkStatsByMap
-export def "sites-stats-maps-sdkclients get" [
+export def "sites-stats-maps-sdkclients get-site-sdk" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20612,7 +20612,7 @@ export def "sites-stats-maps-sdkclients get" [
 ]: nothing -> table<id: string, last_seen: float, map_id: string, name: string, network_connection: record<mac: string, rssi: float, signal_level: float, type: string>, uuid: string, x: float, y: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/maps/($map_id)/sdkclients")
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/stats/maps/{map_id}/sdkclients"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20636,7 +20636,7 @@ export def "sites-stats-maps-unconnected-clients get" [
 ]: nothing -> table<ap_mac: string, last_seen: float, mac: string, manufacture: string, map_id: string, rssi: int, x: int, y: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/maps/($map_id)/unconnected_clients")
+  let full_url = (build-url $base ({site_id: $site_id, map_id: $map_id} | format pattern "/api/v1/sites/{site_id}/stats/maps/{map_id}/unconnected_clients"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20659,7 +20659,7 @@ export def "sites-stats-mxedges list" [
 ]: nothing -> table<cpu_stat: record<cpus: record, idle: int, interrupt: int, system: int, usage: int, user: int>, created_time: int, for_site: bool, id: string, ip_stat: record<ip: string, ips: record, macs: record>, lag_stat: record, last_seen: int, mac: string, memory_stat: record<active: int, available: int, buffers: int, cached: int, free: int, inactive: int, swap_cached: int, swap_free: int, swap_total: int, total: int, usage: int>, model: string, modified_time: int, mxagent_registered: bool, mxcluster_id: string, name: string, num_tunnels: int, org_id: string, port_stat: record, sensor_stat: record, service_stat: record<mxagent: record, tunterm: record>, services: list<record>, site_id: string, status: string, tunterm_id: string, tunterm_ip_config: record<gateway: string, ip: string, netmask: string>, tunterm_port_config: record<downstream_ports: list, separate_upstream_downstream: bool, upstream_ports: list>, tunterm_registered: bool, tunterm_stat: record<monitoring_failed: bool>, uptime: int, virtualization_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/mxedges")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/mxedges"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20683,7 +20683,7 @@ export def "sites-stats-mxedges get" [
 ]: nothing -> record<cpu_stat: record<cpus: record, idle: int, interrupt: int, system: int, usage: int, user: int>, created_time: int, for_site: bool, id: string, ip_stat: record<ip: string, ips: record, macs: record>, lag_stat: record, last_seen: int, mac: string, memory_stat: record<active: int, available: int, buffers: int, cached: int, free: int, inactive: int, swap_cached: int, swap_free: int, swap_total: int, total: int, usage: int>, model: string, modified_time: int, mxagent_registered: bool, mxcluster_id: string, name: string, num_tunnels: int, org_id: string, port_stat: record, sensor_stat: record, service_stat: record<mxagent: record<ext_ip: string, last_seen: int, package_state: string, package_version: string, running_state: string, uptime: int>, tunterm: record<ext_ip: string, last_seen: int, package_state: string, package_version: string, running_state: string, uptime: int>>, services: list<record>, site_id: string, status: string, tunterm_id: string, tunterm_ip_config: record<gateway: string, ip: string, netmask: string>, tunterm_port_config: record<downstream_ports: list<record>, separate_upstream_downstream: bool, upstream_ports: list<record>>, tunterm_registered: bool, tunterm_stat: record<monitoring_failed: bool>, uptime: int, virtualization_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/mxedges/($mxedge_id)")
+  let full_url = (build-url $base ({site_id: $site_id, mxedge_id: $mxedge_id} | format pattern "/api/v1/sites/{site_id}/stats/mxedges/{mxedge_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20738,7 +20738,7 @@ export def "sites-stats-ports-count countSiteByDisctinctAttributesOPorts" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "full_duplex" $full_duplex "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "neighbor_mac" $neighbor_mac "scalar") (serialize-qp "neighbor_port_desc" $neighbor_port_desc "scalar") (serialize-qp "neighbor_system_name" $neighbor_system_name "scalar") (serialize-qp "poe_disabled" $poe_disabled "scalar") (serialize-qp "poe_mode" $poe_mode "scalar") (serialize-qp "poe_on" $poe_on "scalar") (serialize-qp "port_id" $port_id "scalar") (serialize-qp "port_mac" $port_mac "scalar") (serialize-qp "power_draw" $power_draw "scalar") (serialize-qp "tx_pkts" $tx_pkts "scalar") (serialize-qp "rx_pkts" $rx_pkts "scalar") (serialize-qp "rx_bytes" $rx_bytes "scalar") (serialize-qp "tx_bps" $tx_bps "scalar") (serialize-qp "rx_bps" $rx_bps "scalar") (serialize-qp "tx_mcast_pkts" $tx_mcast_pkts "scalar") (serialize-qp "tx_bcast_pkts" $tx_bcast_pkts "scalar") (serialize-qp "rx_mcast_pkts" $rx_mcast_pkts "scalar") (serialize-qp "rx_bcast_pkts" $rx_bcast_pkts "scalar") (serialize-qp "speed" $speed "scalar") (serialize-qp "stp_state" $stp_state "scalar") (serialize-qp "stp_role" $stp_role "scalar") (serialize-qp "auth_state" $auth_state "scalar") (serialize-qp "up" $up "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/ports/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/ports/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20748,7 +20748,7 @@ export def "sites-stats-ports-count countSiteByDisctinctAttributesOPorts" [
 #
 # GET /api/v1/sites/{site_id}/stats/ports/search
 # operationId: searchSiteSwOrGwPorts
-export def "sites-stats-ports-search searchSiteSwOrGwPorts" [
+export def "sites-stats-ports-search list-site-sw-or-gw" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20796,7 +20796,7 @@ export def "sites-stats-ports-search searchSiteSwOrGwPorts" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full_duplex" $full_duplex "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "neighbor_mac" $neighbor_mac "scalar") (serialize-qp "neighbor_port_desc" $neighbor_port_desc "scalar") (serialize-qp "neighbor_system_name" $neighbor_system_name "scalar") (serialize-qp "poe_disabled" $poe_disabled "scalar") (serialize-qp "poe_mode" $poe_mode "scalar") (serialize-qp "poe_on" $poe_on "scalar") (serialize-qp "port_id" $port_id "scalar") (serialize-qp "port_mac" $port_mac "scalar") (serialize-qp "power_draw" $power_draw "scalar") (serialize-qp "tx_pkts" $tx_pkts "scalar") (serialize-qp "rx_pkts" $rx_pkts "scalar") (serialize-qp "rx_bytes" $rx_bytes "scalar") (serialize-qp "tx_bps" $tx_bps "scalar") (serialize-qp "rx_bps" $rx_bps "scalar") (serialize-qp "tx_errors" $tx_errors "scalar") (serialize-qp "rx_errors" $rx_errors "scalar") (serialize-qp "tx_mcast_pkts" $tx_mcast_pkts "scalar") (serialize-qp "tx_bcast_pkts" $tx_bcast_pkts "scalar") (serialize-qp "rx_mcast_pkts" $rx_mcast_pkts "scalar") (serialize-qp "rx_bcast_pkts" $rx_bcast_pkts "scalar") (serialize-qp "speed" $speed "scalar") (serialize-qp "mac_limit" $mac_limit "scalar") (serialize-qp "mac_count" $mac_count "scalar") (serialize-qp "up" $up "scalar") (serialize-qp "stp_state" $stp_state "scalar") (serialize-qp "stp_role" $stp_role "scalar") (serialize-qp "xcvr_part_number" $xcvr_part_number "scalar") (serialize-qp "auth_state" $auth_state "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/ports/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/ports/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20806,7 +20806,7 @@ export def "sites-stats-ports-search searchSiteSwOrGwPorts" [
 #
 # GET /api/v1/sites/{site_id}/stats/sdkclients/{sdkclient_id}
 # operationId: getSiteSdkStats
-export def "sites-stats-sdkclients get" [
+export def "sites-stats-sdkclients get-site-sdk" [
   site_id: string
   sdkclient_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20820,7 +20820,7 @@ export def "sites-stats-sdkclients get" [
 ]: nothing -> record<id: string, last_seen: float, map_id: string, name: string, network_connection: record<mac: string, rssi: float, signal_level: float, type: string>, uuid: string, vbeacons: table<id: string, since: float>, x: float, y: float, zones: table<id: string, since: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/sdkclients/($sdkclient_id)")
+  let full_url = (build-url $base ({site_id: $site_id, sdkclient_id: $sdkclient_id} | format pattern "/api/v1/sites/{site_id}/stats/sdkclients/{sdkclient_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20875,7 +20875,7 @@ export def "sites-stats-switch-ports-count countSiteByDisctinctAttributesOfSwitc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "full_duplex" $full_duplex "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "neighbor_mac" $neighbor_mac "scalar") (serialize-qp "neighbor_port_desc" $neighbor_port_desc "scalar") (serialize-qp "neighbor_system_name" $neighbor_system_name "scalar") (serialize-qp "poe_disabled" $poe_disabled "scalar") (serialize-qp "poe_mode" $poe_mode "scalar") (serialize-qp "poe_on" $poe_on "scalar") (serialize-qp "port_id" $port_id "scalar") (serialize-qp "port_mac" $port_mac "scalar") (serialize-qp "power_draw" $power_draw "scalar") (serialize-qp "tx_pkts" $tx_pkts "scalar") (serialize-qp "rx_pkts" $rx_pkts "scalar") (serialize-qp "rx_bytes" $rx_bytes "scalar") (serialize-qp "tx_bps" $tx_bps "scalar") (serialize-qp "rx_bps" $rx_bps "scalar") (serialize-qp "tx_mcast_pkts" $tx_mcast_pkts "scalar") (serialize-qp "tx_bcast_pkts" $tx_bcast_pkts "scalar") (serialize-qp "rx_mcast_pkts" $rx_mcast_pkts "scalar") (serialize-qp "rx_bcast_pkts" $rx_bcast_pkts "scalar") (serialize-qp "speed" $speed "scalar") (serialize-qp "stp_state" $stp_state "scalar") (serialize-qp "stp_role" $stp_role "scalar") (serialize-qp "auth_state" $auth_state "scalar") (serialize-qp "up" $up "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/switch_ports/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/switch_ports/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20885,7 +20885,7 @@ export def "sites-stats-switch-ports-count countSiteByDisctinctAttributesOfSwitc
 #
 # GET /api/v1/sites/{site_id}/stats/switch_ports/search
 # operationId: searchSiteSwitchPorts
-export def "sites-stats-switch-ports-search searchSiteSwitchPorts" [
+export def "sites-stats-switch-ports-search list" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20928,7 +20928,7 @@ export def "sites-stats-switch-ports-search searchSiteSwitchPorts" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full_duplex" $full_duplex "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "neighbor_mac" $neighbor_mac "scalar") (serialize-qp "neighbor_port_desc" $neighbor_port_desc "scalar") (serialize-qp "neighbor_system_name" $neighbor_system_name "scalar") (serialize-qp "poe_disabled" $poe_disabled "scalar") (serialize-qp "poe_mode" $poe_mode "scalar") (serialize-qp "poe_on" $poe_on "scalar") (serialize-qp "port_id" $port_id "scalar") (serialize-qp "port_mac" $port_mac "scalar") (serialize-qp "power_draw" $power_draw "scalar") (serialize-qp "tx_pkts" $tx_pkts "scalar") (serialize-qp "rx_pkts" $rx_pkts "scalar") (serialize-qp "rx_bytes" $rx_bytes "scalar") (serialize-qp "tx_bps" $tx_bps "scalar") (serialize-qp "rx_bps" $rx_bps "scalar") (serialize-qp "tx_mcast_pkts" $tx_mcast_pkts "scalar") (serialize-qp "tx_bcast_pkts" $tx_bcast_pkts "scalar") (serialize-qp "rx_mcast_pkts" $rx_mcast_pkts "scalar") (serialize-qp "rx_bcast_pkts" $rx_bcast_pkts "scalar") (serialize-qp "speed" $speed "scalar") (serialize-qp "stp_state" $stp_state "scalar") (serialize-qp "stp_role" $stp_role "scalar") (serialize-qp "auth_state" $auth_state "scalar") (serialize-qp "up" $up "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/switch_ports/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/switch_ports/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20938,7 +20938,7 @@ export def "sites-stats-switch-ports-search searchSiteSwitchPorts" [
 #
 # GET /api/v1/sites/{site_id}/stats/switches/metrics
 # operationId: getSiteAdoptedSwitchesComplianceMetrics
-export def "sites-stats-switches-metrics get" [
+export def "sites-stats-switches-metrics get-site-adopted-switches-compliance" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20951,7 +20951,7 @@ export def "sites-stats-switches-metrics get" [
 ]: nothing -> record<version_compliance: record<details: record<major_versions: list>, score: int, total_switch_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/switches/metrics")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/switches/metrics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20961,7 +20961,7 @@ export def "sites-stats-switches-metrics get" [
 #
 # GET /api/v1/sites/{site_id}/stats/wxrules
 # operationId: getSiteWxRulesUsage
-export def "sites-stats-wxrules get" [
+export def "sites-stats-wxrules get-site-wx-rules-usage" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20974,7 +20974,7 @@ export def "sites-stats-wxrules get" [
 ]: nothing -> table<action: string, client_mac: list<string>, dst_allow_wxtags: list<string>, dst_deny_wxtags: list<string>, dst_wxtags: list<string>, name: string, order: int, src_wxtags: list<string>, usage: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/wxrules")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/wxrules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -20999,7 +20999,7 @@ export def "sites-stats-zones get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "map_id" $map_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/zones" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/stats/zones") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21009,7 +21009,7 @@ export def "sites-stats-zones get" [
 #
 # GET /api/v1/sites/{site_id}/stats/{zone_type}/{zone_id}
 # operationId: getSiteZoneStats
-export def "sites-stats get-by-site_id-zone_type-zone_id" [
+export def "sites-stats get-site-zone" [
   site_id: string
   zone_type: string
   zone_id: string
@@ -21024,7 +21024,7 @@ export def "sites-stats get-by-site_id-zone_type-zone_id" [
 ]: nothing -> record<assets: list<string>, client_waits: record<avg: int, max: int, min: int, p95: int>, clients: list<string>, id: string, map_id: string, name: string, num_clients: int, num_sdkclients: int, sdkclients: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/stats/($zone_type)/($zone_id)")
+  let full_url = (build-url $base ({site_id: $site_id, zone_type: $zone_type, zone_id: $zone_id} | format pattern "/api/v1/sites/{site_id}/stats/{zone_type}/{zone_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21034,7 +21034,7 @@ export def "sites-stats get-by-site_id-zone_type-zone_id" [
 #
 # DELETE /api/v1/sites/{site_id}/subscriptions
 # operationId: UnsubscribeSite
-export def "sites-subscriptions UnsubscribeSite" [
+export def "sites-subscriptions unsubscribe" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21047,7 +21047,7 @@ export def "sites-subscriptions UnsubscribeSite" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/subscriptions")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/subscriptions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21057,7 +21057,7 @@ export def "sites-subscriptions UnsubscribeSite" [
 #
 # POST /api/v1/sites/{site_id}/subscriptions
 # operationId: SubscribeSite
-export def "sites-subscriptions SubscribeSite" [
+export def "sites-subscriptions subscribe" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21070,7 +21070,7 @@ export def "sites-subscriptions SubscribeSite" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/subscriptions")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/subscriptions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21080,7 +21080,7 @@ export def "sites-subscriptions SubscribeSite" [
 #
 # GET /api/v1/sites/{site_id}/synthetic_test
 # operationId: getSiteSyntheticTestStatus
-export def "sites-synthetic-test get" [
+export def "sites-synthetic-test get-site-synthetic-test-status" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21093,7 +21093,7 @@ export def "sites-synthetic-test get" [
 ]: nothing -> record<end_time: int, id: string, report_url: string, start_time: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/synthetic_test")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/synthetic_test"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21103,7 +21103,7 @@ export def "sites-synthetic-test get" [
 #
 # POST /api/v1/sites/{site_id}/synthetic_test
 # operationId: triggerSiteSyntheticTest
-export def "sites-synthetic-test triggerSiteSyntheticTest" [
+export def "sites-synthetic-test trigger" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21118,8 +21118,8 @@ export def "sites-synthetic-test triggerSiteSyntheticTest" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/synthetic_test")
-  let body = {email: $email} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/synthetic_test"))
+  let body = {"email": $email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -21130,7 +21130,7 @@ export def "sites-synthetic-test triggerSiteSyntheticTest" [
 #
 # GET /api/v1/sites/{site_id}/uisettings
 # operationId: getSiteCurdSettings
-export def "sites-uisettings list" [
+export def "sites-uisettings get-site-curd-settings" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21143,7 +21143,7 @@ export def "sites-uisettings list" [
 ]: nothing -> table<created_time: float, defaultScopeId: string, defaultScopeType: string, defaultTimeRange: record<end: int, endDate: string, interval: string, name: string, shortName: string, start: int, usePreset: bool>, description: string, for_site: bool, id: string, isCustomDataboard: bool, isScopeLinked: bool, isTimeRangeLinked: bool, modified_time: float, name: string, org_id: string, purpose: string, site_id: string, tiles: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/uisettings")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/uisettings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21155,7 +21155,7 @@ export def "sites-uisettings list" [
 # operationId: createSiteCurdSettings
 # --defaultTimeRange shape: {end?: int, endDate?: string, interval?: string, name?: string, shortName?: string, start?: int, usePreset?: bool}
 # --tiles item shape: {chartBand?: string, chartColor?: string, chartDirection?: string, chartRankBy?: string, chartType?: string, colspan?: int, column?: int, hideEmptyRows?: bool, id?: string, metric?: record, name?: string, row?: int, rowspan?: int, scopeId?: string, scopeType?: string, sortedColumns?: any, timeRange?: record, trendType?: string, vizType?: string}
-export def "sites-uisettings createSiteCurdSettings" [
+export def "sites-uisettings create-site-curd-settings" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21165,13 +21165,13 @@ export def "sites-uisettings createSiteCurdSettings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultScopeId: string
-  --defaultScopeType: string
-  --defaultTimeRange: record # shape: {end?: int, endDate?: string, interval?: string, name?: string, shortName?: string, start?: int, usePreset?: bool}
+  --default-scope-id: string
+  --default-scope-type: string
+  --default-time-range: record # shape: {end?: int, endDate?: string, interval?: string, name?: string, shortName?: string, start?: int, usePreset?: bool}
   description: string
-  --isCustomDataboard: oneof<nothing, bool>
-  --isScopeLinked: oneof<nothing, bool>
-  --isTimeRangeLinked: oneof<nothing, bool>
+  --is-custom-databoard: oneof<nothing, bool>
+  --is-scope-linked: oneof<nothing, bool>
+  --is-time-range-linked: oneof<nothing, bool>
   --name: string
   purpose: string
   --tiles: list # item shape: {chartBand?: string, chartColor?: string, chartDirection?: string, chartRankBy?: string, chartType?: string, colspan?: int, column?: int, hideEmptyRows?: bool, id?: string, metric?: record, name?: string, row?: int, rowspan?: int, scopeId?: string, scopeType?: string, sortedColumns?: any, timeRange?: record, trendType?: string, vizType?: string}
@@ -21179,8 +21179,8 @@ export def "sites-uisettings createSiteCurdSettings" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/uisettings")
-  let body = {defaultScopeId: $defaultScopeId, defaultScopeType: $defaultScopeType, defaultTimeRange: $defaultTimeRange, description: $description, isCustomDataboard: $isCustomDataboard, isScopeLinked: $isScopeLinked, isTimeRangeLinked: $isTimeRangeLinked, name: $name, purpose: $purpose, tiles: $tiles} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/uisettings"))
+  let body = {"defaultScopeId": $default_scope_id, "defaultScopeType": $default_scope_type, "defaultTimeRange": $default_time_range, "description": $description, "isCustomDataboard": $is_custom_databoard, "isScopeLinked": $is_scope_linked, "isTimeRangeLinked": $is_time_range_linked, "name": $name, "purpose": $purpose, "tiles": $tiles} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -21191,7 +21191,7 @@ export def "sites-uisettings createSiteCurdSettings" [
 #
 # GET /api/v1/sites/{site_id}/uisettings/derived
 # operationId: getSiteDerivedCurdSetting
-export def "sites-uisettings-derived get" [
+export def "sites-uisettings-derived get-site-derived-curd-setting" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21204,7 +21204,7 @@ export def "sites-uisettings-derived get" [
 ]: nothing -> record<created_time: float, defaultScopeId: string, defaultScopeType: string, defaultTimeRange: record<end: int, endDate: string, interval: string, name: string, shortName: string, start: int, usePreset: bool>, description: string, for_site: bool, id: string, isCustomDataboard: bool, isScopeLinked: bool, isTimeRangeLinked: bool, modified_time: float, name: string, org_id: string, purpose: string, site_id: string, tiles: table<chartBand: string, chartColor: string, chartDirection: string, chartRankBy: string, chartType: string, colspan: int, column: int, hideEmptyRows: bool, id: string, metric: record, name: string, row: int, rowspan: int, scopeId: string, scopeType: string, sortedColumns: any, timeRange: record, trendType: string, vizType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/uisettings/derived")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/uisettings/derived"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21214,7 +21214,7 @@ export def "sites-uisettings-derived get" [
 #
 # DELETE /api/v1/sites/{site_id}/uisettings/{uisetting_id}
 # operationId: deleteSiteCurdSetting
-export def "sites-uisettings delete" [
+export def "sites-uisettings delete-site-curd-setting" [
   site_id: string
   uisetting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21228,7 +21228,7 @@ export def "sites-uisettings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/uisettings/($uisetting_id)")
+  let full_url = (build-url $base ({site_id: $site_id, uisetting_id: $uisetting_id} | format pattern "/api/v1/sites/{site_id}/uisettings/{uisetting_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21238,7 +21238,7 @@ export def "sites-uisettings delete" [
 #
 # GET /api/v1/sites/{site_id}/uisettings/{uisetting_id}
 # operationId: getSiteCurdSetting
-export def "sites-uisettings get" [
+export def "sites-uisettings get-site-curd-setting" [
   site_id: string
   uisetting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21252,7 +21252,7 @@ export def "sites-uisettings get" [
 ]: nothing -> record<created_time: float, defaultScopeId: string, defaultScopeType: string, defaultTimeRange: record<end: int, endDate: string, interval: string, name: string, shortName: string, start: int, usePreset: bool>, description: string, for_site: bool, id: string, isCustomDataboard: bool, isScopeLinked: bool, isTimeRangeLinked: bool, modified_time: float, name: string, org_id: string, purpose: string, site_id: string, tiles: table<chartBand: string, chartColor: string, chartDirection: string, chartRankBy: string, chartType: string, colspan: int, column: int, hideEmptyRows: bool, id: string, metric: record, name: string, row: int, rowspan: int, scopeId: string, scopeType: string, sortedColumns: any, timeRange: record, trendType: string, vizType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/uisettings/($uisetting_id)")
+  let full_url = (build-url $base ({site_id: $site_id, uisetting_id: $uisetting_id} | format pattern "/api/v1/sites/{site_id}/uisettings/{uisetting_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21264,7 +21264,7 @@ export def "sites-uisettings get" [
 # operationId: updateSiteCurdSetting
 # --defaultTimeRange shape: {end?: int, endDate?: string, interval?: string, name?: string, shortName?: string, start?: int, usePreset?: bool}
 # --tiles item shape: {chartBand?: string, chartColor?: string, chartDirection?: string, chartRankBy?: string, chartType?: string, colspan?: int, column?: int, hideEmptyRows?: bool, id?: string, metric?: record, name?: string, row?: int, rowspan?: int, scopeId?: string, scopeType?: string, sortedColumns?: any, timeRange?: record, trendType?: string, vizType?: string}
-export def "sites-uisettings updateSiteCurdSetting" [
+export def "sites-uisettings update-site-curd-setting" [
   site_id: string
   uisetting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21275,13 +21275,13 @@ export def "sites-uisettings updateSiteCurdSetting" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultScopeId: string
-  --defaultScopeType: string
-  --defaultTimeRange: record # shape: {end?: int, endDate?: string, interval?: string, name?: string, shortName?: string, start?: int, usePreset?: bool}
+  --default-scope-id: string
+  --default-scope-type: string
+  --default-time-range: record # shape: {end?: int, endDate?: string, interval?: string, name?: string, shortName?: string, start?: int, usePreset?: bool}
   description: string
-  --isCustomDataboard: oneof<nothing, bool>
-  --isScopeLinked: oneof<nothing, bool>
-  --isTimeRangeLinked: oneof<nothing, bool>
+  --is-custom-databoard: oneof<nothing, bool>
+  --is-scope-linked: oneof<nothing, bool>
+  --is-time-range-linked: oneof<nothing, bool>
   --name: string
   purpose: string
   --tiles: list # item shape: {chartBand?: string, chartColor?: string, chartDirection?: string, chartRankBy?: string, chartType?: string, colspan?: int, column?: int, hideEmptyRows?: bool, id?: string, metric?: record, name?: string, row?: int, rowspan?: int, scopeId?: string, scopeType?: string, sortedColumns?: any, timeRange?: record, trendType?: string, vizType?: string}
@@ -21289,8 +21289,8 @@ export def "sites-uisettings updateSiteCurdSetting" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/uisettings/($uisetting_id)")
-  let body = {defaultScopeId: $defaultScopeId, defaultScopeType: $defaultScopeType, defaultTimeRange: $defaultTimeRange, description: $description, isCustomDataboard: $isCustomDataboard, isScopeLinked: $isScopeLinked, isTimeRangeLinked: $isTimeRangeLinked, name: $name, purpose: $purpose, tiles: $tiles} | compact
+  let full_url = (build-url $base ({site_id: $site_id, uisetting_id: $uisetting_id} | format pattern "/api/v1/sites/{site_id}/uisettings/{uisetting_id}"))
+  let body = {"defaultScopeId": $default_scope_id, "defaultScopeType": $default_scope_type, "defaultTimeRange": $default_time_range, "description": $description, "isCustomDataboard": $is_custom_databoard, "isScopeLinked": $is_scope_linked, "isTimeRangeLinked": $is_time_range_linked, "name": $name, "purpose": $purpose, "tiles": $tiles} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -21314,7 +21314,7 @@ export def "sites-vbeacons list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/vbeacons")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/vbeacons"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21324,7 +21324,7 @@ export def "sites-vbeacons list" [
 #
 # POST /api/v1/sites/{site_id}/vbeacons
 # operationId: createSiteVBeacon
-export def "sites-vbeacons createSiteVBeacon" [
+export def "sites-vbeacons create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21350,8 +21350,8 @@ export def "sites-vbeacons createSiteVBeacon" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/vbeacons")
-  let body = {major: $major, map_id: $map_id, message: $message, minor: $minor, name: $name, power: $power, power_mode: $power_mode, url: $body_url, uuid: $uuid, wayfinding_nodename: $wayfinding_nodename, x: $x, y: $y} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/vbeacons"))
+  let body = {"major": $major, "map_id": $map_id, "message": $message, "minor": $minor, "name": $name, "power": $power, "power_mode": $power_mode, "url": $body_url, "uuid": $uuid, "wayfinding_nodename": $wayfinding_nodename, "x": $x, "y": $y} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -21376,7 +21376,7 @@ export def "sites-vbeacons delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/vbeacons/($vbeacon_id)")
+  let full_url = (build-url $base ({site_id: $site_id, vbeacon_id: $vbeacon_id} | format pattern "/api/v1/sites/{site_id}/vbeacons/{vbeacon_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21400,7 +21400,7 @@ export def "sites-vbeacons get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/vbeacons/($vbeacon_id)")
+  let full_url = (build-url $base ({site_id: $site_id, vbeacon_id: $vbeacon_id} | format pattern "/api/v1/sites/{site_id}/vbeacons/{vbeacon_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21410,7 +21410,7 @@ export def "sites-vbeacons get" [
 #
 # PUT /api/v1/sites/{site_id}/vbeacons/{vbeacon_id}
 # operationId: updateSiteVBeacon
-export def "sites-vbeacons updateSiteVBeacon" [
+export def "sites-vbeacons update" [
   site_id: string
   vbeacon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21437,8 +21437,8 @@ export def "sites-vbeacons updateSiteVBeacon" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/vbeacons/($vbeacon_id)")
-  let body = {major: $major, map_id: $map_id, message: $message, minor: $minor, name: $name, power: $power, power_mode: $power_mode, url: $body_url, uuid: $uuid, wayfinding_nodename: $wayfinding_nodename, x: $x, y: $y} | compact
+  let full_url = (build-url $base ({site_id: $site_id, vbeacon_id: $vbeacon_id} | format pattern "/api/v1/sites/{site_id}/vbeacons/{vbeacon_id}"))
+  let body = {"major": $major, "map_id": $map_id, "message": $message, "minor": $minor, "name": $name, "power": $power, "power_mode": $power_mode, "url": $body_url, "uuid": $uuid, "wayfinding_nodename": $wayfinding_nodename, "x": $x, "y": $y} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -21462,7 +21462,7 @@ export def "sites-webhooks list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/webhooks")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/webhooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21472,7 +21472,7 @@ export def "sites-webhooks list" [
 #
 # POST /api/v1/sites/{site_id}/webhooks
 # operationId: createSiteWebhook
-export def "sites-webhooks createSiteWebhook" [
+export def "sites-webhooks create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21495,8 +21495,8 @@ export def "sites-webhooks createSiteWebhook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/webhooks")
-  let body = {enabled: $enabled, headers: $headers, name: $name, secret: $secret, splunk_token: $splunk_token, topics: $topics, type: $type, url: $body_url, verify_cert: $verify_cert} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/webhooks"))
+  let body = {"enabled": $enabled, "headers": $headers, "name": $name, "secret": $secret, "splunk_token": $splunk_token, "topics": $topics, "type": $type, "url": $body_url, "verify_cert": $verify_cert} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -21521,7 +21521,7 @@ export def "sites-webhooks delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/webhooks/($webhook_id)")
+  let full_url = (build-url $base ({site_id: $site_id, webhook_id: $webhook_id} | format pattern "/api/v1/sites/{site_id}/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21545,7 +21545,7 @@ export def "sites-webhooks get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/webhooks/($webhook_id)")
+  let full_url = (build-url $base ({site_id: $site_id, webhook_id: $webhook_id} | format pattern "/api/v1/sites/{site_id}/webhooks/{webhook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21555,7 +21555,7 @@ export def "sites-webhooks get" [
 #
 # PUT /api/v1/sites/{site_id}/webhooks/{webhook_id}
 # operationId: updateSiteWebhook
-export def "sites-webhooks updateSiteWebhook" [
+export def "sites-webhooks update" [
   site_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21579,8 +21579,8 @@ export def "sites-webhooks updateSiteWebhook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/webhooks/($webhook_id)")
-  let body = {enabled: $enabled, headers: $headers, name: $name, secret: $secret, splunk_token: $splunk_token, topics: $topics, type: $type, url: $body_url, verify_cert: $verify_cert} | compact
+  let full_url = (build-url $base ({site_id: $site_id, webhook_id: $webhook_id} | format pattern "/api/v1/sites/{site_id}/webhooks/{webhook_id}"))
+  let body = {"enabled": $enabled, "headers": $headers, "name": $name, "secret": $secret, "splunk_token": $splunk_token, "topics": $topics, "type": $type, "url": $body_url, "verify_cert": $verify_cert} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -21591,7 +21591,7 @@ export def "sites-webhooks updateSiteWebhook" [
 #
 # POST /api/v1/sites/{site_id}/webhooks/{webhook_id}/ping
 # operationId: pingSiteWebhook
-export def "sites-webhooks-ping pingSiteWebhook" [
+export def "sites-webhooks-ping ping" [
   site_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21605,7 +21605,7 @@ export def "sites-webhooks-ping pingSiteWebhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/webhooks/($webhook_id)/ping")
+  let full_url = (build-url $base ({site_id: $site_id, webhook_id: $webhook_id} | format pattern "/api/v1/sites/{site_id}/webhooks/{webhook_id}/ping"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21639,7 +21639,7 @@ export def "sites-wired-clients-count countSiteClientsWired" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "device_mac" $device_mac "scalar") (serialize-qp "port_id" $port_id "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wired_clients/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/wired_clients/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21649,7 +21649,7 @@ export def "sites-wired-clients-count countSiteClientsWired" [
 #
 # GET /api/v1/sites/{site_id}/wired_clients/search
 # operationId: searchSiteClientsWired
-export def "sites-wired-clients-search searchSiteClientsWired" [
+export def "sites-wired-clients-search list" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21663,7 +21663,7 @@ export def "sites-wired-clients-search searchSiteClientsWired" [
   --mac: string # client mac
   --port-id: string # port id
   --vlan: string # vlan
-  --ip address: string # format: ipv4, e.g. 192.168.1.1
+  --ip-address: string # format: ipv4, e.g. 192.168.1.1
   --manufacture: string # manufacture
   --text: string # single entry of hostname/mac
   --limit: int # default: 100
@@ -21673,8 +21673,8 @@ export def "sites-wired-clients-search searchSiteClientsWired" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "device_mac" $device_mac "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "port_id" $port_id "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "ip address" $ip address "scalar") (serialize-qp "manufacture" $manufacture "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wired_clients/search" $qp)
+  let qp = [(serialize-qp "device_mac" $device_mac "scalar") (serialize-qp "mac" $mac "scalar") (serialize-qp "port_id" $port_id "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "ip address" $ip_address "scalar") (serialize-qp "manufacture" $manufacture "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/wired_clients/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21697,7 +21697,7 @@ export def "sites-wlans list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wlans")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/wlans"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21727,7 +21727,7 @@ export def "sites-wlans list" [
 # --rateset shape: {5?: record, 24?: record}
 # --schedule shape: {enabled?: bool, hours?: record}
 @deprecated --flag band
-export def "sites-wlans createSiteWlan" [
+export def "sites-wlans create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21829,8 +21829,8 @@ export def "sites-wlans createSiteWlan" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wlans")
-  let body = {acct_interim_interval: $acct_interim_interval, acct_servers: $acct_servers, airwatch: $airwatch, allow_ipv6_ndp: $allow_ipv6_ndp, allow_mdns: $allow_mdns, allow_ssdp: $allow_ssdp, ap_ids: $ap_ids, app_limit: $app_limit, app_qos: $app_qos, apply_to: $apply_to, arp_filter: $arp_filter, auth: $body_auth, auth_server_selection: $auth_server_selection, auth_servers: $auth_servers, auth_servers_nas_id: $auth_servers_nas_id, auth_servers_nas_ip: $auth_servers_nas_ip, auth_servers_retries: $auth_servers_retries, auth_servers_timeout: $auth_servers_timeout, band: $band, band_steer: $band_steer, band_steer_force_band5: $band_steer_force_band5, bands: $bands, block_blacklist_clients: $block_blacklist_clients, bonjour: $bonjour, cisco_cwa: $cisco_cwa, client_limit_down: $client_limit_down, client_limit_down_enabled: $client_limit_down_enabled, client_limit_up: $client_limit_up, client_limit_up_enabled: $client_limit_up_enabled, coa_servers: $coa_servers, disable_11ax: $disable_11ax, disable_ht_vht_rates: $disable_ht_vht_rates, disable_uapsd: $disable_uapsd, disable_v1_roam_notify: $disable_v1_roam_notify, disable_v2_roam_notify: $disable_v2_roam_notify, disable_wmm: $disable_wmm, dns_server_rewrite: $dns_server_rewrite, dtim: $dtim, dynamic_psk: $dynamic_psk, dynamic_vlan: $dynamic_vlan, enable_local_keycaching: $enable_local_keycaching, enable_wireless_bridging: $enable_wireless_bridging, enabled: $enabled, hide_ssid: $hide_ssid, hostname_ie: $hostname_ie, hotspot20: $hotspot20, interface: $interface, isolation: $isolation, l2_isolation: $l2_isolation, legacy_overds: $legacy_overds, limit_bcast: $limit_bcast, limit_probe_response: $limit_probe_response, max_idletime: $max_idletime, mist_nac: $mist_nac, mxtunnel: $mxtunnel, mxtunnel_id: $mxtunnel_id, mxtunnel_name: $mxtunnel_name, no_static_dns: $no_static_dns, no_static_ip: $no_static_ip, portal: $portal, portal_allowed_hostnames: $portal_allowed_hostnames, portal_allowed_subnets: $portal_allowed_subnets, portal_api_secret: $portal_api_secret, portal_denied_hostnames: $portal_denied_hostnames, portal_image: $portal_image, portal_sso_url: $portal_sso_url, portal_template_url: $portal_template_url, qos: $qos, radsec: $radsec, rateset: $rateset, roam_mode: $roam_mode, schedule: $schedule, sle_excluded: $sle_excluded, ssid: $ssid, template_id: $template_id, thumbnail: $thumbnail, use_eapol_v1: $use_eapol_v1, vlan_enabled: $vlan_enabled, vlan_id: $vlan_id, vlan_ids: $vlan_ids, vlan_pooling: $vlan_pooling, wlan_limit_down: $wlan_limit_down, wlan_limit_down_enabled: $wlan_limit_down_enabled, wlan_limit_up: $wlan_limit_up, wlan_limit_up_enabled: $wlan_limit_up_enabled, wxtag_ids: $wxtag_ids, wxtunnel_id: $wxtunnel_id, wxtunnel_remote_id: $wxtunnel_remote_id} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/wlans"))
+  let body = {"acct_interim_interval": $acct_interim_interval, "acct_servers": $acct_servers, "airwatch": $airwatch, "allow_ipv6_ndp": $allow_ipv6_ndp, "allow_mdns": $allow_mdns, "allow_ssdp": $allow_ssdp, "ap_ids": $ap_ids, "app_limit": $app_limit, "app_qos": $app_qos, "apply_to": $apply_to, "arp_filter": $arp_filter, "auth": $body_auth, "auth_server_selection": $auth_server_selection, "auth_servers": $auth_servers, "auth_servers_nas_id": $auth_servers_nas_id, "auth_servers_nas_ip": $auth_servers_nas_ip, "auth_servers_retries": $auth_servers_retries, "auth_servers_timeout": $auth_servers_timeout, "band": $band, "band_steer": $band_steer, "band_steer_force_band5": $band_steer_force_band5, "bands": $bands, "block_blacklist_clients": $block_blacklist_clients, "bonjour": $bonjour, "cisco_cwa": $cisco_cwa, "client_limit_down": $client_limit_down, "client_limit_down_enabled": $client_limit_down_enabled, "client_limit_up": $client_limit_up, "client_limit_up_enabled": $client_limit_up_enabled, "coa_servers": $coa_servers, "disable_11ax": $disable_11ax, "disable_ht_vht_rates": $disable_ht_vht_rates, "disable_uapsd": $disable_uapsd, "disable_v1_roam_notify": $disable_v1_roam_notify, "disable_v2_roam_notify": $disable_v2_roam_notify, "disable_wmm": $disable_wmm, "dns_server_rewrite": $dns_server_rewrite, "dtim": $dtim, "dynamic_psk": $dynamic_psk, "dynamic_vlan": $dynamic_vlan, "enable_local_keycaching": $enable_local_keycaching, "enable_wireless_bridging": $enable_wireless_bridging, "enabled": $enabled, "hide_ssid": $hide_ssid, "hostname_ie": $hostname_ie, "hotspot20": $hotspot20, "interface": $interface, "isolation": $isolation, "l2_isolation": $l2_isolation, "legacy_overds": $legacy_overds, "limit_bcast": $limit_bcast, "limit_probe_response": $limit_probe_response, "max_idletime": $max_idletime, "mist_nac": $mist_nac, "mxtunnel": $mxtunnel, "mxtunnel_id": $mxtunnel_id, "mxtunnel_name": $mxtunnel_name, "no_static_dns": $no_static_dns, "no_static_ip": $no_static_ip, "portal": $portal, "portal_allowed_hostnames": $portal_allowed_hostnames, "portal_allowed_subnets": $portal_allowed_subnets, "portal_api_secret": $portal_api_secret, "portal_denied_hostnames": $portal_denied_hostnames, "portal_image": $portal_image, "portal_sso_url": $portal_sso_url, "portal_template_url": $portal_template_url, "qos": $qos, "radsec": $radsec, "rateset": $rateset, "roam_mode": $roam_mode, "schedule": $schedule, "sle_excluded": $sle_excluded, "ssid": $ssid, "template_id": $template_id, "thumbnail": $thumbnail, "use_eapol_v1": $use_eapol_v1, "vlan_enabled": $vlan_enabled, "vlan_id": $vlan_id, "vlan_ids": $vlan_ids, "vlan_pooling": $vlan_pooling, "wlan_limit_down": $wlan_limit_down, "wlan_limit_down_enabled": $wlan_limit_down_enabled, "wlan_limit_up": $wlan_limit_up, "wlan_limit_up_enabled": $wlan_limit_up_enabled, "wxtag_ids": $wxtag_ids, "wxtunnel_id": $wxtunnel_id, "wxtunnel_remote_id": $wxtunnel_remote_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -21856,7 +21856,7 @@ export def "sites-wlans-derived get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resolve" $resolve "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wlans/derived" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/wlans/derived") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21880,7 +21880,7 @@ export def "sites-wlans delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wlans/($wlan_id)")
+  let full_url = (build-url $base ({site_id: $site_id, wlan_id: $wlan_id} | format pattern "/api/v1/sites/{site_id}/wlans/{wlan_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21904,7 +21904,7 @@ export def "sites-wlans get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wlans/($wlan_id)")
+  let full_url = (build-url $base ({site_id: $site_id, wlan_id: $wlan_id} | format pattern "/api/v1/sites/{site_id}/wlans/{wlan_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -21934,7 +21934,7 @@ export def "sites-wlans get" [
 # --rateset shape: {5?: record, 24?: record}
 # --schedule shape: {enabled?: bool, hours?: record}
 @deprecated --flag band
-export def "sites-wlans updateSiteWlan" [
+export def "sites-wlans update" [
   site_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22037,8 +22037,8 @@ export def "sites-wlans updateSiteWlan" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wlans/($wlan_id)")
-  let body = {acct_interim_interval: $acct_interim_interval, acct_servers: $acct_servers, airwatch: $airwatch, allow_ipv6_ndp: $allow_ipv6_ndp, allow_mdns: $allow_mdns, allow_ssdp: $allow_ssdp, ap_ids: $ap_ids, app_limit: $app_limit, app_qos: $app_qos, apply_to: $apply_to, arp_filter: $arp_filter, auth: $body_auth, auth_server_selection: $auth_server_selection, auth_servers: $auth_servers, auth_servers_nas_id: $auth_servers_nas_id, auth_servers_nas_ip: $auth_servers_nas_ip, auth_servers_retries: $auth_servers_retries, auth_servers_timeout: $auth_servers_timeout, band: $band, band_steer: $band_steer, band_steer_force_band5: $band_steer_force_band5, bands: $bands, block_blacklist_clients: $block_blacklist_clients, bonjour: $bonjour, cisco_cwa: $cisco_cwa, client_limit_down: $client_limit_down, client_limit_down_enabled: $client_limit_down_enabled, client_limit_up: $client_limit_up, client_limit_up_enabled: $client_limit_up_enabled, coa_servers: $coa_servers, disable_11ax: $disable_11ax, disable_ht_vht_rates: $disable_ht_vht_rates, disable_uapsd: $disable_uapsd, disable_v1_roam_notify: $disable_v1_roam_notify, disable_v2_roam_notify: $disable_v2_roam_notify, disable_wmm: $disable_wmm, dns_server_rewrite: $dns_server_rewrite, dtim: $dtim, dynamic_psk: $dynamic_psk, dynamic_vlan: $dynamic_vlan, enable_local_keycaching: $enable_local_keycaching, enable_wireless_bridging: $enable_wireless_bridging, enabled: $enabled, hide_ssid: $hide_ssid, hostname_ie: $hostname_ie, hotspot20: $hotspot20, interface: $interface, isolation: $isolation, l2_isolation: $l2_isolation, legacy_overds: $legacy_overds, limit_bcast: $limit_bcast, limit_probe_response: $limit_probe_response, max_idletime: $max_idletime, mist_nac: $mist_nac, mxtunnel: $mxtunnel, mxtunnel_id: $mxtunnel_id, mxtunnel_name: $mxtunnel_name, no_static_dns: $no_static_dns, no_static_ip: $no_static_ip, portal: $portal, portal_allowed_hostnames: $portal_allowed_hostnames, portal_allowed_subnets: $portal_allowed_subnets, portal_api_secret: $portal_api_secret, portal_denied_hostnames: $portal_denied_hostnames, portal_image: $portal_image, portal_sso_url: $portal_sso_url, portal_template_url: $portal_template_url, qos: $qos, radsec: $radsec, rateset: $rateset, roam_mode: $roam_mode, schedule: $schedule, sle_excluded: $sle_excluded, ssid: $ssid, template_id: $template_id, thumbnail: $thumbnail, use_eapol_v1: $use_eapol_v1, vlan_enabled: $vlan_enabled, vlan_id: $vlan_id, vlan_ids: $vlan_ids, vlan_pooling: $vlan_pooling, wlan_limit_down: $wlan_limit_down, wlan_limit_down_enabled: $wlan_limit_down_enabled, wlan_limit_up: $wlan_limit_up, wlan_limit_up_enabled: $wlan_limit_up_enabled, wxtag_ids: $wxtag_ids, wxtunnel_id: $wxtunnel_id, wxtunnel_remote_id: $wxtunnel_remote_id} | compact
+  let full_url = (build-url $base ({site_id: $site_id, wlan_id: $wlan_id} | format pattern "/api/v1/sites/{site_id}/wlans/{wlan_id}"))
+  let body = {"acct_interim_interval": $acct_interim_interval, "acct_servers": $acct_servers, "airwatch": $airwatch, "allow_ipv6_ndp": $allow_ipv6_ndp, "allow_mdns": $allow_mdns, "allow_ssdp": $allow_ssdp, "ap_ids": $ap_ids, "app_limit": $app_limit, "app_qos": $app_qos, "apply_to": $apply_to, "arp_filter": $arp_filter, "auth": $body_auth, "auth_server_selection": $auth_server_selection, "auth_servers": $auth_servers, "auth_servers_nas_id": $auth_servers_nas_id, "auth_servers_nas_ip": $auth_servers_nas_ip, "auth_servers_retries": $auth_servers_retries, "auth_servers_timeout": $auth_servers_timeout, "band": $band, "band_steer": $band_steer, "band_steer_force_band5": $band_steer_force_band5, "bands": $bands, "block_blacklist_clients": $block_blacklist_clients, "bonjour": $bonjour, "cisco_cwa": $cisco_cwa, "client_limit_down": $client_limit_down, "client_limit_down_enabled": $client_limit_down_enabled, "client_limit_up": $client_limit_up, "client_limit_up_enabled": $client_limit_up_enabled, "coa_servers": $coa_servers, "disable_11ax": $disable_11ax, "disable_ht_vht_rates": $disable_ht_vht_rates, "disable_uapsd": $disable_uapsd, "disable_v1_roam_notify": $disable_v1_roam_notify, "disable_v2_roam_notify": $disable_v2_roam_notify, "disable_wmm": $disable_wmm, "dns_server_rewrite": $dns_server_rewrite, "dtim": $dtim, "dynamic_psk": $dynamic_psk, "dynamic_vlan": $dynamic_vlan, "enable_local_keycaching": $enable_local_keycaching, "enable_wireless_bridging": $enable_wireless_bridging, "enabled": $enabled, "hide_ssid": $hide_ssid, "hostname_ie": $hostname_ie, "hotspot20": $hotspot20, "interface": $interface, "isolation": $isolation, "l2_isolation": $l2_isolation, "legacy_overds": $legacy_overds, "limit_bcast": $limit_bcast, "limit_probe_response": $limit_probe_response, "max_idletime": $max_idletime, "mist_nac": $mist_nac, "mxtunnel": $mxtunnel, "mxtunnel_id": $mxtunnel_id, "mxtunnel_name": $mxtunnel_name, "no_static_dns": $no_static_dns, "no_static_ip": $no_static_ip, "portal": $portal, "portal_allowed_hostnames": $portal_allowed_hostnames, "portal_allowed_subnets": $portal_allowed_subnets, "portal_api_secret": $portal_api_secret, "portal_denied_hostnames": $portal_denied_hostnames, "portal_image": $portal_image, "portal_sso_url": $portal_sso_url, "portal_template_url": $portal_template_url, "qos": $qos, "radsec": $radsec, "rateset": $rateset, "roam_mode": $roam_mode, "schedule": $schedule, "sle_excluded": $sle_excluded, "ssid": $ssid, "template_id": $template_id, "thumbnail": $thumbnail, "use_eapol_v1": $use_eapol_v1, "vlan_enabled": $vlan_enabled, "vlan_id": $vlan_id, "vlan_ids": $vlan_ids, "vlan_pooling": $vlan_pooling, "wlan_limit_down": $wlan_limit_down, "wlan_limit_down_enabled": $wlan_limit_down_enabled, "wlan_limit_up": $wlan_limit_up, "wlan_limit_up_enabled": $wlan_limit_up_enabled, "wxtag_ids": $wxtag_ids, "wxtunnel_id": $wxtunnel_id, "wxtunnel_remote_id": $wxtunnel_remote_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -22049,7 +22049,7 @@ export def "sites-wlans updateSiteWlan" [
 #
 # POST /api/v1/sites/{site_id}/wlans/{wlan_id}/portal_image
 # operationId: uploadSiteWlanPortalImage
-export def "sites-wlans-portal-image uploadSiteWlanPortalImage" [
+export def "sites-wlans-portal-image upload" [
   site_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22066,8 +22066,8 @@ export def "sites-wlans-portal-image uploadSiteWlanPortalImage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wlans/($wlan_id)/portal_image")
-  let body = {file: $file, json: $json} | compact
+  let full_url = (build-url $base ({site_id: $site_id, wlan_id: $wlan_id} | format pattern "/api/v1/sites/{site_id}/wlans/{wlan_id}/portal_image"))
+  let body = {"file": $file, "json": $json} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -22078,7 +22078,7 @@ export def "sites-wlans-portal-image uploadSiteWlanPortalImage" [
 #
 # PUT /api/v1/sites/{site_id}/wlans/{wlan_id}/portal_template
 # operationId: updateSiteWlanPortalTemplate
-export def "sites-wlans-portal-template updateSiteWlanPortalTemplate" [
+export def "sites-wlans-portal-template update" [
   site_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22089,126 +22089,126 @@ export def "sites-wlans-portal-template updateSiteWlanPortalTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accessCodeAlternateEmail: string # “Please provide valid alternate email”
+  --access-code-alternate-email: string # “Please provide valid alternate email”
   --alignment: string # defines alignment on portal. “left” is default.
-  --authButtonAmazon: string # label for Amazon auth button
-  --authButtonAzure: string # label for Azure auth button
-  --authButtonEmail: string # label for Email auth button
-  --authButtonFacebook: string # label for Facebook auth button
-  --authButtonGoogle: string # label for Google auth button
-  --authButtonMicrosoft: string # label for Microsoft auth button
-  --authButtonPassphrase: string # label for passphrase auth button
-  --authButtonSms: string # label for SMS auth button
-  --authButtonSponsor: string # label for Sponsor auth button
-  --authLabel: string # “Connect to WiFi with”
-  --backLink: string # label of the link to go back to /logon
+  --auth-button-amazon: string # label for Amazon auth button
+  --auth-button-azure: string # label for Azure auth button
+  --auth-button-email: string # label for Email auth button
+  --auth-button-facebook: string # label for Facebook auth button
+  --auth-button-google: string # label for Google auth button
+  --auth-button-microsoft: string # label for Microsoft auth button
+  --auth-button-passphrase: string # label for passphrase auth button
+  --auth-button-sms: string # label for SMS auth button
+  --auth-button-sponsor: string # label for Sponsor auth button
+  --auth-label: string # “Connect to WiFi with”
+  --back-link: string # label of the link to go back to /logon
   --color: string # “#1074bc”
-  --colorDark: string # “#0b5183”
-  --colorLight: string # “#3589c6”
+  --color-dark: string # “#0b5183”
+  --color-light: string # “#3589c6”
   --company: oneof<nothing, bool> # whether company field is required (default: false)
-  --companyError: string # error message when company not provided
-  --companyLabel: string # label of company field
+  --company-error: string # error message when company not provided
+  --company-label: string # label of company field
   --email: oneof<nothing, bool> # whether email field is required (default: false)
-  --emailAccessDomainError: string # error message when a user has valid social login but doesn’t match specified email domains.
-  --emailCancel: string # Label for cancel confirmation code submission using email auth
-  --emailCodeCancel: string
-  --emailCodeError: string # “Please provide valid alternate email”
-  --emailCodeFieldLabel: string # “Confirmation Code”
-  --emailCodeMessage: string # “Enter the access number that was sent to your email address.”
-  --emailCodeSubmit: string # “Sign In
-  --emailCodeTitle: string # “Access Code”
-  --emailError: string # error message when email not provided
-  --emailFieldLabel: string # “Enter your email address”
-  --emailLabel: string # label of email field
-  --emailMessage: string # “We will email you an authentication code which you can use to connect to the WiFi network.”
-  --emailSubmit: string # Label for confirmation code submit button using email auth
-  --emailTitle: string # “Sign in with Email”
+  --email-access-domain-error: string # error message when a user has valid social login but doesn’t match specified email domains.
+  --email-cancel: string # Label for cancel confirmation code submission using email auth
+  --email-code-cancel: string
+  --email-code-error: string # “Please provide valid alternate email”
+  --email-code-field-label: string # “Confirmation Code”
+  --email-code-message: string # “Enter the access number that was sent to your email address.”
+  --email-code-submit: string # “Sign In
+  --email-code-title: string # “Access Code”
+  --email-error: string # error message when email not provided
+  --email-field-label: string # “Enter your email address”
+  --email-label: string # label of email field
+  --email-message: string # “We will email you an authentication code which you can use to connect to the WiFi network.”
+  --email-submit: string # Label for confirmation code submit button using email auth
+  --email-title: string # “Sign in with Email”
   --field1: oneof<nothing, bool> # whether to ask field1
-  --field1Error: string # error message when field1 not provided
-  --field1Label: string # label of field1
-  --field1Required: oneof<nothing, bool> # whether field1 is required field
+  --field1-error: string # error message when field1 not provided
+  --field1-label: string # label of field1
+  --field1-required: oneof<nothing, bool> # whether field1 is required field
   --field2: oneof<nothing, bool> # whether to ask field2
-  --field2Error: string # error message when field2 not provided
-  --field2Label: string # label of field2
-  --field2Required: oneof<nothing, bool> # whether field2 is required field
+  --field2-error: string # error message when field2 not provided
+  --field2-label: string # label of field2
+  --field2-required: oneof<nothing, bool> # whether field2 is required field
   --field3: oneof<nothing, bool> # whether to ask field3
-  --field3Error: string # error message when field3 not provided
-  --field3Label: string # label of field3
-  --field3Required: oneof<nothing, bool> # whether field3 is required field
+  --field3-error: string # error message when field3 not provided
+  --field3-label: string # label of field3
+  --field3-required: oneof<nothing, bool> # whether field3 is required field
   --field4: oneof<nothing, bool> # whether to ask field4
-  --field4Error: string # error message when field4 not provided
-  --field4Label: string # label of field4
-  --field4Required: oneof<nothing, bool> # whether field4 is required field
+  --field4-error: string # error message when field4 not provided
+  --field4-label: string # label of field4
+  --field4-required: oneof<nothing, bool> # whether field4 is required field
   --message: string # “Please enjoy the complimentary Wifi”
   --name: oneof<nothing, bool> # whether name field is required (default: false)
-  --nameError: string # error message when name not provided
-  --nameLabel: string # label of name field
+  --name-error: string # error message when name not provided
+  --name-label: string # label of name field
   --optout: oneof<nothing, bool> # whether to display “Do Not Store My Personal Information”
-  --optoutLabel: string # label for “Do Not Store My Personal Information”
-  pageTitle: string # “Welcome”
-  --passphraseCancel: string # “Cancel”
-  --passphraseError: string # error message when invalid passphrase is provided
-  --passphraseLabel: string # Passphrase
-  --passphraseMessage: string # “Login using passphrase”
-  --passphraseSubmit: string # “Sign in”
-  --passphraseTitle: string # Title for passphrase details page
-  --poweredBy: oneof<nothing, bool> # whether to show “Powered by Mist” (default: true)
-  --requiredFieldLabel: string # label to denote required field
-  --signInLabel: string # label of the button to /signin
-  --smsCarrierDefault: string # “Please Select”
-  --smsCarrierError: string # “Please select a mobile carrier”
-  --smsCarrierFieldLabel: string # label for mobile carrier drop-down list
-  --smsCodeCancel: string # Label for cancel confirmation code submission
-  --smsCodeError: string # error message when confirmation code is invalid
-  --smsCodeFieldLabel: string # “Confirmation Code”
-  --smsCodeMessage: string # “Enter the confirmation code”
-  --smsCodeSubmit: string # Label for confirmation code submit button
-  --smsCodeTitle: string # “Access Code”
-  --smsCountryFieldLabel: string # “Country Code”
-  --smsCountryFormat: string # “+1”
-  --smsHaveAccessCode: string # Label for checkbox to specify that the user has access code
-  --smsMessageFormat: string # format of access code sms message. {{code}} and {{duration}} are place holders and should be retained as is.
-  --smsNumberCancel: string # label for canceling mobile details for SMS auth
-  --smsNumberError: string # “Invalid Mobile Number”
-  --smsNumberFieldLabel: string # label for field to provide mobile number
-  --smsNumberFormat: string # “2125551212 (digits only)”
-  --smsNumberMessage: string # “We will send an access code to your mobile number which you can use to connect to the WiFi network. Message and data rates may apply.”
-  --smsNumberSubmit: string # label for submit button for code generation
-  --smsNumberTitle: string # Title for phone number details
-  --smsUsernameFormat: string # “username”
-  --smsValidityDuration: int # how long confirmation code should be considered valid (in minutes)
-  --sponsorBackLink: string # “Go back and edit request form”
-  --sponsorCancel: string # “Cancel”
-  --sponsorEmail: string # label for Sponsor Email
-  --sponsorEmailError: string # “Please provide valid sponsor email”
-  --sponsorEmailTemplate: string # html template to replace/override default sponsor email template  Sponsor Email Template supports following template variables:   * `approve_url`: Renders URL to approve the request; optionally &minutes=N query param can be appended to change the Authorization period of the guest, where N is a valid integer denoting number of minutes a guest remains authorized  * `deny_url`: Renders URL to reject the request  * `guest_email`: Renders Email ID of the guest  * `guest_name`: Renders Name of the guest  * `field1`: Renders value of the Custom Field 1  * `field2`: Renders value of the Custom Field 2  * `sponsor_link_validity_duration`: Renders validity time of the request (i.e. Approve/Deny URL)  * `auth_expire_minutes`: Renders Wlan-level configured Guest Authorization Expiration time period (in minutes), If not configured then default (1 day in minutes)
-  --sponsorInfoApproved: string # “Your request was approved by”
-  --sponsorInfoDenied: string # “Your request was denied by”
-  --sponsorInfoPending: string # “Your notification has been sent to”
-  --sponsorName: string # label for Sponsor Name
-  --sponsorNameError: string # “Please provide sponsor’s name”
-  --sponsorNotePending: string # “Please wait for them to acknowledge.”
-  --sponsorRequestAccess: string # ‘submit button label request Wifi Access and notify sponsor about guest request
-  --sponsorSelectEmail: string # “Select Sponsor”
-  --sponsorStatusApproved: string # text to display if sponsor approves request
-  --sponsorStatusDenied: string # text to display when sponsor denies request
-  --sponsorStatusPending: string # text to display if request is still pending
-  --sponsorSubmit: string # submit button label to notify sponsor about guest request
-  --sponsorsError: string # “Please select a sponsor”
-  --sponsorsInfoApproved: string # “Your request was approved”
-  --sponsorsInfoDenied: string # “Your request was denied”
-  --sponsorsInfoPending: string # “Your notification has been sent to the sponsors”
+  --optout-label: string # label for “Do Not Store My Personal Information”
+  page_title: string # “Welcome”
+  --passphrase-cancel: string # “Cancel”
+  --passphrase-error: string # error message when invalid passphrase is provided
+  --passphrase-label: string # Passphrase
+  --passphrase-message: string # “Login using passphrase”
+  --passphrase-submit: string # “Sign in”
+  --passphrase-title: string # Title for passphrase details page
+  --powered-by: oneof<nothing, bool> # whether to show “Powered by Mist” (default: true)
+  --required-field-label: string # label to denote required field
+  --sign-in-label: string # label of the button to /signin
+  --sms-carrier-default: string # “Please Select”
+  --sms-carrier-error: string # “Please select a mobile carrier”
+  --sms-carrier-field-label: string # label for mobile carrier drop-down list
+  --sms-code-cancel: string # Label for cancel confirmation code submission
+  --sms-code-error: string # error message when confirmation code is invalid
+  --sms-code-field-label: string # “Confirmation Code”
+  --sms-code-message: string # “Enter the confirmation code”
+  --sms-code-submit: string # Label for confirmation code submit button
+  --sms-code-title: string # “Access Code”
+  --sms-country-field-label: string # “Country Code”
+  --sms-country-format: string # “+1”
+  --sms-have-access-code: string # Label for checkbox to specify that the user has access code
+  --sms-message-format: string # format of access code sms message. {{code}} and {{duration}} are place holders and should be retained as is.
+  --sms-number-cancel: string # label for canceling mobile details for SMS auth
+  --sms-number-error: string # “Invalid Mobile Number”
+  --sms-number-field-label: string # label for field to provide mobile number
+  --sms-number-format: string # “2125551212 (digits only)”
+  --sms-number-message: string # “We will send an access code to your mobile number which you can use to connect to the WiFi network. Message and data rates may apply.”
+  --sms-number-submit: string # label for submit button for code generation
+  --sms-number-title: string # Title for phone number details
+  --sms-username-format: string # “username”
+  --sms-validity-duration: int # how long confirmation code should be considered valid (in minutes)
+  --sponsor-back-link: string # “Go back and edit request form”
+  --sponsor-cancel: string # “Cancel”
+  --sponsor-email: string # label for Sponsor Email
+  --sponsor-email-error: string # “Please provide valid sponsor email”
+  --sponsor-email-template: string # html template to replace/override default sponsor email template  Sponsor Email Template supports following template variables:   * `approve_url`: Renders URL to approve the request; optionally &minutes=N query param can be appended to change the Authorization period of the guest, where N is a valid integer denoting number of minutes a guest remains authorized  * `deny_url`: Renders URL to reject the request  * `guest_email`: Renders Email ID of the guest  * `guest_name`: Renders Name of the guest  * `field1`: Renders value of the Custom Field 1  * `field2`: Renders value of the Custom Field 2  * `sponsor_link_validity_duration`: Renders validity time of the request (i.e. Approve/Deny URL)  * `auth_expire_minutes`: Renders Wlan-level configured Guest Authorization Expiration time period (in minutes), If not configured then default (1 day in minutes)
+  --sponsor-info-approved: string # “Your request was approved by”
+  --sponsor-info-denied: string # “Your request was denied by”
+  --sponsor-info-pending: string # “Your notification has been sent to”
+  --sponsor-name: string # label for Sponsor Name
+  --sponsor-name-error: string # “Please provide sponsor’s name”
+  --sponsor-note-pending: string # “Please wait for them to acknowledge.”
+  --sponsor-request-access: string # ‘submit button label request Wifi Access and notify sponsor about guest request
+  --sponsor-select-email: string # “Select Sponsor”
+  --sponsor-status-approved: string # text to display if sponsor approves request
+  --sponsor-status-denied: string # text to display when sponsor denies request
+  --sponsor-status-pending: string # text to display if request is still pending
+  --sponsor-submit: string # submit button label to notify sponsor about guest request
+  --sponsors-error: string # “Please select a sponsor”
+  --sponsors-info-approved: string # “Your request was approved”
+  --sponsors-info-denied: string # “Your request was denied”
+  --sponsors-info-pending: string # “Your notification has been sent to the sponsors”
   --tos: oneof<nothing, bool> # default: true
-  --tosAcceptLabel: string # prefix of the label of the link to go to /tos
-  --tosError: string # error message when tos not accepted
-  --tosLink: string # label of the link to go to /tos
-  --tosText: string # text of the Terms of Service
+  --tos-accept-label: string # prefix of the label of the link to go to /tos
+  --tos-error: string # error message when tos not accepted
+  --tos-link: string # label of the link to go to /tos
+  --tos-text: string # text of the Terms of Service
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wlans/($wlan_id)/portal_template")
-  let body = {accessCodeAlternateEmail: $accessCodeAlternateEmail, alignment: $alignment, authButtonAmazon: $authButtonAmazon, authButtonAzure: $authButtonAzure, authButtonEmail: $authButtonEmail, authButtonFacebook: $authButtonFacebook, authButtonGoogle: $authButtonGoogle, authButtonMicrosoft: $authButtonMicrosoft, authButtonPassphrase: $authButtonPassphrase, authButtonSms: $authButtonSms, authButtonSponsor: $authButtonSponsor, authLabel: $authLabel, backLink: $backLink, color: $color, colorDark: $colorDark, colorLight: $colorLight, company: $company, companyError: $companyError, companyLabel: $companyLabel, email: $email, emailAccessDomainError: $emailAccessDomainError, emailCancel: $emailCancel, emailCodeCancel: $emailCodeCancel, emailCodeError: $emailCodeError, emailCodeFieldLabel: $emailCodeFieldLabel, emailCodeMessage: $emailCodeMessage, emailCodeSubmit: $emailCodeSubmit, emailCodeTitle: $emailCodeTitle, emailError: $emailError, emailFieldLabel: $emailFieldLabel, emailLabel: $emailLabel, emailMessage: $emailMessage, emailSubmit: $emailSubmit, emailTitle: $emailTitle, field1: $field1, field1Error: $field1Error, field1Label: $field1Label, field1Required: $field1Required, field2: $field2, field2Error: $field2Error, field2Label: $field2Label, field2Required: $field2Required, field3: $field3, field3Error: $field3Error, field3Label: $field3Label, field3Required: $field3Required, field4: $field4, field4Error: $field4Error, field4Label: $field4Label, field4Required: $field4Required, message: $message, name: $name, nameError: $nameError, nameLabel: $nameLabel, optout: $optout, optoutLabel: $optoutLabel, pageTitle: $pageTitle, passphraseCancel: $passphraseCancel, passphraseError: $passphraseError, passphraseLabel: $passphraseLabel, passphraseMessage: $passphraseMessage, passphraseSubmit: $passphraseSubmit, passphraseTitle: $passphraseTitle, poweredBy: $poweredBy, requiredFieldLabel: $requiredFieldLabel, signInLabel: $signInLabel, smsCarrierDefault: $smsCarrierDefault, smsCarrierError: $smsCarrierError, smsCarrierFieldLabel: $smsCarrierFieldLabel, smsCodeCancel: $smsCodeCancel, smsCodeError: $smsCodeError, smsCodeFieldLabel: $smsCodeFieldLabel, smsCodeMessage: $smsCodeMessage, smsCodeSubmit: $smsCodeSubmit, smsCodeTitle: $smsCodeTitle, smsCountryFieldLabel: $smsCountryFieldLabel, smsCountryFormat: $smsCountryFormat, smsHaveAccessCode: $smsHaveAccessCode, smsMessageFormat: $smsMessageFormat, smsNumberCancel: $smsNumberCancel, smsNumberError: $smsNumberError, smsNumberFieldLabel: $smsNumberFieldLabel, smsNumberFormat: $smsNumberFormat, smsNumberMessage: $smsNumberMessage, smsNumberSubmit: $smsNumberSubmit, smsNumberTitle: $smsNumberTitle, smsUsernameFormat: $smsUsernameFormat, smsValidityDuration: $smsValidityDuration, sponsorBackLink: $sponsorBackLink, sponsorCancel: $sponsorCancel, sponsorEmail: $sponsorEmail, sponsorEmailError: $sponsorEmailError, sponsorEmailTemplate: $sponsorEmailTemplate, sponsorInfoApproved: $sponsorInfoApproved, sponsorInfoDenied: $sponsorInfoDenied, sponsorInfoPending: $sponsorInfoPending, sponsorName: $sponsorName, sponsorNameError: $sponsorNameError, sponsorNotePending: $sponsorNotePending, sponsorRequestAccess: $sponsorRequestAccess, sponsorSelectEmail: $sponsorSelectEmail, sponsorStatusApproved: $sponsorStatusApproved, sponsorStatusDenied: $sponsorStatusDenied, sponsorStatusPending: $sponsorStatusPending, sponsorSubmit: $sponsorSubmit, sponsorsError: $sponsorsError, sponsorsInfoApproved: $sponsorsInfoApproved, sponsorsInfoDenied: $sponsorsInfoDenied, sponsorsInfoPending: $sponsorsInfoPending, tos: $tos, tosAcceptLabel: $tosAcceptLabel, tosError: $tosError, tosLink: $tosLink, tosText: $tosText} | compact
+  let full_url = (build-url $base ({site_id: $site_id, wlan_id: $wlan_id} | format pattern "/api/v1/sites/{site_id}/wlans/{wlan_id}/portal_template"))
+  let body = {"accessCodeAlternateEmail": $access_code_alternate_email, "alignment": $alignment, "authButtonAmazon": $auth_button_amazon, "authButtonAzure": $auth_button_azure, "authButtonEmail": $auth_button_email, "authButtonFacebook": $auth_button_facebook, "authButtonGoogle": $auth_button_google, "authButtonMicrosoft": $auth_button_microsoft, "authButtonPassphrase": $auth_button_passphrase, "authButtonSms": $auth_button_sms, "authButtonSponsor": $auth_button_sponsor, "authLabel": $auth_label, "backLink": $back_link, "color": $color, "colorDark": $color_dark, "colorLight": $color_light, "company": $company, "companyError": $company_error, "companyLabel": $company_label, "email": $email, "emailAccessDomainError": $email_access_domain_error, "emailCancel": $email_cancel, "emailCodeCancel": $email_code_cancel, "emailCodeError": $email_code_error, "emailCodeFieldLabel": $email_code_field_label, "emailCodeMessage": $email_code_message, "emailCodeSubmit": $email_code_submit, "emailCodeTitle": $email_code_title, "emailError": $email_error, "emailFieldLabel": $email_field_label, "emailLabel": $email_label, "emailMessage": $email_message, "emailSubmit": $email_submit, "emailTitle": $email_title, "field1": $field1, "field1Error": $field1_error, "field1Label": $field1_label, "field1Required": $field1_required, "field2": $field2, "field2Error": $field2_error, "field2Label": $field2_label, "field2Required": $field2_required, "field3": $field3, "field3Error": $field3_error, "field3Label": $field3_label, "field3Required": $field3_required, "field4": $field4, "field4Error": $field4_error, "field4Label": $field4_label, "field4Required": $field4_required, "message": $message, "name": $name, "nameError": $name_error, "nameLabel": $name_label, "optout": $optout, "optoutLabel": $optout_label, "pageTitle": $page_title, "passphraseCancel": $passphrase_cancel, "passphraseError": $passphrase_error, "passphraseLabel": $passphrase_label, "passphraseMessage": $passphrase_message, "passphraseSubmit": $passphrase_submit, "passphraseTitle": $passphrase_title, "poweredBy": $powered_by, "requiredFieldLabel": $required_field_label, "signInLabel": $sign_in_label, "smsCarrierDefault": $sms_carrier_default, "smsCarrierError": $sms_carrier_error, "smsCarrierFieldLabel": $sms_carrier_field_label, "smsCodeCancel": $sms_code_cancel, "smsCodeError": $sms_code_error, "smsCodeFieldLabel": $sms_code_field_label, "smsCodeMessage": $sms_code_message, "smsCodeSubmit": $sms_code_submit, "smsCodeTitle": $sms_code_title, "smsCountryFieldLabel": $sms_country_field_label, "smsCountryFormat": $sms_country_format, "smsHaveAccessCode": $sms_have_access_code, "smsMessageFormat": $sms_message_format, "smsNumberCancel": $sms_number_cancel, "smsNumberError": $sms_number_error, "smsNumberFieldLabel": $sms_number_field_label, "smsNumberFormat": $sms_number_format, "smsNumberMessage": $sms_number_message, "smsNumberSubmit": $sms_number_submit, "smsNumberTitle": $sms_number_title, "smsUsernameFormat": $sms_username_format, "smsValidityDuration": $sms_validity_duration, "sponsorBackLink": $sponsor_back_link, "sponsorCancel": $sponsor_cancel, "sponsorEmail": $sponsor_email, "sponsorEmailError": $sponsor_email_error, "sponsorEmailTemplate": $sponsor_email_template, "sponsorInfoApproved": $sponsor_info_approved, "sponsorInfoDenied": $sponsor_info_denied, "sponsorInfoPending": $sponsor_info_pending, "sponsorName": $sponsor_name, "sponsorNameError": $sponsor_name_error, "sponsorNotePending": $sponsor_note_pending, "sponsorRequestAccess": $sponsor_request_access, "sponsorSelectEmail": $sponsor_select_email, "sponsorStatusApproved": $sponsor_status_approved, "sponsorStatusDenied": $sponsor_status_denied, "sponsorStatusPending": $sponsor_status_pending, "sponsorSubmit": $sponsor_submit, "sponsorsError": $sponsors_error, "sponsorsInfoApproved": $sponsors_info_approved, "sponsorsInfoDenied": $sponsors_info_denied, "sponsorsInfoPending": $sponsors_info_pending, "tos": $tos, "tosAcceptLabel": $tos_accept_label, "tosError": $tos_error, "tosLink": $tos_link, "tosText": $tos_text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -22232,7 +22232,7 @@ export def "sites-wxrules list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxrules")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/wxrules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22242,7 +22242,7 @@ export def "sites-wxrules list" [
 #
 # POST /api/v1/sites/{site_id}/wxrules
 # operationId: createSiteWxRule
-export def "sites-wxrules createSiteWxRule" [
+export def "sites-wxrules create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -22264,8 +22264,8 @@ export def "sites-wxrules createSiteWxRule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxrules")
-  let body = {action: $action, blocked_apps: $blocked_apps, dst_allow_wxtags: $dst_allow_wxtags, dst_deny_wxtags: $dst_deny_wxtags, enabled: $enabled, order: $order, org_id: $org_id, src_wxtags: $src_wxtags} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/wxrules"))
+  let body = {"action": $action, "blocked_apps": $blocked_apps, "dst_allow_wxtags": $dst_allow_wxtags, "dst_deny_wxtags": $dst_deny_wxtags, "enabled": $enabled, "order": $order, "org_id": $org_id, "src_wxtags": $src_wxtags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -22289,7 +22289,7 @@ export def "sites-wxrules-derived get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxrules/derived")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/wxrules/derived"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22313,7 +22313,7 @@ export def "sites-wxrules delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxrules/($wxrules_id)")
+  let full_url = (build-url $base ({site_id: $site_id, wxrules_id: $wxrules_id} | format pattern "/api/v1/sites/{site_id}/wxrules/{wxrules_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22337,7 +22337,7 @@ export def "sites-wxrules get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxrules/($wxrules_id)")
+  let full_url = (build-url $base ({site_id: $site_id, wxrules_id: $wxrules_id} | format pattern "/api/v1/sites/{site_id}/wxrules/{wxrules_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22347,7 +22347,7 @@ export def "sites-wxrules get" [
 #
 # PUT /api/v1/sites/{site_id}/wxrules/{wxrules_id}
 # operationId: updateSiteWxRule
-export def "sites-wxrules updateSiteWxRule" [
+export def "sites-wxrules update" [
   site_id: string
   wxrules_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22370,8 +22370,8 @@ export def "sites-wxrules updateSiteWxRule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxrules/($wxrules_id)")
-  let body = {action: $action, blocked_apps: $blocked_apps, dst_allow_wxtags: $dst_allow_wxtags, dst_deny_wxtags: $dst_deny_wxtags, enabled: $enabled, order: $order, org_id: $org_id, src_wxtags: $src_wxtags} | compact
+  let full_url = (build-url $base ({site_id: $site_id, wxrules_id: $wxrules_id} | format pattern "/api/v1/sites/{site_id}/wxrules/{wxrules_id}"))
+  let body = {"action": $action, "blocked_apps": $blocked_apps, "dst_allow_wxtags": $dst_allow_wxtags, "dst_deny_wxtags": $dst_deny_wxtags, "enabled": $enabled, "order": $order, "org_id": $org_id, "src_wxtags": $src_wxtags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -22395,7 +22395,7 @@ export def "sites-wxtags list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxtags")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/wxtags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22406,7 +22406,7 @@ export def "sites-wxtags list" [
 # POST /api/v1/sites/{site_id}/wxtags
 # operationId: createSiteWxTag
 # --specs item shape: {port_range?: string, protocol?: string, subnets?: list}
-export def "sites-wxtags createSiteWxTag" [
+export def "sites-wxtags create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -22431,8 +22431,8 @@ export def "sites-wxtags createSiteWxTag" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxtags")
-  let body = {last_ips: $last_ips, mac: $mac, match: $body_match, name: $name, op: $op, resource_mac: $resource_mac, services: $services, specs: $specs, subnet: $subnet, type: $type, values: $values} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/wxtags"))
+  let body = {"last_ips": $last_ips, "mac": $mac, "match": $body_match, "name": $name, "op": $op, "resource_mac": $resource_mac, "services": $services, "specs": $specs, "subnet": $subnet, "type": $type, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -22443,7 +22443,7 @@ export def "sites-wxtags createSiteWxTag" [
 #
 # GET /api/v1/sites/{site_id}/wxtags/apps
 # operationId: getSiteApplicationList
-export def "sites-wxtags-apps get" [
+export def "sites-wxtags-apps get-site-application-list" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -22456,7 +22456,7 @@ export def "sites-wxtags-apps get" [
 ]: nothing -> table<group: string, key: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxtags/apps")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/wxtags/apps"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22480,7 +22480,7 @@ export def "sites-wxtags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxtags/($wxtag_id)")
+  let full_url = (build-url $base ({site_id: $site_id, wxtag_id: $wxtag_id} | format pattern "/api/v1/sites/{site_id}/wxtags/{wxtag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22504,7 +22504,7 @@ export def "sites-wxtags get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxtags/($wxtag_id)")
+  let full_url = (build-url $base ({site_id: $site_id, wxtag_id: $wxtag_id} | format pattern "/api/v1/sites/{site_id}/wxtags/{wxtag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22515,7 +22515,7 @@ export def "sites-wxtags get" [
 # PUT /api/v1/sites/{site_id}/wxtags/{wxtag_id}
 # operationId: updateSiteWxTag
 # --specs item shape: {port_range?: string, protocol?: string, subnets?: list}
-export def "sites-wxtags updateSiteWxTag" [
+export def "sites-wxtags update" [
   site_id: string
   wxtag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22541,8 +22541,8 @@ export def "sites-wxtags updateSiteWxTag" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxtags/($wxtag_id)")
-  let body = {last_ips: $last_ips, mac: $mac, match: $body_match, name: $name, op: $op, resource_mac: $resource_mac, services: $services, specs: $specs, subnet: $subnet, type: $type, values: $values} | compact
+  let full_url = (build-url $base ({site_id: $site_id, wxtag_id: $wxtag_id} | format pattern "/api/v1/sites/{site_id}/wxtags/{wxtag_id}"))
+  let body = {"last_ips": $last_ips, "mac": $mac, "match": $body_match, "name": $name, "op": $op, "resource_mac": $resource_mac, "services": $services, "specs": $specs, "subnet": $subnet, "type": $type, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -22553,7 +22553,7 @@ export def "sites-wxtags updateSiteWxTag" [
 #
 # GET /api/v1/sites/{site_id}/wxtags/{wxtag_id}/clients
 # operationId: getSiteCurrentMatchingClientsOfAWxTag
-export def "sites-wxtags-clients get" [
+export def "sites-wxtags-clients get-site-current-matching-clients-of-a" [
   site_id: string
   wxtag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22567,7 +22567,7 @@ export def "sites-wxtags-clients get" [
 ]: nothing -> table<mac: string, since: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxtags/($wxtag_id)/clients")
+  let full_url = (build-url $base ({site_id: $site_id, wxtag_id: $wxtag_id} | format pattern "/api/v1/sites/{site_id}/wxtags/{wxtag_id}/clients"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22590,7 +22590,7 @@ export def "sites-wxtunnels list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxtunnels")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/wxtunnels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22603,7 +22603,7 @@ export def "sites-wxtunnels list" [
 # --dmvpn shape: {enabled?: bool, holding_time?: int, host_routes?: list}
 # --ipsec shape: {enabled?: bool, psk: string}
 # --sessions item shape: {ap_as_session_id?: string, comment?: string, enable_cookie?: bool, ethertype?: "ethernet"|"vlan", local_session_id?: int, pseudo_802.1ad_enabled?: bool, remote_id?: string, remote_session_id?: int, use_ap_as_session_ids?: bool}
-export def "sites-wxtunnels createSiteWxTunnel" [
+export def "sites-wxtunnels create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -22633,8 +22633,8 @@ export def "sites-wxtunnels createSiteWxTunnel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxtunnels")
-  let body = {dmvpn: $dmvpn, for_mgmt: $for_mgmt, hello_interval: $hello_interval, hello_retries: $hello_retries, hostname: $hostname, ipsec: $ipsec, is_static: $is_static, mtu: $mtu, name: $name, org_id: $org_id, peers: $peers, router_id: $router_id, secret: $secret, sessions: $sessions, udp_port: $udp_port, use_udp: $use_udp} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/wxtunnels"))
+  let body = {"dmvpn": $dmvpn, "for_mgmt": $for_mgmt, "hello_interval": $hello_interval, "hello_retries": $hello_retries, "hostname": $hostname, "ipsec": $ipsec, "is_static": $is_static, "mtu": $mtu, "name": $name, "org_id": $org_id, "peers": $peers, "router_id": $router_id, "secret": $secret, "sessions": $sessions, "udp_port": $udp_port, "use_udp": $use_udp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -22659,7 +22659,7 @@ export def "sites-wxtunnels delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxtunnels/($wxtunnel_id)")
+  let full_url = (build-url $base ({site_id: $site_id, wxtunnel_id: $wxtunnel_id} | format pattern "/api/v1/sites/{site_id}/wxtunnels/{wxtunnel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22683,7 +22683,7 @@ export def "sites-wxtunnels get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxtunnels/($wxtunnel_id)")
+  let full_url = (build-url $base ({site_id: $site_id, wxtunnel_id: $wxtunnel_id} | format pattern "/api/v1/sites/{site_id}/wxtunnels/{wxtunnel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22696,7 +22696,7 @@ export def "sites-wxtunnels get" [
 # --dmvpn shape: {enabled?: bool, holding_time?: int, host_routes?: list}
 # --ipsec shape: {enabled?: bool, psk: string}
 # --sessions item shape: {ap_as_session_id?: string, comment?: string, enable_cookie?: bool, ethertype?: "ethernet"|"vlan", local_session_id?: int, pseudo_802.1ad_enabled?: bool, remote_id?: string, remote_session_id?: int, use_ap_as_session_ids?: bool}
-export def "sites-wxtunnels updateSiteWxTunnel" [
+export def "sites-wxtunnels update" [
   site_id: string
   wxtunnel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22727,8 +22727,8 @@ export def "sites-wxtunnels updateSiteWxTunnel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/wxtunnels/($wxtunnel_id)")
-  let body = {dmvpn: $dmvpn, for_mgmt: $for_mgmt, hello_interval: $hello_interval, hello_retries: $hello_retries, hostname: $hostname, ipsec: $ipsec, is_static: $is_static, mtu: $mtu, name: $name, org_id: $org_id, peers: $peers, router_id: $router_id, secret: $secret, sessions: $sessions, udp_port: $udp_port, use_udp: $use_udp} | compact
+  let full_url = (build-url $base ({site_id: $site_id, wxtunnel_id: $wxtunnel_id} | format pattern "/api/v1/sites/{site_id}/wxtunnels/{wxtunnel_id}"))
+  let body = {"dmvpn": $dmvpn, "for_mgmt": $for_mgmt, "hello_interval": $hello_interval, "hello_retries": $hello_retries, "hostname": $hostname, "ipsec": $ipsec, "is_static": $is_static, "mtu": $mtu, "name": $name, "org_id": $org_id, "peers": $peers, "router_id": $router_id, "secret": $secret, "sessions": $sessions, "udp_port": $udp_port, "use_udp": $use_udp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -22752,7 +22752,7 @@ export def "sites-zones list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/zones")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/zones"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22763,7 +22763,7 @@ export def "sites-zones list" [
 # POST /api/v1/sites/{site_id}/zones
 # operationId: createSiteZone
 # --vertices item shape: {x: float, y: float}
-export def "sites-zones createSiteZone" [
+export def "sites-zones create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -22781,8 +22781,8 @@ export def "sites-zones createSiteZone" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/zones")
-  let body = {map_id: $map_id, name: $name, org_id: $org_id, vertices: $vertices} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/api/v1/sites/{site_id}/zones"))
+  let body = {"map_id": $map_id, "name": $name, "org_id": $org_id, "vertices": $vertices} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -22807,7 +22807,7 @@ export def "sites-zones delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/zones/($zone_id)")
+  let full_url = (build-url $base ({site_id: $site_id, zone_id: $zone_id} | format pattern "/api/v1/sites/{site_id}/zones/{zone_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22831,7 +22831,7 @@ export def "sites-zones get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/zones/($zone_id)")
+  let full_url = (build-url $base ({site_id: $site_id, zone_id: $zone_id} | format pattern "/api/v1/sites/{site_id}/zones/{zone_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22842,7 +22842,7 @@ export def "sites-zones get" [
 # PUT /api/v1/sites/{site_id}/zones/{zone_id}
 # operationId: updateSiteZone
 # --vertices item shape: {x: float, y: float}
-export def "sites-zones updateSiteZone" [
+export def "sites-zones update" [
   site_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22861,8 +22861,8 @@ export def "sites-zones updateSiteZone" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/zones/($zone_id)")
-  let body = {map_id: $map_id, name: $name, org_id: $org_id, vertices: $vertices} | compact
+  let full_url = (build-url $base ({site_id: $site_id, zone_id: $zone_id} | format pattern "/api/v1/sites/{site_id}/zones/{zone_id}"))
+  let body = {"map_id": $map_id, "name": $name, "org_id": $org_id, "vertices": $vertices} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -22898,7 +22898,7 @@ export def "sites-count countSiteZoneSessions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "distinct" $distinct "scalar") (serialize-qp "user_type" $user_type "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "scope_id" $scope_id "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/($zone_type)/count" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, zone_type: $zone_type} | format pattern "/api/v1/sites/{site_id}/{zone_type}/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22908,7 +22908,7 @@ export def "sites-count countSiteZoneSessions" [
 #
 # GET /api/v1/sites/{site_id}/{zone_type}/visits/search
 # operationId: searchSiteZoneSessions
-export def "sites-visits-search searchSiteZoneSessions" [
+export def "sites-visits-search list-site-zone-sessions" [
   site_id: any
   zone_type: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -22932,7 +22932,7 @@ export def "sites-visits-search searchSiteZoneSessions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_type" $user_type "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "scope_id" $scope_id "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/sites/($site_id)/($zone_type)/visits/search" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, zone_type: $zone_type} | format pattern "/api/v1/sites/{site_id}/{zone_type}/visits/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -22942,7 +22942,7 @@ export def "sites-visits-search searchSiteZoneSessions" [
 #
 # GET /api/v1/utils/test_telstra
 # operationId: testSiteWlanTelstraSetup
-export def "utils-test-telstra testSiteWlanTelstraSetup" [
+export def "utils-test-telstra test-site-wlan-telstra-setup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -22959,7 +22959,7 @@ export def "utils-test-telstra testSiteWlanTelstraSetup" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/utils/test_telstra")
-  let body = {telstra_client_id: $telstra_client_id, telstra_client_secret: $telstra_client_secret, to: $body_to} | compact
+  let body = {"telstra_client_id": $telstra_client_id, "telstra_client_secret": $telstra_client_secret, "to": $body_to} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -22970,7 +22970,7 @@ export def "utils-test-telstra testSiteWlanTelstraSetup" [
 #
 # POST /api/v1/utils/test_twilio
 # operationId: testSiteWlanTwilioSetup
-export def "utils-test-twilio testSiteWlanTwilioSetup" [
+export def "utils-test-twilio test-site-wlan-twilio-setup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -22988,7 +22988,7 @@ export def "utils-test-twilio testSiteWlanTwilioSetup" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/utils/test_twilio")
-  let body = {from: $body_from, to: $body_to, twilio_auth_token: $twilio_auth_token, twilio_sid: $twilio_sid} | compact
+  let body = {"from": $body_from, "to": $body_to, "twilio_auth_token": $twilio_auth_token, "twilio_sid": $twilio_sid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -23015,7 +23015,7 @@ export def "webhook-example-alarm alarms" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_example/_alarm_")
-  let body = {events: $events, topic: $topic} | compact
+  let body = {"events": $events, "topic": $topic} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -23043,7 +23043,7 @@ export def "webhook-example-asset-raw assetRaw" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_example/_asset_raw_")
-  let body = {events: $events, topic: $topic} | compact
+  let body = {"events": $events, "topic": $topic} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -23071,7 +23071,7 @@ export def "webhook-example-audit audits" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_example/_audit_")
-  let body = {events: $events, topic: $topic} | compact
+  let body = {"events": $events, "topic": $topic} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -23099,7 +23099,7 @@ export def "webhook-example-client-join clientJoin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_example/_client_join_")
-  let body = {events: $events, topic: $topic} | compact
+  let body = {"events": $events, "topic": $topic} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -23127,7 +23127,7 @@ export def "webhook-example-client-sessions clientSessions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_example/_client_sessions_")
-  let body = {events: $events, topic: $topic} | compact
+  let body = {"events": $events, "topic": $topic} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -23155,7 +23155,7 @@ export def "webhook-example-device-events deviceEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_example/_device_events_")
-  let body = {events: $events, topic: $topic} | compact
+  let body = {"events": $events, "topic": $topic} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -23183,7 +23183,7 @@ export def "webhook-example-device-updowns deviceUpDown" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_example/_device_updowns_")
-  let body = {events: $events, topic: $topic} | compact
+  let body = {"events": $events, "topic": $topic} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -23211,7 +23211,7 @@ export def "webhook-example-discovered-raw-rssi discovered-raw-rssi" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_example/_discovered_raw_rssi_")
-  let body = {events: $events, topic: $topic} | compact
+  let body = {"events": $events, "topic": $topic} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -23239,7 +23239,7 @@ export def "webhook-example-location location" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_example/_location_")
-  let body = {events: $events, topic: $topic} | compact
+  let body = {"events": $events, "topic": $topic} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -23266,7 +23266,7 @@ export def "webhook-example-occupancy-alerts occupancyAlerts" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_example/_occupancy_alerts_")
-  let body = {events: $events, topic: $topic} | compact
+  let body = {"events": $events, "topic": $topic} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -23294,7 +23294,7 @@ export def "webhook-example-ping ping" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_example/_ping_")
-  let body = {events: $events, topic: $topic} | compact
+  let body = {"events": $events, "topic": $topic} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -23321,7 +23321,7 @@ export def "webhook-example-sdkclient-scan-data sdkclientScanData" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_example/_sdkclient_scan_data")
-  let body = {topic: $topic} | compact
+  let body = {"topic": $topic} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -23349,7 +23349,7 @@ export def "webhook-example-zone zone" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_example/_zone_")
-  let body = {events: $events, topic: $topic} | compact
+  let body = {"events": $events, "topic": $topic} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

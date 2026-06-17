@@ -103,13 +103,13 @@ export def "address-autocomplete post" [
   --galaxy-ap-name: string # e.g. Key (e.g. Key)
   --galaxy-ap-password: string # e.g. Secret (e.g. Secret)
   --galaxy-search-type: string # e.g. DevAPIAddressAutoComplete (e.g. DevAPIAddressAutoComplete)
-  --Input: string
+  --input: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/address/autocomplete")
-  let body = {Input: $Input} | compact
+  let body = {"Input": $input} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"galaxy-ap-name": $galaxy_ap_name, "galaxy-ap-password": $galaxy_ap_password, "galaxy-search-type": $galaxy_search_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -134,20 +134,20 @@ export def "contact-enrich post" [
   --galaxy-ap-name: string # e.g. Key (e.g. Key)
   --galaxy-ap-password: string # e.g. Secret (e.g. Secret)
   --galaxy-search-type: string # e.g. DevAPIContactEnrich (e.g. DevAPIContactEnrich)
-  --Address: record # shape: {addressLine1?: string, addressLine2?: string}
-  --Age: float
-  --Dob: string
-  --Email: string
-  --FirstName: string
-  --LastName: string
-  --MiddleName: string
-  --PhoneNumber: string
+  --address: record # shape: {addressLine1?: string, addressLine2?: string}
+  --age: float
+  --dob: string
+  --email: string
+  --first-name: string
+  --last-name: string
+  --middle-name: string
+  --phone-number: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contact/enrich")
-  let body = {Address: $Address, Age: $Age, Dob: $Dob, Email: $Email, FirstName: $FirstName, LastName: $LastName, MiddleName: $MiddleName, PhoneNumber: $PhoneNumber} | compact
+  let body = {"Address": $address, "Age": $age, "Dob": $dob, "Email": $email, "FirstName": $first_name, "LastName": $last_name, "MiddleName": $middle_name, "PhoneNumber": $phone_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"galaxy-ap-name": $galaxy_ap_name, "galaxy-ap-password": $galaxy_ap_password, "galaxy-search-type": $galaxy_search_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -171,13 +171,13 @@ export def "email-enrich post" [
   --galaxy-ap-name: string # e.g. Key (e.g. Key)
   --galaxy-ap-password: string # e.g. Secret (e.g. Secret)
   --galaxy-search-type: string # e.g. DevAPIEmailID (e.g. DevAPIEmailID)
-  --Email: string
+  --email: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/email/enrich")
-  let body = {Email: $Email} | compact
+  let body = {"Email": $email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"galaxy-ap-name": $galaxy_ap_name, "galaxy-ap-password": $galaxy_ap_password, "galaxy-search-type": $galaxy_search_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -191,7 +191,7 @@ export def "email-enrich post" [
 # POST /identity/verify_id
 # operationId: Search
 # --Address shape: {addressLine1?: string, addressLine2?: string}
-export def "identity-verify-id Search" [
+export def "identity-verify-id list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,20 +203,20 @@ export def "identity-verify-id Search" [
   --galaxy-ap-name: string # e.g. Key (e.g. Key)
   --galaxy-ap-password: string # e.g. Secret (e.g. Secret)
   --galaxy-search-type: string # e.g. DevAPIIDVerification (e.g. DevAPIIDVerification)
-  --Address: record # shape: {addressLine1?: string, addressLine2?: string}
-  --Age: float
-  --Dob: string
-  --Email: string
-  --FirstName: string
-  --LastName: string
-  --MiddleName: string
-  --PhoneNumber: string
+  --address: record # shape: {addressLine1?: string, addressLine2?: string}
+  --age: float
+  --dob: string
+  --email: string
+  --first-name: string
+  --last-name: string
+  --middle-name: string
+  --phone-number: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity/verify_id")
-  let body = {Address: $Address, Age: $Age, Dob: $Dob, Email: $Email, FirstName: $FirstName, LastName: $LastName, MiddleName: $MiddleName, PhoneNumber: $PhoneNumber} | compact
+  let body = {"Address": $address, "Age": $age, "Dob": $dob, "Email": $email, "FirstName": $first_name, "LastName": $last_name, "MiddleName": $middle_name, "PhoneNumber": $phone_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"galaxy-ap-name": $galaxy_ap_name, "galaxy-ap-password": $galaxy_ap_password, "galaxy-search-type": $galaxy_search_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -240,13 +240,13 @@ export def "phone-enrich post" [
   --galaxy-ap-name: string # e.g. Key (e.g. Key)
   --galaxy-ap-password: string # e.g. Secret (e.g. Secret)
   --galaxy-search-type: string # e.g. DevAPICallerID (e.g. DevAPICallerID)
-  --Phone: string
+  --phone: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone/enrich")
-  let body = {Phone: $Phone} | compact
+  let body = {"Phone": $phone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"galaxy-ap-name": $galaxy_ap_name, "galaxy-ap-password": $galaxy_ap_password, "galaxy-search-type": $galaxy_search_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

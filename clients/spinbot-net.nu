@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "acc get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "acc get-info" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/acc
 # operationId: getInfo
-export def "acc get" [
+export def "acc get-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,7 +117,7 @@ export def "acc get" [
 #
 # POST /api/article
 # operationId: postArticle
-export def "article post" [
+export def "article create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "article post" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/article")
-  let body = {key: $key, url: $body_url, faster_mode: $faster_mode} | compact
+  let body = {"key": $key, "url": $body_url, "faster_mode": $faster_mode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -145,7 +145,7 @@ export def "article post" [
 #
 # POST /api/pretty-spinner
 # operationId: postPrettySpinner
-export def "pretty-spinner post" [
+export def "pretty-spinner create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "pretty-spinner post" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/pretty-spinner")
-  let body = {key: $key, text: $text, keep: $keep, accuracy: $accuracy} | compact
+  let body = {"key": $key, "text": $text, "keep": $keep, "accuracy": $accuracy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -174,7 +174,7 @@ export def "pretty-spinner post" [
 #
 # POST /api/spinner
 # operationId: postSpinner
-export def "spinner post" [
+export def "spinner create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "spinner post" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/spinner")
-  let body = {key: $key, text: $text} | compact
+  let body = {"key": $key, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -201,7 +201,7 @@ export def "spinner post" [
 #
 # POST /api/spintax
 # operationId: postSpintax
-export def "spintax post" [
+export def "spintax create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "spintax post" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/spintax")
-  let body = {key: $key, text: $text, full_mode: $full_mode} | compact
+  let body = {"key": $key, "text": $text, "full_mode": $full_mode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

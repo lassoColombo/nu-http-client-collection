@@ -65,7 +65,7 @@ def base-url-completer [] { ["https://vtex.local" "https://{accountName}.vtexcom
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def simulationBehavior-completer [] { ["default" "only1P" "skip"] }
+def simulation-behavior-completer [] { ["default" "only1P" "skip"] }
 def sort-completer [] { ["discount:desc" "name:asc" "name:desc" "orders:desc" "price:asc" "price:desc" "release:desc"] }
 
 # List all available API commands with their parameters
@@ -134,7 +134,7 @@ export def "banners get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/banners/($facets)" $qp)
+  let full_url = (build-url $base ({facets: $facets} | format pattern "/banners/{facets}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,12 +179,12 @@ export def "facets get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search term. It can contain any character.
   --locale: string # Indicates the target language as a BCP 47 language code. The Intelligent Search must have indexed the account in the target language. (nullable, e.g. en-US)
-  --hideUnavailableItems: oneof<nothing, bool> # Whether the result should hide unavailable items (`true`), or not (`false`) (default: false)
+  --hide-unavailable-items: oneof<nothing, bool> # Whether the result should hide unavailable items (`true`), or not (`false`) (default: false)
 ]: nothing -> record<breadcrumb: table<href: string, name: string>, facets: table<hidden: bool, name: string, quantity: float, type: string, values: list>, queryArgs: record<query: string, selectedFacets: list<record>>, sampling: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "hideUnavailableItems" $hideUnavailableItems "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/facets/($facets)" $qp)
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "hideUnavailableItems" $hide_unavailable_items "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({facets: $facets} | format pattern "/facets/{facets}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,17 +204,17 @@ export def "product-search get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search term. It can contain any character.
-  --simulationBehavior: string@simulationBehavior-completer # Defines the simulation behavior.   * `default` - Calls the simulation for every single seller.  * `skip` - Never calls the simulation.  * `only1P` - Only calls the simulation for first party sellers. (nullable, default: default)
+  --simulation-behavior: string@simulation-behavior-completer # Defines the simulation behavior.   * `default` - Calls the simulation for every single seller.  * `skip` - Never calls the simulation.  * `only1P` - Only calls the simulation for first party sellers. (nullable, default: default)
   --count: float # Number of products per page. (nullable, default: 24)
   --page: float # Current search page. (nullable, default: 1)
   --qp-sort: string@sort-completer # Defines the sort type. If null, the products will be sorted by relevance. (nullable)
   --locale: string # Indicates the target language as a BCP 47 language code. The Intelligent Search must have indexed the account in the target language. (nullable, e.g. en-US)
-  --hideUnavailableItems: oneof<nothing, bool> # Whether the result should hide unavailable items (`true`), or not (`false`) (default: false)
+  --hide-unavailable-items: oneof<nothing, bool> # Whether the result should hide unavailable items (`true`), or not (`false`) (default: false)
 ]: nothing -> record<correction: record<misspelled: bool>, fuzzy: string, operator: string, products: list<record>, recordsFiltered: float, translated: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "simulationBehavior" $simulationBehavior "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "hideUnavailableItems" $hideUnavailableItems "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/product_search/($facets)" $qp)
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "simulationBehavior" $simulation_behavior "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "hideUnavailableItems" $hide_unavailable_items "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({facets: $facets} | format pattern "/product_search/{facets}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

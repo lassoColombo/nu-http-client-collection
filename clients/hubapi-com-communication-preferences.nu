@@ -68,12 +68,12 @@ def base-url-completer [] { ["https://api.hubapi.com"] }
 def auth-scheme-completer [] { ["query-hapikey" "bearer" "private-app-legacy"] }
 
 # Completers for enum parameters
-def legalBasis-completer [] { ["CONSENT_WITH_NOTICE" "LEGITIMATE_INTEREST_CLIENT" "LEGITIMATE_INTEREST_OTHER" "LEGITIMATE_INTEREST_PQL" "NON_GDPR" "PERFORMANCE_OF_CONTRACT" "PROCESS_AND_STORE"] }
+def legal-basis-completer [] { ["CONSENT_WITH_NOTICE" "LEGITIMATE_INTEREST_CLIENT" "LEGITIMATE_INTEREST_OTHER" "LEGITIMATE_INTEREST_PQL" "NON_GDPR" "PERFORMANCE_OF_CONTRACT" "PROCESS_AND_STORE"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "communication-preferences-definitions get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "communication-preferences-definitions get-page" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +97,7 @@ export def commands []: nothing -> table {
 #
 # GET /communication-preferences/v3/definitions
 # operationId: get-/communication-preferences/v3/definitions_getPage
-export def "communication-preferences-definitions get" [
+export def "communication-preferences-definitions get-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,7 +120,7 @@ export def "communication-preferences-definitions get" [
 # GET /communication-preferences/v3/status/email/{emailAddress}
 # operationId: get-/communication-preferences/v3/status/email/{emailAddress}_getEmailStatus
 export def "communication-preferences-status-email get" [
-  emailAddress: string
+  email_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "communication-preferences-status-email get" [
 ]: nothing -> record<recipient: string, subscriptionStatuses: table<brandId: int, description: string, id: string, legalBasis: string, legalBasisExplanation: string, name: string, preferenceGroupName: string, sourceOfStatus: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/communication-preferences/v3/status/email/($emailAddress)")
+  let full_url = (build-url $base ({email_address: $email_address} | format pattern "/communication-preferences/v3/status/email/{email_address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -151,16 +151,16 @@ export def "communication-preferences-subscribe subscribe" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  emailAddress: string # Contact's email address.
-  --legalBasis: string@legalBasis-completer # Legal basis for updating the contact's status (required for GDPR enabled portals).
-  --legalBasisExplanation: string # A more detailed explanation to go with the legal basis (required for GDPR enabled portals).
-  subscriptionId: string # ID of the subscription being updated for the contact.
+  email_address: string # Contact's email address.
+  --legal-basis: string@legal-basis-completer # Legal basis for updating the contact's status (required for GDPR enabled portals).
+  --legal-basis-explanation: string # A more detailed explanation to go with the legal basis (required for GDPR enabled portals).
+  subscription_id: string # ID of the subscription being updated for the contact.
 ]: any -> record<brandId: int, description: string, id: string, legalBasis: string, legalBasisExplanation: string, name: string, preferenceGroupName: string, sourceOfStatus: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/communication-preferences/v3/subscribe")
-  let body = {emailAddress: $emailAddress, legalBasis: $legalBasis, legalBasisExplanation: $legalBasisExplanation, subscriptionId: $subscriptionId} | compact
+  let body = {"emailAddress": $email_address, "legalBasis": $legal_basis, "legalBasisExplanation": $legal_basis_explanation, "subscriptionId": $subscription_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -180,16 +180,16 @@ export def "communication-preferences-unsubscribe unsubscribe" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  emailAddress: string # Contact's email address.
-  --legalBasis: string@legalBasis-completer # Legal basis for updating the contact's status (required for GDPR enabled portals).
-  --legalBasisExplanation: string # A more detailed explanation to go with the legal basis (required for GDPR enabled portals).
-  subscriptionId: string # ID of the subscription being updated for the contact.
+  email_address: string # Contact's email address.
+  --legal-basis: string@legal-basis-completer # Legal basis for updating the contact's status (required for GDPR enabled portals).
+  --legal-basis-explanation: string # A more detailed explanation to go with the legal basis (required for GDPR enabled portals).
+  subscription_id: string # ID of the subscription being updated for the contact.
 ]: any -> record<brandId: int, description: string, id: string, legalBasis: string, legalBasisExplanation: string, name: string, preferenceGroupName: string, sourceOfStatus: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/communication-preferences/v3/unsubscribe")
-  let body = {emailAddress: $emailAddress, legalBasis: $legalBasis, legalBasisExplanation: $legalBasisExplanation, subscriptionId: $subscriptionId} | compact
+  let body = {"emailAddress": $email_address, "legalBasis": $legal_basis, "legalBasisExplanation": $legal_basis_explanation, "subscriptionId": $subscription_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

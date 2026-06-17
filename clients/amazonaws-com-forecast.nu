@@ -66,74 +66,74 @@ def base-url-completer [] { ["http://forecast.us-east-1.amazonaws.com" "http://f
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AmazonForecast.CreateAutoPredictor"] }
-def X-Amz-Target-completer-1 [] { ["AmazonForecast.CreateDataset"] }
-def X-Amz-Target-completer-2 [] { ["AmazonForecast.CreateDatasetGroup"] }
-def X-Amz-Target-completer-3 [] { ["AmazonForecast.CreateDatasetImportJob"] }
-def X-Amz-Target-completer-4 [] { ["AmazonForecast.CreateExplainability"] }
-def X-Amz-Target-completer-5 [] { ["AmazonForecast.CreateExplainabilityExport"] }
-def X-Amz-Target-completer-6 [] { ["AmazonForecast.CreateForecast"] }
-def X-Amz-Target-completer-7 [] { ["AmazonForecast.CreateForecastExportJob"] }
-def X-Amz-Target-completer-8 [] { ["AmazonForecast.CreateMonitor"] }
-def X-Amz-Target-completer-9 [] { ["AmazonForecast.CreatePredictor"] }
-def X-Amz-Target-completer-10 [] { ["AmazonForecast.CreatePredictorBacktestExportJob"] }
-def X-Amz-Target-completer-11 [] { ["AmazonForecast.CreateWhatIfAnalysis"] }
-def X-Amz-Target-completer-12 [] { ["AmazonForecast.CreateWhatIfForecast"] }
-def X-Amz-Target-completer-13 [] { ["AmazonForecast.CreateWhatIfForecastExport"] }
-def X-Amz-Target-completer-14 [] { ["AmazonForecast.DeleteDataset"] }
-def X-Amz-Target-completer-15 [] { ["AmazonForecast.DeleteDatasetGroup"] }
-def X-Amz-Target-completer-16 [] { ["AmazonForecast.DeleteDatasetImportJob"] }
-def X-Amz-Target-completer-17 [] { ["AmazonForecast.DeleteExplainability"] }
-def X-Amz-Target-completer-18 [] { ["AmazonForecast.DeleteExplainabilityExport"] }
-def X-Amz-Target-completer-19 [] { ["AmazonForecast.DeleteForecast"] }
-def X-Amz-Target-completer-20 [] { ["AmazonForecast.DeleteForecastExportJob"] }
-def X-Amz-Target-completer-21 [] { ["AmazonForecast.DeleteMonitor"] }
-def X-Amz-Target-completer-22 [] { ["AmazonForecast.DeletePredictor"] }
-def X-Amz-Target-completer-23 [] { ["AmazonForecast.DeletePredictorBacktestExportJob"] }
-def X-Amz-Target-completer-24 [] { ["AmazonForecast.DeleteResourceTree"] }
-def X-Amz-Target-completer-25 [] { ["AmazonForecast.DeleteWhatIfAnalysis"] }
-def X-Amz-Target-completer-26 [] { ["AmazonForecast.DeleteWhatIfForecast"] }
-def X-Amz-Target-completer-27 [] { ["AmazonForecast.DeleteWhatIfForecastExport"] }
-def X-Amz-Target-completer-28 [] { ["AmazonForecast.DescribeAutoPredictor"] }
-def X-Amz-Target-completer-29 [] { ["AmazonForecast.DescribeDataset"] }
-def X-Amz-Target-completer-30 [] { ["AmazonForecast.DescribeDatasetGroup"] }
-def X-Amz-Target-completer-31 [] { ["AmazonForecast.DescribeDatasetImportJob"] }
-def X-Amz-Target-completer-32 [] { ["AmazonForecast.DescribeExplainability"] }
-def X-Amz-Target-completer-33 [] { ["AmazonForecast.DescribeExplainabilityExport"] }
-def X-Amz-Target-completer-34 [] { ["AmazonForecast.DescribeForecast"] }
-def X-Amz-Target-completer-35 [] { ["AmazonForecast.DescribeForecastExportJob"] }
-def X-Amz-Target-completer-36 [] { ["AmazonForecast.DescribeMonitor"] }
-def X-Amz-Target-completer-37 [] { ["AmazonForecast.DescribePredictor"] }
-def X-Amz-Target-completer-38 [] { ["AmazonForecast.DescribePredictorBacktestExportJob"] }
-def X-Amz-Target-completer-39 [] { ["AmazonForecast.DescribeWhatIfAnalysis"] }
-def X-Amz-Target-completer-40 [] { ["AmazonForecast.DescribeWhatIfForecast"] }
-def X-Amz-Target-completer-41 [] { ["AmazonForecast.DescribeWhatIfForecastExport"] }
-def X-Amz-Target-completer-42 [] { ["AmazonForecast.GetAccuracyMetrics"] }
-def X-Amz-Target-completer-43 [] { ["AmazonForecast.ListDatasetGroups"] }
-def X-Amz-Target-completer-44 [] { ["AmazonForecast.ListDatasetImportJobs"] }
-def X-Amz-Target-completer-45 [] { ["AmazonForecast.ListDatasets"] }
-def X-Amz-Target-completer-46 [] { ["AmazonForecast.ListExplainabilities"] }
-def X-Amz-Target-completer-47 [] { ["AmazonForecast.ListExplainabilityExports"] }
-def X-Amz-Target-completer-48 [] { ["AmazonForecast.ListForecastExportJobs"] }
-def X-Amz-Target-completer-49 [] { ["AmazonForecast.ListForecasts"] }
-def X-Amz-Target-completer-50 [] { ["AmazonForecast.ListMonitorEvaluations"] }
-def X-Amz-Target-completer-51 [] { ["AmazonForecast.ListMonitors"] }
-def X-Amz-Target-completer-52 [] { ["AmazonForecast.ListPredictorBacktestExportJobs"] }
-def X-Amz-Target-completer-53 [] { ["AmazonForecast.ListPredictors"] }
-def X-Amz-Target-completer-54 [] { ["AmazonForecast.ListTagsForResource"] }
-def X-Amz-Target-completer-55 [] { ["AmazonForecast.ListWhatIfAnalyses"] }
-def X-Amz-Target-completer-56 [] { ["AmazonForecast.ListWhatIfForecastExports"] }
-def X-Amz-Target-completer-57 [] { ["AmazonForecast.ListWhatIfForecasts"] }
-def X-Amz-Target-completer-58 [] { ["AmazonForecast.ResumeResource"] }
-def X-Amz-Target-completer-59 [] { ["AmazonForecast.StopResource"] }
-def X-Amz-Target-completer-60 [] { ["AmazonForecast.TagResource"] }
-def X-Amz-Target-completer-61 [] { ["AmazonForecast.UntagResource"] }
-def X-Amz-Target-completer-62 [] { ["AmazonForecast.UpdateDatasetGroup"] }
+def x-amz-target-completer [] { ["AmazonForecast.CreateAutoPredictor"] }
+def x-amz-target-completer-1 [] { ["AmazonForecast.CreateDataset"] }
+def x-amz-target-completer-2 [] { ["AmazonForecast.CreateDatasetGroup"] }
+def x-amz-target-completer-3 [] { ["AmazonForecast.CreateDatasetImportJob"] }
+def x-amz-target-completer-4 [] { ["AmazonForecast.CreateExplainability"] }
+def x-amz-target-completer-5 [] { ["AmazonForecast.CreateExplainabilityExport"] }
+def x-amz-target-completer-6 [] { ["AmazonForecast.CreateForecast"] }
+def x-amz-target-completer-7 [] { ["AmazonForecast.CreateForecastExportJob"] }
+def x-amz-target-completer-8 [] { ["AmazonForecast.CreateMonitor"] }
+def x-amz-target-completer-9 [] { ["AmazonForecast.CreatePredictor"] }
+def x-amz-target-completer-10 [] { ["AmazonForecast.CreatePredictorBacktestExportJob"] }
+def x-amz-target-completer-11 [] { ["AmazonForecast.CreateWhatIfAnalysis"] }
+def x-amz-target-completer-12 [] { ["AmazonForecast.CreateWhatIfForecast"] }
+def x-amz-target-completer-13 [] { ["AmazonForecast.CreateWhatIfForecastExport"] }
+def x-amz-target-completer-14 [] { ["AmazonForecast.DeleteDataset"] }
+def x-amz-target-completer-15 [] { ["AmazonForecast.DeleteDatasetGroup"] }
+def x-amz-target-completer-16 [] { ["AmazonForecast.DeleteDatasetImportJob"] }
+def x-amz-target-completer-17 [] { ["AmazonForecast.DeleteExplainability"] }
+def x-amz-target-completer-18 [] { ["AmazonForecast.DeleteExplainabilityExport"] }
+def x-amz-target-completer-19 [] { ["AmazonForecast.DeleteForecast"] }
+def x-amz-target-completer-20 [] { ["AmazonForecast.DeleteForecastExportJob"] }
+def x-amz-target-completer-21 [] { ["AmazonForecast.DeleteMonitor"] }
+def x-amz-target-completer-22 [] { ["AmazonForecast.DeletePredictor"] }
+def x-amz-target-completer-23 [] { ["AmazonForecast.DeletePredictorBacktestExportJob"] }
+def x-amz-target-completer-24 [] { ["AmazonForecast.DeleteResourceTree"] }
+def x-amz-target-completer-25 [] { ["AmazonForecast.DeleteWhatIfAnalysis"] }
+def x-amz-target-completer-26 [] { ["AmazonForecast.DeleteWhatIfForecast"] }
+def x-amz-target-completer-27 [] { ["AmazonForecast.DeleteWhatIfForecastExport"] }
+def x-amz-target-completer-28 [] { ["AmazonForecast.DescribeAutoPredictor"] }
+def x-amz-target-completer-29 [] { ["AmazonForecast.DescribeDataset"] }
+def x-amz-target-completer-30 [] { ["AmazonForecast.DescribeDatasetGroup"] }
+def x-amz-target-completer-31 [] { ["AmazonForecast.DescribeDatasetImportJob"] }
+def x-amz-target-completer-32 [] { ["AmazonForecast.DescribeExplainability"] }
+def x-amz-target-completer-33 [] { ["AmazonForecast.DescribeExplainabilityExport"] }
+def x-amz-target-completer-34 [] { ["AmazonForecast.DescribeForecast"] }
+def x-amz-target-completer-35 [] { ["AmazonForecast.DescribeForecastExportJob"] }
+def x-amz-target-completer-36 [] { ["AmazonForecast.DescribeMonitor"] }
+def x-amz-target-completer-37 [] { ["AmazonForecast.DescribePredictor"] }
+def x-amz-target-completer-38 [] { ["AmazonForecast.DescribePredictorBacktestExportJob"] }
+def x-amz-target-completer-39 [] { ["AmazonForecast.DescribeWhatIfAnalysis"] }
+def x-amz-target-completer-40 [] { ["AmazonForecast.DescribeWhatIfForecast"] }
+def x-amz-target-completer-41 [] { ["AmazonForecast.DescribeWhatIfForecastExport"] }
+def x-amz-target-completer-42 [] { ["AmazonForecast.GetAccuracyMetrics"] }
+def x-amz-target-completer-43 [] { ["AmazonForecast.ListDatasetGroups"] }
+def x-amz-target-completer-44 [] { ["AmazonForecast.ListDatasetImportJobs"] }
+def x-amz-target-completer-45 [] { ["AmazonForecast.ListDatasets"] }
+def x-amz-target-completer-46 [] { ["AmazonForecast.ListExplainabilities"] }
+def x-amz-target-completer-47 [] { ["AmazonForecast.ListExplainabilityExports"] }
+def x-amz-target-completer-48 [] { ["AmazonForecast.ListForecastExportJobs"] }
+def x-amz-target-completer-49 [] { ["AmazonForecast.ListForecasts"] }
+def x-amz-target-completer-50 [] { ["AmazonForecast.ListMonitorEvaluations"] }
+def x-amz-target-completer-51 [] { ["AmazonForecast.ListMonitors"] }
+def x-amz-target-completer-52 [] { ["AmazonForecast.ListPredictorBacktestExportJobs"] }
+def x-amz-target-completer-53 [] { ["AmazonForecast.ListPredictors"] }
+def x-amz-target-completer-54 [] { ["AmazonForecast.ListTagsForResource"] }
+def x-amz-target-completer-55 [] { ["AmazonForecast.ListWhatIfAnalyses"] }
+def x-amz-target-completer-56 [] { ["AmazonForecast.ListWhatIfForecastExports"] }
+def x-amz-target-completer-57 [] { ["AmazonForecast.ListWhatIfForecasts"] }
+def x-amz-target-completer-58 [] { ["AmazonForecast.ResumeResource"] }
+def x-amz-target-completer-59 [] { ["AmazonForecast.StopResource"] }
+def x-amz-target-completer-60 [] { ["AmazonForecast.TagResource"] }
+def x-amz-target-completer-61 [] { ["AmazonForecast.UntagResource"] }
+def x-amz-target-completer-62 [] { ["AmazonForecast.UpdateDatasetGroup"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-amazon-forecast-create-auto-predictor CreateAutoPredictor" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-amazon-forecast-create-auto-predictor create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -158,7 +158,7 @@ export def commands []: nothing -> table {
 # POST /#X-Amz-Target=AmazonForecast.CreateAutoPredictor
 # operationId: CreateAutoPredictor
 # --EncryptionConfig shape: {RoleArn: any, KMSKeyArn: any}
-export def "x-amz-target-amazon-forecast-create-auto-predictor CreateAutoPredictor" [
+export def "x-amz-target-amazon-forecast-create-auto-predictor create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,35 +167,35 @@ export def "x-amz-target-amazon-forecast-create-auto-predictor CreateAutoPredict
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  PredictorName: any
-  --ForecastHorizon: any
-  --ForecastTypes: any
-  --ForecastDimensions: any
-  --ForecastFrequency: any
-  --DataConfig: any
-  --EncryptionConfig: record # An Key Management Service (KMS) key and an Identity and Access Management (IAM) role that Amazon Forecast can assume to access the key. You can specify this optional object in the <a>CreateDataset</a> and <a>CreatePredictor</a> requests. — shape: {RoleArn: any, KMSKeyArn: any}
-  --ReferencePredictorArn: any
-  --OptimizationMetric: any
-  --ExplainPredictor: any
-  --Tags: any
-  --MonitorConfig: any
-  --TimeAlignmentBoundary: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  predictor_name: any
+  --forecast-horizon: any
+  --forecast-types: any
+  --forecast-dimensions: any
+  --forecast-frequency: any
+  --data-config: any
+  --encryption-config: record # An Key Management Service (KMS) key and an Identity and Access Management (IAM) role that Amazon Forecast can assume to access the key. You can specify this optional object in the <a>CreateDataset</a> and <a>CreatePredictor</a> requests. — shape: {RoleArn: any, KMSKeyArn: any}
+  --reference-predictor-arn: any
+  --optimization-metric: any
+  --explain-predictor: any
+  --tags: any
+  --monitor-config: any
+  --time-alignment-boundary: any
 ]: any -> record<PredictorArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.CreateAutoPredictor")
-  let body = {PredictorName: $PredictorName, ForecastHorizon: $ForecastHorizon, ForecastTypes: $ForecastTypes, ForecastDimensions: $ForecastDimensions, ForecastFrequency: $ForecastFrequency, DataConfig: $DataConfig, EncryptionConfig: $EncryptionConfig, ReferencePredictorArn: $ReferencePredictorArn, OptimizationMetric: $OptimizationMetric, ExplainPredictor: $ExplainPredictor, Tags: $Tags, MonitorConfig: $MonitorConfig, TimeAlignmentBoundary: $TimeAlignmentBoundary} | compact
+  let body = {"PredictorName": $predictor_name, "ForecastHorizon": $forecast_horizon, "ForecastTypes": $forecast_types, "ForecastDimensions": $forecast_dimensions, "ForecastFrequency": $forecast_frequency, "DataConfig": $data_config, "EncryptionConfig": $encryption_config, "ReferencePredictorArn": $reference_predictor_arn, "OptimizationMetric": $optimization_metric, "ExplainPredictor": $explain_predictor, "Tags": $tags, "MonitorConfig": $monitor_config, "TimeAlignmentBoundary": $time_alignment_boundary} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -206,7 +206,7 @@ export def "x-amz-target-amazon-forecast-create-auto-predictor CreateAutoPredict
 #
 # POST /#X-Amz-Target=AmazonForecast.CreateDataset
 # operationId: CreateDataset
-export def "x-amz-target-amazon-forecast-create-dataset CreateDataset" [
+export def "x-amz-target-amazon-forecast-create-dataset create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,29 +215,29 @@ export def "x-amz-target-amazon-forecast-create-dataset CreateDataset" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  DatasetName: any
-  Domain: any
-  DatasetType: any
-  --DataFrequency: any
-  Schema: any
-  --EncryptionConfig: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  dataset_name: any
+  domain: any
+  dataset_type: any
+  --data-frequency: any
+  schema: any
+  --encryption-config: any
+  --tags: any
 ]: any -> record<DatasetArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.CreateDataset")
-  let body = {DatasetName: $DatasetName, Domain: $Domain, DatasetType: $DatasetType, DataFrequency: $DataFrequency, Schema: $Schema, EncryptionConfig: $EncryptionConfig, Tags: $Tags} | compact
+  let body = {"DatasetName": $dataset_name, "Domain": $domain, "DatasetType": $dataset_type, "DataFrequency": $data_frequency, "Schema": $schema, "EncryptionConfig": $encryption_config, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -248,7 +248,7 @@ export def "x-amz-target-amazon-forecast-create-dataset CreateDataset" [
 #
 # POST /#X-Amz-Target=AmazonForecast.CreateDatasetGroup
 # operationId: CreateDatasetGroup
-export def "x-amz-target-amazon-forecast-create-dataset-group CreateDatasetGroup" [
+export def "x-amz-target-amazon-forecast-create-dataset-group create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,26 +257,26 @@ export def "x-amz-target-amazon-forecast-create-dataset-group CreateDatasetGroup
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  DatasetGroupName: any
-  Domain: any
-  --DatasetArns: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  dataset_group_name: any
+  domain: any
+  --dataset-arns: any
+  --tags: any
 ]: any -> record<DatasetGroupArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.CreateDatasetGroup")
-  let body = {DatasetGroupName: $DatasetGroupName, Domain: $Domain, DatasetArns: $DatasetArns, Tags: $Tags} | compact
+  let body = {"DatasetGroupName": $dataset_group_name, "Domain": $domain, "DatasetArns": $dataset_arns, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -287,7 +287,7 @@ export def "x-amz-target-amazon-forecast-create-dataset-group CreateDatasetGroup
 #
 # POST /#X-Amz-Target=AmazonForecast.CreateDatasetImportJob
 # operationId: CreateDatasetImportJob
-export def "x-amz-target-amazon-forecast-create-dataset-import-job CreateDatasetImportJob" [
+export def "x-amz-target-amazon-forecast-create-dataset-import-job create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,32 +296,32 @@ export def "x-amz-target-amazon-forecast-create-dataset-import-job CreateDataset
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  DatasetImportJobName: any
-  DatasetArn: any
-  DataSource: any
-  --TimestampFormat: any
-  --TimeZone: any
-  --UseGeolocationForTimeZone: any
-  --GeolocationFormat: any
-  --Tags: any
-  --Format: any
-  --ImportMode: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  dataset_import_job_name: any
+  dataset_arn: any
+  data_source: any
+  --timestamp-format: any
+  --time-zone: any
+  --use-geolocation-for-time-zone: any
+  --geolocation-format: any
+  --tags: any
+  --format: any
+  --import-mode: any
 ]: any -> record<DatasetImportJobArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.CreateDatasetImportJob")
-  let body = {DatasetImportJobName: $DatasetImportJobName, DatasetArn: $DatasetArn, DataSource: $DataSource, TimestampFormat: $TimestampFormat, TimeZone: $TimeZone, UseGeolocationForTimeZone: $UseGeolocationForTimeZone, GeolocationFormat: $GeolocationFormat, Tags: $Tags, Format: $Format, ImportMode: $ImportMode} | compact
+  let body = {"DatasetImportJobName": $dataset_import_job_name, "DatasetArn": $dataset_arn, "DataSource": $data_source, "TimestampFormat": $timestamp_format, "TimeZone": $time_zone, "UseGeolocationForTimeZone": $use_geolocation_for_time_zone, "GeolocationFormat": $geolocation_format, "Tags": $tags, "Format": $format, "ImportMode": $import_mode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -334,7 +334,7 @@ export def "x-amz-target-amazon-forecast-create-dataset-import-job CreateDataset
 # operationId: CreateExplainability
 # --DataSource shape: {S3Config: any}
 # --Schema shape: {Attributes?: any}
-export def "x-amz-target-amazon-forecast-create-explainability CreateExplainability" [
+export def "x-amz-target-amazon-forecast-create-explainability create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,31 +343,31 @@ export def "x-amz-target-amazon-forecast-create-explainability CreateExplainabil
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  ExplainabilityName: any
-  ResourceArn: any
-  ExplainabilityConfig: any
-  --DataSource: record # The source of your data, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the data and, optionally, an Key Management Service (KMS) key. — shape: {S3Config: any}
-  --Schema: record # Defines the fields of a dataset. — shape: {Attributes?: any}
-  --EnableVisualization: any
-  --StartDateTime: any
-  --EndDateTime: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  explainability_name: any
+  resource_arn: any
+  explainability_config: any
+  --data-source: record # The source of your data, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the data and, optionally, an Key Management Service (KMS) key. — shape: {S3Config: any}
+  --schema: record # Defines the fields of a dataset. — shape: {Attributes?: any}
+  --enable-visualization: any
+  --start-date-time: any
+  --end-date-time: any
+  --tags: any
 ]: any -> record<ExplainabilityArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.CreateExplainability")
-  let body = {ExplainabilityName: $ExplainabilityName, ResourceArn: $ResourceArn, ExplainabilityConfig: $ExplainabilityConfig, DataSource: $DataSource, Schema: $Schema, EnableVisualization: $EnableVisualization, StartDateTime: $StartDateTime, EndDateTime: $EndDateTime, Tags: $Tags} | compact
+  let body = {"ExplainabilityName": $explainability_name, "ResourceArn": $resource_arn, "ExplainabilityConfig": $explainability_config, "DataSource": $data_source, "Schema": $schema, "EnableVisualization": $enable_visualization, "StartDateTime": $start_date_time, "EndDateTime": $end_date_time, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -379,7 +379,7 @@ export def "x-amz-target-amazon-forecast-create-explainability CreateExplainabil
 # POST /#X-Amz-Target=AmazonForecast.CreateExplainabilityExport
 # operationId: CreateExplainabilityExport
 # --Destination shape: {S3Config: any}
-export def "x-amz-target-amazon-forecast-create-explainability-export CreateExplainabilityExport" [
+export def "x-amz-target-amazon-forecast-create-explainability-export create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,27 +388,27 @@ export def "x-amz-target-amazon-forecast-create-explainability-export CreateExpl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  ExplainabilityExportName: any
-  ExplainabilityArn: any
-  Destination: record # The destination for an export job. Provide an S3 path, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the location, and an Key Management Service (KMS) key (optional).  — shape: {S3Config: any}
-  --Tags: any
-  --Format: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  explainability_export_name: any
+  explainability_arn: any
+  destination: record # The destination for an export job. Provide an S3 path, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the location, and an Key Management Service (KMS) key (optional).  — shape: {S3Config: any}
+  --tags: any
+  --format: any
 ]: any -> record<ExplainabilityExportArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.CreateExplainabilityExport")
-  let body = {ExplainabilityExportName: $ExplainabilityExportName, ExplainabilityArn: $ExplainabilityArn, Destination: $Destination, Tags: $Tags, Format: $Format} | compact
+  let body = {"ExplainabilityExportName": $explainability_export_name, "ExplainabilityArn": $explainability_arn, "Destination": $destination, "Tags": $tags, "Format": $format} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -419,7 +419,7 @@ export def "x-amz-target-amazon-forecast-create-explainability-export CreateExpl
 #
 # POST /#X-Amz-Target=AmazonForecast.CreateForecast
 # operationId: CreateForecast
-export def "x-amz-target-amazon-forecast-create-forecast CreateForecast" [
+export def "x-amz-target-amazon-forecast-create-forecast create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,27 +428,27 @@ export def "x-amz-target-amazon-forecast-create-forecast CreateForecast" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  ForecastName: any
-  PredictorArn: any
-  --ForecastTypes: any
-  --Tags: any
-  --TimeSeriesSelector: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  forecast_name: any
+  predictor_arn: any
+  --forecast-types: any
+  --tags: any
+  --time-series-selector: any
 ]: any -> record<ForecastArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.CreateForecast")
-  let body = {ForecastName: $ForecastName, PredictorArn: $PredictorArn, ForecastTypes: $ForecastTypes, Tags: $Tags, TimeSeriesSelector: $TimeSeriesSelector} | compact
+  let body = {"ForecastName": $forecast_name, "PredictorArn": $predictor_arn, "ForecastTypes": $forecast_types, "Tags": $tags, "TimeSeriesSelector": $time_series_selector} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -459,7 +459,7 @@ export def "x-amz-target-amazon-forecast-create-forecast CreateForecast" [
 #
 # POST /#X-Amz-Target=AmazonForecast.CreateForecastExportJob
 # operationId: CreateForecastExportJob
-export def "x-amz-target-amazon-forecast-create-forecast-export-job CreateForecastExportJob" [
+export def "x-amz-target-amazon-forecast-create-forecast-export-job create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -468,27 +468,27 @@ export def "x-amz-target-amazon-forecast-create-forecast-export-job CreateForeca
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  ForecastExportJobName: any
-  ForecastArn: any
-  Destination: any
-  --Tags: any
-  --Format: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  forecast_export_job_name: any
+  forecast_arn: any
+  destination: any
+  --tags: any
+  --format: any
 ]: any -> record<ForecastExportJobArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.CreateForecastExportJob")
-  let body = {ForecastExportJobName: $ForecastExportJobName, ForecastArn: $ForecastArn, Destination: $Destination, Tags: $Tags, Format: $Format} | compact
+  let body = {"ForecastExportJobName": $forecast_export_job_name, "ForecastArn": $forecast_arn, "Destination": $destination, "Tags": $tags, "Format": $format} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -499,7 +499,7 @@ export def "x-amz-target-amazon-forecast-create-forecast-export-job CreateForeca
 #
 # POST /#X-Amz-Target=AmazonForecast.CreateMonitor
 # operationId: CreateMonitor
-export def "x-amz-target-amazon-forecast-create-monitor CreateMonitor" [
+export def "x-amz-target-amazon-forecast-create-monitor create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,25 +508,25 @@ export def "x-amz-target-amazon-forecast-create-monitor CreateMonitor" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  MonitorName: any
-  ResourceArn: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  monitor_name: any
+  resource_arn: any
+  --tags: any
 ]: any -> record<MonitorArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.CreateMonitor")
-  let body = {MonitorName: $MonitorName, ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"MonitorName": $monitor_name, "ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -537,7 +537,7 @@ export def "x-amz-target-amazon-forecast-create-monitor CreateMonitor" [
 #
 # POST /#X-Amz-Target=AmazonForecast.CreatePredictor
 # operationId: CreatePredictor
-export def "x-amz-target-amazon-forecast-create-predictor CreatePredictor" [
+export def "x-amz-target-amazon-forecast-create-predictor create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,37 +546,37 @@ export def "x-amz-target-amazon-forecast-create-predictor CreatePredictor" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  PredictorName: any
-  --AlgorithmArn: any
-  ForecastHorizon: any
-  --ForecastTypes: any
-  --PerformAutoML: any
-  --AutoMLOverrideStrategy: any
-  --PerformHPO: any
-  --TrainingParameters: any
-  --EvaluationParameters: any
-  --HPOConfig: any
-  InputDataConfig: any
-  FeaturizationConfig: any
-  --EncryptionConfig: any
-  --Tags: any
-  --OptimizationMetric: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  predictor_name: any
+  --algorithm-arn: any
+  forecast_horizon: any
+  --forecast-types: any
+  --perform-auto-ml: any
+  --auto-ml-override-strategy: any
+  --perform-hpo: any
+  --training-parameters: any
+  --evaluation-parameters: any
+  --hpo-config: any
+  input_data_config: any
+  featurization_config: any
+  --encryption-config: any
+  --tags: any
+  --optimization-metric: any
 ]: any -> record<PredictorArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.CreatePredictor")
-  let body = {PredictorName: $PredictorName, AlgorithmArn: $AlgorithmArn, ForecastHorizon: $ForecastHorizon, ForecastTypes: $ForecastTypes, PerformAutoML: $PerformAutoML, AutoMLOverrideStrategy: $AutoMLOverrideStrategy, PerformHPO: $PerformHPO, TrainingParameters: $TrainingParameters, EvaluationParameters: $EvaluationParameters, HPOConfig: $HPOConfig, InputDataConfig: $InputDataConfig, FeaturizationConfig: $FeaturizationConfig, EncryptionConfig: $EncryptionConfig, Tags: $Tags, OptimizationMetric: $OptimizationMetric} | compact
+  let body = {"PredictorName": $predictor_name, "AlgorithmArn": $algorithm_arn, "ForecastHorizon": $forecast_horizon, "ForecastTypes": $forecast_types, "PerformAutoML": $perform_auto_ml, "AutoMLOverrideStrategy": $auto_ml_override_strategy, "PerformHPO": $perform_hpo, "TrainingParameters": $training_parameters, "EvaluationParameters": $evaluation_parameters, "HPOConfig": $hpo_config, "InputDataConfig": $input_data_config, "FeaturizationConfig": $featurization_config, "EncryptionConfig": $encryption_config, "Tags": $tags, "OptimizationMetric": $optimization_metric} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -588,7 +588,7 @@ export def "x-amz-target-amazon-forecast-create-predictor CreatePredictor" [
 # POST /#X-Amz-Target=AmazonForecast.CreatePredictorBacktestExportJob
 # operationId: CreatePredictorBacktestExportJob
 # --Destination shape: {S3Config: any}
-export def "x-amz-target-amazon-forecast-create-predictor-backtest-export-job CreatePredictorBacktestExportJob" [
+export def "x-amz-target-amazon-forecast-create-predictor-backtest-export-job create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -597,27 +597,27 @@ export def "x-amz-target-amazon-forecast-create-predictor-backtest-export-job Cr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  PredictorBacktestExportJobName: any
-  PredictorArn: any
-  Destination: record # The destination for an export job. Provide an S3 path, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the location, and an Key Management Service (KMS) key (optional).  — shape: {S3Config: any}
-  --Tags: any
-  --Format: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  predictor_backtest_export_job_name: any
+  predictor_arn: any
+  destination: record # The destination for an export job. Provide an S3 path, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the location, and an Key Management Service (KMS) key (optional).  — shape: {S3Config: any}
+  --tags: any
+  --format: any
 ]: any -> record<PredictorBacktestExportJobArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.CreatePredictorBacktestExportJob")
-  let body = {PredictorBacktestExportJobName: $PredictorBacktestExportJobName, PredictorArn: $PredictorArn, Destination: $Destination, Tags: $Tags, Format: $Format} | compact
+  let body = {"PredictorBacktestExportJobName": $predictor_backtest_export_job_name, "PredictorArn": $predictor_arn, "Destination": $destination, "Tags": $tags, "Format": $format} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -628,7 +628,7 @@ export def "x-amz-target-amazon-forecast-create-predictor-backtest-export-job Cr
 #
 # POST /#X-Amz-Target=AmazonForecast.CreateWhatIfAnalysis
 # operationId: CreateWhatIfAnalysis
-export def "x-amz-target-amazon-forecast-create-what-if-analysis CreateWhatIfAnalysis" [
+export def "x-amz-target-amazon-forecast-create-what-if-analysis create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,26 +637,26 @@ export def "x-amz-target-amazon-forecast-create-what-if-analysis CreateWhatIfAna
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  WhatIfAnalysisName: any
-  ForecastArn: any
-  --TimeSeriesSelector: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  what_if_analysis_name: any
+  forecast_arn: any
+  --time-series-selector: any
+  --tags: any
 ]: any -> record<WhatIfAnalysisArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.CreateWhatIfAnalysis")
-  let body = {WhatIfAnalysisName: $WhatIfAnalysisName, ForecastArn: $ForecastArn, TimeSeriesSelector: $TimeSeriesSelector, Tags: $Tags} | compact
+  let body = {"WhatIfAnalysisName": $what_if_analysis_name, "ForecastArn": $forecast_arn, "TimeSeriesSelector": $time_series_selector, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -667,7 +667,7 @@ export def "x-amz-target-amazon-forecast-create-what-if-analysis CreateWhatIfAna
 #
 # POST /#X-Amz-Target=AmazonForecast.CreateWhatIfForecast
 # operationId: CreateWhatIfForecast
-export def "x-amz-target-amazon-forecast-create-what-if-forecast CreateWhatIfForecast" [
+export def "x-amz-target-amazon-forecast-create-what-if-forecast create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -676,27 +676,27 @@ export def "x-amz-target-amazon-forecast-create-what-if-forecast CreateWhatIfFor
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  WhatIfForecastName: any
-  WhatIfAnalysisArn: any
-  --TimeSeriesTransformations: any
-  --TimeSeriesReplacementsDataSource: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  what_if_forecast_name: any
+  what_if_analysis_arn: any
+  --time-series-transformations: any
+  --time-series-replacements-data-source: any
+  --tags: any
 ]: any -> record<WhatIfForecastArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.CreateWhatIfForecast")
-  let body = {WhatIfForecastName: $WhatIfForecastName, WhatIfAnalysisArn: $WhatIfAnalysisArn, TimeSeriesTransformations: $TimeSeriesTransformations, TimeSeriesReplacementsDataSource: $TimeSeriesReplacementsDataSource, Tags: $Tags} | compact
+  let body = {"WhatIfForecastName": $what_if_forecast_name, "WhatIfAnalysisArn": $what_if_analysis_arn, "TimeSeriesTransformations": $time_series_transformations, "TimeSeriesReplacementsDataSource": $time_series_replacements_data_source, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -707,7 +707,7 @@ export def "x-amz-target-amazon-forecast-create-what-if-forecast CreateWhatIfFor
 #
 # POST /#X-Amz-Target=AmazonForecast.CreateWhatIfForecastExport
 # operationId: CreateWhatIfForecastExport
-export def "x-amz-target-amazon-forecast-create-what-if-forecast-export CreateWhatIfForecastExport" [
+export def "x-amz-target-amazon-forecast-create-what-if-forecast-export create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,27 +716,27 @@ export def "x-amz-target-amazon-forecast-create-what-if-forecast-export CreateWh
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  WhatIfForecastExportName: any
-  WhatIfForecastArns: any
-  Destination: any
-  --Tags: any
-  --Format: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  what_if_forecast_export_name: any
+  what_if_forecast_arns: any
+  destination: any
+  --tags: any
+  --format: any
 ]: any -> record<WhatIfForecastExportArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.CreateWhatIfForecastExport")
-  let body = {WhatIfForecastExportName: $WhatIfForecastExportName, WhatIfForecastArns: $WhatIfForecastArns, Destination: $Destination, Tags: $Tags, Format: $Format} | compact
+  let body = {"WhatIfForecastExportName": $what_if_forecast_export_name, "WhatIfForecastArns": $what_if_forecast_arns, "Destination": $destination, "Tags": $tags, "Format": $format} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -747,7 +747,7 @@ export def "x-amz-target-amazon-forecast-create-what-if-forecast-export CreateWh
 #
 # POST /#X-Amz-Target=AmazonForecast.DeleteDataset
 # operationId: DeleteDataset
-export def "x-amz-target-amazon-forecast-delete-dataset DeleteDataset" [
+export def "x-amz-target-amazon-forecast-delete-dataset delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,23 +756,23 @@ export def "x-amz-target-amazon-forecast-delete-dataset DeleteDataset" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  DatasetArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  dataset_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DeleteDataset")
-  let body = {DatasetArn: $DatasetArn} | compact
+  let body = {"DatasetArn": $dataset_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -783,7 +783,7 @@ export def "x-amz-target-amazon-forecast-delete-dataset DeleteDataset" [
 #
 # POST /#X-Amz-Target=AmazonForecast.DeleteDatasetGroup
 # operationId: DeleteDatasetGroup
-export def "x-amz-target-amazon-forecast-delete-dataset-group DeleteDatasetGroup" [
+export def "x-amz-target-amazon-forecast-delete-dataset-group delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -792,23 +792,23 @@ export def "x-amz-target-amazon-forecast-delete-dataset-group DeleteDatasetGroup
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  DatasetGroupArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  dataset_group_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DeleteDatasetGroup")
-  let body = {DatasetGroupArn: $DatasetGroupArn} | compact
+  let body = {"DatasetGroupArn": $dataset_group_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -819,7 +819,7 @@ export def "x-amz-target-amazon-forecast-delete-dataset-group DeleteDatasetGroup
 #
 # POST /#X-Amz-Target=AmazonForecast.DeleteDatasetImportJob
 # operationId: DeleteDatasetImportJob
-export def "x-amz-target-amazon-forecast-delete-dataset-import-job DeleteDatasetImportJob" [
+export def "x-amz-target-amazon-forecast-delete-dataset-import-job delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -828,23 +828,23 @@ export def "x-amz-target-amazon-forecast-delete-dataset-import-job DeleteDataset
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  DatasetImportJobArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  dataset_import_job_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DeleteDatasetImportJob")
-  let body = {DatasetImportJobArn: $DatasetImportJobArn} | compact
+  let body = {"DatasetImportJobArn": $dataset_import_job_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -855,7 +855,7 @@ export def "x-amz-target-amazon-forecast-delete-dataset-import-job DeleteDataset
 #
 # POST /#X-Amz-Target=AmazonForecast.DeleteExplainability
 # operationId: DeleteExplainability
-export def "x-amz-target-amazon-forecast-delete-explainability DeleteExplainability" [
+export def "x-amz-target-amazon-forecast-delete-explainability delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -864,23 +864,23 @@ export def "x-amz-target-amazon-forecast-delete-explainability DeleteExplainabil
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  ExplainabilityArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  explainability_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DeleteExplainability")
-  let body = {ExplainabilityArn: $ExplainabilityArn} | compact
+  let body = {"ExplainabilityArn": $explainability_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -891,7 +891,7 @@ export def "x-amz-target-amazon-forecast-delete-explainability DeleteExplainabil
 #
 # POST /#X-Amz-Target=AmazonForecast.DeleteExplainabilityExport
 # operationId: DeleteExplainabilityExport
-export def "x-amz-target-amazon-forecast-delete-explainability-export DeleteExplainabilityExport" [
+export def "x-amz-target-amazon-forecast-delete-explainability-export delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -900,23 +900,23 @@ export def "x-amz-target-amazon-forecast-delete-explainability-export DeleteExpl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  ExplainabilityExportArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  explainability_export_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DeleteExplainabilityExport")
-  let body = {ExplainabilityExportArn: $ExplainabilityExportArn} | compact
+  let body = {"ExplainabilityExportArn": $explainability_export_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -927,7 +927,7 @@ export def "x-amz-target-amazon-forecast-delete-explainability-export DeleteExpl
 #
 # POST /#X-Amz-Target=AmazonForecast.DeleteForecast
 # operationId: DeleteForecast
-export def "x-amz-target-amazon-forecast-delete-forecast DeleteForecast" [
+export def "x-amz-target-amazon-forecast-delete-forecast delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -936,23 +936,23 @@ export def "x-amz-target-amazon-forecast-delete-forecast DeleteForecast" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  ForecastArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  forecast_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DeleteForecast")
-  let body = {ForecastArn: $ForecastArn} | compact
+  let body = {"ForecastArn": $forecast_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -963,7 +963,7 @@ export def "x-amz-target-amazon-forecast-delete-forecast DeleteForecast" [
 #
 # POST /#X-Amz-Target=AmazonForecast.DeleteForecastExportJob
 # operationId: DeleteForecastExportJob
-export def "x-amz-target-amazon-forecast-delete-forecast-export-job DeleteForecastExportJob" [
+export def "x-amz-target-amazon-forecast-delete-forecast-export-job delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -972,23 +972,23 @@ export def "x-amz-target-amazon-forecast-delete-forecast-export-job DeleteForeca
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  ForecastExportJobArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  forecast_export_job_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DeleteForecastExportJob")
-  let body = {ForecastExportJobArn: $ForecastExportJobArn} | compact
+  let body = {"ForecastExportJobArn": $forecast_export_job_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -999,7 +999,7 @@ export def "x-amz-target-amazon-forecast-delete-forecast-export-job DeleteForeca
 #
 # POST /#X-Amz-Target=AmazonForecast.DeleteMonitor
 # operationId: DeleteMonitor
-export def "x-amz-target-amazon-forecast-delete-monitor DeleteMonitor" [
+export def "x-amz-target-amazon-forecast-delete-monitor delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1008,23 +1008,23 @@ export def "x-amz-target-amazon-forecast-delete-monitor DeleteMonitor" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  MonitorArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  monitor_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DeleteMonitor")
-  let body = {MonitorArn: $MonitorArn} | compact
+  let body = {"MonitorArn": $monitor_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1035,7 +1035,7 @@ export def "x-amz-target-amazon-forecast-delete-monitor DeleteMonitor" [
 #
 # POST /#X-Amz-Target=AmazonForecast.DeletePredictor
 # operationId: DeletePredictor
-export def "x-amz-target-amazon-forecast-delete-predictor DeletePredictor" [
+export def "x-amz-target-amazon-forecast-delete-predictor delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1044,23 +1044,23 @@ export def "x-amz-target-amazon-forecast-delete-predictor DeletePredictor" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  PredictorArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  predictor_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DeletePredictor")
-  let body = {PredictorArn: $PredictorArn} | compact
+  let body = {"PredictorArn": $predictor_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1071,7 +1071,7 @@ export def "x-amz-target-amazon-forecast-delete-predictor DeletePredictor" [
 #
 # POST /#X-Amz-Target=AmazonForecast.DeletePredictorBacktestExportJob
 # operationId: DeletePredictorBacktestExportJob
-export def "x-amz-target-amazon-forecast-delete-predictor-backtest-export-job DeletePredictorBacktestExportJob" [
+export def "x-amz-target-amazon-forecast-delete-predictor-backtest-export-job delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1080,23 +1080,23 @@ export def "x-amz-target-amazon-forecast-delete-predictor-backtest-export-job De
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  PredictorBacktestExportJobArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  predictor_backtest_export_job_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DeletePredictorBacktestExportJob")
-  let body = {PredictorBacktestExportJobArn: $PredictorBacktestExportJobArn} | compact
+  let body = {"PredictorBacktestExportJobArn": $predictor_backtest_export_job_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1107,7 +1107,7 @@ export def "x-amz-target-amazon-forecast-delete-predictor-backtest-export-job De
 #
 # POST /#X-Amz-Target=AmazonForecast.DeleteResourceTree
 # operationId: DeleteResourceTree
-export def "x-amz-target-amazon-forecast-delete-resource-tree DeleteResourceTree" [
+export def "x-amz-target-amazon-forecast-delete-resource-tree delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1116,23 +1116,23 @@ export def "x-amz-target-amazon-forecast-delete-resource-tree DeleteResourceTree
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  resource_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DeleteResourceTree")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1143,7 +1143,7 @@ export def "x-amz-target-amazon-forecast-delete-resource-tree DeleteResourceTree
 #
 # POST /#X-Amz-Target=AmazonForecast.DeleteWhatIfAnalysis
 # operationId: DeleteWhatIfAnalysis
-export def "x-amz-target-amazon-forecast-delete-what-if-analysis DeleteWhatIfAnalysis" [
+export def "x-amz-target-amazon-forecast-delete-what-if-analysis delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1152,23 +1152,23 @@ export def "x-amz-target-amazon-forecast-delete-what-if-analysis DeleteWhatIfAna
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  WhatIfAnalysisArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  what_if_analysis_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DeleteWhatIfAnalysis")
-  let body = {WhatIfAnalysisArn: $WhatIfAnalysisArn} | compact
+  let body = {"WhatIfAnalysisArn": $what_if_analysis_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1179,7 +1179,7 @@ export def "x-amz-target-amazon-forecast-delete-what-if-analysis DeleteWhatIfAna
 #
 # POST /#X-Amz-Target=AmazonForecast.DeleteWhatIfForecast
 # operationId: DeleteWhatIfForecast
-export def "x-amz-target-amazon-forecast-delete-what-if-forecast DeleteWhatIfForecast" [
+export def "x-amz-target-amazon-forecast-delete-what-if-forecast delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1188,23 +1188,23 @@ export def "x-amz-target-amazon-forecast-delete-what-if-forecast DeleteWhatIfFor
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  WhatIfForecastArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  what_if_forecast_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DeleteWhatIfForecast")
-  let body = {WhatIfForecastArn: $WhatIfForecastArn} | compact
+  let body = {"WhatIfForecastArn": $what_if_forecast_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1215,7 +1215,7 @@ export def "x-amz-target-amazon-forecast-delete-what-if-forecast DeleteWhatIfFor
 #
 # POST /#X-Amz-Target=AmazonForecast.DeleteWhatIfForecastExport
 # operationId: DeleteWhatIfForecastExport
-export def "x-amz-target-amazon-forecast-delete-what-if-forecast-export DeleteWhatIfForecastExport" [
+export def "x-amz-target-amazon-forecast-delete-what-if-forecast-export delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1224,23 +1224,23 @@ export def "x-amz-target-amazon-forecast-delete-what-if-forecast-export DeleteWh
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  WhatIfForecastExportArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  what_if_forecast_export_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DeleteWhatIfForecastExport")
-  let body = {WhatIfForecastExportArn: $WhatIfForecastExportArn} | compact
+  let body = {"WhatIfForecastExportArn": $what_if_forecast_export_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1251,7 +1251,7 @@ export def "x-amz-target-amazon-forecast-delete-what-if-forecast-export DeleteWh
 #
 # POST /#X-Amz-Target=AmazonForecast.DescribeAutoPredictor
 # operationId: DescribeAutoPredictor
-export def "x-amz-target-amazon-forecast-describe-auto-predictor DescribeAutoPredictor" [
+export def "x-amz-target-amazon-forecast-describe-auto-predictor post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1260,23 +1260,23 @@ export def "x-amz-target-amazon-forecast-describe-auto-predictor DescribeAutoPre
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  PredictorArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  predictor_arn: any
 ]: any -> record<PredictorArn: record, PredictorName: record, ForecastHorizon: record, ForecastTypes: record, ForecastFrequency: record, ForecastDimensions: record, DatasetImportJobArns: record, DataConfig: record<DatasetGroupArn: record, AttributeConfigs: record, AdditionalDatasets: record>, EncryptionConfig: record<RoleArn: record, KMSKeyArn: record>, ReferencePredictorSummary: record<Arn: record, State: record>, EstimatedTimeRemainingInMinutes: record, Status: record, Message: record, CreationTime: record, LastModificationTime: record, OptimizationMetric: record, ExplainabilityInfo: record<ExplainabilityArn: record, Status: record>, MonitorInfo: record<MonitorArn: record, Status: record>, TimeAlignmentBoundary: record<Month: record, DayOfMonth: record, DayOfWeek: record, Hour: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DescribeAutoPredictor")
-  let body = {PredictorArn: $PredictorArn} | compact
+  let body = {"PredictorArn": $predictor_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1287,7 +1287,7 @@ export def "x-amz-target-amazon-forecast-describe-auto-predictor DescribeAutoPre
 #
 # POST /#X-Amz-Target=AmazonForecast.DescribeDataset
 # operationId: DescribeDataset
-export def "x-amz-target-amazon-forecast-describe-dataset DescribeDataset" [
+export def "x-amz-target-amazon-forecast-describe-dataset post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1296,23 +1296,23 @@ export def "x-amz-target-amazon-forecast-describe-dataset DescribeDataset" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  DatasetArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  dataset_arn: any
 ]: any -> record<DatasetArn: record, DatasetName: record, Domain: record, DatasetType: record, DataFrequency: record, Schema: record<Attributes: record>, EncryptionConfig: record<RoleArn: record, KMSKeyArn: record>, Status: record, CreationTime: record, LastModificationTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DescribeDataset")
-  let body = {DatasetArn: $DatasetArn} | compact
+  let body = {"DatasetArn": $dataset_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1323,7 +1323,7 @@ export def "x-amz-target-amazon-forecast-describe-dataset DescribeDataset" [
 #
 # POST /#X-Amz-Target=AmazonForecast.DescribeDatasetGroup
 # operationId: DescribeDatasetGroup
-export def "x-amz-target-amazon-forecast-describe-dataset-group DescribeDatasetGroup" [
+export def "x-amz-target-amazon-forecast-describe-dataset-group post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1332,23 +1332,23 @@ export def "x-amz-target-amazon-forecast-describe-dataset-group DescribeDatasetG
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  DatasetGroupArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  dataset_group_arn: any
 ]: any -> record<DatasetGroupName: record, DatasetGroupArn: record, DatasetArns: record, Domain: record, Status: record, CreationTime: record, LastModificationTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DescribeDatasetGroup")
-  let body = {DatasetGroupArn: $DatasetGroupArn} | compact
+  let body = {"DatasetGroupArn": $dataset_group_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1359,7 +1359,7 @@ export def "x-amz-target-amazon-forecast-describe-dataset-group DescribeDatasetG
 #
 # POST /#X-Amz-Target=AmazonForecast.DescribeDatasetImportJob
 # operationId: DescribeDatasetImportJob
-export def "x-amz-target-amazon-forecast-describe-dataset-import-job DescribeDatasetImportJob" [
+export def "x-amz-target-amazon-forecast-describe-dataset-import-job post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1368,23 +1368,23 @@ export def "x-amz-target-amazon-forecast-describe-dataset-import-job DescribeDat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  DatasetImportJobArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  dataset_import_job_arn: any
 ]: any -> record<DatasetImportJobName: record, DatasetImportJobArn: record, DatasetArn: record, TimestampFormat: record, TimeZone: record, UseGeolocationForTimeZone: record, GeolocationFormat: record, DataSource: record<S3Config: record<Path: record, RoleArn: record, KMSKeyArn: record>>, EstimatedTimeRemainingInMinutes: record, FieldStatistics: record, DataSize: record, Status: record, Message: record, CreationTime: record, LastModificationTime: record, Format: record, ImportMode: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DescribeDatasetImportJob")
-  let body = {DatasetImportJobArn: $DatasetImportJobArn} | compact
+  let body = {"DatasetImportJobArn": $dataset_import_job_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1395,7 +1395,7 @@ export def "x-amz-target-amazon-forecast-describe-dataset-import-job DescribeDat
 #
 # POST /#X-Amz-Target=AmazonForecast.DescribeExplainability
 # operationId: DescribeExplainability
-export def "x-amz-target-amazon-forecast-describe-explainability DescribeExplainability" [
+export def "x-amz-target-amazon-forecast-describe-explainability post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1404,23 +1404,23 @@ export def "x-amz-target-amazon-forecast-describe-explainability DescribeExplain
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  ExplainabilityArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  explainability_arn: any
 ]: any -> record<ExplainabilityArn: record, ExplainabilityName: record, ResourceArn: record, ExplainabilityConfig: record<TimeSeriesGranularity: record, TimePointGranularity: record>, EnableVisualization: record, DataSource: record<S3Config: record<Path: record, RoleArn: record, KMSKeyArn: record>>, Schema: record<Attributes: record>, StartDateTime: record, EndDateTime: record, EstimatedTimeRemainingInMinutes: record, Message: record, Status: record, CreationTime: record, LastModificationTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DescribeExplainability")
-  let body = {ExplainabilityArn: $ExplainabilityArn} | compact
+  let body = {"ExplainabilityArn": $explainability_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1431,7 +1431,7 @@ export def "x-amz-target-amazon-forecast-describe-explainability DescribeExplain
 #
 # POST /#X-Amz-Target=AmazonForecast.DescribeExplainabilityExport
 # operationId: DescribeExplainabilityExport
-export def "x-amz-target-amazon-forecast-describe-explainability-export DescribeExplainabilityExport" [
+export def "x-amz-target-amazon-forecast-describe-explainability-export export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1440,23 +1440,23 @@ export def "x-amz-target-amazon-forecast-describe-explainability-export Describe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  ExplainabilityExportArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  explainability_export_arn: any
 ]: any -> record<ExplainabilityExportArn: record, ExplainabilityExportName: record, ExplainabilityArn: record, Destination: record<S3Config: record<Path: record, RoleArn: record, KMSKeyArn: record>>, Message: record, Status: record, CreationTime: record, LastModificationTime: record, Format: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DescribeExplainabilityExport")
-  let body = {ExplainabilityExportArn: $ExplainabilityExportArn} | compact
+  let body = {"ExplainabilityExportArn": $explainability_export_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1467,7 +1467,7 @@ export def "x-amz-target-amazon-forecast-describe-explainability-export Describe
 #
 # POST /#X-Amz-Target=AmazonForecast.DescribeForecast
 # operationId: DescribeForecast
-export def "x-amz-target-amazon-forecast-describe-forecast DescribeForecast" [
+export def "x-amz-target-amazon-forecast-describe-forecast post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1476,23 +1476,23 @@ export def "x-amz-target-amazon-forecast-describe-forecast DescribeForecast" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  ForecastArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  forecast_arn: any
 ]: any -> record<ForecastArn: record, ForecastName: record, ForecastTypes: record, PredictorArn: record, DatasetGroupArn: record, EstimatedTimeRemainingInMinutes: record, Status: record, Message: record, CreationTime: record, LastModificationTime: record, TimeSeriesSelector: record<TimeSeriesIdentifiers: record<DataSource: record, Schema: record, Format: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DescribeForecast")
-  let body = {ForecastArn: $ForecastArn} | compact
+  let body = {"ForecastArn": $forecast_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1503,7 +1503,7 @@ export def "x-amz-target-amazon-forecast-describe-forecast DescribeForecast" [
 #
 # POST /#X-Amz-Target=AmazonForecast.DescribeForecastExportJob
 # operationId: DescribeForecastExportJob
-export def "x-amz-target-amazon-forecast-describe-forecast-export-job DescribeForecastExportJob" [
+export def "x-amz-target-amazon-forecast-describe-forecast-export-job post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1512,23 +1512,23 @@ export def "x-amz-target-amazon-forecast-describe-forecast-export-job DescribeFo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  ForecastExportJobArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  forecast_export_job_arn: any
 ]: any -> record<ForecastExportJobArn: record, ForecastExportJobName: record, ForecastArn: record, Destination: record<S3Config: record<Path: record, RoleArn: record, KMSKeyArn: record>>, Message: record, Status: record, CreationTime: record, LastModificationTime: record, Format: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DescribeForecastExportJob")
-  let body = {ForecastExportJobArn: $ForecastExportJobArn} | compact
+  let body = {"ForecastExportJobArn": $forecast_export_job_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1539,7 +1539,7 @@ export def "x-amz-target-amazon-forecast-describe-forecast-export-job DescribeFo
 #
 # POST /#X-Amz-Target=AmazonForecast.DescribeMonitor
 # operationId: DescribeMonitor
-export def "x-amz-target-amazon-forecast-describe-monitor DescribeMonitor" [
+export def "x-amz-target-amazon-forecast-describe-monitor post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1548,23 +1548,23 @@ export def "x-amz-target-amazon-forecast-describe-monitor DescribeMonitor" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  MonitorArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  monitor_arn: any
 ]: any -> record<MonitorName: record, MonitorArn: record, ResourceArn: record, Status: record, LastEvaluationTime: record, LastEvaluationState: record, Baseline: record<PredictorBaseline: record<BaselineMetrics: record>>, Message: record, CreationTime: record, LastModificationTime: record, EstimatedEvaluationTimeRemainingInMinutes: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DescribeMonitor")
-  let body = {MonitorArn: $MonitorArn} | compact
+  let body = {"MonitorArn": $monitor_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1575,7 +1575,7 @@ export def "x-amz-target-amazon-forecast-describe-monitor DescribeMonitor" [
 #
 # POST /#X-Amz-Target=AmazonForecast.DescribePredictor
 # operationId: DescribePredictor
-export def "x-amz-target-amazon-forecast-describe-predictor DescribePredictor" [
+export def "x-amz-target-amazon-forecast-describe-predictor post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1584,23 +1584,23 @@ export def "x-amz-target-amazon-forecast-describe-predictor DescribePredictor" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  PredictorArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  predictor_arn: any
 ]: any -> record<PredictorArn: record, PredictorName: record, AlgorithmArn: record, AutoMLAlgorithmArns: record, ForecastHorizon: record, ForecastTypes: record, PerformAutoML: record, AutoMLOverrideStrategy: record, PerformHPO: record, TrainingParameters: record, EvaluationParameters: record<NumberOfBacktestWindows: record, BackTestWindowOffset: record>, HPOConfig: record<ParameterRanges: record<CategoricalParameterRanges: record, ContinuousParameterRanges: record, IntegerParameterRanges: record>>, InputDataConfig: record<DatasetGroupArn: record, SupplementaryFeatures: record>, FeaturizationConfig: record<ForecastFrequency: record, ForecastDimensions: record, Featurizations: record>, EncryptionConfig: record<RoleArn: record, KMSKeyArn: record>, PredictorExecutionDetails: record<PredictorExecutions: record>, EstimatedTimeRemainingInMinutes: record, IsAutoPredictor: record, DatasetImportJobArns: record, Status: record, Message: record, CreationTime: record, LastModificationTime: record, OptimizationMetric: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DescribePredictor")
-  let body = {PredictorArn: $PredictorArn} | compact
+  let body = {"PredictorArn": $predictor_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1611,7 +1611,7 @@ export def "x-amz-target-amazon-forecast-describe-predictor DescribePredictor" [
 #
 # POST /#X-Amz-Target=AmazonForecast.DescribePredictorBacktestExportJob
 # operationId: DescribePredictorBacktestExportJob
-export def "x-amz-target-amazon-forecast-describe-predictor-backtest-export-job DescribePredictorBacktestExportJob" [
+export def "x-amz-target-amazon-forecast-describe-predictor-backtest-export-job post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1620,23 +1620,23 @@ export def "x-amz-target-amazon-forecast-describe-predictor-backtest-export-job 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  PredictorBacktestExportJobArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  predictor_backtest_export_job_arn: any
 ]: any -> record<PredictorBacktestExportJobArn: record, PredictorBacktestExportJobName: record, PredictorArn: record, Destination: record<S3Config: record<Path: record, RoleArn: record, KMSKeyArn: record>>, Message: record, Status: record, CreationTime: record, LastModificationTime: record, Format: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DescribePredictorBacktestExportJob")
-  let body = {PredictorBacktestExportJobArn: $PredictorBacktestExportJobArn} | compact
+  let body = {"PredictorBacktestExportJobArn": $predictor_backtest_export_job_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1647,7 +1647,7 @@ export def "x-amz-target-amazon-forecast-describe-predictor-backtest-export-job 
 #
 # POST /#X-Amz-Target=AmazonForecast.DescribeWhatIfAnalysis
 # operationId: DescribeWhatIfAnalysis
-export def "x-amz-target-amazon-forecast-describe-what-if-analysis DescribeWhatIfAnalysis" [
+export def "x-amz-target-amazon-forecast-describe-what-if-analysis post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1656,23 +1656,23 @@ export def "x-amz-target-amazon-forecast-describe-what-if-analysis DescribeWhatI
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  WhatIfAnalysisArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  what_if_analysis_arn: any
 ]: any -> record<WhatIfAnalysisName: record, WhatIfAnalysisArn: record, ForecastArn: record, EstimatedTimeRemainingInMinutes: record, Status: record, Message: record, CreationTime: record, LastModificationTime: record, TimeSeriesSelector: record<TimeSeriesIdentifiers: record<DataSource: record, Schema: record, Format: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DescribeWhatIfAnalysis")
-  let body = {WhatIfAnalysisArn: $WhatIfAnalysisArn} | compact
+  let body = {"WhatIfAnalysisArn": $what_if_analysis_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1683,7 +1683,7 @@ export def "x-amz-target-amazon-forecast-describe-what-if-analysis DescribeWhatI
 #
 # POST /#X-Amz-Target=AmazonForecast.DescribeWhatIfForecast
 # operationId: DescribeWhatIfForecast
-export def "x-amz-target-amazon-forecast-describe-what-if-forecast DescribeWhatIfForecast" [
+export def "x-amz-target-amazon-forecast-describe-what-if-forecast post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1692,23 +1692,23 @@ export def "x-amz-target-amazon-forecast-describe-what-if-forecast DescribeWhatI
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  WhatIfForecastArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  what_if_forecast_arn: any
 ]: any -> record<WhatIfForecastName: record, WhatIfForecastArn: record, WhatIfAnalysisArn: record, EstimatedTimeRemainingInMinutes: record, Status: record, Message: record, CreationTime: record, LastModificationTime: record, TimeSeriesTransformations: record, TimeSeriesReplacementsDataSource: record<S3Config: record<Path: record, RoleArn: record, KMSKeyArn: record>, Schema: record<Attributes: record>, Format: record, TimestampFormat: record>, ForecastTypes: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DescribeWhatIfForecast")
-  let body = {WhatIfForecastArn: $WhatIfForecastArn} | compact
+  let body = {"WhatIfForecastArn": $what_if_forecast_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1719,7 +1719,7 @@ export def "x-amz-target-amazon-forecast-describe-what-if-forecast DescribeWhatI
 #
 # POST /#X-Amz-Target=AmazonForecast.DescribeWhatIfForecastExport
 # operationId: DescribeWhatIfForecastExport
-export def "x-amz-target-amazon-forecast-describe-what-if-forecast-export DescribeWhatIfForecastExport" [
+export def "x-amz-target-amazon-forecast-describe-what-if-forecast-export export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1728,23 +1728,23 @@ export def "x-amz-target-amazon-forecast-describe-what-if-forecast-export Descri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  WhatIfForecastExportArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  what_if_forecast_export_arn: any
 ]: any -> record<WhatIfForecastExportArn: record, WhatIfForecastExportName: record, WhatIfForecastArns: record, Destination: record<S3Config: record<Path: record, RoleArn: record, KMSKeyArn: record>>, Message: record, Status: record, CreationTime: record, EstimatedTimeRemainingInMinutes: record, LastModificationTime: record, Format: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.DescribeWhatIfForecastExport")
-  let body = {WhatIfForecastExportArn: $WhatIfForecastExportArn} | compact
+  let body = {"WhatIfForecastExportArn": $what_if_forecast_export_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1755,7 +1755,7 @@ export def "x-amz-target-amazon-forecast-describe-what-if-forecast-export Descri
 #
 # POST /#X-Amz-Target=AmazonForecast.GetAccuracyMetrics
 # operationId: GetAccuracyMetrics
-export def "x-amz-target-amazon-forecast-get-accuracy-metrics GetAccuracyMetrics" [
+export def "x-amz-target-amazon-forecast-get-accuracy-metrics get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1764,23 +1764,23 @@ export def "x-amz-target-amazon-forecast-get-accuracy-metrics GetAccuracyMetrics
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  PredictorArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  predictor_arn: any
 ]: any -> record<PredictorEvaluationResults: record, IsAutoPredictor: record, AutoMLOverrideStrategy: record, OptimizationMetric: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.GetAccuracyMetrics")
-  let body = {PredictorArn: $PredictorArn} | compact
+  let body = {"PredictorArn": $predictor_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1791,7 +1791,7 @@ export def "x-amz-target-amazon-forecast-get-accuracy-metrics GetAccuracyMetrics
 #
 # POST /#X-Amz-Target=AmazonForecast.ListDatasetGroups
 # operationId: ListDatasetGroups
-export def "x-amz-target-amazon-forecast-list-dataset-groups ListDatasetGroups" [
+export def "x-amz-target-amazon-forecast-list-dataset-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1800,27 +1800,27 @@ export def "x-amz-target-amazon-forecast-list-dataset-groups ListDatasetGroups" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  --next-token: any
+  --max-results: any
 ]: any -> record<DatasetGroups: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.ListDatasetGroups" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1831,7 +1831,7 @@ export def "x-amz-target-amazon-forecast-list-dataset-groups ListDatasetGroups" 
 #
 # POST /#X-Amz-Target=AmazonForecast.ListDatasetImportJobs
 # operationId: ListDatasetImportJobs
-export def "x-amz-target-amazon-forecast-list-dataset-import-jobs ListDatasetImportJobs" [
+export def "x-amz-target-amazon-forecast-list-dataset-import-jobs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1840,28 +1840,28 @@ export def "x-amz-target-amazon-forecast-list-dataset-import-jobs ListDatasetImp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  --NextToken: any
-  --MaxResults: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  --next-token: any
+  --max-results: any
+  --filters: any
 ]: any -> record<DatasetImportJobs: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.ListDatasetImportJobs" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Filters: $Filters} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1872,7 +1872,7 @@ export def "x-amz-target-amazon-forecast-list-dataset-import-jobs ListDatasetImp
 #
 # POST /#X-Amz-Target=AmazonForecast.ListDatasets
 # operationId: ListDatasets
-export def "x-amz-target-amazon-forecast-list-datasets ListDatasets" [
+export def "x-amz-target-amazon-forecast-list-datasets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1881,27 +1881,27 @@ export def "x-amz-target-amazon-forecast-list-datasets ListDatasets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  --next-token: any
+  --max-results: any
 ]: any -> record<Datasets: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.ListDatasets" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1912,7 +1912,7 @@ export def "x-amz-target-amazon-forecast-list-datasets ListDatasets" [
 #
 # POST /#X-Amz-Target=AmazonForecast.ListExplainabilities
 # operationId: ListExplainabilities
-export def "x-amz-target-amazon-forecast-list-explainabilities ListExplainabilities" [
+export def "x-amz-target-amazon-forecast-list-explainabilities list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1921,28 +1921,28 @@ export def "x-amz-target-amazon-forecast-list-explainabilities ListExplainabilit
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  --NextToken: any
-  --MaxResults: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  --next-token: any
+  --max-results: any
+  --filters: any
 ]: any -> record<Explainabilities: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.ListExplainabilities" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Filters: $Filters} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1953,7 +1953,7 @@ export def "x-amz-target-amazon-forecast-list-explainabilities ListExplainabilit
 #
 # POST /#X-Amz-Target=AmazonForecast.ListExplainabilityExports
 # operationId: ListExplainabilityExports
-export def "x-amz-target-amazon-forecast-list-explainability-exports ListExplainabilityExports" [
+export def "x-amz-target-amazon-forecast-list-explainability-exports list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1962,28 +1962,28 @@ export def "x-amz-target-amazon-forecast-list-explainability-exports ListExplain
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
-  --NextToken: any
-  --MaxResults: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
+  --next-token: any
+  --max-results: any
+  --filters: any
 ]: any -> record<ExplainabilityExports: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.ListExplainabilityExports" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Filters: $Filters} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1994,7 +1994,7 @@ export def "x-amz-target-amazon-forecast-list-explainability-exports ListExplain
 #
 # POST /#X-Amz-Target=AmazonForecast.ListForecastExportJobs
 # operationId: ListForecastExportJobs
-export def "x-amz-target-amazon-forecast-list-forecast-export-jobs ListForecastExportJobs" [
+export def "x-amz-target-amazon-forecast-list-forecast-export-jobs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2003,28 +2003,28 @@ export def "x-amz-target-amazon-forecast-list-forecast-export-jobs ListForecastE
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
-  --NextToken: any
-  --MaxResults: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
+  --next-token: any
+  --max-results: any
+  --filters: any
 ]: any -> record<ForecastExportJobs: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.ListForecastExportJobs" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Filters: $Filters} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2035,7 +2035,7 @@ export def "x-amz-target-amazon-forecast-list-forecast-export-jobs ListForecastE
 #
 # POST /#X-Amz-Target=AmazonForecast.ListForecasts
 # operationId: ListForecasts
-export def "x-amz-target-amazon-forecast-list-forecasts ListForecasts" [
+export def "x-amz-target-amazon-forecast-list-forecasts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2044,28 +2044,28 @@ export def "x-amz-target-amazon-forecast-list-forecasts ListForecasts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-49
-  --NextToken: any
-  --MaxResults: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-49
+  --next-token: any
+  --max-results: any
+  --filters: any
 ]: any -> record<Forecasts: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.ListForecasts" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Filters: $Filters} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2076,7 +2076,7 @@ export def "x-amz-target-amazon-forecast-list-forecasts ListForecasts" [
 #
 # POST /#X-Amz-Target=AmazonForecast.ListMonitorEvaluations
 # operationId: ListMonitorEvaluations
-export def "x-amz-target-amazon-forecast-list-monitor-evaluations ListMonitorEvaluations" [
+export def "x-amz-target-amazon-forecast-list-monitor-evaluations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2085,29 +2085,29 @@ export def "x-amz-target-amazon-forecast-list-monitor-evaluations ListMonitorEva
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-50
-  --NextToken: any
-  --MaxResults: any
-  MonitorArn: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-50
+  --next-token: any
+  --max-results: any
+  monitor_arn: any
+  --filters: any
 ]: any -> record<NextToken: record, PredictorMonitorEvaluations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.ListMonitorEvaluations" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, MonitorArn: $MonitorArn, Filters: $Filters} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "MonitorArn": $monitor_arn, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2118,7 +2118,7 @@ export def "x-amz-target-amazon-forecast-list-monitor-evaluations ListMonitorEva
 #
 # POST /#X-Amz-Target=AmazonForecast.ListMonitors
 # operationId: ListMonitors
-export def "x-amz-target-amazon-forecast-list-monitors ListMonitors" [
+export def "x-amz-target-amazon-forecast-list-monitors list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2127,28 +2127,28 @@ export def "x-amz-target-amazon-forecast-list-monitors ListMonitors" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-51
-  --NextToken: any
-  --MaxResults: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-51
+  --next-token: any
+  --max-results: any
+  --filters: any
 ]: any -> record<Monitors: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.ListMonitors" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Filters: $Filters} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2159,7 +2159,7 @@ export def "x-amz-target-amazon-forecast-list-monitors ListMonitors" [
 #
 # POST /#X-Amz-Target=AmazonForecast.ListPredictorBacktestExportJobs
 # operationId: ListPredictorBacktestExportJobs
-export def "x-amz-target-amazon-forecast-list-predictor-backtest-export-jobs ListPredictorBacktestExportJobs" [
+export def "x-amz-target-amazon-forecast-list-predictor-backtest-export-jobs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2168,28 +2168,28 @@ export def "x-amz-target-amazon-forecast-list-predictor-backtest-export-jobs Lis
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-52
-  --NextToken: any
-  --MaxResults: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-52
+  --next-token: any
+  --max-results: any
+  --filters: any
 ]: any -> record<PredictorBacktestExportJobs: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.ListPredictorBacktestExportJobs" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Filters: $Filters} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2200,7 +2200,7 @@ export def "x-amz-target-amazon-forecast-list-predictor-backtest-export-jobs Lis
 #
 # POST /#X-Amz-Target=AmazonForecast.ListPredictors
 # operationId: ListPredictors
-export def "x-amz-target-amazon-forecast-list-predictors ListPredictors" [
+export def "x-amz-target-amazon-forecast-list-predictors list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2209,28 +2209,28 @@ export def "x-amz-target-amazon-forecast-list-predictors ListPredictors" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-53
-  --NextToken: any
-  --MaxResults: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-53
+  --next-token: any
+  --max-results: any
+  --filters: any
 ]: any -> record<Predictors: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.ListPredictors" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Filters: $Filters} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2241,7 +2241,7 @@ export def "x-amz-target-amazon-forecast-list-predictors ListPredictors" [
 #
 # POST /#X-Amz-Target=AmazonForecast.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-amazon-forecast-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-amazon-forecast-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2250,23 +2250,23 @@ export def "x-amz-target-amazon-forecast-list-tags-for-resource ListTagsForResou
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-54
-  ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-54
+  resource_arn: any
 ]: any -> record<Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.ListTagsForResource")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2277,7 +2277,7 @@ export def "x-amz-target-amazon-forecast-list-tags-for-resource ListTagsForResou
 #
 # POST /#X-Amz-Target=AmazonForecast.ListWhatIfAnalyses
 # operationId: ListWhatIfAnalyses
-export def "x-amz-target-amazon-forecast-list-what-if-analyses ListWhatIfAnalyses" [
+export def "x-amz-target-amazon-forecast-list-what-if-analyses list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2286,28 +2286,28 @@ export def "x-amz-target-amazon-forecast-list-what-if-analyses ListWhatIfAnalyse
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-55
-  --NextToken: any
-  --MaxResults: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-55
+  --next-token: any
+  --max-results: any
+  --filters: any
 ]: any -> record<WhatIfAnalyses: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.ListWhatIfAnalyses" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Filters: $Filters} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2318,7 +2318,7 @@ export def "x-amz-target-amazon-forecast-list-what-if-analyses ListWhatIfAnalyse
 #
 # POST /#X-Amz-Target=AmazonForecast.ListWhatIfForecastExports
 # operationId: ListWhatIfForecastExports
-export def "x-amz-target-amazon-forecast-list-what-if-forecast-exports ListWhatIfForecastExports" [
+export def "x-amz-target-amazon-forecast-list-what-if-forecast-exports list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2327,28 +2327,28 @@ export def "x-amz-target-amazon-forecast-list-what-if-forecast-exports ListWhatI
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-56
-  --NextToken: any
-  --MaxResults: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-56
+  --next-token: any
+  --max-results: any
+  --filters: any
 ]: any -> record<WhatIfForecastExports: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.ListWhatIfForecastExports" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Filters: $Filters} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2359,7 +2359,7 @@ export def "x-amz-target-amazon-forecast-list-what-if-forecast-exports ListWhatI
 #
 # POST /#X-Amz-Target=AmazonForecast.ListWhatIfForecasts
 # operationId: ListWhatIfForecasts
-export def "x-amz-target-amazon-forecast-list-what-if-forecasts ListWhatIfForecasts" [
+export def "x-amz-target-amazon-forecast-list-what-if-forecasts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2368,28 +2368,28 @@ export def "x-amz-target-amazon-forecast-list-what-if-forecasts ListWhatIfForeca
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-57
-  --NextToken: any
-  --MaxResults: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-57
+  --next-token: any
+  --max-results: any
+  --filters: any
 ]: any -> record<WhatIfForecasts: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.ListWhatIfForecasts" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Filters: $Filters} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2400,7 +2400,7 @@ export def "x-amz-target-amazon-forecast-list-what-if-forecasts ListWhatIfForeca
 #
 # POST /#X-Amz-Target=AmazonForecast.ResumeResource
 # operationId: ResumeResource
-export def "x-amz-target-amazon-forecast-resume-resource ResumeResource" [
+export def "x-amz-target-amazon-forecast-resume-resource post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2409,23 +2409,23 @@ export def "x-amz-target-amazon-forecast-resume-resource ResumeResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-58
-  ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-58
+  resource_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.ResumeResource")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2436,7 +2436,7 @@ export def "x-amz-target-amazon-forecast-resume-resource ResumeResource" [
 #
 # POST /#X-Amz-Target=AmazonForecast.StopResource
 # operationId: StopResource
-export def "x-amz-target-amazon-forecast-stop-resource StopResource" [
+export def "x-amz-target-amazon-forecast-stop-resource stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2445,23 +2445,23 @@ export def "x-amz-target-amazon-forecast-stop-resource StopResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-59
-  ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-59
+  resource_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.StopResource")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2472,7 +2472,7 @@ export def "x-amz-target-amazon-forecast-stop-resource StopResource" [
 #
 # POST /#X-Amz-Target=AmazonForecast.TagResource
 # operationId: TagResource
-export def "x-amz-target-amazon-forecast-tag-resource TagResource" [
+export def "x-amz-target-amazon-forecast-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2481,24 +2481,24 @@ export def "x-amz-target-amazon-forecast-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-60
-  ResourceArn: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-60
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.TagResource")
-  let body = {ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2509,7 +2509,7 @@ export def "x-amz-target-amazon-forecast-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=AmazonForecast.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-amazon-forecast-untag-resource UntagResource" [
+export def "x-amz-target-amazon-forecast-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2518,24 +2518,24 @@ export def "x-amz-target-amazon-forecast-untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-61
-  ResourceArn: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-61
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.UntagResource")
-  let body = {ResourceArn: $ResourceArn, TagKeys: $TagKeys} | compact
+  let body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2546,7 +2546,7 @@ export def "x-amz-target-amazon-forecast-untag-resource UntagResource" [
 #
 # POST /#X-Amz-Target=AmazonForecast.UpdateDatasetGroup
 # operationId: UpdateDatasetGroup
-export def "x-amz-target-amazon-forecast-update-dataset-group UpdateDatasetGroup" [
+export def "x-amz-target-amazon-forecast-update-dataset-group update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2555,24 +2555,24 @@ export def "x-amz-target-amazon-forecast-update-dataset-group UpdateDatasetGroup
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-62
-  DatasetGroupArn: any
-  DatasetArns: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-62
+  dataset_group_arn: any
+  dataset_arns: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonForecast.UpdateDatasetGroup")
-  let body = {DatasetGroupArn: $DatasetGroupArn, DatasetArns: $DatasetArns} | compact
+  let body = {"DatasetGroupArn": $dataset_group_arn, "DatasetArns": $dataset_arns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

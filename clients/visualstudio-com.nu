@@ -68,10 +68,10 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 def privacy-completer [] { ["0 (Private)" "1 (Public)" "2 (Org)"] }
-def tunnelType-completer [] { ["0 (Basis)" "1 (Liveshare)"] }
-def newValue-completer [] { ["0 (None)" "1 (Created)" "10 (Archived)" "11 (Starting)" "12 (ShuttingDown)" "13 (Failed)" "14 (Exporting)" "15 (Updating)" "16 (Rebuilding)" "2 (Queued)" "3 (Provisioning)" "4 (Available)" "5 (Awaiting)" "6 (Unavailable)" "7 (Deleted)" "8 (Moved)" "9 (Shutdown)"] }
-def oldValue-completer [] { ["0 (None)" "1 (Created)" "10 (Archived)" "11 (Starting)" "12 (ShuttingDown)" "13 (Failed)" "14 (Exporting)" "15 (Updating)" "16 (Rebuilding)" "2 (Queued)" "3 (Provisioning)" "4 (Available)" "5 (Awaiting)" "6 (Unavailable)" "7 (Deleted)" "8 (Moved)" "9 (Shutdown)"] }
-def storageType-completer [] { ["0 (V1)" "1 (V2)"] }
+def tunnel-type-completer [] { ["0 (Basis)" "1 (Liveshare)"] }
+def new-value-completer [] { ["0 (None)" "1 (Created)" "10 (Archived)" "11 (Starting)" "12 (ShuttingDown)" "13 (Failed)" "14 (Exporting)" "15 (Updating)" "16 (Rebuilding)" "2 (Queued)" "3 (Provisioning)" "4 (Available)" "5 (Awaiting)" "6 (Unavailable)" "7 (Deleted)" "8 (Moved)" "9 (Shutdown)"] }
+def old-value-completer [] { ["0 (None)" "1 (Created)" "10 (Archived)" "11 (Starting)" "12 (ShuttingDown)" "13 (Failed)" "14 (Exporting)" "15 (Updating)" "16 (Rebuilding)" "2 (Queued)" "3 (Provisioning)" "4 (Available)" "5 (Awaiting)" "6 (Unavailable)" "7 (Deleted)" "8 (Moved)" "9 (Shutdown)"] }
+def storage-type-completer [] { ["0 (V1)" "1 (V2)"] }
 def location-completer [] { ["1001 (SouthAfricaNorth)" "1002 (SouthAfricaWest)" "101 (EastAsia)" "102 (SouthEastAsia)" "1201 (UaeCentral)" "1202 (UaeNorth)" "1401 (UkSouth)" "1402 (UkWest)" "1501 (CentralUs)" "1502 (EastUs)" "1503 (EastUs2)" "1504 (NorthCentralUs)" "1505 (SouthCentralUs)" "1506 (WestCentralUs)" "1507 (WestUs)" "1508 (WestUs2)" "1509 (WestUs3)" "1601 (CentralUsEuap)" "1602 (EastUs2Euap)" "1701 (SwitzerlandNorth)" "1702 (SwitzerlandWest)" "1801 (GermanyNorth)" "1802 (GermanyWestCentral)" "1901 (NorwayWest)" "1902 (NorwayEast)" "201 (AustraliaCentral)" "202 (AustraliaCentral2)" "203 (AustraliaEast)" "205 (AustraliaSouthEast)" "301 (BrazilSouth)" "401 (CanadaCentral)" "402 (CanadaEast)" "501 (NorthEurope)" "502 (WestEurope)" "601 (FranceCentral)" "602 (FranceSouth)" "701 (CentralIndia)" "702 (SouthIndia)" "703 (WestIndia)" "801 (JapanEast)" "802 (JapanWest)" "901 (KoreaCentral)" "902 (KoreaSouth)"] }
 def subtype-completer [] { ["0 (Default)" "2 (ShrunkBlob)" "3 (FullBlob)" "4 (UserParametersBlob)" "5 (PrebuildHash)" "6 (VnetInjected)"] }
 def type-completer [] { ["1 (ComputeVM)" "10 (VirtualNetwork)" "11 (NetworkSecurityGroup)" "12 (LiveShareWorkspace)" "13 (BasisTunnel)" "14 (StorageBlockBlob)" "15 (DataDisk)" "16 (PortForwardingWorkspace)" "2 (StorageFileShare)" "3 (StorageArchive)" "4 (KeyVault)" "5 (OSDisk)" "6 (NetworkInterface)" "7 (InputQueue)" "8 (Snapshot)" "9 (PoolQueue)"] }
@@ -161,7 +161,7 @@ export def "agents get" [
 ]: nothing -> record<assetUri: string, family: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Agents/($family)")
+  let full_url = (build-url $base ({family: $family} | format pattern "/api/v1/Agents/{family}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,12 +179,12 @@ export def "environments get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string
-  --planId: string
+  --plan-id: string
   --deleted: oneof<nothing, bool> # default: false
 ]: nothing -> table<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list, imageAllowList: list>, seed: record<cloneUrl: string, gitConfig: record, recurseClone: bool, repository: record, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "planId" $planId "scalar") (serialize-qp "deleted" $deleted "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "planId" $plan_id "scalar") (serialize-qp "deleted" $deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Environments" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -215,44 +215,44 @@ export def "environments post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --access: oneof<nothing, bool>
-  --analyticsTrackingId: string # nullable
-  --autoShutdownDelayMinutes: int # format: int32
-  --billableOwner: record # shape: {id?: string, login?: string, type?: "0 (User)"|"1 (Organization)"}
+  --analytics-tracking-id: string # nullable
+  --auto-shutdown-delay-minutes: int # format: int32
+  --billable-owner: record # shape: {id?: string, login?: string, type?: "0 (User)"|"1 (Organization)"}
   --connection: record # shape: {connectionServiceUri?: string, connectionSessionId?: string, connectionSessionPath?: string, hostPublicKeys?: list, relayEndpoint?: string, relaySasToken?: string, sessionToken?: string, tunnelProperties?: record}
-  --containerImage: string # nullable
-  --createAsPrebuild: oneof<nothing, bool>
-  --devContainerJson: string # nullable
-  --devContainerPath: string # nullable
-  --experimentalFeatures: record # shape: {enableDynamicHttpsDetection?: bool, queueResourceAllocation?: bool, usePrebuildFastPathIfAvailable?: bool, usePrebuiltImages?: bool, useStorageV2?: bool}
+  --container-image: string # nullable
+  --create-as-prebuild: oneof<nothing, bool>
+  --dev-container-json: string # nullable
+  --dev-container-path: string # nullable
+  --experimental-features: record # shape: {enableDynamicHttpsDetection?: bool, queueResourceAllocation?: bool, usePrebuildFastPathIfAvailable?: bool, usePrebuiltImages?: bool, useStorageV2?: bool}
   --features: record # nullable
-  friendlyName: string
-  --gitHubApiUrl: string # nullable
-  --gitHubAppUrl: string # nullable
-  --gitHubPfsAuthEndpoint: string # nullable
-  --githubEnvironmentEndpoint: string # nullable
-  --hasDevcontainerJson: oneof<nothing, bool>
+  friendly_name: string
+  --git-hub-api-url: string # nullable
+  --git-hub-app-url: string # nullable
+  --git-hub-pfs-auth-endpoint: string # nullable
+  --github-environment-endpoint: string # nullable
+  --has-devcontainer-json: oneof<nothing, bool>
   --identity: record # shape: {displayName?: string, id?: string, userName?: string}
   --label: string # nullable
   --location: string # DEPRECATED, nullable
-  --netmonCorrelationData: record # shape: {billableOwnerCreatedAt?: string, billableOwnerDatabaseId?: string, billableOwnerGlobalRelayId?: string, billableOwnerPlan?: string, ownerCreatedAt?: string, ownerDatabaseId?: string, ownerGlobalRelayId?: string, ownerPlan?: string, repositoryCreatedAt?: string, repositoryDatabaseId?: string, repositoryGlobalRelayId?: string, repositoryPrivate?: bool}
+  --netmon-correlation-data: record # shape: {billableOwnerCreatedAt?: string, billableOwnerDatabaseId?: string, billableOwnerGlobalRelayId?: string, billableOwnerPlan?: string, ownerCreatedAt?: string, ownerDatabaseId?: string, ownerGlobalRelayId?: string, ownerPlan?: string, repositoryCreatedAt?: string, repositoryDatabaseId?: string, repositoryGlobalRelayId?: string, repositoryPrivate?: bool}
   --personalization: record # shape: {dotfilesInstallCommand?: string, dotfilesRepository?: string, dotfilesTargetPath?: string}
-  --planId: string # nullable
+  --plan-id: string # nullable
   --platform: string # DEPRECATED, nullable
-  --runtimeConstraints: record # shape: {allowedPortPrivacySettings?: list, imageAllowList?: list}
+  --runtime-constraints: record # shape: {allowedPortPrivacySettings?: list, imageAllowList?: list}
   --secrets: list # nullable — item shape: {name?: string, type?: "1 (EnvironmentVariable)"|"2 (ContainerRegistry)", value?: string}
   --seed: record # shape: {cloneUrl?: string, gitConfig?: record, recurseClone?: bool, repository?: record, seedMoniker?: string, seedType?: string}
-  --skuName: string # nullable
-  --testAccount: oneof<nothing, bool>
+  --sku-name: string # nullable
+  --test-account: oneof<nothing, bool>
   type: string
-  --userTier: string # nullable
-  --workingDirectory: string # nullable
+  --user-tier: string # nullable
+  --working-directory: string # nullable
 ]: any -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Environments" $qp)
-  let body = {analyticsTrackingId: $analyticsTrackingId, autoShutdownDelayMinutes: $autoShutdownDelayMinutes, billableOwner: $billableOwner, connection: $connection, containerImage: $containerImage, createAsPrebuild: $createAsPrebuild, devContainerJson: $devContainerJson, devContainerPath: $devContainerPath, experimentalFeatures: $experimentalFeatures, features: $features, friendlyName: $friendlyName, gitHubApiUrl: $gitHubApiUrl, gitHubAppUrl: $gitHubAppUrl, gitHubPfsAuthEndpoint: $gitHubPfsAuthEndpoint, githubEnvironmentEndpoint: $githubEnvironmentEndpoint, hasDevcontainerJson: $hasDevcontainerJson, identity: $identity, label: $label, location: $location, netmonCorrelationData: $netmonCorrelationData, personalization: $personalization, planId: $planId, platform: $platform, runtimeConstraints: $runtimeConstraints, secrets: $secrets, seed: $seed, skuName: $skuName, testAccount: $testAccount, type: $type, userTier: $userTier, workingDirectory: $workingDirectory} | compact
+  let body = {"analyticsTrackingId": $analytics_tracking_id, "autoShutdownDelayMinutes": $auto_shutdown_delay_minutes, "billableOwner": $billable_owner, "connection": $connection, "containerImage": $container_image, "createAsPrebuild": $create_as_prebuild, "devContainerJson": $dev_container_json, "devContainerPath": $dev_container_path, "experimentalFeatures": $experimental_features, "features": $features, "friendlyName": $friendly_name, "gitHubApiUrl": $git_hub_api_url, "gitHubAppUrl": $git_hub_app_url, "gitHubPfsAuthEndpoint": $git_hub_pfs_auth_endpoint, "githubEnvironmentEndpoint": $github_environment_endpoint, "hasDevcontainerJson": $has_devcontainer_json, "identity": $identity, "label": $label, "location": $location, "netmonCorrelationData": $netmon_correlation_data, "personalization": $personalization, "planId": $plan_id, "platform": $platform, "runtimeConstraints": $runtime_constraints, "secrets": $secrets, "seed": $seed, "skuName": $sku_name, "testAccount": $test_account, "type": $type, "userTier": $user_tier, "workingDirectory": $working_directory} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -261,7 +261,7 @@ export def "environments post" [
 
 # DELETE /api/v1/Environments/{environmentId}
 export def "environments delete" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,7 +273,7 @@ export def "environments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)")
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -282,8 +282,8 @@ export def "environments delete" [
 # GET /api/v1/Environments/{environmentId}
 #
 # operationId: GetEnvironmentRoute
-export def "environments GetEnvironmentRoute" [
-  environmentId: string
+export def "environments get-environment-route" [
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,13 +294,13 @@ export def "environments GetEnvironmentRoute" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --connect: oneof<nothing, bool>
-  --pfConnect: oneof<nothing, bool>
+  --pf-connect: oneof<nothing, bool>
   --deleted: oneof<nothing, bool> # default: false
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "connect" $connect "scalar") (serialize-qp "pfConnect" $pfConnect "scalar") (serialize-qp "deleted" $deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)" $qp)
+  let qp = [(serialize-qp "connect" $connect "scalar") (serialize-qp "pfConnect" $pf_connect "scalar") (serialize-qp "deleted" $deleted "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -310,7 +310,7 @@ export def "environments GetEnvironmentRoute" [
 #
 # --failoverDetails shape: {failoverEnabled?: bool, failoverRegion?: "101 (EastAsia)"|"102 (SouthEastAsia)"|"201 (AustraliaCentral)"|"202 (AustraliaCentral2)"|"203 (AustraliaEast)"|"205 (AustraliaSouthEast)"|"301 (BrazilSouth)"|"401 (CanadaCentral)"|"402 (CanadaEast)"|"501 (NorthEurope)"|"502 (WestEurope)"|"601 (FranceCentral)"|"602 (FranceSouth)"|"701 (CentralIndia)"|"702 (SouthIndia)"|"703 (WestIndia)"|"801 (JapanEast)"|"802 (JapanWest)"|"901 (KoreaCentral)"|"902 (KoreaSouth)"|"1001 (SouthAfricaNorth)"|"1002 (SouthAfricaWest)"|"1201 (UaeCentral)"|"1202 (UaeNorth)"|"1401 (UkSouth)"|"1402 (UkWest)"|"1501 (CentralUs)"|"1502 (EastUs)"|"1503 (EastUs2)"|"1504 (NorthCentralUs)"|"1505 (SouthCentralUs)"|"1506 (WestCentralUs)"|"1507 (WestUs)"|"1508 (WestUs2)"|"1509 (WestUs3)"|"1601 (CentralUsEuap)"|"1602 (EastUs2Euap)"|"1701 (SwitzerlandNorth)"|"1702 (SwitzerlandWest)"|"1801 (GermanyNorth)"|"1802 (GermanyWestCentral)"|"1901 (NorwayWest)"|"1902 (NorwayEast)"}
 export def "environments patch" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,18 +320,18 @@ export def "environments patch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --autoShutdownDelayMinutes: int # nullable, format: int32
-  --failoverDetails: record # shape: {failoverEnabled?: bool, failoverRegion?: "101 (EastAsia)"|"102 (SouthEastAsia)"|"201 (AustraliaCentral)"|"202 (AustraliaCentral2)"|"203 (AustraliaEast)"|"205 (AustraliaSouthEast)"|"301 (BrazilSouth)"|"401 (CanadaCentral)"|"402 (CanadaEast)"|"501 (NorthEurope)"|"502 (WestEurope)"|"601 (FranceCentral)"|"602 (FranceSouth)"|"701 (CentralIndia)"|"702 (SouthIndia)"|"703 (WestIndia)"|"801 (JapanEast)"|"802 (JapanWest)"|"901 (KoreaCentral)"|"902 (KoreaSouth)"|"1001 (SouthAfricaNorth)"|"1002 (SouthAfricaWest)"|"1201 (UaeCentral)"|"1202 (UaeNorth)"|"1401 (UkSouth)"|"1402 (UkWest)"|"1501 (CentralUs)"|"1502 (EastUs)"|"1503 (EastUs2)"|"1504 (NorthCentralUs)"|"1505 (SouthCentralUs)"|"1506 (WestCentralUs)"|"1507 (WestUs)"|"1508 (WestUs2)"|"1509 (WestUs3)"|"1601 (CentralUsEuap)"|"1602 (EastUs2Euap)"|"1701 (SwitzerlandNorth)"|"1702 (SwitzerlandWest)"|"1801 (GermanyNorth)"|"1802 (GermanyWestCentral)"|"1901 (NorwayWest)"|"1902 (NorwayEast)"}
-  --friendlyName: string # nullable
-  --planAccessToken: string # nullable
-  --planId: string # nullable
-  --skuName: string # nullable
+  --auto-shutdown-delay-minutes: int # nullable, format: int32
+  --failover-details: record # shape: {failoverEnabled?: bool, failoverRegion?: "101 (EastAsia)"|"102 (SouthEastAsia)"|"201 (AustraliaCentral)"|"202 (AustraliaCentral2)"|"203 (AustraliaEast)"|"205 (AustraliaSouthEast)"|"301 (BrazilSouth)"|"401 (CanadaCentral)"|"402 (CanadaEast)"|"501 (NorthEurope)"|"502 (WestEurope)"|"601 (FranceCentral)"|"602 (FranceSouth)"|"701 (CentralIndia)"|"702 (SouthIndia)"|"703 (WestIndia)"|"801 (JapanEast)"|"802 (JapanWest)"|"901 (KoreaCentral)"|"902 (KoreaSouth)"|"1001 (SouthAfricaNorth)"|"1002 (SouthAfricaWest)"|"1201 (UaeCentral)"|"1202 (UaeNorth)"|"1401 (UkSouth)"|"1402 (UkWest)"|"1501 (CentralUs)"|"1502 (EastUs)"|"1503 (EastUs2)"|"1504 (NorthCentralUs)"|"1505 (SouthCentralUs)"|"1506 (WestCentralUs)"|"1507 (WestUs)"|"1508 (WestUs2)"|"1509 (WestUs3)"|"1601 (CentralUsEuap)"|"1602 (EastUs2Euap)"|"1701 (SwitzerlandNorth)"|"1702 (SwitzerlandWest)"|"1801 (GermanyNorth)"|"1802 (GermanyWestCentral)"|"1901 (NorwayWest)"|"1902 (NorwayEast)"}
+  --friendly-name: string # nullable
+  --plan-access-token: string # nullable
+  --plan-id: string # nullable
+  --sku-name: string # nullable
 ]: any -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)")
-  let body = {autoShutdownDelayMinutes: $autoShutdownDelayMinutes, failoverDetails: $failoverDetails, friendlyName: $friendlyName, planAccessToken: $planAccessToken, planId: $planId, skuName: $skuName} | compact
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}"))
+  let body = {"autoShutdownDelayMinutes": $auto_shutdown_delay_minutes, "failoverDetails": $failover_details, "friendlyName": $friendly_name, "planAccessToken": $plan_access_token, "planId": $plan_id, "skuName": $sku_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -342,8 +342,8 @@ export def "environments patch" [
 #
 # operationId: UpdateEnvironmentRoute
 # --payload shape: {sessionId?: string, sessionPath?: string}
-export def "environments-callback UpdateEnvironmentRoute" [
-  environmentId: string
+export def "environments-callback update-environment-route" [
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,8 +359,8 @@ export def "environments-callback UpdateEnvironmentRoute" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)/_callback")
-  let body = {payload: $payload, type: $type} | compact
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/_callback"))
+  let body = {"payload": $payload, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -369,7 +369,7 @@ export def "environments-callback UpdateEnvironmentRoute" [
 
 # GET /api/v1/Environments/{environmentId}/archive
 export def "environments-archive get" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,7 +382,7 @@ export def "environments-archive get" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)/archive")
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/archive"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -390,7 +390,7 @@ export def "environments-archive get" [
 
 # POST /api/v1/Environments/{environmentId}/archive
 export def "environments-archive post" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,7 +403,7 @@ export def "environments-archive post" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)/archive")
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/archive"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,7 +411,7 @@ export def "environments-archive post" [
 
 # POST /api/v1/Environments/{environmentId}/export
 export def "environments-export post" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "environments-export post" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)/export")
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/export"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -432,7 +432,7 @@ export def "environments-export post" [
 
 # PATCH /api/v1/Environments/{environmentId}/folder
 export def "environments-folder patch" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -442,13 +442,13 @@ export def "environments-folder patch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --recentFolderPaths: list # nullable
+  --recent-folder-paths: list # nullable
 ]: any -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)/folder")
-  let body = {recentFolderPaths: $recentFolderPaths} | compact
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/folder"))
+  let body = {"recentFolderPaths": $recent_folder_paths} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -457,7 +457,7 @@ export def "environments-folder patch" [
 
 # GET /api/v1/Environments/{environmentId}/heartbeattoken
 export def "environments-heartbeattoken get" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,7 +470,7 @@ export def "environments-heartbeattoken get" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)/heartbeattoken")
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/heartbeattoken"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -478,7 +478,7 @@ export def "environments-heartbeattoken get" [
 
 # POST /api/v1/Environments/{environmentId}/notify
 export def "environments-notify post" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -489,15 +489,15 @@ export def "environments-notify post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --details: string # nullable
-  --displayMode: string # nullable
+  --display-mode: string # nullable
   --message: string # nullable
   --modal: oneof<nothing, bool>
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)/notify")
-  let body = {details: $details, displayMode: $displayMode, message: $message, modal: $modal} | compact
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/notify"))
+  let body = {"details": $details, "displayMode": $display_mode, "message": $message, "modal": $modal} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -506,7 +506,7 @@ export def "environments-notify post" [
 
 # DELETE /api/v1/Environments/{environmentId}/ports/{port}
 export def "environments-ports delete" [
-  environmentId: string
+  environment_id: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -519,7 +519,7 @@ export def "environments-ports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)/ports/($port)")
+  let full_url = (build-url $base ({environment_id: $environment_id, port: $port} | format pattern "/api/v1/Environments/{environment_id}/ports/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -527,7 +527,7 @@ export def "environments-ports delete" [
 
 # PUT /api/v1/Environments/{environmentId}/ports/{port}
 export def "environments-ports put" [
-  environmentId: string
+  environment_id: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -538,13 +538,13 @@ export def "environments-ports put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --privacy: int@privacy-completer # format: int32
-  --tunnelType: int@tunnelType-completer # format: int32
+  --tunnel-type: int@tunnel-type-completer # format: int32
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)/ports/($port)")
-  let body = {privacy: $privacy, tunnelType: $tunnelType} | compact
+  let full_url = (build-url $base ({environment_id: $environment_id, port: $port} | format pattern "/api/v1/Environments/{environment_id}/ports/{port}"))
+  let body = {"privacy": $privacy, "tunnelType": $tunnel_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -553,7 +553,7 @@ export def "environments-ports put" [
 
 # PATCH /api/v1/Environments/{environmentId}/restore
 export def "environments-restore patch" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,7 +565,7 @@ export def "environments-restore patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)/restore")
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/restore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -575,7 +575,7 @@ export def "environments-restore patch" [
 #
 # --secrets item shape: {name?: string, type?: "1 (EnvironmentVariable)"|"2 (ContainerRegistry)", value?: string}
 export def "environments-secrets put" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,8 +590,8 @@ export def "environments-secrets put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)/secrets")
-  let body = {secrets: $secrets} | compact
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/secrets"))
+  let body = {"secrets": $secrets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -600,7 +600,7 @@ export def "environments-secrets put" [
 
 # POST /api/v1/Environments/{environmentId}/shutdown
 export def "environments-shutdown post" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -613,7 +613,7 @@ export def "environments-shutdown post" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)/shutdown")
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/shutdown"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -621,7 +621,7 @@ export def "environments-shutdown post" [
 
 # POST /api/v1/Environments/{environmentId}/start
 export def "environments-start post" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,7 +636,7 @@ export def "environments-start post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)/start" $qp)
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/start") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -644,7 +644,7 @@ export def "environments-start post" [
 
 # GET /api/v1/Environments/{environmentId}/state
 export def "environments-state get" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,7 +656,7 @@ export def "environments-state get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)/state")
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -664,7 +664,7 @@ export def "environments-state get" [
 
 # GET /api/v1/Environments/{environmentId}/updates
 export def "environments-updates get" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -677,7 +677,7 @@ export def "environments-updates get" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Environments/($environmentId)/updates")
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Environments/{environment_id}/updates"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -694,14 +694,14 @@ export def "geneva-actions-billing-resend post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --endTime: string # format: date-time
-  --startTime: string # format: date-time
+  --end-time: string # format: date-time
+  --start-time: string # format: date-time
 ]: any -> record<billGenerationTime: string, environmentId: string, id: string, location: int, partitionKey: string, periodEnd: string, periodStart: string, plan: record<location: int, name: string, providerNamespace: string, resourceGroup: string, resourceId: string, subscription: string>, usage: record, usageDetail: table<endState: int, id: string, resourceUsage: record, sku: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/GenevaActions/Billing/resend")
-  let body = {endTime: $endTime, startTime: $startTime} | compact
+  let body = {"endTime": $end_time, "startTime": $start_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -710,7 +710,7 @@ export def "geneva-actions-billing-resend post" [
 
 # GET /api/v1/GenevaActions/Billing/{environmentId}
 export def "geneva-actions-billing get" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -720,13 +720,13 @@ export def "geneva-actions-billing get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --startTime: string
-  --endTime: string
+  --start-time: string
+  --end-time: string
 ]: nothing -> record<billGenerationTime: string, environmentId: string, id: string, location: int, partitionKey: string, periodEnd: string, periodStart: string, plan: record<location: int, name: string, providerNamespace: string, resourceGroup: string, resourceId: string, subscription: string>, usage: record, usageDetail: table<endState: int, id: string, resourceUsage: record, sku: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/GenevaActions/Billing/($environmentId)" $qp)
+  let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/GenevaActions/Billing/{environment_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -734,7 +734,7 @@ export def "geneva-actions-billing get" [
 
 # GET /api/v1/GenevaActions/Billing/{environmentId}/state-changes
 export def "geneva-actions-billing-state-changes get" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,7 +747,7 @@ export def "geneva-actions-billing-state-changes get" [
 ]: nothing -> record<environment: record<id: string, name: string, sku: record<name: string, tier: string>, userId: string>, id: string, newValue: int, oldValue: int, partitionKey: string, time: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/GenevaActions/Billing/($environmentId)/state-changes")
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/GenevaActions/Billing/{environment_id}/state-changes"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -755,7 +755,7 @@ export def "geneva-actions-billing-state-changes get" [
 
 # POST /api/v1/GenevaActions/Billing/{environmentId}/state-changes
 export def "geneva-actions-billing-state-changes post" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -765,15 +765,15 @@ export def "geneva-actions-billing-state-changes post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --newValue: int@newValue-completer # format: int32
-  --oldValue: int@oldValue-completer # format: int32
+  --new-value: int@new-value-completer # format: int32
+  --old-value: int@old-value-completer # format: int32
   --time: string # nullable, format: date-time
 ]: any -> record<environment: record<id: string, name: string, sku: record<name: string, tier: string>, userId: string>, id: string, newValue: int, oldValue: int, partitionKey: string, time: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/GenevaActions/Billing/($environmentId)/state-changes")
-  let body = {newValue: $newValue, oldValue: $oldValue, time: $time} | compact
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/GenevaActions/Billing/{environment_id}/state-changes"))
+  let body = {"newValue": $new_value, "oldValue": $old_value, "time": $time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -799,8 +799,8 @@ export def "geneva-actions-configuration post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/GenevaActions/Configuration/($target)")
-  let body = {comment: $comment, key: $key, value: $value} | compact
+  let full_url = (build-url $base ({target: $target} | format pattern "/api/v1/GenevaActions/Configuration/{target}"))
+  let body = {"comment": $comment, "key": $key, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -822,7 +822,7 @@ export def "geneva-actions-configuration delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/GenevaActions/Configuration/($target)/($key)")
+  let full_url = (build-url $base ({target: $target, key: $key} | format pattern "/api/v1/GenevaActions/Configuration/{target}/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -844,7 +844,7 @@ export def "geneva-actions-configuration get" [
 ]: nothing -> record<comment: string, key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/GenevaActions/Configuration/($target)/($key)")
+  let full_url = (build-url $base ({target: $target, key: $key} | format pattern "/api/v1/GenevaActions/Configuration/{target}/{key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -852,7 +852,7 @@ export def "geneva-actions-configuration get" [
 
 # DELETE /api/v1/GenevaActions/Environments/{environmentId}
 export def "geneva-actions-environments delete" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -861,12 +861,12 @@ export def "geneva-actions-environments delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --deletionType: string
+  --deletion-type: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deletionType" $deletionType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/GenevaActions/Environments/($environmentId)" $qp)
+  let qp = [(serialize-qp "deletionType" $deletion_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -874,7 +874,7 @@ export def "geneva-actions-environments delete" [
 
 # GET /api/v1/GenevaActions/Environments/{environmentId}
 export def "geneva-actions-environments get" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,7 +887,7 @@ export def "geneva-actions-environments get" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/GenevaActions/Environments/($environmentId)")
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -895,7 +895,7 @@ export def "geneva-actions-environments get" [
 
 # PUT /api/v1/GenevaActions/Environments/{environmentId}/archive
 export def "geneva-actions-environments-archive put" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -908,7 +908,7 @@ export def "geneva-actions-environments-archive put" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/GenevaActions/Environments/($environmentId)/archive")
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/archive"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -916,8 +916,8 @@ export def "geneva-actions-environments-archive put" [
 
 # GET /api/v1/GenevaActions/Environments/{environmentId}/archived_storage_sas/{targetBlob}
 export def "geneva-actions-environments-archived-storage-sas get" [
-  environmentId: string
-  targetBlob: string
+  environment_id: string
+  target_blob: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -930,7 +930,7 @@ export def "geneva-actions-environments-archived-storage-sas get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/GenevaActions/Environments/($environmentId)/archived_storage_sas/($targetBlob)")
+  let full_url = (build-url $base ({environment_id: $environment_id, target_blob: $target_blob} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/archived_storage_sas/{target_blob}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -938,7 +938,7 @@ export def "geneva-actions-environments-archived-storage-sas get" [
 
 # PUT /api/v1/GenevaActions/Environments/{environmentId}/shutdown
 export def "geneva-actions-environments-shutdown put" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -951,7 +951,7 @@ export def "geneva-actions-environments-shutdown put" [
 ]: nothing -> record<accessToken: string, active: string, autoShutdownDelayMinutes: int, billableOwnerType: int, clientUsage: record<sessionId: string, usageData: record>, connection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, container: record<id: string, schemaVersion: string>, containerImage: string, createFromPrebuild: bool, created: string, displayStorageUtilizationInKb: bool, exportedBlobUrl: string, failoverDetails: record<failoverEnabled: bool, failoverRegion: int>, features: record, friendlyName: string, gitStatus: record<ahead: int, behind: int, branch: string, commit: string, hasUncommittedChanges: bool, hasUnpushedChanges: bool, noGitRepo: bool>, id: string, lastStateUpdateReason: string, lastUsed: string, location: string, organizationId: string, ownerId: string, planId: string, platform: string, portForwardingConnection: record<connectionServiceUri: string, connectionSessionId: string, connectionSessionPath: string, hostPublicKeys: list<string>, relayEndpoint: string, relaySasToken: string, sessionToken: string, tunnelProperties: record<clusterId: string, connectAccessToken: string, domain: string, managePortsAccessToken: string, serviceUri: string, tunnelId: string, tunnelName: string>>, prebuildType: string, recentFolders: list<string>, resourceTier: int, runtimeConstraints: record<allowedPortPrivacySettings: list<int>, imageAllowList: list<string>>, seed: record<cloneUrl: string, gitConfig: record<userEmail: string, userName: string>, recurseClone: bool, repository: record<branchName: string, commitId: string, createType: string, diskUsage: string, name: string, owner: string, prebuildHash: string, repoId: int, url: string>, seedMoniker: string, seedType: string>, skuDisplayName: string, skuName: string, state: string, storageUtilizationInKb: int, subscriptionData: record<computeQuota: int, computeUsage: int, subscriptionId: string, subscriptionState: string>, templateStatus: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/GenevaActions/Environments/($environmentId)/shutdown")
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/shutdown"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -959,7 +959,7 @@ export def "geneva-actions-environments-shutdown put" [
 
 # POST /api/v1/GenevaActions/Environments/{environmentId}/upload/running/vm/logs
 export def "geneva-actions-environments-upload-running-vm-logs post" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -972,7 +972,7 @@ export def "geneva-actions-environments-upload-running-vm-logs post" [
 ]: nothing -> record<containerName: string, message: string, pathInContainer: string, storageUri: string, vmResourceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/GenevaActions/Environments/($environmentId)/upload/running/vm/logs")
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/GenevaActions/Environments/{environment_id}/upload/running/vm/logs"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -991,15 +991,15 @@ export def "geneva-actions-pools-change-resource-deletion-setting post" [
   --accept: string@accept-completer # Response content type
   --comment: string # nullable
   --enabled: oneof<nothing, bool>
-  --poolCode: string # nullable
-  --poolType: string # nullable
+  --pool-code: string # nullable
+  --pool-type: string # nullable
   --region: string # nullable
 ]: any -> record<comment: string, key: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/GenevaActions/Pools/change-resource-deletion-setting")
-  let body = {comment: $comment, enabled: $enabled, poolCode: $poolCode, poolType: $poolType, region: $region} | compact
+  let body = {"comment": $comment, "enabled": $enabled, "poolCode": $pool_code, "poolType": $pool_type, "region": $region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1008,7 +1008,7 @@ export def "geneva-actions-pools-change-resource-deletion-setting post" [
 
 # POST /api/v1/GenevaActions/Pools/{poolCode}/rotate-pool
 export def "geneva-actions-pools-rotate-pool post" [
-  poolCode: string
+  pool_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1020,7 +1020,7 @@ export def "geneva-actions-pools-rotate-pool post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/GenevaActions/Pools/($poolCode)/rotate-pool")
+  let full_url = (build-url $base ({pool_code: $pool_code} | format pattern "/api/v1/GenevaActions/Pools/{pool_code}/rotate-pool"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1039,18 +1039,18 @@ export def "geneva-actions-pools post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --comment: string # nullable
-  --maxTargetCount: string # nullable
-  --minTargetCount: string # nullable
-  --poolCode: string # nullable
-  --poolType: string # nullable
+  --max-target-count: string # nullable
+  --min-target-count: string # nullable
+  --pool-code: string # nullable
+  --pool-type: string # nullable
   --region: string # nullable
-  --targetCount: string # nullable
+  --target-count: string # nullable
 ]: any -> record<comment: string, key: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/GenevaActions/Pools/($target)")
-  let body = {comment: $comment, maxTargetCount: $maxTargetCount, minTargetCount: $minTargetCount, poolCode: $poolCode, poolType: $poolType, region: $region, targetCount: $targetCount} | compact
+  let full_url = (build-url $base ({target: $target} | format pattern "/api/v1/GenevaActions/Pools/{target}"))
+  let body = {"comment": $comment, "maxTargetCount": $max_target_count, "minTargetCount": $min_target_count, "poolCode": $pool_code, "poolType": $pool_type, "region": $region, "targetCount": $target_count} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1069,17 +1069,17 @@ export def "geneva-actions-prebuilds-pools-createorupdatesettings post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --branchName: string # nullable
-  --devContainerPath: string # nullable
+  --branch-name: string # nullable
+  --dev-container-path: string # nullable
   --pools: list # nullable — item shape: {poolType?: "0 (None)"|"1 (Blob)"|"2 (CodespacePool)"|"3 (StoragePool)"|"4 (CodespaceAndStoragePool)", skuName?: string, targetCount?: int}
-  --repoId: string # nullable
-  --storageType: int@storageType-completer # format: int32
+  --repo-id: string # nullable
+  --storage-type: int@storage-type-completer # format: int32
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/GenevaActions/Prebuilds/pools/createorupdatesettings")
-  let body = {branchName: $branchName, devContainerPath: $devContainerPath, pools: $pools, repoId: $repoId, storageType: $storageType} | compact
+  let body = {"branchName": $branch_name, "devContainerPath": $dev_container_path, "pools": $pools, "repoId": $repo_id, "storageType": $storage_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1098,17 +1098,17 @@ export def "geneva-actions-prebuilds-pools-delete post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --branchName: string # nullable
-  --devContainerPath: string # nullable
+  --branch-name: string # nullable
+  --dev-container-path: string # nullable
   --pools: list # nullable — item shape: {poolType?: "0 (None)"|"1 (Blob)"|"2 (CodespacePool)"|"3 (StoragePool)"|"4 (CodespaceAndStoragePool)", skuName?: string, targetCount?: int}
-  --repoId: string # nullable
-  --storageType: int@storageType-completer # format: int32
+  --repo-id: string # nullable
+  --storage-type: int@storage-type-completer # format: int32
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/GenevaActions/Prebuilds/pools/delete")
-  let body = {branchName: $branchName, devContainerPath: $devContainerPath, pools: $pools, repoId: $repoId, storageType: $storageType} | compact
+  let body = {"branchName": $branch_name, "devContainerPath": $dev_container_path, "pools": $pools, "repoId": $repo_id, "storageType": $storage_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1127,14 +1127,14 @@ export def "geneva-actions-privacy-refresh-profile-telemetry-properties post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --partner: string # nullable
-  --tenantId: string # nullable
-  --userIds: string # nullable
+  --tenant-id: string # nullable
+  --user-ids: string # nullable
 ]: any -> record<failed: table<oid: string, provider: string, tid: string>, succeeded: table<oid: string, provider: string, tid: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/GenevaActions/Privacy/refresh-profile-telemetry-properties")
-  let body = {partner: $partner, tenantId: $tenantId, userIds: $userIds} | compact
+  let body = {"partner": $partner, "tenantId": $tenant_id, "userIds": $user_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1143,7 +1143,7 @@ export def "geneva-actions-privacy-refresh-profile-telemetry-properties post" [
 
 # POST /api/v1/GenevaActions/Resources/{resourceId}/under-investigation
 export def "geneva-actions-resources-under-investigation post" [
-  resourceId: string
+  resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1156,7 +1156,7 @@ export def "geneva-actions-resources-under-investigation post" [
 ]: nothing -> record<investigationStarted: string, resourceId: string, underInvestigation: bool, updated: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/GenevaActions/Resources/($resourceId)/under-investigation")
+  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/api/v1/GenevaActions/Resources/{resource_id}/under-investigation"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1173,18 +1173,18 @@ export def "geneva-actions-vnet-pool-definitions delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   dimensions: record
-  --isEnabled: oneof<nothing, bool>
+  --is-enabled: oneof<nothing, bool>
   location: int@location-completer # format: int32
-  --logicalSkus: list # nullable
+  --logical-skus: list # nullable
   subtype: int@subtype-completer # format: int32
-  targetCount: int # format: int32
+  target_count: int # format: int32
   type: int@type-completer # format: int32
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/GenevaActions/VnetPoolDefinitions")
-  let body = {dimensions: $dimensions, isEnabled: $isEnabled, location: $location, logicalSkus: $logicalSkus, subtype: $subtype, targetCount: $targetCount, type: $type} | compact
+  let body = {"dimensions": $dimensions, "isEnabled": $is_enabled, "location": $location, "logicalSkus": $logical_skus, "subtype": $subtype, "targetCount": $target_count, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1202,18 +1202,18 @@ export def "geneva-actions-vnet-pool-definitions post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   dimensions: record
-  --isEnabled: oneof<nothing, bool>
+  --is-enabled: oneof<nothing, bool>
   location: int@location-completer # format: int32
-  --logicalSkus: list # nullable
+  --logical-skus: list # nullable
   subtype: int@subtype-completer # format: int32
-  targetCount: int # format: int32
+  target_count: int # format: int32
   type: int@type-completer # format: int32
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/GenevaActions/VnetPoolDefinitions")
-  let body = {dimensions: $dimensions, isEnabled: $isEnabled, location: $location, logicalSkus: $logicalSkus, subtype: $subtype, targetCount: $targetCount, type: $type} | compact
+  let body = {"dimensions": $dimensions, "isEnabled": $is_enabled, "location": $location, "logicalSkus": $logical_skus, "subtype": $subtype, "targetCount": $target_count, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1232,17 +1232,17 @@ export def "heart-beat post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --agentVersion: string # nullable
-  --collectedDataList: list # nullable — item shape: {environmentId?: string, name?: string, parentActivityId?: string, timestamp?: string}
-  --environmentId: string # nullable
-  --resourceId: string # format: uuid
-  --timeStamp: string # format: date-time
+  --agent-version: string # nullable
+  --collected-data-list: list # nullable — item shape: {environmentId?: string, name?: string, parentActivityId?: string, timestamp?: string}
+  --environment-id: string # nullable
+  --resource-id: string # format: uuid
+  --time-stamp: string # format: date-time
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/HeartBeat")
-  let body = {agentVersion: $agentVersion, collectedDataList: $collectedDataList, environmentId: $environmentId, resourceId: $resourceId, timeStamp: $timeStamp} | compact
+  let body = {"agentVersion": $agent_version, "collectedDataList": $collected_data_list, "environmentId": $environment_id, "resourceId": $resource_id, "timeStamp": $time_stamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1281,12 +1281,12 @@ export def "locations get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string
+  --plan-id: string
 ]: nothing -> record<skus: table<availableSettings: record, displayName: string, name: string, os: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Locations/($location)" $qp)
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({location: $location} | format pattern "/api/v1/Locations/{location}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1297,7 +1297,7 @@ export def "locations get" [
 # --environmentOptions shape: {correlationId?: string}
 # --secrets item shape: {name?: string, type?: "1 (EnvironmentVariable)"|"2 (ContainerRegistry)", value?: string}
 export def "prebuilds-pools-instances post" [
-  poolId: string
+  pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1306,14 +1306,14 @@ export def "prebuilds-pools-instances post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environmentOptions: record # shape: {correlationId?: string}
+  --environment-options: record # shape: {correlationId?: string}
   --secrets: list # nullable — item shape: {name?: string, type?: "1 (EnvironmentVariable)"|"2 (ContainerRegistry)", value?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Prebuilds/pools/($poolId)/instances")
-  let body = {environmentOptions: $environmentOptions, secrets: $secrets} | compact
+  let full_url = (build-url $base ({pool_id: $pool_id} | format pattern "/api/v1/Prebuilds/pools/{pool_id}/instances"))
+  let body = {"environmentOptions": $environment_options, "secrets": $secrets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1325,7 +1325,7 @@ export def "prebuilds-pools-instances post" [
 # --environmentOptions shape: {correlationId?: string}
 # --secrets item shape: {name?: string, type?: "1 (EnvironmentVariable)"|"2 (ContainerRegistry)", value?: string}
 export def "prebuilds-pools-instances put" [
-  poolId: string
+  pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1334,14 +1334,14 @@ export def "prebuilds-pools-instances put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environmentOptions: record # shape: {correlationId?: string}
+  --environment-options: record # shape: {correlationId?: string}
   --secrets: list # nullable — item shape: {name?: string, type?: "1 (EnvironmentVariable)"|"2 (ContainerRegistry)", value?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Prebuilds/pools/($poolId)/instances")
-  let body = {environmentOptions: $environmentOptions, secrets: $secrets} | compact
+  let full_url = (build-url $base ({pool_id: $pool_id} | format pattern "/api/v1/Prebuilds/pools/{pool_id}/instances"))
+  let body = {"environmentOptions": $environment_options, "secrets": $secrets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1351,8 +1351,8 @@ export def "prebuilds-pools-instances put" [
 # GET /api/v1/Prebuilds/template/{environmentId}
 #
 # operationId: GetTemplateInfoRoute
-export def "prebuilds-template GetTemplateInfoRoute" [
-  environmentId: string
+export def "prebuilds-template get-template-info-route" [
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1365,7 +1365,7 @@ export def "prebuilds-template GetTemplateInfoRoute" [
 ]: nothing -> record<branchName: string, commitId: string, id: string, isPrebuild: bool, lastUsedTime: string, logicalSkus: list<string>, prebuildHash: string, repoId: int, templateStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Prebuilds/template/($environmentId)")
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Prebuilds/template/{environment_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1374,10 +1374,10 @@ export def "prebuilds-template GetTemplateInfoRoute" [
 # GET /api/v1/Prebuilds/templates/repo/{repoId}/branch/{branchName}/hash/{prebuildHash}/location/{location}/skus
 #
 # operationId: GetPrebuildReadinessRoute
-export def "prebuilds-templates-repo-branch-hash-location-skus GetPrebuildReadinessRoute" [
-  repoId: string
-  branchName: string
-  prebuildHash: string
+export def "prebuilds-templates-repo-branch-hash-location-skus get-prebuild-readiness-route" [
+  repo_id: string
+  branch_name: string
+  prebuild_hash: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1388,12 +1388,12 @@ export def "prebuilds-templates-repo-branch-hash-location-skus GetPrebuildReadin
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --storageType: int@storageType-completer # format: int32
+  --storage-type: int@storage-type-completer # format: int32
 ]: nothing -> record<branchName: string, devContainerPath: string, location: int, poolSkus: list<string>, prebuildHash: string, repoId: string, supportedSkus: list<string>, templateSkus: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "storageType" $storageType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Prebuilds/templates/repo/($repoId)/branch/($branchName)/hash/($prebuildHash)/location/($location)/skus" $qp)
+  let qp = [(serialize-qp "storageType" $storage_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({repo_id: $repo_id, branch_name: $branch_name, prebuild_hash: $prebuild_hash, location: $location} | format pattern "/api/v1/Prebuilds/templates/repo/{repo_id}/branch/{branch_name}/hash/{prebuild_hash}/location/{location}/skus") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1430,11 +1430,11 @@ export def "secrets get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string
+  --plan-id: string
 ]: nothing -> table<filters: list<record>, id: string, lastModified: string, notes: string, scope: int, secretName: string, type: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Secrets" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1454,20 +1454,20 @@ export def "secrets post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string
+  --plan-id: string
   --filters: list # nullable — item shape: {type?: "1 (GitRepo)"|"2 (CodespaceName)", value?: string}
   --notes: string # nullable
   --scope: int@scope-completer # format: int32
-  --secretName: string # nullable
+  --secret-name: string # nullable
   --type: int@type-completer-1 # format: int32
   --value: string # nullable
 ]: any -> record<filters: table<type: int, value: string>, id: string, lastModified: string, notes: string, scope: int, secretName: string, type: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Secrets" $qp)
-  let body = {filters: $filters, notes: $notes, scope: $scope, secretName: $secretName, type: $type, value: $value} | compact
+  let body = {"filters": $filters, "notes": $notes, "scope": $scope, "secretName": $secret_name, "type": $type, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1476,7 +1476,7 @@ export def "secrets post" [
 
 # DELETE /api/v1/Secrets/{secretId}
 export def "secrets delete" [
-  secretId: string
+  secret_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1485,13 +1485,13 @@ export def "secrets delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --planId: string
+  --plan-id: string
   --scope: int@scope-completer # format: int32
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Secrets/($secretId)" $qp)
+  let qp = [(serialize-qp "planId" $plan_id "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({secret_id: $secret_id} | format pattern "/api/v1/Secrets/{secret_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1501,7 +1501,7 @@ export def "secrets delete" [
 #
 # --filters item shape: {type?: "1 (GitRepo)"|"2 (CodespaceName)", value?: string}
 export def "secrets put" [
-  secretId: string
+  secret_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1511,19 +1511,19 @@ export def "secrets put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --planId: string
+  --plan-id: string
   --filters: list # nullable — item shape: {type?: "1 (GitRepo)"|"2 (CodespaceName)", value?: string}
   --notes: string # nullable
   --scope: int@scope-completer # format: int32
-  --secretName: string # nullable
+  --secret-name: string # nullable
   --value: string # nullable
 ]: any -> record<filters: table<type: int, value: string>, id: string, lastModified: string, notes: string, scope: int, secretName: string, type: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "planId" $planId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Secrets/($secretId)" $qp)
-  let body = {filters: $filters, notes: $notes, scope: $scope, secretName: $secretName, value: $value} | compact
+  let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({secret_id: $secret_id} | format pattern "/api/v1/Secrets/{secret_id}") $qp)
+  let body = {"filters": $filters, "notes": $notes, "scope": $scope, "secretName": $secret_name, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1532,7 +1532,7 @@ export def "secrets put" [
 
 # DELETE /api/v1/Tenant/{tenantId}
 export def "tenant delete" [
-  tenantId: string
+  tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1544,7 +1544,7 @@ export def "tenant delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Tenant/($tenantId)")
+  let full_url = (build-url $base ({tenant_id: $tenant_id} | format pattern "/api/v1/Tenant/{tenant_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1552,7 +1552,7 @@ export def "tenant delete" [
 
 # GET /api/v1/Tenant/{tenantId}
 export def "tenant get" [
-  tenantId: string
+  tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1565,7 +1565,7 @@ export def "tenant get" [
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Tenant/($tenantId)")
+  let full_url = (build-url $base ({tenant_id: $tenant_id} | format pattern "/api/v1/Tenant/{tenant_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1573,7 +1573,7 @@ export def "tenant get" [
 
 # PUT /api/v1/Tenant/{tenantId}
 export def "tenant put" [
-  tenantId: string
+  tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1585,7 +1585,7 @@ export def "tenant put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Tenant/($tenantId)")
+  let full_url = (build-url $base ({tenant_id: $tenant_id} | format pattern "/api/v1/Tenant/{tenant_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1593,7 +1593,7 @@ export def "tenant put" [
 
 # POST /api/v1/Tokens/plans/{planName}/deleteAllCodespaces
 export def "tokens-plans-delete-all-codespaces post" [
-  planName: string
+  plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1608,7 +1608,7 @@ export def "tokens-plans-delete-all-codespaces post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Tokens/plans/($planName)/deleteAllCodespaces" $qp)
+  let full_url = (build-url $base ({plan_name: $plan_name} | format pattern "/api/v1/Tokens/plans/{plan_name}/deleteAllCodespaces") $qp)
   let extra_headers = {"x-subscription-id": $x_subscription_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1618,7 +1618,7 @@ export def "tokens-plans-delete-all-codespaces post" [
 
 # POST /api/v1/Tokens/plans/{planName}/readAllCodespaces
 export def "tokens-plans-read-all-codespaces post" [
-  planName: string
+  plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1633,7 +1633,7 @@ export def "tokens-plans-read-all-codespaces post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Tokens/plans/($planName)/readAllCodespaces" $qp)
+  let full_url = (build-url $base ({plan_name: $plan_name} | format pattern "/api/v1/Tokens/plans/{plan_name}/readAllCodespaces") $qp)
   let extra_headers = {"x-subscription-id": $x_subscription_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1643,7 +1643,7 @@ export def "tokens-plans-read-all-codespaces post" [
 
 # POST /api/v1/Tokens/plans/{planName}/writeCodespaces
 export def "tokens-plans-write-codespaces post" [
-  planName: string
+  plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1658,7 +1658,7 @@ export def "tokens-plans-write-codespaces post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Tokens/plans/($planName)/writeCodespaces" $qp)
+  let full_url = (build-url $base ({plan_name: $plan_name} | format pattern "/api/v1/Tokens/plans/{plan_name}/writeCodespaces") $qp)
   let extra_headers = {"x-subscription-id": $x_subscription_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1670,7 +1670,7 @@ export def "tokens-plans-write-codespaces post" [
 #
 # --identity shape: {displayName?: string, id?: string, username?: string}
 export def "tokens-plans-write-delegates post" [
-  planName: string
+  plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1680,17 +1680,17 @@ export def "tokens-plans-write-delegates post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-subscription-id: string
-  --environmentIds: list # nullable
+  --environment-ids: list # nullable
   --expiration: string # nullable, format: date-time
   --identity: record # shape: {displayName?: string, id?: string, username?: string}
-  --portNumbers: list # nullable
+  --port-numbers: list # nullable
   --scope: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Tokens/plans/($planName)/writeDelegates")
-  let body = {environmentIds: $environmentIds, expiration: $expiration, identity: $identity, portNumbers: $portNumbers, scope: $scope} | compact
+  let full_url = (build-url $base ({plan_name: $plan_name} | format pattern "/api/v1/Tokens/plans/{plan_name}/writeDelegates"))
+  let body = {"environmentIds": $environment_ids, "expiration": $expiration, "identity": $identity, "portNumbers": $port_numbers, "scope": $scope} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-subscription-id": $x_subscription_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1704,10 +1704,10 @@ export def "tokens-plans-write-delegates post" [
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
 export def "tokens-subscriptions-resource-groups-providers-plans put" [
-  subscriptionId: string
-  resourceGroup: string
-  providerNamespace: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  provider_namespace: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1722,15 +1722,15 @@ export def "tokens-subscriptions-resource-groups-providers-plans put" [
   --location: string # nullable
   --name: string # nullable
   --properties: record # shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-  --provisioningState: string # nullable
+  --provisioning-state: string # nullable
   --tags: record # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Tokens/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/($providerNamespace)/plans/($resourceName)")
-  let body = {id: $id, identity: $identity, location: $location, name: $name, properties: $properties, provisioningState: $provisioningState, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, provider_namespace: $provider_namespace, resource_name: $resource_name} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}"))
+  let body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"headers": $headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1741,10 +1741,10 @@ export def "tokens-subscriptions-resource-groups-providers-plans put" [
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/deleteAllCodespaces
 export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-codespaces post" [
-  subscriptionId: string
-  resourceGroup: string
-  providerNamespace: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  provider_namespace: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1758,7 +1758,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-code
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Tokens/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/($providerNamespace)/plans/($resourceName)/deleteAllCodespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, provider_namespace: $provider_namespace, resource_name: $resource_name} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/deleteAllCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1766,10 +1766,10 @@ export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-code
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/deleteAllEnvironments
 export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-environments post" [
-  subscriptionId: string
-  resourceGroup: string
-  providerNamespace: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  provider_namespace: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1783,7 +1783,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-envi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Tokens/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/($providerNamespace)/plans/($resourceName)/deleteAllEnvironments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, provider_namespace: $provider_namespace, resource_name: $resource_name} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/deleteAllEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1791,10 +1791,10 @@ export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-envi
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/readAllCodespaces
 export def "tokens-subscriptions-resource-groups-providers-plans-read-all-codespaces post" [
-  subscriptionId: string
-  resourceGroup: string
-  providerNamespace: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  provider_namespace: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1808,7 +1808,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-read-all-codesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Tokens/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/($providerNamespace)/plans/($resourceName)/readAllCodespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, provider_namespace: $provider_namespace, resource_name: $resource_name} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/readAllCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1816,10 +1816,10 @@ export def "tokens-subscriptions-resource-groups-providers-plans-read-all-codesp
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/readAllEnvironments
 export def "tokens-subscriptions-resource-groups-providers-plans-read-all-environments post" [
-  subscriptionId: string
-  resourceGroup: string
-  providerNamespace: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  provider_namespace: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1833,7 +1833,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-read-all-enviro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Tokens/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/($providerNamespace)/plans/($resourceName)/readAllEnvironments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, provider_namespace: $provider_namespace, resource_name: $resource_name} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/readAllEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1841,10 +1841,10 @@ export def "tokens-subscriptions-resource-groups-providers-plans-read-all-enviro
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/writeCodespaces
 export def "tokens-subscriptions-resource-groups-providers-plans-write-codespaces post" [
-  subscriptionId: string
-  resourceGroup: string
-  providerNamespace: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  provider_namespace: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1858,7 +1858,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-write-codespace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Tokens/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/($providerNamespace)/plans/($resourceName)/writeCodespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, provider_namespace: $provider_namespace, resource_name: $resource_name} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/writeCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1868,10 +1868,10 @@ export def "tokens-subscriptions-resource-groups-providers-plans-write-codespace
 #
 # --identity shape: {displayName?: string, id?: string, username?: string}
 export def "tokens-subscriptions-resource-groups-providers-plans-write-delegates post" [
-  subscriptionId: string
-  resourceGroup: string
-  providerNamespace: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  provider_namespace: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1880,17 +1880,17 @@ export def "tokens-subscriptions-resource-groups-providers-plans-write-delegates
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environmentIds: list # nullable
+  --environment-ids: list # nullable
   --expiration: string # nullable, format: date-time
   --identity: record # shape: {displayName?: string, id?: string, username?: string}
-  --portNumbers: list # nullable
+  --port-numbers: list # nullable
   --scope: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/Tokens/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/($providerNamespace)/plans/($resourceName)/writeDelegates")
-  let body = {environmentIds: $environmentIds, expiration: $expiration, identity: $identity, portNumbers: $portNumbers, scope: $scope} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, provider_namespace: $provider_namespace, resource_name: $resource_name} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/writeDelegates"))
+  let body = {"environmentIds": $environment_ids, "expiration": $expiration, "identity": $identity, "portNumbers": $port_numbers, "scope": $scope} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1899,10 +1899,10 @@ export def "tokens-subscriptions-resource-groups-providers-plans-write-delegates
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/writeEnvironments
 export def "tokens-subscriptions-resource-groups-providers-plans-write-environments post" [
-  subscriptionId: string
-  resourceGroup: string
-  providerNamespace: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  provider_namespace: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1916,7 +1916,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-write-environme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Tokens/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/($providerNamespace)/plans/($resourceName)/writeEnvironments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, provider_namespace: $provider_namespace, resource_name: $resource_name} | format pattern "/api/v1/Tokens/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{provider_namespace}/plans/{resource_name}/writeEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1924,7 +1924,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-write-environme
 
 # GET /api/v1/Tunnel/{environmentId}/portInfo
 export def "tunnel-port-info get" [
-  environmentId: string
+  environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1934,12 +1934,12 @@ export def "tunnel-port-info get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --portNumber: int # format: int32
+  --port-number: int # format: int32
 ]: nothing -> record<portVisibility: string, tunnelToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "portNumber" $portNumber "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/Tunnel/($environmentId)/portInfo" $qp)
+  let qp = [(serialize-qp "portNumber" $port_number "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({environment_id: $environment_id} | format pattern "/api/v1/Tunnel/{environment_id}/portInfo") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1998,11 +1998,11 @@ export def "pools-default get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --skuName: list
+  --sku-name: list
 ]: nothing -> table<allWithLatestVersion: bool, isEnvironmentPool: bool, location: string, poolCode: string, readyUnassignedCount: int, readyUnassignedLatestVersionCount: int, readyUnassignedNotLatestVersionAndIdleCount: int, readyUnassignedNotLatestVersionCount: int, resourceType: string, sku: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "skuName" $skuName "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "skuName" $sku_name "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/pools/default" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2013,8 +2013,8 @@ export def "pools-default get" [
 #
 # --properties shape: {accountOwner?: record, additionalProperties?: record, locationPlacementId?: string, managedByTenants?: list, quotaId?: string, registeredFeatures?: list, tenantId?: string}
 export def "subscriptions-providers-git-hub-network-subscription-life-cycle-notification put" [
-  subscriptionId: string
-  resourceType: string
+  subscription_id: string
+  resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2024,14 +2024,14 @@ export def "subscriptions-providers-git-hub-network-subscription-life-cycle-noti
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --properties: record # shape: {accountOwner?: record, additionalProperties?: record, locationPlacementId?: string, managedByTenants?: list, quotaId?: string, registeredFeatures?: list, tenantId?: string}
-  --registrationDate: string # format: date-time
+  --registration-date: string # format: date-time
   --state: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/providers/GitHub.Network/($resourceType)/SubscriptionLifeCycleNotification")
-  let body = {properties: $properties, registrationDate: $registrationDate, state: $state} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_type: $resource_type} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/GitHub.Network/{resource_type}/SubscriptionLifeCycleNotification"))
+  let body = {"properties": $properties, "registrationDate": $registration_date, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2042,8 +2042,8 @@ export def "subscriptions-providers-git-hub-network-subscription-life-cycle-noti
 #
 # --value item shape: {id?: string, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
 export def "subscriptions-providers-git-hub-network-resource-read-begin post" [
-  subscriptionId: string
-  resourceType: string
+  subscription_id: string
+  resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2057,8 +2057,8 @@ export def "subscriptions-providers-git-hub-network-resource-read-begin post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/providers/GitHub.Network/($resourceType)/resourceReadBegin")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_type: $resource_type} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/GitHub.Network/{resource_type}/resourceReadBegin"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2069,7 +2069,7 @@ export def "subscriptions-providers-git-hub-network-resource-read-begin post" [
 #
 # --properties shape: {accountOwner?: record, additionalProperties?: record, locationPlacementId?: string, managedByTenants?: list, quotaId?: string, registeredFeatures?: list, tenantId?: string}
 export def "subscriptions-providers-microsoft-codespaces-plans-subscription-life-cycle-notification put" [
-  subscriptionId: string
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2079,14 +2079,14 @@ export def "subscriptions-providers-microsoft-codespaces-plans-subscription-life
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --properties: record # shape: {accountOwner?: record, additionalProperties?: record, locationPlacementId?: string, managedByTenants?: list, quotaId?: string, registeredFeatures?: list, tenantId?: string}
-  --registrationDate: string # format: date-time
+  --registration-date: string # format: date-time
   --state: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/providers/Microsoft.Codespaces/plans/SubscriptionLifeCycleNotification")
-  let body = {properties: $properties, registrationDate: $registrationDate, state: $state} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.Codespaces/plans/SubscriptionLifeCycleNotification"))
+  let body = {"properties": $properties, "registrationDate": $registration_date, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2097,7 +2097,7 @@ export def "subscriptions-providers-microsoft-codespaces-plans-subscription-life
 #
 # --value item shape: {id?: string, identity?: record, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
 export def "subscriptions-providers-microsoft-codespaces-plans-resource-read-begin post" [
-  subscriptionId: string
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2111,8 +2111,8 @@ export def "subscriptions-providers-microsoft-codespaces-plans-resource-read-beg
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/providers/Microsoft.Codespaces/plans/resourceReadBegin")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.Codespaces/plans/resourceReadBegin"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2123,7 +2123,7 @@ export def "subscriptions-providers-microsoft-codespaces-plans-resource-read-beg
 #
 # --properties shape: {accountOwner?: record, additionalProperties?: record, locationPlacementId?: string, managedByTenants?: list, quotaId?: string, registeredFeatures?: list, tenantId?: string}
 export def "subscriptions-providers-microsoft-vs-online-plans-subscription-life-cycle-notification put" [
-  subscriptionId: string
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2133,14 +2133,14 @@ export def "subscriptions-providers-microsoft-vs-online-plans-subscription-life-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --properties: record # shape: {accountOwner?: record, additionalProperties?: record, locationPlacementId?: string, managedByTenants?: list, quotaId?: string, registeredFeatures?: list, tenantId?: string}
-  --registrationDate: string # format: date-time
+  --registration-date: string # format: date-time
   --state: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/providers/Microsoft.VSOnline/plans/SubscriptionLifeCycleNotification")
-  let body = {properties: $properties, registrationDate: $registrationDate, state: $state} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.VSOnline/plans/SubscriptionLifeCycleNotification"))
+  let body = {"properties": $properties, "registrationDate": $registration_date, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2151,7 +2151,7 @@ export def "subscriptions-providers-microsoft-vs-online-plans-subscription-life-
 #
 # --value item shape: {id?: string, identity?: record, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
 export def "subscriptions-providers-microsoft-vs-online-plans-resource-read-begin post" [
-  subscriptionId: string
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2165,8 +2165,8 @@ export def "subscriptions-providers-microsoft-vs-online-plans-resource-read-begi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/providers/Microsoft.VSOnline/plans/resourceReadBegin")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/api/v1/subscriptions/{subscription_id}/providers/Microsoft.VSOnline/plans/resourceReadBegin"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2177,9 +2177,9 @@ export def "subscriptions-providers-microsoft-vs-online-plans-resource-read-begi
 #
 # --value item shape: {id?: string, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
 export def "subscriptions-resource-groups-providers-git-hub-network-resource-read-begin post-by-subscriptionId-resourceGroup-resourceType" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceType: string
+  subscription_id: string
+  resource_group: string
+  resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2193,8 +2193,8 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-rea
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/GitHub.Network/($resourceType)/resourceReadBegin")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/resourceReadBegin"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2205,10 +2205,10 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-rea
 #
 # --properties shape: {subnetId?: string}
 export def "subscriptions-resource-groups-providers-git-hub-network delete" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceType: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2221,15 +2221,15 @@ export def "subscriptions-resource-groups-providers-git-hub-network delete" [
   --location: string # nullable
   --name: string # nullable
   --properties: record # shape: {subnetId?: string}
-  --provisioningState: string # nullable
+  --provisioning-state: string # nullable
   --tags: record # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/GitHub.Network/($resourceType)/($resourceName)")
-  let body = {id: $id, location: $location, name: $name, properties: $properties, provisioningState: $provisioningState, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}"))
+  let body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2240,10 +2240,10 @@ export def "subscriptions-resource-groups-providers-git-hub-network delete" [
 #
 # --properties shape: {subnetId?: string}
 export def "subscriptions-resource-groups-providers-git-hub-network patch" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceType: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2256,15 +2256,15 @@ export def "subscriptions-resource-groups-providers-git-hub-network patch" [
   --location: string # nullable
   --name: string # nullable
   --properties: record # shape: {subnetId?: string}
-  --provisioningState: string # nullable
+  --provisioning-state: string # nullable
   --tags: record # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/GitHub.Network/($resourceType)/($resourceName)")
-  let body = {id: $id, location: $location, name: $name, properties: $properties, provisioningState: $provisioningState, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}"))
+  let body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2275,10 +2275,10 @@ export def "subscriptions-resource-groups-providers-git-hub-network patch" [
 #
 # --properties shape: {subnetId?: string}
 export def "subscriptions-resource-groups-providers-git-hub-network put" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceType: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2291,15 +2291,15 @@ export def "subscriptions-resource-groups-providers-git-hub-network put" [
   --location: string # nullable
   --name: string # nullable
   --properties: record # shape: {subnetId?: string}
-  --provisioningState: string # nullable
+  --provisioning-state: string # nullable
   --tags: record # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/GitHub.Network/($resourceType)/($resourceName)")
-  let body = {id: $id, location: $location, name: $name, properties: $properties, provisioningState: $provisioningState, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}"))
+  let body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2308,10 +2308,10 @@ export def "subscriptions-resource-groups-providers-git-hub-network put" [
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceCreationCompleted
 export def "subscriptions-resource-groups-providers-git-hub-network-resource-creation-completed post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceType: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2323,7 +2323,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-cre
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/GitHub.Network/($resourceType)/($resourceName)/resourceCreationCompleted")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceCreationCompleted"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2333,10 +2333,10 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-cre
 #
 # --properties shape: {subnetId?: string}
 export def "subscriptions-resource-groups-providers-git-hub-network-resource-creation-validate post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceType: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2349,15 +2349,15 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-cre
   --location: string # nullable
   --name: string # nullable
   --properties: record # shape: {subnetId?: string}
-  --provisioningState: string # nullable
+  --provisioning-state: string # nullable
   --tags: record # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/GitHub.Network/($resourceType)/($resourceName)/resourceCreationValidate")
-  let body = {id: $id, location: $location, name: $name, properties: $properties, provisioningState: $provisioningState, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceCreationValidate"))
+  let body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2366,10 +2366,10 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-cre
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceDeletionCompleted
 export def "subscriptions-resource-groups-providers-git-hub-network-resource-deletion-completed post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceType: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2381,7 +2381,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-del
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/GitHub.Network/($resourceType)/($resourceName)/resourceDeletionCompleted")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceDeletionCompleted"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2391,10 +2391,10 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-del
 #
 # --properties shape: {subnetId?: string}
 export def "subscriptions-resource-groups-providers-git-hub-network-resource-deletion-validate post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceType: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2407,15 +2407,15 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-del
   --location: string # nullable
   --name: string # nullable
   --properties: record # shape: {subnetId?: string}
-  --provisioningState: string # nullable
+  --provisioning-state: string # nullable
   --tags: record # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/GitHub.Network/($resourceType)/($resourceName)/resourceDeletionValidate")
-  let body = {id: $id, location: $location, name: $name, properties: $properties, provisioningState: $provisioningState, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceDeletionValidate"))
+  let body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2424,10 +2424,10 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-del
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourcePatchCompleted
 export def "subscriptions-resource-groups-providers-git-hub-network-resource-patch-completed post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceType: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2439,7 +2439,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-pat
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/GitHub.Network/($resourceType)/($resourceName)/resourcePatchCompleted")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourcePatchCompleted"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2449,10 +2449,10 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-pat
 #
 # --properties shape: {subnetId?: string}
 export def "subscriptions-resource-groups-providers-git-hub-network-resource-patch-validate post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceType: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2465,15 +2465,15 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-pat
   --location: string # nullable
   --name: string # nullable
   --properties: record # shape: {subnetId?: string}
-  --provisioningState: string # nullable
+  --provisioning-state: string # nullable
   --tags: record # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/GitHub.Network/($resourceType)/($resourceName)/resourcePatchValidate")
-  let body = {id: $id, location: $location, name: $name, properties: $properties, provisioningState: $provisioningState, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourcePatchValidate"))
+  let body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2484,10 +2484,10 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-pat
 #
 # --properties shape: {subnetId?: string}
 export def "subscriptions-resource-groups-providers-git-hub-network-resource-read-begin post-by-subscriptionId-resourceGroup-resourceType-resourceName" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceType: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2500,15 +2500,15 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-rea
   --location: string # nullable
   --name: string # nullable
   --properties: record # shape: {subnetId?: string}
-  --provisioningState: string # nullable
+  --provisioning-state: string # nullable
   --tags: record # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/GitHub.Network/($resourceType)/($resourceName)/resourceReadBegin")
-  let body = {id: $id, location: $location, name: $name, properties: $properties, provisioningState: $provisioningState, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/GitHub.Network/{resource_type}/{resource_name}/resourceReadBegin"))
+  let body = {"id": $id, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2519,8 +2519,8 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-rea
 #
 # --value item shape: {id?: string, identity?: record, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
 export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-read-begin post-by-subscriptionId-resourceGroup" [
-  subscriptionId: string
-  resourceGroup: string
+  subscription_id: string
+  resource_group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2534,8 +2534,8 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Codespaces/plans/resourceReadBegin")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/resourceReadBegin"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2547,9 +2547,9 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
 export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans put" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2564,15 +2564,15 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans p
   --location: string # nullable
   --name: string # nullable
   --properties: record # shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-  --provisioningState: string # nullable
+  --provisioning-state: string # nullable
   --tags: record # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Codespaces/plans/($resourceName)")
-  let body = {id: $id, identity: $identity, location: $location, name: $name, properties: $properties, provisioningState: $provisioningState, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}"))
+  let body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"headers": $headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2583,9 +2583,9 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans p
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/deleteAllCodespaces
 export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-delete-all-codespaces post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2599,7 +2599,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-d
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Codespaces/plans/($resourceName)/deleteAllCodespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/deleteAllCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2607,9 +2607,9 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-d
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/deleteAllEnvironments
 export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-delete-all-environments post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2623,7 +2623,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-d
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Codespaces/plans/($resourceName)/deleteAllEnvironments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/deleteAllEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2631,9 +2631,9 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-d
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/readAllCodespaces
 export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-read-all-codespaces post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2647,7 +2647,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Codespaces/plans/($resourceName)/readAllCodespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/readAllCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2655,9 +2655,9 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/readAllEnvironments
 export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-read-all-environments post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2671,7 +2671,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Codespaces/plans/($resourceName)/readAllEnvironments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/readAllEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2679,9 +2679,9 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/readDelegates
 export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-read-delegates post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2693,7 +2693,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Codespaces/plans/($resourceName)/readDelegates")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/readDelegates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2701,9 +2701,9 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/resourceCreationCompleted
 export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-creation-completed post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2715,7 +2715,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Codespaces/plans/($resourceName)/resourceCreationCompleted")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceCreationCompleted"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2726,9 +2726,9 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
 export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-creation-validate post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2742,15 +2742,15 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   --location: string # nullable
   --name: string # nullable
   --properties: record # shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-  --provisioningState: string # nullable
+  --provisioning-state: string # nullable
   --tags: record # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Codespaces/plans/($resourceName)/resourceCreationValidate")
-  let body = {id: $id, identity: $identity, location: $location, name: $name, properties: $properties, provisioningState: $provisioningState, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceCreationValidate"))
+  let body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2759,9 +2759,9 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/resourceDeletionValidate
 export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-deletion-validate post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2773,7 +2773,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Codespaces/plans/($resourceName)/resourceDeletionValidate")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceDeletionValidate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2784,9 +2784,9 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
 export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-patch-completed post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2802,8 +2802,8 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Codespaces/plans/($resourceName)/resourcePatchCompleted")
-  let body = {identity: $identity, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourcePatchCompleted"))
+  let body = {"identity": $identity, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"headers": $headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2817,9 +2817,9 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
 export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-patch-validate post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2834,8 +2834,8 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Codespaces/plans/($resourceName)/resourcePatchValidate")
-  let body = {identity: $identity, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourcePatchValidate"))
+  let body = {"identity": $identity, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2847,9 +2847,9 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
 export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-read-begin post-by-subscriptionId-resourceGroup-resourceName" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2863,15 +2863,15 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
   --location: string # nullable
   --name: string # nullable
   --properties: record # shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-  --provisioningState: string # nullable
+  --provisioning-state: string # nullable
   --tags: record # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Codespaces/plans/($resourceName)/resourceReadBegin")
-  let body = {id: $id, identity: $identity, location: $location, name: $name, properties: $properties, provisioningState: $provisioningState, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/resourceReadBegin"))
+  let body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2880,9 +2880,9 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/writeCodespaces
 export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-write-codespaces post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2896,7 +2896,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Codespaces/plans/($resourceName)/writeCodespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/writeCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2906,9 +2906,9 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
 #
 # --identity shape: {displayName?: string, id?: string, username?: string}
 export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-write-delegates post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2917,17 +2917,17 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environmentIds: list # nullable
+  --environment-ids: list # nullable
   --expiration: string # nullable, format: date-time
   --identity: record # shape: {displayName?: string, id?: string, username?: string}
-  --portNumbers: list # nullable
+  --port-numbers: list # nullable
   --scope: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Codespaces/plans/($resourceName)/writeDelegates")
-  let body = {environmentIds: $environmentIds, expiration: $expiration, identity: $identity, portNumbers: $portNumbers, scope: $scope} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/writeDelegates"))
+  let body = {"environmentIds": $environment_ids, "expiration": $expiration, "identity": $identity, "portNumbers": $port_numbers, "scope": $scope} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2936,9 +2936,9 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/writeEnvironments
 export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-write-environments post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2952,7 +2952,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Codespaces/plans/($resourceName)/writeEnvironments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/writeEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2962,8 +2962,8 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
 #
 # --value item shape: {id?: string, identity?: record, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
 export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-read-begin post-by-subscriptionId-resourceGroup" [
-  subscriptionId: string
-  resourceGroup: string
+  subscription_id: string
+  resource_group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2977,8 +2977,8 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.VSOnline/plans/resourceReadBegin")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/resourceReadBegin"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2990,9 +2990,9 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
 export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans put" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3007,15 +3007,15 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans pu
   --location: string # nullable
   --name: string # nullable
   --properties: record # shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-  --provisioningState: string # nullable
+  --provisioning-state: string # nullable
   --tags: record # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.VSOnline/plans/($resourceName)")
-  let body = {id: $id, identity: $identity, location: $location, name: $name, properties: $properties, provisioningState: $provisioningState, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}"))
+  let body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"headers": $headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3026,9 +3026,9 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans pu
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/deleteAllCodespaces
 export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-delete-all-codespaces post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3042,7 +3042,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-de
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.VSOnline/plans/($resourceName)/deleteAllCodespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/deleteAllCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3050,9 +3050,9 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-de
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/deleteAllEnvironments
 export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-delete-all-environments post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3066,7 +3066,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-de
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.VSOnline/plans/($resourceName)/deleteAllEnvironments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/deleteAllEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3074,9 +3074,9 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-de
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/readAllCodespaces
 export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-read-all-codespaces post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3090,7 +3090,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.VSOnline/plans/($resourceName)/readAllCodespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/readAllCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3098,9 +3098,9 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/readAllEnvironments
 export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-read-all-environments post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3114,7 +3114,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.VSOnline/plans/($resourceName)/readAllEnvironments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/readAllEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3122,9 +3122,9 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/readDelegates
 export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-read-delegates post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3136,7 +3136,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.VSOnline/plans/($resourceName)/readDelegates")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/readDelegates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3144,9 +3144,9 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/resourceCreationCompleted
 export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-creation-completed post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3158,7 +3158,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.VSOnline/plans/($resourceName)/resourceCreationCompleted")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceCreationCompleted"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3169,9 +3169,9 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
 export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-creation-validate post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3185,15 +3185,15 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   --location: string # nullable
   --name: string # nullable
   --properties: record # shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-  --provisioningState: string # nullable
+  --provisioning-state: string # nullable
   --tags: record # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.VSOnline/plans/($resourceName)/resourceCreationValidate")
-  let body = {id: $id, identity: $identity, location: $location, name: $name, properties: $properties, provisioningState: $provisioningState, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceCreationValidate"))
+  let body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3202,9 +3202,9 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/resourceDeletionValidate
 export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-deletion-validate post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3216,7 +3216,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.VSOnline/plans/($resourceName)/resourceDeletionValidate")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceDeletionValidate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3227,9 +3227,9 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
 export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-patch-completed post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3245,8 +3245,8 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.VSOnline/plans/($resourceName)/resourcePatchCompleted")
-  let body = {identity: $identity, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourcePatchCompleted"))
+  let body = {"identity": $identity, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"headers": $headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3260,9 +3260,9 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
 export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-patch-validate post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3277,8 +3277,8 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.VSOnline/plans/($resourceName)/resourcePatchValidate")
-  let body = {identity: $identity, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourcePatchValidate"))
+  let body = {"identity": $identity, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3290,9 +3290,9 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
 export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-read-begin post-by-subscriptionId-resourceGroup-resourceName" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3306,15 +3306,15 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
   --location: string # nullable
   --name: string # nullable
   --properties: record # shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-  --provisioningState: string # nullable
+  --provisioning-state: string # nullable
   --tags: record # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.VSOnline/plans/($resourceName)/resourceReadBegin")
-  let body = {id: $id, identity: $identity, location: $location, name: $name, properties: $properties, provisioningState: $provisioningState, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/resourceReadBegin"))
+  let body = {"id": $id, "identity": $identity, "location": $location, "name": $name, "properties": $properties, "provisioningState": $provisioning_state, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3323,9 +3323,9 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/writeCodespaces
 export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-write-codespaces post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3339,7 +3339,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-wr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.VSOnline/plans/($resourceName)/writeCodespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/writeCodespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3349,9 +3349,9 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-wr
 #
 # --identity shape: {displayName?: string, id?: string, username?: string}
 export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-write-delegates post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3360,17 +3360,17 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-wr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environmentIds: list # nullable
+  --environment-ids: list # nullable
   --expiration: string # nullable, format: date-time
   --identity: record # shape: {displayName?: string, id?: string, username?: string}
-  --portNumbers: list # nullable
+  --port-numbers: list # nullable
   --scope: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.VSOnline/plans/($resourceName)/writeDelegates")
-  let body = {environmentIds: $environmentIds, expiration: $expiration, identity: $identity, portNumbers: $portNumbers, scope: $scope} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/writeDelegates"))
+  let body = {"environmentIds": $environment_ids, "expiration": $expiration, "identity": $identity, "portNumbers": $port_numbers, "scope": $scope} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3379,9 +3379,9 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-wr
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/writeEnvironments
 export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-write-environments post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3395,7 +3395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-wr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiration" $expiration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.VSOnline/plans/($resourceName)/writeEnvironments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/writeEnvironments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3403,9 +3403,9 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-wr
 
 # POST /api/v1/subscriptions/{subscriptionId}/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/deleteDelegates
 export def "subscriptions-providers-microsoft-codespaces-plans-delete-delegates post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3417,7 +3417,7 @@ export def "subscriptions-providers-microsoft-codespaces-plans-delete-delegates 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/($resourceGroup)/providers/Microsoft.Codespaces/plans/($resourceName)/deleteDelegates")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/{resource_group}/providers/Microsoft.Codespaces/plans/{resource_name}/deleteDelegates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3425,9 +3425,9 @@ export def "subscriptions-providers-microsoft-codespaces-plans-delete-delegates 
 
 # POST /api/v1/subscriptions/{subscriptionId}/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/deleteDelegates
 export def "subscriptions-providers-microsoft-vs-online-plans-delete-delegates post" [
-  subscriptionId: string
-  resourceGroup: string
-  resourceName: string
+  subscription_id: string
+  resource_group: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3439,7 +3439,7 @@ export def "subscriptions-providers-microsoft-vs-online-plans-delete-delegates p
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/subscriptions/($subscriptionId)/($resourceGroup)/providers/Microsoft.VSOnline/plans/($resourceName)/deleteDelegates")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, resource_name: $resource_name} | format pattern "/api/v1/subscriptions/{subscription_id}/{resource_group}/providers/Microsoft.VSOnline/plans/{resource_name}/deleteDelegates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3447,8 +3447,8 @@ export def "subscriptions-providers-microsoft-vs-online-plans-delete-delegates p
 
 # DELETE /api/v1/tenant/{tenantId}/Pool/{poolName}
 export def "tenant-pool delete" [
-  tenantId: string
-  poolName: string
+  tenant_id: string
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3460,7 +3460,7 @@ export def "tenant-pool delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/tenant/($tenantId)/Pool/($poolName)")
+  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3468,8 +3468,8 @@ export def "tenant-pool delete" [
 
 # GET /api/v1/tenant/{tenantId}/Pool/{poolName}
 export def "tenant-pool get" [
-  tenantId: string
-  poolName: string
+  tenant_id: string
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3482,7 +3482,7 @@ export def "tenant-pool get" [
 ]: nothing -> record<domainUserCredentials: record<domain: string, organizationalUnit: string, passwordSecretIdentifier: string, userName: string>, hotPoolSettings: record<size: int>, poolGroupName: string, provisioningStatus: record<completedSteps: int, currentStepDescription: string, isReady: bool, operationStartedTimeUtc: string, totalSteps: int>, tags: record, userGroupName: string, vmSpecs: record<diskType: int, imageResourceId: string, size: string, subnetResourceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/tenant/($tenantId)/Pool/($poolName)")
+  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3494,8 +3494,8 @@ export def "tenant-pool get" [
 # --hotPoolSettings shape: {size?: int}
 # --vmSpecs shape: {diskType: "0 (StandardHDD)"|"1 (StandardSSD)"|"2 (PremiumSSD)", imageResourceId: string, size: string, subnetResourceId: string}
 export def "tenant-pool patch" [
-  tenantId: string
-  poolName: string
+  tenant_id: string
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3505,18 +3505,18 @@ export def "tenant-pool patch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --domainUserCredentials: record # shape: {domain: string, organizationalUnit?: string, passwordSecretIdentifier: string, userName: string}
-  --hotPoolSettings: record # shape: {size?: int}
-  poolGroupName: string
+  --domain-user-credentials: record # shape: {domain: string, organizationalUnit?: string, passwordSecretIdentifier: string, userName: string}
+  --hot-pool-settings: record # shape: {size?: int}
+  pool_group_name: string
   --tags: record # nullable
-  --userGroupName: string # nullable
-  vmSpecs: record # shape: {diskType: "0 (StandardHDD)"|"1 (StandardSSD)"|"2 (PremiumSSD)", imageResourceId: string, size: string, subnetResourceId: string}
+  --user-group-name: string # nullable
+  vm_specs: record # shape: {diskType: "0 (StandardHDD)"|"1 (StandardSSD)"|"2 (PremiumSSD)", imageResourceId: string, size: string, subnetResourceId: string}
 ]: any -> record<domainUserCredentials: record<domain: string, organizationalUnit: string, passwordSecretIdentifier: string, userName: string>, hotPoolSettings: record<size: int>, poolGroupName: string, provisioningStatus: record<completedSteps: int, currentStepDescription: string, isReady: bool, operationStartedTimeUtc: string, totalSteps: int>, tags: record, userGroupName: string, vmSpecs: record<diskType: int, imageResourceId: string, size: string, subnetResourceId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/tenant/($tenantId)/Pool/($poolName)")
-  let body = {domainUserCredentials: $domainUserCredentials, hotPoolSettings: $hotPoolSettings, poolGroupName: $poolGroupName, tags: $tags, userGroupName: $userGroupName, vmSpecs: $vmSpecs} | compact
+  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}"))
+  let body = {"domainUserCredentials": $domain_user_credentials, "hotPoolSettings": $hot_pool_settings, "poolGroupName": $pool_group_name, "tags": $tags, "userGroupName": $user_group_name, "vmSpecs": $vm_specs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3529,8 +3529,8 @@ export def "tenant-pool patch" [
 # --hotPoolSettings shape: {size?: int}
 # --vmSpecs shape: {diskType: "0 (StandardHDD)"|"1 (StandardSSD)"|"2 (PremiumSSD)", imageResourceId: string, size: string, subnetResourceId: string}
 export def "tenant-pool put" [
-  tenantId: string
-  poolName: string
+  tenant_id: string
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3540,18 +3540,18 @@ export def "tenant-pool put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --domainUserCredentials: record # shape: {domain: string, organizationalUnit?: string, passwordSecretIdentifier: string, userName: string}
-  --hotPoolSettings: record # shape: {size?: int}
-  poolGroupName: string
+  --domain-user-credentials: record # shape: {domain: string, organizationalUnit?: string, passwordSecretIdentifier: string, userName: string}
+  --hot-pool-settings: record # shape: {size?: int}
+  pool_group_name: string
   --tags: record # nullable
-  --userGroupName: string # nullable
-  vmSpecs: record # shape: {diskType: "0 (StandardHDD)"|"1 (StandardSSD)"|"2 (PremiumSSD)", imageResourceId: string, size: string, subnetResourceId: string}
+  --user-group-name: string # nullable
+  vm_specs: record # shape: {diskType: "0 (StandardHDD)"|"1 (StandardSSD)"|"2 (PremiumSSD)", imageResourceId: string, size: string, subnetResourceId: string}
 ]: any -> record<domainUserCredentials: record<domain: string, organizationalUnit: string, passwordSecretIdentifier: string, userName: string>, hotPoolSettings: record<size: int>, poolGroupName: string, provisioningStatus: record<completedSteps: int, currentStepDescription: string, isReady: bool, operationStartedTimeUtc: string, totalSteps: int>, tags: record, userGroupName: string, vmSpecs: record<diskType: int, imageResourceId: string, size: string, subnetResourceId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/tenant/($tenantId)/Pool/($poolName)")
-  let body = {domainUserCredentials: $domainUserCredentials, hotPoolSettings: $hotPoolSettings, poolGroupName: $poolGroupName, tags: $tags, userGroupName: $userGroupName, vmSpecs: $vmSpecs} | compact
+  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name} | format pattern "/api/v1/tenant/{tenant_id}/Pool/{pool_name}"))
+  let body = {"domainUserCredentials": $domain_user_credentials, "hotPoolSettings": $hot_pool_settings, "poolGroupName": $pool_group_name, "tags": $tags, "userGroupName": $user_group_name, "vmSpecs": $vm_specs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3560,8 +3560,8 @@ export def "tenant-pool put" [
 
 # DELETE /api/v1/tenant/{tenantId}/PoolGroup/{poolGroupName}
 export def "tenant-pool-group delete" [
-  tenantId: string
-  poolGroupName: string
+  tenant_id: string
+  pool_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3573,7 +3573,7 @@ export def "tenant-pool-group delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/tenant/($tenantId)/PoolGroup/($poolGroupName)")
+  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_group_name: $pool_group_name} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3581,8 +3581,8 @@ export def "tenant-pool-group delete" [
 
 # GET /api/v1/tenant/{tenantId}/PoolGroup/{poolGroupName}
 export def "tenant-pool-group get" [
-  tenantId: string
-  poolGroupName: string
+  tenant_id: string
+  pool_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3595,7 +3595,7 @@ export def "tenant-pool-group get" [
 ]: nothing -> record<displayName: string, region: int, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/tenant/($tenantId)/PoolGroup/($poolGroupName)")
+  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_group_name: $pool_group_name} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3603,8 +3603,8 @@ export def "tenant-pool-group get" [
 
 # PATCH /api/v1/tenant/{tenantId}/PoolGroup/{poolGroupName}
 export def "tenant-pool-group patch" [
-  tenantId: string
-  poolGroupName: string
+  tenant_id: string
+  pool_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3613,14 +3613,14 @@ export def "tenant-pool-group patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  displayName: string
+  display_name: string
   --tags: record # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/tenant/($tenantId)/PoolGroup/($poolGroupName)")
-  let body = {displayName: $displayName, tags: $tags} | compact
+  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_group_name: $pool_group_name} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}"))
+  let body = {"displayName": $display_name, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3629,8 +3629,8 @@ export def "tenant-pool-group patch" [
 
 # PUT /api/v1/tenant/{tenantId}/PoolGroup/{poolGroupName}
 export def "tenant-pool-group put" [
-  tenantId: string
-  poolGroupName: string
+  tenant_id: string
+  pool_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3639,15 +3639,15 @@ export def "tenant-pool-group put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  displayName: string
+  display_name: string
   region: int@region-completer # format: int32
   --tags: record # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/tenant/($tenantId)/PoolGroup/($poolGroupName)")
-  let body = {displayName: $displayName, region: $region, tags: $tags} | compact
+  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_group_name: $pool_group_name} | format pattern "/api/v1/tenant/{tenant_id}/PoolGroup/{pool_group_name}"))
+  let body = {"displayName": $display_name, "region": $region, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3656,8 +3656,8 @@ export def "tenant-pool-group put" [
 
 # GET /api/v1/tenant/{tenantId}/pool/{poolName}/Vm
 export def "tenant-pool-vm list" [
-  tenantId: string
-  poolName: string
+  tenant_id: string
+  pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3670,7 +3670,7 @@ export def "tenant-pool-vm list" [
 ]: nothing -> table<connection: record<connectionType: int, liveShareWorkspaceId: string>, provisioningStatus: record<completedSteps: int, currentStepDescription: string, isReady: bool, operationStartedTimeUtc: string, totalSteps: int>, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/tenant/($tenantId)/pool/($poolName)/Vm")
+  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3678,9 +3678,9 @@ export def "tenant-pool-vm list" [
 
 # DELETE /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}
 export def "tenant-pool-vm delete" [
-  tenantId: string
-  poolName: string
-  vmName: string
+  tenant_id: string
+  pool_name: string
+  vm_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3692,7 +3692,7 @@ export def "tenant-pool-vm delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/tenant/($tenantId)/pool/($poolName)/Vm/($vmName)")
+  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name, vm_name: $vm_name} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3700,9 +3700,9 @@ export def "tenant-pool-vm delete" [
 
 # GET /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}
 export def "tenant-pool-vm get" [
-  tenantId: string
-  poolName: string
-  vmName: string
+  tenant_id: string
+  pool_name: string
+  vm_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3715,7 +3715,7 @@ export def "tenant-pool-vm get" [
 ]: nothing -> record<connection: record<connectionType: int, liveShareWorkspaceId: string>, provisioningStatus: record<completedSteps: int, currentStepDescription: string, isReady: bool, operationStartedTimeUtc: string, totalSteps: int>, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/tenant/($tenantId)/pool/($poolName)/Vm/($vmName)")
+  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name, vm_name: $vm_name} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3725,9 +3725,9 @@ export def "tenant-pool-vm get" [
 #
 # --user shape: {userPrincipalName: string}
 export def "tenant-pool-vm put" [
-  tenantId: string
-  poolName: string
-  vmName: string
+  tenant_id: string
+  pool_name: string
+  vm_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3742,8 +3742,8 @@ export def "tenant-pool-vm put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/tenant/($tenantId)/pool/($poolName)/Vm/($vmName)")
-  let body = {user: $user} | compact
+  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name, vm_name: $vm_name} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}"))
+  let body = {"user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3752,9 +3752,9 @@ export def "tenant-pool-vm put" [
 
 # POST /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}/start
 export def "tenant-pool-vm-start post" [
-  tenantId: string
-  poolName: string
-  vmName: string
+  tenant_id: string
+  pool_name: string
+  vm_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3766,7 +3766,7 @@ export def "tenant-pool-vm-start post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/tenant/($tenantId)/pool/($poolName)/Vm/($vmName)/start")
+  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name, vm_name: $vm_name} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3774,9 +3774,9 @@ export def "tenant-pool-vm-start post" [
 
 # POST /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}/stop
 export def "tenant-pool-vm-stop post" [
-  tenantId: string
-  poolName: string
-  vmName: string
+  tenant_id: string
+  pool_name: string
+  vm_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3788,7 +3788,7 @@ export def "tenant-pool-vm-stop post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/tenant/($tenantId)/pool/($poolName)/Vm/($vmName)/stop")
+  let full_url = (build-url $base ({tenant_id: $tenant_id, pool_name: $pool_name, vm_name: $vm_name} | format pattern "/api/v1/tenant/{tenant_id}/pool/{pool_name}/Vm/{vm_name}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3804,16 +3804,16 @@ export def "prebuilds-delete post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  branchName: string
-  --devContainerPath: string # nullable
-  --prebuildConfigurationId: int # format: int64
-  repoId: int # format: int64
+  branch_name: string
+  --dev-container-path: string # nullable
+  --prebuild-configuration-id: int # format: int64
+  repo_id: int # format: int64
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/prebuilds/delete")
-  let body = {branchName: $branchName, devContainerPath: $devContainerPath, prebuildConfigurationId: $prebuildConfigurationId, repoId: $repoId} | compact
+  let body = {"branchName": $branch_name, "devContainerPath": $dev_container_path, "prebuildConfigurationId": $prebuild_configuration_id, "repoId": $repo_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3822,8 +3822,8 @@ export def "prebuilds-delete post" [
 
 # DELETE /api/v2/prebuilds/repository/{repoId}/branch/{branchName}
 export def "prebuilds-repository-branch delete" [
-  repoId: int
-  branchName: string
+  repo_id: int
+  branch_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3835,7 +3835,7 @@ export def "prebuilds-repository-branch delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/prebuilds/repository/($repoId)/branch/($branchName)")
+  let full_url = (build-url $base ({repo_id: $repo_id, branch_name: $branch_name} | format pattern "/api/v2/prebuilds/repository/{repo_id}/branch/{branch_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3856,20 +3856,20 @@ export def "prebuilds-templates post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --devContainerPath: string # nullable
-  --experimentalFeatures: record # shape: {enableDynamicHttpsDetection?: bool, queueResourceAllocation?: bool, usePrebuildFastPathIfAvailable?: bool, usePrebuiltImages?: bool, useStorageV2?: bool}
+  --dev-container-path: string # nullable
+  --experimental-features: record # shape: {enableDynamicHttpsDetection?: bool, queueResourceAllocation?: bool, usePrebuildFastPathIfAvailable?: bool, usePrebuiltImages?: bool, useStorageV2?: bool}
   --features: record # nullable
-  friendlyName: string
-  --planId: string # nullable
+  friendly_name: string
+  --plan-id: string # nullable
   --seed: record # shape: {cloneUrl?: string, gitConfig?: record, recurseClone?: bool, repository?: record, seedMoniker?: string, seedType?: string}
-  --storageType: int@storageType-completer # format: int32
-  --templateInfo: record # shape: {container?: record, prebuildConfigurationId?: string, templateSizeInGB?: float, totalTimeSavingsInSeconds?: string, workFlowRunId?: string}
+  --storage-type: int@storage-type-completer # format: int32
+  --template-info: record # shape: {container?: record, prebuildConfigurationId?: string, templateSizeInGB?: float, totalTimeSavingsInSeconds?: string, workFlowRunId?: string}
 ]: any -> record<properties: record, sasUrl: string, templateId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/prebuilds/templates")
-  let body = {devContainerPath: $devContainerPath, experimentalFeatures: $experimentalFeatures, features: $features, friendlyName: $friendlyName, planId: $planId, seed: $seed, storageType: $storageType, templateInfo: $templateInfo} | compact
+  let body = {"devContainerPath": $dev_container_path, "experimentalFeatures": $experimental_features, "features": $features, "friendlyName": $friendly_name, "planId": $plan_id, "seed": $seed, "storageType": $storage_type, "templateInfo": $template_info} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3879,12 +3879,12 @@ export def "prebuilds-templates post" [
 # GET /api/v2/prebuilds/templates/skus/repo/{repoId}/branch/{branchName}/hash/{prebuildHash}/location/{location}/devcontainerpath/{devContainerPath}
 #
 # operationId: GetPrebuildReadinessSkusRoute
-export def "prebuilds-templates-skus-repo-branch-hash-location-devcontainerpath GetPrebuildReadinessSkusRoute" [
-  repoId: string
-  branchName: string
-  prebuildHash: string
+export def "prebuilds-templates-skus-repo-branch-hash-location-devcontainerpath get-prebuild-readiness-skus-route" [
+  repo_id: string
+  branch_name: string
+  prebuild_hash: string
   location: string
-  devContainerPath: string
+  dev_container_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3894,13 +3894,13 @@ export def "prebuilds-templates-skus-repo-branch-hash-location-devcontainerpath 
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --storageType: int@storageType-completer # format: int32
-  --fastPathEnabled: oneof<nothing, bool>
+  --storage-type: int@storage-type-completer # format: int32
+  --fast-path-enabled: oneof<nothing, bool>
 ]: nothing -> record<branchName: string, devContainerPath: string, location: int, poolSkus: list<string>, prebuildHash: string, repoId: string, supportedSkus: list<string>, templateSkus: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "storageType" $storageType "scalar") (serialize-qp "fastPathEnabled" $fastPathEnabled "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v2/prebuilds/templates/skus/repo/($repoId)/branch/($branchName)/hash/($prebuildHash)/location/($location)/devcontainerpath/($devContainerPath)" $qp)
+  let qp = [(serialize-qp "storageType" $storage_type "scalar") (serialize-qp "fastPathEnabled" $fast_path_enabled "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({repo_id: $repo_id, branch_name: $branch_name, prebuild_hash: $prebuild_hash, location: $location, dev_container_path: $dev_container_path} | format pattern "/api/v2/prebuilds/templates/skus/repo/{repo_id}/branch/{branch_name}/hash/{prebuild_hash}/location/{location}/devcontainerpath/{dev_container_path}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3916,16 +3916,16 @@ export def "prebuilds-templates-updatemaxversions post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  branchName: string
-  --devContainerPath: string # nullable
-  maxPrebuildTemplateVersions: int # format: int32
-  repoId: int # format: int64
+  branch_name: string
+  --dev-container-path: string # nullable
+  max_prebuild_template_versions: int # format: int32
+  repo_id: int # format: int64
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/prebuilds/templates/updatemaxversions")
-  let body = {branchName: $branchName, devContainerPath: $devContainerPath, maxPrebuildTemplateVersions: $maxPrebuildTemplateVersions, repoId: $repoId} | compact
+  let body = {"branchName": $branch_name, "devContainerPath": $dev_container_path, "maxPrebuildTemplateVersions": $max_prebuild_template_versions, "repoId": $repo_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3934,7 +3934,7 @@ export def "prebuilds-templates-updatemaxversions post" [
 
 # POST /api/v2/prebuilds/templates/{templateId}/updatestatus
 export def "prebuilds-templates-updatestatus post" [
-  templateId: string
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3943,13 +3943,13 @@ export def "prebuilds-templates-updatestatus post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --isSuccess: oneof<nothing, bool>
+  --is-success: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/prebuilds/templates/($templateId)/updatestatus")
-  let body = {isSuccess: $isSuccess} | compact
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/api/v2/prebuilds/templates/{template_id}/updatestatus"))
+  let body = {"isSuccess": $is_success} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3986,11 +3986,11 @@ export def "internal-netmon-correlation get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --macAddress: string
+  --mac-address: string
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "macAddress" $macAddress "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "macAddress" $mac_address "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/internal/Netmon/correlation" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

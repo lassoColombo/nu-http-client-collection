@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-location post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-location get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 # operationId: getLocation
 # --MiataruConfig shape: {RequestMiataruDeviceID: string}
 # --MiataruGetLocation item shape: {Device: string}
-export def "get-location post" [
+export def "get-location get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,14 +103,14 @@ export def "get-location post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MiataruConfig: record # the configuration for this request. please note that it's optional. — shape: {RequestMiataruDeviceID: string}
-  MiataruGetLocation: list # one or more devices in an array for which the location should be retrieved. — item shape: {Device: string}
+  --miataru-config: record # the configuration for this request. please note that it's optional. — shape: {RequestMiataruDeviceID: string}
+  miataru_get_location: list # one or more devices in an array for which the location should be retrieved. — item shape: {Device: string}
 ]: any -> record<MiataruLocation: table<Device: string, HorizontalAccuracy: string, Latitude: string, Longitude: string, Timestamp: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetLocation")
-  let body = {MiataruConfig: $MiataruConfig, MiataruGetLocation: $MiataruGetLocation} | compact
+  let body = {"MiataruConfig": $miataru_config, "MiataruGetLocation": $miataru_get_location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -122,7 +122,7 @@ export def "get-location post" [
 # GET /GetLocationGeoJSON/{deviceID}
 # operationId: getLocationGeoJSON
 export def "get-location-geo-json get" [
-  deviceID: string
+  device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "get-location-geo-json get" [
 ]: nothing -> record<geometry: record<coordinates: list<float>, type: string>, properties: record<name: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/GetLocationGeoJSON/($deviceID)")
+  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/GetLocationGeoJSON/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -146,7 +146,7 @@ export def "get-location-geo-json get" [
 # operationId: getLocationHistory
 # --MiataruConfig shape: {RequestMiataruDeviceID: string}
 # --MiataruGetLocationHistory shape: {Amount: string, Device: string}
-export def "get-location-history post" [
+export def "get-location-history get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,14 +155,14 @@ export def "get-location-history post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MiataruConfig: record # the configuration for this request. please note that it's optional. — shape: {RequestMiataruDeviceID: string}
-  MiataruGetLocationHistory: record # one device id for which the location history should be retrieved. — shape: {Amount: string, Device: string}
+  --miataru-config: record # the configuration for this request. please note that it's optional. — shape: {RequestMiataruDeviceID: string}
+  miataru_get_location_history: record # one device id for which the location history should be retrieved. — shape: {Amount: string, Device: string}
 ]: any -> record<MiataruLocation: table<Device: string, HorizontalAccuracy: string, Latitude: string, Longitude: string, Timestamp: string>, MiataruServerConfig: record<AvailableDeviceLocationUpdates: string, MaximumNumberOfLocationUpdates: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetLocationHistory")
-  let body = {MiataruConfig: $MiataruConfig, MiataruGetLocationHistory: $MiataruGetLocationHistory} | compact
+  let body = {"MiataruConfig": $miataru_config, "MiataruGetLocationHistory": $miataru_get_location_history} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -174,7 +174,7 @@ export def "get-location-history post" [
 # POST /GetVisitorHistory
 # operationId: getVisitorHistory
 # --MiataruGetVisitorHistory shape: {Amount: string, Device: string}
-export def "get-visitor-history post" [
+export def "get-visitor-history get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,13 +183,13 @@ export def "get-visitor-history post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  MiataruGetVisitorHistory: record # shape: {Amount: string, Device: string}
+  miataru_get_visitor_history: record # shape: {Amount: string, Device: string}
 ]: any -> record<MiataruServerConfig: record<AvailableVisitorHistory: string, MaximumNumberOfVisitorHistory: string>, MiataruVisitors: table<DeviceID: string, TimeStamp: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetVisitorHistory")
-  let body = {MiataruGetVisitorHistory: $MiataruGetVisitorHistory} | compact
+  let body = {"MiataruGetVisitorHistory": $miataru_get_visitor_history} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -202,7 +202,7 @@ export def "get-visitor-history post" [
 # operationId: updateLocation
 # --MiataruConfig shape: {EnableLocationHistory: string, LocationDataRetentionTime: string}
 # --MiataruLocation item shape: {Device: string, HorizontalAccuracy: string, Latitude: string, Longitude: string, Timestamp: string}
-export def "update-location updateLocation" [
+export def "update-location update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,14 +211,14 @@ export def "update-location updateLocation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  MiataruConfig: record # the configuration for this request. — shape: {EnableLocationHistory: string, LocationDataRetentionTime: string}
-  MiataruLocation: list # item shape: {Device: string, HorizontalAccuracy: string, Latitude: string, Longitude: string, Timestamp: string}
+  miataru_config: record # the configuration for this request. — shape: {EnableLocationHistory: string, LocationDataRetentionTime: string}
+  miataru_location: list # item shape: {Device: string, HorizontalAccuracy: string, Latitude: string, Longitude: string, Timestamp: string}
 ]: any -> record<MiataruResponse: string, MiataruVerboseResponse: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/UpdateLocation")
-  let body = {MiataruConfig: $MiataruConfig, MiataruLocation: $MiataruLocation} | compact
+  let body = {"MiataruConfig": $miataru_config, "MiataruLocation": $miataru_location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shopping-seatmaps get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shopping-seatmaps get-seatmap-from-order" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /shopping/seatmaps
 # operationId: getSeatmapFromOrder
-export def "shopping-seatmaps get" [
+export def "shopping-seatmaps get-seatmap-from-order" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,12 +101,12 @@ export def "shopping-seatmaps get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --flightOrderId: string # identifier of the order (e.g. MlpZVkFMfFdBVFNPTnwyMDE1LTExLTAy)
-  --flight-orderId: string # DEPRECATED identifier of the order , kept for backward compatibility (e.g. MlpZVkFMfFdBVFNPTnwyMDE1LTExLTAy)
+  --flight-order-id: string # identifier of the order (e.g. MlpZVkFMfFdBVFNPTnwyMDE1LTExLTAy)
+  --flight-order-id: string # DEPRECATED identifier of the order , kept for backward compatibility (e.g. MlpZVkFMfFdBVFNPTnwyMDE1LTExLTAy)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "flightOrderId" $flightOrderId "scalar") (serialize-qp "flight-orderId" $flight_orderId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "flightOrderId" $flight_order_id "scalar") (serialize-qp "flight-orderId" $flight_order_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shopping/seatmaps" $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -119,7 +119,7 @@ export def "shopping-seatmaps get" [
 # operationId: getSeatmapFromFlightOffer
 # --data item shape: {disablePricing?: bool, fareRules?: record, id: string, instantTicketingRequired?: bool, itineraries?: list, lastTicketingDate?: string, nonHomogeneous?: bool, numberOfBookableSeats?: float, oneWay?: bool, paymentCardRequired?: bool, price?: record, pricingOptions?: record, source?: "GDS", travelerPricings?: list, type: string, validatingAirlineCodes?: list}
 # --included shape: {travelers?: any}
-export def "shopping-seatmaps post" [
+export def "shopping-seatmaps get-seatmap-from-flight-offer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,7 +128,7 @@ export def "shopping-seatmaps post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-HTTP-Method-Override: string # the HTTP method to apply
+  --x-http-method-override: string # the HTTP method to apply
   data: list # item shape: {disablePricing?: bool, fareRules?: record, id: string, instantTicketingRequired?: bool, itineraries?: list, lastTicketingDate?: string, nonHomogeneous?: bool, numberOfBookableSeats?: float, oneWay?: bool, paymentCardRequired?: bool, price?: record, pricingOptions?: record, source?: "GDS", travelerPricings?: list, type: string, validatingAirlineCodes?: list}
   --included: any # shape: {travelers?: any}
 ]: any -> any {
@@ -136,9 +136,9 @@ export def "shopping-seatmaps post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shopping/seatmaps")
-  let body = {data: $data, included: $included} | compact
+  let body = {"data": $data, "included": $included} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-HTTP-Method-Override": $X_HTTP_Method_Override} | compact
+  let extra_headers = {"X-HTTP-Method-Override": $x_http_method_override} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions GetRecurrencebyemail" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions get-recurrencebyemail" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions
 # operationId: GetRecurrencebyemail
-export def "subscriptions GetRecurrencebyemail" [
+export def "subscriptions get-recurrencebyemail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,15 +104,15 @@ export def "subscriptions GetRecurrencebyemail" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # If you wish to list tasks by email, insert the desired user's email. (e.g. {{email}})
-  --cycleStatus: string # If you wish to list tasks by Subscriptions with failures on the last execution cycle, insert the desired cycleStatus. (e.g. {{cycleStatus}})
-  --Content-Type: string # Type of the content being sent (e.g. application/json)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
+  --cycle-status: string # If you wish to list tasks by Subscriptions with failures on the last execution cycle, insert the desired cycleStatus. (e.g. {{cycleStatus}})
+  --content-type: string # Type of the content being sent (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "cycleStatus" $cycleStatus "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "cycleStatus" $cycle_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscriptions" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -124,7 +124,7 @@ export def "subscriptions GetRecurrencebyemail" [
 # PUT /subscriptions
 # operationId: Updaterecurrence
 # --items item shape: {frequency: record, quantity: int, seller: string, shippingAddressId: string, sku: string}
-export def "subscriptions Updaterecurrence" [
+export def "subscriptions update-recurrence" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,21 +133,21 @@ export def "subscriptions Updaterecurrence" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent (e.g. application/json)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
-  deliveryDay: int # format: int32
-  deliveryWeekday: string
+  --content-type: string # Type of the content being sent (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
+  delivery_day: int # format: int32
+  delivery_weekday: string
   email: string
   items: list # item shape: {frequency: record, quantity: int, seller: string, shippingAddressId: string, sku: string}
-  paymentAccountId: string
+  payment_account_id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions")
-  let body = {deliveryDay: $deliveryDay, deliveryWeekday: $deliveryWeekday, email: $email, items: $items, paymentAccountId: $paymentAccountId} | compact
+  let body = {"deliveryDay": $delivery_day, "deliveryWeekday": $delivery_weekday, "email": $email, "items": $items, "paymentAccountId": $payment_account_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -158,7 +158,7 @@ export def "subscriptions Updaterecurrence" [
 #
 # GET /subscriptions/me
 # operationId: Getselfrecurrence
-export def "subscriptions-me Getselfrecurrence" [
+export def "subscriptions-me get-selfrecurrence" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,13 +167,13 @@ export def "subscriptions-me Getselfrecurrence" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent (e.g. application/json)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
+  --content-type: string # Type of the content being sent (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions/me")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -184,7 +184,7 @@ export def "subscriptions-me Getselfrecurrence" [
 #
 # GET /subscriptions/settings
 # operationId: Getrecurrencesettings
-export def "subscriptions-settings Getrecurrencesettings" [
+export def "subscriptions-settings get-recurrencesettings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,13 +193,13 @@ export def "subscriptions-settings Getrecurrencesettings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent (e.g. application/json)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
+  --content-type: string # Type of the content being sent (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions/settings")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -210,7 +210,7 @@ export def "subscriptions-settings Getrecurrencesettings" [
 #
 # PUT /subscriptions/settings
 # operationId: Updaterecurrencesettings
-export def "subscriptions-settings Updaterecurrencesettings" [
+export def "subscriptions-settings update-recurrencesettings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,18 +219,18 @@ export def "subscriptions-settings Updaterecurrencesettings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent (e.g. application/json)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
-  defaultSLA: string
-  salesChannel: string
+  --content-type: string # Type of the content being sent (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
+  default_sla: string
+  sales_channel: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions/settings")
-  let body = {defaultSLA: $defaultSLA, salesChannel: $salesChannel} | compact
+  let body = {"defaultSLA": $default_sla, "salesChannel": $sales_channel} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -241,8 +241,8 @@ export def "subscriptions-settings Updaterecurrencesettings" [
 #
 # GET /subscriptions/{recurrenceId}
 # operationId: GetRecurrencebyrecurrenceId
-export def "subscriptions GetRecurrencebyrecurrenceId" [
-  recurrenceId: string
+export def "subscriptions get-recurrencebyrecurrence" [
+  recurrence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,13 +251,13 @@ export def "subscriptions GetRecurrencebyrecurrenceId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent (e.g. application/json)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
+  --content-type: string # Type of the content being sent (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($recurrenceId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({recurrence_id: $recurrence_id} | format pattern "/subscriptions/{recurrence_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -268,8 +268,8 @@ export def "subscriptions GetRecurrencebyrecurrenceId" [
 #
 # PATCH /subscriptions/{recurrenceId}
 # operationId: Updatepartialrecurrence
-export def "subscriptions Updatepartialrecurrence" [
-  recurrenceId: string
+export def "subscriptions update-partialrecurrence" [
+  recurrence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,19 +278,19 @@ export def "subscriptions Updatepartialrecurrence" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent (e.g. application/json)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
-  deliveryDay: int # format: int32
-  deliveryWeekday: string
+  --content-type: string # Type of the content being sent (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
+  delivery_day: int # format: int32
+  delivery_weekday: string
   status: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($recurrenceId)")
-  let body = {deliveryDay: $deliveryDay, deliveryWeekday: $deliveryWeekday, status: $status} | compact
+  let full_url = (build-url $base ({recurrence_id: $recurrence_id} | format pattern "/subscriptions/{recurrence_id}"))
+  let body = {"deliveryDay": $delivery_day, "deliveryWeekday": $delivery_weekday, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -301,8 +301,8 @@ export def "subscriptions Updatepartialrecurrence" [
 #
 # GET /subscriptions/{recurrenceId}/addresses
 # operationId: Getrecurrenceaddresses
-export def "subscriptions-addresses Getrecurrenceaddresses" [
-  recurrenceId: string
+export def "subscriptions-addresses get-recurrenceaddresses" [
+  recurrence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,13 +311,13 @@ export def "subscriptions-addresses Getrecurrenceaddresses" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent (e.g. application/json)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
+  --content-type: string # Type of the content being sent (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($recurrenceId)/addresses")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({recurrence_id: $recurrence_id} | format pattern "/subscriptions/{recurrence_id}/addresses"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -328,8 +328,8 @@ export def "subscriptions-addresses Getrecurrenceaddresses" [
 #
 # POST /subscriptions/{recurrenceId}/items
 # operationId: Addrecurrenceitem
-export def "subscriptions-items Addrecurrenceitem" [
-  recurrenceId: string
+export def "subscriptions-items create-recurrenceitem" [
+  recurrence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,16 +338,16 @@ export def "subscriptions-items Addrecurrenceitem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent (e.g. application/json)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
+  --content-type: string # Type of the content being sent (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($recurrenceId)/items")
+  let full_url = (build-url $base ({recurrence_id: $recurrence_id} | format pattern "/subscriptions/{recurrence_id}/items"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -358,8 +358,8 @@ export def "subscriptions-items Addrecurrenceitem" [
 #
 # PATCH /subscriptions/{recurrenceId}/reindex
 # operationId: Reindexrecurrence
-export def "subscriptions-reindex Reindexrecurrence" [
-  recurrenceId: string
+export def "subscriptions-reindex patch" [
+  recurrence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,16 +368,16 @@ export def "subscriptions-reindex Reindexrecurrence" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent (e.g. application/json)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
+  --content-type: string # Type of the content being sent (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($recurrenceId)/reindex")
+  let full_url = (build-url $base ({recurrence_id: $recurrence_id} | format pattern "/subscriptions/{recurrence_id}/reindex"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -388,7 +388,7 @@ export def "subscriptions-reindex Reindexrecurrence" [
 #
 # GET /subscriptions/{recurrenceid}/accounts
 # operationId: Getpaymentaccounts
-export def "subscriptions-accounts Getpaymentaccounts" [
+export def "subscriptions-accounts get-paymentaccounts" [
   recurrenceid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -398,13 +398,13 @@ export def "subscriptions-accounts Getpaymentaccounts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent (e.g. application/json)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
+  --content-type: string # Type of the content being sent (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($recurrenceid)/accounts")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({recurrenceid: $recurrenceid} | format pattern "/subscriptions/{recurrenceid}/accounts"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

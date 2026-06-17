@@ -108,8 +108,8 @@ def p-last-dmr-within-completer [] { ["N" "W"] }
 def p-indsw-completer [] { ["N" "Y"] }
 def p-msgp-ptype-completer [] { ["NOE" "NOI"] }
 def p-mon-type-completer [] { ["BENCH" "BENCHG2" "ELG"] }
-def p-MS4-completer [] { ["N" "Y"] }
-def p-ooFNtype-completer [] { ["ALL" "BEGINS" "CONTAINS" "EXACT"] }
+def p-ms4-completer [] { ["N" "Y"] }
+def p-oo-f-ntype-completer [] { ["ALL" "BEGINS" "CONTAINS" "EXACT"] }
 def p-fac-ico-completer [] { ["N" "Y"] }
 def p-limit-addr-completer [] { ["N" "Y"] }
 def p-ejscreen-over80cnt-completer [] { ["1" "10" "11" "2" "3" "4" "5" "6" "7" "8" "9"] }
@@ -191,7 +191,7 @@ export def "cwa-rest-servicesget-download post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cwa_rest_services.get_download")
-  let body = {output: $output, qcolumns: $qcolumns} | compact
+  let body = {"output": $output, "qcolumns": $qcolumns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -305,19 +305,19 @@ export def "cwa-rest-servicesget-facilities get" [
   --p-permitting-agency: string
   --p-isws: string # Multi-Sector General Purpose Permit Subsector Individual Identifier.  Enter a value to filter results.
   --p-iswss: string # Multi-Sector General Purpose Permit Subsector Group Code.  Enter a value to filter results.
-  --p-iswssID: string # Multi-Sector General Purpose Permit Sector Code.  Enter a value to filter results.
+  --p-iswss-id: string # Multi-Sector General Purpose Permit Sector Code.  Enter a value to filter results.
   --p-ds1: string # Submitted Date Filter Start.  To filter by the date of submission, enter a start date here and an end date in the p_ds2 parameter.  Both dates are required for filtering.
   --p-ds2: string # Submitted Date Filter End.  To filter by the date of submission, enter an end date here and a start date in the p_ds1 parameter.  Both dates are required for filtering.
   --p-da1: string # Active Date Filter Start.  To filter by the active date, enter a start date here and an end date in the p_da2 parameter.  Both dates are required for filtering.
   --p-da2: string # Active Date Filter End.  To filter by the active date, enter an end date here and a start date in the p_da1 parameter.  Both dates are required for filtering.
-  --p-MS4: string@p-MS4-completer # Municipal Separate Storm Water Sewer (MS4) Permit Flag.  Enter a Y or N to filter results by this type of permit.
-  --p-ooFN: string # Owner/Operator Name. Enter the owner/operator name of the facility.
-  --p-ooFNtype: string@p-ooFNtype-completer # Owner/Operator Name Multiple Selection Evaluator.  
-  --p-ooSA: string # Owner/Operator Address.  Enter the address of the owner/operator of the facility.
-  --p-ooSA1: string # Owner/Operator Address Line 2.  Enter the line 2 address of the owner/operator of the facility.
-  --p-ooCt: string # Owner/Operator City. Enter the city where the owner/operator of the facility is located.
-  --p-ooSt: string # Owner/Operator State.  Enter the standardized postal state code where the owner/operator of the facility is located.
-  --p-ooZip: string # Owner/Operator Zip Code.  Enter the postal zip code where the owner/operator of the facility is located.
+  --p-ms4: string@p-ms4-completer # Municipal Separate Storm Water Sewer (MS4) Permit Flag.  Enter a Y or N to filter results by this type of permit.
+  --p-oo-fn: string # Owner/Operator Name. Enter the owner/operator name of the facility.
+  --p-oo-f-ntype: string@p-oo-f-ntype-completer # Owner/Operator Name Multiple Selection Evaluator.  
+  --p-oo-sa: string # Owner/Operator Address.  Enter the address of the owner/operator of the facility.
+  --p-oo-sa1: string # Owner/Operator Address Line 2.  Enter the line 2 address of the owner/operator of the facility.
+  --p-oo-ct: string # Owner/Operator City. Enter the city where the owner/operator of the facility is located.
+  --p-oo-st: string # Owner/Operator State.  Enter the standardized postal state code where the owner/operator of the facility is located.
+  --p-oo-zip: string # Owner/Operator Zip Code.  Enter the postal zip code where the owner/operator of the facility is located.
   --p-fac-ico: string@p-fac-ico-completer # FRS tribal land code flag.  Enter "Y" or "N" to include or exclude facilities based on FRS tribal land code.
   --p-icoo: string # Indian country search and/or flag.  Enter "Y" to set indian country search conditions to return any results found using p_ico, p_fac_ico or p_fac_icoo.  Otherwise only results matching all provided p_ico, p_fac_ico or p_fac_icoo conditions will be returned.
   --p-fac-icos: string # FRS tribal land spatial flag.  Enter "Y" or "N" to include or exclude facilities based on FRS tribal land spatial flag.
@@ -362,7 +362,7 @@ export def "cwa-rest-servicesget-facilities get" [
 ]: nothing -> record<Results: record<BadSystemIDs: string, BioCVRows: string, BioV3Rows: string, CVRows: string, FEARows: string, Facilities: list<record>, INSPRows: string, IndianCountryRows: string, InfFEARows: string, MapOutput: record<IconBaseURL: string, MapData: list, PopUpBaseURL: string, QueryID: string>, Message: string, PageNo: string, QueryID: string, QueryRows: string, SVRows: string, TotalPenalties: string, V3Rows: string, Version: string, VioLast4QRows: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_fn" $p_fn "scalar") (serialize-qp "p_sa" $p_sa "scalar") (serialize-qp "p_sa1" $p_sa1 "scalar") (serialize-qp "p_ct" $p_ct "scalar") (serialize-qp "p_co" $p_co "scalar") (serialize-qp "p_fips" $p_fips "scalar") (serialize-qp "p_st" $p_st "scalar") (serialize-qp "p_zip" $p_zip "scalar") (serialize-qp "p_frs" $p_frs "scalar") (serialize-qp "p_reg" $p_reg "scalar") (serialize-qp "p_sic" $p_sic "scalar") (serialize-qp "p_ncs" $p_ncs "scalar") (serialize-qp "p_pen" $p_pen "scalar") (serialize-qp "p_c1lat" $p_c1lat "scalar") (serialize-qp "p_c1lon" $p_c1lon "scalar") (serialize-qp "p_c2lat" $p_c2lat "scalar") (serialize-qp "p_c2lon" $p_c2lon "scalar") (serialize-qp "p_usmex" $p_usmex "scalar") (serialize-qp "p_sic2" $p_sic2 "scalar") (serialize-qp "p_sic4" $p_sic4 "scalar") (serialize-qp "p_fa" $p_fa "scalar") (serialize-qp "p_ff" $p_ff "scalar") (serialize-qp "p_act" $p_act "scalar") (serialize-qp "p_maj" $p_maj "scalar") (serialize-qp "p_mact" $p_mact "scalar") (serialize-qp "p_fea" $p_fea "scalar") (serialize-qp "p_feay" $p_feay "scalar") (serialize-qp "p_feaa" $p_feaa "scalar") (serialize-qp "p_iea" $p_iea "scalar") (serialize-qp "p_ieay" $p_ieay "scalar") (serialize-qp "p_ieaa" $p_ieaa "scalar") (serialize-qp "p_qiv" $p_qiv "scalar") (serialize-qp "p_iv" $p_iv "scalar") (serialize-qp "p_impw" $p_impw "scalar") (serialize-qp "p_imp_cau_grp" $p_imp_cau_grp "scalar") (serialize-qp "p_imp_pol" $p_imp_pol "scalar") (serialize-qp "p_trep" $p_trep "scalar") (serialize-qp "p_pm" $p_pm "scalar") (serialize-qp "p_pd" $p_pd "scalar") (serialize-qp "p_ico" $p_ico "scalar") (serialize-qp "p_huc" $p_huc "scalar") (serialize-qp "p_pid" $p_pid "scalar") (serialize-qp "p_med" $p_med "scalar") (serialize-qp "p_ysl" $p_ysl "scalar") (serialize-qp "p_ysly" $p_ysly "scalar") (serialize-qp "p_ysla" $p_ysla "scalar") (serialize-qp "p_qs" $p_qs "scalar") (serialize-qp "p_sfs" $p_sfs "scalar") (serialize-qp "p_tribeid" $p_tribeid "scalar") (serialize-qp "p_tribename" $p_tribename "scalar") (serialize-qp "p_tribedist" $p_tribedist "scalar") (serialize-qp "p_pstat" $p_pstat "scalar") (serialize-qp "p_ptype" $p_ptype "scalar") (serialize-qp "p_pcomp" $p_pcomp "scalar") (serialize-qp "p_plimits" $p_plimits "scalar") (serialize-qp "p_pcss" $p_pcss "scalar") (serialize-qp "p_pexp" $p_pexp "scalar") (serialize-qp "p_owop" $p_owop "scalar") (serialize-qp "p_ipfti" $p_ipfti "scalar") (serialize-qp "p_agoo" $p_agoo "scalar") (serialize-qp "p_idt1" $p_idt1 "scalar") (serialize-qp "p_idt2" $p_idt2 "scalar") (serialize-qp "p_pityp" $p_pityp "scalar") (serialize-qp "p_pfead1" $p_pfead1 "scalar") (serialize-qp "p_pfead2" $p_pfead2 "scalar") (serialize-qp "p_pfeat" $p_pfeat "scalar") (serialize-qp "p_pccs" $p_pccs "scalar") (serialize-qp "p_pexcd" $p_pexcd "scalar") (serialize-qp "p_psncq" $p_psncq "scalar") (serialize-qp "p_pctrack" $p_pctrack "scalar") (serialize-qp "p_dwd" $p_dwd "scalar") (serialize-qp "p_pt" $p_pt "scalar") (serialize-qp "p_pdwdist" $p_pdwdist "scalar") (serialize-qp "p_pswdpc" $p_pswdpc "scalar") (serialize-qp "p_pswdmp" $p_pswdmp "scalar") (serialize-qp "p_pswpol" $p_pswpol "scalar") (serialize-qp "p_pswcas" $p_pswcas "scalar") (serialize-qp "p_pswparam" $p_pswparam "scalar") (serialize-qp "p_pswvio" $p_pswvio "scalar") (serialize-qp "p_wbd" $p_wbd "scalar") (serialize-qp "p_radwbd" $p_radwbd "scalar") (serialize-qp "p_frswbd" $p_frswbd "scalar") (serialize-qp "p_fntype" $p_fntype "scalar") (serialize-qp "p_pidall" $p_pidall "scalar") (serialize-qp "p_months_last_dmr" $p_months_last_dmr "scalar") (serialize-qp "p_last_dmr_within" $p_last_dmr_within "scalar") (serialize-qp "p_indsw" $p_indsw "scalar") (serialize-qp "p_msgp_ptype" $p_msgp_ptype "scalar") (serialize-qp "p_mon_type" $p_mon_type "scalar") (serialize-qp "p_iagency" $p_iagency "scalar") (serialize-qp "p_permitting_agency" $p_permitting_agency "scalar") (serialize-qp "p_isws" $p_isws "scalar") (serialize-qp "p_iswss" $p_iswss "scalar") (serialize-qp "p_iswssID" $p_iswssID "scalar") (serialize-qp "p_ds1" $p_ds1 "scalar") (serialize-qp "p_ds2" $p_ds2 "scalar") (serialize-qp "p_da1" $p_da1 "scalar") (serialize-qp "p_da2" $p_da2 "scalar") (serialize-qp "p_MS4" $p_MS4 "scalar") (serialize-qp "p_ooFN" $p_ooFN "scalar") (serialize-qp "p_ooFNtype" $p_ooFNtype "scalar") (serialize-qp "p_ooSA" $p_ooSA "scalar") (serialize-qp "p_ooSA1" $p_ooSA1 "scalar") (serialize-qp "p_ooCt" $p_ooCt "scalar") (serialize-qp "p_ooSt" $p_ooSt "scalar") (serialize-qp "p_ooZip" $p_ooZip "scalar") (serialize-qp "p_fac_ico" $p_fac_ico "scalar") (serialize-qp "p_icoo" $p_icoo "scalar") (serialize-qp "p_fac_icos" $p_fac_icos "scalar") (serialize-qp "p_ejscreen" $p_ejscreen "scalar") (serialize-qp "p_alrexceed" $p_alrexceed "scalar") (serialize-qp "p_limit_addr" $p_limit_addr "scalar") (serialize-qp "p_lat" $p_lat "scalar") (serialize-qp "p_long" $p_long "scalar") (serialize-qp "p_radius" $p_radius "scalar") (serialize-qp "p_ejscreen_over80cnt" $p_ejscreen_over80cnt "scalar") (serialize-qp "p_bio_flag" $p_bio_flag "scalar") (serialize-qp "p_bio_fac_type" $p_bio_fac_type "scalar") (serialize-qp "p_bio_trtmnt_procs" $p_bio_trtmnt_procs "scalar") (serialize-qp "p_bio_analy_method_catgry" $p_bio_analy_method_catgry "scalar") (serialize-qp "p_bio_total_volume_amt" $p_bio_total_volume_amt "scalar") (serialize-qp "p_bio_mgmt_prctce_type" $p_bio_mgmt_prctce_type "scalar") (serialize-qp "p_bio_mgmt_prctce_stype" $p_bio_mgmt_prctce_stype "scalar") (serialize-qp "p_bio_mgmt_prctce_handler" $p_bio_mgmt_prctce_handler "scalar") (serialize-qp "p_bio_mgmt_container" $p_bio_mgmt_container "scalar") (serialize-qp "p_bio_mgmt_pathogen" $p_bio_mgmt_pathogen "scalar") (serialize-qp "p_bio_mgmt_pathred" $p_bio_mgmt_pathred "scalar") (serialize-qp "p_bio_mgmt_vector" $p_bio_mgmt_vector "scalar") (serialize-qp "p_bio_mgmt_def_category" $p_bio_mgmt_def_category "scalar") (serialize-qp "p_bio_mgmt_deficiencies" $p_bio_mgmt_deficiencies "scalar") (serialize-qp "p_bio_vio_code" $p_bio_vio_code "scalar") (serialize-qp "p_bio_current_vio" $p_bio_current_vio "scalar") (serialize-qp "p_bio_qtrs_in_vio" $p_bio_qtrs_in_vio "scalar") (serialize-qp "p_bio_rpt_year" $p_bio_rpt_year "scalar") (serialize-qp "p_bio_vio_last_year" $p_bio_vio_last_year "scalar") (serialize-qp "p_msgp_rpt_year" $p_msgp_rpt_year "scalar") (serialize-qp "p_vio_last_year" $p_vio_last_year "scalar") (serialize-qp "queryset" $queryset "scalar") (serialize-qp "responseset" $responseset "scalar") (serialize-qp "tablelist" $tablelist "scalar") (serialize-qp "maplist" $maplist "scalar") (serialize-qp "summarylist" $summarylist "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_e90_count" $p_e90_count "scalar") (serialize-qp "p_e90_years" $p_e90_years "scalar") (serialize-qp "p_psc" $p_psc "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_fn" $p_fn "scalar") (serialize-qp "p_sa" $p_sa "scalar") (serialize-qp "p_sa1" $p_sa1 "scalar") (serialize-qp "p_ct" $p_ct "scalar") (serialize-qp "p_co" $p_co "scalar") (serialize-qp "p_fips" $p_fips "scalar") (serialize-qp "p_st" $p_st "scalar") (serialize-qp "p_zip" $p_zip "scalar") (serialize-qp "p_frs" $p_frs "scalar") (serialize-qp "p_reg" $p_reg "scalar") (serialize-qp "p_sic" $p_sic "scalar") (serialize-qp "p_ncs" $p_ncs "scalar") (serialize-qp "p_pen" $p_pen "scalar") (serialize-qp "p_c1lat" $p_c1lat "scalar") (serialize-qp "p_c1lon" $p_c1lon "scalar") (serialize-qp "p_c2lat" $p_c2lat "scalar") (serialize-qp "p_c2lon" $p_c2lon "scalar") (serialize-qp "p_usmex" $p_usmex "scalar") (serialize-qp "p_sic2" $p_sic2 "scalar") (serialize-qp "p_sic4" $p_sic4 "scalar") (serialize-qp "p_fa" $p_fa "scalar") (serialize-qp "p_ff" $p_ff "scalar") (serialize-qp "p_act" $p_act "scalar") (serialize-qp "p_maj" $p_maj "scalar") (serialize-qp "p_mact" $p_mact "scalar") (serialize-qp "p_fea" $p_fea "scalar") (serialize-qp "p_feay" $p_feay "scalar") (serialize-qp "p_feaa" $p_feaa "scalar") (serialize-qp "p_iea" $p_iea "scalar") (serialize-qp "p_ieay" $p_ieay "scalar") (serialize-qp "p_ieaa" $p_ieaa "scalar") (serialize-qp "p_qiv" $p_qiv "scalar") (serialize-qp "p_iv" $p_iv "scalar") (serialize-qp "p_impw" $p_impw "scalar") (serialize-qp "p_imp_cau_grp" $p_imp_cau_grp "scalar") (serialize-qp "p_imp_pol" $p_imp_pol "scalar") (serialize-qp "p_trep" $p_trep "scalar") (serialize-qp "p_pm" $p_pm "scalar") (serialize-qp "p_pd" $p_pd "scalar") (serialize-qp "p_ico" $p_ico "scalar") (serialize-qp "p_huc" $p_huc "scalar") (serialize-qp "p_pid" $p_pid "scalar") (serialize-qp "p_med" $p_med "scalar") (serialize-qp "p_ysl" $p_ysl "scalar") (serialize-qp "p_ysly" $p_ysly "scalar") (serialize-qp "p_ysla" $p_ysla "scalar") (serialize-qp "p_qs" $p_qs "scalar") (serialize-qp "p_sfs" $p_sfs "scalar") (serialize-qp "p_tribeid" $p_tribeid "scalar") (serialize-qp "p_tribename" $p_tribename "scalar") (serialize-qp "p_tribedist" $p_tribedist "scalar") (serialize-qp "p_pstat" $p_pstat "scalar") (serialize-qp "p_ptype" $p_ptype "scalar") (serialize-qp "p_pcomp" $p_pcomp "scalar") (serialize-qp "p_plimits" $p_plimits "scalar") (serialize-qp "p_pcss" $p_pcss "scalar") (serialize-qp "p_pexp" $p_pexp "scalar") (serialize-qp "p_owop" $p_owop "scalar") (serialize-qp "p_ipfti" $p_ipfti "scalar") (serialize-qp "p_agoo" $p_agoo "scalar") (serialize-qp "p_idt1" $p_idt1 "scalar") (serialize-qp "p_idt2" $p_idt2 "scalar") (serialize-qp "p_pityp" $p_pityp "scalar") (serialize-qp "p_pfead1" $p_pfead1 "scalar") (serialize-qp "p_pfead2" $p_pfead2 "scalar") (serialize-qp "p_pfeat" $p_pfeat "scalar") (serialize-qp "p_pccs" $p_pccs "scalar") (serialize-qp "p_pexcd" $p_pexcd "scalar") (serialize-qp "p_psncq" $p_psncq "scalar") (serialize-qp "p_pctrack" $p_pctrack "scalar") (serialize-qp "p_dwd" $p_dwd "scalar") (serialize-qp "p_pt" $p_pt "scalar") (serialize-qp "p_pdwdist" $p_pdwdist "scalar") (serialize-qp "p_pswdpc" $p_pswdpc "scalar") (serialize-qp "p_pswdmp" $p_pswdmp "scalar") (serialize-qp "p_pswpol" $p_pswpol "scalar") (serialize-qp "p_pswcas" $p_pswcas "scalar") (serialize-qp "p_pswparam" $p_pswparam "scalar") (serialize-qp "p_pswvio" $p_pswvio "scalar") (serialize-qp "p_wbd" $p_wbd "scalar") (serialize-qp "p_radwbd" $p_radwbd "scalar") (serialize-qp "p_frswbd" $p_frswbd "scalar") (serialize-qp "p_fntype" $p_fntype "scalar") (serialize-qp "p_pidall" $p_pidall "scalar") (serialize-qp "p_months_last_dmr" $p_months_last_dmr "scalar") (serialize-qp "p_last_dmr_within" $p_last_dmr_within "scalar") (serialize-qp "p_indsw" $p_indsw "scalar") (serialize-qp "p_msgp_ptype" $p_msgp_ptype "scalar") (serialize-qp "p_mon_type" $p_mon_type "scalar") (serialize-qp "p_iagency" $p_iagency "scalar") (serialize-qp "p_permitting_agency" $p_permitting_agency "scalar") (serialize-qp "p_isws" $p_isws "scalar") (serialize-qp "p_iswss" $p_iswss "scalar") (serialize-qp "p_iswssID" $p_iswss_id "scalar") (serialize-qp "p_ds1" $p_ds1 "scalar") (serialize-qp "p_ds2" $p_ds2 "scalar") (serialize-qp "p_da1" $p_da1 "scalar") (serialize-qp "p_da2" $p_da2 "scalar") (serialize-qp "p_MS4" $p_ms4 "scalar") (serialize-qp "p_ooFN" $p_oo_fn "scalar") (serialize-qp "p_ooFNtype" $p_oo_f_ntype "scalar") (serialize-qp "p_ooSA" $p_oo_sa "scalar") (serialize-qp "p_ooSA1" $p_oo_sa1 "scalar") (serialize-qp "p_ooCt" $p_oo_ct "scalar") (serialize-qp "p_ooSt" $p_oo_st "scalar") (serialize-qp "p_ooZip" $p_oo_zip "scalar") (serialize-qp "p_fac_ico" $p_fac_ico "scalar") (serialize-qp "p_icoo" $p_icoo "scalar") (serialize-qp "p_fac_icos" $p_fac_icos "scalar") (serialize-qp "p_ejscreen" $p_ejscreen "scalar") (serialize-qp "p_alrexceed" $p_alrexceed "scalar") (serialize-qp "p_limit_addr" $p_limit_addr "scalar") (serialize-qp "p_lat" $p_lat "scalar") (serialize-qp "p_long" $p_long "scalar") (serialize-qp "p_radius" $p_radius "scalar") (serialize-qp "p_ejscreen_over80cnt" $p_ejscreen_over80cnt "scalar") (serialize-qp "p_bio_flag" $p_bio_flag "scalar") (serialize-qp "p_bio_fac_type" $p_bio_fac_type "scalar") (serialize-qp "p_bio_trtmnt_procs" $p_bio_trtmnt_procs "scalar") (serialize-qp "p_bio_analy_method_catgry" $p_bio_analy_method_catgry "scalar") (serialize-qp "p_bio_total_volume_amt" $p_bio_total_volume_amt "scalar") (serialize-qp "p_bio_mgmt_prctce_type" $p_bio_mgmt_prctce_type "scalar") (serialize-qp "p_bio_mgmt_prctce_stype" $p_bio_mgmt_prctce_stype "scalar") (serialize-qp "p_bio_mgmt_prctce_handler" $p_bio_mgmt_prctce_handler "scalar") (serialize-qp "p_bio_mgmt_container" $p_bio_mgmt_container "scalar") (serialize-qp "p_bio_mgmt_pathogen" $p_bio_mgmt_pathogen "scalar") (serialize-qp "p_bio_mgmt_pathred" $p_bio_mgmt_pathred "scalar") (serialize-qp "p_bio_mgmt_vector" $p_bio_mgmt_vector "scalar") (serialize-qp "p_bio_mgmt_def_category" $p_bio_mgmt_def_category "scalar") (serialize-qp "p_bio_mgmt_deficiencies" $p_bio_mgmt_deficiencies "scalar") (serialize-qp "p_bio_vio_code" $p_bio_vio_code "scalar") (serialize-qp "p_bio_current_vio" $p_bio_current_vio "scalar") (serialize-qp "p_bio_qtrs_in_vio" $p_bio_qtrs_in_vio "scalar") (serialize-qp "p_bio_rpt_year" $p_bio_rpt_year "scalar") (serialize-qp "p_bio_vio_last_year" $p_bio_vio_last_year "scalar") (serialize-qp "p_msgp_rpt_year" $p_msgp_rpt_year "scalar") (serialize-qp "p_vio_last_year" $p_vio_last_year "scalar") (serialize-qp "queryset" $queryset "scalar") (serialize-qp "responseset" $responseset "scalar") (serialize-qp "tablelist" $tablelist "scalar") (serialize-qp "maplist" $maplist "scalar") (serialize-qp "summarylist" $summarylist "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_e90_count" $p_e90_count "scalar") (serialize-qp "p_e90_years" $p_e90_years "scalar") (serialize-qp "p_psc" $p_psc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cwa_rest_services.get_facilities" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -389,7 +389,7 @@ export def "cwa-rest-servicesget-facilities post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cwa_rest_services.get_facilities")
-  let body = {output: $output, qcolumns: $qcolumns} | compact
+  let body = {"output": $output, "qcolumns": $qcolumns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -503,19 +503,19 @@ export def "cwa-rest-servicesget-facility-info get" [
   --p-permitting-agency: string
   --p-isws: string # Multi-Sector General Purpose Permit Subsector Individual Identifier.  Enter a value to filter results.
   --p-iswss: string # Multi-Sector General Purpose Permit Subsector Group Code.  Enter a value to filter results.
-  --p-iswssID: string # Multi-Sector General Purpose Permit Sector Code.  Enter a value to filter results.
+  --p-iswss-id: string # Multi-Sector General Purpose Permit Sector Code.  Enter a value to filter results.
   --p-ds1: string # Submitted Date Filter Start.  To filter by the date of submission, enter a start date here and an end date in the p_ds2 parameter.  Both dates are required for filtering.
   --p-ds2: string # Submitted Date Filter End.  To filter by the date of submission, enter an end date here and a start date in the p_ds1 parameter.  Both dates are required for filtering.
   --p-da1: string # Active Date Filter Start.  To filter by the active date, enter a start date here and an end date in the p_da2 parameter.  Both dates are required for filtering.
   --p-da2: string # Active Date Filter End.  To filter by the active date, enter an end date here and a start date in the p_da1 parameter.  Both dates are required for filtering.
-  --p-MS4: string@p-MS4-completer # Municipal Separate Storm Water Sewer (MS4) Permit Flag.  Enter a Y or N to filter results by this type of permit.
-  --p-ooFN: string # Owner/Operator Name. Enter the owner/operator name of the facility.
-  --p-ooFNtype: string@p-ooFNtype-completer # Owner/Operator Name Multiple Selection Evaluator.  
-  --p-ooSA: string # Owner/Operator Address.  Enter the address of the owner/operator of the facility.
-  --p-ooSA1: string # Owner/Operator Address Line 2.  Enter the line 2 address of the owner/operator of the facility.
-  --p-ooCt: string # Owner/Operator City. Enter the city where the owner/operator of the facility is located.
-  --p-ooSt: string # Owner/Operator State.  Enter the standardized postal state code where the owner/operator of the facility is located.
-  --p-ooZip: string # Owner/Operator Zip Code.  Enter the postal zip code where the owner/operator of the facility is located.
+  --p-ms4: string@p-ms4-completer # Municipal Separate Storm Water Sewer (MS4) Permit Flag.  Enter a Y or N to filter results by this type of permit.
+  --p-oo-fn: string # Owner/Operator Name. Enter the owner/operator name of the facility.
+  --p-oo-f-ntype: string@p-oo-f-ntype-completer # Owner/Operator Name Multiple Selection Evaluator.  
+  --p-oo-sa: string # Owner/Operator Address.  Enter the address of the owner/operator of the facility.
+  --p-oo-sa1: string # Owner/Operator Address Line 2.  Enter the line 2 address of the owner/operator of the facility.
+  --p-oo-ct: string # Owner/Operator City. Enter the city where the owner/operator of the facility is located.
+  --p-oo-st: string # Owner/Operator State.  Enter the standardized postal state code where the owner/operator of the facility is located.
+  --p-oo-zip: string # Owner/Operator Zip Code.  Enter the postal zip code where the owner/operator of the facility is located.
   --p-fac-ico: string@p-fac-ico-completer # FRS tribal land code flag.  Enter "Y" or "N" to include or exclude facilities based on FRS tribal land code.
   --p-icoo: string # Indian country search and/or flag.  Enter "Y" to set indian country search conditions to return any results found using p_ico, p_fac_ico or p_fac_icoo.  Otherwise only results matching all provided p_ico, p_fac_ico or p_fac_icoo conditions will be returned.
   --p-fac-icos: string # FRS tribal land spatial flag.  Enter "Y" or "N" to include or exclude facilities based on FRS tribal land spatial flag.
@@ -557,7 +557,7 @@ export def "cwa-rest-servicesget-facility-info get" [
 ]: nothing -> record<Results: record<BadSystemIDs: string, BioCVRows: string, BioV3Rows: string, CVRows: string, ClusterOutput: record<ClusterData: list>, ClusterRecords: string, FEARows: string, Facilities: list<record>, INSPRows: string, IconBaseURL: string, IndianCountryRows: string, InfFEARows: string, Message: string, PopUpBaseURL: string, QueryID: string, QueryParameters: list<record>, QueryRows: string, SVRows: string, ServiceBaseURL: string, TotalPenalties: string, V3Rows: string, VioLast4QRows: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_fn" $p_fn "scalar") (serialize-qp "p_sa" $p_sa "scalar") (serialize-qp "p_sa1" $p_sa1 "scalar") (serialize-qp "p_ct" $p_ct "scalar") (serialize-qp "p_co" $p_co "scalar") (serialize-qp "p_fips" $p_fips "scalar") (serialize-qp "p_st" $p_st "scalar") (serialize-qp "p_zip" $p_zip "scalar") (serialize-qp "p_frs" $p_frs "scalar") (serialize-qp "p_reg" $p_reg "scalar") (serialize-qp "p_sic" $p_sic "scalar") (serialize-qp "p_ncs" $p_ncs "scalar") (serialize-qp "p_pen" $p_pen "scalar") (serialize-qp "xmin" $xmin "scalar") (serialize-qp "ymin" $ymin "scalar") (serialize-qp "xmax" $xmax "scalar") (serialize-qp "ymax" $ymax "scalar") (serialize-qp "p_usmex" $p_usmex "scalar") (serialize-qp "p_sic2" $p_sic2 "scalar") (serialize-qp "p_sic4" $p_sic4 "scalar") (serialize-qp "p_fa" $p_fa "scalar") (serialize-qp "p_ff" $p_ff "scalar") (serialize-qp "p_act" $p_act "scalar") (serialize-qp "p_maj" $p_maj "scalar") (serialize-qp "p_mact" $p_mact "scalar") (serialize-qp "p_fea" $p_fea "scalar") (serialize-qp "p_feay" $p_feay "scalar") (serialize-qp "p_feaa" $p_feaa "scalar") (serialize-qp "p_iea" $p_iea "scalar") (serialize-qp "p_ieay" $p_ieay "scalar") (serialize-qp "p_ieaa" $p_ieaa "scalar") (serialize-qp "p_qiv" $p_qiv "scalar") (serialize-qp "p_iv" $p_iv "scalar") (serialize-qp "p_impw" $p_impw "scalar") (serialize-qp "p_imp_pol" $p_imp_pol "scalar") (serialize-qp "p_imp_cau_grp" $p_imp_cau_grp "scalar") (serialize-qp "p_trep" $p_trep "scalar") (serialize-qp "p_pm" $p_pm "scalar") (serialize-qp "p_pd" $p_pd "scalar") (serialize-qp "p_ico" $p_ico "scalar") (serialize-qp "p_huc" $p_huc "scalar") (serialize-qp "p_pid" $p_pid "scalar") (serialize-qp "p_med" $p_med "scalar") (serialize-qp "p_ysl" $p_ysl "scalar") (serialize-qp "p_ysly" $p_ysly "scalar") (serialize-qp "p_ysla" $p_ysla "scalar") (serialize-qp "p_qs" $p_qs "scalar") (serialize-qp "p_sfs" $p_sfs "scalar") (serialize-qp "p_tribeid" $p_tribeid "scalar") (serialize-qp "p_tribename" $p_tribename "scalar") (serialize-qp "p_tribedist" $p_tribedist "scalar") (serialize-qp "p_pstat" $p_pstat "scalar") (serialize-qp "p_ptype" $p_ptype "scalar") (serialize-qp "p_pcomp" $p_pcomp "scalar") (serialize-qp "p_plimits" $p_plimits "scalar") (serialize-qp "p_pcss" $p_pcss "scalar") (serialize-qp "p_pexp" $p_pexp "scalar") (serialize-qp "p_owop" $p_owop "scalar") (serialize-qp "p_ipfti" $p_ipfti "scalar") (serialize-qp "p_agoo" $p_agoo "scalar") (serialize-qp "p_idt1" $p_idt1 "scalar") (serialize-qp "p_idt2" $p_idt2 "scalar") (serialize-qp "p_pityp" $p_pityp "scalar") (serialize-qp "p_pfead1" $p_pfead1 "scalar") (serialize-qp "p_pfead2" $p_pfead2 "scalar") (serialize-qp "p_pfeat" $p_pfeat "scalar") (serialize-qp "p_pccs" $p_pccs "scalar") (serialize-qp "p_pexcd" $p_pexcd "scalar") (serialize-qp "p_psncq" $p_psncq "scalar") (serialize-qp "p_pctrack" $p_pctrack "scalar") (serialize-qp "p_dwd" $p_dwd "scalar") (serialize-qp "p_pt" $p_pt "scalar") (serialize-qp "p_pdwdist" $p_pdwdist "scalar") (serialize-qp "p_pswdpc" $p_pswdpc "scalar") (serialize-qp "p_pswdmp" $p_pswdmp "scalar") (serialize-qp "p_pswpol" $p_pswpol "scalar") (serialize-qp "p_pswcas" $p_pswcas "scalar") (serialize-qp "p_pswparam" $p_pswparam "scalar") (serialize-qp "p_pswvio" $p_pswvio "scalar") (serialize-qp "p_wbd" $p_wbd "scalar") (serialize-qp "p_radwbd" $p_radwbd "scalar") (serialize-qp "p_frswbd" $p_frswbd "scalar") (serialize-qp "p_fntype" $p_fntype "scalar") (serialize-qp "p_pidall" $p_pidall "scalar") (serialize-qp "p_months_last_dmr" $p_months_last_dmr "scalar") (serialize-qp "p_last_dmr_within" $p_last_dmr_within "scalar") (serialize-qp "p_indsw" $p_indsw "scalar") (serialize-qp "p_msgp_ptype" $p_msgp_ptype "scalar") (serialize-qp "p_mon_type" $p_mon_type "scalar") (serialize-qp "p_iagency" $p_iagency "scalar") (serialize-qp "p_permitting_agency" $p_permitting_agency "scalar") (serialize-qp "p_isws" $p_isws "scalar") (serialize-qp "p_iswss" $p_iswss "scalar") (serialize-qp "p_iswssID" $p_iswssID "scalar") (serialize-qp "p_ds1" $p_ds1 "scalar") (serialize-qp "p_ds2" $p_ds2 "scalar") (serialize-qp "p_da1" $p_da1 "scalar") (serialize-qp "p_da2" $p_da2 "scalar") (serialize-qp "p_MS4" $p_MS4 "scalar") (serialize-qp "p_ooFN" $p_ooFN "scalar") (serialize-qp "p_ooFNtype" $p_ooFNtype "scalar") (serialize-qp "p_ooSA" $p_ooSA "scalar") (serialize-qp "p_ooSA1" $p_ooSA1 "scalar") (serialize-qp "p_ooCt" $p_ooCt "scalar") (serialize-qp "p_ooSt" $p_ooSt "scalar") (serialize-qp "p_ooZip" $p_ooZip "scalar") (serialize-qp "p_fac_ico" $p_fac_ico "scalar") (serialize-qp "p_icoo" $p_icoo "scalar") (serialize-qp "p_fac_icos" $p_fac_icos "scalar") (serialize-qp "p_ejscreen" $p_ejscreen "scalar") (serialize-qp "p_alrexceed" $p_alrexceed "scalar") (serialize-qp "p_limit_addr" $p_limit_addr "scalar") (serialize-qp "p_lat" $p_lat "scalar") (serialize-qp "p_long" $p_long "scalar") (serialize-qp "p_radius" $p_radius "scalar") (serialize-qp "p_ejscreen_over80cnt" $p_ejscreen_over80cnt "scalar") (serialize-qp "p_bio_flag" $p_bio_flag "scalar") (serialize-qp "p_bio_fac_type" $p_bio_fac_type "scalar") (serialize-qp "p_bio_trtmnt_procs" $p_bio_trtmnt_procs "scalar") (serialize-qp "p_bio_analy_method_catgry" $p_bio_analy_method_catgry "scalar") (serialize-qp "p_bio_total_volume_amt" $p_bio_total_volume_amt "scalar") (serialize-qp "p_bio_mgmt_prctce_type" $p_bio_mgmt_prctce_type "scalar") (serialize-qp "p_bio_mgmt_prctce_stype" $p_bio_mgmt_prctce_stype "scalar") (serialize-qp "p_bio_mgmt_prctce_handler" $p_bio_mgmt_prctce_handler "scalar") (serialize-qp "p_bio_mgmt_container" $p_bio_mgmt_container "scalar") (serialize-qp "p_bio_mgmt_pathogen" $p_bio_mgmt_pathogen "scalar") (serialize-qp "p_bio_mgmt_pathred" $p_bio_mgmt_pathred "scalar") (serialize-qp "p_bio_mgmt_vector" $p_bio_mgmt_vector "scalar") (serialize-qp "p_bio_mgmt_def_category" $p_bio_mgmt_def_category "scalar") (serialize-qp "p_bio_mgmt_deficiencies" $p_bio_mgmt_deficiencies "scalar") (serialize-qp "p_bio_vio_code" $p_bio_vio_code "scalar") (serialize-qp "p_bio_current_vio" $p_bio_current_vio "scalar") (serialize-qp "p_bio_qtrs_in_vio" $p_bio_qtrs_in_vio "scalar") (serialize-qp "p_bio_rpt_year" $p_bio_rpt_year "scalar") (serialize-qp "p_bio_vio_last_year" $p_bio_vio_last_year "scalar") (serialize-qp "p_msgp_rpt_year" $p_msgp_rpt_year "scalar") (serialize-qp "p_vio_last_year" $p_vio_last_year "scalar") (serialize-qp "responseset" $responseset "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_pretty_print" $p_pretty_print "scalar") (serialize-qp "p_e90_count" $p_e90_count "scalar") (serialize-qp "p_e90_years" $p_e90_years "scalar") (serialize-qp "p_psc" $p_psc "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_fn" $p_fn "scalar") (serialize-qp "p_sa" $p_sa "scalar") (serialize-qp "p_sa1" $p_sa1 "scalar") (serialize-qp "p_ct" $p_ct "scalar") (serialize-qp "p_co" $p_co "scalar") (serialize-qp "p_fips" $p_fips "scalar") (serialize-qp "p_st" $p_st "scalar") (serialize-qp "p_zip" $p_zip "scalar") (serialize-qp "p_frs" $p_frs "scalar") (serialize-qp "p_reg" $p_reg "scalar") (serialize-qp "p_sic" $p_sic "scalar") (serialize-qp "p_ncs" $p_ncs "scalar") (serialize-qp "p_pen" $p_pen "scalar") (serialize-qp "xmin" $xmin "scalar") (serialize-qp "ymin" $ymin "scalar") (serialize-qp "xmax" $xmax "scalar") (serialize-qp "ymax" $ymax "scalar") (serialize-qp "p_usmex" $p_usmex "scalar") (serialize-qp "p_sic2" $p_sic2 "scalar") (serialize-qp "p_sic4" $p_sic4 "scalar") (serialize-qp "p_fa" $p_fa "scalar") (serialize-qp "p_ff" $p_ff "scalar") (serialize-qp "p_act" $p_act "scalar") (serialize-qp "p_maj" $p_maj "scalar") (serialize-qp "p_mact" $p_mact "scalar") (serialize-qp "p_fea" $p_fea "scalar") (serialize-qp "p_feay" $p_feay "scalar") (serialize-qp "p_feaa" $p_feaa "scalar") (serialize-qp "p_iea" $p_iea "scalar") (serialize-qp "p_ieay" $p_ieay "scalar") (serialize-qp "p_ieaa" $p_ieaa "scalar") (serialize-qp "p_qiv" $p_qiv "scalar") (serialize-qp "p_iv" $p_iv "scalar") (serialize-qp "p_impw" $p_impw "scalar") (serialize-qp "p_imp_pol" $p_imp_pol "scalar") (serialize-qp "p_imp_cau_grp" $p_imp_cau_grp "scalar") (serialize-qp "p_trep" $p_trep "scalar") (serialize-qp "p_pm" $p_pm "scalar") (serialize-qp "p_pd" $p_pd "scalar") (serialize-qp "p_ico" $p_ico "scalar") (serialize-qp "p_huc" $p_huc "scalar") (serialize-qp "p_pid" $p_pid "scalar") (serialize-qp "p_med" $p_med "scalar") (serialize-qp "p_ysl" $p_ysl "scalar") (serialize-qp "p_ysly" $p_ysly "scalar") (serialize-qp "p_ysla" $p_ysla "scalar") (serialize-qp "p_qs" $p_qs "scalar") (serialize-qp "p_sfs" $p_sfs "scalar") (serialize-qp "p_tribeid" $p_tribeid "scalar") (serialize-qp "p_tribename" $p_tribename "scalar") (serialize-qp "p_tribedist" $p_tribedist "scalar") (serialize-qp "p_pstat" $p_pstat "scalar") (serialize-qp "p_ptype" $p_ptype "scalar") (serialize-qp "p_pcomp" $p_pcomp "scalar") (serialize-qp "p_plimits" $p_plimits "scalar") (serialize-qp "p_pcss" $p_pcss "scalar") (serialize-qp "p_pexp" $p_pexp "scalar") (serialize-qp "p_owop" $p_owop "scalar") (serialize-qp "p_ipfti" $p_ipfti "scalar") (serialize-qp "p_agoo" $p_agoo "scalar") (serialize-qp "p_idt1" $p_idt1 "scalar") (serialize-qp "p_idt2" $p_idt2 "scalar") (serialize-qp "p_pityp" $p_pityp "scalar") (serialize-qp "p_pfead1" $p_pfead1 "scalar") (serialize-qp "p_pfead2" $p_pfead2 "scalar") (serialize-qp "p_pfeat" $p_pfeat "scalar") (serialize-qp "p_pccs" $p_pccs "scalar") (serialize-qp "p_pexcd" $p_pexcd "scalar") (serialize-qp "p_psncq" $p_psncq "scalar") (serialize-qp "p_pctrack" $p_pctrack "scalar") (serialize-qp "p_dwd" $p_dwd "scalar") (serialize-qp "p_pt" $p_pt "scalar") (serialize-qp "p_pdwdist" $p_pdwdist "scalar") (serialize-qp "p_pswdpc" $p_pswdpc "scalar") (serialize-qp "p_pswdmp" $p_pswdmp "scalar") (serialize-qp "p_pswpol" $p_pswpol "scalar") (serialize-qp "p_pswcas" $p_pswcas "scalar") (serialize-qp "p_pswparam" $p_pswparam "scalar") (serialize-qp "p_pswvio" $p_pswvio "scalar") (serialize-qp "p_wbd" $p_wbd "scalar") (serialize-qp "p_radwbd" $p_radwbd "scalar") (serialize-qp "p_frswbd" $p_frswbd "scalar") (serialize-qp "p_fntype" $p_fntype "scalar") (serialize-qp "p_pidall" $p_pidall "scalar") (serialize-qp "p_months_last_dmr" $p_months_last_dmr "scalar") (serialize-qp "p_last_dmr_within" $p_last_dmr_within "scalar") (serialize-qp "p_indsw" $p_indsw "scalar") (serialize-qp "p_msgp_ptype" $p_msgp_ptype "scalar") (serialize-qp "p_mon_type" $p_mon_type "scalar") (serialize-qp "p_iagency" $p_iagency "scalar") (serialize-qp "p_permitting_agency" $p_permitting_agency "scalar") (serialize-qp "p_isws" $p_isws "scalar") (serialize-qp "p_iswss" $p_iswss "scalar") (serialize-qp "p_iswssID" $p_iswss_id "scalar") (serialize-qp "p_ds1" $p_ds1 "scalar") (serialize-qp "p_ds2" $p_ds2 "scalar") (serialize-qp "p_da1" $p_da1 "scalar") (serialize-qp "p_da2" $p_da2 "scalar") (serialize-qp "p_MS4" $p_ms4 "scalar") (serialize-qp "p_ooFN" $p_oo_fn "scalar") (serialize-qp "p_ooFNtype" $p_oo_f_ntype "scalar") (serialize-qp "p_ooSA" $p_oo_sa "scalar") (serialize-qp "p_ooSA1" $p_oo_sa1 "scalar") (serialize-qp "p_ooCt" $p_oo_ct "scalar") (serialize-qp "p_ooSt" $p_oo_st "scalar") (serialize-qp "p_ooZip" $p_oo_zip "scalar") (serialize-qp "p_fac_ico" $p_fac_ico "scalar") (serialize-qp "p_icoo" $p_icoo "scalar") (serialize-qp "p_fac_icos" $p_fac_icos "scalar") (serialize-qp "p_ejscreen" $p_ejscreen "scalar") (serialize-qp "p_alrexceed" $p_alrexceed "scalar") (serialize-qp "p_limit_addr" $p_limit_addr "scalar") (serialize-qp "p_lat" $p_lat "scalar") (serialize-qp "p_long" $p_long "scalar") (serialize-qp "p_radius" $p_radius "scalar") (serialize-qp "p_ejscreen_over80cnt" $p_ejscreen_over80cnt "scalar") (serialize-qp "p_bio_flag" $p_bio_flag "scalar") (serialize-qp "p_bio_fac_type" $p_bio_fac_type "scalar") (serialize-qp "p_bio_trtmnt_procs" $p_bio_trtmnt_procs "scalar") (serialize-qp "p_bio_analy_method_catgry" $p_bio_analy_method_catgry "scalar") (serialize-qp "p_bio_total_volume_amt" $p_bio_total_volume_amt "scalar") (serialize-qp "p_bio_mgmt_prctce_type" $p_bio_mgmt_prctce_type "scalar") (serialize-qp "p_bio_mgmt_prctce_stype" $p_bio_mgmt_prctce_stype "scalar") (serialize-qp "p_bio_mgmt_prctce_handler" $p_bio_mgmt_prctce_handler "scalar") (serialize-qp "p_bio_mgmt_container" $p_bio_mgmt_container "scalar") (serialize-qp "p_bio_mgmt_pathogen" $p_bio_mgmt_pathogen "scalar") (serialize-qp "p_bio_mgmt_pathred" $p_bio_mgmt_pathred "scalar") (serialize-qp "p_bio_mgmt_vector" $p_bio_mgmt_vector "scalar") (serialize-qp "p_bio_mgmt_def_category" $p_bio_mgmt_def_category "scalar") (serialize-qp "p_bio_mgmt_deficiencies" $p_bio_mgmt_deficiencies "scalar") (serialize-qp "p_bio_vio_code" $p_bio_vio_code "scalar") (serialize-qp "p_bio_current_vio" $p_bio_current_vio "scalar") (serialize-qp "p_bio_qtrs_in_vio" $p_bio_qtrs_in_vio "scalar") (serialize-qp "p_bio_rpt_year" $p_bio_rpt_year "scalar") (serialize-qp "p_bio_vio_last_year" $p_bio_vio_last_year "scalar") (serialize-qp "p_msgp_rpt_year" $p_msgp_rpt_year "scalar") (serialize-qp "p_vio_last_year" $p_vio_last_year "scalar") (serialize-qp "responseset" $responseset "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_pretty_print" $p_pretty_print "scalar") (serialize-qp "p_e90_count" $p_e90_count "scalar") (serialize-qp "p_e90_years" $p_e90_years "scalar") (serialize-qp "p_psc" $p_psc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cwa_rest_services.get_facility_info" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -584,7 +584,7 @@ export def "cwa-rest-servicesget-facility-info post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cwa_rest_services.get_facility_info")
-  let body = {output: $output, qcolumns: $qcolumns} | compact
+  let body = {"output": $output, "qcolumns": $qcolumns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -641,7 +641,7 @@ export def "cwa-rest-servicesget-geojson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cwa_rest_services.get_geojson")
-  let body = {output: $output, qcolumns: $qcolumns} | compact
+  let body = {"output": $output, "qcolumns": $qcolumns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -693,7 +693,7 @@ export def "cwa-rest-servicesget-info-clusters post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cwa_rest_services.get_info_clusters")
-  let body = {output: $output} | compact
+  let body = {"output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -751,7 +751,7 @@ export def "cwa-rest-servicesget-map post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cwa_rest_services.get_map")
-  let body = {output: $output} | compact
+  let body = {"output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -808,7 +808,7 @@ export def "cwa-rest-servicesget-qid post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cwa_rest_services.get_qid")
-  let body = {output: $output, qcolumns: $qcolumns} | compact
+  let body = {"output": $output, "qcolumns": $qcolumns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -859,7 +859,7 @@ export def "cwa-rest-servicesmetadata post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cwa_rest_services.metadata")
-  let body = {output: $output} | compact
+  let body = {"output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -912,7 +912,7 @@ export def "rest-lookupsbp-tribes post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest_lookups.bp_tribes")
-  let body = {output: $output} | compact
+  let body = {"output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -965,7 +965,7 @@ export def "rest-lookupscwa-parameters post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest_lookups.cwa_parameters")
-  let body = {output: $output} | compact
+  let body = {"output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1018,7 +1018,7 @@ export def "rest-lookupscwa-pollutants post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest_lookups.cwa_pollutants")
-  let body = {output: $output} | compact
+  let body = {"output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1071,7 +1071,7 @@ export def "rest-lookupsfederal-agencies post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest_lookups.federal_agencies")
-  let body = {output: $output} | compact
+  let body = {"output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1124,7 +1124,7 @@ export def "rest-lookupsicis-inspection-types post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest_lookups.icis_inspection_types")
-  let body = {output: $output} | compact
+  let body = {"output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1180,7 +1180,7 @@ export def "rest-lookupsicis-law-sections post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest_lookups.icis_law_sections")
-  let body = {output: $output} | compact
+  let body = {"output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1233,7 +1233,7 @@ export def "rest-lookupsnaics-codes post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest_lookups.naics_codes")
-  let body = {output: $output} | compact
+  let body = {"output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1285,7 +1285,7 @@ export def "rest-lookupsnpdes-parameters post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest_lookups.npdes_parameters")
-  let body = {output: $output} | compact
+  let body = {"output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1338,7 +1338,7 @@ export def "rest-lookupswbd-code-lu post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest_lookups.wbd_code_lu")
-  let body = {output: $output} | compact
+  let body = {"output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1391,7 +1391,7 @@ export def "rest-lookupswbd-name-lu post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest_lookups.wbd_name_lu")
-  let body = {output: $output} | compact
+  let body = {"output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

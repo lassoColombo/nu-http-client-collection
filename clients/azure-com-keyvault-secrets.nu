@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-secrets List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-secrets list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.KeyVault/vaults/{vaultName}/secrets
 # operationId: Secrets_List
-export def "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-secrets List" [
-  resourceGroupName: string
-  vaultName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-secrets list" [
+  subscription_id: string
+  resource_group_name: string
+  vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,7 +111,7 @@ export def "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.KeyVault/vaults/($vaultName)/secrets" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vault_name: $vault_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.KeyVault/vaults/{vault_name}/secrets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -121,11 +121,11 @@ export def "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-s
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.KeyVault/vaults/{vaultName}/secrets/{secretName}
 # operationId: Secrets_Get
-export def "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-secrets Get" [
-  resourceGroupName: string
-  vaultName: string
-  secretName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-secrets get" [
+  subscription_id: string
+  resource_group_name: string
+  vault_name: string
+  secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,7 +139,7 @@ export def "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.KeyVault/vaults/($vaultName)/secrets/($secretName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vault_name: $vault_name, secret_name: $secret_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.KeyVault/vaults/{vault_name}/secrets/{secret_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,11 +150,11 @@ export def "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-s
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.KeyVault/vaults/{vaultName}/secrets/{secretName}
 # operationId: Secrets_Update
 # --properties shape: {attributes?: any, contentType?: string, value?: string}
-export def "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-secrets Update" [
-  resourceGroupName: string
-  vaultName: string
-  secretName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-secrets update" [
+  subscription_id: string
+  resource_group_name: string
+  vault_name: string
+  secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,8 +171,8 @@ export def "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.KeyVault/vaults/($vaultName)/secrets/($secretName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vault_name: $vault_name, secret_name: $secret_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.KeyVault/vaults/{vault_name}/secrets/{secret_name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -184,11 +184,11 @@ export def "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-s
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.KeyVault/vaults/{vaultName}/secrets/{secretName}
 # operationId: Secrets_CreateOrUpdate
 # --properties shape: {attributes?: any, contentType?: string, value?: string}
-export def "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-secrets CreateOrUpdate" [
-  resourceGroupName: string
-  vaultName: string
-  secretName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-secrets create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  vault_name: string
+  secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,8 +205,8 @@ export def "subscriptions-resource-groups-providers-microsoft-key-vault-vaults-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.KeyVault/vaults/($vaultName)/secrets/($secretName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vault_name: $vault_name, secret_name: $secret_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.KeyVault/vaults/{vault_name}/secrets/{secret_name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

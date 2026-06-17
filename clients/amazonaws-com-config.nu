@@ -66,103 +66,103 @@ def base-url-completer [] { ["http://config.us-east-1.amazonaws.com" "http://con
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["StarlingDoveService.BatchGetAggregateResourceConfig"] }
-def X-Amz-Target-completer-1 [] { ["StarlingDoveService.BatchGetResourceConfig"] }
-def X-Amz-Target-completer-2 [] { ["StarlingDoveService.DeleteAggregationAuthorization"] }
-def X-Amz-Target-completer-3 [] { ["StarlingDoveService.DeleteConfigRule"] }
-def X-Amz-Target-completer-4 [] { ["StarlingDoveService.DeleteConfigurationAggregator"] }
-def X-Amz-Target-completer-5 [] { ["StarlingDoveService.DeleteConfigurationRecorder"] }
-def X-Amz-Target-completer-6 [] { ["StarlingDoveService.DeleteConformancePack"] }
-def X-Amz-Target-completer-7 [] { ["StarlingDoveService.DeleteDeliveryChannel"] }
-def X-Amz-Target-completer-8 [] { ["StarlingDoveService.DeleteEvaluationResults"] }
-def X-Amz-Target-completer-9 [] { ["StarlingDoveService.DeleteOrganizationConfigRule"] }
-def X-Amz-Target-completer-10 [] { ["StarlingDoveService.DeleteOrganizationConformancePack"] }
-def X-Amz-Target-completer-11 [] { ["StarlingDoveService.DeletePendingAggregationRequest"] }
-def X-Amz-Target-completer-12 [] { ["StarlingDoveService.DeleteRemediationConfiguration"] }
-def X-Amz-Target-completer-13 [] { ["StarlingDoveService.DeleteRemediationExceptions"] }
-def X-Amz-Target-completer-14 [] { ["StarlingDoveService.DeleteResourceConfig"] }
-def X-Amz-Target-completer-15 [] { ["StarlingDoveService.DeleteRetentionConfiguration"] }
-def X-Amz-Target-completer-16 [] { ["StarlingDoveService.DeleteStoredQuery"] }
-def X-Amz-Target-completer-17 [] { ["StarlingDoveService.DeliverConfigSnapshot"] }
-def X-Amz-Target-completer-18 [] { ["StarlingDoveService.DescribeAggregateComplianceByConfigRules"] }
-def X-Amz-Target-completer-19 [] { ["StarlingDoveService.DescribeAggregateComplianceByConformancePacks"] }
-def X-Amz-Target-completer-20 [] { ["StarlingDoveService.DescribeAggregationAuthorizations"] }
-def X-Amz-Target-completer-21 [] { ["StarlingDoveService.DescribeComplianceByConfigRule"] }
-def X-Amz-Target-completer-22 [] { ["StarlingDoveService.DescribeComplianceByResource"] }
-def X-Amz-Target-completer-23 [] { ["StarlingDoveService.DescribeConfigRuleEvaluationStatus"] }
-def X-Amz-Target-completer-24 [] { ["StarlingDoveService.DescribeConfigRules"] }
-def X-Amz-Target-completer-25 [] { ["StarlingDoveService.DescribeConfigurationAggregatorSourcesStatus"] }
-def X-Amz-Target-completer-26 [] { ["StarlingDoveService.DescribeConfigurationAggregators"] }
-def X-Amz-Target-completer-27 [] { ["StarlingDoveService.DescribeConfigurationRecorderStatus"] }
-def X-Amz-Target-completer-28 [] { ["StarlingDoveService.DescribeConfigurationRecorders"] }
-def X-Amz-Target-completer-29 [] { ["StarlingDoveService.DescribeConformancePackCompliance"] }
-def X-Amz-Target-completer-30 [] { ["StarlingDoveService.DescribeConformancePackStatus"] }
-def X-Amz-Target-completer-31 [] { ["StarlingDoveService.DescribeConformancePacks"] }
-def X-Amz-Target-completer-32 [] { ["StarlingDoveService.DescribeDeliveryChannelStatus"] }
-def X-Amz-Target-completer-33 [] { ["StarlingDoveService.DescribeDeliveryChannels"] }
-def X-Amz-Target-completer-34 [] { ["StarlingDoveService.DescribeOrganizationConfigRuleStatuses"] }
-def X-Amz-Target-completer-35 [] { ["StarlingDoveService.DescribeOrganizationConfigRules"] }
-def X-Amz-Target-completer-36 [] { ["StarlingDoveService.DescribeOrganizationConformancePackStatuses"] }
-def X-Amz-Target-completer-37 [] { ["StarlingDoveService.DescribeOrganizationConformancePacks"] }
-def X-Amz-Target-completer-38 [] { ["StarlingDoveService.DescribePendingAggregationRequests"] }
-def X-Amz-Target-completer-39 [] { ["StarlingDoveService.DescribeRemediationConfigurations"] }
-def X-Amz-Target-completer-40 [] { ["StarlingDoveService.DescribeRemediationExceptions"] }
-def X-Amz-Target-completer-41 [] { ["StarlingDoveService.DescribeRemediationExecutionStatus"] }
-def X-Amz-Target-completer-42 [] { ["StarlingDoveService.DescribeRetentionConfigurations"] }
-def X-Amz-Target-completer-43 [] { ["StarlingDoveService.GetAggregateComplianceDetailsByConfigRule"] }
-def X-Amz-Target-completer-44 [] { ["StarlingDoveService.GetAggregateConfigRuleComplianceSummary"] }
-def X-Amz-Target-completer-45 [] { ["StarlingDoveService.GetAggregateConformancePackComplianceSummary"] }
-def X-Amz-Target-completer-46 [] { ["StarlingDoveService.GetAggregateDiscoveredResourceCounts"] }
-def X-Amz-Target-completer-47 [] { ["StarlingDoveService.GetAggregateResourceConfig"] }
-def X-Amz-Target-completer-48 [] { ["StarlingDoveService.GetComplianceDetailsByConfigRule"] }
-def X-Amz-Target-completer-49 [] { ["StarlingDoveService.GetComplianceDetailsByResource"] }
-def X-Amz-Target-completer-50 [] { ["StarlingDoveService.GetComplianceSummaryByConfigRule"] }
-def X-Amz-Target-completer-51 [] { ["StarlingDoveService.GetComplianceSummaryByResourceType"] }
-def X-Amz-Target-completer-52 [] { ["StarlingDoveService.GetConformancePackComplianceDetails"] }
-def X-Amz-Target-completer-53 [] { ["StarlingDoveService.GetConformancePackComplianceSummary"] }
-def X-Amz-Target-completer-54 [] { ["StarlingDoveService.GetCustomRulePolicy"] }
-def X-Amz-Target-completer-55 [] { ["StarlingDoveService.GetDiscoveredResourceCounts"] }
-def X-Amz-Target-completer-56 [] { ["StarlingDoveService.GetOrganizationConfigRuleDetailedStatus"] }
-def X-Amz-Target-completer-57 [] { ["StarlingDoveService.GetOrganizationConformancePackDetailedStatus"] }
-def X-Amz-Target-completer-58 [] { ["StarlingDoveService.GetOrganizationCustomRulePolicy"] }
-def X-Amz-Target-completer-59 [] { ["StarlingDoveService.GetResourceConfigHistory"] }
-def X-Amz-Target-completer-60 [] { ["StarlingDoveService.GetResourceEvaluationSummary"] }
-def X-Amz-Target-completer-61 [] { ["StarlingDoveService.GetStoredQuery"] }
-def X-Amz-Target-completer-62 [] { ["StarlingDoveService.ListAggregateDiscoveredResources"] }
-def X-Amz-Target-completer-63 [] { ["StarlingDoveService.ListConformancePackComplianceScores"] }
-def X-Amz-Target-completer-64 [] { ["StarlingDoveService.ListDiscoveredResources"] }
-def X-Amz-Target-completer-65 [] { ["StarlingDoveService.ListResourceEvaluations"] }
-def X-Amz-Target-completer-66 [] { ["StarlingDoveService.ListStoredQueries"] }
-def X-Amz-Target-completer-67 [] { ["StarlingDoveService.ListTagsForResource"] }
-def X-Amz-Target-completer-68 [] { ["StarlingDoveService.PutAggregationAuthorization"] }
-def X-Amz-Target-completer-69 [] { ["StarlingDoveService.PutConfigRule"] }
-def X-Amz-Target-completer-70 [] { ["StarlingDoveService.PutConfigurationAggregator"] }
-def X-Amz-Target-completer-71 [] { ["StarlingDoveService.PutConfigurationRecorder"] }
-def X-Amz-Target-completer-72 [] { ["StarlingDoveService.PutConformancePack"] }
-def X-Amz-Target-completer-73 [] { ["StarlingDoveService.PutDeliveryChannel"] }
-def X-Amz-Target-completer-74 [] { ["StarlingDoveService.PutEvaluations"] }
-def X-Amz-Target-completer-75 [] { ["StarlingDoveService.PutExternalEvaluation"] }
-def X-Amz-Target-completer-76 [] { ["StarlingDoveService.PutOrganizationConfigRule"] }
-def X-Amz-Target-completer-77 [] { ["StarlingDoveService.PutOrganizationConformancePack"] }
-def X-Amz-Target-completer-78 [] { ["StarlingDoveService.PutRemediationConfigurations"] }
-def X-Amz-Target-completer-79 [] { ["StarlingDoveService.PutRemediationExceptions"] }
-def X-Amz-Target-completer-80 [] { ["StarlingDoveService.PutResourceConfig"] }
-def X-Amz-Target-completer-81 [] { ["StarlingDoveService.PutRetentionConfiguration"] }
-def X-Amz-Target-completer-82 [] { ["StarlingDoveService.PutStoredQuery"] }
-def X-Amz-Target-completer-83 [] { ["StarlingDoveService.SelectAggregateResourceConfig"] }
-def X-Amz-Target-completer-84 [] { ["StarlingDoveService.SelectResourceConfig"] }
-def X-Amz-Target-completer-85 [] { ["StarlingDoveService.StartConfigRulesEvaluation"] }
-def X-Amz-Target-completer-86 [] { ["StarlingDoveService.StartConfigurationRecorder"] }
-def X-Amz-Target-completer-87 [] { ["StarlingDoveService.StartRemediationExecution"] }
-def X-Amz-Target-completer-88 [] { ["StarlingDoveService.StartResourceEvaluation"] }
-def X-Amz-Target-completer-89 [] { ["StarlingDoveService.StopConfigurationRecorder"] }
-def X-Amz-Target-completer-90 [] { ["StarlingDoveService.TagResource"] }
-def X-Amz-Target-completer-91 [] { ["StarlingDoveService.UntagResource"] }
+def x-amz-target-completer [] { ["StarlingDoveService.BatchGetAggregateResourceConfig"] }
+def x-amz-target-completer-1 [] { ["StarlingDoveService.BatchGetResourceConfig"] }
+def x-amz-target-completer-2 [] { ["StarlingDoveService.DeleteAggregationAuthorization"] }
+def x-amz-target-completer-3 [] { ["StarlingDoveService.DeleteConfigRule"] }
+def x-amz-target-completer-4 [] { ["StarlingDoveService.DeleteConfigurationAggregator"] }
+def x-amz-target-completer-5 [] { ["StarlingDoveService.DeleteConfigurationRecorder"] }
+def x-amz-target-completer-6 [] { ["StarlingDoveService.DeleteConformancePack"] }
+def x-amz-target-completer-7 [] { ["StarlingDoveService.DeleteDeliveryChannel"] }
+def x-amz-target-completer-8 [] { ["StarlingDoveService.DeleteEvaluationResults"] }
+def x-amz-target-completer-9 [] { ["StarlingDoveService.DeleteOrganizationConfigRule"] }
+def x-amz-target-completer-10 [] { ["StarlingDoveService.DeleteOrganizationConformancePack"] }
+def x-amz-target-completer-11 [] { ["StarlingDoveService.DeletePendingAggregationRequest"] }
+def x-amz-target-completer-12 [] { ["StarlingDoveService.DeleteRemediationConfiguration"] }
+def x-amz-target-completer-13 [] { ["StarlingDoveService.DeleteRemediationExceptions"] }
+def x-amz-target-completer-14 [] { ["StarlingDoveService.DeleteResourceConfig"] }
+def x-amz-target-completer-15 [] { ["StarlingDoveService.DeleteRetentionConfiguration"] }
+def x-amz-target-completer-16 [] { ["StarlingDoveService.DeleteStoredQuery"] }
+def x-amz-target-completer-17 [] { ["StarlingDoveService.DeliverConfigSnapshot"] }
+def x-amz-target-completer-18 [] { ["StarlingDoveService.DescribeAggregateComplianceByConfigRules"] }
+def x-amz-target-completer-19 [] { ["StarlingDoveService.DescribeAggregateComplianceByConformancePacks"] }
+def x-amz-target-completer-20 [] { ["StarlingDoveService.DescribeAggregationAuthorizations"] }
+def x-amz-target-completer-21 [] { ["StarlingDoveService.DescribeComplianceByConfigRule"] }
+def x-amz-target-completer-22 [] { ["StarlingDoveService.DescribeComplianceByResource"] }
+def x-amz-target-completer-23 [] { ["StarlingDoveService.DescribeConfigRuleEvaluationStatus"] }
+def x-amz-target-completer-24 [] { ["StarlingDoveService.DescribeConfigRules"] }
+def x-amz-target-completer-25 [] { ["StarlingDoveService.DescribeConfigurationAggregatorSourcesStatus"] }
+def x-amz-target-completer-26 [] { ["StarlingDoveService.DescribeConfigurationAggregators"] }
+def x-amz-target-completer-27 [] { ["StarlingDoveService.DescribeConfigurationRecorderStatus"] }
+def x-amz-target-completer-28 [] { ["StarlingDoveService.DescribeConfigurationRecorders"] }
+def x-amz-target-completer-29 [] { ["StarlingDoveService.DescribeConformancePackCompliance"] }
+def x-amz-target-completer-30 [] { ["StarlingDoveService.DescribeConformancePackStatus"] }
+def x-amz-target-completer-31 [] { ["StarlingDoveService.DescribeConformancePacks"] }
+def x-amz-target-completer-32 [] { ["StarlingDoveService.DescribeDeliveryChannelStatus"] }
+def x-amz-target-completer-33 [] { ["StarlingDoveService.DescribeDeliveryChannels"] }
+def x-amz-target-completer-34 [] { ["StarlingDoveService.DescribeOrganizationConfigRuleStatuses"] }
+def x-amz-target-completer-35 [] { ["StarlingDoveService.DescribeOrganizationConfigRules"] }
+def x-amz-target-completer-36 [] { ["StarlingDoveService.DescribeOrganizationConformancePackStatuses"] }
+def x-amz-target-completer-37 [] { ["StarlingDoveService.DescribeOrganizationConformancePacks"] }
+def x-amz-target-completer-38 [] { ["StarlingDoveService.DescribePendingAggregationRequests"] }
+def x-amz-target-completer-39 [] { ["StarlingDoveService.DescribeRemediationConfigurations"] }
+def x-amz-target-completer-40 [] { ["StarlingDoveService.DescribeRemediationExceptions"] }
+def x-amz-target-completer-41 [] { ["StarlingDoveService.DescribeRemediationExecutionStatus"] }
+def x-amz-target-completer-42 [] { ["StarlingDoveService.DescribeRetentionConfigurations"] }
+def x-amz-target-completer-43 [] { ["StarlingDoveService.GetAggregateComplianceDetailsByConfigRule"] }
+def x-amz-target-completer-44 [] { ["StarlingDoveService.GetAggregateConfigRuleComplianceSummary"] }
+def x-amz-target-completer-45 [] { ["StarlingDoveService.GetAggregateConformancePackComplianceSummary"] }
+def x-amz-target-completer-46 [] { ["StarlingDoveService.GetAggregateDiscoveredResourceCounts"] }
+def x-amz-target-completer-47 [] { ["StarlingDoveService.GetAggregateResourceConfig"] }
+def x-amz-target-completer-48 [] { ["StarlingDoveService.GetComplianceDetailsByConfigRule"] }
+def x-amz-target-completer-49 [] { ["StarlingDoveService.GetComplianceDetailsByResource"] }
+def x-amz-target-completer-50 [] { ["StarlingDoveService.GetComplianceSummaryByConfigRule"] }
+def x-amz-target-completer-51 [] { ["StarlingDoveService.GetComplianceSummaryByResourceType"] }
+def x-amz-target-completer-52 [] { ["StarlingDoveService.GetConformancePackComplianceDetails"] }
+def x-amz-target-completer-53 [] { ["StarlingDoveService.GetConformancePackComplianceSummary"] }
+def x-amz-target-completer-54 [] { ["StarlingDoveService.GetCustomRulePolicy"] }
+def x-amz-target-completer-55 [] { ["StarlingDoveService.GetDiscoveredResourceCounts"] }
+def x-amz-target-completer-56 [] { ["StarlingDoveService.GetOrganizationConfigRuleDetailedStatus"] }
+def x-amz-target-completer-57 [] { ["StarlingDoveService.GetOrganizationConformancePackDetailedStatus"] }
+def x-amz-target-completer-58 [] { ["StarlingDoveService.GetOrganizationCustomRulePolicy"] }
+def x-amz-target-completer-59 [] { ["StarlingDoveService.GetResourceConfigHistory"] }
+def x-amz-target-completer-60 [] { ["StarlingDoveService.GetResourceEvaluationSummary"] }
+def x-amz-target-completer-61 [] { ["StarlingDoveService.GetStoredQuery"] }
+def x-amz-target-completer-62 [] { ["StarlingDoveService.ListAggregateDiscoveredResources"] }
+def x-amz-target-completer-63 [] { ["StarlingDoveService.ListConformancePackComplianceScores"] }
+def x-amz-target-completer-64 [] { ["StarlingDoveService.ListDiscoveredResources"] }
+def x-amz-target-completer-65 [] { ["StarlingDoveService.ListResourceEvaluations"] }
+def x-amz-target-completer-66 [] { ["StarlingDoveService.ListStoredQueries"] }
+def x-amz-target-completer-67 [] { ["StarlingDoveService.ListTagsForResource"] }
+def x-amz-target-completer-68 [] { ["StarlingDoveService.PutAggregationAuthorization"] }
+def x-amz-target-completer-69 [] { ["StarlingDoveService.PutConfigRule"] }
+def x-amz-target-completer-70 [] { ["StarlingDoveService.PutConfigurationAggregator"] }
+def x-amz-target-completer-71 [] { ["StarlingDoveService.PutConfigurationRecorder"] }
+def x-amz-target-completer-72 [] { ["StarlingDoveService.PutConformancePack"] }
+def x-amz-target-completer-73 [] { ["StarlingDoveService.PutDeliveryChannel"] }
+def x-amz-target-completer-74 [] { ["StarlingDoveService.PutEvaluations"] }
+def x-amz-target-completer-75 [] { ["StarlingDoveService.PutExternalEvaluation"] }
+def x-amz-target-completer-76 [] { ["StarlingDoveService.PutOrganizationConfigRule"] }
+def x-amz-target-completer-77 [] { ["StarlingDoveService.PutOrganizationConformancePack"] }
+def x-amz-target-completer-78 [] { ["StarlingDoveService.PutRemediationConfigurations"] }
+def x-amz-target-completer-79 [] { ["StarlingDoveService.PutRemediationExceptions"] }
+def x-amz-target-completer-80 [] { ["StarlingDoveService.PutResourceConfig"] }
+def x-amz-target-completer-81 [] { ["StarlingDoveService.PutRetentionConfiguration"] }
+def x-amz-target-completer-82 [] { ["StarlingDoveService.PutStoredQuery"] }
+def x-amz-target-completer-83 [] { ["StarlingDoveService.SelectAggregateResourceConfig"] }
+def x-amz-target-completer-84 [] { ["StarlingDoveService.SelectResourceConfig"] }
+def x-amz-target-completer-85 [] { ["StarlingDoveService.StartConfigRulesEvaluation"] }
+def x-amz-target-completer-86 [] { ["StarlingDoveService.StartConfigurationRecorder"] }
+def x-amz-target-completer-87 [] { ["StarlingDoveService.StartRemediationExecution"] }
+def x-amz-target-completer-88 [] { ["StarlingDoveService.StartResourceEvaluation"] }
+def x-amz-target-completer-89 [] { ["StarlingDoveService.StopConfigurationRecorder"] }
+def x-amz-target-completer-90 [] { ["StarlingDoveService.TagResource"] }
+def x-amz-target-completer-91 [] { ["StarlingDoveService.UntagResource"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-starling-dove-service-batch-get-aggregate-resource-config BatchGetAggregateResourceConfig" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-starling-dove-service-batch-get-aggregate-resource-config post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -186,7 +186,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=StarlingDoveService.BatchGetAggregateResourceConfig
 # operationId: BatchGetAggregateResourceConfig
-export def "x-amz-target-starling-dove-service-batch-get-aggregate-resource-config BatchGetAggregateResourceConfig" [
+export def "x-amz-target-starling-dove-service-batch-get-aggregate-resource-config post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,24 +195,24 @@ export def "x-amz-target-starling-dove-service-batch-get-aggregate-resource-conf
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  ConfigurationAggregatorName: any
-  ResourceIdentifiers: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  configuration_aggregator_name: any
+  resource_identifiers: any
 ]: any -> record<BaseConfigurationItems: record, UnprocessedResourceIdentifiers: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.BatchGetAggregateResourceConfig")
-  let body = {ConfigurationAggregatorName: $ConfigurationAggregatorName, ResourceIdentifiers: $ResourceIdentifiers} | compact
+  let body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "ResourceIdentifiers": $resource_identifiers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -223,7 +223,7 @@ export def "x-amz-target-starling-dove-service-batch-get-aggregate-resource-conf
 #
 # POST /#X-Amz-Target=StarlingDoveService.BatchGetResourceConfig
 # operationId: BatchGetResourceConfig
-export def "x-amz-target-starling-dove-service-batch-get-resource-config BatchGetResourceConfig" [
+export def "x-amz-target-starling-dove-service-batch-get-resource-config post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,23 +232,23 @@ export def "x-amz-target-starling-dove-service-batch-get-resource-config BatchGe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  resourceKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  resource_keys: any
 ]: any -> record<baseConfigurationItems: record, unprocessedResourceKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.BatchGetResourceConfig")
-  let body = {resourceKeys: $resourceKeys} | compact
+  let body = {"resourceKeys": $resource_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -259,7 +259,7 @@ export def "x-amz-target-starling-dove-service-batch-get-resource-config BatchGe
 #
 # POST /#X-Amz-Target=StarlingDoveService.DeleteAggregationAuthorization
 # operationId: DeleteAggregationAuthorization
-export def "x-amz-target-starling-dove-service-delete-aggregation-authorization DeleteAggregationAuthorization" [
+export def "x-amz-target-starling-dove-service-delete-aggregation-authorization delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,24 +268,24 @@ export def "x-amz-target-starling-dove-service-delete-aggregation-authorization 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  AuthorizedAccountId: any
-  AuthorizedAwsRegion: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  authorized_account_id: any
+  authorized_aws_region: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DeleteAggregationAuthorization")
-  let body = {AuthorizedAccountId: $AuthorizedAccountId, AuthorizedAwsRegion: $AuthorizedAwsRegion} | compact
+  let body = {"AuthorizedAccountId": $authorized_account_id, "AuthorizedAwsRegion": $authorized_aws_region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -296,7 +296,7 @@ export def "x-amz-target-starling-dove-service-delete-aggregation-authorization 
 #
 # POST /#X-Amz-Target=StarlingDoveService.DeleteConfigRule
 # operationId: DeleteConfigRule
-export def "x-amz-target-starling-dove-service-delete-config-rule DeleteConfigRule" [
+export def "x-amz-target-starling-dove-service-delete-config-rule delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,23 +305,23 @@ export def "x-amz-target-starling-dove-service-delete-config-rule DeleteConfigRu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  ConfigRuleName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  config_rule_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DeleteConfigRule")
-  let body = {ConfigRuleName: $ConfigRuleName} | compact
+  let body = {"ConfigRuleName": $config_rule_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -332,7 +332,7 @@ export def "x-amz-target-starling-dove-service-delete-config-rule DeleteConfigRu
 #
 # POST /#X-Amz-Target=StarlingDoveService.DeleteConfigurationAggregator
 # operationId: DeleteConfigurationAggregator
-export def "x-amz-target-starling-dove-service-delete-configuration-aggregator DeleteConfigurationAggregator" [
+export def "x-amz-target-starling-dove-service-delete-configuration-aggregator delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,23 +341,23 @@ export def "x-amz-target-starling-dove-service-delete-configuration-aggregator D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  ConfigurationAggregatorName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  configuration_aggregator_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DeleteConfigurationAggregator")
-  let body = {ConfigurationAggregatorName: $ConfigurationAggregatorName} | compact
+  let body = {"ConfigurationAggregatorName": $configuration_aggregator_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -368,7 +368,7 @@ export def "x-amz-target-starling-dove-service-delete-configuration-aggregator D
 #
 # POST /#X-Amz-Target=StarlingDoveService.DeleteConfigurationRecorder
 # operationId: DeleteConfigurationRecorder
-export def "x-amz-target-starling-dove-service-delete-configuration-recorder DeleteConfigurationRecorder" [
+export def "x-amz-target-starling-dove-service-delete-configuration-recorder delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,23 +377,23 @@ export def "x-amz-target-starling-dove-service-delete-configuration-recorder Del
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  ConfigurationRecorderName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  configuration_recorder_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DeleteConfigurationRecorder")
-  let body = {ConfigurationRecorderName: $ConfigurationRecorderName} | compact
+  let body = {"ConfigurationRecorderName": $configuration_recorder_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -404,7 +404,7 @@ export def "x-amz-target-starling-dove-service-delete-configuration-recorder Del
 #
 # POST /#X-Amz-Target=StarlingDoveService.DeleteConformancePack
 # operationId: DeleteConformancePack
-export def "x-amz-target-starling-dove-service-delete-conformance-pack DeleteConformancePack" [
+export def "x-amz-target-starling-dove-service-delete-conformance-pack delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,23 +413,23 @@ export def "x-amz-target-starling-dove-service-delete-conformance-pack DeleteCon
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  ConformancePackName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  conformance_pack_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DeleteConformancePack")
-  let body = {ConformancePackName: $ConformancePackName} | compact
+  let body = {"ConformancePackName": $conformance_pack_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -440,7 +440,7 @@ export def "x-amz-target-starling-dove-service-delete-conformance-pack DeleteCon
 #
 # POST /#X-Amz-Target=StarlingDoveService.DeleteDeliveryChannel
 # operationId: DeleteDeliveryChannel
-export def "x-amz-target-starling-dove-service-delete-delivery-channel DeleteDeliveryChannel" [
+export def "x-amz-target-starling-dove-service-delete-delivery-channel delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -449,23 +449,23 @@ export def "x-amz-target-starling-dove-service-delete-delivery-channel DeleteDel
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  DeliveryChannelName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  delivery_channel_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DeleteDeliveryChannel")
-  let body = {DeliveryChannelName: $DeliveryChannelName} | compact
+  let body = {"DeliveryChannelName": $delivery_channel_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -476,7 +476,7 @@ export def "x-amz-target-starling-dove-service-delete-delivery-channel DeleteDel
 #
 # POST /#X-Amz-Target=StarlingDoveService.DeleteEvaluationResults
 # operationId: DeleteEvaluationResults
-export def "x-amz-target-starling-dove-service-delete-evaluation-results DeleteEvaluationResults" [
+export def "x-amz-target-starling-dove-service-delete-evaluation-results delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,23 +485,23 @@ export def "x-amz-target-starling-dove-service-delete-evaluation-results DeleteE
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  ConfigRuleName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  config_rule_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DeleteEvaluationResults")
-  let body = {ConfigRuleName: $ConfigRuleName} | compact
+  let body = {"ConfigRuleName": $config_rule_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -512,7 +512,7 @@ export def "x-amz-target-starling-dove-service-delete-evaluation-results DeleteE
 #
 # POST /#X-Amz-Target=StarlingDoveService.DeleteOrganizationConfigRule
 # operationId: DeleteOrganizationConfigRule
-export def "x-amz-target-starling-dove-service-delete-organization-config-rule DeleteOrganizationConfigRule" [
+export def "x-amz-target-starling-dove-service-delete-organization-config-rule delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -521,23 +521,23 @@ export def "x-amz-target-starling-dove-service-delete-organization-config-rule D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  OrganizationConfigRuleName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  organization_config_rule_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DeleteOrganizationConfigRule")
-  let body = {OrganizationConfigRuleName: $OrganizationConfigRuleName} | compact
+  let body = {"OrganizationConfigRuleName": $organization_config_rule_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -548,7 +548,7 @@ export def "x-amz-target-starling-dove-service-delete-organization-config-rule D
 #
 # POST /#X-Amz-Target=StarlingDoveService.DeleteOrganizationConformancePack
 # operationId: DeleteOrganizationConformancePack
-export def "x-amz-target-starling-dove-service-delete-organization-conformance-pack DeleteOrganizationConformancePack" [
+export def "x-amz-target-starling-dove-service-delete-organization-conformance-pack delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -557,23 +557,23 @@ export def "x-amz-target-starling-dove-service-delete-organization-conformance-p
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  OrganizationConformancePackName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  organization_conformance_pack_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DeleteOrganizationConformancePack")
-  let body = {OrganizationConformancePackName: $OrganizationConformancePackName} | compact
+  let body = {"OrganizationConformancePackName": $organization_conformance_pack_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -584,7 +584,7 @@ export def "x-amz-target-starling-dove-service-delete-organization-conformance-p
 #
 # POST /#X-Amz-Target=StarlingDoveService.DeletePendingAggregationRequest
 # operationId: DeletePendingAggregationRequest
-export def "x-amz-target-starling-dove-service-delete-pending-aggregation-request DeletePendingAggregationRequest" [
+export def "x-amz-target-starling-dove-service-delete-pending-aggregation-request delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,24 +593,24 @@ export def "x-amz-target-starling-dove-service-delete-pending-aggregation-reques
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  RequesterAccountId: any
-  RequesterAwsRegion: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  requester_account_id: any
+  requester_aws_region: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DeletePendingAggregationRequest")
-  let body = {RequesterAccountId: $RequesterAccountId, RequesterAwsRegion: $RequesterAwsRegion} | compact
+  let body = {"RequesterAccountId": $requester_account_id, "RequesterAwsRegion": $requester_aws_region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -621,7 +621,7 @@ export def "x-amz-target-starling-dove-service-delete-pending-aggregation-reques
 #
 # POST /#X-Amz-Target=StarlingDoveService.DeleteRemediationConfiguration
 # operationId: DeleteRemediationConfiguration
-export def "x-amz-target-starling-dove-service-delete-remediation-configuration DeleteRemediationConfiguration" [
+export def "x-amz-target-starling-dove-service-delete-remediation-configuration delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,24 +630,24 @@ export def "x-amz-target-starling-dove-service-delete-remediation-configuration 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  ConfigRuleName: any
-  --ResourceType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  config_rule_name: any
+  --resource-type: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DeleteRemediationConfiguration")
-  let body = {ConfigRuleName: $ConfigRuleName, ResourceType: $ResourceType} | compact
+  let body = {"ConfigRuleName": $config_rule_name, "ResourceType": $resource_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -658,7 +658,7 @@ export def "x-amz-target-starling-dove-service-delete-remediation-configuration 
 #
 # POST /#X-Amz-Target=StarlingDoveService.DeleteRemediationExceptions
 # operationId: DeleteRemediationExceptions
-export def "x-amz-target-starling-dove-service-delete-remediation-exceptions DeleteRemediationExceptions" [
+export def "x-amz-target-starling-dove-service-delete-remediation-exceptions delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -667,24 +667,24 @@ export def "x-amz-target-starling-dove-service-delete-remediation-exceptions Del
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  ConfigRuleName: any
-  ResourceKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  config_rule_name: any
+  resource_keys: any
 ]: any -> record<FailedBatches: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DeleteRemediationExceptions")
-  let body = {ConfigRuleName: $ConfigRuleName, ResourceKeys: $ResourceKeys} | compact
+  let body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -695,7 +695,7 @@ export def "x-amz-target-starling-dove-service-delete-remediation-exceptions Del
 #
 # POST /#X-Amz-Target=StarlingDoveService.DeleteResourceConfig
 # operationId: DeleteResourceConfig
-export def "x-amz-target-starling-dove-service-delete-resource-config DeleteResourceConfig" [
+export def "x-amz-target-starling-dove-service-delete-resource-config delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -704,24 +704,24 @@ export def "x-amz-target-starling-dove-service-delete-resource-config DeleteReso
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  ResourceType: any
-  ResourceId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  resource_type: any
+  resource_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DeleteResourceConfig")
-  let body = {ResourceType: $ResourceType, ResourceId: $ResourceId} | compact
+  let body = {"ResourceType": $resource_type, "ResourceId": $resource_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -732,7 +732,7 @@ export def "x-amz-target-starling-dove-service-delete-resource-config DeleteReso
 #
 # POST /#X-Amz-Target=StarlingDoveService.DeleteRetentionConfiguration
 # operationId: DeleteRetentionConfiguration
-export def "x-amz-target-starling-dove-service-delete-retention-configuration DeleteRetentionConfiguration" [
+export def "x-amz-target-starling-dove-service-delete-retention-configuration delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,23 +741,23 @@ export def "x-amz-target-starling-dove-service-delete-retention-configuration De
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  RetentionConfigurationName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  retention_configuration_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DeleteRetentionConfiguration")
-  let body = {RetentionConfigurationName: $RetentionConfigurationName} | compact
+  let body = {"RetentionConfigurationName": $retention_configuration_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -768,7 +768,7 @@ export def "x-amz-target-starling-dove-service-delete-retention-configuration De
 #
 # POST /#X-Amz-Target=StarlingDoveService.DeleteStoredQuery
 # operationId: DeleteStoredQuery
-export def "x-amz-target-starling-dove-service-delete-stored-query DeleteStoredQuery" [
+export def "x-amz-target-starling-dove-service-delete-stored-query delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -777,23 +777,23 @@ export def "x-amz-target-starling-dove-service-delete-stored-query DeleteStoredQ
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  QueryName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  query_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DeleteStoredQuery")
-  let body = {QueryName: $QueryName} | compact
+  let body = {"QueryName": $query_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -804,7 +804,7 @@ export def "x-amz-target-starling-dove-service-delete-stored-query DeleteStoredQ
 #
 # POST /#X-Amz-Target=StarlingDoveService.DeliverConfigSnapshot
 # operationId: DeliverConfigSnapshot
-export def "x-amz-target-starling-dove-service-deliver-config-snapshot DeliverConfigSnapshot" [
+export def "x-amz-target-starling-dove-service-deliver-config-snapshot post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -813,23 +813,23 @@ export def "x-amz-target-starling-dove-service-deliver-config-snapshot DeliverCo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  deliveryChannelName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  delivery_channel_name: any
 ]: any -> record<configSnapshotId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DeliverConfigSnapshot")
-  let body = {deliveryChannelName: $deliveryChannelName} | compact
+  let body = {"deliveryChannelName": $delivery_channel_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -840,7 +840,7 @@ export def "x-amz-target-starling-dove-service-deliver-config-snapshot DeliverCo
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeAggregateComplianceByConfigRules
 # operationId: DescribeAggregateComplianceByConfigRules
-export def "x-amz-target-starling-dove-service-describe-aggregate-compliance-by-config-rules DescribeAggregateComplianceByConfigRules" [
+export def "x-amz-target-starling-dove-service-describe-aggregate-compliance-by-config-rules post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -849,29 +849,29 @@ export def "x-amz-target-starling-dove-service-describe-aggregate-compliance-by-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  ConfigurationAggregatorName: any
-  --Filters: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  configuration_aggregator_name: any
+  --filters: any
+  --limit: any
+  --next-token: any
 ]: any -> record<AggregateComplianceByConfigRules: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeAggregateComplianceByConfigRules" $qp)
-  let body = {ConfigurationAggregatorName: $ConfigurationAggregatorName, Filters: $Filters, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -882,7 +882,7 @@ export def "x-amz-target-starling-dove-service-describe-aggregate-compliance-by-
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeAggregateComplianceByConformancePacks
 # operationId: DescribeAggregateComplianceByConformancePacks
-export def "x-amz-target-starling-dove-service-describe-aggregate-compliance-by-conformance-packs DescribeAggregateComplianceByConformancePacks" [
+export def "x-amz-target-starling-dove-service-describe-aggregate-compliance-by-conformance-packs post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -891,29 +891,29 @@ export def "x-amz-target-starling-dove-service-describe-aggregate-compliance-by-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  ConfigurationAggregatorName: any
-  --Filters: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  configuration_aggregator_name: any
+  --filters: any
+  --limit: any
+  --next-token: any
 ]: any -> record<AggregateComplianceByConformancePacks: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeAggregateComplianceByConformancePacks" $qp)
-  let body = {ConfigurationAggregatorName: $ConfigurationAggregatorName, Filters: $Filters, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -924,7 +924,7 @@ export def "x-amz-target-starling-dove-service-describe-aggregate-compliance-by-
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeAggregationAuthorizations
 # operationId: DescribeAggregationAuthorizations
-export def "x-amz-target-starling-dove-service-describe-aggregation-authorizations DescribeAggregationAuthorizations" [
+export def "x-amz-target-starling-dove-service-describe-aggregation-authorizations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,27 +933,27 @@ export def "x-amz-target-starling-dove-service-describe-aggregation-authorizatio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  --limit: any
+  --next-token: any
 ]: any -> record<AggregationAuthorizations: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeAggregationAuthorizations" $qp)
-  let body = {Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -964,7 +964,7 @@ export def "x-amz-target-starling-dove-service-describe-aggregation-authorizatio
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeComplianceByConfigRule
 # operationId: DescribeComplianceByConfigRule
-export def "x-amz-target-starling-dove-service-describe-compliance-by-config-rule DescribeComplianceByConfigRule" [
+export def "x-amz-target-starling-dove-service-describe-compliance-by-config-rule post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -973,27 +973,27 @@ export def "x-amz-target-starling-dove-service-describe-compliance-by-config-rul
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  --ConfigRuleNames: any
-  --ComplianceTypes: any
-  --NextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  --config-rule-names: any
+  --compliance-types: any
+  --next-token: any
 ]: any -> record<ComplianceByConfigRules: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeComplianceByConfigRule" $qp)
-  let body = {ConfigRuleNames: $ConfigRuleNames, ComplianceTypes: $ComplianceTypes, NextToken: $NextToken} | compact
+  let body = {"ConfigRuleNames": $config_rule_names, "ComplianceTypes": $compliance_types, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1004,7 +1004,7 @@ export def "x-amz-target-starling-dove-service-describe-compliance-by-config-rul
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeComplianceByResource
 # operationId: DescribeComplianceByResource
-export def "x-amz-target-starling-dove-service-describe-compliance-by-resource DescribeComplianceByResource" [
+export def "x-amz-target-starling-dove-service-describe-compliance-by-resource post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1013,30 +1013,30 @@ export def "x-amz-target-starling-dove-service-describe-compliance-by-resource D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  --ResourceType: any
-  --ResourceId: any
-  --ComplianceTypes: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  --resource-type: any
+  --resource-id: any
+  --compliance-types: any
+  --limit: any
+  --next-token: any
 ]: any -> record<ComplianceByResources: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeComplianceByResource" $qp)
-  let body = {ResourceType: $ResourceType, ResourceId: $ResourceId, ComplianceTypes: $ComplianceTypes, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ResourceType": $resource_type, "ResourceId": $resource_id, "ComplianceTypes": $compliance_types, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1047,7 +1047,7 @@ export def "x-amz-target-starling-dove-service-describe-compliance-by-resource D
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeConfigRuleEvaluationStatus
 # operationId: DescribeConfigRuleEvaluationStatus
-export def "x-amz-target-starling-dove-service-describe-config-rule-evaluation-status DescribeConfigRuleEvaluationStatus" [
+export def "x-amz-target-starling-dove-service-describe-config-rule-evaluation-status post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1056,28 +1056,28 @@ export def "x-amz-target-starling-dove-service-describe-config-rule-evaluation-s
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  --ConfigRuleNames: any
-  --NextToken: any
-  --Limit: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  --config-rule-names: any
+  --next-token: any
+  --limit: any
 ]: any -> record<ConfigRulesEvaluationStatus: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeConfigRuleEvaluationStatus" $qp)
-  let body = {ConfigRuleNames: $ConfigRuleNames, NextToken: $NextToken, Limit: $Limit} | compact
+  let body = {"ConfigRuleNames": $config_rule_names, "NextToken": $next_token, "Limit": $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1088,7 +1088,7 @@ export def "x-amz-target-starling-dove-service-describe-config-rule-evaluation-s
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeConfigRules
 # operationId: DescribeConfigRules
-export def "x-amz-target-starling-dove-service-describe-config-rules DescribeConfigRules" [
+export def "x-amz-target-starling-dove-service-describe-config-rules post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1097,27 +1097,27 @@ export def "x-amz-target-starling-dove-service-describe-config-rules DescribeCon
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  --ConfigRuleNames: any
-  --NextToken: any
-  --Filters: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  --config-rule-names: any
+  --next-token: any
+  --filters: any
 ]: any -> record<ConfigRules: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeConfigRules" $qp)
-  let body = {ConfigRuleNames: $ConfigRuleNames, NextToken: $NextToken, Filters: $Filters} | compact
+  let body = {"ConfigRuleNames": $config_rule_names, "NextToken": $next_token, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1128,7 +1128,7 @@ export def "x-amz-target-starling-dove-service-describe-config-rules DescribeCon
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeConfigurationAggregatorSourcesStatus
 # operationId: DescribeConfigurationAggregatorSourcesStatus
-export def "x-amz-target-starling-dove-service-describe-configuration-aggregator-sources-status DescribeConfigurationAggregatorSourcesStatus" [
+export def "x-amz-target-starling-dove-service-describe-configuration-aggregator-sources-status post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1137,29 +1137,29 @@ export def "x-amz-target-starling-dove-service-describe-configuration-aggregator
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  ConfigurationAggregatorName: any
-  --UpdateStatus: any
-  --NextToken: any
-  --Limit: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  configuration_aggregator_name: any
+  --update-status: any
+  --next-token: any
+  --limit: any
 ]: any -> record<AggregatedSourceStatusList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeConfigurationAggregatorSourcesStatus" $qp)
-  let body = {ConfigurationAggregatorName: $ConfigurationAggregatorName, UpdateStatus: $UpdateStatus, NextToken: $NextToken, Limit: $Limit} | compact
+  let body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "UpdateStatus": $update_status, "NextToken": $next_token, "Limit": $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1170,7 +1170,7 @@ export def "x-amz-target-starling-dove-service-describe-configuration-aggregator
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeConfigurationAggregators
 # operationId: DescribeConfigurationAggregators
-export def "x-amz-target-starling-dove-service-describe-configuration-aggregators DescribeConfigurationAggregators" [
+export def "x-amz-target-starling-dove-service-describe-configuration-aggregators post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1179,28 +1179,28 @@ export def "x-amz-target-starling-dove-service-describe-configuration-aggregator
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  --ConfigurationAggregatorNames: any
-  --NextToken: any
-  --Limit: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  --configuration-aggregator-names: any
+  --next-token: any
+  --limit: any
 ]: any -> record<ConfigurationAggregators: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeConfigurationAggregators" $qp)
-  let body = {ConfigurationAggregatorNames: $ConfigurationAggregatorNames, NextToken: $NextToken, Limit: $Limit} | compact
+  let body = {"ConfigurationAggregatorNames": $configuration_aggregator_names, "NextToken": $next_token, "Limit": $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1211,7 +1211,7 @@ export def "x-amz-target-starling-dove-service-describe-configuration-aggregator
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeConfigurationRecorderStatus
 # operationId: DescribeConfigurationRecorderStatus
-export def "x-amz-target-starling-dove-service-describe-configuration-recorder-status DescribeConfigurationRecorderStatus" [
+export def "x-amz-target-starling-dove-service-describe-configuration-recorder-status post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1220,23 +1220,23 @@ export def "x-amz-target-starling-dove-service-describe-configuration-recorder-s
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  --ConfigurationRecorderNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  --configuration-recorder-names: any
 ]: any -> record<ConfigurationRecordersStatus: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeConfigurationRecorderStatus")
-  let body = {ConfigurationRecorderNames: $ConfigurationRecorderNames} | compact
+  let body = {"ConfigurationRecorderNames": $configuration_recorder_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1247,7 +1247,7 @@ export def "x-amz-target-starling-dove-service-describe-configuration-recorder-s
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeConfigurationRecorders
 # operationId: DescribeConfigurationRecorders
-export def "x-amz-target-starling-dove-service-describe-configuration-recorders DescribeConfigurationRecorders" [
+export def "x-amz-target-starling-dove-service-describe-configuration-recorders post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1256,23 +1256,23 @@ export def "x-amz-target-starling-dove-service-describe-configuration-recorders 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  --ConfigurationRecorderNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  --configuration-recorder-names: any
 ]: any -> record<ConfigurationRecorders: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeConfigurationRecorders")
-  let body = {ConfigurationRecorderNames: $ConfigurationRecorderNames} | compact
+  let body = {"ConfigurationRecorderNames": $configuration_recorder_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1283,7 +1283,7 @@ export def "x-amz-target-starling-dove-service-describe-configuration-recorders 
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeConformancePackCompliance
 # operationId: DescribeConformancePackCompliance
-export def "x-amz-target-starling-dove-service-describe-conformance-pack-compliance DescribeConformancePackCompliance" [
+export def "x-amz-target-starling-dove-service-describe-conformance-pack-compliance post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1292,29 +1292,29 @@ export def "x-amz-target-starling-dove-service-describe-conformance-pack-complia
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  ConformancePackName: any
-  --Filters: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  conformance_pack_name: any
+  --filters: any
+  --limit: any
+  --next-token: any
 ]: any -> record<ConformancePackName: record, ConformancePackRuleComplianceList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeConformancePackCompliance" $qp)
-  let body = {ConformancePackName: $ConformancePackName, Filters: $Filters, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ConformancePackName": $conformance_pack_name, "Filters": $filters, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1325,7 +1325,7 @@ export def "x-amz-target-starling-dove-service-describe-conformance-pack-complia
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeConformancePackStatus
 # operationId: DescribeConformancePackStatus
-export def "x-amz-target-starling-dove-service-describe-conformance-pack-status DescribeConformancePackStatus" [
+export def "x-amz-target-starling-dove-service-describe-conformance-pack-status post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1334,28 +1334,28 @@ export def "x-amz-target-starling-dove-service-describe-conformance-pack-status 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  --ConformancePackNames: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  --conformance-pack-names: any
+  --limit: any
+  --next-token: any
 ]: any -> record<ConformancePackStatusDetails: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeConformancePackStatus" $qp)
-  let body = {ConformancePackNames: $ConformancePackNames, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ConformancePackNames": $conformance_pack_names, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1366,7 +1366,7 @@ export def "x-amz-target-starling-dove-service-describe-conformance-pack-status 
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeConformancePacks
 # operationId: DescribeConformancePacks
-export def "x-amz-target-starling-dove-service-describe-conformance-packs DescribeConformancePacks" [
+export def "x-amz-target-starling-dove-service-describe-conformance-packs post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1375,28 +1375,28 @@ export def "x-amz-target-starling-dove-service-describe-conformance-packs Descri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  --ConformancePackNames: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  --conformance-pack-names: any
+  --limit: any
+  --next-token: any
 ]: any -> record<ConformancePackDetails: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeConformancePacks" $qp)
-  let body = {ConformancePackNames: $ConformancePackNames, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ConformancePackNames": $conformance_pack_names, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1407,7 +1407,7 @@ export def "x-amz-target-starling-dove-service-describe-conformance-packs Descri
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeDeliveryChannelStatus
 # operationId: DescribeDeliveryChannelStatus
-export def "x-amz-target-starling-dove-service-describe-delivery-channel-status DescribeDeliveryChannelStatus" [
+export def "x-amz-target-starling-dove-service-describe-delivery-channel-status post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1416,23 +1416,23 @@ export def "x-amz-target-starling-dove-service-describe-delivery-channel-status 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  --DeliveryChannelNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  --delivery-channel-names: any
 ]: any -> record<DeliveryChannelsStatus: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeDeliveryChannelStatus")
-  let body = {DeliveryChannelNames: $DeliveryChannelNames} | compact
+  let body = {"DeliveryChannelNames": $delivery_channel_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1443,7 +1443,7 @@ export def "x-amz-target-starling-dove-service-describe-delivery-channel-status 
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeDeliveryChannels
 # operationId: DescribeDeliveryChannels
-export def "x-amz-target-starling-dove-service-describe-delivery-channels DescribeDeliveryChannels" [
+export def "x-amz-target-starling-dove-service-describe-delivery-channels post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1452,23 +1452,23 @@ export def "x-amz-target-starling-dove-service-describe-delivery-channels Descri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  --DeliveryChannelNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  --delivery-channel-names: any
 ]: any -> record<DeliveryChannels: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeDeliveryChannels")
-  let body = {DeliveryChannelNames: $DeliveryChannelNames} | compact
+  let body = {"DeliveryChannelNames": $delivery_channel_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1479,7 +1479,7 @@ export def "x-amz-target-starling-dove-service-describe-delivery-channels Descri
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeOrganizationConfigRuleStatuses
 # operationId: DescribeOrganizationConfigRuleStatuses
-export def "x-amz-target-starling-dove-service-describe-organization-config-rule-statuses DescribeOrganizationConfigRuleStatuses" [
+export def "x-amz-target-starling-dove-service-describe-organization-config-rule-statuses post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1488,28 +1488,28 @@ export def "x-amz-target-starling-dove-service-describe-organization-config-rule
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  --OrganizationConfigRuleNames: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  --organization-config-rule-names: any
+  --limit: any
+  --next-token: any
 ]: any -> record<OrganizationConfigRuleStatuses: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeOrganizationConfigRuleStatuses" $qp)
-  let body = {OrganizationConfigRuleNames: $OrganizationConfigRuleNames, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"OrganizationConfigRuleNames": $organization_config_rule_names, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1520,7 +1520,7 @@ export def "x-amz-target-starling-dove-service-describe-organization-config-rule
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeOrganizationConfigRules
 # operationId: DescribeOrganizationConfigRules
-export def "x-amz-target-starling-dove-service-describe-organization-config-rules DescribeOrganizationConfigRules" [
+export def "x-amz-target-starling-dove-service-describe-organization-config-rules post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1529,28 +1529,28 @@ export def "x-amz-target-starling-dove-service-describe-organization-config-rule
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  --OrganizationConfigRuleNames: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  --organization-config-rule-names: any
+  --limit: any
+  --next-token: any
 ]: any -> record<OrganizationConfigRules: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeOrganizationConfigRules" $qp)
-  let body = {OrganizationConfigRuleNames: $OrganizationConfigRuleNames, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"OrganizationConfigRuleNames": $organization_config_rule_names, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1561,7 +1561,7 @@ export def "x-amz-target-starling-dove-service-describe-organization-config-rule
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeOrganizationConformancePackStatuses
 # operationId: DescribeOrganizationConformancePackStatuses
-export def "x-amz-target-starling-dove-service-describe-organization-conformance-pack-statuses DescribeOrganizationConformancePackStatuses" [
+export def "x-amz-target-starling-dove-service-describe-organization-conformance-pack-statuses post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1570,28 +1570,28 @@ export def "x-amz-target-starling-dove-service-describe-organization-conformance
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  --OrganizationConformancePackNames: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  --organization-conformance-pack-names: any
+  --limit: any
+  --next-token: any
 ]: any -> record<OrganizationConformancePackStatuses: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeOrganizationConformancePackStatuses" $qp)
-  let body = {OrganizationConformancePackNames: $OrganizationConformancePackNames, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"OrganizationConformancePackNames": $organization_conformance_pack_names, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1602,7 +1602,7 @@ export def "x-amz-target-starling-dove-service-describe-organization-conformance
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeOrganizationConformancePacks
 # operationId: DescribeOrganizationConformancePacks
-export def "x-amz-target-starling-dove-service-describe-organization-conformance-packs DescribeOrganizationConformancePacks" [
+export def "x-amz-target-starling-dove-service-describe-organization-conformance-packs post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1611,28 +1611,28 @@ export def "x-amz-target-starling-dove-service-describe-organization-conformance
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  --OrganizationConformancePackNames: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  --organization-conformance-pack-names: any
+  --limit: any
+  --next-token: any
 ]: any -> record<OrganizationConformancePacks: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeOrganizationConformancePacks" $qp)
-  let body = {OrganizationConformancePackNames: $OrganizationConformancePackNames, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"OrganizationConformancePackNames": $organization_conformance_pack_names, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1643,7 +1643,7 @@ export def "x-amz-target-starling-dove-service-describe-organization-conformance
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribePendingAggregationRequests
 # operationId: DescribePendingAggregationRequests
-export def "x-amz-target-starling-dove-service-describe-pending-aggregation-requests DescribePendingAggregationRequests" [
+export def "x-amz-target-starling-dove-service-describe-pending-aggregation-requests post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1652,27 +1652,27 @@ export def "x-amz-target-starling-dove-service-describe-pending-aggregation-requ
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  --limit: any
+  --next-token: any
 ]: any -> record<PendingAggregationRequests: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribePendingAggregationRequests" $qp)
-  let body = {Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1683,7 +1683,7 @@ export def "x-amz-target-starling-dove-service-describe-pending-aggregation-requ
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeRemediationConfigurations
 # operationId: DescribeRemediationConfigurations
-export def "x-amz-target-starling-dove-service-describe-remediation-configurations DescribeRemediationConfigurations" [
+export def "x-amz-target-starling-dove-service-describe-remediation-configurations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1692,23 +1692,23 @@ export def "x-amz-target-starling-dove-service-describe-remediation-configuratio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  ConfigRuleNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  config_rule_names: any
 ]: any -> record<RemediationConfigurations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeRemediationConfigurations")
-  let body = {ConfigRuleNames: $ConfigRuleNames} | compact
+  let body = {"ConfigRuleNames": $config_rule_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1719,7 +1719,7 @@ export def "x-amz-target-starling-dove-service-describe-remediation-configuratio
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeRemediationExceptions
 # operationId: DescribeRemediationExceptions
-export def "x-amz-target-starling-dove-service-describe-remediation-exceptions DescribeRemediationExceptions" [
+export def "x-amz-target-starling-dove-service-describe-remediation-exceptions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1728,29 +1728,29 @@ export def "x-amz-target-starling-dove-service-describe-remediation-exceptions D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  ConfigRuleName: any
-  --ResourceKeys: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  config_rule_name: any
+  --resource-keys: any
+  --limit: any
+  --next-token: any
 ]: any -> record<RemediationExceptions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeRemediationExceptions" $qp)
-  let body = {ConfigRuleName: $ConfigRuleName, ResourceKeys: $ResourceKeys, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1761,7 +1761,7 @@ export def "x-amz-target-starling-dove-service-describe-remediation-exceptions D
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeRemediationExecutionStatus
 # operationId: DescribeRemediationExecutionStatus
-export def "x-amz-target-starling-dove-service-describe-remediation-execution-status DescribeRemediationExecutionStatus" [
+export def "x-amz-target-starling-dove-service-describe-remediation-execution-status post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1770,29 +1770,29 @@ export def "x-amz-target-starling-dove-service-describe-remediation-execution-st
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  ConfigRuleName: any
-  --ResourceKeys: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  config_rule_name: any
+  --resource-keys: any
+  --limit: any
+  --next-token: any
 ]: any -> record<RemediationExecutionStatuses: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeRemediationExecutionStatus" $qp)
-  let body = {ConfigRuleName: $ConfigRuleName, ResourceKeys: $ResourceKeys, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1803,7 +1803,7 @@ export def "x-amz-target-starling-dove-service-describe-remediation-execution-st
 #
 # POST /#X-Amz-Target=StarlingDoveService.DescribeRetentionConfigurations
 # operationId: DescribeRetentionConfigurations
-export def "x-amz-target-starling-dove-service-describe-retention-configurations DescribeRetentionConfigurations" [
+export def "x-amz-target-starling-dove-service-describe-retention-configurations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1812,26 +1812,26 @@ export def "x-amz-target-starling-dove-service-describe-retention-configurations
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  --RetentionConfigurationNames: any
-  --NextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  --retention-configuration-names: any
+  --next-token: any
 ]: any -> record<RetentionConfigurations: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.DescribeRetentionConfigurations" $qp)
-  let body = {RetentionConfigurationNames: $RetentionConfigurationNames, NextToken: $NextToken} | compact
+  let body = {"RetentionConfigurationNames": $retention_configuration_names, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1842,7 +1842,7 @@ export def "x-amz-target-starling-dove-service-describe-retention-configurations
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetAggregateComplianceDetailsByConfigRule
 # operationId: GetAggregateComplianceDetailsByConfigRule
-export def "x-amz-target-starling-dove-service-get-aggregate-compliance-details-by-config-rule GetAggregateComplianceDetailsByConfigRule" [
+export def "x-amz-target-starling-dove-service-get-aggregate-compliance-details-by-config-rule get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1851,32 +1851,32 @@ export def "x-amz-target-starling-dove-service-get-aggregate-compliance-details-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  ConfigurationAggregatorName: any
-  ConfigRuleName: any
-  AccountId: any
-  AwsRegion: any
-  --ComplianceType: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  configuration_aggregator_name: any
+  config_rule_name: any
+  account_id: any
+  aws_region: any
+  --compliance-type: any
+  --limit: any
+  --next-token: any
 ]: any -> record<AggregateEvaluationResults: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetAggregateComplianceDetailsByConfigRule" $qp)
-  let body = {ConfigurationAggregatorName: $ConfigurationAggregatorName, ConfigRuleName: $ConfigRuleName, AccountId: $AccountId, AwsRegion: $AwsRegion, ComplianceType: $ComplianceType, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "ConfigRuleName": $config_rule_name, "AccountId": $account_id, "AwsRegion": $aws_region, "ComplianceType": $compliance_type, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1887,7 +1887,7 @@ export def "x-amz-target-starling-dove-service-get-aggregate-compliance-details-
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetAggregateConfigRuleComplianceSummary
 # operationId: GetAggregateConfigRuleComplianceSummary
-export def "x-amz-target-starling-dove-service-get-aggregate-config-rule-compliance-summary GetAggregateConfigRuleComplianceSummary" [
+export def "x-amz-target-starling-dove-service-get-aggregate-config-rule-compliance-summary get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1896,30 +1896,30 @@ export def "x-amz-target-starling-dove-service-get-aggregate-config-rule-complia
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  ConfigurationAggregatorName: any
-  --Filters: any
-  --GroupByKey: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  configuration_aggregator_name: any
+  --filters: any
+  --group-by-key: any
+  --limit: any
+  --next-token: any
 ]: any -> record<GroupByKey: record, AggregateComplianceCounts: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetAggregateConfigRuleComplianceSummary" $qp)
-  let body = {ConfigurationAggregatorName: $ConfigurationAggregatorName, Filters: $Filters, GroupByKey: $GroupByKey, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "GroupByKey": $group_by_key, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1930,7 +1930,7 @@ export def "x-amz-target-starling-dove-service-get-aggregate-config-rule-complia
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetAggregateConformancePackComplianceSummary
 # operationId: GetAggregateConformancePackComplianceSummary
-export def "x-amz-target-starling-dove-service-get-aggregate-conformance-pack-compliance-summary GetAggregateConformancePackComplianceSummary" [
+export def "x-amz-target-starling-dove-service-get-aggregate-conformance-pack-compliance-summary get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1939,30 +1939,30 @@ export def "x-amz-target-starling-dove-service-get-aggregate-conformance-pack-co
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  ConfigurationAggregatorName: any
-  --Filters: any
-  --GroupByKey: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  configuration_aggregator_name: any
+  --filters: any
+  --group-by-key: any
+  --limit: any
+  --next-token: any
 ]: any -> record<AggregateConformancePackComplianceSummaries: record, GroupByKey: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetAggregateConformancePackComplianceSummary" $qp)
-  let body = {ConfigurationAggregatorName: $ConfigurationAggregatorName, Filters: $Filters, GroupByKey: $GroupByKey, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "GroupByKey": $group_by_key, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1973,7 +1973,7 @@ export def "x-amz-target-starling-dove-service-get-aggregate-conformance-pack-co
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetAggregateDiscoveredResourceCounts
 # operationId: GetAggregateDiscoveredResourceCounts
-export def "x-amz-target-starling-dove-service-get-aggregate-discovered-resource-counts GetAggregateDiscoveredResourceCounts" [
+export def "x-amz-target-starling-dove-service-get-aggregate-discovered-resource-counts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1982,30 +1982,30 @@ export def "x-amz-target-starling-dove-service-get-aggregate-discovered-resource
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  ConfigurationAggregatorName: any
-  --Filters: any
-  --GroupByKey: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  configuration_aggregator_name: any
+  --filters: any
+  --group-by-key: any
+  --limit: any
+  --next-token: any
 ]: any -> record<TotalDiscoveredResources: record, GroupByKey: record, GroupedResourceCounts: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetAggregateDiscoveredResourceCounts" $qp)
-  let body = {ConfigurationAggregatorName: $ConfigurationAggregatorName, Filters: $Filters, GroupByKey: $GroupByKey, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "GroupByKey": $group_by_key, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2016,7 +2016,7 @@ export def "x-amz-target-starling-dove-service-get-aggregate-discovered-resource
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetAggregateResourceConfig
 # operationId: GetAggregateResourceConfig
-export def "x-amz-target-starling-dove-service-get-aggregate-resource-config GetAggregateResourceConfig" [
+export def "x-amz-target-starling-dove-service-get-aggregate-resource-config get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2025,24 +2025,24 @@ export def "x-amz-target-starling-dove-service-get-aggregate-resource-config Get
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
-  ConfigurationAggregatorName: any
-  ResourceIdentifier: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
+  configuration_aggregator_name: any
+  resource_identifier: any
 ]: any -> record<ConfigurationItem: record<version: record, accountId: record, configurationItemCaptureTime: record, configurationItemStatus: record, configurationStateId: record, configurationItemMD5Hash: record, arn: record, resourceType: record, resourceId: record, resourceName: record, awsRegion: record, availabilityZone: record, resourceCreationTime: record, tags: record, relatedEvents: record, relationships: record, configuration: record, supplementaryConfiguration: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetAggregateResourceConfig")
-  let body = {ConfigurationAggregatorName: $ConfigurationAggregatorName, ResourceIdentifier: $ResourceIdentifier} | compact
+  let body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "ResourceIdentifier": $resource_identifier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2053,7 +2053,7 @@ export def "x-amz-target-starling-dove-service-get-aggregate-resource-config Get
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetComplianceDetailsByConfigRule
 # operationId: GetComplianceDetailsByConfigRule
-export def "x-amz-target-starling-dove-service-get-compliance-details-by-config-rule GetComplianceDetailsByConfigRule" [
+export def "x-amz-target-starling-dove-service-get-compliance-details-by-config-rule get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2062,29 +2062,29 @@ export def "x-amz-target-starling-dove-service-get-compliance-details-by-config-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
-  ConfigRuleName: any
-  --ComplianceTypes: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
+  config_rule_name: any
+  --compliance-types: any
+  --limit: any
+  --next-token: any
 ]: any -> record<EvaluationResults: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetComplianceDetailsByConfigRule" $qp)
-  let body = {ConfigRuleName: $ConfigRuleName, ComplianceTypes: $ComplianceTypes, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ConfigRuleName": $config_rule_name, "ComplianceTypes": $compliance_types, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2095,7 +2095,7 @@ export def "x-amz-target-starling-dove-service-get-compliance-details-by-config-
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetComplianceDetailsByResource
 # operationId: GetComplianceDetailsByResource
-export def "x-amz-target-starling-dove-service-get-compliance-details-by-resource GetComplianceDetailsByResource" [
+export def "x-amz-target-starling-dove-service-get-compliance-details-by-resource get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2104,29 +2104,29 @@ export def "x-amz-target-starling-dove-service-get-compliance-details-by-resourc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-49
-  --ResourceType: any
-  --ResourceId: any
-  --ComplianceTypes: any
-  --NextToken: any
-  --ResourceEvaluationId: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-49
+  --resource-type: any
+  --resource-id: any
+  --compliance-types: any
+  --next-token: any
+  --resource-evaluation-id: any
 ]: any -> record<EvaluationResults: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetComplianceDetailsByResource" $qp)
-  let body = {ResourceType: $ResourceType, ResourceId: $ResourceId, ComplianceTypes: $ComplianceTypes, NextToken: $NextToken, ResourceEvaluationId: $ResourceEvaluationId} | compact
+  let body = {"ResourceType": $resource_type, "ResourceId": $resource_id, "ComplianceTypes": $compliance_types, "NextToken": $next_token, "ResourceEvaluationId": $resource_evaluation_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2137,7 +2137,7 @@ export def "x-amz-target-starling-dove-service-get-compliance-details-by-resourc
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetComplianceSummaryByConfigRule
 # operationId: GetComplianceSummaryByConfigRule
-export def "x-amz-target-starling-dove-service-get-compliance-summary-by-config-rule GetComplianceSummaryByConfigRule" [
+export def "x-amz-target-starling-dove-service-get-compliance-summary-by-config-rule get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2146,19 +2146,19 @@ export def "x-amz-target-starling-dove-service-get-compliance-summary-by-config-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-50
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-50
 ]: nothing -> record<ComplianceSummary: record<CompliantResourceCount: record<CappedCount: record, CapExceeded: record>, NonCompliantResourceCount: record<CappedCount: record, CapExceeded: record>, ComplianceSummaryTimestamp: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetComplianceSummaryByConfigRule")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2169,7 +2169,7 @@ export def "x-amz-target-starling-dove-service-get-compliance-summary-by-config-
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetComplianceSummaryByResourceType
 # operationId: GetComplianceSummaryByResourceType
-export def "x-amz-target-starling-dove-service-get-compliance-summary-by-resource-type GetComplianceSummaryByResourceType" [
+export def "x-amz-target-starling-dove-service-get-compliance-summary-by-resource-type get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2178,23 +2178,23 @@ export def "x-amz-target-starling-dove-service-get-compliance-summary-by-resourc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-51
-  --ResourceTypes: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-51
+  --resource-types: any
 ]: any -> record<ComplianceSummariesByResourceType: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetComplianceSummaryByResourceType")
-  let body = {ResourceTypes: $ResourceTypes} | compact
+  let body = {"ResourceTypes": $resource_types} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2205,7 +2205,7 @@ export def "x-amz-target-starling-dove-service-get-compliance-summary-by-resourc
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetConformancePackComplianceDetails
 # operationId: GetConformancePackComplianceDetails
-export def "x-amz-target-starling-dove-service-get-conformance-pack-compliance-details GetConformancePackComplianceDetails" [
+export def "x-amz-target-starling-dove-service-get-conformance-pack-compliance-details get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2214,29 +2214,29 @@ export def "x-amz-target-starling-dove-service-get-conformance-pack-compliance-d
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-52
-  ConformancePackName: any
-  --Filters: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-52
+  conformance_pack_name: any
+  --filters: any
+  --limit: any
+  --next-token: any
 ]: any -> record<ConformancePackName: record, ConformancePackRuleEvaluationResults: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetConformancePackComplianceDetails" $qp)
-  let body = {ConformancePackName: $ConformancePackName, Filters: $Filters, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ConformancePackName": $conformance_pack_name, "Filters": $filters, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2247,7 +2247,7 @@ export def "x-amz-target-starling-dove-service-get-conformance-pack-compliance-d
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetConformancePackComplianceSummary
 # operationId: GetConformancePackComplianceSummary
-export def "x-amz-target-starling-dove-service-get-conformance-pack-compliance-summary GetConformancePackComplianceSummary" [
+export def "x-amz-target-starling-dove-service-get-conformance-pack-compliance-summary get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2256,28 +2256,28 @@ export def "x-amz-target-starling-dove-service-get-conformance-pack-compliance-s
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-53
-  ConformancePackNames: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-53
+  conformance_pack_names: any
+  --limit: any
+  --next-token: any
 ]: any -> record<ConformancePackComplianceSummaryList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetConformancePackComplianceSummary" $qp)
-  let body = {ConformancePackNames: $ConformancePackNames, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ConformancePackNames": $conformance_pack_names, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2288,7 +2288,7 @@ export def "x-amz-target-starling-dove-service-get-conformance-pack-compliance-s
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetCustomRulePolicy
 # operationId: GetCustomRulePolicy
-export def "x-amz-target-starling-dove-service-get-custom-rule-policy GetCustomRulePolicy" [
+export def "x-amz-target-starling-dove-service-get-custom-rule-policy get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2297,23 +2297,23 @@ export def "x-amz-target-starling-dove-service-get-custom-rule-policy GetCustomR
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-54
-  --ConfigRuleName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-54
+  --config-rule-name: any
 ]: any -> record<PolicyText: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetCustomRulePolicy")
-  let body = {ConfigRuleName: $ConfigRuleName} | compact
+  let body = {"ConfigRuleName": $config_rule_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2324,7 +2324,7 @@ export def "x-amz-target-starling-dove-service-get-custom-rule-policy GetCustomR
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetDiscoveredResourceCounts
 # operationId: GetDiscoveredResourceCounts
-export def "x-amz-target-starling-dove-service-get-discovered-resource-counts GetDiscoveredResourceCounts" [
+export def "x-amz-target-starling-dove-service-get-discovered-resource-counts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2334,27 +2334,27 @@ export def "x-amz-target-starling-dove-service-get-discovered-resource-counts Ge
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-55
-  --resourceTypes: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-55
+  --resource-types: any
   --limit: any
-  --nextToken: any
+  --next-token: any
 ]: any -> record<totalDiscoveredResources: record, resourceCounts: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetDiscoveredResourceCounts" $qp)
-  let body = {resourceTypes: $resourceTypes, limit: $limit, nextToken: $nextToken} | compact
+  let body = {"resourceTypes": $resource_types, "limit": $limit, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2365,7 +2365,7 @@ export def "x-amz-target-starling-dove-service-get-discovered-resource-counts Ge
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetOrganizationConfigRuleDetailedStatus
 # operationId: GetOrganizationConfigRuleDetailedStatus
-export def "x-amz-target-starling-dove-service-get-organization-config-rule-detailed-status GetOrganizationConfigRuleDetailedStatus" [
+export def "x-amz-target-starling-dove-service-get-organization-config-rule-detailed-status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2374,29 +2374,29 @@ export def "x-amz-target-starling-dove-service-get-organization-config-rule-deta
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-56
-  OrganizationConfigRuleName: any
-  --Filters: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-56
+  organization_config_rule_name: any
+  --filters: any
+  --limit: any
+  --next-token: any
 ]: any -> record<OrganizationConfigRuleDetailedStatus: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetOrganizationConfigRuleDetailedStatus" $qp)
-  let body = {OrganizationConfigRuleName: $OrganizationConfigRuleName, Filters: $Filters, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"OrganizationConfigRuleName": $organization_config_rule_name, "Filters": $filters, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2407,7 +2407,7 @@ export def "x-amz-target-starling-dove-service-get-organization-config-rule-deta
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetOrganizationConformancePackDetailedStatus
 # operationId: GetOrganizationConformancePackDetailedStatus
-export def "x-amz-target-starling-dove-service-get-organization-conformance-pack-detailed-status GetOrganizationConformancePackDetailedStatus" [
+export def "x-amz-target-starling-dove-service-get-organization-conformance-pack-detailed-status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2416,29 +2416,29 @@ export def "x-amz-target-starling-dove-service-get-organization-conformance-pack
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-57
-  OrganizationConformancePackName: any
-  --Filters: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-57
+  organization_conformance_pack_name: any
+  --filters: any
+  --limit: any
+  --next-token: any
 ]: any -> record<OrganizationConformancePackDetailedStatuses: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetOrganizationConformancePackDetailedStatus" $qp)
-  let body = {OrganizationConformancePackName: $OrganizationConformancePackName, Filters: $Filters, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"OrganizationConformancePackName": $organization_conformance_pack_name, "Filters": $filters, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2449,7 +2449,7 @@ export def "x-amz-target-starling-dove-service-get-organization-conformance-pack
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetOrganizationCustomRulePolicy
 # operationId: GetOrganizationCustomRulePolicy
-export def "x-amz-target-starling-dove-service-get-organization-custom-rule-policy GetOrganizationCustomRulePolicy" [
+export def "x-amz-target-starling-dove-service-get-organization-custom-rule-policy get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2458,23 +2458,23 @@ export def "x-amz-target-starling-dove-service-get-organization-custom-rule-poli
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-58
-  OrganizationConfigRuleName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-58
+  organization_config_rule_name: any
 ]: any -> record<PolicyText: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetOrganizationCustomRulePolicy")
-  let body = {OrganizationConfigRuleName: $OrganizationConfigRuleName} | compact
+  let body = {"OrganizationConfigRuleName": $organization_config_rule_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2485,7 +2485,7 @@ export def "x-amz-target-starling-dove-service-get-organization-custom-rule-poli
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetResourceConfigHistory
 # operationId: GetResourceConfigHistory
-export def "x-amz-target-starling-dove-service-get-resource-config-history GetResourceConfigHistory" [
+export def "x-amz-target-starling-dove-service-get-resource-config-history get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2495,31 +2495,31 @@ export def "x-amz-target-starling-dove-service-get-resource-config-history GetRe
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-59
-  resourceType: any
-  resourceId: any
-  --laterTime: any
-  --earlierTime: any
-  --chronologicalOrder: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-59
+  resource_type: any
+  resource_id: any
+  --later-time: any
+  --earlier-time: any
+  --chronological-order: any
   --limit: any
-  --nextToken: any
+  --next-token: any
 ]: any -> record<configurationItems: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetResourceConfigHistory" $qp)
-  let body = {resourceType: $resourceType, resourceId: $resourceId, laterTime: $laterTime, earlierTime: $earlierTime, chronologicalOrder: $chronologicalOrder, limit: $limit, nextToken: $nextToken} | compact
+  let body = {"resourceType": $resource_type, "resourceId": $resource_id, "laterTime": $later_time, "earlierTime": $earlier_time, "chronologicalOrder": $chronological_order, "limit": $limit, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2530,7 +2530,7 @@ export def "x-amz-target-starling-dove-service-get-resource-config-history GetRe
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetResourceEvaluationSummary
 # operationId: GetResourceEvaluationSummary
-export def "x-amz-target-starling-dove-service-get-resource-evaluation-summary GetResourceEvaluationSummary" [
+export def "x-amz-target-starling-dove-service-get-resource-evaluation-summary get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2539,23 +2539,23 @@ export def "x-amz-target-starling-dove-service-get-resource-evaluation-summary G
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-60
-  ResourceEvaluationId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-60
+  resource_evaluation_id: any
 ]: any -> record<ResourceEvaluationId: record, EvaluationMode: record, EvaluationStatus: record<Status: record, FailureReason: record>, EvaluationStartTimestamp: record, Compliance: record, EvaluationContext: record<EvaluationContextIdentifier: record>, ResourceDetails: record<ResourceId: record, ResourceType: record, ResourceConfiguration: record, ResourceConfigurationSchemaType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetResourceEvaluationSummary")
-  let body = {ResourceEvaluationId: $ResourceEvaluationId} | compact
+  let body = {"ResourceEvaluationId": $resource_evaluation_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2566,7 +2566,7 @@ export def "x-amz-target-starling-dove-service-get-resource-evaluation-summary G
 #
 # POST /#X-Amz-Target=StarlingDoveService.GetStoredQuery
 # operationId: GetStoredQuery
-export def "x-amz-target-starling-dove-service-get-stored-query GetStoredQuery" [
+export def "x-amz-target-starling-dove-service-get-stored-query get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2575,23 +2575,23 @@ export def "x-amz-target-starling-dove-service-get-stored-query GetStoredQuery" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-61
-  QueryName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-61
+  query_name: any
 ]: any -> record<StoredQuery: record<QueryId: record, QueryArn: record, QueryName: record, Description: record, Expression: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.GetStoredQuery")
-  let body = {QueryName: $QueryName} | compact
+  let body = {"QueryName": $query_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2602,7 +2602,7 @@ export def "x-amz-target-starling-dove-service-get-stored-query GetStoredQuery" 
 #
 # POST /#X-Amz-Target=StarlingDoveService.ListAggregateDiscoveredResources
 # operationId: ListAggregateDiscoveredResources
-export def "x-amz-target-starling-dove-service-list-aggregate-discovered-resources ListAggregateDiscoveredResources" [
+export def "x-amz-target-starling-dove-service-list-aggregate-discovered-resources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2611,30 +2611,30 @@ export def "x-amz-target-starling-dove-service-list-aggregate-discovered-resourc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-62
-  ConfigurationAggregatorName: any
-  ResourceType: any
-  --Filters: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-62
+  configuration_aggregator_name: any
+  resource_type: any
+  --filters: any
+  --limit: any
+  --next-token: any
 ]: any -> record<ResourceIdentifiers: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.ListAggregateDiscoveredResources" $qp)
-  let body = {ConfigurationAggregatorName: $ConfigurationAggregatorName, ResourceType: $ResourceType, Filters: $Filters, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "ResourceType": $resource_type, "Filters": $filters, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2645,7 +2645,7 @@ export def "x-amz-target-starling-dove-service-list-aggregate-discovered-resourc
 #
 # POST /#X-Amz-Target=StarlingDoveService.ListConformancePackComplianceScores
 # operationId: ListConformancePackComplianceScores
-export def "x-amz-target-starling-dove-service-list-conformance-pack-compliance-scores ListConformancePackComplianceScores" [
+export def "x-amz-target-starling-dove-service-list-conformance-pack-compliance-scores list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2654,30 +2654,30 @@ export def "x-amz-target-starling-dove-service-list-conformance-pack-compliance-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-63
-  --Filters: any
-  --SortOrder: any
-  --SortBy: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-63
+  --filters: any
+  --sort-order: any
+  --sort-by: any
+  --limit: any
+  --next-token: any
 ]: any -> record<NextToken: record, ConformancePackComplianceScores: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.ListConformancePackComplianceScores" $qp)
-  let body = {Filters: $Filters, SortOrder: $SortOrder, SortBy: $SortBy, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"Filters": $filters, "SortOrder": $sort_order, "SortBy": $sort_by, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2688,7 +2688,7 @@ export def "x-amz-target-starling-dove-service-list-conformance-pack-compliance-
 #
 # POST /#X-Amz-Target=StarlingDoveService.ListDiscoveredResources
 # operationId: ListDiscoveredResources
-export def "x-amz-target-starling-dove-service-list-discovered-resources ListDiscoveredResources" [
+export def "x-amz-target-starling-dove-service-list-discovered-resources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2698,30 +2698,30 @@ export def "x-amz-target-starling-dove-service-list-discovered-resources ListDis
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-64
-  resourceType: any
-  --resourceIds: any
-  --resourceName: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-64
+  resource_type: any
+  --resource-ids: any
+  --resource-name: any
   --limit: any
-  --includeDeletedResources: any
-  --nextToken: any
+  --include-deleted-resources: any
+  --next-token: any
 ]: any -> record<resourceIdentifiers: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.ListDiscoveredResources" $qp)
-  let body = {resourceType: $resourceType, resourceIds: $resourceIds, resourceName: $resourceName, limit: $limit, includeDeletedResources: $includeDeletedResources, nextToken: $nextToken} | compact
+  let body = {"resourceType": $resource_type, "resourceIds": $resource_ids, "resourceName": $resource_name, "limit": $limit, "includeDeletedResources": $include_deleted_resources, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2732,7 +2732,7 @@ export def "x-amz-target-starling-dove-service-list-discovered-resources ListDis
 #
 # POST /#X-Amz-Target=StarlingDoveService.ListResourceEvaluations
 # operationId: ListResourceEvaluations
-export def "x-amz-target-starling-dove-service-list-resource-evaluations ListResourceEvaluations" [
+export def "x-amz-target-starling-dove-service-list-resource-evaluations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2741,28 +2741,28 @@ export def "x-amz-target-starling-dove-service-list-resource-evaluations ListRes
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-65
-  --Filters: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-65
+  --filters: any
+  --limit: any
+  --next-token: any
 ]: any -> record<ResourceEvaluations: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.ListResourceEvaluations" $qp)
-  let body = {Filters: $Filters, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"Filters": $filters, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2773,7 +2773,7 @@ export def "x-amz-target-starling-dove-service-list-resource-evaluations ListRes
 #
 # POST /#X-Amz-Target=StarlingDoveService.ListStoredQueries
 # operationId: ListStoredQueries
-export def "x-amz-target-starling-dove-service-list-stored-queries ListStoredQueries" [
+export def "x-amz-target-starling-dove-service-list-stored-queries list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2782,27 +2782,27 @@ export def "x-amz-target-starling-dove-service-list-stored-queries ListStoredQue
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-66
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-66
+  --next-token: any
+  --max-results: any
 ]: any -> record<StoredQueryMetadata: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.ListStoredQueries" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2813,7 +2813,7 @@ export def "x-amz-target-starling-dove-service-list-stored-queries ListStoredQue
 #
 # POST /#X-Amz-Target=StarlingDoveService.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-starling-dove-service-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-starling-dove-service-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2822,28 +2822,28 @@ export def "x-amz-target-starling-dove-service-list-tags-for-resource ListTagsFo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-67
-  ResourceArn: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-67
+  resource_arn: any
+  --limit: any
+  --next-token: any
 ]: any -> record<Tags: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.ListTagsForResource" $qp)
-  let body = {ResourceArn: $ResourceArn, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"ResourceArn": $resource_arn, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2854,7 +2854,7 @@ export def "x-amz-target-starling-dove-service-list-tags-for-resource ListTagsFo
 #
 # POST /#X-Amz-Target=StarlingDoveService.PutAggregationAuthorization
 # operationId: PutAggregationAuthorization
-export def "x-amz-target-starling-dove-service-put-aggregation-authorization PutAggregationAuthorization" [
+export def "x-amz-target-starling-dove-service-put-aggregation-authorization update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2863,25 +2863,25 @@ export def "x-amz-target-starling-dove-service-put-aggregation-authorization Put
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-68
-  AuthorizedAccountId: any
-  AuthorizedAwsRegion: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-68
+  authorized_account_id: any
+  authorized_aws_region: any
+  --tags: any
 ]: any -> record<AggregationAuthorization: record<AggregationAuthorizationArn: record, AuthorizedAccountId: record, AuthorizedAwsRegion: record, CreationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.PutAggregationAuthorization")
-  let body = {AuthorizedAccountId: $AuthorizedAccountId, AuthorizedAwsRegion: $AuthorizedAwsRegion, Tags: $Tags} | compact
+  let body = {"AuthorizedAccountId": $authorized_account_id, "AuthorizedAwsRegion": $authorized_aws_region, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2892,7 +2892,7 @@ export def "x-amz-target-starling-dove-service-put-aggregation-authorization Put
 #
 # POST /#X-Amz-Target=StarlingDoveService.PutConfigRule
 # operationId: PutConfigRule
-export def "x-amz-target-starling-dove-service-put-config-rule PutConfigRule" [
+export def "x-amz-target-starling-dove-service-put-config-rule update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2901,24 +2901,24 @@ export def "x-amz-target-starling-dove-service-put-config-rule PutConfigRule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-69
-  ConfigRule: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-69
+  config_rule: any
+  --tags: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.PutConfigRule")
-  let body = {ConfigRule: $ConfigRule, Tags: $Tags} | compact
+  let body = {"ConfigRule": $config_rule, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2929,7 +2929,7 @@ export def "x-amz-target-starling-dove-service-put-config-rule PutConfigRule" [
 #
 # POST /#X-Amz-Target=StarlingDoveService.PutConfigurationAggregator
 # operationId: PutConfigurationAggregator
-export def "x-amz-target-starling-dove-service-put-configuration-aggregator PutConfigurationAggregator" [
+export def "x-amz-target-starling-dove-service-put-configuration-aggregator update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2938,26 +2938,26 @@ export def "x-amz-target-starling-dove-service-put-configuration-aggregator PutC
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-70
-  ConfigurationAggregatorName: any
-  --AccountAggregationSources: any
-  --OrganizationAggregationSource: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-70
+  configuration_aggregator_name: any
+  --account-aggregation-sources: any
+  --organization-aggregation-source: any
+  --tags: any
 ]: any -> record<ConfigurationAggregator: record<ConfigurationAggregatorName: record, ConfigurationAggregatorArn: record, AccountAggregationSources: record, OrganizationAggregationSource: record<RoleArn: record, AwsRegions: record, AllAwsRegions: record>, CreationTime: record, LastUpdatedTime: record, CreatedBy: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.PutConfigurationAggregator")
-  let body = {ConfigurationAggregatorName: $ConfigurationAggregatorName, AccountAggregationSources: $AccountAggregationSources, OrganizationAggregationSource: $OrganizationAggregationSource, Tags: $Tags} | compact
+  let body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "AccountAggregationSources": $account_aggregation_sources, "OrganizationAggregationSource": $organization_aggregation_source, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2968,7 +2968,7 @@ export def "x-amz-target-starling-dove-service-put-configuration-aggregator PutC
 #
 # POST /#X-Amz-Target=StarlingDoveService.PutConfigurationRecorder
 # operationId: PutConfigurationRecorder
-export def "x-amz-target-starling-dove-service-put-configuration-recorder PutConfigurationRecorder" [
+export def "x-amz-target-starling-dove-service-put-configuration-recorder update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2977,23 +2977,23 @@ export def "x-amz-target-starling-dove-service-put-configuration-recorder PutCon
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-71
-  ConfigurationRecorder: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-71
+  configuration_recorder: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.PutConfigurationRecorder")
-  let body = {ConfigurationRecorder: $ConfigurationRecorder} | compact
+  let body = {"ConfigurationRecorder": $configuration_recorder} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3004,7 +3004,7 @@ export def "x-amz-target-starling-dove-service-put-configuration-recorder PutCon
 #
 # POST /#X-Amz-Target=StarlingDoveService.PutConformancePack
 # operationId: PutConformancePack
-export def "x-amz-target-starling-dove-service-put-conformance-pack PutConformancePack" [
+export def "x-amz-target-starling-dove-service-put-conformance-pack update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3013,29 +3013,29 @@ export def "x-amz-target-starling-dove-service-put-conformance-pack PutConforman
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-72
-  ConformancePackName: any
-  --TemplateS3Uri: any
-  --TemplateBody: any
-  --DeliveryS3Bucket: any
-  --DeliveryS3KeyPrefix: any
-  --ConformancePackInputParameters: any
-  --TemplateSSMDocumentDetails: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-72
+  conformance_pack_name: any
+  --template-s3-uri: any
+  --template-body: any
+  --delivery-s3-bucket: any
+  --delivery-s3-key-prefix: any
+  --conformance-pack-input-parameters: any
+  --template-ssm-document-details: any
 ]: any -> record<ConformancePackArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.PutConformancePack")
-  let body = {ConformancePackName: $ConformancePackName, TemplateS3Uri: $TemplateS3Uri, TemplateBody: $TemplateBody, DeliveryS3Bucket: $DeliveryS3Bucket, DeliveryS3KeyPrefix: $DeliveryS3KeyPrefix, ConformancePackInputParameters: $ConformancePackInputParameters, TemplateSSMDocumentDetails: $TemplateSSMDocumentDetails} | compact
+  let body = {"ConformancePackName": $conformance_pack_name, "TemplateS3Uri": $template_s3_uri, "TemplateBody": $template_body, "DeliveryS3Bucket": $delivery_s3_bucket, "DeliveryS3KeyPrefix": $delivery_s3_key_prefix, "ConformancePackInputParameters": $conformance_pack_input_parameters, "TemplateSSMDocumentDetails": $template_ssm_document_details} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3046,7 +3046,7 @@ export def "x-amz-target-starling-dove-service-put-conformance-pack PutConforman
 #
 # POST /#X-Amz-Target=StarlingDoveService.PutDeliveryChannel
 # operationId: PutDeliveryChannel
-export def "x-amz-target-starling-dove-service-put-delivery-channel PutDeliveryChannel" [
+export def "x-amz-target-starling-dove-service-put-delivery-channel update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3055,23 +3055,23 @@ export def "x-amz-target-starling-dove-service-put-delivery-channel PutDeliveryC
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-73
-  DeliveryChannel: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-73
+  delivery_channel: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.PutDeliveryChannel")
-  let body = {DeliveryChannel: $DeliveryChannel} | compact
+  let body = {"DeliveryChannel": $delivery_channel} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3082,7 +3082,7 @@ export def "x-amz-target-starling-dove-service-put-delivery-channel PutDeliveryC
 #
 # POST /#X-Amz-Target=StarlingDoveService.PutEvaluations
 # operationId: PutEvaluations
-export def "x-amz-target-starling-dove-service-put-evaluations PutEvaluations" [
+export def "x-amz-target-starling-dove-service-put-evaluations update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3091,25 +3091,25 @@ export def "x-amz-target-starling-dove-service-put-evaluations PutEvaluations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-74
-  --Evaluations: any
-  ResultToken: any
-  --TestMode: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-74
+  --evaluations: any
+  result_token: any
+  --test-mode: any
 ]: any -> record<FailedEvaluations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.PutEvaluations")
-  let body = {Evaluations: $Evaluations, ResultToken: $ResultToken, TestMode: $TestMode} | compact
+  let body = {"Evaluations": $evaluations, "ResultToken": $result_token, "TestMode": $test_mode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3120,7 +3120,7 @@ export def "x-amz-target-starling-dove-service-put-evaluations PutEvaluations" [
 #
 # POST /#X-Amz-Target=StarlingDoveService.PutExternalEvaluation
 # operationId: PutExternalEvaluation
-export def "x-amz-target-starling-dove-service-put-external-evaluation PutExternalEvaluation" [
+export def "x-amz-target-starling-dove-service-put-external-evaluation update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3129,24 +3129,24 @@ export def "x-amz-target-starling-dove-service-put-external-evaluation PutExtern
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-75
-  ConfigRuleName: any
-  ExternalEvaluation: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-75
+  config_rule_name: any
+  external_evaluation: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.PutExternalEvaluation")
-  let body = {ConfigRuleName: $ConfigRuleName, ExternalEvaluation: $ExternalEvaluation} | compact
+  let body = {"ConfigRuleName": $config_rule_name, "ExternalEvaluation": $external_evaluation} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3157,7 +3157,7 @@ export def "x-amz-target-starling-dove-service-put-external-evaluation PutExtern
 #
 # POST /#X-Amz-Target=StarlingDoveService.PutOrganizationConfigRule
 # operationId: PutOrganizationConfigRule
-export def "x-amz-target-starling-dove-service-put-organization-config-rule PutOrganizationConfigRule" [
+export def "x-amz-target-starling-dove-service-put-organization-config-rule update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3166,27 +3166,27 @@ export def "x-amz-target-starling-dove-service-put-organization-config-rule PutO
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-76
-  OrganizationConfigRuleName: any
-  --OrganizationManagedRuleMetadata: any
-  --OrganizationCustomRuleMetadata: any
-  --ExcludedAccounts: any
-  --OrganizationCustomPolicyRuleMetadata: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-76
+  organization_config_rule_name: any
+  --organization-managed-rule-metadata: any
+  --organization-custom-rule-metadata: any
+  --excluded-accounts: any
+  --organization-custom-policy-rule-metadata: any
 ]: any -> record<OrganizationConfigRuleArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.PutOrganizationConfigRule")
-  let body = {OrganizationConfigRuleName: $OrganizationConfigRuleName, OrganizationManagedRuleMetadata: $OrganizationManagedRuleMetadata, OrganizationCustomRuleMetadata: $OrganizationCustomRuleMetadata, ExcludedAccounts: $ExcludedAccounts, OrganizationCustomPolicyRuleMetadata: $OrganizationCustomPolicyRuleMetadata} | compact
+  let body = {"OrganizationConfigRuleName": $organization_config_rule_name, "OrganizationManagedRuleMetadata": $organization_managed_rule_metadata, "OrganizationCustomRuleMetadata": $organization_custom_rule_metadata, "ExcludedAccounts": $excluded_accounts, "OrganizationCustomPolicyRuleMetadata": $organization_custom_policy_rule_metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3197,7 +3197,7 @@ export def "x-amz-target-starling-dove-service-put-organization-config-rule PutO
 #
 # POST /#X-Amz-Target=StarlingDoveService.PutOrganizationConformancePack
 # operationId: PutOrganizationConformancePack
-export def "x-amz-target-starling-dove-service-put-organization-conformance-pack PutOrganizationConformancePack" [
+export def "x-amz-target-starling-dove-service-put-organization-conformance-pack update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3206,29 +3206,29 @@ export def "x-amz-target-starling-dove-service-put-organization-conformance-pack
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-77
-  OrganizationConformancePackName: any
-  --TemplateS3Uri: any
-  --TemplateBody: any
-  --DeliveryS3Bucket: any
-  --DeliveryS3KeyPrefix: any
-  --ConformancePackInputParameters: any
-  --ExcludedAccounts: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-77
+  organization_conformance_pack_name: any
+  --template-s3-uri: any
+  --template-body: any
+  --delivery-s3-bucket: any
+  --delivery-s3-key-prefix: any
+  --conformance-pack-input-parameters: any
+  --excluded-accounts: any
 ]: any -> record<OrganizationConformancePackArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.PutOrganizationConformancePack")
-  let body = {OrganizationConformancePackName: $OrganizationConformancePackName, TemplateS3Uri: $TemplateS3Uri, TemplateBody: $TemplateBody, DeliveryS3Bucket: $DeliveryS3Bucket, DeliveryS3KeyPrefix: $DeliveryS3KeyPrefix, ConformancePackInputParameters: $ConformancePackInputParameters, ExcludedAccounts: $ExcludedAccounts} | compact
+  let body = {"OrganizationConformancePackName": $organization_conformance_pack_name, "TemplateS3Uri": $template_s3_uri, "TemplateBody": $template_body, "DeliveryS3Bucket": $delivery_s3_bucket, "DeliveryS3KeyPrefix": $delivery_s3_key_prefix, "ConformancePackInputParameters": $conformance_pack_input_parameters, "ExcludedAccounts": $excluded_accounts} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3239,7 +3239,7 @@ export def "x-amz-target-starling-dove-service-put-organization-conformance-pack
 #
 # POST /#X-Amz-Target=StarlingDoveService.PutRemediationConfigurations
 # operationId: PutRemediationConfigurations
-export def "x-amz-target-starling-dove-service-put-remediation-configurations PutRemediationConfigurations" [
+export def "x-amz-target-starling-dove-service-put-remediation-configurations update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3248,23 +3248,23 @@ export def "x-amz-target-starling-dove-service-put-remediation-configurations Pu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-78
-  RemediationConfigurations: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-78
+  remediation_configurations: any
 ]: any -> record<FailedBatches: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.PutRemediationConfigurations")
-  let body = {RemediationConfigurations: $RemediationConfigurations} | compact
+  let body = {"RemediationConfigurations": $remediation_configurations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3275,7 +3275,7 @@ export def "x-amz-target-starling-dove-service-put-remediation-configurations Pu
 #
 # POST /#X-Amz-Target=StarlingDoveService.PutRemediationExceptions
 # operationId: PutRemediationExceptions
-export def "x-amz-target-starling-dove-service-put-remediation-exceptions PutRemediationExceptions" [
+export def "x-amz-target-starling-dove-service-put-remediation-exceptions update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3284,26 +3284,26 @@ export def "x-amz-target-starling-dove-service-put-remediation-exceptions PutRem
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-79
-  ConfigRuleName: any
-  ResourceKeys: any
-  --Message: any
-  --ExpirationTime: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-79
+  config_rule_name: any
+  resource_keys: any
+  --message: any
+  --expiration-time: any
 ]: any -> record<FailedBatches: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.PutRemediationExceptions")
-  let body = {ConfigRuleName: $ConfigRuleName, ResourceKeys: $ResourceKeys, Message: $Message, ExpirationTime: $ExpirationTime} | compact
+  let body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys, "Message": $message, "ExpirationTime": $expiration_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3314,7 +3314,7 @@ export def "x-amz-target-starling-dove-service-put-remediation-exceptions PutRem
 #
 # POST /#X-Amz-Target=StarlingDoveService.PutResourceConfig
 # operationId: PutResourceConfig
-export def "x-amz-target-starling-dove-service-put-resource-config PutResourceConfig" [
+export def "x-amz-target-starling-dove-service-put-resource-config update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3323,28 +3323,28 @@ export def "x-amz-target-starling-dove-service-put-resource-config PutResourceCo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-80
-  ResourceType: any
-  SchemaVersionId: any
-  ResourceId: any
-  --ResourceName: any
-  Configuration: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-80
+  resource_type: any
+  schema_version_id: any
+  resource_id: any
+  --resource-name: any
+  configuration: any
+  --tags: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.PutResourceConfig")
-  let body = {ResourceType: $ResourceType, SchemaVersionId: $SchemaVersionId, ResourceId: $ResourceId, ResourceName: $ResourceName, Configuration: $Configuration, Tags: $Tags} | compact
+  let body = {"ResourceType": $resource_type, "SchemaVersionId": $schema_version_id, "ResourceId": $resource_id, "ResourceName": $resource_name, "Configuration": $configuration, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3355,7 +3355,7 @@ export def "x-amz-target-starling-dove-service-put-resource-config PutResourceCo
 #
 # POST /#X-Amz-Target=StarlingDoveService.PutRetentionConfiguration
 # operationId: PutRetentionConfiguration
-export def "x-amz-target-starling-dove-service-put-retention-configuration PutRetentionConfiguration" [
+export def "x-amz-target-starling-dove-service-put-retention-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3364,23 +3364,23 @@ export def "x-amz-target-starling-dove-service-put-retention-configuration PutRe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-81
-  RetentionPeriodInDays: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-81
+  retention_period_in_days: any
 ]: any -> record<RetentionConfiguration: record<Name: record, RetentionPeriodInDays: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.PutRetentionConfiguration")
-  let body = {RetentionPeriodInDays: $RetentionPeriodInDays} | compact
+  let body = {"RetentionPeriodInDays": $retention_period_in_days} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3391,7 +3391,7 @@ export def "x-amz-target-starling-dove-service-put-retention-configuration PutRe
 #
 # POST /#X-Amz-Target=StarlingDoveService.PutStoredQuery
 # operationId: PutStoredQuery
-export def "x-amz-target-starling-dove-service-put-stored-query PutStoredQuery" [
+export def "x-amz-target-starling-dove-service-put-stored-query update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3400,24 +3400,24 @@ export def "x-amz-target-starling-dove-service-put-stored-query PutStoredQuery" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-82
-  StoredQuery: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-82
+  stored_query: any
+  --tags: any
 ]: any -> record<QueryArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.PutStoredQuery")
-  let body = {StoredQuery: $StoredQuery, Tags: $Tags} | compact
+  let body = {"StoredQuery": $stored_query, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3428,7 +3428,7 @@ export def "x-amz-target-starling-dove-service-put-stored-query PutStoredQuery" 
 #
 # POST /#X-Amz-Target=StarlingDoveService.SelectAggregateResourceConfig
 # operationId: SelectAggregateResourceConfig
-export def "x-amz-target-starling-dove-service-select-aggregate-resource-config SelectAggregateResourceConfig" [
+export def "x-amz-target-starling-dove-service-select-aggregate-resource-config post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3437,30 +3437,30 @@ export def "x-amz-target-starling-dove-service-select-aggregate-resource-config 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-83
-  Expression: any
-  ConfigurationAggregatorName: any
-  --Limit: any
-  --MaxResults: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-83
+  expression: any
+  configuration_aggregator_name: any
+  --limit: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<Results: record, QueryInfo: record<SelectFields: record>, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.SelectAggregateResourceConfig" $qp)
-  let body = {Expression: $Expression, ConfigurationAggregatorName: $ConfigurationAggregatorName, Limit: $Limit, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"Expression": $expression, "ConfigurationAggregatorName": $configuration_aggregator_name, "Limit": $limit, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3471,7 +3471,7 @@ export def "x-amz-target-starling-dove-service-select-aggregate-resource-config 
 #
 # POST /#X-Amz-Target=StarlingDoveService.SelectResourceConfig
 # operationId: SelectResourceConfig
-export def "x-amz-target-starling-dove-service-select-resource-config SelectResourceConfig" [
+export def "x-amz-target-starling-dove-service-select-resource-config post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3480,28 +3480,28 @@ export def "x-amz-target-starling-dove-service-select-resource-config SelectReso
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-84
-  Expression: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-84
+  expression: any
+  --limit: any
+  --next-token: any
 ]: any -> record<Results: record, QueryInfo: record<SelectFields: record>, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.SelectResourceConfig" $qp)
-  let body = {Expression: $Expression, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"Expression": $expression, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3512,7 +3512,7 @@ export def "x-amz-target-starling-dove-service-select-resource-config SelectReso
 #
 # POST /#X-Amz-Target=StarlingDoveService.StartConfigRulesEvaluation
 # operationId: StartConfigRulesEvaluation
-export def "x-amz-target-starling-dove-service-start-config-rules-evaluation StartConfigRulesEvaluation" [
+export def "x-amz-target-starling-dove-service-start-config-rules-evaluation start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3521,23 +3521,23 @@ export def "x-amz-target-starling-dove-service-start-config-rules-evaluation Sta
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-85
-  --ConfigRuleNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-85
+  --config-rule-names: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.StartConfigRulesEvaluation")
-  let body = {ConfigRuleNames: $ConfigRuleNames} | compact
+  let body = {"ConfigRuleNames": $config_rule_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3548,7 +3548,7 @@ export def "x-amz-target-starling-dove-service-start-config-rules-evaluation Sta
 #
 # POST /#X-Amz-Target=StarlingDoveService.StartConfigurationRecorder
 # operationId: StartConfigurationRecorder
-export def "x-amz-target-starling-dove-service-start-configuration-recorder StartConfigurationRecorder" [
+export def "x-amz-target-starling-dove-service-start-configuration-recorder start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3557,23 +3557,23 @@ export def "x-amz-target-starling-dove-service-start-configuration-recorder Star
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-86
-  ConfigurationRecorderName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-86
+  configuration_recorder_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.StartConfigurationRecorder")
-  let body = {ConfigurationRecorderName: $ConfigurationRecorderName} | compact
+  let body = {"ConfigurationRecorderName": $configuration_recorder_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3584,7 +3584,7 @@ export def "x-amz-target-starling-dove-service-start-configuration-recorder Star
 #
 # POST /#X-Amz-Target=StarlingDoveService.StartRemediationExecution
 # operationId: StartRemediationExecution
-export def "x-amz-target-starling-dove-service-start-remediation-execution StartRemediationExecution" [
+export def "x-amz-target-starling-dove-service-start-remediation-execution start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3593,24 +3593,24 @@ export def "x-amz-target-starling-dove-service-start-remediation-execution Start
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-87
-  ConfigRuleName: any
-  ResourceKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-87
+  config_rule_name: any
+  resource_keys: any
 ]: any -> record<FailureMessage: record, FailedItems: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.StartRemediationExecution")
-  let body = {ConfigRuleName: $ConfigRuleName, ResourceKeys: $ResourceKeys} | compact
+  let body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3621,7 +3621,7 @@ export def "x-amz-target-starling-dove-service-start-remediation-execution Start
 #
 # POST /#X-Amz-Target=StarlingDoveService.StartResourceEvaluation
 # operationId: StartResourceEvaluation
-export def "x-amz-target-starling-dove-service-start-resource-evaluation StartResourceEvaluation" [
+export def "x-amz-target-starling-dove-service-start-resource-evaluation start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3630,27 +3630,27 @@ export def "x-amz-target-starling-dove-service-start-resource-evaluation StartRe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-88
-  ResourceDetails: any
-  --EvaluationContext: any
-  EvaluationMode: any
-  --EvaluationTimeout: any
-  --ClientToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-88
+  resource_details: any
+  --evaluation-context: any
+  evaluation_mode: any
+  --evaluation-timeout: any
+  --client-token: any
 ]: any -> record<ResourceEvaluationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.StartResourceEvaluation")
-  let body = {ResourceDetails: $ResourceDetails, EvaluationContext: $EvaluationContext, EvaluationMode: $EvaluationMode, EvaluationTimeout: $EvaluationTimeout, ClientToken: $ClientToken} | compact
+  let body = {"ResourceDetails": $resource_details, "EvaluationContext": $evaluation_context, "EvaluationMode": $evaluation_mode, "EvaluationTimeout": $evaluation_timeout, "ClientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3661,7 +3661,7 @@ export def "x-amz-target-starling-dove-service-start-resource-evaluation StartRe
 #
 # POST /#X-Amz-Target=StarlingDoveService.StopConfigurationRecorder
 # operationId: StopConfigurationRecorder
-export def "x-amz-target-starling-dove-service-stop-configuration-recorder StopConfigurationRecorder" [
+export def "x-amz-target-starling-dove-service-stop-configuration-recorder stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3670,23 +3670,23 @@ export def "x-amz-target-starling-dove-service-stop-configuration-recorder StopC
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-89
-  ConfigurationRecorderName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-89
+  configuration_recorder_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.StopConfigurationRecorder")
-  let body = {ConfigurationRecorderName: $ConfigurationRecorderName} | compact
+  let body = {"ConfigurationRecorderName": $configuration_recorder_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3697,7 +3697,7 @@ export def "x-amz-target-starling-dove-service-stop-configuration-recorder StopC
 #
 # POST /#X-Amz-Target=StarlingDoveService.TagResource
 # operationId: TagResource
-export def "x-amz-target-starling-dove-service-tag-resource TagResource" [
+export def "x-amz-target-starling-dove-service-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3706,24 +3706,24 @@ export def "x-amz-target-starling-dove-service-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-90
-  ResourceArn: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-90
+  resource_arn: any
+  tags: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.TagResource")
-  let body = {ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3734,7 +3734,7 @@ export def "x-amz-target-starling-dove-service-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=StarlingDoveService.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-starling-dove-service-untag-resource UntagResource" [
+export def "x-amz-target-starling-dove-service-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3743,24 +3743,24 @@ export def "x-amz-target-starling-dove-service-untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-91
-  ResourceArn: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-91
+  resource_arn: any
+  tag_keys: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=StarlingDoveService.UntagResource")
-  let body = {ResourceArn: $ResourceArn, TagKeys: $TagKeys} | compact
+  let body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

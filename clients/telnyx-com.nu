@@ -69,14 +69,14 @@ def auth-scheme-completer [] { ["bearer"] }
 def status-completer [] { ["disabled" "enabled" "standby"] }
 def sort-completer [] { ["business_name" "created_at" "first_name" "last_name" "street_address"] }
 def sort-completer-1 [] { ["-active" "-created_at" "-name" "-short_name" "-updated_at" "active" "created_at" "name" "short_name" "updated_at"] }
-def filternumber-type-completer [] { ["toll-free"] }
-def filternumber-type-completer-1 [] { ["local" "mobile" "national" "toll-free"] }
+def filter-number-type-completer [] { ["toll-free"] }
+def filter-number-type-completer-1 [] { ["local" "mobile" "national" "toll-free"] }
 def sort-completer-2 [] { ["active" "connection_name" "created_at"] }
-def anchorsite-override-completer [] { [""Ashburn, VA"" ""Chicago, IL"" ""Latency"" ""San Jose, CA""] }
+def anchorsite-override-completer [] { ["Ashburn, VA" "Chicago, IL" "Latency" "San Jose, CA"] }
 def dtmf-type-completer [] { ["Inband" "RFC 2833" "SIP INFO"] }
 def webhook-api-version-completer [] { ["1" "2"] }
-def filterstatus-completer [] { ["delivered" "failed"] }
-def filtertype-completer [] { ["command" "webhook"] }
+def filter-status-completer [] { ["delivered" "failed"] }
+def filter-type-completer [] { ["command" "webhook"] }
 def answering-machine-detection-completer [] { ["detect" "detect_beep" "detect_words" "disabled" "greeting_end"] }
 def webhook-url-method-completer [] { ["GET" "POST"] }
 def stream-type-completer [] { ["decrypted" "raw"] }
@@ -95,10 +95,10 @@ def anchorsite-override-completer-1 [] { ["Amsterdam, Netherlands" "Ashburn, VA"
 def encrypted-media-completer [] { ["SRTP" "ZRTP"] }
 def sip-uri-calling-preference-completer [] { ["disabled" "internal" "unrestricted"] }
 def transport-protocol-completer [] { ["TCP" "TLS" "UDP"] }
-def filternumber-type-completer-2 [] { ["did" "toll-free"] }
-def filterphone-number-type-completer [] { ["landline" "local" "mobile" "national" "shared_cost" "toll_free"] }
-def filtercountry-code-completer [] { ["CA" "GB" "US"] }
-def filtergroupBy-completer [] { ["locality" "national_destination_code" "npa" "nxx" "rate_center"] }
+def filter-number-type-completer-2 [] { ["did" "toll-free"] }
+def filter-phone-number-type-completer [] { ["landline" "local" "mobile" "national" "shared_cost" "toll_free"] }
+def filter-country-code-completer [] { ["CA" "GB" "US"] }
+def filter-group-by-completer [] { ["locality" "national_destination_code" "npa" "nxx" "rate_center"] }
 def sort-completer-3 [] { ["created_at" "email"] }
 def direction-completer [] { ["INBOUND" "OUTBOUND"] }
 def status-completer-1 [] { ["DELIVERED" "DLR_TIMEOUT" "DLR_UNCONFIRMED" "FAILED" "GW_REJECT" "GW_TIMEOUT" "RECEIVED"] }
@@ -107,51 +107,51 @@ def product-completer [] { ["ALPHANUMERIC_ID" "LONG_CODE" "RCS" "SHORT_CODE" "SH
 def type-completer [] { ["MMS" "SMS"] }
 def time-frame-completer [] { ["1h" "24h" "30d" "3d" "3h" "7d"] }
 def webhook-api-version-completer-1 [] { ["1" "2" "2010-04-01"] }
-def filterchannel-type-ideq-completer [] { ["email" "sms" "voice" "webhook"] }
+def filter-channel-type-id-eq-completer [] { ["email" "sms" "voice" "webhook"] }
 def channel-type-id-completer [] { ["email" "sms" "voice" "webhook"] }
-def filterassociated-record-typeeq-completer [] { ["account" "phone_number"] }
-def filterstatuseq-completer [] { ["delete-pending" "delete-received" "delete-submitted" "deleted" "enable-pending" "enable-received" "enable-submtited" "enabled"] }
+def filter-associated-record-type-eq-completer [] { ["account" "phone_number"] }
+def filter-status-eq-completer [] { ["delete-pending" "delete-received" "delete-submitted" "deleted" "enable-pending" "enable-received" "enable-submtited" "enabled"] }
 def type-completer-1 [] { ["caller-name" "carrier"] }
-def filterstatus-completer-1 [] { ["completed" "failed" "in-progress"] }
-def filtertype-completer-1 [] { ["sim_card_network_preferences"] }
+def filter-status-completer-1 [] { ["completed" "failed" "in-progress"] }
+def filter-type-completer-1 [] { ["sim_card_network_preferences"] }
 def sort-completer-4 [] { ["-created_at" "-enabled" "-name" "-service_plan" "-traffic_type" "-usage_payment_method" "created_at" "enabled" "name" "service_plan" "traffic_type" "usage_payment_method"] }
 def service-plan-completer [] { ["global" "international" "us"] }
 def traffic-type-completer [] { ["conversational" "short_duration"] }
 def usage-payment-method-completer [] { ["rate-deck" "tariff"] }
-def filtertype-completer-2 [] { ["delete_phone_number_block"] }
-def filterstatus-completer-2 [] { ["completed" "failed" "in_progress" "pending"] }
+def filter-type-completer-2 [] { ["delete_phone_number_block"] }
+def filter-status-completer-2 [] { ["completed" "failed" "in_progress" "pending"] }
 def sort-completer-5 [] { ["created_at"] }
-def filterstatus-completer-3 [] { ["active" "deleted" "emergency_only" "port_failed" "port_out_pending" "port_pending" "ported_out" "purchase_failed" "purchase_pending"] }
-def filterusage-payment-method-completer [] { ["channel" "pay-per-minute"] }
+def filter-status-completer-3 [] { ["active" "deleted" "emergency_only" "port_failed" "port_out_pending" "port_pending" "ported_out" "purchase_failed" "purchase_pending"] }
+def filter-usage-payment-method-completer [] { ["channel" "pay-per-minute"] }
 def sort-completer-6 [] { ["connection_name" "phone_number" "purchased_at" "usage_payment_method"] }
-def filtertype-completer-3 [] { ["delete_phone_numbers" "update_emergency_settings" "update_phone_numbers"] }
+def filter-type-completer-3 [] { ["delete_phone_numbers" "update_emergency_settings" "update_phone_numbers"] }
 def number-level-routing-completer [] { ["disabled" "enabled"] }
 def usage-payment-method-completer-1 [] { ["channel" "pay-per-minute"] }
-def filtermisctype-completer [] { ["full" "partial"] }
+def filter-misc-type-completer [] { ["full" "partial"] }
 def sort-completer-7 [] { ["-activation_settings.foc_datetime_requested" "-created_at" "activation_settings.foc_datetime_requested" "created_at"] }
-def filteractivation-status-completer [] { ["Activate RDY" "Active" "Cancel Pending" "Canceled" "Concurred" "Concurrence Sent" "Conflict" "Disconnect Pending" "Failed" "New" "Old" "Pending" "Sending"] }
-def filterportability-status-completer [] { ["confirmed" "pending" "provisional"] }
-def filterstatus-completer-4 [] { ["authorized" "canceled" "pending" "ported" "rejected" "rejected-pending"] }
+def filter-activation-status-completer [] { ["Activate RDY" "Active" "Cancel Pending" "Canceled" "Concurred" "Concurrence Sent" "Conflict" "Disconnect Pending" "Failed" "New" "Old" "Pending" "Sending"] }
+def filter-portability-status-completer [] { ["confirmed" "pending" "provisional"] }
+def filter-status-completer-4 [] { ["authorized" "canceled" "pending" "ported" "rejected" "rejected-pending"] }
 def aggregation-type-completer [] { ["BILLING_GROUP" "CONNECTION" "NO_AGGREGATION" "TAG"] }
 def product-breakdown-completer [] { ["COUNTRY" "DID_VS_TOLL_FREE" "DID_VS_TOLL_FREE_PER_COUNTRY" "NO_BREAKDOWN"] }
 def aggregation-type-completer-1 [] { ["NO_AGGREGATION" "PROFILE" "TAGS"] }
 def message-type-completer-1 [] { ["MMS" "SMS"] }
 def sort-completer-8 [] { ["created_at" "name" "updated_at"] }
-def filterphone-number-type-completer-1 [] { ["local" "national" "toll-free"] }
-def filteraction-completer [] { ["ordering" "porting"] }
+def filter-phone-number-type-completer-1 [] { ["local" "national" "toll-free"] }
+def filter-action-completer [] { ["ordering" "porting"] }
 def sort-completer-9 [] { ["action" "country_code" "locality" "phone_number_type"] }
-def filtertype-completer-4 [] { ["remove_private_wireless_gateway" "set_private_wireless_gateway"] }
+def filter-type-completer-4 [] { ["remove_private_wireless_gateway" "set_private_wireless_gateway"] }
 def status-callback-method-completer [] { ["get" "post"] }
 def voice-method-completer [] { ["get" "post"] }
 def currency-completer [] { ["AUD" "CAD" "EUR" "GBP" "USD"] }
-def filterstatuseq-completer-1 [] { ["delivered" "failed"] }
+def filter-status-eq-completer-1 [] { ["delivered" "failed"] }
 def blocking-completer [] { ["no_wait" "wait"] }
 def type-completer-2 [] { ["audio" "contacts" "document" "hsm" "image" "location" "template" "text" "unknown" "video" "voice"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "actions-bulk-telephony-credentials DeleteBulkTelephonyCredential" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "actions-bulk-telephony-credentials delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -175,7 +175,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /actions/bulk/telephony_credentials
 # operationId: DeleteBulkTelephonyCredential
-export def "actions-bulk-telephony-credentials DeleteBulkTelephonyCredential" [
+export def "actions-bulk-telephony-credentials delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,11 +184,11 @@ export def "actions-bulk-telephony-credentials DeleteBulkTelephonyCredential" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filtertag: string # Filter by tag, required by bulk operations.
+  --filter-tag: string # Filter by tag, required by bulk operations.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[tag]" $filtertag "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[tag]" $filter_tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/actions/bulk/telephony_credentials" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -199,7 +199,7 @@ export def "actions-bulk-telephony-credentials DeleteBulkTelephonyCredential" [
 #
 # PATCH /actions/bulk/telephony_credentials
 # operationId: UpdateBulkTelephonyCredential
-export def "actions-bulk-telephony-credentials UpdateBulkTelephonyCredential" [
+export def "actions-bulk-telephony-credentials update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "actions-bulk-telephony-credentials UpdateBulkTelephonyCredential" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filtertag: string # Filter by tag, required by bulk operations.
+  --filter-tag: string # Filter by tag, required by bulk operations.
   --amount: int # Amount of credentials to be created. A single tag can hold at maximum 1000 credentials (e.g. 100)
   connection_id: string # Identifies the connection this credential is associated with. (e.g. 1234567890)
   --name: string # A default name for all credentials. (e.g. Default Credentials)
@@ -217,9 +217,9 @@ export def "actions-bulk-telephony-credentials UpdateBulkTelephonyCredential" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[tag]" $filtertag "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[tag]" $filter_tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/actions/bulk/telephony_credentials" $qp)
-  let body = {amount: $amount, connection_id: $connection_id, name: $name, tag: $tag} | compact
+  let body = {"amount": $amount, "connection_id": $connection_id, "name": $name, "tag": $tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -230,7 +230,7 @@ export def "actions-bulk-telephony-credentials UpdateBulkTelephonyCredential" [
 #
 # POST /actions/bulk/telephony_credentials
 # operationId: CreateBulkTelephonyCredential
-export def "actions-bulk-telephony-credentials CreateBulkTelephonyCredential" [
+export def "actions-bulk-telephony-credentials create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "actions-bulk-telephony-credentials CreateBulkTelephonyCredential" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/actions/bulk/telephony_credentials")
-  let body = {amount: $amount, connection_id: $connection_id, name: $name, tag: $tag} | compact
+  let body = {"amount": $amount, "connection_id": $connection_id, "name": $name, "tag": $tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -260,7 +260,7 @@ export def "actions-bulk-telephony-credentials CreateBulkTelephonyCredential" [
 # PUT /actions/network_preferences/sim_cards
 # operationId: BulkSIMCardNetworkPreferences
 # --mobile_operator_networks_preferences item shape: {mobile_operator_network_id?: string, priority?: int}
-export def "actions-network-preferences-sim-cards BulkSIMCardNetworkPreferences" [
+export def "actions-network-preferences-sim-cards put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "actions-network-preferences-sim-cards BulkSIMCardNetworkPreferences"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/actions/network_preferences/sim_cards")
-  let body = {mobile_operator_networks_preferences: $mobile_operator_networks_preferences, sim_card_ids: $sim_card_ids} | compact
+  let body = {"mobile_operator_networks_preferences": $mobile_operator_networks_preferences, "sim_card_ids": $sim_card_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -287,7 +287,7 @@ export def "actions-network-preferences-sim-cards BulkSIMCardNetworkPreferences"
 #
 # POST /actions/register/sim_cards
 # operationId: SimCardRegister
-export def "actions-register-sim-cards SimCardRegister" [
+export def "actions-register-sim-cards create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,7 +305,7 @@ export def "actions-register-sim-cards SimCardRegister" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/actions/register/sim_cards")
-  let body = {registration_codes: $registration_codes, sim_card_group_id: $sim_card_group_id, status: $status, tags: $tags} | compact
+  let body = {"registration_codes": $registration_codes, "sim_card_group_id": $sim_card_group_id, "status": $status, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -316,7 +316,7 @@ export def "actions-register-sim-cards SimCardRegister" [
 #
 # POST /actions/{action}/telephony_credentials
 # operationId: BulkCredentialAction
-export def "actions-telephony-credentials BulkCredentialAction" [
+export def "actions-telephony-credentials post" [
   action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -326,12 +326,12 @@ export def "actions-telephony-credentials BulkCredentialAction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filtertag: string # Filter by tag, required by bulk operations.
+  --filter-tag: string # Filter by tag, required by bulk operations.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[tag]" $filtertag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/actions/($action)/telephony_credentials" $qp)
+  let qp = [(serialize-qp "filter[tag]" $filter_tag "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({action: $action} | format pattern "/actions/{action}/telephony_credentials") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -350,18 +350,18 @@ export def "addresses findAddresss" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filtercustomer-referenceeq: string # Filter addresses via the customer reference set. Matching is not case-sensitive.
-  --filtercustomer-referencecontains: string # If present, addresses with <code>customer_reference</code> containing the given value will be returned. Matching is not case-sensitive.
-  --filterused-as-emergency: string # If set as 'true', only addresses used as the emergency address for at least one active phone-number will be returned. When set to 'false', the opposite happens: only addresses not used as the emergency address from phone-numbers will be returned. (default: null)
-  --filterstreet-addresscontains: string # If present, addresses with <code>street_address</code> containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters. (default: null)
-  --filteraddress-bookeq: string # If present, only returns results with the <code>address_book</code> flag set to the given value. (default: null)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-customer-reference-eq: string # Filter addresses via the customer reference set. Matching is not case-sensitive.
+  --filter-customer-reference-contains: string # If present, addresses with <code>customer_reference</code> containing the given value will be returned. Matching is not case-sensitive.
+  --filter-used-as-emergency: string # If set as 'true', only addresses used as the emergency address for at least one active phone-number will be returned. When set to 'false', the opposite happens: only addresses not used as the emergency address from phone-numbers will be returned. (default: null)
+  --filter-street-address-contains: string # If present, addresses with <code>street_address</code> containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters. (default: null)
+  --filter-address-book-eq: string # If present, only returns results with the <code>address_book</code> flag set to the given value. (default: null)
   --qp-sort: string@sort-completer # Specifies the sort order for results. By default sorting direction is ascending. To have the results sorted in descending order add the <code> -</code> prefix.<br/><br/> That is: <ul>   <li>     <code>street_address</code>: sorts the result by the     <code>street_address</code> field in ascending order.   </li>    <li>     <code>-street_address</code>: sorts the result by the     <code>street_address</code> field in descending order.   </li> </ul> <br/> If not given, results are sorted by <code>created_at</code> in descending order. (default: created_at, e.g. street_address)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[customer_reference][eq]" $filtercustomer_referenceeq "scalar") (serialize-qp "filter[customer_reference][contains]" $filtercustomer_referencecontains "scalar") (serialize-qp "filter[used_as_emergency]" $filterused_as_emergency "scalar") (serialize-qp "filter[street_address][contains]" $filterstreet_addresscontains "scalar") (serialize-qp "filter[address_book][eq]" $filteraddress_bookeq "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[customer_reference][eq]" $filter_customer_reference_eq "scalar") (serialize-qp "filter[customer_reference][contains]" $filter_customer_reference_contains "scalar") (serialize-qp "filter[used_as_emergency]" $filter_used_as_emergency "scalar") (serialize-qp "filter[street_address][contains]" $filter_street_address_contains "scalar") (serialize-qp "filter[address_book][eq]" $filter_address_book_eq "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/addresses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -372,7 +372,7 @@ export def "addresses findAddresss" [
 #
 # POST /addresses
 # operationId: CreateAddress
-export def "addresses CreateAddress" [
+export def "addresses create-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "addresses CreateAddress" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/addresses")
-  let body = {address_book: $address_book, administrative_area: $administrative_area, borough: $borough, business_name: $business_name, country_code: $country_code, customer_reference: $customer_reference, extended_address: $extended_address, first_name: $first_name, last_name: $last_name, locality: $locality, neighborhood: $neighborhood, phone_number: $phone_number, postal_code: $postal_code, street_address: $street_address, validate_address: $validate_address} | compact
+  let body = {"address_book": $address_book, "administrative_area": $administrative_area, "borough": $borough, "business_name": $business_name, "country_code": $country_code, "customer_reference": $customer_reference, "extended_address": $extended_address, "first_name": $first_name, "last_name": $last_name, "locality": $locality, "neighborhood": $neighborhood, "phone_number": $phone_number, "postal_code": $postal_code, "street_address": $street_address, "validate_address": $validate_address} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -412,7 +412,7 @@ export def "addresses CreateAddress" [
 #
 # POST /addresses/actions/validate
 # operationId: validateAddress
-export def "addresses-actions-validate validateAddress" [
+export def "addresses-actions-validate validate-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,7 +432,7 @@ export def "addresses-actions-validate validateAddress" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/addresses/actions/validate")
-  let body = {administrative_area: $administrative_area, country_code: $country_code, extended_address: $extended_address, locality: $locality, postal_code: $postal_code, street_address: $street_address} | compact
+  let body = {"administrative_area": $administrative_area, "country_code": $country_code, "extended_address": $extended_address, "locality": $locality, "postal_code": $postal_code, "street_address": $street_address} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -443,7 +443,7 @@ export def "addresses-actions-validate validateAddress" [
 #
 # DELETE /addresses/{id}
 # operationId: DeleteAddress
-export def "addresses DeleteAddress" [
+export def "addresses delete-address" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,7 +456,7 @@ export def "addresses DeleteAddress" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/addresses/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/addresses/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -466,7 +466,7 @@ export def "addresses DeleteAddress" [
 #
 # GET /addresses/{id}
 # operationId: getAddress
-export def "addresses get" [
+export def "addresses get-address" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -479,7 +479,7 @@ export def "addresses get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/addresses/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/addresses/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -498,13 +498,13 @@ export def "authentication-providers findAuthenticationProviders" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
   --qp-sort: string@sort-completer-1 # Specifies the sort order for results. By default sorting direction is ascending. To have the results sorted in descending order add the <code> -</code> prefix.<br/><br/> That is: <ul>   <li>     <code>name</code>: sorts the result by the     <code>name</code> field in ascending order.   </li>    <li>     <code>-name</code>: sorts the result by the     <code>name</code> field in descending order.   </li> </ul> <br/> If not given, results are sorted by <code>created_at</code> in descending order. (default: -created_at, e.g. name)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication_providers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -516,7 +516,7 @@ export def "authentication-providers findAuthenticationProviders" [
 # POST /authentication_providers
 # operationId: CreateAuthenticationProvider
 # --settings shape: {idp_cert_fingerprint: string, idp_cert_fingerprint_algorithm?: "sha1"|"sha256"|"sha384"|"sha512", idp_entity_id: string, idp_sso_target_url: string}
-export def "authentication-providers CreateAuthenticationProvider" [
+export def "authentication-providers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -535,7 +535,7 @@ export def "authentication-providers CreateAuthenticationProvider" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authentication_providers")
-  let body = {active: $active, name: $name, settings: $settings, settings_url: $settings_url, short_name: $short_name} | compact
+  let body = {"active": $active, "name": $name, "settings": $settings, "settings_url": $settings_url, "short_name": $short_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -546,7 +546,7 @@ export def "authentication-providers CreateAuthenticationProvider" [
 #
 # DELETE /authentication_providers/{id}
 # operationId: DeleteAuthenticationProvider
-export def "authentication-providers DeleteAuthenticationProvider" [
+export def "authentication-providers delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +559,7 @@ export def "authentication-providers DeleteAuthenticationProvider" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authentication_providers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/authentication_providers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -582,7 +582,7 @@ export def "authentication-providers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authentication_providers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/authentication_providers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -593,7 +593,7 @@ export def "authentication-providers get" [
 # PATCH /authentication_providers/{id}
 # operationId: updateAuthenticationProvider
 # --settings shape: {idp_cert_fingerprint: string, idp_cert_fingerprint_algorithm?: "sha1"|"sha256"|"sha384"|"sha512", idp_entity_id: string, idp_sso_target_url: string}
-export def "authentication-providers updateAuthenticationProvider" [
+export def "authentication-providers update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -612,8 +612,8 @@ export def "authentication-providers updateAuthenticationProvider" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/authentication_providers/($id)")
-  let body = {active: $active, name: $name, settings: $settings, settings_url: $settings_url, short_name: $short_name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/authentication_providers/{id}"))
+  let body = {"active": $active, "name": $name, "settings": $settings, "settings_url": $settings_url, "short_name": $short_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -624,7 +624,7 @@ export def "authentication-providers updateAuthenticationProvider" [
 #
 # GET /available_phone_number_blocks
 # operationId: listAvailablePhoneNumberBlocks
-export def "available-phone-number-blocks listAvailablePhoneNumberBlocks" [
+export def "available-phone-number-blocks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -633,22 +633,22 @@ export def "available-phone-number-blocks listAvailablePhoneNumberBlocks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterphone-numberstarts-with: string # Filter number blocks that start with a pattern (meant to be used after `national_destination_code` filter has been set). (e.g. 201)
-  --filterphone-numberends-with: string # Filter numbers ending with a pattern. (e.g. 8000)
-  --filterphone-numbercontains: string # Filter numbers containing a pattern. (e.g. 456)
-  --filterlocality: string # Filter phone numbers by city.
-  --filteradministrative-area: string # Filter phone numbers by US state/CA province. (e.g. IL)
-  --filtercountry-code: string # Filter phone numbers by ISO alpha-2 country code. (e.g. US)
-  --filternational-destination-code: string # Filter by the national destination code of the number. This filter is only applicable to North American numbers.
-  --filterrate-center: string # Filter phone numbers by NANP rate center. This filter is only applicable to North American numbers. (e.g. CHICAGO HEIGHTS)
-  --filternumber-type: string@filternumber-type-completer # Filter phone numbers by number type. (e.g. toll-free)
-  --filterfeatures: list # Filter if the phone number should be used for voice, fax, mms, sms, emergency. (e.g. voice,sms)
-  --filterminimum-block-size: int # Filter number blocks by minimum blocks size (e.g. 100)
-  --filterlimit: int # Limits the number of results. (e.g. 100)
+  --filter-phone-number-starts-with: string # Filter number blocks that start with a pattern (meant to be used after `national_destination_code` filter has been set). (e.g. 201)
+  --filter-phone-number-ends-with: string # Filter numbers ending with a pattern. (e.g. 8000)
+  --filter-phone-number-contains: string # Filter numbers containing a pattern. (e.g. 456)
+  --filter-locality: string # Filter phone numbers by city.
+  --filter-administrative-area: string # Filter phone numbers by US state/CA province. (e.g. IL)
+  --filter-country-code: string # Filter phone numbers by ISO alpha-2 country code. (e.g. US)
+  --filter-national-destination-code: string # Filter by the national destination code of the number. This filter is only applicable to North American numbers.
+  --filter-rate-center: string # Filter phone numbers by NANP rate center. This filter is only applicable to North American numbers. (e.g. CHICAGO HEIGHTS)
+  --filter-number-type: string@filter-number-type-completer # Filter phone numbers by number type. (e.g. toll-free)
+  --filter-features: list # Filter if the phone number should be used for voice, fax, mms, sms, emergency. (e.g. voice,sms)
+  --filter-minimum-block-size: int # Filter number blocks by minimum blocks size (e.g. 100)
+  --filter-limit: int # Limits the number of results. (e.g. 100)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[phone_number][starts_with]" $filterphone_numberstarts_with "scalar") (serialize-qp "filter[phone_number][ends_with]" $filterphone_numberends_with "scalar") (serialize-qp "filter[phone_number][contains]" $filterphone_numbercontains "scalar") (serialize-qp "filter[locality]" $filterlocality "scalar") (serialize-qp "filter[administrative_area]" $filteradministrative_area "scalar") (serialize-qp "filter[country_code]" $filtercountry_code "scalar") (serialize-qp "filter[national_destination_code]" $filternational_destination_code "scalar") (serialize-qp "filter[rate_center]" $filterrate_center "scalar") (serialize-qp "filter[number_type]" $filternumber_type "scalar") (serialize-qp "filter[features]" $filterfeatures "multi") (serialize-qp "filter[minimum_block_size]" $filterminimum_block_size "scalar") (serialize-qp "filter[limit]" $filterlimit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[phone_number][starts_with]" $filter_phone_number_starts_with "scalar") (serialize-qp "filter[phone_number][ends_with]" $filter_phone_number_ends_with "scalar") (serialize-qp "filter[phone_number][contains]" $filter_phone_number_contains "scalar") (serialize-qp "filter[locality]" $filter_locality "scalar") (serialize-qp "filter[administrative_area]" $filter_administrative_area "scalar") (serialize-qp "filter[country_code]" $filter_country_code "scalar") (serialize-qp "filter[national_destination_code]" $filter_national_destination_code "scalar") (serialize-qp "filter[rate_center]" $filter_rate_center "scalar") (serialize-qp "filter[number_type]" $filter_number_type "scalar") (serialize-qp "filter[features]" $filter_features "multi") (serialize-qp "filter[minimum_block_size]" $filter_minimum_block_size "scalar") (serialize-qp "filter[limit]" $filter_limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/available_phone_number_blocks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -659,7 +659,7 @@ export def "available-phone-number-blocks listAvailablePhoneNumberBlocks" [
 #
 # GET /available_phone_numbers
 # operationId: listAvailablePhoneNumbers
-export def "available-phone-numbers listAvailablePhoneNumbers" [
+export def "available-phone-numbers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,25 +668,25 @@ export def "available-phone-numbers listAvailablePhoneNumbers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterphone-numberstarts-with: string # Filter numbers starting with a pattern (meant to be used after `national_destination_code` filter has been set).
-  --filterphone-numberends-with: string # Filter numbers ending with a pattern.
-  --filterphone-numbercontains: string # Filter numbers containing a pattern.
-  --filterlocality: string # Filter phone numbers by city.
-  --filteradministrative-area: string # Filter phone numbers by US state/CA province. (e.g. IL)
-  --filtercountry-code: string # Filter phone numbers by ISO alpha-2 country code. (e.g. US)
-  --filternational-destination-code: string # Filter by the national destination code of the number. This filter is only applicable to North American numbers.
-  --filterrate-center: string # Filter phone numbers by NANP rate center. This filter is only applicable to North American numbers. (e.g. CHICAGO HEIGHTS)
-  --filternumber-type: string@filternumber-type-completer-1 # Filter phone numbers by number type. (e.g. local)
-  --filterfeatures: list # Filter if the phone number should be used for voice, fax, mms, sms, emergency. (e.g. voice,sms)
-  --filterlimit: int # Limits the number of results. (e.g. 100)
-  --filterbest-effort: oneof<nothing, bool> # Filter to determine if best effort results should be included. (e.g. false)
-  --filterquickship: oneof<nothing, bool> # Filter to exclude phone numbers that need additional time after to purchase to receive phone calls. (e.g. true)
-  --filterreservable: oneof<nothing, bool> # Filter to exclude phone numbers that cannot be reserved before purchase. (e.g. true)
-  --filterexclude-held-numbers: oneof<nothing, bool> # Filter to exclude phone numbers that are currently on hold for your account. (e.g. false)
+  --filter-phone-number-starts-with: string # Filter numbers starting with a pattern (meant to be used after `national_destination_code` filter has been set).
+  --filter-phone-number-ends-with: string # Filter numbers ending with a pattern.
+  --filter-phone-number-contains: string # Filter numbers containing a pattern.
+  --filter-locality: string # Filter phone numbers by city.
+  --filter-administrative-area: string # Filter phone numbers by US state/CA province. (e.g. IL)
+  --filter-country-code: string # Filter phone numbers by ISO alpha-2 country code. (e.g. US)
+  --filter-national-destination-code: string # Filter by the national destination code of the number. This filter is only applicable to North American numbers.
+  --filter-rate-center: string # Filter phone numbers by NANP rate center. This filter is only applicable to North American numbers. (e.g. CHICAGO HEIGHTS)
+  --filter-number-type: string@filter-number-type-completer-1 # Filter phone numbers by number type. (e.g. local)
+  --filter-features: list # Filter if the phone number should be used for voice, fax, mms, sms, emergency. (e.g. voice,sms)
+  --filter-limit: int # Limits the number of results. (e.g. 100)
+  --filter-best-effort: oneof<nothing, bool> # Filter to determine if best effort results should be included. (e.g. false)
+  --filter-quickship: oneof<nothing, bool> # Filter to exclude phone numbers that need additional time after to purchase to receive phone calls. (e.g. true)
+  --filter-reservable: oneof<nothing, bool> # Filter to exclude phone numbers that cannot be reserved before purchase. (e.g. true)
+  --filter-exclude-held-numbers: oneof<nothing, bool> # Filter to exclude phone numbers that are currently on hold for your account. (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[phone_number][starts_with]" $filterphone_numberstarts_with "scalar") (serialize-qp "filter[phone_number][ends_with]" $filterphone_numberends_with "scalar") (serialize-qp "filter[phone_number][contains]" $filterphone_numbercontains "scalar") (serialize-qp "filter[locality]" $filterlocality "scalar") (serialize-qp "filter[administrative_area]" $filteradministrative_area "scalar") (serialize-qp "filter[country_code]" $filtercountry_code "scalar") (serialize-qp "filter[national_destination_code]" $filternational_destination_code "scalar") (serialize-qp "filter[rate_center]" $filterrate_center "scalar") (serialize-qp "filter[number_type]" $filternumber_type "scalar") (serialize-qp "filter[features]" $filterfeatures "multi") (serialize-qp "filter[limit]" $filterlimit "scalar") (serialize-qp "filter[best_effort]" $filterbest_effort "scalar") (serialize-qp "filter[quickship]" $filterquickship "scalar") (serialize-qp "filter[reservable]" $filterreservable "scalar") (serialize-qp "filter[exclude_held_numbers]" $filterexclude_held_numbers "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[phone_number][starts_with]" $filter_phone_number_starts_with "scalar") (serialize-qp "filter[phone_number][ends_with]" $filter_phone_number_ends_with "scalar") (serialize-qp "filter[phone_number][contains]" $filter_phone_number_contains "scalar") (serialize-qp "filter[locality]" $filter_locality "scalar") (serialize-qp "filter[administrative_area]" $filter_administrative_area "scalar") (serialize-qp "filter[country_code]" $filter_country_code "scalar") (serialize-qp "filter[national_destination_code]" $filter_national_destination_code "scalar") (serialize-qp "filter[rate_center]" $filter_rate_center "scalar") (serialize-qp "filter[number_type]" $filter_number_type "scalar") (serialize-qp "filter[features]" $filter_features "multi") (serialize-qp "filter[limit]" $filter_limit "scalar") (serialize-qp "filter[best_effort]" $filter_best_effort "scalar") (serialize-qp "filter[quickship]" $filter_quickship "scalar") (serialize-qp "filter[reservable]" $filter_reservable "scalar") (serialize-qp "filter[exclude_held_numbers]" $filter_exclude_held_numbers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/available_phone_numbers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -697,7 +697,7 @@ export def "available-phone-numbers listAvailablePhoneNumbers" [
 #
 # GET /balance
 # operationId: getUserBalance
-export def "balance get" [
+export def "balance get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -719,7 +719,7 @@ export def "balance get" [
 #
 # GET /billing_groups
 # operationId: listBillingGroups
-export def "billing-groups listBillingGroups" [
+export def "billing-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,12 +728,12 @@ export def "billing-groups listBillingGroups" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/billing_groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -744,7 +744,7 @@ export def "billing-groups listBillingGroups" [
 #
 # POST /billing_groups
 # operationId: createBillingGroup
-export def "billing-groups createBillingGroup" [
+export def "billing-groups create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,7 +759,7 @@ export def "billing-groups createBillingGroup" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/billing_groups")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -783,7 +783,7 @@ export def "billing-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/billing_groups/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/billing_groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -793,7 +793,7 @@ export def "billing-groups delete" [
 #
 # GET /billing_groups/{id}
 # operationId: retrieveBillingGroup
-export def "billing-groups retrieveBillingGroup" [
+export def "billing-groups retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -806,7 +806,7 @@ export def "billing-groups retrieveBillingGroup" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/billing_groups/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/billing_groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -816,7 +816,7 @@ export def "billing-groups retrieveBillingGroup" [
 #
 # PATCH /billing_groups/{id}
 # operationId: updateBillingGroup
-export def "billing-groups updateBillingGroup" [
+export def "billing-groups update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -831,8 +831,8 @@ export def "billing-groups updateBillingGroup" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/billing_groups/($id)")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/billing_groups/{id}"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -843,7 +843,7 @@ export def "billing-groups updateBillingGroup" [
 #
 # GET /call_control_applications
 # operationId: listCallControlApplications
-export def "call-control-applications listCallControlApplications" [
+export def "call-control-applications list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -852,15 +852,15 @@ export def "call-control-applications listCallControlApplications" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filterapplication-namecontains: string # If present, applications with <code>application_name</code> containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters. (default: null)
-  --filteroutbound-voice-profile-id: string # Identifies the associated outbound voice profile. (format: int64, e.g. 1293384261075731499)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-application-name-contains: string # If present, applications with <code>application_name</code> containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters. (default: null)
+  --filter-outbound-voice-profile-id: string # Identifies the associated outbound voice profile. (format: int64, e.g. 1293384261075731499)
   --qp-sort: string@sort-completer-2 # Specifies the sort order for results. By default sorting direction is ascending. To have the results sorted in descending order add the <code> -</code> prefix.<br/><br/> That is: <ul>   <li>     <code>connection_name</code>: sorts the result by the     <code>connection_name</code> field in ascending order.   </li>    <li>     <code>-connection_name</code>: sorts the result by the     <code>connection_name</code> field in descending order.   </li> </ul> <br/> If not given, results are sorted by <code>created_at</code> in descending order. (default: created_at, e.g. connection_name)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[application_name][contains]" $filterapplication_namecontains "scalar") (serialize-qp "filter[outbound_voice_profile_id]" $filteroutbound_voice_profile_id "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[application_name][contains]" $filter_application_name_contains "scalar") (serialize-qp "filter[outbound_voice_profile_id]" $filter_outbound_voice_profile_id "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/call_control_applications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -873,7 +873,7 @@ export def "call-control-applications listCallControlApplications" [
 # operationId: createCallControlApplication
 # --inbound shape: {channel_limit?: int, sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone"}
 # --outbound shape: {channel_limit?: int, outbound_voice_profile_id?: string}
-export def "call-control-applications createCallControlApplication" [
+export def "call-control-applications create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -899,7 +899,7 @@ export def "call-control-applications createCallControlApplication" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/call_control_applications")
-  let body = {active: $active, anchorsite_override: $anchorsite_override, application_name: $application_name, dtmf_type: $dtmf_type, first_command_timeout: $first_command_timeout, first_command_timeout_secs: $first_command_timeout_secs, inbound: $inbound, outbound: $outbound, webhook_api_version: $webhook_api_version, webhook_event_failover_url: $webhook_event_failover_url, webhook_event_url: $webhook_event_url, webhook_timeout_secs: $webhook_timeout_secs} | compact
+  let body = {"active": $active, "anchorsite_override": $anchorsite_override, "application_name": $application_name, "dtmf_type": $dtmf_type, "first_command_timeout": $first_command_timeout, "first_command_timeout_secs": $first_command_timeout_secs, "inbound": $inbound, "outbound": $outbound, "webhook_api_version": $webhook_api_version, "webhook_event_failover_url": $webhook_event_failover_url, "webhook_event_url": $webhook_event_url, "webhook_timeout_secs": $webhook_timeout_secs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -923,7 +923,7 @@ export def "call-control-applications delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/call_control_applications/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/call_control_applications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -933,7 +933,7 @@ export def "call-control-applications delete" [
 #
 # GET /call_control_applications/{id}
 # operationId: retrieveCallControlApplication
-export def "call-control-applications retrieveCallControlApplication" [
+export def "call-control-applications retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -946,7 +946,7 @@ export def "call-control-applications retrieveCallControlApplication" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/call_control_applications/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/call_control_applications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -958,7 +958,7 @@ export def "call-control-applications retrieveCallControlApplication" [
 # operationId: updateCallControlApplication
 # --inbound shape: {channel_limit?: int, sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone"}
 # --outbound shape: {channel_limit?: int, outbound_voice_profile_id?: string}
-export def "call-control-applications updateCallControlApplication" [
+export def "call-control-applications update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -984,8 +984,8 @@ export def "call-control-applications updateCallControlApplication" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/call_control_applications/($id)")
-  let body = {active: $active, anchorsite_override: $anchorsite_override, application_name: $application_name, dtmf_type: $dtmf_type, first_command_timeout: $first_command_timeout, first_command_timeout_secs: $first_command_timeout_secs, inbound: $inbound, outbound: $outbound, webhook_api_version: $webhook_api_version, webhook_event_failover_url: $webhook_event_failover_url, webhook_event_url: $webhook_event_url, webhook_timeout_secs: $webhook_timeout_secs} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/call_control_applications/{id}"))
+  let body = {"active": $active, "anchorsite_override": $anchorsite_override, "application_name": $application_name, "dtmf_type": $dtmf_type, "first_command_timeout": $first_command_timeout, "first_command_timeout_secs": $first_command_timeout_secs, "inbound": $inbound, "outbound": $outbound, "webhook_api_version": $webhook_api_version, "webhook_event_failover_url": $webhook_event_failover_url, "webhook_event_url": $webhook_event_url, "webhook_timeout_secs": $webhook_timeout_secs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -996,7 +996,7 @@ export def "call-control-applications updateCallControlApplication" [
 #
 # GET /call_events
 # operationId: listCallEvents
-export def "call-events listCallEvents" [
+export def "call-events list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1005,21 +1005,21 @@ export def "call-events listCallEvents" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filtercall-leg-id: string # The unique identifier of an individual call leg. (format: uuid)
-  --filtercall-session-id: string # The unique identifier of the call control session. A session may include multiple call leg events. (format: uuid)
-  --filterstatus: string@filterstatus-completer # Event status (e.g. delivered)
-  --filtertype: string@filtertype-completer # Event type (e.g. webhook)
-  --filterevent-timestampgt: string # Event timestamp: greater than (e.g. 2019-03-29T11:10:00Z)
-  --filterevent-timestampgte: string # Event timestamp: greater than or equal (e.g. 2019-03-29T11:10:00Z)
-  --filterevent-timestamplt: string # Event timestamp: lower than (e.g. 2019-03-29T11:10:00Z)
-  --filterevent-timestamplte: string # Event timestamp: lower than or equal (e.g. 2019-03-29T11:10:00Z)
-  --filterevent-timestampeq: string # Event timestamp: equal (e.g. 2019-03-29T11:10:00Z)
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --filter-call-leg-id: string # The unique identifier of an individual call leg. (format: uuid)
+  --filter-call-session-id: string # The unique identifier of the call control session. A session may include multiple call leg events. (format: uuid)
+  --filter-status: string@filter-status-completer # Event status (e.g. delivered)
+  --filter-type: string@filter-type-completer # Event type (e.g. webhook)
+  --filter-event-timestamp-gt: string # Event timestamp: greater than (e.g. 2019-03-29T11:10:00Z)
+  --filter-event-timestamp-gte: string # Event timestamp: greater than or equal (e.g. 2019-03-29T11:10:00Z)
+  --filter-event-timestamp-lt: string # Event timestamp: lower than (e.g. 2019-03-29T11:10:00Z)
+  --filter-event-timestamp-lte: string # Event timestamp: lower than or equal (e.g. 2019-03-29T11:10:00Z)
+  --filter-event-timestamp-eq: string # Event timestamp: equal (e.g. 2019-03-29T11:10:00Z)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[call_leg_id]" $filtercall_leg_id "scalar") (serialize-qp "filter[call_session_id]" $filtercall_session_id "scalar") (serialize-qp "filter[status]" $filterstatus "scalar") (serialize-qp "filter[type]" $filtertype "scalar") (serialize-qp "filter[event_timestamp][gt]" $filterevent_timestampgt "scalar") (serialize-qp "filter[event_timestamp][gte]" $filterevent_timestampgte "scalar") (serialize-qp "filter[event_timestamp][lt]" $filterevent_timestamplt "scalar") (serialize-qp "filter[event_timestamp][lte]" $filterevent_timestamplte "scalar") (serialize-qp "filter[event_timestamp][eq]" $filterevent_timestampeq "scalar") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[call_leg_id]" $filter_call_leg_id "scalar") (serialize-qp "filter[call_session_id]" $filter_call_session_id "scalar") (serialize-qp "filter[status]" $filter_status "scalar") (serialize-qp "filter[type]" $filter_type "scalar") (serialize-qp "filter[event_timestamp][gt]" $filter_event_timestamp_gt "scalar") (serialize-qp "filter[event_timestamp][gte]" $filter_event_timestamp_gte "scalar") (serialize-qp "filter[event_timestamp][lt]" $filter_event_timestamp_lt "scalar") (serialize-qp "filter[event_timestamp][lte]" $filter_event_timestamp_lte "scalar") (serialize-qp "filter[event_timestamp][eq]" $filter_event_timestamp_eq "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/call_events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1065,7 +1065,7 @@ export def "calls callDial" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls")
-  let body = {answering_machine_detection: $answering_machine_detection, answering_machine_detection_config: $answering_machine_detection_config, audio_url: $audio_url, billing_group_id: $billing_group_id, client_state: $client_state, command_id: $command_id, connection_id: $connection_id, custom_headers: $custom_headers, from: $body_from, from_display_name: $from_display_name, link_to: $link_to, media_name: $media_name, sip_auth_password: $sip_auth_password, sip_auth_username: $sip_auth_username, time_limit_secs: $time_limit_secs, timeout_secs: $timeout_secs, to: $body_to, webhook_url: $webhook_url, webhook_url_method: $webhook_url_method} | compact
+  let body = {"answering_machine_detection": $answering_machine_detection, "answering_machine_detection_config": $answering_machine_detection_config, "audio_url": $audio_url, "billing_group_id": $billing_group_id, "client_state": $client_state, "command_id": $command_id, "connection_id": $connection_id, "custom_headers": $custom_headers, "from": $body_from, "from_display_name": $from_display_name, "link_to": $link_to, "media_name": $media_name, "sip_auth_password": $sip_auth_password, "sip_auth_username": $sip_auth_username, "time_limit_secs": $time_limit_secs, "timeout_secs": $timeout_secs, "to": $body_to, "webhook_url": $webhook_url, "webhook_url_method": $webhook_url_method} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1076,7 +1076,7 @@ export def "calls callDial" [
 #
 # GET /calls/{call_control_id}
 # operationId: retrieveCallStatus
-export def "calls retrieveCallStatus" [
+export def "calls retrieve-call-status" [
   call_control_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1089,7 +1089,7 @@ export def "calls retrieveCallStatus" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)")
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1118,8 +1118,8 @@ export def "calls-actions-answer callAnswer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/answer")
-  let body = {billing_group_id: $billing_group_id, client_state: $client_state, command_id: $command_id, webhook_url: $webhook_url, webhook_url_method: $webhook_url_method} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/answer"))
+  let body = {"billing_group_id": $billing_group_id, "client_state": $client_state, "command_id": $command_id, "webhook_url": $webhook_url, "webhook_url_method": $webhook_url_method} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1149,8 +1149,8 @@ export def "calls-actions-bridge callBridge" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/bridge")
-  let body = {call_control_id: $body_call_control_id, client_state: $client_state, command_id: $command_id, park_after_unbridge: $park_after_unbridge, queue: $queue} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/bridge"))
+  let body = {"call_control_id": $body_call_control_id, "client_state": $client_state, "command_id": $command_id, "park_after_unbridge": $park_after_unbridge, "queue": $queue} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1180,8 +1180,8 @@ export def "calls-actions-enqueue callEnqueue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/enqueue")
-  let body = {client_state: $client_state, command_id: $command_id, max_size: $max_size, max_wait_time_secs: $max_wait_time_secs, queue_name: $queue_name} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/enqueue"))
+  let body = {"client_state": $client_state, "command_id": $command_id, "max_size": $max_size, "max_wait_time_secs": $max_wait_time_secs, "queue_name": $queue_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1212,8 +1212,8 @@ export def "calls-actions-fork-start callForkStart" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/fork_start")
-  let body = {client_state: $client_state, command_id: $command_id, rx: $rx, stream_type: $stream_type, target: $target, tx: $tx} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/fork_start"))
+  let body = {"client_state": $client_state, "command_id": $command_id, "rx": $rx, "stream_type": $stream_type, "target": $target, "tx": $tx} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1240,8 +1240,8 @@ export def "calls-actions-fork-stop callForkStop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/fork_stop")
-  let body = {client_state: $client_state, command_id: $command_id} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/fork_stop"))
+  let body = {"client_state": $client_state, "command_id": $command_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1268,8 +1268,8 @@ export def "calls-actions-gather-stop callGatherStop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/gather_stop")
-  let body = {client_state: $client_state, command_id: $command_id} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/gather_stop"))
+  let body = {"client_state": $client_state, "command_id": $command_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1307,8 +1307,8 @@ export def "calls-actions-gather-using-audio callGatherUsingAudio" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/gather_using_audio")
-  let body = {audio_url: $audio_url, client_state: $client_state, command_id: $command_id, inter_digit_timeout_millis: $inter_digit_timeout_millis, invalid_audio_url: $invalid_audio_url, invalid_media_name: $invalid_media_name, maximum_digits: $maximum_digits, maximum_tries: $maximum_tries, media_name: $media_name, minimum_digits: $minimum_digits, terminating_digit: $terminating_digit, timeout_millis: $timeout_millis, valid_digits: $valid_digits} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/gather_using_audio"))
+  let body = {"audio_url": $audio_url, "client_state": $client_state, "command_id": $command_id, "inter_digit_timeout_millis": $inter_digit_timeout_millis, "invalid_audio_url": $invalid_audio_url, "invalid_media_name": $invalid_media_name, "maximum_digits": $maximum_digits, "maximum_tries": $maximum_tries, "media_name": $media_name, "minimum_digits": $minimum_digits, "terminating_digit": $terminating_digit, "timeout_millis": $timeout_millis, "valid_digits": $valid_digits} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1348,8 +1348,8 @@ export def "calls-actions-gather-using-speak callGatherUsingSpeak" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/gather_using_speak")
-  let body = {client_state: $client_state, command_id: $command_id, inter_digit_timeout_millis: $inter_digit_timeout_millis, invalid_payload: $invalid_payload, language: $language, maximum_digits: $maximum_digits, maximum_tries: $maximum_tries, minimum_digits: $minimum_digits, payload: $payload, payload_type: $payload_type, service_level: $service_level, terminating_digit: $terminating_digit, timeout_millis: $timeout_millis, valid_digits: $valid_digits, voice: $voice} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/gather_using_speak"))
+  let body = {"client_state": $client_state, "command_id": $command_id, "inter_digit_timeout_millis": $inter_digit_timeout_millis, "invalid_payload": $invalid_payload, "language": $language, "maximum_digits": $maximum_digits, "maximum_tries": $maximum_tries, "minimum_digits": $minimum_digits, "payload": $payload, "payload_type": $payload_type, "service_level": $service_level, "terminating_digit": $terminating_digit, "timeout_millis": $timeout_millis, "valid_digits": $valid_digits, "voice": $voice} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1376,8 +1376,8 @@ export def "calls-actions-hangup callHangup" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/hangup")
-  let body = {client_state: $client_state, command_id: $command_id} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/hangup"))
+  let body = {"client_state": $client_state, "command_id": $command_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1404,8 +1404,8 @@ export def "calls-actions-leave-queue leaveQueue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/leave_queue")
-  let body = {client_state: $client_state, command_id: $command_id} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/leave_queue"))
+  let body = {"client_state": $client_state, "command_id": $command_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1438,8 +1438,8 @@ export def "calls-actions-playback-start callPlaybackStart" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/playback_start")
-  let body = {audio_url: $audio_url, client_state: $client_state, command_id: $command_id, loop: $body_loop, media_name: $media_name, overlay: $body_overlay, stop: $stop, target_legs: $target_legs} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/playback_start"))
+  let body = {"audio_url": $audio_url, "client_state": $client_state, "command_id": $command_id, "loop": $body_loop, "media_name": $media_name, "overlay": $body_overlay, "stop": $stop, "target_legs": $target_legs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1467,8 +1467,8 @@ export def "calls-actions-playback-stop callPlaybackStop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/playback_stop")
-  let body = {client_state: $client_state, command_id: $command_id, stop: $stop} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/playback_stop"))
+  let body = {"client_state": $client_state, "command_id": $command_id, "stop": $stop} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1495,8 +1495,8 @@ export def "calls-actions-record-pause callRecordPause" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/record_pause")
-  let body = {client_state: $client_state, command_id: $command_id} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/record_pause"))
+  let body = {"client_state": $client_state, "command_id": $command_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1523,8 +1523,8 @@ export def "calls-actions-record-resume callRecordResume" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/record_resume")
-  let body = {client_state: $client_state, command_id: $command_id} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/record_resume"))
+  let body = {"client_state": $client_state, "command_id": $command_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1555,8 +1555,8 @@ export def "calls-actions-record-start callRecordStart" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/record_start")
-  let body = {channels: $channels, client_state: $client_state, command_id: $command_id, format: $format, max_length: $max_length, play_beep: $play_beep} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/record_start"))
+  let body = {"channels": $channels, "client_state": $client_state, "command_id": $command_id, "format": $format, "max_length": $max_length, "play_beep": $play_beep} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1583,8 +1583,8 @@ export def "calls-actions-record-stop callRecordStop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/record_stop")
-  let body = {client_state: $client_state, command_id: $command_id} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/record_stop"))
+  let body = {"client_state": $client_state, "command_id": $command_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1616,8 +1616,8 @@ export def "calls-actions-refer callRefer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/refer")
-  let body = {client_state: $client_state, command_id: $command_id, custom_headers: $custom_headers, sip_address: $sip_address, sip_auth_password: $sip_auth_password, sip_auth_username: $sip_auth_username} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/refer"))
+  let body = {"client_state": $client_state, "command_id": $command_id, "custom_headers": $custom_headers, "sip_address": $sip_address, "sip_auth_password": $sip_auth_password, "sip_auth_username": $sip_auth_username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1645,8 +1645,8 @@ export def "calls-actions-reject callReject" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/reject")
-  let body = {cause: $cause, client_state: $client_state, command_id: $command_id} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/reject"))
+  let body = {"cause": $cause, "client_state": $client_state, "command_id": $command_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1675,8 +1675,8 @@ export def "calls-actions-send-dtmf callSendDTMF" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/send_dtmf")
-  let body = {client_state: $client_state, command_id: $command_id, digits: $digits, duration_millis: $duration_millis} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/send_dtmf"))
+  let body = {"client_state": $client_state, "command_id": $command_id, "digits": $digits, "duration_millis": $duration_millis} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1709,8 +1709,8 @@ export def "calls-actions-speak callSpeak" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/speak")
-  let body = {client_state: $client_state, command_id: $command_id, language: $language, payload: $payload, payload_type: $payload_type, service_level: $service_level, stop: $stop, voice: $voice} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/speak"))
+  let body = {"client_state": $client_state, "command_id": $command_id, "language": $language, "payload": $payload, "payload_type": $payload_type, "service_level": $service_level, "stop": $stop, "voice": $voice} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1738,8 +1738,8 @@ export def "calls-actions-transcription-start callTranscriptionStart" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/transcription_start")
-  let body = {client_state: $client_state, command_id: $command_id, language: $language} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/transcription_start"))
+  let body = {"client_state": $client_state, "command_id": $command_id, "language": $language} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1766,8 +1766,8 @@ export def "calls-actions-transcription-stop callTranscriptionStop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/transcription_stop")
-  let body = {client_state: $client_state, command_id: $command_id} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/transcription_stop"))
+  let body = {"client_state": $client_state, "command_id": $command_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1811,8 +1811,8 @@ export def "calls-actions-transfer callTransfer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calls/($call_control_id)/actions/transfer")
-  let body = {answering_machine_detection: $answering_machine_detection, answering_machine_detection_config: $answering_machine_detection_config, audio_url: $audio_url, client_state: $client_state, command_id: $command_id, custom_headers: $custom_headers, from: $body_from, from_display_name: $from_display_name, media_name: $media_name, sip_auth_password: $sip_auth_password, sip_auth_username: $sip_auth_username, target_leg_client_state: $target_leg_client_state, time_limit_secs: $time_limit_secs, timeout_secs: $timeout_secs, to: $body_to, webhook_url: $webhook_url, webhook_url_method: $webhook_url_method} | compact
+  let full_url = (build-url $base ({call_control_id: $call_control_id} | format pattern "/calls/{call_control_id}/actions/transfer"))
+  let body = {"answering_machine_detection": $answering_machine_detection, "answering_machine_detection_config": $answering_machine_detection_config, "audio_url": $audio_url, "client_state": $client_state, "command_id": $command_id, "custom_headers": $custom_headers, "from": $body_from, "from_display_name": $from_display_name, "media_name": $media_name, "sip_auth_password": $sip_auth_password, "sip_auth_username": $sip_auth_username, "target_leg_client_state": $target_leg_client_state, "time_limit_secs": $time_limit_secs, "timeout_secs": $timeout_secs, "to": $body_to, "webhook_url": $webhook_url, "webhook_url_method": $webhook_url_method} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1823,7 +1823,7 @@ export def "calls-actions-transfer callTransfer" [
 #
 # GET /comments
 # operationId: listComments
-export def "comments listComments" [
+export def "comments list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1832,12 +1832,12 @@ export def "comments listComments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filtercomment-record-type: string # Record type that the comment relates to i.e number_order, sub_number_order or number_order_phone_number (e.g. sub_number_order)
-  --filtercomment-record-id: string # ID of the record the comments relate to (e.g. 8ffb3622-7c6b-4ccc-b65f-7a3dc0099576)
+  --filter-comment-record-type: string # Record type that the comment relates to i.e number_order, sub_number_order or number_order_phone_number (e.g. sub_number_order)
+  --filter-comment-record-id: string # ID of the record the comments relate to (e.g. 8ffb3622-7c6b-4ccc-b65f-7a3dc0099576)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[comment_record_type]" $filtercomment_record_type "scalar") (serialize-qp "filter[comment_record_id]" $filtercomment_record_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[comment_record_type]" $filter_comment_record_type "scalar") (serialize-qp "filter[comment_record_id]" $filter_comment_record_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/comments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1848,7 +1848,7 @@ export def "comments listComments" [
 #
 # POST /comments
 # operationId: createComment
-export def "comments createComment" [
+export def "comments create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1865,7 +1865,7 @@ export def "comments createComment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/comments")
-  let body = {body: $body_body, comment_record_id: $comment_record_id, comment_record_type: $comment_record_type} | compact
+  let body = {"body": $body_body, "comment_record_id": $comment_record_id, "comment_record_type": $comment_record_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1876,7 +1876,7 @@ export def "comments createComment" [
 #
 # GET /comments/{id}
 # operationId: retrieveComment
-export def "comments retrieveComment" [
+export def "comments retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1889,7 +1889,7 @@ export def "comments retrieveComment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/comments/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/comments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1912,7 +1912,7 @@ export def "comments-read markCommentRead" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/comments/($id)/read")
+  let full_url = (build-url $base ({id: $id} | format pattern "/comments/{id}/read"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1922,7 +1922,7 @@ export def "comments-read markCommentRead" [
 #
 # GET /conferences
 # operationId: listConferences
-export def "conferences listConferences" [
+export def "conferences list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1931,13 +1931,13 @@ export def "conferences listConferences" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filtername: string # If present, conferences will be filtered to those with a matching `name` attribute. Matching is case-sensitive
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --filter-name: string # If present, conferences will be filtered to those with a matching `name` attribute. Matching is case-sensitive
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[name]" $filtername "scalar") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/conferences" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1948,7 +1948,7 @@ export def "conferences listConferences" [
 #
 # POST /conferences
 # operationId: createConference
-export def "conferences createConference" [
+export def "conferences create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1972,7 +1972,7 @@ export def "conferences createConference" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conferences")
-  let body = {beep_enabled: $beep_enabled, call_control_id: $call_control_id, client_state: $client_state, comfort_noise: $comfort_noise, command_id: $command_id, duration_minutes: $duration_minutes, hold_audio_url: $hold_audio_url, hold_media_name: $hold_media_name, name: $name, start_conference_on_create: $start_conference_on_create} | compact
+  let body = {"beep_enabled": $beep_enabled, "call_control_id": $call_control_id, "client_state": $client_state, "comfort_noise": $comfort_noise, "command_id": $command_id, "duration_minutes": $duration_minutes, "hold_audio_url": $hold_audio_url, "hold_media_name": $hold_media_name, "name": $name, "start_conference_on_create": $start_conference_on_create} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1983,7 +1983,7 @@ export def "conferences createConference" [
 #
 # GET /conferences/{conference_id}/participants
 # operationId: listConferenceParticipants
-export def "conferences-participants listConferenceParticipants" [
+export def "conferences-participants list" [
   conference_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1993,16 +1993,16 @@ export def "conferences-participants listConferenceParticipants" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filtermuted: oneof<nothing, bool> # If present, participants will be filtered to those who are/are not muted
-  --filteron-hold: oneof<nothing, bool> # If present, participants will be filtered to those who are/are not put on hold
-  --filterwhispering: oneof<nothing, bool> # If present, participants will be filtered to those who are whispering or are not
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --filter-muted: oneof<nothing, bool> # If present, participants will be filtered to those who are/are not muted
+  --filter-on-hold: oneof<nothing, bool> # If present, participants will be filtered to those who are/are not put on hold
+  --filter-whispering: oneof<nothing, bool> # If present, participants will be filtered to those who are whispering or are not
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[muted]" $filtermuted "scalar") (serialize-qp "filter[on_hold]" $filteron_hold "scalar") (serialize-qp "filter[whispering]" $filterwhispering "scalar") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/conferences/($conference_id)/participants" $qp)
+  let qp = [(serialize-qp "filter[muted]" $filter_muted "scalar") (serialize-qp "filter[on_hold]" $filter_on_hold "scalar") (serialize-qp "filter[whispering]" $filter_whispering "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({conference_id: $conference_id} | format pattern "/conferences/{conference_id}/participants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2012,7 +2012,7 @@ export def "conferences-participants listConferenceParticipants" [
 #
 # GET /conferences/{id}
 # operationId: retrieveConference
-export def "conferences retrieveConference" [
+export def "conferences retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2025,7 +2025,7 @@ export def "conferences retrieveConference" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conferences/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/conferences/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2061,8 +2061,8 @@ export def "conferences-actions-dial-participant conferenceDialParticipantIn" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conferences/($id)/actions/dial_participant")
-  let body = {call_control_id: $call_control_id, client_state: $client_state, command_id: $command_id, from: $body_from, hold: $hold, hold_audio_url: $hold_audio_url, hold_media_name: $hold_media_name, mute: $mute, start_conference_on_enter: $start_conference_on_enter, supervisor_role: $supervisor_role, to: $body_to, whisper_call_control_ids: $whisper_call_control_ids} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/conferences/{id}/actions/dial_participant"))
+  let body = {"call_control_id": $call_control_id, "client_state": $client_state, "command_id": $command_id, "from": $body_from, "hold": $hold, "hold_audio_url": $hold_audio_url, "hold_media_name": $hold_media_name, "mute": $mute, "start_conference_on_enter": $start_conference_on_enter, "supervisor_role": $supervisor_role, "to": $body_to, "whisper_call_control_ids": $whisper_call_control_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2090,8 +2090,8 @@ export def "conferences-actions-hold conferenceHoldParticipants" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conferences/($id)/actions/hold")
-  let body = {audio_url: $audio_url, call_control_ids: $call_control_ids, media_name: $media_name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/conferences/{id}/actions/hold"))
+  let body = {"audio_url": $audio_url, "call_control_ids": $call_control_ids, "media_name": $media_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2129,8 +2129,8 @@ export def "conferences-actions-join conferenceJoin" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conferences/($id)/actions/join")
-  let body = {beep_enabled: $beep_enabled, call_control_id: $call_control_id, client_state: $client_state, command_id: $command_id, end_conference_on_exit: $end_conference_on_exit, hold: $hold, hold_audio_url: $hold_audio_url, hold_media_name: $hold_media_name, mute: $mute, soft_end_conference_on_exit: $soft_end_conference_on_exit, start_conference_on_enter: $start_conference_on_enter, supervisor_role: $supervisor_role, whisper_call_control_ids: $whisper_call_control_ids} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/conferences/{id}/actions/join"))
+  let body = {"beep_enabled": $beep_enabled, "call_control_id": $call_control_id, "client_state": $client_state, "command_id": $command_id, "end_conference_on_exit": $end_conference_on_exit, "hold": $hold, "hold_audio_url": $hold_audio_url, "hold_media_name": $hold_media_name, "mute": $mute, "soft_end_conference_on_exit": $soft_end_conference_on_exit, "start_conference_on_enter": $start_conference_on_enter, "supervisor_role": $supervisor_role, "whisper_call_control_ids": $whisper_call_control_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2158,8 +2158,8 @@ export def "conferences-actions-leave conferenceLeave" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conferences/($id)/actions/leave")
-  let body = {beep_enabled: $beep_enabled, call_control_id: $call_control_id, command_id: $command_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/conferences/{id}/actions/leave"))
+  let body = {"beep_enabled": $beep_enabled, "call_control_id": $call_control_id, "command_id": $command_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2185,8 +2185,8 @@ export def "conferences-actions-mute conferenceMuteParticipants" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conferences/($id)/actions/mute")
-  let body = {call_control_ids: $call_control_ids} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/conferences/{id}/actions/mute"))
+  let body = {"call_control_ids": $call_control_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2215,8 +2215,8 @@ export def "conferences-actions-play conferencePlayAudio" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conferences/($id)/actions/play")
-  let body = {audio_url: $audio_url, call_control_ids: $call_control_ids, loop: $body_loop, media_name: $media_name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/conferences/{id}/actions/play"))
+  let body = {"audio_url": $audio_url, "call_control_ids": $call_control_ids, "loop": $body_loop, "media_name": $media_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2247,8 +2247,8 @@ export def "conferences-actions-record-start conferenceStartRecording" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conferences/($id)/actions/record_start")
-  let body = {channels: $channels, client_state: $client_state, command_id: $command_id, format: $format, max_length: $max_length, play_beep: $play_beep} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/conferences/{id}/actions/record_start"))
+  let body = {"channels": $channels, "client_state": $client_state, "command_id": $command_id, "format": $format, "max_length": $max_length, "play_beep": $play_beep} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2275,8 +2275,8 @@ export def "conferences-actions-record-stop conferenceStopRecording" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conferences/($id)/actions/record_stop")
-  let body = {client_state: $client_state, command_id: $command_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/conferences/{id}/actions/record_stop"))
+  let body = {"client_state": $client_state, "command_id": $command_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2307,8 +2307,8 @@ export def "conferences-actions-speak conferenceSpeakText" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conferences/($id)/actions/speak")
-  let body = {call_control_ids: $call_control_ids, command_id: $command_id, language: $language, payload: $payload, payload_type: $payload_type, voice: $voice} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/conferences/{id}/actions/speak"))
+  let body = {"call_control_ids": $call_control_ids, "command_id": $command_id, "language": $language, "payload": $payload, "payload_type": $payload_type, "voice": $voice} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2334,8 +2334,8 @@ export def "conferences-actions-stop conferenceStopAudio" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conferences/($id)/actions/stop")
-  let body = {call_control_ids: $call_control_ids} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/conferences/{id}/actions/stop"))
+  let body = {"call_control_ids": $call_control_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2361,8 +2361,8 @@ export def "conferences-actions-unhold conferenceUnholdParticipants" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conferences/($id)/actions/unhold")
-  let body = {call_control_ids: $call_control_ids} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/conferences/{id}/actions/unhold"))
+  let body = {"call_control_ids": $call_control_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2388,8 +2388,8 @@ export def "conferences-actions-unmute conferenceUnmuteParticipants" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conferences/($id)/actions/unmute")
-  let body = {call_control_ids: $call_control_ids} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/conferences/{id}/actions/unmute"))
+  let body = {"call_control_ids": $call_control_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2418,8 +2418,8 @@ export def "conferences-actions-update conferenceUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conferences/($id)/actions/update")
-  let body = {call_control_id: $call_control_id, command_id: $command_id, supervisor_role: $supervisor_role, whisper_call_control_ids: $whisper_call_control_ids} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/conferences/{id}/actions/update"))
+  let body = {"call_control_id": $call_control_id, "command_id": $command_id, "supervisor_role": $supervisor_role, "whisper_call_control_ids": $whisper_call_control_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2430,7 +2430,7 @@ export def "conferences-actions-update conferenceUpdate" [
 #
 # GET /connections
 # operationId: listConnections
-export def "connections listConnections" [
+export def "connections list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2439,15 +2439,15 @@ export def "connections listConnections" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filterconnection-namecontains: string # If present, connections with <code>connection_name</code> containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters.
-  --filteroutbound-voice-profile-id: string # Identifies the associated outbound voice profile. (format: int64, e.g. 1293384261075731499)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-connection-name-contains: string # If present, connections with <code>connection_name</code> containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters.
+  --filter-outbound-voice-profile-id: string # Identifies the associated outbound voice profile. (format: int64, e.g. 1293384261075731499)
   --qp-sort: string@sort-completer-2 # Specifies the sort order for results. By default sorting direction is ascending. To have the results sorted in descending order add the <code> -</code> prefix.<br/><br/> That is: <ul>   <li>     <code>connection_name</code>: sorts the result by the     <code>connection_name</code> field in ascending order.   </li>    <li>     <code>-connection_name</code>: sorts the result by the     <code>connection_name</code> field in descending order.   </li> </ul> <br/> If not given, results are sorted by <code>created_at</code> in descending order. (default: created_at, e.g. connection_name)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[connection_name][contains]" $filterconnection_namecontains "scalar") (serialize-qp "filter[outbound_voice_profile_id]" $filteroutbound_voice_profile_id "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[connection_name][contains]" $filter_connection_name_contains "scalar") (serialize-qp "filter[outbound_voice_profile_id]" $filter_outbound_voice_profile_id "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/connections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2458,7 +2458,7 @@ export def "connections listConnections" [
 #
 # GET /connections/{id}
 # operationId: retrieveConnection
-export def "connections retrieveConnection" [
+export def "connections retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2471,7 +2471,7 @@ export def "connections retrieveConnection" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/connections/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/connections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2481,7 +2481,7 @@ export def "connections retrieveConnection" [
 #
 # GET /credential_connections
 # operationId: listCredentialConnections
-export def "credential-connections listCredentialConnections" [
+export def "credential-connections list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2490,15 +2490,15 @@ export def "credential-connections listCredentialConnections" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filterconnection-namecontains: string # If present, connections with <code>connection_name</code> containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters.
-  --filteroutboundoutbound-voice-profile-id: string # Identifies the associated outbound voice profile. (format: int64, e.g. 1293384261075731499)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-connection-name-contains: string # If present, connections with <code>connection_name</code> containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters.
+  --filter-outbound-outbound-voice-profile-id: string # Identifies the associated outbound voice profile. (format: int64, e.g. 1293384261075731499)
   --qp-sort: string@sort-completer-2 # Specifies the sort order for results. By default sorting direction is ascending. To have the results sorted in descending order add the <code> -</code> prefix.<br/><br/> That is: <ul>   <li>     <code>connection_name</code>: sorts the result by the     <code>connection_name</code> field in ascending order.   </li>    <li>     <code>-connection_name</code>: sorts the result by the     <code>connection_name</code> field in descending order.   </li> </ul> <br/> If not given, results are sorted by <code>created_at</code> in descending order. (default: created_at, e.g. connection_name)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[connection_name][contains]" $filterconnection_namecontains "scalar") (serialize-qp "filter[outbound.outbound_voice_profile_id]" $filteroutboundoutbound_voice_profile_id "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[connection_name][contains]" $filter_connection_name_contains "scalar") (serialize-qp "filter[outbound.outbound_voice_profile_id]" $filter_outbound_outbound_voice_profile_id "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/credential_connections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2512,7 +2512,7 @@ export def "credential-connections listCredentialConnections" [
 # --inbound shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", channel_limit?: int, codecs?: list, dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, privacy_zone_enabled?: bool, sip_compact_headers_enabled?: bool, timeout_1xx_secs?: int, timeout_2xx_secs?: string}
 # --outbound shape: {ani_override?: string, ani_override_type?: "always"|"normal"|"emergency", call_parking_enabled?: bool, channel_limit?: int, generate_ringback_tone?: bool, instant_ringback_enabled?: bool, localization?: string, outbound_voice_profile_id?: string, t38_reinvite_source?: "telnyx"|"customer"|"disabled"|"passthru"|"caller-passthru"|"callee-passthru"}
 # --rtcp_settings shape: {capture_enabled?: bool, port?: "rtcp-mux"|"rtp+1", report_frequency_secs?: int}
-export def "credential-connections createCredentialConnection" [
+export def "credential-connections create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2544,7 +2544,7 @@ export def "credential-connections createCredentialConnection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credential_connections")
-  let body = {active: $active, anchorsite_override: $anchorsite_override, connection_name: $connection_name, default_on_hold_comfort_noise_enabled: $default_on_hold_comfort_noise_enabled, dtmf_type: $dtmf_type, encode_contact_header_enabled: $encode_contact_header_enabled, encrypted_media: $encrypted_media, inbound: $inbound, onnet_t38_passthrough_enabled: $onnet_t38_passthrough_enabled, outbound: $outbound, password: $password, rtcp_settings: $rtcp_settings, sip_uri_calling_preference: $sip_uri_calling_preference, user_name: $user_name, webhook_api_version: $webhook_api_version, webhook_event_failover_url: $webhook_event_failover_url, webhook_event_url: $webhook_event_url, webhook_timeout_secs: $webhook_timeout_secs} | compact
+  let body = {"active": $active, "anchorsite_override": $anchorsite_override, "connection_name": $connection_name, "default_on_hold_comfort_noise_enabled": $default_on_hold_comfort_noise_enabled, "dtmf_type": $dtmf_type, "encode_contact_header_enabled": $encode_contact_header_enabled, "encrypted_media": $encrypted_media, "inbound": $inbound, "onnet_t38_passthrough_enabled": $onnet_t38_passthrough_enabled, "outbound": $outbound, "password": $password, "rtcp_settings": $rtcp_settings, "sip_uri_calling_preference": $sip_uri_calling_preference, "user_name": $user_name, "webhook_api_version": $webhook_api_version, "webhook_event_failover_url": $webhook_event_failover_url, "webhook_event_url": $webhook_event_url, "webhook_timeout_secs": $webhook_timeout_secs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2568,7 +2568,7 @@ export def "credential-connections delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/credential_connections/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/credential_connections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2578,7 +2578,7 @@ export def "credential-connections delete" [
 #
 # GET /credential_connections/{id}
 # operationId: retrieveCredentialConnection
-export def "credential-connections retrieveCredentialConnection" [
+export def "credential-connections retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2591,7 +2591,7 @@ export def "credential-connections retrieveCredentialConnection" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/credential_connections/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/credential_connections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2604,7 +2604,7 @@ export def "credential-connections retrieveCredentialConnection" [
 # --inbound shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", channel_limit?: int, codecs?: list, dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, privacy_zone_enabled?: bool, sip_compact_headers_enabled?: bool, timeout_1xx_secs?: int, timeout_2xx_secs?: string}
 # --outbound shape: {ani_override?: string, ani_override_type?: "always"|"normal"|"emergency", call_parking_enabled?: bool, channel_limit?: int, generate_ringback_tone?: bool, instant_ringback_enabled?: bool, localization?: string, outbound_voice_profile_id?: string, t38_reinvite_source?: "telnyx"|"customer"|"disabled"|"passthru"|"caller-passthru"|"callee-passthru"}
 # --rtcp_settings shape: {capture_enabled?: bool, port?: "rtcp-mux"|"rtp+1", report_frequency_secs?: int}
-export def "credential-connections updateCredentialConnection" [
+export def "credential-connections update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2636,8 +2636,8 @@ export def "credential-connections updateCredentialConnection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/credential_connections/($id)")
-  let body = {active: $active, anchorsite_override: $anchorsite_override, connection_name: $connection_name, default_on_hold_comfort_noise_enabled: $default_on_hold_comfort_noise_enabled, dtmf_type: $dtmf_type, encode_contact_header_enabled: $encode_contact_header_enabled, encrypted_media: $encrypted_media, inbound: $inbound, onnet_t38_passthrough_enabled: $onnet_t38_passthrough_enabled, outbound: $outbound, password: $password, rtcp_settings: $rtcp_settings, sip_uri_calling_preference: $sip_uri_calling_preference, user_name: $user_name, webhook_api_version: $webhook_api_version, webhook_event_failover_url: $webhook_event_failover_url, webhook_event_url: $webhook_event_url, webhook_timeout_secs: $webhook_timeout_secs} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/credential_connections/{id}"))
+  let body = {"active": $active, "anchorsite_override": $anchorsite_override, "connection_name": $connection_name, "default_on_hold_comfort_noise_enabled": $default_on_hold_comfort_noise_enabled, "dtmf_type": $dtmf_type, "encode_contact_header_enabled": $encode_contact_header_enabled, "encrypted_media": $encrypted_media, "inbound": $inbound, "onnet_t38_passthrough_enabled": $onnet_t38_passthrough_enabled, "outbound": $outbound, "password": $password, "rtcp_settings": $rtcp_settings, "sip_uri_calling_preference": $sip_uri_calling_preference, "user_name": $user_name, "webhook_api_version": $webhook_api_version, "webhook_event_failover_url": $webhook_event_failover_url, "webhook_event_url": $webhook_event_url, "webhook_timeout_secs": $webhook_timeout_secs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2648,7 +2648,7 @@ export def "credential-connections updateCredentialConnection" [
 #
 # GET /detail_records
 # operationId: DetailRecordsSearch
-export def "detail-records DetailRecordsSearch" [
+export def "detail-records list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2657,16 +2657,16 @@ export def "detail-records DetailRecordsSearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterrecord-type: string # Filter by the given record type
-  --filterdate-range: string # Filter by the given user-friendly date range
+  --filter-record-type: string # Filter by the given record type
+  --filter-date-range: string # Filter by the given user-friendly date range
   --filter: record # Filter records
-  --pagenumber: int # Page number (format: int32, default: 1)
-  --pagesize: int # Page size (format: int32, default: 20)
+  --page-number: int # Page number (format: int32, default: 1)
+  --page-size: int # Page size (format: int32, default: 20)
   --qp-sort: list # Specifies the sort order for results
 ]: nothing -> record<data: list<record>, meta: record<page_number: int, page_size: int, total_pages: int, total_results: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[record_type]" $filterrecord_type "scalar") (serialize-qp "filter[date_range]" $filterdate_range "scalar") (serialize-qp "filter" $filter "multi") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "sort" $qp_sort "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[record_type]" $filter_record_type "scalar") (serialize-qp "filter[date_range]" $filter_date_range "scalar") (serialize-qp "filter" $filter "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "sort" $qp_sort "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/detail_records" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2677,7 +2677,7 @@ export def "detail-records DetailRecordsSearch" [
 #
 # GET /document_links
 # operationId: listDocumentLinks
-export def "document-links listDocumentLinks" [
+export def "document-links list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2686,15 +2686,15 @@ export def "document-links listDocumentLinks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filterdocument-id: string # Identifies the associated document to filter on. (format: uuid, e.g. 6a09cdc3-8948-47f0-aa62-74ac943d6c58)
-  --filterlinked-record-type: string # The `linked_record_type` of the document to filter on. (e.g. porting_order)
-  --filterlinked-resource-id: string # The `linked_resource_id` of the document to filter on. (format: uuid, e.g. 6a09cdc3-8948-47f0-aa62-74ac943d6c58)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-document-id: string # Identifies the associated document to filter on. (format: uuid, e.g. 6a09cdc3-8948-47f0-aa62-74ac943d6c58)
+  --filter-linked-record-type: string # The `linked_record_type` of the document to filter on. (e.g. porting_order)
+  --filter-linked-resource-id: string # The `linked_resource_id` of the document to filter on. (format: uuid, e.g. 6a09cdc3-8948-47f0-aa62-74ac943d6c58)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[document_id]" $filterdocument_id "scalar") (serialize-qp "filter[linked_record_type]" $filterlinked_record_type "scalar") (serialize-qp "filter[linked_resource_id]" $filterlinked_resource_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[document_id]" $filter_document_id "scalar") (serialize-qp "filter[linked_record_type]" $filter_linked_record_type "scalar") (serialize-qp "filter[linked_resource_id]" $filter_linked_resource_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/document_links" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2705,7 +2705,7 @@ export def "document-links listDocumentLinks" [
 #
 # GET /documents
 # operationId: listDocuments
-export def "documents listDocuments" [
+export def "documents list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2714,12 +2714,12 @@ export def "documents listDocuments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/documents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2730,7 +2730,7 @@ export def "documents listDocuments" [
 #
 # POST /documents
 # operationId: createDocument
-export def "documents createDocument" [
+export def "documents create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2746,7 +2746,7 @@ export def "documents createDocument" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/documents")
-  let body = {url: $body_url, file: $file} | compact
+  let body = {"url": $body_url, "file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2770,7 +2770,7 @@ export def "documents delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2780,7 +2780,7 @@ export def "documents delete" [
 #
 # GET /documents/{id}
 # operationId: retrieveDocument
-export def "documents retrieveDocument" [
+export def "documents retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2793,7 +2793,7 @@ export def "documents retrieveDocument" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2803,7 +2803,7 @@ export def "documents retrieveDocument" [
 #
 # PATCH /documents/{id}
 # operationId: updateDocument
-export def "documents updateDocument" [
+export def "documents update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2818,8 +2818,8 @@ export def "documents updateDocument" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)")
-  let body = {filename: $filename} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}"))
+  let body = {"filename": $filename} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2830,7 +2830,7 @@ export def "documents updateDocument" [
 #
 # GET /documents/{id}/download
 # operationId: downloadDocServiceDocument
-export def "documents-download downloadDocServiceDocument" [
+export def "documents-download download-doc-service" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2843,7 +2843,7 @@ export def "documents-download downloadDocServiceDocument" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)/download")
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}/download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2853,7 +2853,7 @@ export def "documents-download downloadDocServiceDocument" [
 #
 # GET /fax_applications
 # operationId: listFaxApplications
-export def "fax-applications listFaxApplications" [
+export def "fax-applications list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2862,15 +2862,15 @@ export def "fax-applications listFaxApplications" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filterapplication-namecontains: string # If present, applications with <code>application_name</code> containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters. (default: null)
-  --filteroutbound-voice-profile-id: string # Identifies the associated outbound voice profile. (format: int64, e.g. 1293384261075731499)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-application-name-contains: string # If present, applications with <code>application_name</code> containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters. (default: null)
+  --filter-outbound-voice-profile-id: string # Identifies the associated outbound voice profile. (format: int64, e.g. 1293384261075731499)
   --qp-sort: string@sort-completer-2 # Specifies the sort order for results. By default sorting direction is ascending. To have the results sorted in descending order add the <code> -</code> prefix.<br/><br/> That is: <ul>   <li>     <code>connection_name</code>: sorts the result by the     <code>connection_name</code> field in ascending order.   </li>    <li>     <code>-connection_name</code>: sorts the result by the     <code>connection_name</code> field in descending order.   </li> </ul> <br/> If not given, results are sorted by <code>created_at</code> in descending order. (default: created_at, e.g. connection_name)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[application_name][contains]" $filterapplication_namecontains "scalar") (serialize-qp "filter[outbound_voice_profile_id]" $filteroutbound_voice_profile_id "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[application_name][contains]" $filter_application_name_contains "scalar") (serialize-qp "filter[outbound_voice_profile_id]" $filter_outbound_voice_profile_id "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fax_applications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2883,7 +2883,7 @@ export def "fax-applications listFaxApplications" [
 # operationId: CreateFaxApplication
 # --inbound shape: {channel_limit?: int, sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone"}
 # --outbound shape: {channel_limit?: int, outbound_voice_profile_id?: string}
-export def "fax-applications CreateFaxApplication" [
+export def "fax-applications create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2905,7 +2905,7 @@ export def "fax-applications CreateFaxApplication" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fax_applications")
-  let body = {active: $active, anchorsite_override: $anchorsite_override, application_name: $application_name, inbound: $inbound, outbound: $outbound, webhook_event_failover_url: $webhook_event_failover_url, webhook_event_url: $webhook_event_url, webhook_timeout_secs: $webhook_timeout_secs} | compact
+  let body = {"active": $active, "anchorsite_override": $anchorsite_override, "application_name": $application_name, "inbound": $inbound, "outbound": $outbound, "webhook_event_failover_url": $webhook_event_failover_url, "webhook_event_url": $webhook_event_url, "webhook_timeout_secs": $webhook_timeout_secs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2916,7 +2916,7 @@ export def "fax-applications CreateFaxApplication" [
 #
 # DELETE /fax_applications/{id}
 # operationId: DeleteFaxApplication
-export def "fax-applications DeleteFaxApplication" [
+export def "fax-applications delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2929,7 +2929,7 @@ export def "fax-applications DeleteFaxApplication" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/fax_applications/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/fax_applications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2952,7 +2952,7 @@ export def "fax-applications get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/fax_applications/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/fax_applications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2964,7 +2964,7 @@ export def "fax-applications get" [
 # operationId: UpdateFaxApplication
 # --inbound shape: {channel_limit?: int, sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone"}
 # --outbound shape: {channel_limit?: int, outbound_voice_profile_id?: string}
-export def "fax-applications UpdateFaxApplication" [
+export def "fax-applications update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2986,8 +2986,8 @@ export def "fax-applications UpdateFaxApplication" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/fax_applications/($id)")
-  let body = {active: $active, anchorsite_override: $anchorsite_override, application_name: $application_name, inbound: $inbound, outbound: $outbound, webhook_event_failover_url: $webhook_event_failover_url, webhook_event_url: $webhook_event_url, webhook_timeout_secs: $webhook_timeout_secs} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/fax_applications/{id}"))
+  let body = {"active": $active, "anchorsite_override": $anchorsite_override, "application_name": $application_name, "inbound": $inbound, "outbound": $outbound, "webhook_event_failover_url": $webhook_event_failover_url, "webhook_event_url": $webhook_event_url, "webhook_timeout_secs": $webhook_timeout_secs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2998,7 +2998,7 @@ export def "fax-applications UpdateFaxApplication" [
 #
 # GET /faxes
 # operationId: ListFaxes
-export def "faxes ListFaxes" [
+export def "faxes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3007,18 +3007,18 @@ export def "faxes ListFaxes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filtercreated-atgte: string # ISO 8601 date time for filtering faxes created after or on that date (format: date-time, e.g. 2020-02-02T22:25:27.521992Z)
-  --filtercreated-atgt: string # ISO 8601 date time for filtering faxes created after that date (format: date-time, e.g. 2020-02-02T22:25:27.521992Z)
-  --filtercreated-atlte: string # ISO 8601 formatted date time for filtering faxes created on or before that date (format: date-time, e.g. 2020-02-02T22:25:27.521992Z)
-  --filtercreated-atlt: string # ISO 8601 formatted date time for filtering faxes created before that date (format: date-time, e.g. 2020-02-02T22:25:27.521992Z)
-  --filterdirectioneq: string # The direction, inbound or outbound, for filtering faxes sent from this account (e.g. inbound)
-  --filterfromeq: string # The phone number, in E.164 format for filtering faxes sent from this number (e.g. +13127367276)
-  --pagesize: int # Number of fax resourcxes for the single page returned (e.g. 2)
-  --pagenumber: int # Number of the page to be retrieved (e.g. 2)
+  --filter-created-at-gte: string # ISO 8601 date time for filtering faxes created after or on that date (format: date-time, e.g. 2020-02-02T22:25:27.521992Z)
+  --filter-created-at-gt: string # ISO 8601 date time for filtering faxes created after that date (format: date-time, e.g. 2020-02-02T22:25:27.521992Z)
+  --filter-created-at-lte: string # ISO 8601 formatted date time for filtering faxes created on or before that date (format: date-time, e.g. 2020-02-02T22:25:27.521992Z)
+  --filter-created-at-lt: string # ISO 8601 formatted date time for filtering faxes created before that date (format: date-time, e.g. 2020-02-02T22:25:27.521992Z)
+  --filter-direction-eq: string # The direction, inbound or outbound, for filtering faxes sent from this account (e.g. inbound)
+  --filter-from-eq: string # The phone number, in E.164 format for filtering faxes sent from this number (e.g. +13127367276)
+  --page-size: int # Number of fax resourcxes for the single page returned (e.g. 2)
+  --page-number: int # Number of the page to be retrieved (e.g. 2)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[created_at][gte]" $filtercreated_atgte "scalar") (serialize-qp "filter[created_at][gt]" $filtercreated_atgt "scalar") (serialize-qp "filter[created_at][lte]" $filtercreated_atlte "scalar") (serialize-qp "filter[created_at][lt]" $filtercreated_atlt "scalar") (serialize-qp "filter[direction][eq]" $filterdirectioneq "scalar") (serialize-qp "filter[from][eq]" $filterfromeq "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "page[number]" $pagenumber "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[created_at][gte]" $filter_created_at_gte "scalar") (serialize-qp "filter[created_at][gt]" $filter_created_at_gt "scalar") (serialize-qp "filter[created_at][lte]" $filter_created_at_lte "scalar") (serialize-qp "filter[created_at][lt]" $filter_created_at_lt "scalar") (serialize-qp "filter[direction][eq]" $filter_direction_eq "scalar") (serialize-qp "filter[from][eq]" $filter_from_eq "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[number]" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/faxes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3029,7 +3029,7 @@ export def "faxes ListFaxes" [
 #
 # POST /faxes
 # operationId: SendFax
-export def "faxes SendFax" [
+export def "faxes send-fax" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3050,7 +3050,7 @@ export def "faxes SendFax" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/faxes")
-  let body = {connection_id: $connection_id, from: $body_from, media_name: $media_name, media_url: $media_url, quality: $quality, store_media: $store_media, to: $body_to} | compact
+  let body = {"connection_id": $connection_id, "from": $body_from, "media_name": $media_name, "media_url": $media_url, "quality": $quality, "store_media": $store_media, "to": $body_to} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3061,7 +3061,7 @@ export def "faxes SendFax" [
 #
 # DELETE /faxes/{id}
 # operationId: DeleteFax
-export def "faxes DeleteFax" [
+export def "faxes delete-fax" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3074,7 +3074,7 @@ export def "faxes DeleteFax" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/faxes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/faxes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3084,7 +3084,7 @@ export def "faxes DeleteFax" [
 #
 # GET /faxes/{id}
 # operationId: ViewFax
-export def "faxes ViewFax" [
+export def "faxes get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3097,7 +3097,7 @@ export def "faxes ViewFax" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/faxes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/faxes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3107,7 +3107,7 @@ export def "faxes ViewFax" [
 #
 # POST /faxes/{id}/actions/refresh
 # operationId: RefreshFax
-export def "faxes-actions-refresh RefreshFax" [
+export def "faxes-actions-refresh refresh-fax" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3120,7 +3120,7 @@ export def "faxes-actions-refresh RefreshFax" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/faxes/($id)/actions/refresh")
+  let full_url = (build-url $base ({id: $id} | format pattern "/faxes/{id}/actions/refresh"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3130,7 +3130,7 @@ export def "faxes-actions-refresh RefreshFax" [
 #
 # GET /fqdn_connections
 # operationId: listFqdnConnections
-export def "fqdn-connections listFqdnConnections" [
+export def "fqdn-connections list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3139,14 +3139,14 @@ export def "fqdn-connections listFqdnConnections" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filterconnection-namecontains: string # If present, connections with <code>connection_name</code> containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters.
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-connection-name-contains: string # If present, connections with <code>connection_name</code> containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters.
   --qp-sort: string@sort-completer-2 # Specifies the sort order for results. By default sorting direction is ascending. To have the results sorted in descending order add the <code> -</code> prefix.<br/><br/> That is: <ul>   <li>     <code>connection_name</code>: sorts the result by the     <code>connection_name</code> field in ascending order.   </li>    <li>     <code>-connection_name</code>: sorts the result by the     <code>connection_name</code> field in descending order.   </li> </ul> <br/> If not given, results are sorted by <code>created_at</code> in descending order. (default: created_at, e.g. connection_name)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[connection_name][contains]" $filterconnection_namecontains "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[connection_name][contains]" $filter_connection_name_contains "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fqdn_connections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3159,7 +3159,7 @@ export def "fqdn-connections listFqdnConnections" [
 # operationId: createFqdnConnection
 # --inbound shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", channel_limit?: int, codecs?: list, default_routing_method?: "sequential"|"round-robin", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, privacy_zone_enabled?: bool, sip_compact_headers_enabled?: bool, sip_region?: "US"|"Europe"|"Australia", sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone", timeout_1xx_secs?: int, timeout_2xx_secs?: int}
 # --rtcp_settings shape: {capture_enabled?: bool, port?: "rtcp-mux"|"rtp+1", report_frequency_secs?: int}
-export def "fqdn-connections createFqdnConnection" [
+export def "fqdn-connections create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3188,7 +3188,7 @@ export def "fqdn-connections createFqdnConnection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fqdn_connections")
-  let body = {active: $active, anchorsite_override: $anchorsite_override, connection_name: $connection_name, default_on_hold_comfort_noise_enabled: $default_on_hold_comfort_noise_enabled, dtmf_type: $dtmf_type, encode_contact_header_enabled: $encode_contact_header_enabled, encrypted_media: $encrypted_media, inbound: $inbound, onnet_t38_passthrough_enabled: $onnet_t38_passthrough_enabled, rtcp_settings: $rtcp_settings, transport_protocol: $transport_protocol, webhook_api_version: $webhook_api_version, webhook_event_failover_url: $webhook_event_failover_url, webhook_event_url: $webhook_event_url, webhook_timeout_secs: $webhook_timeout_secs} | compact
+  let body = {"active": $active, "anchorsite_override": $anchorsite_override, "connection_name": $connection_name, "default_on_hold_comfort_noise_enabled": $default_on_hold_comfort_noise_enabled, "dtmf_type": $dtmf_type, "encode_contact_header_enabled": $encode_contact_header_enabled, "encrypted_media": $encrypted_media, "inbound": $inbound, "onnet_t38_passthrough_enabled": $onnet_t38_passthrough_enabled, "rtcp_settings": $rtcp_settings, "transport_protocol": $transport_protocol, "webhook_api_version": $webhook_api_version, "webhook_event_failover_url": $webhook_event_failover_url, "webhook_event_url": $webhook_event_url, "webhook_timeout_secs": $webhook_timeout_secs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3212,7 +3212,7 @@ export def "fqdn-connections delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/fqdn_connections/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/fqdn_connections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3222,7 +3222,7 @@ export def "fqdn-connections delete" [
 #
 # GET /fqdn_connections/{id}
 # operationId: retrieveFqdnConnection
-export def "fqdn-connections retrieveFqdnConnection" [
+export def "fqdn-connections retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3235,7 +3235,7 @@ export def "fqdn-connections retrieveFqdnConnection" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/fqdn_connections/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/fqdn_connections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3247,7 +3247,7 @@ export def "fqdn-connections retrieveFqdnConnection" [
 # operationId: updateFqdnConnection
 # --inbound shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", channel_limit?: int, codecs?: list, default_routing_method?: "sequential"|"round-robin", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, privacy_zone_enabled?: bool, sip_compact_headers_enabled?: bool, sip_region?: "US"|"Europe"|"Australia", sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone", timeout_1xx_secs?: int, timeout_2xx_secs?: int}
 # --rtcp_settings shape: {capture_enabled?: bool, port?: "rtcp-mux"|"rtp+1", report_frequency_secs?: int}
-export def "fqdn-connections updateFqdnConnection" [
+export def "fqdn-connections update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3276,8 +3276,8 @@ export def "fqdn-connections updateFqdnConnection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/fqdn_connections/($id)")
-  let body = {active: $active, anchorsite_override: $anchorsite_override, connection_name: $connection_name, default_on_hold_comfort_noise_enabled: $default_on_hold_comfort_noise_enabled, dtmf_type: $dtmf_type, encode_contact_header_enabled: $encode_contact_header_enabled, encrypted_media: $encrypted_media, inbound: $inbound, onnet_t38_passthrough_enabled: $onnet_t38_passthrough_enabled, rtcp_settings: $rtcp_settings, transport_protocol: $transport_protocol, webhook_api_version: $webhook_api_version, webhook_event_failover_url: $webhook_event_failover_url, webhook_event_url: $webhook_event_url, webhook_timeout_secs: $webhook_timeout_secs} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/fqdn_connections/{id}"))
+  let body = {"active": $active, "anchorsite_override": $anchorsite_override, "connection_name": $connection_name, "default_on_hold_comfort_noise_enabled": $default_on_hold_comfort_noise_enabled, "dtmf_type": $dtmf_type, "encode_contact_header_enabled": $encode_contact_header_enabled, "encrypted_media": $encrypted_media, "inbound": $inbound, "onnet_t38_passthrough_enabled": $onnet_t38_passthrough_enabled, "rtcp_settings": $rtcp_settings, "transport_protocol": $transport_protocol, "webhook_api_version": $webhook_api_version, "webhook_event_failover_url": $webhook_event_failover_url, "webhook_event_url": $webhook_event_url, "webhook_timeout_secs": $webhook_timeout_secs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3288,7 +3288,7 @@ export def "fqdn-connections updateFqdnConnection" [
 #
 # GET /fqdns
 # operationId: listFqdns
-export def "fqdns listFqdns" [
+export def "fqdns list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3297,16 +3297,16 @@ export def "fqdns listFqdns" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filterconnection-id: string # ID of the FQDN connection to which the FQDN belongs.
-  --filterfqdn: string # FQDN represented by the resource. (e.g. example.com)
-  --filterport: int # Port to use when connecting to the FQDN. (e.g. 5060)
-  --filterdns-record-type: string # DNS record type used by the FQDN. (e.g. a)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-connection-id: string # ID of the FQDN connection to which the FQDN belongs.
+  --filter-fqdn: string # FQDN represented by the resource. (e.g. example.com)
+  --filter-port: int # Port to use when connecting to the FQDN. (e.g. 5060)
+  --filter-dns-record-type: string # DNS record type used by the FQDN. (e.g. a)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[connection_id]" $filterconnection_id "scalar") (serialize-qp "filter[fqdn]" $filterfqdn "scalar") (serialize-qp "filter[port]" $filterport "scalar") (serialize-qp "filter[dns_record_type]" $filterdns_record_type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[connection_id]" $filter_connection_id "scalar") (serialize-qp "filter[fqdn]" $filter_fqdn "scalar") (serialize-qp "filter[port]" $filter_port "scalar") (serialize-qp "filter[dns_record_type]" $filter_dns_record_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fqdns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3317,7 +3317,7 @@ export def "fqdns listFqdns" [
 #
 # POST /fqdns
 # operationId: createFqdn
-export def "fqdns createFqdn" [
+export def "fqdns create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3335,7 +3335,7 @@ export def "fqdns createFqdn" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fqdns")
-  let body = {connection_id: $connection_id, dns_record_type: $dns_record_type, fqdn: $fqdn, port: $port} | compact
+  let body = {"connection_id": $connection_id, "dns_record_type": $dns_record_type, "fqdn": $fqdn, "port": $port} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3359,7 +3359,7 @@ export def "fqdns delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/fqdns/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/fqdns/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3369,7 +3369,7 @@ export def "fqdns delete" [
 #
 # GET /fqdns/{id}
 # operationId: retrieveFqdn
-export def "fqdns retrieveFqdn" [
+export def "fqdns retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3382,7 +3382,7 @@ export def "fqdns retrieveFqdn" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/fqdns/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/fqdns/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3392,7 +3392,7 @@ export def "fqdns retrieveFqdn" [
 #
 # PATCH /fqdns/{id}
 # operationId: updateFqdn
-export def "fqdns updateFqdn" [
+export def "fqdns update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3410,8 +3410,8 @@ export def "fqdns updateFqdn" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/fqdns/($id)")
-  let body = {connection_id: $connection_id, dns_record_type: $dns_record_type, fqdn: $fqdn, port: $port} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/fqdns/{id}"))
+  let body = {"connection_id": $connection_id, "dns_record_type": $dns_record_type, "fqdn": $fqdn, "port": $port} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3422,7 +3422,7 @@ export def "fqdns updateFqdn" [
 #
 # GET /inventory_coverage
 # operationId: createInventoryCoverageRequest
-export def "inventory-coverage createInventoryCoverageRequest" [
+export def "inventory-coverage create-inventory-coverage-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3431,18 +3431,18 @@ export def "inventory-coverage createInventoryCoverageRequest" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filternpa: int # e.g. 318
-  --filternxx: int # e.g. 202
-  --filteradministrative-area: string # e.g. LA
-  --filternumber-type: string@filternumber-type-completer-2 # e.g. did
-  --filterphone-number-type: string@filterphone-number-type-completer # e.g. local
-  --filtercountry-code: string@filtercountry-code-completer # e.g. US
-  --filtercount: oneof<nothing, bool> # e.g. true
-  --filtergroupBy: string@filtergroupBy-completer # e.g. nxx
+  --filter-npa: int # e.g. 318
+  --filter-nxx: int # e.g. 202
+  --filter-administrative-area: string # e.g. LA
+  --filter-number-type: string@filter-number-type-completer-2 # e.g. did
+  --filter-phone-number-type: string@filter-phone-number-type-completer # e.g. local
+  --filter-country-code: string@filter-country-code-completer # e.g. US
+  --filter-count: oneof<nothing, bool> # e.g. true
+  --filter-group-by: string@filter-group-by-completer # e.g. nxx
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[npa]" $filternpa "scalar") (serialize-qp "filter[nxx]" $filternxx "scalar") (serialize-qp "filter[administrative_area]" $filteradministrative_area "scalar") (serialize-qp "filter[number_type]" $filternumber_type "scalar") (serialize-qp "filter[phone_number_type]" $filterphone_number_type "scalar") (serialize-qp "filter[country_code]" $filtercountry_code "scalar") (serialize-qp "filter[count]" $filtercount "scalar") (serialize-qp "filter[groupBy]" $filtergroupBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[npa]" $filter_npa "scalar") (serialize-qp "filter[nxx]" $filter_nxx "scalar") (serialize-qp "filter[administrative_area]" $filter_administrative_area "scalar") (serialize-qp "filter[number_type]" $filter_number_type "scalar") (serialize-qp "filter[phone_number_type]" $filter_phone_number_type "scalar") (serialize-qp "filter[country_code]" $filter_country_code "scalar") (serialize-qp "filter[count]" $filter_count "scalar") (serialize-qp "filter[groupBy]" $filter_group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/inventory_coverage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3453,7 +3453,7 @@ export def "inventory-coverage createInventoryCoverageRequest" [
 #
 # GET /ip_connections
 # operationId: listIpConnections
-export def "ip-connections listIpConnections" [
+export def "ip-connections list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3462,15 +3462,15 @@ export def "ip-connections listIpConnections" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filterconnection-namecontains: string # If present, connections with <code>connection_name</code> containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters.
-  --filteroutboundoutbound-voice-profile-id: string # Identifies the associated outbound voice profile. (format: int64, e.g. 1293384261075731499)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-connection-name-contains: string # If present, connections with <code>connection_name</code> containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters.
+  --filter-outbound-outbound-voice-profile-id: string # Identifies the associated outbound voice profile. (format: int64, e.g. 1293384261075731499)
   --qp-sort: string@sort-completer-2 # Specifies the sort order for results. By default sorting direction is ascending. To have the results sorted in descending order add the <code> -</code> prefix.<br/><br/> That is: <ul>   <li>     <code>connection_name</code>: sorts the result by the     <code>connection_name</code> field in ascending order.   </li>    <li>     <code>-connection_name</code>: sorts the result by the     <code>connection_name</code> field in descending order.   </li> </ul> <br/> If not given, results are sorted by <code>created_at</code> in descending order. (default: created_at, e.g. connection_name)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[connection_name][contains]" $filterconnection_namecontains "scalar") (serialize-qp "filter[outbound.outbound_voice_profile_id]" $filteroutboundoutbound_voice_profile_id "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[connection_name][contains]" $filter_connection_name_contains "scalar") (serialize-qp "filter[outbound.outbound_voice_profile_id]" $filter_outbound_outbound_voice_profile_id "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ip_connections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3484,7 +3484,7 @@ export def "ip-connections listIpConnections" [
 # --inbound shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", channel_limit?: int, codecs?: list, default_routing_method?: "sequential"|"round-robin", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, privacy_zone_enabled?: bool, sip_compact_headers_enabled?: bool, sip_region?: "US"|"Europe"|"Australia", sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone", timeout_1xx_secs?: int, timeout_2xx_secs?: int}
 # --outbound shape: {ani_override?: string, ani_override_type?: "always"|"normal"|"emergency", call_parking_enabled?: bool, channel_limit?: int, generate_ringback_tone?: bool, instant_ringback_enabled?: bool, ip_authentication_method?: "tech-prefixp-charge-info"|"token", ip_authentication_token?: string, localization?: string, outbound_voice_profile_id?: string, t38_reinvite_source?: "telnyx"|"customer"|"disabled"|"passthru"|"caller-passthru"|"callee-passthru", tech_prefix?: string}
 # --rtcp_settings shape: {capture_enabled?: bool, port?: "rtcp-mux"|"rtp+1", report_frequency_secs?: int}
-export def "ip-connections createIpConnection" [
+export def "ip-connections create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3514,7 +3514,7 @@ export def "ip-connections createIpConnection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ip_connections")
-  let body = {active: $active, anchorsite_override: $anchorsite_override, connection_name: $connection_name, default_on_hold_comfort_noise_enabled: $default_on_hold_comfort_noise_enabled, dtmf_type: $dtmf_type, encode_contact_header_enabled: $encode_contact_header_enabled, encrypted_media: $encrypted_media, inbound: $inbound, onnet_t38_passthrough_enabled: $onnet_t38_passthrough_enabled, outbound: $outbound, rtcp_settings: $rtcp_settings, transport_protocol: $transport_protocol, webhook_api_version: $webhook_api_version, webhook_event_failover_url: $webhook_event_failover_url, webhook_event_url: $webhook_event_url, webhook_timeout_secs: $webhook_timeout_secs} | compact
+  let body = {"active": $active, "anchorsite_override": $anchorsite_override, "connection_name": $connection_name, "default_on_hold_comfort_noise_enabled": $default_on_hold_comfort_noise_enabled, "dtmf_type": $dtmf_type, "encode_contact_header_enabled": $encode_contact_header_enabled, "encrypted_media": $encrypted_media, "inbound": $inbound, "onnet_t38_passthrough_enabled": $onnet_t38_passthrough_enabled, "outbound": $outbound, "rtcp_settings": $rtcp_settings, "transport_protocol": $transport_protocol, "webhook_api_version": $webhook_api_version, "webhook_event_failover_url": $webhook_event_failover_url, "webhook_event_url": $webhook_event_url, "webhook_timeout_secs": $webhook_timeout_secs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3538,7 +3538,7 @@ export def "ip-connections delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ip_connections/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ip_connections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3548,7 +3548,7 @@ export def "ip-connections delete" [
 #
 # GET /ip_connections/{id}
 # operationId: retrieveIpConnection
-export def "ip-connections retrieveIpConnection" [
+export def "ip-connections retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3561,7 +3561,7 @@ export def "ip-connections retrieveIpConnection" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ip_connections/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ip_connections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3574,7 +3574,7 @@ export def "ip-connections retrieveIpConnection" [
 # --inbound shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", channel_limit?: int, codecs?: list, default_primary_ip_id?: string, default_routing_method?: "sequential"|"round-robin", default_secondary_ip_id?: string, default_tertiary_ip_id?: string, dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, privacy_zone_enabled?: bool, sip_compact_headers_enabled?: bool, sip_region?: "US"|"Europe"|"Australia", sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone", timeout_1xx_secs?: int, timeout_2xx_secs?: int}
 # --outbound shape: {ani_override?: string, ani_override_type?: "always"|"normal"|"emergency", call_parking_enabled?: bool, channel_limit?: int, generate_ringback_tone?: bool, instant_ringback_enabled?: bool, ip_authentication_method?: "tech-prefixp-charge-info"|"token", ip_authentication_token?: string, localization?: string, outbound_voice_profile_id?: string, t38_reinvite_source?: "telnyx"|"customer"|"disabled"|"passthru"|"caller-passthru"|"callee-passthru", tech_prefix?: string}
 # --rtcp_settings shape: {capture_enabled?: bool, port?: "rtcp-mux"|"rtp+1", report_frequency_secs?: int}
-export def "ip-connections updateIpConnection" [
+export def "ip-connections update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3604,8 +3604,8 @@ export def "ip-connections updateIpConnection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ip_connections/($id)")
-  let body = {active: $active, anchorsite_override: $anchorsite_override, connection_name: $connection_name, default_on_hold_comfort_noise_enabled: $default_on_hold_comfort_noise_enabled, dtmf_type: $dtmf_type, encode_contact_header_enabled: $encode_contact_header_enabled, encrypted_media: $encrypted_media, inbound: $inbound, onnet_t38_passthrough_enabled: $onnet_t38_passthrough_enabled, outbound: $outbound, rtcp_settings: $rtcp_settings, transport_protocol: $transport_protocol, webhook_api_version: $webhook_api_version, webhook_event_failover_url: $webhook_event_failover_url, webhook_event_url: $webhook_event_url, webhook_timeout_secs: $webhook_timeout_secs} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ip_connections/{id}"))
+  let body = {"active": $active, "anchorsite_override": $anchorsite_override, "connection_name": $connection_name, "default_on_hold_comfort_noise_enabled": $default_on_hold_comfort_noise_enabled, "dtmf_type": $dtmf_type, "encode_contact_header_enabled": $encode_contact_header_enabled, "encrypted_media": $encrypted_media, "inbound": $inbound, "onnet_t38_passthrough_enabled": $onnet_t38_passthrough_enabled, "outbound": $outbound, "rtcp_settings": $rtcp_settings, "transport_protocol": $transport_protocol, "webhook_api_version": $webhook_api_version, "webhook_event_failover_url": $webhook_event_failover_url, "webhook_event_url": $webhook_event_url, "webhook_timeout_secs": $webhook_timeout_secs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3616,7 +3616,7 @@ export def "ip-connections updateIpConnection" [
 #
 # GET /ips
 # operationId: listIps
-export def "ips listIps" [
+export def "ips list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3625,15 +3625,15 @@ export def "ips listIps" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filterconnection-id: string # ID of the IP Connection to which this IP should be attached.
-  --filterip-address: string # IP adddress represented by this resource. (e.g. 192.168.0.0)
-  --filterport: int # Port to use when connecting to this IP. (e.g. 5060)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-connection-id: string # ID of the IP Connection to which this IP should be attached.
+  --filter-ip-address: string # IP adddress represented by this resource. (e.g. 192.168.0.0)
+  --filter-port: int # Port to use when connecting to this IP. (e.g. 5060)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[connection_id]" $filterconnection_id "scalar") (serialize-qp "filter[ip_address]" $filterip_address "scalar") (serialize-qp "filter[port]" $filterport "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[connection_id]" $filter_connection_id "scalar") (serialize-qp "filter[ip_address]" $filter_ip_address "scalar") (serialize-qp "filter[port]" $filter_port "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ips" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3644,7 +3644,7 @@ export def "ips listIps" [
 #
 # POST /ips
 # operationId: createIp
-export def "ips createIp" [
+export def "ips create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3661,7 +3661,7 @@ export def "ips createIp" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips")
-  let body = {connection_id: $connection_id, ip_address: $ip_address, port: $port} | compact
+  let body = {"connection_id": $connection_id, "ip_address": $ip_address, "port": $port} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3685,7 +3685,7 @@ export def "ips delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ips/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ips/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3695,7 +3695,7 @@ export def "ips delete" [
 #
 # GET /ips/{id}
 # operationId: retrieveIp
-export def "ips retrieveIp" [
+export def "ips retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3708,7 +3708,7 @@ export def "ips retrieveIp" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ips/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ips/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3718,7 +3718,7 @@ export def "ips retrieveIp" [
 #
 # PATCH /ips/{id}
 # operationId: updateIp
-export def "ips updateIp" [
+export def "ips update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3735,8 +3735,8 @@ export def "ips updateIp" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ips/($id)")
-  let body = {connection_id: $connection_id, ip_address: $ip_address, port: $port} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ips/{id}"))
+  let body = {"connection_id": $connection_id, "ip_address": $ip_address, "port": $port} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3747,7 +3747,7 @@ export def "ips updateIp" [
 #
 # POST /ledger_billing_group_reports
 # operationId: createLedgerBillingGroupReport
-export def "ledger-billing-group-reports createLedgerBillingGroupReport" [
+export def "ledger-billing-group-reports create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3763,7 +3763,7 @@ export def "ledger-billing-group-reports createLedgerBillingGroupReport" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ledger_billing_group_reports")
-  let body = {month: $month, year: $year} | compact
+  let body = {"month": $month, "year": $year} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3774,7 +3774,7 @@ export def "ledger-billing-group-reports createLedgerBillingGroupReport" [
 #
 # GET /ledger_billing_group_reports/{id}
 # operationId: retrieveLedgerBillingGroupReport
-export def "ledger-billing-group-reports retrieveLedgerBillingGroupReport" [
+export def "ledger-billing-group-reports retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3787,7 +3787,7 @@ export def "ledger-billing-group-reports retrieveLedgerBillingGroupReport" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ledger_billing_group_reports/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ledger_billing_group_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3797,7 +3797,7 @@ export def "ledger-billing-group-reports retrieveLedgerBillingGroupReport" [
 #
 # GET /managed_accounts
 # operationId: listManagedAccounts
-export def "managed-accounts listManagedAccounts" [
+export def "managed-accounts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3806,15 +3806,15 @@ export def "managed-accounts listManagedAccounts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filteremailcontains: string # If present, email containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters. (default: null)
-  --filteremaileq: string # If present, only returns results with the <code>email</code> matching exactly the value given. (default: null)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-email-contains: string # If present, email containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters. (default: null)
+  --filter-email-eq: string # If present, only returns results with the <code>email</code> matching exactly the value given. (default: null)
   --qp-sort: string@sort-completer-3 # Specifies the sort order for results. By default sorting direction is ascending. To have the results sorted in descending order add the <code> -</code> prefix.<br/><br/> That is: <ul>   <li>     <code>email</code>: sorts the result by the     <code>email</code> field in ascending order.   </li>    <li>     <code>-email</code>: sorts the result by the     <code>email</code> field in descending order.   </li> </ul> <br/> If not given, results are sorted by <code>created_at</code> in descending order. (default: created_at, e.g. email)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[email][contains]" $filteremailcontains "scalar") (serialize-qp "filter[email][eq]" $filteremaileq "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[email][contains]" $filter_email_contains "scalar") (serialize-qp "filter[email][eq]" $filter_email_eq "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/managed_accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3825,7 +3825,7 @@ export def "managed-accounts listManagedAccounts" [
 #
 # POST /managed_accounts
 # operationId: createManagedAccount
-export def "managed-accounts createManagedAccount" [
+export def "managed-accounts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3842,7 +3842,7 @@ export def "managed-accounts createManagedAccount" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/managed_accounts")
-  let body = {business_name: $business_name, email: $email, password: $password} | compact
+  let body = {"business_name": $business_name, "email": $email, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3853,7 +3853,7 @@ export def "managed-accounts createManagedAccount" [
 #
 # GET /managed_accounts/{id}
 # operationId: retrieveManagedAccount
-export def "managed-accounts retrieveManagedAccount" [
+export def "managed-accounts retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3866,7 +3866,7 @@ export def "managed-accounts retrieveManagedAccount" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed_accounts/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/managed_accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3876,7 +3876,7 @@ export def "managed-accounts retrieveManagedAccount" [
 #
 # POST /managed_accounts/{id}/actions/disable
 # operationId: disableManagedAccount
-export def "managed-accounts-actions-disable disableManagedAccount" [
+export def "managed-accounts-actions-disable disable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3889,7 +3889,7 @@ export def "managed-accounts-actions-disable disableManagedAccount" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed_accounts/($id)/actions/disable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/managed_accounts/{id}/actions/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3899,7 +3899,7 @@ export def "managed-accounts-actions-disable disableManagedAccount" [
 #
 # POST /managed_accounts/{id}/actions/enable
 # operationId: enableManagedAccount
-export def "managed-accounts-actions-enable enableManagedAccount" [
+export def "managed-accounts-actions-enable enable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3912,7 +3912,7 @@ export def "managed-accounts-actions-enable enableManagedAccount" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed_accounts/($id)/actions/enable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/managed_accounts/{id}/actions/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3922,7 +3922,7 @@ export def "managed-accounts-actions-enable enableManagedAccount" [
 #
 # GET /media
 # operationId: listMedia
-export def "media listMedia" [
+export def "media list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3944,7 +3944,7 @@ export def "media listMedia" [
 #
 # POST /media
 # operationId: createMedia
-export def "media createMedia" [
+export def "media create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3961,7 +3961,7 @@ export def "media createMedia" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/media")
-  let body = {media_name: $media_name, media_url: $media_url, ttl_secs: $ttl_secs} | compact
+  let body = {"media_name": $media_name, "media_url": $media_url, "ttl_secs": $ttl_secs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3985,7 +3985,7 @@ export def "media delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/media/($media_name)")
+  let full_url = (build-url $base ({media_name: $media_name} | format pattern "/media/{media_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4008,7 +4008,7 @@ export def "media get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/media/($media_name)")
+  let full_url = (build-url $base ({media_name: $media_name} | format pattern "/media/{media_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4018,7 +4018,7 @@ export def "media get" [
 #
 # PUT /media/{media_name}
 # operationId: updateMedia
-export def "media updateMedia" [
+export def "media update" [
   media_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4034,8 +4034,8 @@ export def "media updateMedia" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/media/($media_name)")
-  let body = {media_url: $media_url, ttl_secs: $ttl_secs} | compact
+  let full_url = (build-url $base ({media_name: $media_name} | format pattern "/media/{media_name}"))
+  let body = {"media_url": $media_url, "ttl_secs": $ttl_secs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4046,7 +4046,7 @@ export def "media updateMedia" [
 #
 # GET /media/{media_name}/download
 # operationId: downloadMedia
-export def "media-download downloadMedia" [
+export def "media-download download" [
   media_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4059,7 +4059,7 @@ export def "media-download downloadMedia" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/media/($media_name)/download")
+  let full_url = (build-url $base ({media_name: $media_name} | format pattern "/media/{media_name}/download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4069,7 +4069,7 @@ export def "media-download downloadMedia" [
 #
 # GET /message_detail_records
 # operationId: getPaginatedMdrs
-export def "message-detail-records get" [
+export def "message-detail-records get-paginated-mdrs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4094,13 +4094,13 @@ export def "message-detail-records get" [
   --mcc: string # e.g. 204
   --mnc: string # e.g. 01
   --product: string@product-completer # e.g. LONG_CODE
-  --pagenumber: int # Page number (format: int32, default: 1)
-  --pagesize: int # Size of the page (format: int32, default: 20)
+  --page-number: int # Page number (format: int32, default: 1)
+  --page-size: int # Size of the page (format: int32, default: 20)
   --qp-sort: list # default: created_at, e.g. created_at
 ]: nothing -> record<data: table<cld: string, cli: string, cost: string, created_at: string, currency: string, direction: string, id: string, message_type: string, parts: float, profile_name: string, rate: string, record_type: string, status: string>, meta: record<page_number: int, page_size: int, total_pages: int, total_results: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "outbound_profile_id" $outbound_profile_id "scalar") (serialize-qp "cld" $cld "scalar") (serialize-qp "cli" $cli "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "message_type" $message_type "scalar") (serialize-qp "country_iso" $country_iso "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "normalized_carrier" $normalized_carrier "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "mcc" $mcc "scalar") (serialize-qp "mnc" $mnc "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "sort" $qp_sort "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "outbound_profile_id" $outbound_profile_id "scalar") (serialize-qp "cld" $cld "scalar") (serialize-qp "cli" $cli "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "message_type" $message_type "scalar") (serialize-qp "country_iso" $country_iso "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "normalized_carrier" $normalized_carrier "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "mcc" $mcc "scalar") (serialize-qp "mnc" $mnc "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "sort" $qp_sort "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/message_detail_records" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4111,7 +4111,7 @@ export def "message-detail-records get" [
 #
 # GET /message_detail_records/{id}/message_body
 # operationId: getMdrMessageBody
-export def "message-detail-records-message-body get" [
+export def "message-detail-records-message-body get-mdr" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4124,7 +4124,7 @@ export def "message-detail-records-message-body get" [
 ]: nothing -> record<data: record<message_body: string, record_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/message_detail_records/($id)/message_body")
+  let full_url = (build-url $base ({id: $id} | format pattern "/message_detail_records/{id}/message_body"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4134,7 +4134,7 @@ export def "message-detail-records-message-body get" [
 #
 # POST /messages
 # operationId: createMessage
-export def "messages createMessage" [
+export def "messages create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4159,7 +4159,7 @@ export def "messages createMessage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages")
-  let body = {auto_detect: $auto_detect, from: $body_from, media_urls: $media_urls, messaging_profile_id: $messaging_profile_id, subject: $subject, text: $text, to: $body_to, type: $type, use_profile_webhooks: $use_profile_webhooks, webhook_failover_url: $webhook_failover_url, webhook_url: $webhook_url} | compact
+  let body = {"auto_detect": $auto_detect, "from": $body_from, "media_urls": $media_urls, "messaging_profile_id": $messaging_profile_id, "subject": $subject, "text": $text, "to": $body_to, "type": $type, "use_profile_webhooks": $use_profile_webhooks, "webhook_failover_url": $webhook_failover_url, "webhook_url": $webhook_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4170,7 +4170,7 @@ export def "messages createMessage" [
 #
 # POST /messages/long_code
 # operationId: createLongCodeMessage
-export def "messages-long-code createLongCodeMessage" [
+export def "messages-long-code create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4194,7 +4194,7 @@ export def "messages-long-code createLongCodeMessage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/long_code")
-  let body = {auto_detect: $auto_detect, from: $body_from, media_urls: $media_urls, subject: $subject, text: $text, to: $body_to, type: $type, use_profile_webhooks: $use_profile_webhooks, webhook_failover_url: $webhook_failover_url, webhook_url: $webhook_url} | compact
+  let body = {"auto_detect": $auto_detect, "from": $body_from, "media_urls": $media_urls, "subject": $subject, "text": $text, "to": $body_to, "type": $type, "use_profile_webhooks": $use_profile_webhooks, "webhook_failover_url": $webhook_failover_url, "webhook_url": $webhook_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4205,7 +4205,7 @@ export def "messages-long-code createLongCodeMessage" [
 #
 # POST /messages/number_pool
 # operationId: createNumberPoolMessage
-export def "messages-number-pool createNumberPoolMessage" [
+export def "messages-number-pool create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4229,7 +4229,7 @@ export def "messages-number-pool createNumberPoolMessage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/number_pool")
-  let body = {auto_detect: $auto_detect, media_urls: $media_urls, messaging_profile_id: $messaging_profile_id, subject: $subject, text: $text, to: $body_to, type: $type, use_profile_webhooks: $use_profile_webhooks, webhook_failover_url: $webhook_failover_url, webhook_url: $webhook_url} | compact
+  let body = {"auto_detect": $auto_detect, "media_urls": $media_urls, "messaging_profile_id": $messaging_profile_id, "subject": $subject, "text": $text, "to": $body_to, "type": $type, "use_profile_webhooks": $use_profile_webhooks, "webhook_failover_url": $webhook_failover_url, "webhook_url": $webhook_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4240,7 +4240,7 @@ export def "messages-number-pool createNumberPoolMessage" [
 #
 # POST /messages/short_code
 # operationId: createShortCodeMessage
-export def "messages-short-code createShortCodeMessage" [
+export def "messages-short-code create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4264,7 +4264,7 @@ export def "messages-short-code createShortCodeMessage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/short_code")
-  let body = {auto_detect: $auto_detect, from: $body_from, media_urls: $media_urls, subject: $subject, text: $text, to: $body_to, type: $type, use_profile_webhooks: $use_profile_webhooks, webhook_failover_url: $webhook_failover_url, webhook_url: $webhook_url} | compact
+  let body = {"auto_detect": $auto_detect, "from": $body_from, "media_urls": $media_urls, "subject": $subject, "text": $text, "to": $body_to, "type": $type, "use_profile_webhooks": $use_profile_webhooks, "webhook_failover_url": $webhook_failover_url, "webhook_url": $webhook_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4275,7 +4275,7 @@ export def "messages-short-code createShortCodeMessage" [
 #
 # GET /messages/{id}
 # operationId: retrieveMessage
-export def "messages retrieveMessage" [
+export def "messages retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4288,7 +4288,7 @@ export def "messages retrieveMessage" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messages/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/messages/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4298,7 +4298,7 @@ export def "messages retrieveMessage" [
 #
 # GET /messaging_hosted_number_orders
 # operationId: listMessagingHostedNumberOrder
-export def "messaging-hosted-number-orders listMessagingHostedNumberOrder" [
+export def "messaging-hosted-number-orders list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4307,12 +4307,12 @@ export def "messaging-hosted-number-orders listMessagingHostedNumberOrder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/messaging_hosted_number_orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4323,7 +4323,7 @@ export def "messaging-hosted-number-orders listMessagingHostedNumberOrder" [
 #
 # POST /messaging_hosted_number_orders
 # operationId: createMessagingHostedNumberOrder
-export def "messaging-hosted-number-orders createMessagingHostedNumberOrder" [
+export def "messaging-hosted-number-orders create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4339,7 +4339,7 @@ export def "messaging-hosted-number-orders createMessagingHostedNumberOrder" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messaging_hosted_number_orders")
-  let body = {messaging_profile_id: $messaging_profile_id, phone_numbers: $phone_numbers} | compact
+  let body = {"messaging_profile_id": $messaging_profile_id, "phone_numbers": $phone_numbers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4350,7 +4350,7 @@ export def "messaging-hosted-number-orders createMessagingHostedNumberOrder" [
 #
 # GET /messaging_hosted_number_orders/{id}
 # operationId: retrieveMessagingHostedNumberOrder
-export def "messaging-hosted-number-orders retrieveMessagingHostedNumberOrder" [
+export def "messaging-hosted-number-orders retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4363,7 +4363,7 @@ export def "messaging-hosted-number-orders retrieveMessagingHostedNumberOrder" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messaging_hosted_number_orders/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/messaging_hosted_number_orders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4373,7 +4373,7 @@ export def "messaging-hosted-number-orders retrieveMessagingHostedNumberOrder" [
 #
 # POST /messaging_hosted_number_orders/{id}/actions/file_upload
 # operationId: uploadFileMessagingHostedNumberOrder
-export def "messaging-hosted-number-orders-actions-file-upload uploadFileMessagingHostedNumberOrder" [
+export def "messaging-hosted-number-orders-actions-file-upload upload" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4389,8 +4389,8 @@ export def "messaging-hosted-number-orders-actions-file-upload uploadFileMessagi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messaging_hosted_number_orders/($id)/actions/file_upload")
-  let body = {bill: $bill, loa: $loa} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/messaging_hosted_number_orders/{id}/actions/file_upload"))
+  let body = {"bill": $bill, "loa": $loa} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4414,7 +4414,7 @@ export def "messaging-hosted-numbers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messaging_hosted_numbers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/messaging_hosted_numbers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4424,7 +4424,7 @@ export def "messaging-hosted-numbers delete" [
 #
 # GET /messaging_profile_metrics
 # operationId: listMessagingProfileMetrics
-export def "messaging-profile-metrics listMessagingProfileMetrics" [
+export def "messaging-profile-metrics list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4433,14 +4433,14 @@ export def "messaging-profile-metrics listMessagingProfileMetrics" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
   --id: string # The id of the messaging profile(s) to retrieve (format: uuid)
   --time-frame: string@time-frame-completer # The timeframe for which you'd like to retrieve metrics. (default: 24h)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_frame" $time_frame "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_frame" $time_frame "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/messaging_profile_metrics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4451,7 +4451,7 @@ export def "messaging-profile-metrics listMessagingProfileMetrics" [
 #
 # GET /messaging_profiles
 # operationId: listMessagingProfiles
-export def "messaging-profiles listMessagingProfiles" [
+export def "messaging-profiles list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4460,12 +4460,12 @@ export def "messaging-profiles listMessagingProfiles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/messaging_profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4478,7 +4478,7 @@ export def "messaging-profiles listMessagingProfiles" [
 # operationId: createMessagingProfile
 # --number_pool_settings shape: {geomatch?: bool, long_code_weight: float, skip_unhealthy: bool, sticky_sender?: bool, toll_free_weight: float}
 # --url_shortener_settings shape: {domain: string, prefix?: string, replace_blacklist_only?: bool, send_webhooks?: bool}
-export def "messaging-profiles createMessagingProfile" [
+export def "messaging-profiles create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4499,7 +4499,7 @@ export def "messaging-profiles createMessagingProfile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messaging_profiles")
-  let body = {enabled: $enabled, name: $name, number_pool_settings: $number_pool_settings, url_shortener_settings: $url_shortener_settings, webhook_api_version: $webhook_api_version, webhook_failover_url: $webhook_failover_url, webhook_url: $webhook_url} | compact
+  let body = {"enabled": $enabled, "name": $name, "number_pool_settings": $number_pool_settings, "url_shortener_settings": $url_shortener_settings, "webhook_api_version": $webhook_api_version, "webhook_failover_url": $webhook_failover_url, "webhook_url": $webhook_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4523,7 +4523,7 @@ export def "messaging-profiles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messaging_profiles/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/messaging_profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4533,7 +4533,7 @@ export def "messaging-profiles delete" [
 #
 # GET /messaging_profiles/{id}
 # operationId: retrieveMessagingProfile
-export def "messaging-profiles retrieveMessagingProfile" [
+export def "messaging-profiles retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4546,7 +4546,7 @@ export def "messaging-profiles retrieveMessagingProfile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messaging_profiles/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/messaging_profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4558,7 +4558,7 @@ export def "messaging-profiles retrieveMessagingProfile" [
 # operationId: updateMessagingProfile
 # --number_pool_settings shape: {geomatch?: bool, long_code_weight: float, skip_unhealthy: bool, sticky_sender?: bool, toll_free_weight: float}
 # --url_shortener_settings shape: {domain: string, prefix?: string, replace_blacklist_only?: bool, send_webhooks?: bool}
-export def "messaging-profiles updateMessagingProfile" [
+export def "messaging-profiles update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4581,8 +4581,8 @@ export def "messaging-profiles updateMessagingProfile" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/messaging_profiles/($id)")
-  let body = {enabled: $enabled, name: $name, number_pool_settings: $number_pool_settings, url_shortener_settings: $url_shortener_settings, v1_secret: $v1_secret, webhook_api_version: $webhook_api_version, webhook_failover_url: $webhook_failover_url, webhook_url: $webhook_url, whitelisted_destinations: $whitelisted_destinations} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/messaging_profiles/{id}"))
+  let body = {"enabled": $enabled, "name": $name, "number_pool_settings": $number_pool_settings, "url_shortener_settings": $url_shortener_settings, "v1_secret": $v1_secret, "webhook_api_version": $webhook_api_version, "webhook_failover_url": $webhook_failover_url, "webhook_url": $webhook_url, "whitelisted_destinations": $whitelisted_destinations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4593,7 +4593,7 @@ export def "messaging-profiles updateMessagingProfile" [
 #
 # GET /messaging_profiles/{id}/metrics
 # operationId: retrieveMessagingProfileDetailedMetrics
-export def "messaging-profiles-metrics retrieveMessagingProfileDetailedMetrics" [
+export def "messaging-profiles-metrics retrieve-messaging-profile-detailed" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4608,7 +4608,7 @@ export def "messaging-profiles-metrics retrieveMessagingProfileDetailedMetrics" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time_frame" $time_frame "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/messaging_profiles/($id)/metrics" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/messaging_profiles/{id}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4618,7 +4618,7 @@ export def "messaging-profiles-metrics retrieveMessagingProfileDetailedMetrics" 
 #
 # GET /messaging_profiles/{id}/phone_numbers
 # operationId: listMessagingProfilePhoneNumbers
-export def "messaging-profiles-phone-numbers listMessagingProfilePhoneNumbers" [
+export def "messaging-profiles-phone-numbers list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4628,13 +4628,13 @@ export def "messaging-profiles-phone-numbers listMessagingProfilePhoneNumbers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/messaging_profiles/($id)/phone_numbers" $qp)
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/messaging_profiles/{id}/phone_numbers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4644,7 +4644,7 @@ export def "messaging-profiles-phone-numbers listMessagingProfilePhoneNumbers" [
 #
 # GET /messaging_profiles/{id}/short_codes
 # operationId: listMessagingProfileShortCodes
-export def "messaging-profiles-short-codes listMessagingProfileShortCodes" [
+export def "messaging-profiles-short-codes list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4654,13 +4654,13 @@ export def "messaging-profiles-short-codes listMessagingProfileShortCodes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/messaging_profiles/($id)/short_codes" $qp)
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/messaging_profiles/{id}/short_codes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4670,7 +4670,7 @@ export def "messaging-profiles-short-codes listMessagingProfileShortCodes" [
 #
 # GET /messaging_url_domains
 # operationId: listMessagingUrlDomains
-export def "messaging-url-domains listMessagingUrlDomains" [
+export def "messaging-url-domains list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4679,12 +4679,12 @@ export def "messaging-url-domains listMessagingUrlDomains" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/messaging_url_domains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4695,7 +4695,7 @@ export def "messaging-url-domains listMessagingUrlDomains" [
 #
 # GET /mobile_operator_networks
 # operationId: MobileOperatorNetworksGet
-export def "mobile-operator-networks MobileOperatorNetworksGet" [
+export def "mobile-operator-networks get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4704,19 +4704,19 @@ export def "mobile-operator-networks MobileOperatorNetworksGet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filternamestarts-with: string # Filter by name starting with. (e.g. AT)
-  --filternamecontains: string # Filter by name containing match. (e.g. T&T)
-  --filternameends-with: string # Filter by name ending with. (e.g. T)
-  --filtercountry-code: string # Filter by exact country_code. (e.g. US)
-  --filtermcc: string # Filter by exact MCC. (e.g. 310)
-  --filtermnc: string # Filter by exact MNC. (e.g. 410)
-  --filtertadig: string # Filter by exact TADIG. (e.g. USACG)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-name-starts-with: string # Filter by name starting with. (e.g. AT)
+  --filter-name-contains: string # Filter by name containing match. (e.g. T&T)
+  --filter-name-ends-with: string # Filter by name ending with. (e.g. T)
+  --filter-country-code: string # Filter by exact country_code. (e.g. US)
+  --filter-mcc: string # Filter by exact MCC. (e.g. 310)
+  --filter-mnc: string # Filter by exact MNC. (e.g. 410)
+  --filter-tadig: string # Filter by exact TADIG. (e.g. USACG)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[name][starts_with]" $filternamestarts_with "scalar") (serialize-qp "filter[name][contains]" $filternamecontains "scalar") (serialize-qp "filter[name][ends_with]" $filternameends_with "scalar") (serialize-qp "filter[country_code]" $filtercountry_code "scalar") (serialize-qp "filter[mcc]" $filtermcc "scalar") (serialize-qp "filter[mnc]" $filtermnc "scalar") (serialize-qp "filter[tadig]" $filtertadig "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[name][starts_with]" $filter_name_starts_with "scalar") (serialize-qp "filter[name][contains]" $filter_name_contains "scalar") (serialize-qp "filter[name][ends_with]" $filter_name_ends_with "scalar") (serialize-qp "filter[country_code]" $filter_country_code "scalar") (serialize-qp "filter[mcc]" $filter_mcc "scalar") (serialize-qp "filter[mnc]" $filter_mnc "scalar") (serialize-qp "filter[tadig]" $filter_tadig "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/mobile_operator_networks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4727,7 +4727,7 @@ export def "mobile-operator-networks MobileOperatorNetworksGet" [
 #
 # GET /notification_channels
 # operationId: listNotificationChannels
-export def "notification-channels listNotificationChannels" [
+export def "notification-channels list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4736,13 +4736,13 @@ export def "notification-channels listNotificationChannels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filterchannel-type-ideq: string@filterchannel-type-ideq-completer # Filter by the id of a channel type (e.g. webhook)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-channel-type-id-eq: string@filter-channel-type-id-eq-completer # Filter by the id of a channel type (e.g. webhook)
 ]: nothing -> record<data: table<channel_destination: string, channel_type_id: string, created_at: string, id: string, notification_profile_id: string, updated_at: string>, meta: record<page_number: int, page_size: int, total_pages: int, total_results: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[channel_type_id][eq]" $filterchannel_type_ideq "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[channel_type_id][eq]" $filter_channel_type_id_eq "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notification_channels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4753,7 +4753,7 @@ export def "notification-channels listNotificationChannels" [
 #
 # POST /notification_channels
 # operationId: createNotificationChannels
-export def "notification-channels createNotificationChannels" [
+export def "notification-channels create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4770,7 +4770,7 @@ export def "notification-channels createNotificationChannels" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notification_channels")
-  let body = {channel_destination: $channel_destination, channel_type_id: $channel_type_id, notification_profile_id: $notification_profile_id} | compact
+  let body = {"channel_destination": $channel_destination, "channel_type_id": $channel_type_id, "notification_profile_id": $notification_profile_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4794,7 +4794,7 @@ export def "notification-channels delete" [
 ]: nothing -> record<data: record<channel_destination: string, channel_type_id: string, created_at: string, id: string, notification_profile_id: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notification_channels/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/notification_channels/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4804,7 +4804,7 @@ export def "notification-channels delete" [
 #
 # GET /notification_channels/{id}
 # operationId: retrieveNotificationChannel
-export def "notification-channels retrieveNotificationChannel" [
+export def "notification-channels retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4817,7 +4817,7 @@ export def "notification-channels retrieveNotificationChannel" [
 ]: nothing -> record<data: record<channel_destination: string, channel_type_id: string, created_at: string, id: string, notification_profile_id: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notification_channels/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/notification_channels/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4827,7 +4827,7 @@ export def "notification-channels retrieveNotificationChannel" [
 #
 # PATCH /notification_channels/{id}
 # operationId: updateNotificationChannel
-export def "notification-channels updateNotificationChannel" [
+export def "notification-channels update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4844,8 +4844,8 @@ export def "notification-channels updateNotificationChannel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notification_channels/($id)")
-  let body = {channel_destination: $channel_destination, channel_type_id: $channel_type_id, notification_profile_id: $notification_profile_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/notification_channels/{id}"))
+  let body = {"channel_destination": $channel_destination, "channel_type_id": $channel_type_id, "notification_profile_id": $notification_profile_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4865,13 +4865,13 @@ export def "notification-event-conditions findNotificationsEventsConditions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filterassociated-record-typeeq: string@filterassociated-record-typeeq-completer # Filter by the associated record type (e.g. phone_number)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-associated-record-type-eq: string@filter-associated-record-type-eq-completer # Filter by the associated record type (e.g. phone_number)
 ]: nothing -> record<data: table<allow_multiple_channels: bool, associated_record_type: string, asynchronous: bool, created_at: string, description: string, enabled: bool, id: string, name: string, notification_event_id: string, parameters: list, supported_channels: list, updated_at: string>, meta: record<page_number: int, page_size: int, total_pages: int, total_results: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[associated_record_type][eq]" $filterassociated_record_typeeq "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[associated_record_type][eq]" $filter_associated_record_type_eq "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notification_event_conditions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4891,12 +4891,12 @@ export def "notification-events findNotificationsEvents" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> record<data: table<created_at: string, enabled: bool, id: string, name: string, notification_category: string, updated_at: string>, meta: record<page_number: int, page_size: int, total_pages: int, total_results: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notification_events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4916,12 +4916,12 @@ export def "notification-profiles findNotificationsProfiles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> record<data: table<created_at: string, id: string, name: string, updated_at: string>, meta: record<page_number: int, page_size: int, total_pages: int, total_results: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notification_profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4932,7 +4932,7 @@ export def "notification-profiles findNotificationsProfiles" [
 #
 # POST /notification_profiles
 # operationId: createNotificationProfile
-export def "notification-profiles createNotificationProfile" [
+export def "notification-profiles create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4947,7 +4947,7 @@ export def "notification-profiles createNotificationProfile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notification_profiles")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4971,7 +4971,7 @@ export def "notification-profiles delete" [
 ]: nothing -> record<data: record<created_at: string, id: string, name: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notification_profiles/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/notification_profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4981,7 +4981,7 @@ export def "notification-profiles delete" [
 #
 # GET /notification_profiles/{id}
 # operationId: retrieveNotificationProfile
-export def "notification-profiles retrieveNotificationProfile" [
+export def "notification-profiles retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4994,7 +4994,7 @@ export def "notification-profiles retrieveNotificationProfile" [
 ]: nothing -> record<data: record<created_at: string, id: string, name: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notification_profiles/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/notification_profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5004,7 +5004,7 @@ export def "notification-profiles retrieveNotificationProfile" [
 #
 # PATCH /notification_profiles/{id}
 # operationId: updateNotificationProfile
-export def "notification-profiles updateNotificationProfile" [
+export def "notification-profiles update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5019,8 +5019,8 @@ export def "notification-profiles updateNotificationProfile" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notification_profiles/($id)")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/notification_profiles/{id}"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5031,7 +5031,7 @@ export def "notification-profiles updateNotificationProfile" [
 #
 # GET /notification_settings
 # operationId: listNotificationSettings
-export def "notification-settings listNotificationSettings" [
+export def "notification-settings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5040,17 +5040,17 @@ export def "notification-settings listNotificationSettings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filternotification-profile-ideq: string # Filter by the id of a notification profile (e.g. 12455643-3cf1-4683-ad23-1cd32f7d5e0a)
-  --filternotification-channeleq: string # Filter by the id of a notification channel (e.g. 12455643-3cf1-4683-ad23-1cd32f7d5e0a)
-  --filternotification-event-condition-ideq: string # Filter by the id of a notification channel (e.g. 12455643-3cf1-4683-ad23-1cd32f7d5e0a)
-  --filterassociated-record-typeeq: string@filterassociated-record-typeeq-completer # Filter by the associated record type (e.g. phone_number)
-  --filterstatuseq: string@filterstatuseq-completer # The status of a notification setting (e.g. enable-received)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-notification-profile-id-eq: string # Filter by the id of a notification profile (e.g. 12455643-3cf1-4683-ad23-1cd32f7d5e0a)
+  --filter-notification-channel-eq: string # Filter by the id of a notification channel (e.g. 12455643-3cf1-4683-ad23-1cd32f7d5e0a)
+  --filter-notification-event-condition-id-eq: string # Filter by the id of a notification channel (e.g. 12455643-3cf1-4683-ad23-1cd32f7d5e0a)
+  --filter-associated-record-type-eq: string@filter-associated-record-type-eq-completer # Filter by the associated record type (e.g. phone_number)
+  --filter-status-eq: string@filter-status-eq-completer # The status of a notification setting (e.g. enable-received)
 ]: nothing -> record<data: table<associated_record_type: string, associated_record_type_value: string, created_at: string, id: string, notification_channel_id: string, notification_event_condition_id: string, notification_profile_id: string, parameters: list, status: string, updated_at: string>, meta: record<page_number: int, page_size: int, total_pages: int, total_results: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[notification_profile_id][eq]" $filternotification_profile_ideq "scalar") (serialize-qp "filter[notification_channel][eq]" $filternotification_channeleq "scalar") (serialize-qp "filter[notification_event_condition_id][eq]" $filternotification_event_condition_ideq "scalar") (serialize-qp "filter[associated_record_type][eq]" $filterassociated_record_typeeq "scalar") (serialize-qp "filter[status][eq]" $filterstatuseq "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[notification_profile_id][eq]" $filter_notification_profile_id_eq "scalar") (serialize-qp "filter[notification_channel][eq]" $filter_notification_channel_eq "scalar") (serialize-qp "filter[notification_event_condition_id][eq]" $filter_notification_event_condition_id_eq "scalar") (serialize-qp "filter[associated_record_type][eq]" $filter_associated_record_type_eq "scalar") (serialize-qp "filter[status][eq]" $filter_status_eq "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notification_settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5062,7 +5062,7 @@ export def "notification-settings listNotificationSettings" [
 # POST /notification_settings
 # operationId: createNotificationSetting
 # --parameters item shape: {name?: string, value?: string}
-export def "notification-settings createNotificationSetting" [
+export def "notification-settings create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5080,7 +5080,7 @@ export def "notification-settings createNotificationSetting" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notification_settings")
-  let body = {notification_channel_id: $notification_channel_id, notification_event_condition_id: $notification_event_condition_id, notification_profile_id: $notification_profile_id, parameters: $parameters} | compact
+  let body = {"notification_channel_id": $notification_channel_id, "notification_event_condition_id": $notification_event_condition_id, "notification_profile_id": $notification_profile_id, "parameters": $parameters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5104,7 +5104,7 @@ export def "notification-settings delete" [
 ]: nothing -> record<data: record<associated_record_type: string, associated_record_type_value: string, created_at: string, id: string, notification_channel_id: string, notification_event_condition_id: string, notification_profile_id: string, parameters: list<record>, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notification_settings/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/notification_settings/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5114,7 +5114,7 @@ export def "notification-settings delete" [
 #
 # GET /notification_settings/{id}
 # operationId: retrieveNotificationSetting
-export def "notification-settings retrieveNotificationSetting" [
+export def "notification-settings retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5127,7 +5127,7 @@ export def "notification-settings retrieveNotificationSetting" [
 ]: nothing -> record<data: record<associated_record_type: string, associated_record_type_value: string, created_at: string, id: string, notification_channel_id: string, notification_event_condition_id: string, notification_profile_id: string, parameters: list<record>, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notification_settings/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/notification_settings/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5137,7 +5137,7 @@ export def "notification-settings retrieveNotificationSetting" [
 #
 # GET /number_block_orders
 # operationId: listNumberBlockOrders
-export def "number-block-orders listNumberBlockOrders" [
+export def "number-block-orders list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5146,16 +5146,16 @@ export def "number-block-orders listNumberBlockOrders" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterstatus: string # Filter number block orders by status. (e.g. pending)
-  --filtercreated-atgt: string # Filter number block orders later than this value. (e.g. 2018-01-01T00:00:00.000000Z)
-  --filtercreated-atlt: string # Filter number block orders earlier than this value. (e.g. 2018-01-01T00:00:00.000000Z)
-  --filterphone-numbersstarting-number: string # Filter number block  orders having these phone numbers. (e.g. +19705555000)
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --filter-status: string # Filter number block orders by status. (e.g. pending)
+  --filter-created-at-gt: string # Filter number block orders later than this value. (e.g. 2018-01-01T00:00:00.000000Z)
+  --filter-created-at-lt: string # Filter number block orders earlier than this value. (e.g. 2018-01-01T00:00:00.000000Z)
+  --filter-phone-numbers-starting-number: string # Filter number block  orders having these phone numbers. (e.g. +19705555000)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[status]" $filterstatus "scalar") (serialize-qp "filter[created_at][gt]" $filtercreated_atgt "scalar") (serialize-qp "filter[created_at][lt]" $filtercreated_atlt "scalar") (serialize-qp "filter[phone_numbers.starting_number]" $filterphone_numbersstarting_number "scalar") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[status]" $filter_status "scalar") (serialize-qp "filter[created_at][gt]" $filter_created_at_gt "scalar") (serialize-qp "filter[created_at][lt]" $filter_created_at_lt "scalar") (serialize-qp "filter[phone_numbers.starting_number]" $filter_phone_numbers_starting_number "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/number_block_orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5166,7 +5166,7 @@ export def "number-block-orders listNumberBlockOrders" [
 #
 # POST /number_block_orders
 # operationId: createNumberBlockOrder
-export def "number-block-orders createNumberBlockOrder" [
+export def "number-block-orders create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5185,7 +5185,7 @@ export def "number-block-orders createNumberBlockOrder" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/number_block_orders")
-  let body = {connection_id: $connection_id, customer_reference: $customer_reference, messaging_profile_id: $messaging_profile_id, range: $range, starting_number: $starting_number} | compact
+  let body = {"connection_id": $connection_id, "customer_reference": $customer_reference, "messaging_profile_id": $messaging_profile_id, "range": $range, "starting_number": $starting_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5196,7 +5196,7 @@ export def "number-block-orders createNumberBlockOrder" [
 #
 # GET /number_block_orders/{number_block_order_id}
 # operationId: retrieveNumberBlockOrder
-export def "number-block-orders retrieveNumberBlockOrder" [
+export def "number-block-orders retrieve" [
   number_block_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5209,7 +5209,7 @@ export def "number-block-orders retrieveNumberBlockOrder" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/number_block_orders/($number_block_order_id)")
+  let full_url = (build-url $base ({number_block_order_id: $number_block_order_id} | format pattern "/number_block_orders/{number_block_order_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5219,7 +5219,7 @@ export def "number-block-orders retrieveNumberBlockOrder" [
 #
 # GET /number_lookup/{phone_number}
 # operationId: NumberLookup
-export def "number-lookup NumberLookup" [
+export def "number-lookup get" [
   phone_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5234,7 +5234,7 @@ export def "number-lookup NumberLookup" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/number_lookup/($phone_number)" $qp)
+  let full_url = (build-url $base ({phone_number: $phone_number} | format pattern "/number_lookup/{phone_number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5244,7 +5244,7 @@ export def "number-lookup NumberLookup" [
 #
 # GET /number_order_documents
 # operationId: listNumberOrderDocuments
-export def "number-order-documents listNumberOrderDocuments" [
+export def "number-order-documents list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5253,15 +5253,15 @@ export def "number-order-documents listNumberOrderDocuments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterrequirement-id: string # Filter number order documents by `requirement_id`.
-  --filtercreated-atgt: string # Filter number order documents after this datetime.
-  --filtercreated-atlt: string # Filter number order documents from before this datetime.
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --filter-requirement-id: string # Filter number order documents by `requirement_id`.
+  --filter-created-at-gt: string # Filter number order documents after this datetime.
+  --filter-created-at-lt: string # Filter number order documents from before this datetime.
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[requirement_id]" $filterrequirement_id "scalar") (serialize-qp "filter[created_at][gt]" $filtercreated_atgt "scalar") (serialize-qp "filter[created_at][lt]" $filtercreated_atlt "scalar") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[requirement_id]" $filter_requirement_id "scalar") (serialize-qp "filter[created_at][gt]" $filter_created_at_gt "scalar") (serialize-qp "filter[created_at][lt]" $filter_created_at_lt "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/number_order_documents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5272,7 +5272,7 @@ export def "number-order-documents listNumberOrderDocuments" [
 #
 # POST /number_order_documents
 # operationId: createNumberOrderDocument
-export def "number-order-documents createNumberOrderDocument" [
+export def "number-order-documents create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5289,7 +5289,7 @@ export def "number-order-documents createNumberOrderDocument" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/number_order_documents")
-  let body = {customer_reference: $customer_reference, file_id: $file_id, requirements_id: $requirements_id} | compact
+  let body = {"customer_reference": $customer_reference, "file_id": $file_id, "requirements_id": $requirements_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5300,7 +5300,7 @@ export def "number-order-documents createNumberOrderDocument" [
 #
 # GET /number_order_documents/{number_order_document_id}
 # operationId: retrieveNumberOrderDocument
-export def "number-order-documents retrieveNumberOrderDocument" [
+export def "number-order-documents retrieve" [
   number_order_document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5313,7 +5313,7 @@ export def "number-order-documents retrieveNumberOrderDocument" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/number_order_documents/($number_order_document_id)")
+  let full_url = (build-url $base ({number_order_document_id: $number_order_document_id} | format pattern "/number_order_documents/{number_order_document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5323,7 +5323,7 @@ export def "number-order-documents retrieveNumberOrderDocument" [
 #
 # PATCH /number_order_documents/{number_order_document_id}
 # operationId: updateNumberOrderDocument
-export def "number-order-documents updateNumberOrderDocument" [
+export def "number-order-documents update" [
   number_order_document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5340,8 +5340,8 @@ export def "number-order-documents updateNumberOrderDocument" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/number_order_documents/($number_order_document_id)")
-  let body = {customer_reference: $customer_reference, file_id: $file_id, requirements_id: $requirements_id} | compact
+  let full_url = (build-url $base ({number_order_document_id: $number_order_document_id} | format pattern "/number_order_documents/{number_order_document_id}"))
+  let body = {"customer_reference": $customer_reference, "file_id": $file_id, "requirements_id": $requirements_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5352,7 +5352,7 @@ export def "number-order-documents updateNumberOrderDocument" [
 #
 # GET /number_order_phone_numbers
 # operationId: retrieveNumberOrderPhoneNumbers
-export def "number-order-phone-numbers retrieveNumberOrderPhoneNumbers" [
+export def "number-order-phone-numbers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5374,7 +5374,7 @@ export def "number-order-phone-numbers retrieveNumberOrderPhoneNumbers" [
 #
 # GET /number_order_phone_numbers/{number_order_phone_number_id}
 # operationId: retrieveNumberOrderPhoneNumber
-export def "number-order-phone-numbers retrieveNumberOrderPhoneNumber" [
+export def "number-order-phone-numbers retrieve" [
   number_order_phone_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5387,7 +5387,7 @@ export def "number-order-phone-numbers retrieveNumberOrderPhoneNumber" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/number_order_phone_numbers/($number_order_phone_number_id)")
+  let full_url = (build-url $base ({number_order_phone_number_id: $number_order_phone_number_id} | format pattern "/number_order_phone_numbers/{number_order_phone_number_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5398,7 +5398,7 @@ export def "number-order-phone-numbers retrieveNumberOrderPhoneNumber" [
 # PATCH /number_order_phone_numbers/{number_order_phone_number_id}
 # operationId: updateNumberOrderPhoneNumber
 # --regulatory_requirements item shape: {field_value?: string, requirement_id?: string}
-export def "number-order-phone-numbers updateNumberOrderPhoneNumber" [
+export def "number-order-phone-numbers update" [
   number_order_phone_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5413,8 +5413,8 @@ export def "number-order-phone-numbers updateNumberOrderPhoneNumber" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/number_order_phone_numbers/($number_order_phone_number_id)")
-  let body = {regulatory_requirements: $regulatory_requirements} | compact
+  let full_url = (build-url $base ({number_order_phone_number_id: $number_order_phone_number_id} | format pattern "/number_order_phone_numbers/{number_order_phone_number_id}"))
+  let body = {"regulatory_requirements": $regulatory_requirements} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5425,7 +5425,7 @@ export def "number-order-phone-numbers updateNumberOrderPhoneNumber" [
 #
 # GET /number_orders
 # operationId: listNumberOrders
-export def "number-orders listNumberOrders" [
+export def "number-orders list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5434,18 +5434,18 @@ export def "number-orders listNumberOrders" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterstatus: string # Filter number orders by status.
-  --filtercreated-atgt: string # Filter number orders later than this value.
-  --filtercreated-atlt: string # Filter number orders earlier than this value.
-  --filterphone-numbers-count: string # Filter number order with this amount of numbers
-  --filtercustomer-reference: string # Filter number orders via the customer reference set.
-  --filterrequirements-met: oneof<nothing, bool> # Filter number orders by requirements met.
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --filter-status: string # Filter number orders by status.
+  --filter-created-at-gt: string # Filter number orders later than this value.
+  --filter-created-at-lt: string # Filter number orders earlier than this value.
+  --filter-phone-numbers-count: string # Filter number order with this amount of numbers
+  --filter-customer-reference: string # Filter number orders via the customer reference set.
+  --filter-requirements-met: oneof<nothing, bool> # Filter number orders by requirements met.
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[status]" $filterstatus "scalar") (serialize-qp "filter[created_at][gt]" $filtercreated_atgt "scalar") (serialize-qp "filter[created_at][lt]" $filtercreated_atlt "scalar") (serialize-qp "filter[phone_numbers_count]" $filterphone_numbers_count "scalar") (serialize-qp "filter[customer_reference]" $filtercustomer_reference "scalar") (serialize-qp "filter[requirements_met]" $filterrequirements_met "scalar") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[status]" $filter_status "scalar") (serialize-qp "filter[created_at][gt]" $filter_created_at_gt "scalar") (serialize-qp "filter[created_at][lt]" $filter_created_at_lt "scalar") (serialize-qp "filter[phone_numbers_count]" $filter_phone_numbers_count "scalar") (serialize-qp "filter[customer_reference]" $filter_customer_reference "scalar") (serialize-qp "filter[requirements_met]" $filter_requirements_met "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/number_orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5457,7 +5457,7 @@ export def "number-orders listNumberOrders" [
 # POST /number_orders
 # operationId: createNumberOrder
 # --phone_numbers item shape: {phone_number?: string, regulatory_requirements?: list}
-export def "number-orders createNumberOrder" [
+export def "number-orders create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5476,7 +5476,7 @@ export def "number-orders createNumberOrder" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/number_orders")
-  let body = {billing_group_id: $billing_group_id, connection_id: $connection_id, customer_reference: $customer_reference, messaging_profile_id: $messaging_profile_id, phone_numbers: $phone_numbers} | compact
+  let body = {"billing_group_id": $billing_group_id, "connection_id": $connection_id, "customer_reference": $customer_reference, "messaging_profile_id": $messaging_profile_id, "phone_numbers": $phone_numbers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5487,7 +5487,7 @@ export def "number-orders createNumberOrder" [
 #
 # GET /number_orders/{number_order_id}
 # operationId: retrieveNumberOrder
-export def "number-orders retrieveNumberOrder" [
+export def "number-orders retrieve" [
   number_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5500,7 +5500,7 @@ export def "number-orders retrieveNumberOrder" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/number_orders/($number_order_id)")
+  let full_url = (build-url $base ({number_order_id: $number_order_id} | format pattern "/number_orders/{number_order_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5511,7 +5511,7 @@ export def "number-orders retrieveNumberOrder" [
 # PATCH /number_orders/{number_order_id}
 # operationId: updateNumberOrder
 # --phone_numbers item shape: {phone_number?: string, regulatory_requirements?: list}
-export def "number-orders updateNumberOrder" [
+export def "number-orders update" [
   number_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5527,8 +5527,8 @@ export def "number-orders updateNumberOrder" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/number_orders/($number_order_id)")
-  let body = {customer_reference: $customer_reference, phone_numbers: $phone_numbers} | compact
+  let full_url = (build-url $base ({number_order_id: $number_order_id} | format pattern "/number_orders/{number_order_id}"))
+  let body = {"customer_reference": $customer_reference, "phone_numbers": $phone_numbers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5539,7 +5539,7 @@ export def "number-orders updateNumberOrder" [
 #
 # GET /number_reservations
 # operationId: listNumberReservations
-export def "number-reservations listNumberReservations" [
+export def "number-reservations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5548,17 +5548,17 @@ export def "number-reservations listNumberReservations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterstatus: string # Filter number reservations by status.
-  --filtercreated-atgt: string # Filter number reservations later than this value.
-  --filtercreated-atlt: string # Filter number reservations earlier than this value.
-  --filterphone-numbersphone-number: string # Filter number reservations having these phone numbers.
-  --filtercustomer-reference: string # Filter number reservations via the customer reference set.
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --filter-status: string # Filter number reservations by status.
+  --filter-created-at-gt: string # Filter number reservations later than this value.
+  --filter-created-at-lt: string # Filter number reservations earlier than this value.
+  --filter-phone-numbers-phone-number: string # Filter number reservations having these phone numbers.
+  --filter-customer-reference: string # Filter number reservations via the customer reference set.
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[status]" $filterstatus "scalar") (serialize-qp "filter[created_at][gt]" $filtercreated_atgt "scalar") (serialize-qp "filter[created_at][lt]" $filtercreated_atlt "scalar") (serialize-qp "filter[phone_numbers.phone_number]" $filterphone_numbersphone_number "scalar") (serialize-qp "filter[customer_reference]" $filtercustomer_reference "scalar") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[status]" $filter_status "scalar") (serialize-qp "filter[created_at][gt]" $filter_created_at_gt "scalar") (serialize-qp "filter[created_at][lt]" $filter_created_at_lt "scalar") (serialize-qp "filter[phone_numbers.phone_number]" $filter_phone_numbers_phone_number "scalar") (serialize-qp "filter[customer_reference]" $filter_customer_reference "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/number_reservations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5570,7 +5570,7 @@ export def "number-reservations listNumberReservations" [
 # POST /number_reservations
 # operationId: createNumberReservation
 # --phone_numbers item shape: {phone_number?: string}
-export def "number-reservations createNumberReservation" [
+export def "number-reservations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5586,7 +5586,7 @@ export def "number-reservations createNumberReservation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/number_reservations")
-  let body = {customer_reference: $customer_reference, phone_numbers: $phone_numbers} | compact
+  let body = {"customer_reference": $customer_reference, "phone_numbers": $phone_numbers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5597,7 +5597,7 @@ export def "number-reservations createNumberReservation" [
 #
 # GET /number_reservations/{number_reservation_id}
 # operationId: retrieveNumberReservation
-export def "number-reservations retrieveNumberReservation" [
+export def "number-reservations retrieve" [
   number_reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5610,7 +5610,7 @@ export def "number-reservations retrieveNumberReservation" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/number_reservations/($number_reservation_id)")
+  let full_url = (build-url $base ({number_reservation_id: $number_reservation_id} | format pattern "/number_reservations/{number_reservation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5633,7 +5633,7 @@ export def "number-reservations-actions-extend extendNumberReservationExpiryTime
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/number_reservations/($number_reservation_id)/actions/extend")
+  let full_url = (build-url $base ({number_reservation_id: $number_reservation_id} | format pattern "/number_reservations/{number_reservation_id}/actions/extend"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5643,7 +5643,7 @@ export def "number-reservations-actions-extend extendNumberReservationExpiryTime
 #
 # GET /ota_updates
 # operationId: OTAUpdatesList
-export def "ota-updates OTAUpdatesList" [
+export def "ota-updates list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5652,15 +5652,15 @@ export def "ota-updates OTAUpdatesList" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filterstatus: string@filterstatus-completer-1 # Filter by a specific status of the resource's lifecycle. (e.g. in-progress)
-  --filtersim-card-id: string # The SIM card identification UUID.
-  --filtertype: string@filtertype-completer-1 # Filter by type. (e.g. sim_card_network_preferences)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-status: string@filter-status-completer-1 # Filter by a specific status of the resource's lifecycle. (e.g. in-progress)
+  --filter-sim-card-id: string # The SIM card identification UUID.
+  --filter-type: string@filter-type-completer-1 # Filter by type. (e.g. sim_card_network_preferences)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[status]" $filterstatus "scalar") (serialize-qp "filter[sim_card_id]" $filtersim_card_id "scalar") (serialize-qp "filter[type]" $filtertype "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[status]" $filter_status "scalar") (serialize-qp "filter[sim_card_id]" $filter_sim_card_id "scalar") (serialize-qp "filter[type]" $filter_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ota_updates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5671,7 +5671,7 @@ export def "ota-updates OTAUpdatesList" [
 #
 # GET /ota_updates/{id}
 # operationId: OTAUpdateGET
-export def "ota-updates OTAUpdateGET" [
+export def "ota-updates get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5684,7 +5684,7 @@ export def "ota-updates OTAUpdateGET" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ota_updates/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ota_updates/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5694,7 +5694,7 @@ export def "ota-updates OTAUpdateGET" [
 #
 # GET /outbound_voice_profiles
 # operationId: listOutboundVoiceProfiles
-export def "outbound-voice-profiles listOutboundVoiceProfiles" [
+export def "outbound-voice-profiles list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5703,14 +5703,14 @@ export def "outbound-voice-profiles listOutboundVoiceProfiles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filternamecontains: string # Optional filter on outbound voice profile name. (e.g. office-profile)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-name-contains: string # Optional filter on outbound voice profile name. (e.g. office-profile)
   --qp-sort: string@sort-completer-4 # Specifies the sort order for results. By default sorting direction is ascending. To have the results sorted in descending order add the <code>-</code> prefix.<br/><br/> That is: <ul>   <li>     <code>name</code>: sorts the result by the     <code>name</code> field in ascending order.   </li>    <li>     <code>-name</code>: sorts the result by the     <code>name</code> field in descending order.   </li> </ul> <br/> (default: -created_at, e.g. name)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[name][contains]" $filternamecontains "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[name][contains]" $filter_name_contains "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/outbound_voice_profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5722,7 +5722,7 @@ export def "outbound-voice-profiles listOutboundVoiceProfiles" [
 # POST /outbound_voice_profiles
 # operationId: createOutboundVoiceProfile
 # --call_recording shape: {call_recording_caller_phone_numbers?: list, call_recording_channels?: "single"|"dual", call_recording_format?: "wav"|"mp3", call_recording_type?: "all"|"none"|"by_caller_phone_number"}
-export def "outbound-voice-profiles createOutboundVoiceProfile" [
+export def "outbound-voice-profiles create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5749,7 +5749,7 @@ export def "outbound-voice-profiles createOutboundVoiceProfile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/outbound_voice_profiles")
-  let body = {billing_group_id: $billing_group_id, call_recording: $call_recording, concurrent_call_limit: $concurrent_call_limit, daily_spend_limit: $daily_spend_limit, daily_spend_limit_enabled: $daily_spend_limit_enabled, enabled: $enabled, max_destination_rate: $max_destination_rate, name: $name, service_plan: $service_plan, tags: $tags, traffic_type: $traffic_type, usage_payment_method: $usage_payment_method, whitelisted_destinations: $whitelisted_destinations} | compact
+  let body = {"billing_group_id": $billing_group_id, "call_recording": $call_recording, "concurrent_call_limit": $concurrent_call_limit, "daily_spend_limit": $daily_spend_limit, "daily_spend_limit_enabled": $daily_spend_limit_enabled, "enabled": $enabled, "max_destination_rate": $max_destination_rate, "name": $name, "service_plan": $service_plan, "tags": $tags, "traffic_type": $traffic_type, "usage_payment_method": $usage_payment_method, "whitelisted_destinations": $whitelisted_destinations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5773,7 +5773,7 @@ export def "outbound-voice-profiles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/outbound_voice_profiles/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/outbound_voice_profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5783,7 +5783,7 @@ export def "outbound-voice-profiles delete" [
 #
 # GET /outbound_voice_profiles/{id}
 # operationId: retrieveOutboundVoiceProfile
-export def "outbound-voice-profiles retrieveOutboundVoiceProfile" [
+export def "outbound-voice-profiles retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5796,7 +5796,7 @@ export def "outbound-voice-profiles retrieveOutboundVoiceProfile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/outbound_voice_profiles/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/outbound_voice_profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5807,7 +5807,7 @@ export def "outbound-voice-profiles retrieveOutboundVoiceProfile" [
 # PATCH /outbound_voice_profiles/{id}
 # operationId: updateOutboundVoiceProfile
 # --call_recording shape: {call_recording_caller_phone_numbers?: list, call_recording_channels?: "single"|"dual", call_recording_format?: "wav"|"mp3", call_recording_type?: "all"|"none"|"by_caller_phone_number"}
-export def "outbound-voice-profiles updateOutboundVoiceProfile" [
+export def "outbound-voice-profiles update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5834,8 +5834,8 @@ export def "outbound-voice-profiles updateOutboundVoiceProfile" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/outbound_voice_profiles/($id)")
-  let body = {billing_group_id: $billing_group_id, call_recording: $call_recording, concurrent_call_limit: $concurrent_call_limit, daily_spend_limit: $daily_spend_limit, daily_spend_limit_enabled: $daily_spend_limit_enabled, enabled: $enabled, max_destination_rate: $max_destination_rate, name: $name, service_plan: $service_plan, tags: $tags, traffic_type: $traffic_type, usage_payment_method: $usage_payment_method, whitelisted_destinations: $whitelisted_destinations} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/outbound_voice_profiles/{id}"))
+  let body = {"billing_group_id": $billing_group_id, "call_recording": $call_recording, "concurrent_call_limit": $concurrent_call_limit, "daily_spend_limit": $daily_spend_limit, "daily_spend_limit_enabled": $daily_spend_limit_enabled, "enabled": $enabled, "max_destination_rate": $max_destination_rate, "name": $name, "service_plan": $service_plan, "tags": $tags, "traffic_type": $traffic_type, "usage_payment_method": $usage_payment_method, "whitelisted_destinations": $whitelisted_destinations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5846,7 +5846,7 @@ export def "outbound-voice-profiles updateOutboundVoiceProfile" [
 #
 # GET /phone_number_blocks/jobs
 # operationId: listPhoneNumberBlocksJobs
-export def "phone-number-blocks-jobs listPhoneNumberBlocksJobs" [
+export def "phone-number-blocks-jobs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5855,15 +5855,15 @@ export def "phone-number-blocks-jobs listPhoneNumberBlocksJobs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filtertype: string@filtertype-completer-2 # Filter the phone number blocks jobs by type. (e.g. delete_phone_number_block)
-  --filterstatus: string@filterstatus-completer-2 # Filter the phone number blocks jobs by status. (e.g. in_progress)
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --filter-type: string@filter-type-completer-2 # Filter the phone number blocks jobs by type. (e.g. delete_phone_number_block)
+  --filter-status: string@filter-status-completer-2 # Filter the phone number blocks jobs by status. (e.g. in_progress)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
   --qp-sort: string@sort-completer-5 # Specifies the sort order for results. If not given, results are sorted by created_at in descending order. (e.g. created_at)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[type]" $filtertype "scalar") (serialize-qp "filter[status]" $filterstatus "scalar") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[type]" $filter_type "scalar") (serialize-qp "filter[status]" $filter_status "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone_number_blocks/jobs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5874,7 +5874,7 @@ export def "phone-number-blocks-jobs listPhoneNumberBlocksJobs" [
 #
 # POST /phone_number_blocks/jobs/delete_phone_number_block
 # operationId: createPhoneNumberBlocksJobDeletePhoneNumberBlock
-export def "phone-number-blocks-jobs-delete-phone-number-block createPhoneNumberBlocksJobDeletePhoneNumberBlock" [
+export def "phone-number-blocks-jobs-delete-phone-number-block create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5889,7 +5889,7 @@ export def "phone-number-blocks-jobs-delete-phone-number-block createPhoneNumber
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone_number_blocks/jobs/delete_phone_number_block")
-  let body = {phone_number_block_id: $phone_number_block_id} | compact
+  let body = {"phone_number_block_id": $phone_number_block_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5900,7 +5900,7 @@ export def "phone-number-blocks-jobs-delete-phone-number-block createPhoneNumber
 #
 # GET /phone_number_blocks/jobs/{id}
 # operationId: retrievePhoneNumberBlocksJob
-export def "phone-number-blocks-jobs retrievePhoneNumberBlocksJob" [
+export def "phone-number-blocks-jobs retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5913,7 +5913,7 @@ export def "phone-number-blocks-jobs retrievePhoneNumberBlocksJob" [
 ]: nothing -> record<data: record<created_at: string, etc: string, failed_operations: list<record>, id: string, record_type: string, status: string, successful_operations: list<record>, type: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/phone_number_blocks/jobs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/phone_number_blocks/jobs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5923,7 +5923,7 @@ export def "phone-number-blocks-jobs retrievePhoneNumberBlocksJob" [
 #
 # GET /phone_numbers
 # operationId: listPhoneNumbers
-export def "phone-numbers listPhoneNumbers" [
+export def "phone-numbers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5932,24 +5932,24 @@ export def "phone-numbers listPhoneNumbers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filtertag: string # Filter by phone number tags.
-  --filterphone-number: string # Filter by phone number. Requires at least three digits.              Non-numerical characters will result in no values being returned.
-  --filterstatus: string@filterstatus-completer-3 # Filter by phone number status. (e.g. active)
-  --filtervoiceconnection-namecontains: string # Filter contains connection name. Requires at least three characters. (e.g. test)
-  --filtervoiceconnection-namestarts-with: string # Filter starts with connection name. Requires at least three characters. (e.g. test)
-  --filtervoiceconnection-nameends-with: string # Filter ends with connection name. Requires at least three characters. (e.g. test)
-  --filtervoiceconnection-nameeq: string # Filter by connection name. (e.g. test)
-  --filterusage-payment-method: string@filterusage-payment-method-completer # Filter by usage_payment_method. (e.g. channel)
-  --filterbilling-group-id: string # Filter by the billing_group_id associated with phone numbers. To filter to only phone numbers that have no billing group associated them, set the value of this filter to the string 'null'. (e.g. 62e4bf2e-c278-4282-b524-488d9c9c43b2)
-  --filteremergency-address-id: string # Filter by the emergency_address_id associated with phone numbers. To filter only phone numbers that have no emergency address associated with them, set the value of this filter to the string 'null'. (format: int64, e.g. 9102160989215728032)
-  --filtercustomer-reference: string # Filter numbers via the customer_reference set.
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-tag: string # Filter by phone number tags.
+  --filter-phone-number: string # Filter by phone number. Requires at least three digits.              Non-numerical characters will result in no values being returned.
+  --filter-status: string@filter-status-completer-3 # Filter by phone number status. (e.g. active)
+  --filter-voice-connection-name-contains: string # Filter contains connection name. Requires at least three characters. (e.g. test)
+  --filter-voice-connection-name-starts-with: string # Filter starts with connection name. Requires at least three characters. (e.g. test)
+  --filter-voice-connection-name-ends-with: string # Filter ends with connection name. Requires at least three characters. (e.g. test)
+  --filter-voice-connection-name-eq: string # Filter by connection name. (e.g. test)
+  --filter-usage-payment-method: string@filter-usage-payment-method-completer # Filter by usage_payment_method. (e.g. channel)
+  --filter-billing-group-id: string # Filter by the billing_group_id associated with phone numbers. To filter to only phone numbers that have no billing group associated them, set the value of this filter to the string 'null'. (e.g. 62e4bf2e-c278-4282-b524-488d9c9c43b2)
+  --filter-emergency-address-id: string # Filter by the emergency_address_id associated with phone numbers. To filter only phone numbers that have no emergency address associated with them, set the value of this filter to the string 'null'. (format: int64, e.g. 9102160989215728032)
+  --filter-customer-reference: string # Filter numbers via the customer_reference set.
   --qp-sort: string@sort-completer-6 # Specifies the sort order for results. If not given, results are sorted by created_at in descending order. (e.g. connection_name)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[tag]" $filtertag "scalar") (serialize-qp "filter[phone_number]" $filterphone_number "scalar") (serialize-qp "filter[status]" $filterstatus "scalar") (serialize-qp "filter[voice.connection_name][contains]" $filtervoiceconnection_namecontains "scalar") (serialize-qp "filter[voice.connection_name][starts_with]" $filtervoiceconnection_namestarts_with "scalar") (serialize-qp "filter[voice.connection_name][ends_with]" $filtervoiceconnection_nameends_with "scalar") (serialize-qp "filter[voice.connection_name][eq]" $filtervoiceconnection_nameeq "scalar") (serialize-qp "filter[usage_payment_method]" $filterusage_payment_method "scalar") (serialize-qp "filter[billing_group_id]" $filterbilling_group_id "scalar") (serialize-qp "filter[emergency_address_id]" $filteremergency_address_id "scalar") (serialize-qp "filter[customer_reference]" $filtercustomer_reference "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[tag]" $filter_tag "scalar") (serialize-qp "filter[phone_number]" $filter_phone_number "scalar") (serialize-qp "filter[status]" $filter_status "scalar") (serialize-qp "filter[voice.connection_name][contains]" $filter_voice_connection_name_contains "scalar") (serialize-qp "filter[voice.connection_name][starts_with]" $filter_voice_connection_name_starts_with "scalar") (serialize-qp "filter[voice.connection_name][ends_with]" $filter_voice_connection_name_ends_with "scalar") (serialize-qp "filter[voice.connection_name][eq]" $filter_voice_connection_name_eq "scalar") (serialize-qp "filter[usage_payment_method]" $filter_usage_payment_method "scalar") (serialize-qp "filter[billing_group_id]" $filter_billing_group_id "scalar") (serialize-qp "filter[emergency_address_id]" $filter_emergency_address_id "scalar") (serialize-qp "filter[customer_reference]" $filter_customer_reference "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone_numbers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5960,7 +5960,7 @@ export def "phone-numbers listPhoneNumbers" [
 #
 # GET /phone_numbers/csv_downloads
 # operationId: listCsvDownloads
-export def "phone-numbers-csv-downloads listCsvDownloads" [
+export def "phone-numbers-csv-downloads list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5969,12 +5969,12 @@ export def "phone-numbers-csv-downloads listCsvDownloads" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone_numbers/csv_downloads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5985,7 +5985,7 @@ export def "phone-numbers-csv-downloads listCsvDownloads" [
 #
 # POST /phone_numbers/csv_downloads
 # operationId: createCsvDownload
-export def "phone-numbers-csv-downloads createCsvDownload" [
+export def "phone-numbers-csv-downloads create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6007,7 +6007,7 @@ export def "phone-numbers-csv-downloads createCsvDownload" [
 #
 # GET /phone_numbers/csv_downloads/{id}
 # operationId: retrieveCsvDownload
-export def "phone-numbers-csv-downloads retrieveCsvDownload" [
+export def "phone-numbers-csv-downloads retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6020,7 +6020,7 @@ export def "phone-numbers-csv-downloads retrieveCsvDownload" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/phone_numbers/csv_downloads/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/phone_numbers/csv_downloads/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6030,7 +6030,7 @@ export def "phone-numbers-csv-downloads retrieveCsvDownload" [
 #
 # GET /phone_numbers/inbound_channels
 # operationId: listOutboundChannels
-export def "phone-numbers-inbound-channels listOutboundChannels" [
+export def "phone-numbers-inbound-channels list-outbound" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6052,7 +6052,7 @@ export def "phone-numbers-inbound-channels listOutboundChannels" [
 #
 # PATCH /phone_numbers/inbound_channels
 # operationId: updateOutboundChannels
-export def "phone-numbers-inbound-channels updateOutboundChannels" [
+export def "phone-numbers-inbound-channels update-outbound" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6067,7 +6067,7 @@ export def "phone-numbers-inbound-channels updateOutboundChannels" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone_numbers/inbound_channels")
-  let body = {channels: $channels} | compact
+  let body = {"channels": $channels} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6078,7 +6078,7 @@ export def "phone-numbers-inbound-channels updateOutboundChannels" [
 #
 # GET /phone_numbers/jobs
 # operationId: listPhoneNumbersJobs
-export def "phone-numbers-jobs listPhoneNumbersJobs" [
+export def "phone-numbers-jobs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6087,14 +6087,14 @@ export def "phone-numbers-jobs listPhoneNumbersJobs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filtertype: string@filtertype-completer-3 # Filter the phone number jobs by type. (e.g. update_emergency_settings)
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --filter-type: string@filter-type-completer-3 # Filter the phone number jobs by type. (e.g. update_emergency_settings)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
   --qp-sort: string@sort-completer-5 # Specifies the sort order for results. If not given, results are sorted by created_at in descending order. (e.g. created_at)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[type]" $filtertype "scalar") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[type]" $filter_type "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone_numbers/jobs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6105,7 +6105,7 @@ export def "phone-numbers-jobs listPhoneNumbersJobs" [
 #
 # POST /phone_numbers/jobs/delete_phone_numbers
 # operationId: createPhoneNumbersJobDeletePhoneNumbers
-export def "phone-numbers-jobs-delete-phone-numbers createPhoneNumbersJobDeletePhoneNumbers" [
+export def "phone-numbers-jobs-delete-phone-numbers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6120,7 +6120,7 @@ export def "phone-numbers-jobs-delete-phone-numbers createPhoneNumbersJobDeleteP
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone_numbers/jobs/delete_phone_numbers")
-  let body = {phone_numbers: $phone_numbers} | compact
+  let body = {"phone_numbers": $phone_numbers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6131,7 +6131,7 @@ export def "phone-numbers-jobs-delete-phone-numbers createPhoneNumbersJobDeleteP
 #
 # POST /phone_numbers/jobs/update_emergency_settings
 # operationId: createPhoneNumbersJobUpdateEmergencySettings
-export def "phone-numbers-jobs-update-emergency-settings createPhoneNumbersJobUpdateEmergencySettings" [
+export def "phone-numbers-jobs-update-emergency-settings create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6148,7 +6148,7 @@ export def "phone-numbers-jobs-update-emergency-settings createPhoneNumbersJobUp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone_numbers/jobs/update_emergency_settings")
-  let body = {emergency_address_id: $emergency_address_id, emergency_enabled: $emergency_enabled, phone_numbers: $phone_numbers} | compact
+  let body = {"emergency_address_id": $emergency_address_id, "emergency_enabled": $emergency_enabled, "phone_numbers": $phone_numbers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6159,7 +6159,7 @@ export def "phone-numbers-jobs-update-emergency-settings createPhoneNumbersJobUp
 #
 # POST /phone_numbers/jobs/update_phone_numbers
 # operationId: createPhoneNumbersJobUpdatePhoneNumber
-export def "phone-numbers-jobs-update-phone-numbers createPhoneNumbersJobUpdatePhoneNumber" [
+export def "phone-numbers-jobs-update-phone-numbers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6179,7 +6179,7 @@ export def "phone-numbers-jobs-update-phone-numbers createPhoneNumbersJobUpdateP
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone_numbers/jobs/update_phone_numbers")
-  let body = {billing_group_id: $billing_group_id, connection_id: $connection_id, customer_reference: $customer_reference, external_pin: $external_pin, phone_numbers: $phone_numbers, tags: $tags} | compact
+  let body = {"billing_group_id": $billing_group_id, "connection_id": $connection_id, "customer_reference": $customer_reference, "external_pin": $external_pin, "phone_numbers": $phone_numbers, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6190,7 +6190,7 @@ export def "phone-numbers-jobs-update-phone-numbers createPhoneNumbersJobUpdateP
 #
 # GET /phone_numbers/jobs/{id}
 # operationId: retrievePhoneNumbersJob
-export def "phone-numbers-jobs retrievePhoneNumbersJob" [
+export def "phone-numbers-jobs retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6203,7 +6203,7 @@ export def "phone-numbers-jobs retrievePhoneNumbersJob" [
 ]: nothing -> record<data: record<created_at: string, etc: string, failed_operations: list<record>, id: string, pending_operations: list<record>, record_type: string, status: string, successful_operations: list<record>, type: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/phone_numbers/jobs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/phone_numbers/jobs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6213,7 +6213,7 @@ export def "phone-numbers-jobs retrievePhoneNumbersJob" [
 #
 # GET /phone_numbers/messaging
 # operationId: listPhoneNumbersWithMessagingSettings
-export def "phone-numbers-messaging listPhoneNumbersWithMessagingSettings" [
+export def "phone-numbers-messaging list-phone-numbers-with-messaging-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6222,12 +6222,12 @@ export def "phone-numbers-messaging listPhoneNumbersWithMessagingSettings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone_numbers/messaging" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6238,7 +6238,7 @@ export def "phone-numbers-messaging listPhoneNumbersWithMessagingSettings" [
 #
 # GET /phone_numbers/voice
 # operationId: listPhoneNumbersWithVoiceSettings
-export def "phone-numbers-voice listPhoneNumbersWithVoiceSettings" [
+export def "phone-numbers-voice list-phone-numbers-with-voice-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6247,17 +6247,17 @@ export def "phone-numbers-voice listPhoneNumbersWithVoiceSettings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filterphone-number: string # Filter by phone number. Requires at least three digits.              Non-numerical characters will result in no values being returned.
-  --filterconnection-namecontains: string # Filter contains connection name. Requires at least three characters. (e.g. test)
-  --filtercustomer-reference: string # Filter numbers via the customer_reference set.
-  --filterusage-payment-method: string@filterusage-payment-method-completer # Filter by usage_payment_method. (e.g. channel)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-phone-number: string # Filter by phone number. Requires at least three digits.              Non-numerical characters will result in no values being returned.
+  --filter-connection-name-contains: string # Filter contains connection name. Requires at least three characters. (e.g. test)
+  --filter-customer-reference: string # Filter numbers via the customer_reference set.
+  --filter-usage-payment-method: string@filter-usage-payment-method-completer # Filter by usage_payment_method. (e.g. channel)
   --qp-sort: string@sort-completer-6 # Specifies the sort order for results. If not given, results are sorted by created_at in descending order. (e.g. connection_name)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[phone_number]" $filterphone_number "scalar") (serialize-qp "filter[connection_name][contains]" $filterconnection_namecontains "scalar") (serialize-qp "filter[customer_reference]" $filtercustomer_reference "scalar") (serialize-qp "filter[usage_payment_method]" $filterusage_payment_method "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[phone_number]" $filter_phone_number "scalar") (serialize-qp "filter[connection_name][contains]" $filter_connection_name_contains "scalar") (serialize-qp "filter[customer_reference]" $filter_customer_reference "scalar") (serialize-qp "filter[usage_payment_method]" $filter_usage_payment_method "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone_numbers/voice" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6281,7 +6281,7 @@ export def "phone-numbers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/phone_numbers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/phone_numbers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6291,7 +6291,7 @@ export def "phone-numbers delete" [
 #
 # GET /phone_numbers/{id}
 # operationId: retrievePhoneNumber
-export def "phone-numbers retrievePhoneNumber" [
+export def "phone-numbers retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6304,7 +6304,7 @@ export def "phone-numbers retrievePhoneNumber" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/phone_numbers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/phone_numbers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6314,7 +6314,7 @@ export def "phone-numbers retrievePhoneNumber" [
 #
 # PATCH /phone_numbers/{id}
 # operationId: updatePhoneNumber
-export def "phone-numbers updatePhoneNumber" [
+export def "phone-numbers update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6334,8 +6334,8 @@ export def "phone-numbers updatePhoneNumber" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/phone_numbers/($id)")
-  let body = {billing_group_id: $billing_group_id, connection_id: $connection_id, customer_reference: $customer_reference, external_pin: $external_pin, number_level_routing: $number_level_routing, tags: $tags} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/phone_numbers/{id}"))
+  let body = {"billing_group_id": $billing_group_id, "connection_id": $connection_id, "customer_reference": $customer_reference, "external_pin": $external_pin, "number_level_routing": $number_level_routing, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6346,7 +6346,7 @@ export def "phone-numbers updatePhoneNumber" [
 #
 # POST /phone_numbers/{id}/actions/enable_emergency
 # operationId: enableEmergencyPhoneNumber
-export def "phone-numbers-actions-enable-emergency enableEmergencyPhoneNumber" [
+export def "phone-numbers-actions-enable-emergency enable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6362,8 +6362,8 @@ export def "phone-numbers-actions-enable-emergency enableEmergencyPhoneNumber" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/phone_numbers/($id)/actions/enable_emergency")
-  let body = {emergency_address_id: $emergency_address_id, emergency_enabled: $emergency_enabled} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/phone_numbers/{id}/actions/enable_emergency"))
+  let body = {"emergency_address_id": $emergency_address_id, "emergency_enabled": $emergency_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6374,7 +6374,7 @@ export def "phone-numbers-actions-enable-emergency enableEmergencyPhoneNumber" [
 #
 # GET /phone_numbers/{id}/messaging
 # operationId: retrievePhoneNumberWithMessagingSettings
-export def "phone-numbers-messaging retrievePhoneNumberWithMessagingSettings" [
+export def "phone-numbers-messaging retrieve-phone-number-with-messaging-settings" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6387,7 +6387,7 @@ export def "phone-numbers-messaging retrievePhoneNumberWithMessagingSettings" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/phone_numbers/($id)/messaging")
+  let full_url = (build-url $base ({id: $id} | format pattern "/phone_numbers/{id}/messaging"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6397,7 +6397,7 @@ export def "phone-numbers-messaging retrievePhoneNumberWithMessagingSettings" [
 #
 # PATCH /phone_numbers/{id}/messaging
 # operationId: updatePhoneNumberWithMessagingSettings
-export def "phone-numbers-messaging updatePhoneNumberWithMessagingSettings" [
+export def "phone-numbers-messaging update-phone-number-with-messaging-settings" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6413,8 +6413,8 @@ export def "phone-numbers-messaging updatePhoneNumberWithMessagingSettings" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/phone_numbers/($id)/messaging")
-  let body = {messaging_product: $messaging_product, messaging_profile_id: $messaging_profile_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/phone_numbers/{id}/messaging"))
+  let body = {"messaging_product": $messaging_product, "messaging_profile_id": $messaging_profile_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6425,7 +6425,7 @@ export def "phone-numbers-messaging updatePhoneNumberWithMessagingSettings" [
 #
 # GET /phone_numbers/{id}/voice
 # operationId: retrievePhoneNumberWithVoiceSettings
-export def "phone-numbers-voice retrievePhoneNumberWithVoiceSettings" [
+export def "phone-numbers-voice retrieve-phone-number-with-voice-settings" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6438,7 +6438,7 @@ export def "phone-numbers-voice retrievePhoneNumberWithVoiceSettings" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/phone_numbers/($id)/voice")
+  let full_url = (build-url $base ({id: $id} | format pattern "/phone_numbers/{id}/voice"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6452,7 +6452,7 @@ export def "phone-numbers-voice retrievePhoneNumberWithVoiceSettings" [
 # --call_recording shape: {inbound_call_recording_channels?: "single"|"dual", inbound_call_recording_enabled?: bool, inbound_call_recording_format?: "wav"|"mp3"}
 # --cnam_listing shape: {cnam_listing_details?: string, cnam_listing_enabled?: bool}
 # --media_features shape: {accept_any_rtp_packets_enabled?: bool, media_handling_mode?: "default"|"proxy", rtp_auto_adjust_enabled?: bool, t38_fax_gateway_enabled?: bool}
-export def "phone-numbers-voice updatePhoneNumberWithVoiceSettings" [
+export def "phone-numbers-voice update-phone-number-with-voice-settings" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6473,8 +6473,8 @@ export def "phone-numbers-voice updatePhoneNumberWithVoiceSettings" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/phone_numbers/($id)/voice")
-  let body = {call_forwarding: $call_forwarding, call_recording: $call_recording, cnam_listing: $cnam_listing, media_features: $media_features, tech_prefix_enabled: $tech_prefix_enabled, translated_number: $translated_number, usage_payment_method: $usage_payment_method} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/phone_numbers/{id}/voice"))
+  let body = {"call_forwarding": $call_forwarding, "call_recording": $call_recording, "cnam_listing": $cnam_listing, "media_features": $media_features, "tech_prefix_enabled": $tech_prefix_enabled, "translated_number": $translated_number, "usage_payment_method": $usage_payment_method} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6485,7 +6485,7 @@ export def "phone-numbers-voice updatePhoneNumberWithVoiceSettings" [
 #
 # POST /portability_checks
 # operationId: postPortabilityCheck
-export def "portability-checks post" [
+export def "portability-checks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6500,7 +6500,7 @@ export def "portability-checks post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portability_checks")
-  let body = {phone_numbers: $phone_numbers} | compact
+  let body = {"phone_numbers": $phone_numbers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6511,7 +6511,7 @@ export def "portability-checks post" [
 #
 # GET /porting_orders
 # operationId: listPortingOrders
-export def "porting-orders listPortingOrders" [
+export def "porting-orders list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6520,24 +6520,24 @@ export def "porting-orders listPortingOrders" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
   --include-phone-numbers: oneof<nothing, bool> # Include the first 50 phone number objects in the results (default: true)
-  --filterstatus: record # Filter results by status
-  --filtercustomer-reference: string # Filter results by user reference (e.g. 123abc)
-  --filterphone-numberscountry-code: string # Filter results by country ISO 3166-1 alpha-2 code (e.g. US)
-  --filterphone-numberscarrier-name: string # Filter results by old service provider (e.g. Telnyx)
-  --filtermisctype: string@filtermisctype-completer # Filter results by porting order type (e.g. full)
-  --filterend-useradminentity-name: string # Filter results by person or company name (e.g. Porter McPortersen)
-  --filterend-useradminauth-person-name: string # Filter results by authorized person (e.g. Admin McPortersen)
-  --filteractivation-settingsfast-port-eligible: oneof<nothing, bool> # Filter results by fast port eligible (e.g. false)
-  --filteractivation-settingsfoc-datetime-requestedgt: string # Filter results by foc date later than this value (e.g. 2021-03-25T10:00:00.000Z)
-  --filteractivation-settingsfoc-datetime-requestedlt: string # Filter results by foc date earlier than this value (e.g. 2021-03-25T10:00:00.000Z)
+  --filter-status: record # Filter results by status
+  --filter-customer-reference: string # Filter results by user reference (e.g. 123abc)
+  --filter-phone-numbers-country-code: string # Filter results by country ISO 3166-1 alpha-2 code (e.g. US)
+  --filter-phone-numbers-carrier-name: string # Filter results by old service provider (e.g. Telnyx)
+  --filter-misc-type: string@filter-misc-type-completer # Filter results by porting order type (e.g. full)
+  --filter-end-user-admin-entity-name: string # Filter results by person or company name (e.g. Porter McPortersen)
+  --filter-end-user-admin-auth-person-name: string # Filter results by authorized person (e.g. Admin McPortersen)
+  --filter-activation-settings-fast-port-eligible: oneof<nothing, bool> # Filter results by fast port eligible (e.g. false)
+  --filter-activation-settings-foc-datetime-requested-gt: string # Filter results by foc date later than this value (e.g. 2021-03-25T10:00:00.000Z)
+  --filter-activation-settings-foc-datetime-requested-lt: string # Filter results by foc date earlier than this value (e.g. 2021-03-25T10:00:00.000Z)
   --qp-sort: string@sort-completer-7 # Specifies the sort order for results. If not given, results are sorted by created_at in descending order. (e.g. created_at)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "include_phone_numbers" $include_phone_numbers "scalar") (serialize-qp "filter[status]" $filterstatus "multi") (serialize-qp "filter[customer_reference]" $filtercustomer_reference "scalar") (serialize-qp "filter[phone_numbers][country_code]" $filterphone_numberscountry_code "scalar") (serialize-qp "filter[phone_numbers][carrier_name]" $filterphone_numberscarrier_name "scalar") (serialize-qp "filter[misc][type]" $filtermisctype "scalar") (serialize-qp "filter[end_user][admin][entity_name]" $filterend_useradminentity_name "scalar") (serialize-qp "filter[end_user][admin][auth_person_name]" $filterend_useradminauth_person_name "scalar") (serialize-qp "filter[activation_settings][fast_port_eligible]" $filteractivation_settingsfast_port_eligible "scalar") (serialize-qp "filter[activation_settings][foc_datetime_requested][gt]" $filteractivation_settingsfoc_datetime_requestedgt "scalar") (serialize-qp "filter[activation_settings][foc_datetime_requested][lt]" $filteractivation_settingsfoc_datetime_requestedlt "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "include_phone_numbers" $include_phone_numbers "scalar") (serialize-qp "filter[status]" $filter_status "multi") (serialize-qp "filter[customer_reference]" $filter_customer_reference "scalar") (serialize-qp "filter[phone_numbers][country_code]" $filter_phone_numbers_country_code "scalar") (serialize-qp "filter[phone_numbers][carrier_name]" $filter_phone_numbers_carrier_name "scalar") (serialize-qp "filter[misc][type]" $filter_misc_type "scalar") (serialize-qp "filter[end_user][admin][entity_name]" $filter_end_user_admin_entity_name "scalar") (serialize-qp "filter[end_user][admin][auth_person_name]" $filter_end_user_admin_auth_person_name "scalar") (serialize-qp "filter[activation_settings][fast_port_eligible]" $filter_activation_settings_fast_port_eligible "scalar") (serialize-qp "filter[activation_settings][foc_datetime_requested][gt]" $filter_activation_settings_foc_datetime_requested_gt "scalar") (serialize-qp "filter[activation_settings][foc_datetime_requested][lt]" $filter_activation_settings_foc_datetime_requested_lt "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/porting_orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6548,7 +6548,7 @@ export def "porting-orders listPortingOrders" [
 #
 # POST /porting_orders
 # operationId: createPortingOrder
-export def "porting-orders createPortingOrder" [
+export def "porting-orders create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6563,7 +6563,7 @@ export def "porting-orders createPortingOrder" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/porting_orders")
-  let body = {phone_numbers: $phone_numbers} | compact
+  let body = {"phone_numbers": $phone_numbers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6574,7 +6574,7 @@ export def "porting-orders createPortingOrder" [
 #
 # GET /porting_orders/exception_types
 # operationId: listPortingOrdersExceptionTypes
-export def "porting-orders-exception-types listPortingOrdersExceptionTypes" [
+export def "porting-orders-exception-types list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6609,7 +6609,7 @@ export def "porting-orders delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/porting_orders/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/porting_orders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6634,7 +6634,7 @@ export def "porting-orders get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_phone_numbers" $include_phone_numbers "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/porting_orders/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/porting_orders/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6650,7 +6650,7 @@ export def "porting-orders get" [
 # --phone_number_configuration shape: {connection_id?: string, emergency_address_id?: string, messaging_profile_id?: string, tags?: list}
 # --requirements item shape: {field_value: string, requirement_type_id: string}
 # --user_feedback shape: {user_comment?: string, user_rating?: int}
-export def "porting-orders updatePortingOrder" [
+export def "porting-orders update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6672,8 +6672,8 @@ export def "porting-orders updatePortingOrder" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/porting_orders/($id)")
-  let body = {activation_settings: $activation_settings, customer_reference: $customer_reference, end_user: $end_user, misc: $misc, phone_number_configuration: $phone_number_configuration, requirements: $requirements, user_feedback: $user_feedback, webhook_url: $webhook_url} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/porting_orders/{id}"))
+  let body = {"activation_settings": $activation_settings, "customer_reference": $customer_reference, "end_user": $end_user, "misc": $misc, "phone_number_configuration": $phone_number_configuration, "requirements": $requirements, "user_feedback": $user_feedback, "webhook_url": $webhook_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6697,7 +6697,7 @@ export def "porting-orders-actions-activate activatePortingOrder" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/porting_orders/($id)/actions/activate")
+  let full_url = (build-url $base ({id: $id} | format pattern "/porting_orders/{id}/actions/activate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6707,7 +6707,7 @@ export def "porting-orders-actions-activate activatePortingOrder" [
 #
 # POST /porting_orders/{id}/actions/cancel
 # operationId: cancelPortingOrder
-export def "porting-orders-actions-cancel cancelPortingOrder" [
+export def "porting-orders-actions-cancel cancel" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6720,7 +6720,7 @@ export def "porting-orders-actions-cancel cancelPortingOrder" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/porting_orders/($id)/actions/cancel")
+  let full_url = (build-url $base ({id: $id} | format pattern "/porting_orders/{id}/actions/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6743,7 +6743,7 @@ export def "porting-orders-actions-confirm confirmPortingOrder" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/porting_orders/($id)/actions/confirm")
+  let full_url = (build-url $base ({id: $id} | format pattern "/porting_orders/{id}/actions/confirm"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6753,7 +6753,7 @@ export def "porting-orders-actions-confirm confirmPortingOrder" [
 #
 # GET /porting_orders/{id}/activation_jobs
 # operationId: listPortingOrdersActivationJobs
-export def "porting-orders-activation-jobs listPortingOrdersActivationJobs" [
+export def "porting-orders-activation-jobs list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6763,13 +6763,13 @@ export def "porting-orders-activation-jobs listPortingOrdersActivationJobs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/porting_orders/($id)/activation_jobs" $qp)
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/porting_orders/{id}/activation_jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6781,7 +6781,7 @@ export def "porting-orders-activation-jobs listPortingOrdersActivationJobs" [
 # operationId: getPortingOrdersActivationJob
 export def "porting-orders-activation-jobs get" [
   id: string
-  activationJobId: string
+  activation_job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6793,7 +6793,7 @@ export def "porting-orders-activation-jobs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/porting_orders/($id)/activation_jobs/($activationJobId)")
+  let full_url = (build-url $base ({id: $id, activation_job_id: $activation_job_id} | format pattern "/porting_orders/{id}/activation_jobs/{activation_job_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6803,7 +6803,7 @@ export def "porting-orders-activation-jobs get" [
 #
 # GET /porting_orders/{id}/comments
 # operationId: listPortingOrdersComments
-export def "porting-orders-comments listPortingOrdersComments" [
+export def "porting-orders-comments list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6813,13 +6813,13 @@ export def "porting-orders-comments listPortingOrdersComments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/porting_orders/($id)/comments" $qp)
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/porting_orders/{id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6829,7 +6829,7 @@ export def "porting-orders-comments listPortingOrdersComments" [
 #
 # POST /porting_orders/{id}/comments
 # operationId: createPortingOrderComment
-export def "porting-orders-comments createPortingOrderComment" [
+export def "porting-orders-comments create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6844,8 +6844,8 @@ export def "porting-orders-comments createPortingOrderComment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/porting_orders/($id)/comments")
-  let body = {body: $body_body} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/porting_orders/{id}/comments"))
+  let body = {"body": $body_body} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6869,7 +6869,7 @@ export def "porting-orders-loa-template get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/porting_orders/($id)/loa_template")
+  let full_url = (build-url $base ({id: $id} | format pattern "/porting_orders/{id}/loa_template"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6887,16 +6887,16 @@ export def "porting-phone-numbers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filterporting-order-id: string # Filter results by porting order id (format: uuid)
-  --filterphone-number: string # Filter results by phone number
-  --filteractivation-status: string@filteractivation-status-completer # Filter results by activation status (e.g. Active)
-  --filterportability-status: string@filterportability-status-completer # Filter results by portability status (e.g. confirmed)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-porting-order-id: string # Filter results by porting order id (format: uuid)
+  --filter-phone-number: string # Filter results by phone number
+  --filter-activation-status: string@filter-activation-status-completer # Filter results by activation status (e.g. Active)
+  --filter-portability-status: string@filter-portability-status-completer # Filter results by portability status (e.g. confirmed)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[porting_order_id]" $filterporting_order_id "scalar") (serialize-qp "filter[phone_number]" $filterphone_number "scalar") (serialize-qp "filter[activation_status]" $filteractivation_status "scalar") (serialize-qp "filter[portability_status]" $filterportability_status "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[porting_order_id]" $filter_porting_order_id "scalar") (serialize-qp "filter[phone_number]" $filter_phone_number "scalar") (serialize-qp "filter[activation_status]" $filter_activation_status "scalar") (serialize-qp "filter[portability_status]" $filter_portability_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/porting_phone_numbers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6907,7 +6907,7 @@ export def "porting-phone-numbers get" [
 #
 # GET /portouts
 # operationId: listPortoutRequest
-export def "portouts listPortoutRequest" [
+export def "portouts list-portout-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6916,15 +6916,15 @@ export def "portouts listPortoutRequest" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filtercarrier-name: string # Filter by new carrier name.
-  --filterspid: string # Filter by new carrier spid.
-  --filterstatus: string@filterstatus-completer-4 # Filter by portout status.
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --filter-carrier-name: string # Filter by new carrier name.
+  --filter-spid: string # Filter by new carrier spid.
+  --filter-status: string@filter-status-completer-4 # Filter by portout status.
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[carrier_name]" $filtercarrier_name "scalar") (serialize-qp "filter[spid]" $filterspid "scalar") (serialize-qp "filter[status]" $filterstatus "scalar") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[carrier_name]" $filter_carrier_name "scalar") (serialize-qp "filter[spid]" $filter_spid "scalar") (serialize-qp "filter[status]" $filter_status "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/portouts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6948,7 +6948,7 @@ export def "portouts findPortoutRequest" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/portouts/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/portouts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6971,7 +6971,7 @@ export def "portouts-comments findPortoutComments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/portouts/($id)/comments")
+  let full_url = (build-url $base ({id: $id} | format pattern "/portouts/{id}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6981,7 +6981,7 @@ export def "portouts-comments findPortoutComments" [
 #
 # POST /portouts/{id}/comments
 # operationId: postPortRequestComment
-export def "portouts-comments post" [
+export def "portouts-comments create-port-request" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6996,8 +6996,8 @@ export def "portouts-comments post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/portouts/($id)/comments")
-  let body = {body: $body_body} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/portouts/{id}/comments"))
+  let body = {"body": $body_body} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7008,7 +7008,7 @@ export def "portouts-comments post" [
 #
 # PATCH /portouts/{id}/{status}
 # operationId: updatePortoutRequest
-export def "portouts updatePortoutRequest" [
+export def "portouts update-portout-request" [
   id: string
   status: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7022,7 +7022,7 @@ export def "portouts updatePortoutRequest" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/portouts/($id)/($status)")
+  let full_url = (build-url $base ({id: $id, status: $status} | format pattern "/portouts/{id}/{status}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7041,17 +7041,17 @@ export def "private-wireless-gateways list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filtername: string # The name of the Private Wireless Gateway. (e.g. my private gateway)
-  --filterip-range: string # The IP address range of the Private Wireless Gateway. (e.g. 192.168.0.0/24)
-  --filterregion-code: string # The name of the region where the Private Wireless Gateway is deployed. (e.g. ashburn-va)
-  --filtercreated-at: string # Private Wireless Gateway resource creation date. (e.g. 2018-02-02T22:25:27.521Z)
-  --filterupdated-at: string # When the Private Wireless Gateway was last updated. (e.g. 2018-02-02T22:25:27.521Z)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-name: string # The name of the Private Wireless Gateway. (e.g. my private gateway)
+  --filter-ip-range: string # The IP address range of the Private Wireless Gateway. (e.g. 192.168.0.0/24)
+  --filter-region-code: string # The name of the region where the Private Wireless Gateway is deployed. (e.g. ashburn-va)
+  --filter-created-at: string # Private Wireless Gateway resource creation date. (e.g. 2018-02-02T22:25:27.521Z)
+  --filter-updated-at: string # When the Private Wireless Gateway was last updated. (e.g. 2018-02-02T22:25:27.521Z)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[name]" $filtername "scalar") (serialize-qp "filter[ip_range]" $filterip_range "scalar") (serialize-qp "filter[region_code]" $filterregion_code "scalar") (serialize-qp "filter[created_at]" $filtercreated_at "scalar") (serialize-qp "filter[updated_at]" $filterupdated_at "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[ip_range]" $filter_ip_range "scalar") (serialize-qp "filter[region_code]" $filter_region_code "scalar") (serialize-qp "filter[created_at]" $filter_created_at "scalar") (serialize-qp "filter[updated_at]" $filter_updated_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/private_wireless_gateways" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7062,7 +7062,7 @@ export def "private-wireless-gateways list" [
 #
 # POST /private_wireless_gateways
 # operationId: createPrivateWirelessGateway
-export def "private-wireless-gateways createPrivateWirelessGateway" [
+export def "private-wireless-gateways create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7078,7 +7078,7 @@ export def "private-wireless-gateways createPrivateWirelessGateway" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/private_wireless_gateways")
-  let body = {name: $name, network_id: $network_id} | compact
+  let body = {"name": $name, "network_id": $network_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7102,7 +7102,7 @@ export def "private-wireless-gateways delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/private_wireless_gateways/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/private_wireless_gateways/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7125,7 +7125,7 @@ export def "private-wireless-gateways get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/private_wireless_gateways/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/private_wireless_gateways/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7135,7 +7135,7 @@ export def "private-wireless-gateways get" [
 #
 # GET /queues/{queue_name}
 # operationId: retrieveCallQueue
-export def "queues retrieveCallQueue" [
+export def "queues retrieve-call" [
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7148,7 +7148,7 @@ export def "queues retrieveCallQueue" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/queues/($queue_name)")
+  let full_url = (build-url $base ({queue_name: $queue_name} | format pattern "/queues/{queue_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7158,7 +7158,7 @@ export def "queues retrieveCallQueue" [
 #
 # GET /queues/{queue_name}/calls
 # operationId: listQueueCalls
-export def "queues-calls listQueueCalls" [
+export def "queues-calls list" [
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7168,13 +7168,13 @@ export def "queues-calls listQueueCalls" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/queues/($queue_name)/calls" $qp)
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({queue_name: $queue_name} | format pattern "/queues/{queue_name}/calls") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7184,7 +7184,7 @@ export def "queues-calls listQueueCalls" [
 #
 # GET /queues/{queue_name}/calls/{call_control_id}
 # operationId: retrieveCallFromQueue
-export def "queues-calls retrieveCallFromQueue" [
+export def "queues-calls retrieve-call-from" [
   queue_name: string
   call_control_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7198,7 +7198,7 @@ export def "queues-calls retrieveCallFromQueue" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/queues/($queue_name)/calls/($call_control_id)")
+  let full_url = (build-url $base ({queue_name: $queue_name, call_control_id: $call_control_id} | format pattern "/queues/{queue_name}/calls/{call_control_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7208,7 +7208,7 @@ export def "queues-calls retrieveCallFromQueue" [
 #
 # GET /recordings
 # operationId: listRecordings
-export def "recordings listRecordings" [
+export def "recordings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7217,15 +7217,15 @@ export def "recordings listRecordings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterconference-id: string # Return only recordings associated with a given conference (e.g. 428c31b6-7af4-4bcb-b7f5-5013ef9657c1)
-  --filtercreated-atgte: string # Return only recordings created later than or at given ISO 8601 datetime (e.g. 2019-03-29T11:10:00Z)
-  --filtercreated-atlte: string # Return only recordings created earlier than or at given ISO 8601 datetime (e.g. 2019-03-29T11:10:00Z)
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --filter-conference-id: string # Return only recordings associated with a given conference (e.g. 428c31b6-7af4-4bcb-b7f5-5013ef9657c1)
+  --filter-created-at-gte: string # Return only recordings created later than or at given ISO 8601 datetime (e.g. 2019-03-29T11:10:00Z)
+  --filter-created-at-lte: string # Return only recordings created earlier than or at given ISO 8601 datetime (e.g. 2019-03-29T11:10:00Z)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[conference_id]" $filterconference_id "scalar") (serialize-qp "filter[created_at][gte]" $filtercreated_atgte "scalar") (serialize-qp "filter[created_at][lte]" $filtercreated_atlte "scalar") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[conference_id]" $filter_conference_id "scalar") (serialize-qp "filter[created_at][gte]" $filter_created_at_gte "scalar") (serialize-qp "filter[created_at][lte]" $filter_created_at_lte "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recordings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7236,7 +7236,7 @@ export def "recordings listRecordings" [
 #
 # GET /recordings/{id}
 # operationId: retrieveRecording
-export def "recordings retrieveRecording" [
+export def "recordings retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7249,7 +7249,7 @@ export def "recordings retrieveRecording" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recordings/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/recordings/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7259,7 +7259,7 @@ export def "recordings retrieveRecording" [
 #
 # GET /reports/batch_mdr_reports
 # operationId: getCdrRequests
-export def "reports-batch-mdr-reports list" [
+export def "reports-batch-mdr-reports get-cdr-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7268,12 +7268,12 @@ export def "reports-batch-mdr-reports list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # Page number (format: int32, default: 1)
-  --pagesize: int # Size of the page (format: int32, default: 20)
+  --page-number: int # Page number (format: int32, default: 1)
+  --page-size: int # Size of the page (format: int32, default: 20)
 ]: nothing -> record<data: table<connections: list, created_at: string, directions: list, end_date: string, filters: list, id: string, profiles: string, record_type: string, record_types: list, report_name: string, report_url: string, start_date: string, status: string, updated_at: string>, meta: record<page_number: int, page_size: int, total_pages: int, total_results: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/batch_mdr_reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7285,7 +7285,7 @@ export def "reports-batch-mdr-reports list" [
 # POST /reports/batch_mdr_reports
 # operationId: submitMdrRequest
 # --filters item shape: {billing_group?: string, cld?: string, cld_filter?: "contains"|"starts_with"|"ends_with", cli?: string, cli_filter?: "contains"|"starts_with"|"ends_with", filter_type?: "and"|"or", tags_list?: string}
-export def "reports-batch-mdr-reports submitMdrRequest" [
+export def "reports-batch-mdr-reports submit-mdr-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7308,7 +7308,7 @@ export def "reports-batch-mdr-reports submitMdrRequest" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reports/batch_mdr_reports")
-  let body = {connections: $connections, directions: $directions, end_date: $end_date, filters: $filters, include_message_body: $include_message_body, profiles: $profiles, record_types: $record_types, report_name: $report_name, start_date: $start_date} | compact
+  let body = {"connections": $connections, "directions": $directions, "end_date": $end_date, "filters": $filters, "include_message_body": $include_message_body, "profiles": $profiles, "record_types": $record_types, "report_name": $report_name, "start_date": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7319,7 +7319,7 @@ export def "reports-batch-mdr-reports submitMdrRequest" [
 #
 # DELETE /reports/batch_mdr_reports/{id}
 # operationId: deleteMdrRequest
-export def "reports-batch-mdr-reports delete" [
+export def "reports-batch-mdr-reports delete-mdr-request" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7332,7 +7332,7 @@ export def "reports-batch-mdr-reports delete" [
 ]: nothing -> record<data: record<connections: list<int>, created_at: string, directions: list<string>, end_date: string, filters: list<record>, id: string, profiles: string, record_type: string, record_types: list<string>, report_name: string, report_url: string, start_date: string, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reports/batch_mdr_reports/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/reports/batch_mdr_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7342,7 +7342,7 @@ export def "reports-batch-mdr-reports delete" [
 #
 # GET /reports/batch_mdr_reports/{id}
 # operationId: getMdrRequest
-export def "reports-batch-mdr-reports get" [
+export def "reports-batch-mdr-reports get-mdr-request" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7355,7 +7355,7 @@ export def "reports-batch-mdr-reports get" [
 ]: nothing -> record<data: record<connections: list<int>, created_at: string, directions: list<string>, end_date: string, filters: list<record>, id: string, profiles: string, record_type: string, record_types: list<string>, report_name: string, report_url: string, start_date: string, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reports/batch_mdr_reports/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/reports/batch_mdr_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7402,12 +7402,12 @@ export def "reports-mdr-usage-reports list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # Page number (format: int32, default: 1)
-  --pagesize: int # Size of the page (format: int32, default: 20)
+  --page-number: int # Page number (format: int32, default: 1)
+  --page-size: int # Size of the page (format: int32, default: 20)
 ]: nothing -> record<data: table<aggregation_type: string, connections: list, created_at: string, end_date: string, id: string, profiles: string, record_type: string, report_url: string, result: list, start_date: string, status: string, updated_at: string>, meta: record<page_number: int, page_size: int, total_pages: int, total_results: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/mdr_usage_reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7418,7 +7418,7 @@ export def "reports-mdr-usage-reports list" [
 #
 # POST /reports/mdr_usage_reports
 # operationId: submitUsageReport
-export def "reports-mdr-usage-reports submitUsageReport" [
+export def "reports-mdr-usage-reports submit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7483,7 +7483,7 @@ export def "reports-mdr-usage-reports delete" [
 ]: nothing -> record<data: record<aggregation_type: string, connections: list<int>, created_at: string, end_date: string, id: string, profiles: string, record_type: string, report_url: string, result: list<record>, start_date: string, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reports/mdr_usage_reports/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/reports/mdr_usage_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7506,7 +7506,7 @@ export def "reports-mdr-usage-reports get" [
 ]: nothing -> record<data: record<aggregation_type: string, connections: list<int>, created_at: string, end_date: string, id: string, profiles: string, record_type: string, report_url: string, result: list<record>, start_date: string, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reports/mdr_usage_reports/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/reports/mdr_usage_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7547,7 +7547,7 @@ export def "reports-mdrs get" [
 #
 # GET /reports/wdrs
 # operationId: getPaginatedWdrs
-export def "reports-wdrs get" [
+export def "reports-wdrs get-paginated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7566,13 +7566,13 @@ export def "reports-wdrs get" [
   --sim-group-id: string # e.g. f05a189f-7c46-4531-ac56-1460dc465a42
   --sim-card-id: string # e.g. 877f80a6-e5b2-4687-9a04-88076265720f
   --phone-number: string # e.g. +12345678910
-  --pagenumber: int # Page number (format: int32, default: 1)
-  --pagesize: int # Size of the page (format: int32, default: 20)
+  --page-number: int # Page number (format: int32, default: 1)
+  --page-size: int # Size of the page (format: int32, default: 20)
   --qp-sort: list # default: created_at, e.g. created_at
 ]: nothing -> record<data: table<cost: record, created_at: string, downlink_data: record, duration_seconds: float, id: string, imsi: string, mcc: string, mnc: string, phone_number: string, rate: record, record_type: string, sim_card_id: string, sim_group_id: string, sim_group_name: string, uplink_data: record>, meta: record<page_number: int, page_size: int, total_pages: int, total_results: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "mcc" $mcc "scalar") (serialize-qp "mnc" $mnc "scalar") (serialize-qp "imsi" $imsi "scalar") (serialize-qp "sim_group_name" $sim_group_name "scalar") (serialize-qp "sim_group_id" $sim_group_id "scalar") (serialize-qp "sim_card_id" $sim_card_id "scalar") (serialize-qp "phone_number" $phone_number "scalar") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "sort" $qp_sort "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "mcc" $mcc "scalar") (serialize-qp "mnc" $mnc "scalar") (serialize-qp "imsi" $imsi "scalar") (serialize-qp "sim_group_name" $sim_group_name "scalar") (serialize-qp "sim_group_id" $sim_group_id "scalar") (serialize-qp "sim_card_id" $sim_card_id "scalar") (serialize-qp "phone_number" $phone_number "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "sort" $qp_sort "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/wdrs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7592,12 +7592,12 @@ export def "requirement-types docReqsListRequirementTypes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filternamecontains: string # Filters requirement types to those whose name contains a certain string. (e.g. utility bill)
+  --filter-name-contains: string # Filters requirement types to those whose name contains a certain string. (e.g. utility bill)
   --qp-sort: string@sort-completer-8 # Specifies the sort order for results. If you want to sort by a field in ascending order, include it as a sort parameter. If you want to sort in descending order, prepend a `-` in front of the field name. (e.g. country_code)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[name][contains]" $filternamecontains "scalar") (serialize-qp "sort[]" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[name][contains]" $filter_name_contains "scalar") (serialize-qp "sort[]" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/requirement_types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7621,7 +7621,7 @@ export def "requirement-types docReqsRetrieveRequirementType" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/requirement_types/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/requirement_types/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7631,7 +7631,7 @@ export def "requirement-types docReqsRetrieveRequirementType" [
 #
 # GET /requirements
 # operationId: listRequirements
-export def "requirements listRequirements" [
+export def "requirements list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7640,16 +7640,16 @@ export def "requirements listRequirements" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filtercountry-code: string # Filters results to those applying to a 2-character (ISO 3166-1 alpha-2) country code (e.g. US)
-  --filterphone-number-type: string@filterphone-number-type-completer-1 # Filters results to those applying to a specific `phone_number_type` (e.g. local)
-  --filteraction: string@filteraction-completer # Filters requirements to those applying to a specific action. (e.g. porting)
+  --filter-country-code: string # Filters results to those applying to a 2-character (ISO 3166-1 alpha-2) country code (e.g. US)
+  --filter-phone-number-type: string@filter-phone-number-type-completer-1 # Filters results to those applying to a specific `phone_number_type` (e.g. local)
+  --filter-action: string@filter-action-completer # Filters requirements to those applying to a specific action. (e.g. porting)
   --qp-sort: string@sort-completer-9 # Specifies the sort order for results. If you want to sort by a field in ascending order, include it as a sort parameter. If you want to sort in descending order, prepend a `-` in front of the field name. (e.g. country_code)
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[country_code]" $filtercountry_code "scalar") (serialize-qp "filter[phone_number_type]" $filterphone_number_type "scalar") (serialize-qp "filter[action]" $filteraction "scalar") (serialize-qp "sort[]" $qp_sort "scalar") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[country_code]" $filter_country_code "scalar") (serialize-qp "filter[phone_number_type]" $filter_phone_number_type "scalar") (serialize-qp "filter[action]" $filter_action "scalar") (serialize-qp "sort[]" $qp_sort "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/requirements" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7673,7 +7673,7 @@ export def "requirements docReqsRetrieveDocumentRequirements" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/requirements/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/requirements/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7683,7 +7683,7 @@ export def "requirements docReqsRetrieveDocumentRequirements" [
 #
 # GET /room_participants
 # operationId: ListRoomParticipants
-export def "room-participants ListRoomParticipants" [
+export def "room-participants list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7692,23 +7692,23 @@ export def "room-participants ListRoomParticipants" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterdate-joined-ateq: string # ISO 8601 date for filtering room participants that joined on that date. (format: date, e.g. 2021-04-25)
-  --filterdate-joined-atgte: string # ISO 8601 date for filtering room participants that joined after that date. (format: date, e.g. 2021-04-25)
-  --filterdate-joined-atlte: string # ISO 8601 date for filtering room participants that joined before that date. (format: date, e.g. 2021-04-25)
-  --filterdate-updated-ateq: string # ISO 8601 date for filtering room participants updated on that date. (format: date, e.g. 2021-04-25)
-  --filterdate-updated-atgte: string # ISO 8601 date for filtering room participants updated after that date. (format: date, e.g. 2021-04-25)
-  --filterdate-updated-atlte: string # ISO 8601 date for filtering room participants updated before that date. (format: date, e.g. 2021-04-25)
-  --filterdate-left-ateq: string # ISO 8601 date for filtering room participants that left on that date. (format: date, e.g. 2021-04-25)
-  --filterdate-left-atgte: string # ISO 8601 date for filtering room participants that left after that date. (format: date, e.g. 2021-04-25)
-  --filterdate-left-atlte: string # ISO 8601 date for filtering room participants that left before that date. (format: date, e.g. 2021-04-25)
-  --filtercontext: string # Filter room participants based on the context. (e.g. Alice)
-  --filtersession-id: string # Session_id for filtering room participants. (e.g. 0ccc7b54-4df3-4bca-a65a-3da1ecc777f0)
-  --pagesize: int # The size of the page. (default: 20)
-  --pagenumber: int # The page number to load. (default: 1)
+  --filter-date-joined-at-eq: string # ISO 8601 date for filtering room participants that joined on that date. (format: date, e.g. 2021-04-25)
+  --filter-date-joined-at-gte: string # ISO 8601 date for filtering room participants that joined after that date. (format: date, e.g. 2021-04-25)
+  --filter-date-joined-at-lte: string # ISO 8601 date for filtering room participants that joined before that date. (format: date, e.g. 2021-04-25)
+  --filter-date-updated-at-eq: string # ISO 8601 date for filtering room participants updated on that date. (format: date, e.g. 2021-04-25)
+  --filter-date-updated-at-gte: string # ISO 8601 date for filtering room participants updated after that date. (format: date, e.g. 2021-04-25)
+  --filter-date-updated-at-lte: string # ISO 8601 date for filtering room participants updated before that date. (format: date, e.g. 2021-04-25)
+  --filter-date-left-at-eq: string # ISO 8601 date for filtering room participants that left on that date. (format: date, e.g. 2021-04-25)
+  --filter-date-left-at-gte: string # ISO 8601 date for filtering room participants that left after that date. (format: date, e.g. 2021-04-25)
+  --filter-date-left-at-lte: string # ISO 8601 date for filtering room participants that left before that date. (format: date, e.g. 2021-04-25)
+  --filter-context: string # Filter room participants based on the context. (e.g. Alice)
+  --filter-session-id: string # Session_id for filtering room participants. (e.g. 0ccc7b54-4df3-4bca-a65a-3da1ecc777f0)
+  --page-size: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[date_joined_at][eq]" $filterdate_joined_ateq "scalar") (serialize-qp "filter[date_joined_at][gte]" $filterdate_joined_atgte "scalar") (serialize-qp "filter[date_joined_at][lte]" $filterdate_joined_atlte "scalar") (serialize-qp "filter[date_updated_at][eq]" $filterdate_updated_ateq "scalar") (serialize-qp "filter[date_updated_at][gte]" $filterdate_updated_atgte "scalar") (serialize-qp "filter[date_updated_at][lte]" $filterdate_updated_atlte "scalar") (serialize-qp "filter[date_left_at][eq]" $filterdate_left_ateq "scalar") (serialize-qp "filter[date_left_at][gte]" $filterdate_left_atgte "scalar") (serialize-qp "filter[date_left_at][lte]" $filterdate_left_atlte "scalar") (serialize-qp "filter[context]" $filtercontext "scalar") (serialize-qp "filter[session_id]" $filtersession_id "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "page[number]" $pagenumber "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[date_joined_at][eq]" $filter_date_joined_at_eq "scalar") (serialize-qp "filter[date_joined_at][gte]" $filter_date_joined_at_gte "scalar") (serialize-qp "filter[date_joined_at][lte]" $filter_date_joined_at_lte "scalar") (serialize-qp "filter[date_updated_at][eq]" $filter_date_updated_at_eq "scalar") (serialize-qp "filter[date_updated_at][gte]" $filter_date_updated_at_gte "scalar") (serialize-qp "filter[date_updated_at][lte]" $filter_date_updated_at_lte "scalar") (serialize-qp "filter[date_left_at][eq]" $filter_date_left_at_eq "scalar") (serialize-qp "filter[date_left_at][gte]" $filter_date_left_at_gte "scalar") (serialize-qp "filter[date_left_at][lte]" $filter_date_left_at_lte "scalar") (serialize-qp "filter[context]" $filter_context "scalar") (serialize-qp "filter[session_id]" $filter_session_id "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[number]" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/room_participants" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7719,7 +7719,7 @@ export def "room-participants ListRoomParticipants" [
 #
 # GET /room_participants/{room_participant_id}
 # operationId: ViewRoomParticipant
-export def "room-participants ViewRoomParticipant" [
+export def "room-participants get" [
   room_participant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7732,7 +7732,7 @@ export def "room-participants ViewRoomParticipant" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/room_participants/($room_participant_id)")
+  let full_url = (build-url $base ({room_participant_id: $room_participant_id} | format pattern "/room_participants/{room_participant_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7742,7 +7742,7 @@ export def "room-participants ViewRoomParticipant" [
 #
 # GET /room_sessions
 # operationId: ListRoomSessions
-export def "room-sessions ListRoomSessions" [
+export def "room-sessions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7751,24 +7751,24 @@ export def "room-sessions ListRoomSessions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterdate-created-ateq: string # ISO 8601 date for filtering room sessions created on that date. (format: date, e.g. 2021-04-25)
-  --filterdate-created-atgte: string # ISO 8601 date for filtering room sessions created after that date. (format: date, e.g. 2021-04-25)
-  --filterdate-created-atlte: string # ISO 8601 date for filtering room sessions created before that date. (format: date, e.g. 2021-04-25)
-  --filterdate-updated-ateq: string # ISO 8601 date for filtering room sessions updated on that date. (format: date, e.g. 2021-04-25)
-  --filterdate-updated-atgte: string # ISO 8601 date for filtering room sessions updated after that date. (format: date, e.g. 2021-04-25)
-  --filterdate-updated-atlte: string # ISO 8601 date for filtering room sessions updated before that date. (format: date, e.g. 2021-04-25)
-  --filterdate-ended-ateq: string # ISO 8601 date for filtering room sessions ended on that date. (format: date, e.g. 2021-04-25)
-  --filterdate-ended-atgte: string # ISO 8601 date for filtering room sessions ended after that date. (format: date, e.g. 2021-04-25)
-  --filterdate-ended-atlte: string # ISO 8601 date for filtering room sessions ended before that date. (format: date, e.g. 2021-04-25)
-  --filterroom-id: string # Room_id for filtering room sessions. (e.g. 0ccc7b54-4df3-4bca-a65a-3da1ecc777f0)
-  --filteractive: oneof<nothing, bool> # Filter active or inactive room sessions. (e.g. true)
+  --filter-date-created-at-eq: string # ISO 8601 date for filtering room sessions created on that date. (format: date, e.g. 2021-04-25)
+  --filter-date-created-at-gte: string # ISO 8601 date for filtering room sessions created after that date. (format: date, e.g. 2021-04-25)
+  --filter-date-created-at-lte: string # ISO 8601 date for filtering room sessions created before that date. (format: date, e.g. 2021-04-25)
+  --filter-date-updated-at-eq: string # ISO 8601 date for filtering room sessions updated on that date. (format: date, e.g. 2021-04-25)
+  --filter-date-updated-at-gte: string # ISO 8601 date for filtering room sessions updated after that date. (format: date, e.g. 2021-04-25)
+  --filter-date-updated-at-lte: string # ISO 8601 date for filtering room sessions updated before that date. (format: date, e.g. 2021-04-25)
+  --filter-date-ended-at-eq: string # ISO 8601 date for filtering room sessions ended on that date. (format: date, e.g. 2021-04-25)
+  --filter-date-ended-at-gte: string # ISO 8601 date for filtering room sessions ended after that date. (format: date, e.g. 2021-04-25)
+  --filter-date-ended-at-lte: string # ISO 8601 date for filtering room sessions ended before that date. (format: date, e.g. 2021-04-25)
+  --filter-room-id: string # Room_id for filtering room sessions. (e.g. 0ccc7b54-4df3-4bca-a65a-3da1ecc777f0)
+  --filter-active: oneof<nothing, bool> # Filter active or inactive room sessions. (e.g. true)
   --include-participants: oneof<nothing, bool> # To decide if room participants should be included in the response. (e.g. true)
-  --pagesize: int # The size of the page. (default: 20)
-  --pagenumber: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[date_created_at][eq]" $filterdate_created_ateq "scalar") (serialize-qp "filter[date_created_at][gte]" $filterdate_created_atgte "scalar") (serialize-qp "filter[date_created_at][lte]" $filterdate_created_atlte "scalar") (serialize-qp "filter[date_updated_at][eq]" $filterdate_updated_ateq "scalar") (serialize-qp "filter[date_updated_at][gte]" $filterdate_updated_atgte "scalar") (serialize-qp "filter[date_updated_at][lte]" $filterdate_updated_atlte "scalar") (serialize-qp "filter[date_ended_at][eq]" $filterdate_ended_ateq "scalar") (serialize-qp "filter[date_ended_at][gte]" $filterdate_ended_atgte "scalar") (serialize-qp "filter[date_ended_at][lte]" $filterdate_ended_atlte "scalar") (serialize-qp "filter[room_id]" $filterroom_id "scalar") (serialize-qp "filter[active]" $filteractive "scalar") (serialize-qp "include_participants" $include_participants "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "page[number]" $pagenumber "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[date_created_at][eq]" $filter_date_created_at_eq "scalar") (serialize-qp "filter[date_created_at][gte]" $filter_date_created_at_gte "scalar") (serialize-qp "filter[date_created_at][lte]" $filter_date_created_at_lte "scalar") (serialize-qp "filter[date_updated_at][eq]" $filter_date_updated_at_eq "scalar") (serialize-qp "filter[date_updated_at][gte]" $filter_date_updated_at_gte "scalar") (serialize-qp "filter[date_updated_at][lte]" $filter_date_updated_at_lte "scalar") (serialize-qp "filter[date_ended_at][eq]" $filter_date_ended_at_eq "scalar") (serialize-qp "filter[date_ended_at][gte]" $filter_date_ended_at_gte "scalar") (serialize-qp "filter[date_ended_at][lte]" $filter_date_ended_at_lte "scalar") (serialize-qp "filter[room_id]" $filter_room_id "scalar") (serialize-qp "filter[active]" $filter_active "scalar") (serialize-qp "include_participants" $include_participants "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[number]" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/room_sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7779,7 +7779,7 @@ export def "room-sessions ListRoomSessions" [
 #
 # GET /room_sessions/{room_session_id}
 # operationId: ViewRoomSession
-export def "room-sessions ViewRoomSession" [
+export def "room-sessions get" [
   room_session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7794,7 +7794,7 @@ export def "room-sessions ViewRoomSession" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_participants" $include_participants "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/room_sessions/($room_session_id)" $qp)
+  let full_url = (build-url $base ({room_session_id: $room_session_id} | format pattern "/room_sessions/{room_session_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7804,7 +7804,7 @@ export def "room-sessions ViewRoomSession" [
 #
 # GET /room_sessions/{room_session_id}/participants
 # operationId: NestedListRoomParticipants
-export def "room-sessions-participants NestedListRoomParticipants" [
+export def "room-sessions-participants get" [
   room_session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7814,23 +7814,23 @@ export def "room-sessions-participants NestedListRoomParticipants" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterdate-joined-ateq: string # ISO 8601 date for filtering room participants that joined on that date. (format: date, e.g. 2021-04-25)
-  --filterdate-joined-atgte: string # ISO 8601 date for filtering room participants that joined after that date. (format: date, e.g. 2021-04-25)
-  --filterdate-joined-atlte: string # ISO 8601 date for filtering room participants that joined before that date. (format: date, e.g. 2021-04-25)
-  --filterdate-updated-ateq: string # ISO 8601 date for filtering room participants updated on that date. (format: date, e.g. 2021-04-25)
-  --filterdate-updated-atgte: string # ISO 8601 date for filtering room participants updated after that date. (format: date, e.g. 2021-04-25)
-  --filterdate-updated-atlte: string # ISO 8601 date for filtering room participants updated before that date. (format: date, e.g. 2021-04-25)
-  --filterdate-left-ateq: string # ISO 8601 date for filtering room participants that left on that date. (format: date, e.g. 2021-04-25)
-  --filterdate-left-atgte: string # ISO 8601 date for filtering room participants that left after that date. (format: date, e.g. 2021-04-25)
-  --filterdate-left-atlte: string # ISO 8601 date for filtering room participants that left before that date. (format: date, e.g. 2021-04-25)
-  --filtercontext: string # Filter room participants based on the context. (e.g. Alice)
-  --pagesize: int # The size of the page. (default: 20)
-  --pagenumber: int # The page number to load. (default: 1)
+  --filter-date-joined-at-eq: string # ISO 8601 date for filtering room participants that joined on that date. (format: date, e.g. 2021-04-25)
+  --filter-date-joined-at-gte: string # ISO 8601 date for filtering room participants that joined after that date. (format: date, e.g. 2021-04-25)
+  --filter-date-joined-at-lte: string # ISO 8601 date for filtering room participants that joined before that date. (format: date, e.g. 2021-04-25)
+  --filter-date-updated-at-eq: string # ISO 8601 date for filtering room participants updated on that date. (format: date, e.g. 2021-04-25)
+  --filter-date-updated-at-gte: string # ISO 8601 date for filtering room participants updated after that date. (format: date, e.g. 2021-04-25)
+  --filter-date-updated-at-lte: string # ISO 8601 date for filtering room participants updated before that date. (format: date, e.g. 2021-04-25)
+  --filter-date-left-at-eq: string # ISO 8601 date for filtering room participants that left on that date. (format: date, e.g. 2021-04-25)
+  --filter-date-left-at-gte: string # ISO 8601 date for filtering room participants that left after that date. (format: date, e.g. 2021-04-25)
+  --filter-date-left-at-lte: string # ISO 8601 date for filtering room participants that left before that date. (format: date, e.g. 2021-04-25)
+  --filter-context: string # Filter room participants based on the context. (e.g. Alice)
+  --page-size: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[date_joined_at][eq]" $filterdate_joined_ateq "scalar") (serialize-qp "filter[date_joined_at][gte]" $filterdate_joined_atgte "scalar") (serialize-qp "filter[date_joined_at][lte]" $filterdate_joined_atlte "scalar") (serialize-qp "filter[date_updated_at][eq]" $filterdate_updated_ateq "scalar") (serialize-qp "filter[date_updated_at][gte]" $filterdate_updated_atgte "scalar") (serialize-qp "filter[date_updated_at][lte]" $filterdate_updated_atlte "scalar") (serialize-qp "filter[date_left_at][eq]" $filterdate_left_ateq "scalar") (serialize-qp "filter[date_left_at][gte]" $filterdate_left_atgte "scalar") (serialize-qp "filter[date_left_at][lte]" $filterdate_left_atlte "scalar") (serialize-qp "filter[context]" $filtercontext "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "page[number]" $pagenumber "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/room_sessions/($room_session_id)/participants" $qp)
+  let qp = [(serialize-qp "filter[date_joined_at][eq]" $filter_date_joined_at_eq "scalar") (serialize-qp "filter[date_joined_at][gte]" $filter_date_joined_at_gte "scalar") (serialize-qp "filter[date_joined_at][lte]" $filter_date_joined_at_lte "scalar") (serialize-qp "filter[date_updated_at][eq]" $filter_date_updated_at_eq "scalar") (serialize-qp "filter[date_updated_at][gte]" $filter_date_updated_at_gte "scalar") (serialize-qp "filter[date_updated_at][lte]" $filter_date_updated_at_lte "scalar") (serialize-qp "filter[date_left_at][eq]" $filter_date_left_at_eq "scalar") (serialize-qp "filter[date_left_at][gte]" $filter_date_left_at_gte "scalar") (serialize-qp "filter[date_left_at][lte]" $filter_date_left_at_lte "scalar") (serialize-qp "filter[context]" $filter_context "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[number]" $page_number "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({room_session_id: $room_session_id} | format pattern "/room_sessions/{room_session_id}/participants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7840,7 +7840,7 @@ export def "room-sessions-participants NestedListRoomParticipants" [
 #
 # GET /rooms
 # operationId: ListRooms
-export def "rooms ListRooms" [
+export def "rooms list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7849,20 +7849,20 @@ export def "rooms ListRooms" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterdate-created-ateq: string # ISO 8601 date for filtering rooms created on that date. (format: date, e.g. 2021-04-25)
-  --filterdate-created-atgte: string # ISO 8601 date for filtering rooms created after that date. (format: date, e.g. 2021-04-25)
-  --filterdate-created-atlte: string # ISO 8601 date for filtering rooms created before that date. (format: date, e.g. 2021-04-25)
-  --filterdate-updated-ateq: string # ISO 8601 date for filtering rooms updated on that date. (format: date, e.g. 2021-04-25)
-  --filterdate-updated-atgte: string # ISO 8601 date for filtering rooms updated after that date. (format: date, e.g. 2021-04-25)
-  --filterdate-updated-atlte: string # ISO 8601 date for filtering rooms updated before that date. (format: date, e.g. 2021-04-25)
-  --filterunique-name: string # Unique_name for filtering rooms. (e.g. my_video_room)
+  --filter-date-created-at-eq: string # ISO 8601 date for filtering rooms created on that date. (format: date, e.g. 2021-04-25)
+  --filter-date-created-at-gte: string # ISO 8601 date for filtering rooms created after that date. (format: date, e.g. 2021-04-25)
+  --filter-date-created-at-lte: string # ISO 8601 date for filtering rooms created before that date. (format: date, e.g. 2021-04-25)
+  --filter-date-updated-at-eq: string # ISO 8601 date for filtering rooms updated on that date. (format: date, e.g. 2021-04-25)
+  --filter-date-updated-at-gte: string # ISO 8601 date for filtering rooms updated after that date. (format: date, e.g. 2021-04-25)
+  --filter-date-updated-at-lte: string # ISO 8601 date for filtering rooms updated before that date. (format: date, e.g. 2021-04-25)
+  --filter-unique-name: string # Unique_name for filtering rooms. (e.g. my_video_room)
   --include-sessions: oneof<nothing, bool> # To decide if room sessions should be included in the response. (e.g. true)
-  --pagesize: int # The size of the page. (default: 20)
-  --pagenumber: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[date_created_at][eq]" $filterdate_created_ateq "scalar") (serialize-qp "filter[date_created_at][gte]" $filterdate_created_atgte "scalar") (serialize-qp "filter[date_created_at][lte]" $filterdate_created_atlte "scalar") (serialize-qp "filter[date_updated_at][eq]" $filterdate_updated_ateq "scalar") (serialize-qp "filter[date_updated_at][gte]" $filterdate_updated_atgte "scalar") (serialize-qp "filter[date_updated_at][lte]" $filterdate_updated_atlte "scalar") (serialize-qp "filter[unique_name]" $filterunique_name "scalar") (serialize-qp "include_sessions" $include_sessions "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "page[number]" $pagenumber "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[date_created_at][eq]" $filter_date_created_at_eq "scalar") (serialize-qp "filter[date_created_at][gte]" $filter_date_created_at_gte "scalar") (serialize-qp "filter[date_created_at][lte]" $filter_date_created_at_lte "scalar") (serialize-qp "filter[date_updated_at][eq]" $filter_date_updated_at_eq "scalar") (serialize-qp "filter[date_updated_at][gte]" $filter_date_updated_at_gte "scalar") (serialize-qp "filter[date_updated_at][lte]" $filter_date_updated_at_lte "scalar") (serialize-qp "filter[unique_name]" $filter_unique_name "scalar") (serialize-qp "include_sessions" $include_sessions "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[number]" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rooms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7873,7 +7873,7 @@ export def "rooms ListRooms" [
 #
 # POST /rooms
 # operationId: CreateRoom
-export def "rooms CreateRoom" [
+export def "rooms create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7889,7 +7889,7 @@ export def "rooms CreateRoom" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rooms")
-  let body = {max_participants: $max_participants, unique_name: $unique_name} | compact
+  let body = {"max_participants": $max_participants, "unique_name": $unique_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7900,7 +7900,7 @@ export def "rooms CreateRoom" [
 #
 # DELETE /rooms/{room_id}
 # operationId: DeleteRoom
-export def "rooms DeleteRoom" [
+export def "rooms delete" [
   room_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7913,7 +7913,7 @@ export def "rooms DeleteRoom" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rooms/($room_id)")
+  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/rooms/{room_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7923,7 +7923,7 @@ export def "rooms DeleteRoom" [
 #
 # GET /rooms/{room_id}
 # operationId: ViewRoom
-export def "rooms ViewRoom" [
+export def "rooms get" [
   room_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7938,7 +7938,7 @@ export def "rooms ViewRoom" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_sessions" $include_sessions "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rooms/($room_id)" $qp)
+  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/rooms/{room_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7948,7 +7948,7 @@ export def "rooms ViewRoom" [
 #
 # POST /rooms/{room_id}/actions/generate_join_client_token
 # operationId: CreateRoomClientToken
-export def "rooms-actions-generate-join-client-token CreateRoomClientToken" [
+export def "rooms-actions-generate-join-client-token create" [
   room_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7964,8 +7964,8 @@ export def "rooms-actions-generate-join-client-token CreateRoomClientToken" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rooms/($room_id)/actions/generate_join_client_token")
-  let body = {refresh_token_ttl_secs: $refresh_token_ttl_secs, token_ttl_secs: $token_ttl_secs} | compact
+  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/rooms/{room_id}/actions/generate_join_client_token"))
+  let body = {"refresh_token_ttl_secs": $refresh_token_ttl_secs, "token_ttl_secs": $token_ttl_secs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7976,7 +7976,7 @@ export def "rooms-actions-generate-join-client-token CreateRoomClientToken" [
 #
 # POST /rooms/{room_id}/actions/refresh_client_token
 # operationId: RefreshRoomClientToken
-export def "rooms-actions-refresh-client-token RefreshRoomClientToken" [
+export def "rooms-actions-refresh-client-token refresh" [
   room_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7992,8 +7992,8 @@ export def "rooms-actions-refresh-client-token RefreshRoomClientToken" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rooms/($room_id)/actions/refresh_client_token")
-  let body = {refresh_token: $refresh_token, token_ttl_secs: $token_ttl_secs} | compact
+  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/rooms/{room_id}/actions/refresh_client_token"))
+  let body = {"refresh_token": $refresh_token, "token_ttl_secs": $token_ttl_secs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8004,7 +8004,7 @@ export def "rooms-actions-refresh-client-token RefreshRoomClientToken" [
 #
 # GET /rooms/{room_id}/sessions
 # operationId: NestedListRoomSessions
-export def "rooms-sessions NestedListRoomSessions" [
+export def "rooms-sessions get" [
   room_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8014,24 +8014,24 @@ export def "rooms-sessions NestedListRoomSessions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterdate-created-ateq: string # ISO 8601 date for filtering room sessions created on that date. (format: date, e.g. 2021-04-25)
-  --filterdate-created-atgte: string # ISO 8601 date for filtering room sessions created after that date. (format: date, e.g. 2021-04-25)
-  --filterdate-created-atlte: string # ISO 8601 date for filtering room sessions created before that date. (format: date, e.g. 2021-04-25)
-  --filterdate-updated-ateq: string # ISO 8601 date for filtering room sessions updated on that date. (format: date, e.g. 2021-04-25)
-  --filterdate-updated-atgte: string # ISO 8601 date for filtering room sessions updated after that date. (format: date, e.g. 2021-04-25)
-  --filterdate-updated-atlte: string # ISO 8601 date for filtering room sessions updated before that date. (format: date, e.g. 2021-04-25)
-  --filterdate-ended-ateq: string # ISO 8601 date for filtering room sessions ended on that date. (format: date, e.g. 2021-04-25)
-  --filterdate-ended-atgte: string # ISO 8601 date for filtering room sessions ended after that date. (format: date, e.g. 2021-04-25)
-  --filterdate-ended-atlte: string # ISO 8601 date for filtering room sessions ended before that date. (format: date, e.g. 2021-04-25)
-  --filteractive: oneof<nothing, bool> # Filter active or inactive room sessions. (e.g. true)
+  --filter-date-created-at-eq: string # ISO 8601 date for filtering room sessions created on that date. (format: date, e.g. 2021-04-25)
+  --filter-date-created-at-gte: string # ISO 8601 date for filtering room sessions created after that date. (format: date, e.g. 2021-04-25)
+  --filter-date-created-at-lte: string # ISO 8601 date for filtering room sessions created before that date. (format: date, e.g. 2021-04-25)
+  --filter-date-updated-at-eq: string # ISO 8601 date for filtering room sessions updated on that date. (format: date, e.g. 2021-04-25)
+  --filter-date-updated-at-gte: string # ISO 8601 date for filtering room sessions updated after that date. (format: date, e.g. 2021-04-25)
+  --filter-date-updated-at-lte: string # ISO 8601 date for filtering room sessions updated before that date. (format: date, e.g. 2021-04-25)
+  --filter-date-ended-at-eq: string # ISO 8601 date for filtering room sessions ended on that date. (format: date, e.g. 2021-04-25)
+  --filter-date-ended-at-gte: string # ISO 8601 date for filtering room sessions ended after that date. (format: date, e.g. 2021-04-25)
+  --filter-date-ended-at-lte: string # ISO 8601 date for filtering room sessions ended before that date. (format: date, e.g. 2021-04-25)
+  --filter-active: oneof<nothing, bool> # Filter active or inactive room sessions. (e.g. true)
   --include-participants: oneof<nothing, bool> # To decide if room participants should be included in the response. (e.g. true)
-  --pagesize: int # The size of the page. (default: 20)
-  --pagenumber: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[date_created_at][eq]" $filterdate_created_ateq "scalar") (serialize-qp "filter[date_created_at][gte]" $filterdate_created_atgte "scalar") (serialize-qp "filter[date_created_at][lte]" $filterdate_created_atlte "scalar") (serialize-qp "filter[date_updated_at][eq]" $filterdate_updated_ateq "scalar") (serialize-qp "filter[date_updated_at][gte]" $filterdate_updated_atgte "scalar") (serialize-qp "filter[date_updated_at][lte]" $filterdate_updated_atlte "scalar") (serialize-qp "filter[date_ended_at][eq]" $filterdate_ended_ateq "scalar") (serialize-qp "filter[date_ended_at][gte]" $filterdate_ended_atgte "scalar") (serialize-qp "filter[date_ended_at][lte]" $filterdate_ended_atlte "scalar") (serialize-qp "filter[active]" $filteractive "scalar") (serialize-qp "include_participants" $include_participants "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "page[number]" $pagenumber "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rooms/($room_id)/sessions" $qp)
+  let qp = [(serialize-qp "filter[date_created_at][eq]" $filter_date_created_at_eq "scalar") (serialize-qp "filter[date_created_at][gte]" $filter_date_created_at_gte "scalar") (serialize-qp "filter[date_created_at][lte]" $filter_date_created_at_lte "scalar") (serialize-qp "filter[date_updated_at][eq]" $filter_date_updated_at_eq "scalar") (serialize-qp "filter[date_updated_at][gte]" $filter_date_updated_at_gte "scalar") (serialize-qp "filter[date_updated_at][lte]" $filter_date_updated_at_lte "scalar") (serialize-qp "filter[date_ended_at][eq]" $filter_date_ended_at_eq "scalar") (serialize-qp "filter[date_ended_at][gte]" $filter_date_ended_at_gte "scalar") (serialize-qp "filter[date_ended_at][lte]" $filter_date_ended_at_lte "scalar") (serialize-qp "filter[active]" $filter_active "scalar") (serialize-qp "include_participants" $include_participants "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[number]" $page_number "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({room_id: $room_id} | format pattern "/rooms/{room_id}/sessions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8041,7 +8041,7 @@ export def "rooms-sessions NestedListRoomSessions" [
 #
 # GET /short_codes
 # operationId: listShortCodes
-export def "short-codes listShortCodes" [
+export def "short-codes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8050,13 +8050,13 @@ export def "short-codes listShortCodes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filtermessaging-profile-id: string # Filter by Messaging Profile ID. Use the string `null` for phone numbers without assigned profiles. A synonym for the `/messaging_profiles/{id}/short_codes` endpoint when querying about an extant profile.
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-messaging-profile-id: string # Filter by Messaging Profile ID. Use the string `null` for phone numbers without assigned profiles. A synonym for the `/messaging_profiles/{id}/short_codes` endpoint when querying about an extant profile.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[messaging_profile_id]" $filtermessaging_profile_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[messaging_profile_id]" $filter_messaging_profile_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/short_codes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8067,7 +8067,7 @@ export def "short-codes listShortCodes" [
 #
 # GET /short_codes/{id}
 # operationId: retrieveShortCode
-export def "short-codes retrieveShortCode" [
+export def "short-codes retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8080,7 +8080,7 @@ export def "short-codes retrieveShortCode" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/short_codes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/short_codes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8090,7 +8090,7 @@ export def "short-codes retrieveShortCode" [
 #
 # PATCH /short_codes/{id}
 # operationId: updateShortCode
-export def "short-codes updateShortCode" [
+export def "short-codes update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8105,8 +8105,8 @@ export def "short-codes updateShortCode" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/short_codes/($id)")
-  let body = {messaging_profile_id: $messaging_profile_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/short_codes/{id}"))
+  let body = {"messaging_profile_id": $messaging_profile_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8117,7 +8117,7 @@ export def "short-codes updateShortCode" [
 #
 # GET /sim_card_group_actions
 # operationId: SimCardGroupActionsGet
-export def "sim-card-group-actions SimCardGroupActionsGet" [
+export def "sim-card-group-actions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8126,15 +8126,15 @@ export def "sim-card-group-actions SimCardGroupActionsGet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filtersim-card-group-id: string # A valid SIM card group ID. (format: uuid, e.g. 47a1c2b0-cc7b-4ab1-bb98-b33fb0fc61b9)
-  --filterstatus: string@filterstatus-completer-1 # Filter by a specific status of the resource's lifecycle. (e.g. in-progress)
-  --filtertype: string@filtertype-completer-4 # Filter by action type. (e.g. set_private_wireless_gateway)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-sim-card-group-id: string # A valid SIM card group ID. (format: uuid, e.g. 47a1c2b0-cc7b-4ab1-bb98-b33fb0fc61b9)
+  --filter-status: string@filter-status-completer-1 # Filter by a specific status of the resource's lifecycle. (e.g. in-progress)
+  --filter-type: string@filter-type-completer-4 # Filter by action type. (e.g. set_private_wireless_gateway)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[sim_card_group_id]" $filtersim_card_group_id "scalar") (serialize-qp "filter[status]" $filterstatus "scalar") (serialize-qp "filter[type]" $filtertype "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[sim_card_group_id]" $filter_sim_card_group_id "scalar") (serialize-qp "filter[status]" $filter_status "scalar") (serialize-qp "filter[type]" $filter_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sim_card_group_actions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8145,7 +8145,7 @@ export def "sim-card-group-actions SimCardGroupActionsGet" [
 #
 # GET /sim_card_group_actions/{id}
 # operationId: SimCardGroupActionGet
-export def "sim-card-group-actions SimCardGroupActionGet" [
+export def "sim-card-group-actions get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8158,7 +8158,7 @@ export def "sim-card-group-actions SimCardGroupActionGet" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_card_group_actions/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sim_card_group_actions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8168,7 +8168,7 @@ export def "sim-card-group-actions SimCardGroupActionGet" [
 #
 # GET /sim_card_groups
 # operationId: SimCardGroupsGetAll
-export def "sim-card-groups SimCardGroupsGetAll" [
+export def "sim-card-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8177,13 +8177,13 @@ export def "sim-card-groups SimCardGroupsGetAll" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filtername: string # A valid SIM card group name. (format: uuid, e.g. My Test Group)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-name: string # A valid SIM card group name. (format: uuid, e.g. My Test Group)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[name]" $filtername "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[name]" $filter_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sim_card_groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8194,7 +8194,7 @@ export def "sim-card-groups SimCardGroupsGetAll" [
 #
 # POST /sim_card_groups
 # operationId: SimCardGroupsPost
-export def "sim-card-groups SimCardGroupsPost" [
+export def "sim-card-groups create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8210,7 +8210,7 @@ export def "sim-card-groups SimCardGroupsPost" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sim_card_groups")
-  let body = {data_limit: $data_limit, name: $name} | compact
+  let body = {"data_limit": $data_limit, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8221,7 +8221,7 @@ export def "sim-card-groups SimCardGroupsPost" [
 #
 # DELETE /sim_card_groups/{id}
 # operationId: SimCardGroupDelete
-export def "sim-card-groups SimCardGroupDelete" [
+export def "sim-card-groups delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8234,7 +8234,7 @@ export def "sim-card-groups SimCardGroupDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_card_groups/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sim_card_groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8244,7 +8244,7 @@ export def "sim-card-groups SimCardGroupDelete" [
 #
 # GET /sim_card_groups/{id}
 # operationId: SimCardGroupsGet
-export def "sim-card-groups SimCardGroupsGet" [
+export def "sim-card-groups get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8257,7 +8257,7 @@ export def "sim-card-groups SimCardGroupsGet" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_card_groups/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sim_card_groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8267,7 +8267,7 @@ export def "sim-card-groups SimCardGroupsGet" [
 #
 # PATCH /sim_card_groups/{id}
 # operationId: SimCardGroupUpdate
-export def "sim-card-groups SimCardGroupUpdate" [
+export def "sim-card-groups update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8283,8 +8283,8 @@ export def "sim-card-groups SimCardGroupUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_card_groups/($id)")
-  let body = {data_limit: $data_limit, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/sim_card_groups/{id}"))
+  let body = {"data_limit": $data_limit, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8295,7 +8295,7 @@ export def "sim-card-groups SimCardGroupUpdate" [
 #
 # POST /sim_card_groups/{id}/actions/remove_private_wireless_gateway
 # operationId: RemoveSIMCardGroupPrivateWirelessGateway
-export def "sim-card-groups-actions-remove-private-wireless-gateway RemoveSIMCardGroupPrivateWirelessGateway" [
+export def "sim-card-groups-actions-remove-private-wireless-gateway delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8308,7 +8308,7 @@ export def "sim-card-groups-actions-remove-private-wireless-gateway RemoveSIMCar
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_card_groups/($id)/actions/remove_private_wireless_gateway")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sim_card_groups/{id}/actions/remove_private_wireless_gateway"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8318,7 +8318,7 @@ export def "sim-card-groups-actions-remove-private-wireless-gateway RemoveSIMCar
 #
 # POST /sim_card_groups/{id}/actions/set_private_wireless_gateway
 # operationId: SetSIMCardGroupPrivateWirelessGateway
-export def "sim-card-groups-actions-set-private-wireless-gateway SetSIMCardGroupPrivateWirelessGateway" [
+export def "sim-card-groups-actions-set-private-wireless-gateway post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8333,8 +8333,8 @@ export def "sim-card-groups-actions-set-private-wireless-gateway SetSIMCardGroup
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_card_groups/($id)/actions/set_private_wireless_gateway")
-  let body = {private_wireless_gateway_id: $private_wireless_gateway_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/sim_card_groups/{id}/actions/set_private_wireless_gateway"))
+  let body = {"private_wireless_gateway_id": $private_wireless_gateway_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8345,7 +8345,7 @@ export def "sim-card-groups-actions-set-private-wireless-gateway SetSIMCardGroup
 #
 # POST /sim_card_order_preview
 # operationId: SimCardOrdersPreview
-export def "sim-card-order-preview SimCardOrdersPreview" [
+export def "sim-card-order-preview post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8361,7 +8361,7 @@ export def "sim-card-order-preview SimCardOrdersPreview" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sim_card_order_preview")
-  let body = {address_id: $address_id, quantity: $quantity} | compact
+  let body = {"address_id": $address_id, "quantity": $quantity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8372,7 +8372,7 @@ export def "sim-card-order-preview SimCardOrdersPreview" [
 #
 # GET /sim_card_orders
 # operationId: SimCardOrdersGet
-export def "sim-card-orders SimCardOrdersGet" [
+export def "sim-card-orders list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8381,24 +8381,24 @@ export def "sim-card-orders SimCardOrdersGet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filtercreated-at: string # Filter by ISO 8601 formatted date-time string matching resource creation date-time. (format: datetime, e.g. 2018-02-02T22:25:27.521Z)
-  --filterupdated-at: string # Filter by ISO 8601 formatted date-time string matching resource last update date-time. (format: datetime, e.g. 2018-02-02T22:25:27.521Z)
-  --filterquantity: int # Filter orders by how many SIM cards were ordered. (e.g. 21)
-  --filtercostamount: string # The total monetary amount of the order. (e.g. 2.53)
-  --filtercostcurrency: string # Filter by ISO 4217 currency string. (e.g. USD)
-  --filteraddressid: string # Uniquely identifies the address for the order. (format: int64, e.g. 1293384261075731499)
-  --filteraddressstreet-address: string # Returns entries with matching name of the street where the address is located. (e.g. 311 W Superior St)
-  --filteraddressextended-address: string # Returns entries with matching name of the supplemental field for address information. (e.g. Suite 504)
-  --filteraddresslocality: string # Filter by the name of the city where the address is located. (e.g. Chicago)
-  --filteraddressadministrative-area: string # Filter by state or province where the address is located. (e.g. IL)
-  --filteraddresscountry-code: string # Filter by the mobile operator two-character (ISO 3166-1 alpha-2) origin country code. (e.g. US)
-  --filteraddresspostal-code: string # Filter by postal code for the address. (e.g. 60654)
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --filter-created-at: string # Filter by ISO 8601 formatted date-time string matching resource creation date-time. (format: datetime, e.g. 2018-02-02T22:25:27.521Z)
+  --filter-updated-at: string # Filter by ISO 8601 formatted date-time string matching resource last update date-time. (format: datetime, e.g. 2018-02-02T22:25:27.521Z)
+  --filter-quantity: int # Filter orders by how many SIM cards were ordered. (e.g. 21)
+  --filter-cost-amount: string # The total monetary amount of the order. (e.g. 2.53)
+  --filter-cost-currency: string # Filter by ISO 4217 currency string. (e.g. USD)
+  --filter-address-id: string # Uniquely identifies the address for the order. (format: int64, e.g. 1293384261075731499)
+  --filter-address-street-address: string # Returns entries with matching name of the street where the address is located. (e.g. 311 W Superior St)
+  --filter-address-extended-address: string # Returns entries with matching name of the supplemental field for address information. (e.g. Suite 504)
+  --filter-address-locality: string # Filter by the name of the city where the address is located. (e.g. Chicago)
+  --filter-address-administrative-area: string # Filter by state or province where the address is located. (e.g. IL)
+  --filter-address-country-code: string # Filter by the mobile operator two-character (ISO 3166-1 alpha-2) origin country code. (e.g. US)
+  --filter-address-postal-code: string # Filter by postal code for the address. (e.g. 60654)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[created_at]" $filtercreated_at "scalar") (serialize-qp "filter[updated_at]" $filterupdated_at "scalar") (serialize-qp "filter[quantity]" $filterquantity "scalar") (serialize-qp "filter[cost.amount]" $filtercostamount "scalar") (serialize-qp "filter[cost.currency]" $filtercostcurrency "scalar") (serialize-qp "filter[address.id]" $filteraddressid "scalar") (serialize-qp "filter[address.street_address]" $filteraddressstreet_address "scalar") (serialize-qp "filter[address.extended_address]" $filteraddressextended_address "scalar") (serialize-qp "filter[address.locality]" $filteraddresslocality "scalar") (serialize-qp "filter[address.administrative_area]" $filteraddressadministrative_area "scalar") (serialize-qp "filter[address.country_code]" $filteraddresscountry_code "scalar") (serialize-qp "filter[address.postal_code]" $filteraddresspostal_code "scalar") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[created_at]" $filter_created_at "scalar") (serialize-qp "filter[updated_at]" $filter_updated_at "scalar") (serialize-qp "filter[quantity]" $filter_quantity "scalar") (serialize-qp "filter[cost.amount]" $filter_cost_amount "scalar") (serialize-qp "filter[cost.currency]" $filter_cost_currency "scalar") (serialize-qp "filter[address.id]" $filter_address_id "scalar") (serialize-qp "filter[address.street_address]" $filter_address_street_address "scalar") (serialize-qp "filter[address.extended_address]" $filter_address_extended_address "scalar") (serialize-qp "filter[address.locality]" $filter_address_locality "scalar") (serialize-qp "filter[address.administrative_area]" $filter_address_administrative_area "scalar") (serialize-qp "filter[address.country_code]" $filter_address_country_code "scalar") (serialize-qp "filter[address.postal_code]" $filter_address_postal_code "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sim_card_orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8409,7 +8409,7 @@ export def "sim-card-orders SimCardOrdersGet" [
 #
 # POST /sim_card_orders
 # operationId: SimCardOrdersPost
-export def "sim-card-orders SimCardOrdersPost" [
+export def "sim-card-orders create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8425,7 +8425,7 @@ export def "sim-card-orders SimCardOrdersPost" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sim_card_orders")
-  let body = {address_id: $address_id, quantity: $quantity} | compact
+  let body = {"address_id": $address_id, "quantity": $quantity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8436,7 +8436,7 @@ export def "sim-card-orders SimCardOrdersPost" [
 #
 # GET /sim_card_orders/{id}
 # operationId: SimCardOrderGet
-export def "sim-card-orders SimCardOrderGet" [
+export def "sim-card-orders get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8449,7 +8449,7 @@ export def "sim-card-orders SimCardOrderGet" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_card_orders/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sim_card_orders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8459,7 +8459,7 @@ export def "sim-card-orders SimCardOrderGet" [
 #
 # GET /sim_cards
 # operationId: SimCardsGet
-export def "sim-cards SimCardsGet" [
+export def "sim-cards list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8468,16 +8468,16 @@ export def "sim-cards SimCardsGet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
   --include-sim-card-group: oneof<nothing, bool> # It includes the associated SIM card group object in the response when present. (default: false, e.g. true)
-  --filtersim-card-group-id: string # A valid SIM card group ID. (format: uuid, e.g. 47a1c2b0-cc7b-4ab1-bb98-b33fb0fc61b9)
-  --filtertags: list # A list of SIM card tags to filter on.<br/><br/> If the SIM card contains <b><i>all</i></b> of the given <code>tags</code> they will be found.<br/><br/> For example, if the SIM cards have the following tags: <ul>   <li><code>['customers', 'staff', 'test']</code>   <li><code>['test']</code></li>   <li><code>['customers']</code></li> </ul> Searching for <code>['customers', 'test']</code> returns only the first because it's the only one with both tags.<br/> Searching for <code>test</code> returns the first two SIMs, because both of them have such tag.<br/> Searching for <code>customers</code> returns the first and last SIMs.<br/>  (e.g. [personal, customers, active-customers])
-  --filtericcid: string # A search string to partially match for the SIM card's ICCID. (e.g. 89310410106543789301)
+  --filter-sim-card-group-id: string # A valid SIM card group ID. (format: uuid, e.g. 47a1c2b0-cc7b-4ab1-bb98-b33fb0fc61b9)
+  --filter-tags: list # A list of SIM card tags to filter on.<br/><br/> If the SIM card contains <b><i>all</i></b> of the given <code>tags</code> they will be found.<br/><br/> For example, if the SIM cards have the following tags: <ul>   <li><code>['customers', 'staff', 'test']</code>   <li><code>['test']</code></li>   <li><code>['customers']</code></li> </ul> Searching for <code>['customers', 'test']</code> returns only the first because it's the only one with both tags.<br/> Searching for <code>test</code> returns the first two SIMs, because both of them have such tag.<br/> Searching for <code>customers</code> returns the first and last SIMs.<br/>  (e.g. [personal, customers, active-customers])
+  --filter-iccid: string # A search string to partially match for the SIM card's ICCID. (e.g. 89310410106543789301)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "include_sim_card_group" $include_sim_card_group "scalar") (serialize-qp "filter[sim_card_group_id]" $filtersim_card_group_id "scalar") (serialize-qp "filter[tags]" $filtertags "multi") (serialize-qp "filter[iccid]" $filtericcid "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "include_sim_card_group" $include_sim_card_group "scalar") (serialize-qp "filter[sim_card_group_id]" $filter_sim_card_group_id "scalar") (serialize-qp "filter[tags]" $filter_tags "multi") (serialize-qp "filter[iccid]" $filter_iccid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sim_cards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8488,7 +8488,7 @@ export def "sim-cards SimCardsGet" [
 #
 # POST /sim_cards/actions/validate_registration_codes
 # operationId: postValidateRegistrationCodes
-export def "sim-cards-actions-validate-registration-codes post" [
+export def "sim-cards-actions-validate-registration-codes create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8503,7 +8503,7 @@ export def "sim-cards-actions-validate-registration-codes post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sim_cards/actions/validate_registration_codes")
-  let body = {registration_codes: $registration_codes} | compact
+  let body = {"registration_codes": $registration_codes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8514,7 +8514,7 @@ export def "sim-cards-actions-validate-registration-codes post" [
 #
 # DELETE /sim_cards/{id}
 # operationId: SimCardDelete
-export def "sim-cards SimCardDelete" [
+export def "sim-cards delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8527,7 +8527,7 @@ export def "sim-cards SimCardDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_cards/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sim_cards/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8537,7 +8537,7 @@ export def "sim-cards SimCardDelete" [
 #
 # GET /sim_cards/{id}
 # operationId: SimCardGet
-export def "sim-cards SimCardGet" [
+export def "sim-cards get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8552,7 +8552,7 @@ export def "sim-cards SimCardGet" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_sim_card_group" $include_sim_card_group "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sim_cards/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/sim_cards/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8562,7 +8562,7 @@ export def "sim-cards SimCardGet" [
 #
 # PATCH /sim_cards/{id}
 # operationId: SimCardUpdate
-export def "sim-cards SimCardUpdate" [
+export def "sim-cards update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8578,8 +8578,8 @@ export def "sim-cards SimCardUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_cards/($id)")
-  let body = {sim_card_group_id: $sim_card_group_id, tags: $tags} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/sim_cards/{id}"))
+  let body = {"sim_card_group_id": $sim_card_group_id, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8590,7 +8590,7 @@ export def "sim-cards SimCardUpdate" [
 #
 # POST /sim_cards/{id}/actions/disable
 # operationId: SimCardDisable
-export def "sim-cards-actions-disable SimCardDisable" [
+export def "sim-cards-actions-disable disable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8603,7 +8603,7 @@ export def "sim-cards-actions-disable SimCardDisable" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_cards/($id)/actions/disable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sim_cards/{id}/actions/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8613,7 +8613,7 @@ export def "sim-cards-actions-disable SimCardDisable" [
 #
 # POST /sim_cards/{id}/actions/enable
 # operationId: SimCardEnable
-export def "sim-cards-actions-enable SimCardEnable" [
+export def "sim-cards-actions-enable enable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8626,7 +8626,7 @@ export def "sim-cards-actions-enable SimCardEnable" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_cards/($id)/actions/enable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sim_cards/{id}/actions/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8636,7 +8636,7 @@ export def "sim-cards-actions-enable SimCardEnable" [
 #
 # POST /sim_cards/{id}/actions/set_standby
 # operationId: SimCardSetStandby
-export def "sim-cards-actions-set-standby SimCardSetStandby" [
+export def "sim-cards-actions-set-standby post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8649,7 +8649,7 @@ export def "sim-cards-actions-set-standby SimCardSetStandby" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_cards/($id)/actions/set_standby")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sim_cards/{id}/actions/set_standby"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8659,7 +8659,7 @@ export def "sim-cards-actions-set-standby SimCardSetStandby" [
 #
 # DELETE /sim_cards/{sim_card_id}/network_preferences
 # operationId: SIMCardNetworkPreferencesDelete
-export def "sim-cards-network-preferences SIMCardNetworkPreferencesDelete" [
+export def "sim-cards-network-preferences delete" [
   sim_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8672,7 +8672,7 @@ export def "sim-cards-network-preferences SIMCardNetworkPreferencesDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_cards/($sim_card_id)/network_preferences")
+  let full_url = (build-url $base ({sim_card_id: $sim_card_id} | format pattern "/sim_cards/{sim_card_id}/network_preferences"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8682,7 +8682,7 @@ export def "sim-cards-network-preferences SIMCardNetworkPreferencesDelete" [
 #
 # GET /sim_cards/{sim_card_id}/network_preferences
 # operationId: SIMCardNetworkPreferencesGet
-export def "sim-cards-network-preferences SIMCardNetworkPreferencesGet" [
+export def "sim-cards-network-preferences get" [
   sim_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8697,7 +8697,7 @@ export def "sim-cards-network-preferences SIMCardNetworkPreferencesGet" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_ota_updates" $include_ota_updates "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sim_cards/($sim_card_id)/network_preferences" $qp)
+  let full_url = (build-url $base ({sim_card_id: $sim_card_id} | format pattern "/sim_cards/{sim_card_id}/network_preferences") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8708,7 +8708,7 @@ export def "sim-cards-network-preferences SIMCardNetworkPreferencesGet" [
 # PUT /sim_cards/{sim_card_id}/network_preferences
 # operationId: SIMCardNetworkPreferencesPut
 # --mobile_operator_networks_preferences item shape: {mobile_operator_network_id?: string, priority?: int}
-export def "sim-cards-network-preferences SIMCardNetworkPreferencesPut" [
+export def "sim-cards-network-preferences put" [
   sim_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8723,8 +8723,8 @@ export def "sim-cards-network-preferences SIMCardNetworkPreferencesPut" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_cards/($sim_card_id)/network_preferences")
-  let body = {mobile_operator_networks_preferences: $mobile_operator_networks_preferences} | compact
+  let full_url = (build-url $base ({sim_card_id: $sim_card_id} | format pattern "/sim_cards/{sim_card_id}/network_preferences"))
+  let body = {"mobile_operator_networks_preferences": $mobile_operator_networks_preferences} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8735,7 +8735,7 @@ export def "sim-cards-network-preferences SIMCardNetworkPreferencesPut" [
 #
 # DELETE /sim_cards/{sim_card_id}/public_ip
 # operationId: SIMCardPublicIPDelete
-export def "sim-cards-public-ip SIMCardPublicIPDelete" [
+export def "sim-cards-public-ip delete" [
   sim_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8748,7 +8748,7 @@ export def "sim-cards-public-ip SIMCardPublicIPDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_cards/($sim_card_id)/public_ip")
+  let full_url = (build-url $base ({sim_card_id: $sim_card_id} | format pattern "/sim_cards/{sim_card_id}/public_ip"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8758,7 +8758,7 @@ export def "sim-cards-public-ip SIMCardPublicIPDelete" [
 #
 # GET /sim_cards/{sim_card_id}/public_ip
 # operationId: SIMCardPublicIPGet
-export def "sim-cards-public-ip SIMCardPublicIPGet" [
+export def "sim-cards-public-ip get" [
   sim_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8771,7 +8771,7 @@ export def "sim-cards-public-ip SIMCardPublicIPGet" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_cards/($sim_card_id)/public_ip")
+  let full_url = (build-url $base ({sim_card_id: $sim_card_id} | format pattern "/sim_cards/{sim_card_id}/public_ip"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8781,7 +8781,7 @@ export def "sim-cards-public-ip SIMCardPublicIPGet" [
 #
 # POST /sim_cards/{sim_card_id}/public_ip
 # operationId: SIMCardPublicIPPost
-export def "sim-cards-public-ip SIMCardPublicIPPost" [
+export def "sim-cards-public-ip post" [
   sim_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8794,7 +8794,7 @@ export def "sim-cards-public-ip SIMCardPublicIPPost" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sim_cards/($sim_card_id)/public_ip")
+  let full_url = (build-url $base ({sim_card_id: $sim_card_id} | format pattern "/sim_cards/{sim_card_id}/public_ip"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8804,7 +8804,7 @@ export def "sim-cards-public-ip SIMCardPublicIPPost" [
 #
 # GET /sim_cards/{sim_card_id}/wireless_connectivity_logs
 # operationId: WirelessConnectivityLogsGet
-export def "sim-cards-wireless-connectivity-logs WirelessConnectivityLogsGet" [
+export def "sim-cards-wireless-connectivity-logs get" [
   sim_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8814,13 +8814,13 @@ export def "sim-cards-wireless-connectivity-logs WirelessConnectivityLogsGet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sim_cards/($sim_card_id)/wireless_connectivity_logs" $qp)
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({sim_card_id: $sim_card_id} | format pattern "/sim_cards/{sim_card_id}/wireless_connectivity_logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8830,7 +8830,7 @@ export def "sim-cards-wireless-connectivity-logs WirelessConnectivityLogsGet" [
 #
 # GET /sub_number_orders
 # operationId: listSubNumberOrders
-export def "sub-number-orders listSubNumberOrders" [
+export def "sub-number-orders list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8839,15 +8839,15 @@ export def "sub-number-orders listSubNumberOrders" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filteruser-id: string # User ID of the user who owns the sub number order (format: uuid, e.g. d70873cd-7c98-401a-81b6-b1ae08246995)
-  --filterorder-request-id: string # ID of the number order the sub number order belongs to (format: uuid, e.g. 12ade33a-21c0-473b-b055-b3c836e1c293)
-  --filtercountry-code: string # ISO alpha-2 country code. (e.g. US)
-  --filterphone-number-type: string # Phone Number Type (e.g. local)
-  --filterphone-numbers-count: int # Amount of numbers in the sub number order (e.g. 1)
+  --filter-user-id: string # User ID of the user who owns the sub number order (format: uuid, e.g. d70873cd-7c98-401a-81b6-b1ae08246995)
+  --filter-order-request-id: string # ID of the number order the sub number order belongs to (format: uuid, e.g. 12ade33a-21c0-473b-b055-b3c836e1c293)
+  --filter-country-code: string # ISO alpha-2 country code. (e.g. US)
+  --filter-phone-number-type: string # Phone Number Type (e.g. local)
+  --filter-phone-numbers-count: int # Amount of numbers in the sub number order (e.g. 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[user_id]" $filteruser_id "scalar") (serialize-qp "filter[order_request_id]" $filterorder_request_id "scalar") (serialize-qp "filter[country_code]" $filtercountry_code "scalar") (serialize-qp "filter[phone_number_type]" $filterphone_number_type "scalar") (serialize-qp "filter[phone_numbers_count]" $filterphone_numbers_count "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[user_id]" $filter_user_id "scalar") (serialize-qp "filter[order_request_id]" $filter_order_request_id "scalar") (serialize-qp "filter[country_code]" $filter_country_code "scalar") (serialize-qp "filter[phone_number_type]" $filter_phone_number_type "scalar") (serialize-qp "filter[phone_numbers_count]" $filter_phone_numbers_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sub_number_orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8858,7 +8858,7 @@ export def "sub-number-orders listSubNumberOrders" [
 #
 # GET /sub_number_orders/{sub_number_order_id}
 # operationId: retrieveSubNumberOrder
-export def "sub-number-orders retrieveSubNumberOrder" [
+export def "sub-number-orders retrieve" [
   sub_number_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8868,12 +8868,12 @@ export def "sub-number-orders retrieveSubNumberOrder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterinclude-phone-numbers: oneof<nothing, bool> # Include the first 50 phone number objects in the results (default: false)
+  --filter-include-phone-numbers: oneof<nothing, bool> # Include the first 50 phone number objects in the results (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[include_phone_numbers]" $filterinclude_phone_numbers "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sub_number_orders/($sub_number_order_id)" $qp)
+  let qp = [(serialize-qp "filter[include_phone_numbers]" $filter_include_phone_numbers "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({sub_number_order_id: $sub_number_order_id} | format pattern "/sub_number_orders/{sub_number_order_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8884,7 +8884,7 @@ export def "sub-number-orders retrieveSubNumberOrder" [
 # PATCH /sub_number_orders/{sub_number_order_id}
 # operationId: updateSubNumberOrder
 # --regulatory_requirements item shape: {field_value?: string, requirement_id?: string}
-export def "sub-number-orders updateSubNumberOrder" [
+export def "sub-number-orders update" [
   sub_number_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8899,8 +8899,8 @@ export def "sub-number-orders updateSubNumberOrder" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sub_number_orders/($sub_number_order_id)")
-  let body = {regulatory_requirements: $regulatory_requirements} | compact
+  let full_url = (build-url $base ({sub_number_order_id: $sub_number_order_id} | format pattern "/sub_number_orders/{sub_number_order_id}"))
+  let body = {"regulatory_requirements": $regulatory_requirements} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8920,17 +8920,17 @@ export def "telephony-credentials findTelephonyCredentials" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filtertag: string # Filter by tag
-  --filtername: string # Filter by name
-  --filterstatus: string # Filter by status
-  --filterresource-id: string # Filter by resource_id
-  --filtersip-username: string # Filter by sip_username
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-tag: string # Filter by tag
+  --filter-name: string # Filter by name
+  --filter-status: string # Filter by status
+  --filter-resource-id: string # Filter by resource_id
+  --filter-sip-username: string # Filter by sip_username
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[tag]" $filtertag "scalar") (serialize-qp "filter[name]" $filtername "scalar") (serialize-qp "filter[status]" $filterstatus "scalar") (serialize-qp "filter[resource_id]" $filterresource_id "scalar") (serialize-qp "filter[sip_username]" $filtersip_username "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[tag]" $filter_tag "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[status]" $filter_status "scalar") (serialize-qp "filter[resource_id]" $filter_resource_id "scalar") (serialize-qp "filter[sip_username]" $filter_sip_username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/telephony_credentials" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8941,7 +8941,7 @@ export def "telephony-credentials findTelephonyCredentials" [
 #
 # POST /telephony_credentials
 # operationId: CreateTelephonyCredential
-export def "telephony-credentials CreateTelephonyCredential" [
+export def "telephony-credentials create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8959,7 +8959,7 @@ export def "telephony-credentials CreateTelephonyCredential" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/telephony_credentials")
-  let body = {connection_id: $connection_id, expires_at: $expires_at, name: $name, tag: $tag} | compact
+  let body = {"connection_id": $connection_id, "expires_at": $expires_at, "name": $name, "tag": $tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8970,7 +8970,7 @@ export def "telephony-credentials CreateTelephonyCredential" [
 #
 # GET /telephony_credentials/tags
 # operationId: listTags
-export def "telephony-credentials-tags listTags" [
+export def "telephony-credentials-tags list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8979,12 +8979,12 @@ export def "telephony-credentials-tags listTags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/telephony_credentials/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8995,7 +8995,7 @@ export def "telephony-credentials-tags listTags" [
 #
 # DELETE /telephony_credentials/{id}
 # operationId: DeleteTelephonyCredential
-export def "telephony-credentials DeleteTelephonyCredential" [
+export def "telephony-credentials delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9008,7 +9008,7 @@ export def "telephony-credentials DeleteTelephonyCredential" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telephony_credentials/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/telephony_credentials/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9031,7 +9031,7 @@ export def "telephony-credentials get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telephony_credentials/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/telephony_credentials/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9041,7 +9041,7 @@ export def "telephony-credentials get" [
 #
 # PATCH /telephony_credentials/{id}
 # operationId: UpdateTelephonyCredential
-export def "telephony-credentials UpdateTelephonyCredential" [
+export def "telephony-credentials update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9059,8 +9059,8 @@ export def "telephony-credentials UpdateTelephonyCredential" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telephony_credentials/($id)")
-  let body = {connection_id: $connection_id, expires_at: $expires_at, name: $name, tag: $tag} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/telephony_credentials/{id}"))
+  let body = {"connection_id": $connection_id, "expires_at": $expires_at, "name": $name, "tag": $tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9085,7 +9085,7 @@ export def "telephony-credentials-actions telephonyCredentialAction" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telephony_credentials/($id)/actions/($action)")
+  let full_url = (build-url $base ({id: $id, action: $action} | format pattern "/telephony_credentials/{id}/actions/{action}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9095,7 +9095,7 @@ export def "telephony-credentials-actions telephonyCredentialAction" [
 #
 # POST /telephony_credentials/{id}/token
 # operationId: CreateTelephonyCredentialToken
-export def "telephony-credentials-token CreateTelephonyCredentialToken" [
+export def "telephony-credentials-token create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9108,7 +9108,7 @@ export def "telephony-credentials-token CreateTelephonyCredentialToken" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/telephony_credentials/($id)/token")
+  let full_url = (build-url $base ({id: $id} | format pattern "/telephony_credentials/{id}/token"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9127,15 +9127,15 @@ export def "texml-applications findTexmlApplications" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
-  --filterfriendly-namecontains: string # If present, applications with <code>friendly_name</code> containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters. (default: null)
-  --filteroutbound-voice-profile-id: string # Identifies the associated outbound voice profile. (format: int64, e.g. 1293384261075731499)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
+  --filter-friendly-name-contains: string # If present, applications with <code>friendly_name</code> containing the given value will be returned. Matching is not case-sensitive. Requires at least three characters. (default: null)
+  --filter-outbound-voice-profile-id: string # Identifies the associated outbound voice profile. (format: int64, e.g. 1293384261075731499)
   --qp-sort: string@sort-completer-2 # Specifies the sort order for results. By default sorting direction is ascending. To have the results sorted in descending order add the <code> -</code> prefix.<br/><br/> That is: <ul>   <li>     <code>connection_name</code>: sorts the result by the     <code>connection_name</code> field in ascending order.   </li>    <li>     <code>-connection_name</code>: sorts the result by the     <code>connection_name</code> field in descending order.   </li> </ul> <br/> If not given, results are sorted by <code>created_at</code> in descending order. (default: created_at, e.g. connection_name)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[friendly_name][contains]" $filterfriendly_namecontains "scalar") (serialize-qp "filter[outbound_voice_profile_id]" $filteroutbound_voice_profile_id "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[friendly_name][contains]" $filter_friendly_name_contains "scalar") (serialize-qp "filter[outbound_voice_profile_id]" $filter_outbound_voice_profile_id "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/texml_applications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9148,7 +9148,7 @@ export def "texml-applications findTexmlApplications" [
 # operationId: CreateTexmlApplication
 # --inbound shape: {channel_limit?: int, sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone"}
 # --outbound shape: {channel_limit?: int, outbound_voice_profile_id?: string}
-export def "texml-applications CreateTexmlApplication" [
+export def "texml-applications create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9175,7 +9175,7 @@ export def "texml-applications CreateTexmlApplication" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/texml_applications")
-  let body = {active: $active, anchorsite_override: $anchorsite_override, dtmf_type: $dtmf_type, first_command_timeout: $first_command_timeout, first_command_timeout_secs: $first_command_timeout_secs, friendly_name: $friendly_name, inbound: $inbound, outbound: $outbound, status_callback: $status_callback, status_callback_method: $status_callback_method, voice_fallback_url: $voice_fallback_url, voice_method: $voice_method, voice_url: $voice_url} | compact
+  let body = {"active": $active, "anchorsite_override": $anchorsite_override, "dtmf_type": $dtmf_type, "first_command_timeout": $first_command_timeout, "first_command_timeout_secs": $first_command_timeout_secs, "friendly_name": $friendly_name, "inbound": $inbound, "outbound": $outbound, "status_callback": $status_callback, "status_callback_method": $status_callback_method, "voice_fallback_url": $voice_fallback_url, "voice_method": $voice_method, "voice_url": $voice_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9186,7 +9186,7 @@ export def "texml-applications CreateTexmlApplication" [
 #
 # DELETE /texml_applications/{id}
 # operationId: DeleteTexmlApplication
-export def "texml-applications DeleteTexmlApplication" [
+export def "texml-applications delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9199,7 +9199,7 @@ export def "texml-applications DeleteTexmlApplication" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/texml_applications/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/texml_applications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9222,7 +9222,7 @@ export def "texml-applications get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/texml_applications/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/texml_applications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9234,7 +9234,7 @@ export def "texml-applications get" [
 # operationId: UpdateTexmlApplication
 # --inbound shape: {channel_limit?: int, sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone"}
 # --outbound shape: {channel_limit?: int, outbound_voice_profile_id?: string}
-export def "texml-applications UpdateTexmlApplication" [
+export def "texml-applications update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9261,8 +9261,8 @@ export def "texml-applications UpdateTexmlApplication" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/texml_applications/($id)")
-  let body = {active: $active, anchorsite_override: $anchorsite_override, dtmf_type: $dtmf_type, first_command_timeout: $first_command_timeout, first_command_timeout_secs: $first_command_timeout_secs, friendly_name: $friendly_name, inbound: $inbound, outbound: $outbound, status_callback: $status_callback, status_callback_method: $status_callback_method, voice_fallback_url: $voice_fallback_url, voice_method: $voice_method, voice_url: $voice_url} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/texml_applications/{id}"))
+  let body = {"active": $active, "anchorsite_override": $anchorsite_override, "dtmf_type": $dtmf_type, "first_command_timeout": $first_command_timeout, "first_command_timeout_secs": $first_command_timeout_secs, "friendly_name": $friendly_name, "inbound": $inbound, "outbound": $outbound, "status_callback": $status_callback, "status_callback_method": $status_callback_method, "voice_fallback_url": $voice_fallback_url, "voice_method": $voice_method, "voice_url": $voice_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9273,7 +9273,7 @@ export def "texml-applications UpdateTexmlApplication" [
 #
 # GET /verifications/by_phone_number/{phone_number}
 # operationId: listVerifications
-export def "verifications-by-phone-number listVerifications" [
+export def "verifications-by-phone-number list" [
   phone_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9286,7 +9286,7 @@ export def "verifications-by-phone-number listVerifications" [
 ]: nothing -> record<data: table<call_timeout_secs: int, created_at: string, id: string, phone_number: string, record_type: string, status: string, timeout_secs: int, updated_at: string, verification_type: string, verify_profile_id: string>, meta: record<page_number: int, page_size: int, total_pages: int, total_results: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/verifications/by_phone_number/($phone_number)")
+  let full_url = (build-url $base ({phone_number: $phone_number} | format pattern "/verifications/by_phone_number/{phone_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9296,7 +9296,7 @@ export def "verifications-by-phone-number listVerifications" [
 #
 # POST /verifications/by_phone_number/{phone_number}/actions/verify
 # operationId: verifyVerificationCode
-export def "verifications-by-phone-number-actions-verify verifyVerificationCode" [
+export def "verifications-by-phone-number-actions-verify verify-verification-code" [
   phone_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9311,8 +9311,8 @@ export def "verifications-by-phone-number-actions-verify verifyVerificationCode"
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/verifications/by_phone_number/($phone_number)/actions/verify")
-  let body = {code: $code} | compact
+  let full_url = (build-url $base ({phone_number: $phone_number} | format pattern "/verifications/by_phone_number/{phone_number}/actions/verify"))
+  let body = {"code": $code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9323,7 +9323,7 @@ export def "verifications-by-phone-number-actions-verify verifyVerificationCode"
 #
 # POST /verifications/call
 # operationId: createVerificationCall
-export def "verifications-call createVerificationCall" [
+export def "verifications-call create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9341,7 +9341,7 @@ export def "verifications-call createVerificationCall" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/verifications/call")
-  let body = {call_timeout_secs: $call_timeout_secs, phone_number: $phone_number, timeout_secs: $timeout_secs, verify_profile_id: $verify_profile_id} | compact
+  let body = {"call_timeout_secs": $call_timeout_secs, "phone_number": $phone_number, "timeout_secs": $timeout_secs, "verify_profile_id": $verify_profile_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9352,7 +9352,7 @@ export def "verifications-call createVerificationCall" [
 #
 # POST /verifications/flashcall
 # operationId: createVerificationFlashcall
-export def "verifications-flashcall createVerificationFlashcall" [
+export def "verifications-flashcall create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9369,7 +9369,7 @@ export def "verifications-flashcall createVerificationFlashcall" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/verifications/flashcall")
-  let body = {phone_number: $phone_number, timeout_secs: $timeout_secs, verify_profile_id: $verify_profile_id} | compact
+  let body = {"phone_number": $phone_number, "timeout_secs": $timeout_secs, "verify_profile_id": $verify_profile_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9380,7 +9380,7 @@ export def "verifications-flashcall createVerificationFlashcall" [
 #
 # POST /verifications/psd2
 # operationId: createVerificationPSD2
-export def "verifications-psd2 createVerificationPSD2" [
+export def "verifications-psd2 create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9400,7 +9400,7 @@ export def "verifications-psd2 createVerificationPSD2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/verifications/psd2")
-  let body = {amount: $amount, currency: $currency, payee: $payee, phone_number: $phone_number, timeout_secs: $timeout_secs, verify_profile_id: $verify_profile_id} | compact
+  let body = {"amount": $amount, "currency": $currency, "payee": $payee, "phone_number": $phone_number, "timeout_secs": $timeout_secs, "verify_profile_id": $verify_profile_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9411,7 +9411,7 @@ export def "verifications-psd2 createVerificationPSD2" [
 #
 # POST /verifications/sms
 # operationId: createVerificationSMS
-export def "verifications-sms createVerificationSMS" [
+export def "verifications-sms create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9428,7 +9428,7 @@ export def "verifications-sms createVerificationSMS" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/verifications/sms")
-  let body = {phone_number: $phone_number, timeout_secs: $timeout_secs, verify_profile_id: $verify_profile_id} | compact
+  let body = {"phone_number": $phone_number, "timeout_secs": $timeout_secs, "verify_profile_id": $verify_profile_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9439,7 +9439,7 @@ export def "verifications-sms createVerificationSMS" [
 #
 # POST /verifications/whatsapp
 # operationId: createVerificationWhatsapp
-export def "verifications-whatsapp createVerificationWhatsapp" [
+export def "verifications-whatsapp create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9456,7 +9456,7 @@ export def "verifications-whatsapp createVerificationWhatsapp" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/verifications/whatsapp")
-  let body = {phone_number: $phone_number, timeout_secs: $timeout_secs, verify_profile_id: $verify_profile_id} | compact
+  let body = {"phone_number": $phone_number, "timeout_secs": $timeout_secs, "verify_profile_id": $verify_profile_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9467,7 +9467,7 @@ export def "verifications-whatsapp createVerificationWhatsapp" [
 #
 # GET /verifications/{verification_id}
 # operationId: retrieveVerification
-export def "verifications retrieveVerification" [
+export def "verifications retrieve" [
   verification_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9480,7 +9480,7 @@ export def "verifications retrieveVerification" [
 ]: nothing -> record<data: record<call_timeout_secs: int, created_at: string, id: string, phone_number: string, record_type: string, status: string, timeout_secs: int, updated_at: string, verification_type: string, verify_profile_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/verifications/($verification_id)")
+  let full_url = (build-url $base ({verification_id: $verification_id} | format pattern "/verifications/{verification_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9490,7 +9490,7 @@ export def "verifications retrieveVerification" [
 #
 # GET /verify_profiles
 # operationId: listVerifyProfiles
-export def "verify-profiles listVerifyProfiles" [
+export def "verify-profiles list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9499,13 +9499,13 @@ export def "verify-profiles listVerifyProfiles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filtername: string
-  --pagesize: int # default: 25
-  --pagenumber: int # default: 1
+  --filter-name: string
+  --page-size: int # default: 25
+  --page-number: int # default: 1
 ]: nothing -> record<data: table<call: record, created_at: string, flashcall: record, id: string, language: string, name: string, psd2: record, record_type: string, sms: record, updated_at: string, webhook_failover_url: string, webhook_url: string, whatsapp: record>, meta: record<page_number: int, page_size: int, total_pages: int, total_results: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[name]" $filtername "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "page[number]" $pagenumber "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[number]" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/verify_profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9521,7 +9521,7 @@ export def "verify-profiles listVerifyProfiles" [
 # --psd2 shape: {default_verification_timeout_secs?: int}
 # --sms shape: {default_verification_timeout_secs?: int, messaging_enabled?: bool, messaging_template?: string, rcs_enabled?: bool, vsms_enabled?: bool}
 # --whatsapp shape: {app_name?: string, default_verification_timeout_secs?: int}
-export def "verify-profiles createVerifyProfile" [
+export def "verify-profiles create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9544,7 +9544,7 @@ export def "verify-profiles createVerifyProfile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/verify_profiles")
-  let body = {call: $call, flashcall: $flashcall, language: $language, name: $name, psd2: $psd2, sms: $sms, webhook_failover_url: $webhook_failover_url, webhook_url: $webhook_url, whatsapp: $whatsapp} | compact
+  let body = {"call": $call, "flashcall": $flashcall, "language": $language, "name": $name, "psd2": $psd2, "sms": $sms, "webhook_failover_url": $webhook_failover_url, "webhook_url": $webhook_url, "whatsapp": $whatsapp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9568,7 +9568,7 @@ export def "verify-profiles delete" [
 ]: nothing -> record<data: record<call: record<default_call_timeout_secs: int, default_verification_timeout_secs: int, speech_template: string>, created_at: string, flashcall: record<default_verification_timeout_secs: int>, id: string, language: string, name: string, psd2: record<default_verification_timeout_secs: int>, record_type: string, sms: record<default_verification_timeout_secs: int, messaging_enabled: bool, messaging_template: string, rcs_enabled: bool, vsms_enabled: bool>, updated_at: string, webhook_failover_url: string, webhook_url: string, whatsapp: record<app_name: string, default_verification_timeout_secs: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/verify_profiles/($verify_profile_id)")
+  let full_url = (build-url $base ({verify_profile_id: $verify_profile_id} | format pattern "/verify_profiles/{verify_profile_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9578,7 +9578,7 @@ export def "verify-profiles delete" [
 #
 # GET /verify_profiles/{verify_profile_id}
 # operationId: retrieveVerifyProfile
-export def "verify-profiles retrieveVerifyProfile" [
+export def "verify-profiles retrieve" [
   verify_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9591,7 +9591,7 @@ export def "verify-profiles retrieveVerifyProfile" [
 ]: nothing -> record<data: record<call: record<default_call_timeout_secs: int, default_verification_timeout_secs: int, speech_template: string>, created_at: string, flashcall: record<default_verification_timeout_secs: int>, id: string, language: string, name: string, psd2: record<default_verification_timeout_secs: int>, record_type: string, sms: record<default_verification_timeout_secs: int, messaging_enabled: bool, messaging_template: string, rcs_enabled: bool, vsms_enabled: bool>, updated_at: string, webhook_failover_url: string, webhook_url: string, whatsapp: record<app_name: string, default_verification_timeout_secs: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/verify_profiles/($verify_profile_id)")
+  let full_url = (build-url $base ({verify_profile_id: $verify_profile_id} | format pattern "/verify_profiles/{verify_profile_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9606,7 +9606,7 @@ export def "verify-profiles retrieveVerifyProfile" [
 # --psd2 shape: {default_verification_timeout_secs?: int}
 # --sms shape: {default_verification_timeout_secs?: int, messaging_enabled?: bool, messaging_template?: string, rcs_enabled?: bool, vsms_enabled?: bool}
 # --whatsapp shape: {app_name?: string, default_verification_timeout_secs?: int}
-export def "verify-profiles updateVerifyProfile" [
+export def "verify-profiles update" [
   verify_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9629,8 +9629,8 @@ export def "verify-profiles updateVerifyProfile" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/verify_profiles/($verify_profile_id)")
-  let body = {call: $call, flashcall: $flashcall, language: $language, name: $name, psd2: $psd2, sms: $sms, webhook_failover_url: $webhook_failover_url, webhook_url: $webhook_url, whatsapp: $whatsapp} | compact
+  let full_url = (build-url $base ({verify_profile_id: $verify_profile_id} | format pattern "/verify_profiles/{verify_profile_id}"))
+  let body = {"call": $call, "flashcall": $flashcall, "language": $language, "name": $name, "psd2": $psd2, "sms": $sms, "webhook_failover_url": $webhook_failover_url, "webhook_url": $webhook_url, "whatsapp": $whatsapp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9641,7 +9641,7 @@ export def "verify-profiles updateVerifyProfile" [
 #
 # GET /webhook_deliveries
 # operationId: getWebhookDeliveries
-export def "webhook-deliveries list" [
+export def "webhook-deliveries get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9650,19 +9650,19 @@ export def "webhook-deliveries list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterstatuseq: string@filterstatuseq-completer-1 # Return only webhook_deliveries matching the given `status` (e.g. delivered)
-  --filterwebhookcontains: string # Return only webhook deliveries whose `webhook` component contains the given text (e.g. call.initiated)
-  --filterattemptscontains: string # Return only webhook_deliveries whose `attempts` component contains the given text (e.g. https://fallback.example.com/webhooks)
-  --filterstarted-atgte: string # Return only webhook_deliveries whose delivery started later than or at given ISO 8601 datetime (e.g. 2019-03-29T11:10:00Z)
-  --filterstarted-atlte: string # Return only webhook_deliveries whose delivery started earlier than or at given ISO 8601 datetime (e.g. 2019-03-29T11:10:00Z)
-  --filterfinished-atgte: string # Return only webhook_deliveries whose delivery finished later than or at given ISO 8601 datetime (e.g. 2019-03-29T11:10:00Z)
-  --filterfinished-atlte: string # Return only webhook_deliveries whose delivery finished earlier than or at given ISO 8601 datetime (e.g. 2019-03-29T11:10:00Z)
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --filter-status-eq: string@filter-status-eq-completer-1 # Return only webhook_deliveries matching the given `status` (e.g. delivered)
+  --filter-webhook-contains: string # Return only webhook deliveries whose `webhook` component contains the given text (e.g. call.initiated)
+  --filter-attempts-contains: string # Return only webhook_deliveries whose `attempts` component contains the given text (e.g. https://fallback.example.com/webhooks)
+  --filter-started-at-gte: string # Return only webhook_deliveries whose delivery started later than or at given ISO 8601 datetime (e.g. 2019-03-29T11:10:00Z)
+  --filter-started-at-lte: string # Return only webhook_deliveries whose delivery started earlier than or at given ISO 8601 datetime (e.g. 2019-03-29T11:10:00Z)
+  --filter-finished-at-gte: string # Return only webhook_deliveries whose delivery finished later than or at given ISO 8601 datetime (e.g. 2019-03-29T11:10:00Z)
+  --filter-finished-at-lte: string # Return only webhook_deliveries whose delivery finished earlier than or at given ISO 8601 datetime (e.g. 2019-03-29T11:10:00Z)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[status][eq]" $filterstatuseq "scalar") (serialize-qp "filter[webhook][contains]" $filterwebhookcontains "scalar") (serialize-qp "filter[attempts][contains]" $filterattemptscontains "scalar") (serialize-qp "filter[started_at][gte]" $filterstarted_atgte "scalar") (serialize-qp "filter[started_at][lte]" $filterstarted_atlte "scalar") (serialize-qp "filter[finished_at][gte]" $filterfinished_atgte "scalar") (serialize-qp "filter[finished_at][lte]" $filterfinished_atlte "scalar") (serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[status][eq]" $filter_status_eq "scalar") (serialize-qp "filter[webhook][contains]" $filter_webhook_contains "scalar") (serialize-qp "filter[attempts][contains]" $filter_attempts_contains "scalar") (serialize-qp "filter[started_at][gte]" $filter_started_at_gte "scalar") (serialize-qp "filter[started_at][lte]" $filter_started_at_lte "scalar") (serialize-qp "filter[finished_at][gte]" $filter_finished_at_gte "scalar") (serialize-qp "filter[finished_at][lte]" $filter_finished_at_lte "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook_deliveries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9673,7 +9673,7 @@ export def "webhook-deliveries list" [
 #
 # GET /webhook_deliveries/{id}
 # operationId: getWebhookDelivery
-export def "webhook-deliveries get" [
+export def "webhook-deliveries get-webhook-delivery" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9686,7 +9686,7 @@ export def "webhook-deliveries get" [
 ]: nothing -> record<data: record<attempts: list<record>, finished_at: string, id: string, record_type: string, started_at: string, status: string, user_id: string, webhook: record<event_type: string, id: string, occurred_at: string, payload: record, record_type: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhook_deliveries/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/webhook_deliveries/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9696,7 +9696,7 @@ export def "webhook-deliveries get" [
 #
 # POST /whatsapp_contacts
 # operationId: checkContact
-export def "whatsapp-contacts checkContact" [
+export def "whatsapp-contacts check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9713,7 +9713,7 @@ export def "whatsapp-contacts checkContact" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/whatsapp_contacts")
-  let body = {blocking: $blocking, contacts: $contacts, whatsapp_user_id: $whatsapp_user_id} | compact
+  let body = {"blocking": $blocking, "contacts": $contacts, "whatsapp_user_id": $whatsapp_user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9724,7 +9724,7 @@ export def "whatsapp-contacts checkContact" [
 #
 # GET /whatsapp_detail_record_reports
 # operationId: getRequests
-export def "whatsapp-detail-record-reports list" [
+export def "whatsapp-detail-record-reports get-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9733,12 +9733,12 @@ export def "whatsapp-detail-record-reports list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # Page number (format: int32, default: 1)
-  --pagesize: int # Size of the page (format: int32, default: 20)
+  --page-number: int # Page number (format: int32, default: 1)
+  --page-size: int # Size of the page (format: int32, default: 20)
 ]: nothing -> record<data: table<created_at: string, download_link: string, end_date: string, id: string, record_type: string, start_date: string, status: string>, meta: record<page_number: int, page_size: int, total_pages: int, total_results: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/whatsapp_detail_record_reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9749,7 +9749,7 @@ export def "whatsapp-detail-record-reports list" [
 #
 # POST /whatsapp_detail_record_reports
 # operationId: submitRequest
-export def "whatsapp-detail-record-reports submitRequest" [
+export def "whatsapp-detail-record-reports submit-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9765,7 +9765,7 @@ export def "whatsapp-detail-record-reports submitRequest" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/whatsapp_detail_record_reports")
-  let body = {end_date: $end_date, start_date: $start_date} | compact
+  let body = {"end_date": $end_date, "start_date": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9776,7 +9776,7 @@ export def "whatsapp-detail-record-reports submitRequest" [
 #
 # DELETE /whatsapp_detail_record_reports/{id}
 # operationId: deleteRequest
-export def "whatsapp-detail-record-reports delete" [
+export def "whatsapp-detail-record-reports delete-request" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9789,7 +9789,7 @@ export def "whatsapp-detail-record-reports delete" [
 ]: nothing -> record<data: record<created_at: string, download_link: string, end_date: string, id: string, record_type: string, start_date: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/whatsapp_detail_record_reports/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/whatsapp_detail_record_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9799,7 +9799,7 @@ export def "whatsapp-detail-record-reports delete" [
 #
 # GET /whatsapp_detail_record_reports/{id}
 # operationId: getRequest
-export def "whatsapp-detail-record-reports get" [
+export def "whatsapp-detail-record-reports get-request" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9812,7 +9812,7 @@ export def "whatsapp-detail-record-reports get" [
 ]: nothing -> record<data: record<created_at: string, download_link: string, end_date: string, id: string, record_type: string, start_date: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/whatsapp_detail_record_reports/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/whatsapp_detail_record_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9822,7 +9822,7 @@ export def "whatsapp-detail-record-reports get" [
 #
 # POST /whatsapp_media
 # operationId: uploadMedia
-export def "whatsapp-media uploadMedia" [
+export def "whatsapp-media upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9839,7 +9839,7 @@ export def "whatsapp-media uploadMedia" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/whatsapp_media")
-  let body = {media_content_type: $media_content_type, upload_file: $upload_file, whatsapp_user_id: $whatsapp_user_id} | compact
+  let body = {"media_content_type": $media_content_type, "upload_file": $upload_file, "whatsapp_user_id": $whatsapp_user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9863,7 +9863,7 @@ export def "whatsapp-media delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/whatsapp_media/($whatsapp_user_id)/($media_id)")
+  let full_url = (build-url $base ({whatsapp_user_id: $whatsapp_user_id, media_id: $media_id} | format pattern "/whatsapp_media/{whatsapp_user_id}/{media_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9886,7 +9886,7 @@ export def "whatsapp-media get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/whatsapp_media/($whatsapp_user_id)/($media_id)")
+  let full_url = (build-url $base ({whatsapp_user_id: $whatsapp_user_id, media_id: $media_id} | format pattern "/whatsapp_media/{whatsapp_user_id}/{media_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9905,7 +9905,7 @@ export def "whatsapp-media get" [
 # --template shape: {components?: list, language: record, name: string, namespace: string}
 # --text shape: {body: string}
 # --video shape: {caption?: string, id?: string, link?: string}
-export def "whatsapp-messages sendMessage" [
+export def "whatsapp-messages send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9932,7 +9932,7 @@ export def "whatsapp-messages sendMessage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/whatsapp_messages")
-  let body = {audio: $audio, contacts: $contacts, document: $document, hsm: $hsm, image: $image, location: $location, preview_url: $preview_url, template: $template, text: $text, to: $body_to, type: $type, video: $video, whatsapp_user_id: $whatsapp_user_id} | compact
+  let body = {"audio": $audio, "contacts": $contacts, "document": $document, "hsm": $hsm, "image": $image, "location": $location, "preview_url": $preview_url, "template": $template, "text": $text, "to": $body_to, "type": $type, "video": $video, "whatsapp_user_id": $whatsapp_user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9959,8 +9959,8 @@ export def "whatsapp-messages markMessageAsRead" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/whatsapp_messages/($message_id)")
-  let body = {status: $status, whatsapp_user_id: $whatsapp_user_id} | compact
+  let full_url = (build-url $base ({message_id: $message_id} | format pattern "/whatsapp_messages/{message_id}"))
+  let body = {"status": $status, "whatsapp_user_id": $whatsapp_user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9971,7 +9971,7 @@ export def "whatsapp-messages markMessageAsRead" [
 #
 # GET /whatsapp_usage_aggregations
 # operationId: getUsageAggregationsSync
-export def "whatsapp-usage-aggregations get" [
+export def "whatsapp-usage-aggregations get-usage-aggregations-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10009,7 +10009,7 @@ export def "whatsapp-users get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/whatsapp_users/($whatsapp_user_id)")
+  let full_url = (build-url $base ({whatsapp_user_id: $whatsapp_user_id} | format pattern "/whatsapp_users/{whatsapp_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10019,7 +10019,7 @@ export def "whatsapp-users get" [
 #
 # PATCH /whatsapp_users/{whatsapp_user_id}
 # operationId: updateWhatsAppWebhook
-export def "whatsapp-users updateWhatsAppWebhook" [
+export def "whatsapp-users update-whats-app-webhook" [
   whatsapp_user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10034,8 +10034,8 @@ export def "whatsapp-users updateWhatsAppWebhook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/whatsapp_users/($whatsapp_user_id)")
-  let body = {webhook_url: $webhook_url} | compact
+  let full_url = (build-url $base ({whatsapp_user_id: $whatsapp_user_id} | format pattern "/whatsapp_users/{whatsapp_user_id}"))
+  let body = {"webhook_url": $webhook_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10055,12 +10055,12 @@ export def "wireless-detail-records-reports list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # The page number to load. (default: 1)
-  --pagesize: int # The size of the page. (default: 20)
+  --page-number: int # The page number to load. (default: 1)
+  --page-size: int # The size of the page. (default: 20)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/wireless/detail_records_reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10071,7 +10071,7 @@ export def "wireless-detail-records-reports list" [
 #
 # POST /wireless/detail_records_reports
 # operationId: createWdrReport
-export def "wireless-detail-records-reports createWdrReport" [
+export def "wireless-detail-records-reports create-wdr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10087,7 +10087,7 @@ export def "wireless-detail-records-reports createWdrReport" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wireless/detail_records_reports")
-  let body = {end_time: $end_time, start_time: $start_time} | compact
+  let body = {"end_time": $end_time, "start_time": $start_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10098,7 +10098,7 @@ export def "wireless-detail-records-reports createWdrReport" [
 #
 # DELETE /wireless/detail_records_reports/{id}
 # operationId: deleteWdrReport
-export def "wireless-detail-records-reports delete" [
+export def "wireless-detail-records-reports delete-wdr" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10111,7 +10111,7 @@ export def "wireless-detail-records-reports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/wireless/detail_records_reports/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/wireless/detail_records_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10121,7 +10121,7 @@ export def "wireless-detail-records-reports delete" [
 #
 # GET /wireless/detail_records_reports/{id}
 # operationId: getWdrReport
-export def "wireless-detail-records-reports get" [
+export def "wireless-detail-records-reports get-wdr" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10134,7 +10134,7 @@ export def "wireless-detail-records-reports get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/wireless/detail_records_reports/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/wireless/detail_records_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

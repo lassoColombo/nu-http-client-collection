@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-express-route-circuits ListAll" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-express-route-circuits list-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/expressRouteCircuits
 # operationId: ExpressRouteCircuits_ListAll
-export def "subscriptions-providers-microsoft-network-express-route-circuits ListAll" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-network-express-route-circuits list-all" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "subscriptions-providers-microsoft-network-express-route-circuits Lis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/expressRouteCircuits" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/expressRouteCircuits") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,8 +118,8 @@ export def "subscriptions-providers-microsoft-network-express-route-circuits Lis
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/expressRouteServiceProviders
 # operationId: ExpressRouteServiceProviders_List
-export def "subscriptions-providers-microsoft-network-express-route-service-providers List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-network-express-route-service-providers list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,7 +133,7 @@ export def "subscriptions-providers-microsoft-network-express-route-service-prov
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/expressRouteServiceProviders" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/expressRouteServiceProviders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,9 +143,9 @@ export def "subscriptions-providers-microsoft-network-express-route-service-prov
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits
 # operationId: ExpressRouteCircuits_List
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits List" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,10 +169,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}
 # operationId: ExpressRouteCircuits_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits Delete" [
-  resourceGroupName: string
-  circuitName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits delete" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -196,10 +196,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}
 # operationId: ExpressRouteCircuits_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits Get" [
-  resourceGroupName: string
-  circuitName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits get" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -223,10 +223,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}
 # operationId: ExpressRouteCircuits_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits UpdateTags" [
-  resourceGroupName: string
-  circuitName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits update-tags" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,8 +242,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -256,10 +256,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 # operationId: ExpressRouteCircuits_CreateOrUpdate
 # --properties shape: {allowClassicOperations?: bool, authorizations?: list, bandwidthInGbps?: float, circuitProvisioningState?: string, expressRoutePort?: any, gatewayManagerEtag?: string, globalReachEnabled?: bool, peerings?: list, serviceKey?: string, serviceProviderNotes?: string, serviceProviderProperties?: any, serviceProviderProvisioningState?: "NotProvisioned"|"Provisioning"|"Provisioned"|"Deprovisioning"}
 # --sku shape: {family?: "UnlimitedData"|"MeteredData", name?: string, tier?: "Standard"|"Premium"|"Basic"|"Local"}
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits CreateOrUpdate" [
-  resourceGroupName: string
-  circuitName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,8 +279,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)" $qp)
-  let body = {properties: $properties, sku: $sku, id: $id, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "id": $id, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -291,10 +291,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/authorizations
 # operationId: ExpressRouteCircuitAuthorizations_List
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-authorizations List" [
-  resourceGroupName: string
-  circuitName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-authorizations list" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/authorizations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/authorizations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,11 +318,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/authorizations/{authorizationName}
 # operationId: ExpressRouteCircuitAuthorizations_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-authorizations Delete" [
-  resourceGroupName: string
-  circuitName: string
-  authorizationName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-authorizations delete" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
+  authorization_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,7 +336,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/authorizations/($authorizationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name, authorization_name: $authorization_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/authorizations/{authorization_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -346,11 +346,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/authorizations/{authorizationName}
 # operationId: ExpressRouteCircuitAuthorizations_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-authorizations Get" [
-  resourceGroupName: string
-  circuitName: string
-  authorizationName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-authorizations get" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
+  authorization_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/authorizations/($authorizationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name, authorization_name: $authorization_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/authorizations/{authorization_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -375,11 +375,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/authorizations/{authorizationName}
 # operationId: ExpressRouteCircuitAuthorizations_CreateOrUpdate
 # --properties shape: {authorizationKey?: string, authorizationUseStatus?: "Available"|"InUse"}
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-authorizations CreateOrUpdate" [
-  resourceGroupName: string
-  circuitName: string
-  authorizationName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-authorizations create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
+  authorization_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,8 +397,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/authorizations/($authorizationName)" $qp)
-  let body = {name: $name, properties: $properties, id: $id} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name, authorization_name: $authorization_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/authorizations/{authorization_name}") $qp)
+  let body = {"name": $name, "properties": $properties, "id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -409,10 +409,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings
 # operationId: ExpressRouteCircuitPeerings_List
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings List" [
-  resourceGroupName: string
-  circuitName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings list" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,7 +426,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/peerings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/peerings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -436,11 +436,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}
 # operationId: ExpressRouteCircuitPeerings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings Delete" [
-  resourceGroupName: string
-  circuitName: string
-  peeringName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings delete" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
+  peering_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,7 +454,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/peerings/($peeringName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name, peering_name: $peering_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/peerings/{peering_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -464,11 +464,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}
 # operationId: ExpressRouteCircuitPeerings_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings Get" [
-  resourceGroupName: string
-  circuitName: string
-  peeringName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings get" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
+  peering_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,7 +482,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/peerings/($peeringName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name, peering_name: $peering_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/peerings/{peering_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -493,11 +493,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}
 # operationId: ExpressRouteCircuitPeerings_CreateOrUpdate
 # --properties shape: {azureASN?: int, connections?: list, expressRouteConnection?: any, gatewayManagerEtag?: string, ipv6PeeringConfig?: any, lastModifiedBy?: string, microsoftPeeringConfig?: any, peerASN?: int, peeringType?: "AzurePublicPeering"|"AzurePrivatePeering"|"MicrosoftPeering", primaryAzurePort?: string, primaryPeerAddressPrefix?: string, routeFilter?: any, secondaryAzurePort?: string, secondaryPeerAddressPrefix?: string, sharedKey?: string, state?: "Disabled"|"Enabled", stats?: any, vlanId?: int}
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings CreateOrUpdate" [
-  resourceGroupName: string
-  circuitName: string
-  peeringName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
+  peering_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -515,8 +515,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/peerings/($peeringName)" $qp)
-  let body = {name: $name, properties: $properties, id: $id} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name, peering_name: $peering_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/peerings/{peering_name}") $qp)
+  let body = {"name": $name, "properties": $properties, "id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -527,12 +527,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/arpTables/{devicePath}
 # operationId: ExpressRouteCircuits_ListArpTable
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-arp-tables ListArpTable" [
-  resourceGroupName: string
-  circuitName: string
-  peeringName: string
-  devicePath: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-arp-tables list" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
+  peering_name: string
+  device_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,7 +546,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/peerings/($peeringName)/arpTables/($devicePath)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name, peering_name: $peering_name, device_path: $device_path} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/peerings/{peering_name}/arpTables/{device_path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -556,11 +556,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/connections
 # operationId: ExpressRouteCircuitConnections_List
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-connections List" [
-  resourceGroupName: string
-  circuitName: string
-  peeringName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-connections list" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
+  peering_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -574,7 +574,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/peerings/($peeringName)/connections" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name, peering_name: $peering_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/peerings/{peering_name}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -584,12 +584,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/connections/{connectionName}
 # operationId: ExpressRouteCircuitConnections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-connections Delete" [
-  resourceGroupName: string
-  circuitName: string
-  peeringName: string
-  connectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-connections delete" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
+  peering_name: string
+  connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,7 +603,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/peerings/($peeringName)/connections/($connectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name, peering_name: $peering_name, connection_name: $connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/peerings/{peering_name}/connections/{connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -613,12 +613,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/connections/{connectionName}
 # operationId: ExpressRouteCircuitConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-connections Get" [
-  resourceGroupName: string
-  circuitName: string
-  peeringName: string
-  connectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-connections get" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
+  peering_name: string
+  connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,7 +632,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/peerings/($peeringName)/connections/($connectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name, peering_name: $peering_name, connection_name: $connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/peerings/{peering_name}/connections/{connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -643,12 +643,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/connections/{connectionName}
 # operationId: ExpressRouteCircuitConnections_CreateOrUpdate
 # --properties shape: {addressPrefix?: string, authorizationKey?: string, expressRouteCircuitPeering?: any, peerExpressRouteCircuitPeering?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-connections CreateOrUpdate" [
-  resourceGroupName: string
-  circuitName: string
-  peeringName: string
-  connectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-connections create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
+  peering_name: string
+  connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -666,8 +666,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/peerings/($peeringName)/connections/($connectionName)" $qp)
-  let body = {name: $name, properties: $properties, id: $id} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name, peering_name: $peering_name, connection_name: $connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/peerings/{peering_name}/connections/{connection_name}") $qp)
+  let body = {"name": $name, "properties": $properties, "id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -678,11 +678,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/peerConnections
 # operationId: PeerExpressRouteCircuitConnections_List
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-peer-connections List" [
-  resourceGroupName: string
-  circuitName: string
-  peeringName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-peer-connections list" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
+  peering_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -696,7 +696,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/peerings/($peeringName)/peerConnections" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name, peering_name: $peering_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/peerings/{peering_name}/peerConnections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -706,12 +706,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/peerConnections/{connectionName}
 # operationId: PeerExpressRouteCircuitConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-peer-connections Get" [
-  resourceGroupName: string
-  circuitName: string
-  peeringName: string
-  connectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-peer-connections get" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
+  peering_name: string
+  connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -725,7 +725,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/peerings/($peeringName)/peerConnections/($connectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name, peering_name: $peering_name, connection_name: $connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/peerings/{peering_name}/peerConnections/{connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -735,12 +735,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/routeTables/{devicePath}
 # operationId: ExpressRouteCircuits_ListRoutesTable
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-route-tables ListRoutesTable" [
-  resourceGroupName: string
-  circuitName: string
-  peeringName: string
-  devicePath: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-route-tables list" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
+  peering_name: string
+  device_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -754,7 +754,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/peerings/($peeringName)/routeTables/($devicePath)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name, peering_name: $peering_name, device_path: $device_path} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/peerings/{peering_name}/routeTables/{device_path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -764,12 +764,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/routeTablesSummary/{devicePath}
 # operationId: ExpressRouteCircuits_ListRoutesTableSummary
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-route-tables-summary ListRoutesTableSummary" [
-  resourceGroupName: string
-  circuitName: string
-  peeringName: string
-  devicePath: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-route-tables-summary list" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
+  peering_name: string
+  device_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -783,7 +783,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/peerings/($peeringName)/routeTablesSummary/($devicePath)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name, peering_name: $peering_name, device_path: $device_path} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/peerings/{peering_name}/routeTablesSummary/{device_path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -793,11 +793,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/stats
 # operationId: ExpressRouteCircuits_GetPeeringStats
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-stats GetPeeringStats" [
-  resourceGroupName: string
-  circuitName: string
-  peeringName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-stats get" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
+  peering_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -811,7 +811,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/peerings/($peeringName)/stats" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name, peering_name: $peering_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/peerings/{peering_name}/stats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -821,10 +821,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/stats
 # operationId: ExpressRouteCircuits_GetStats
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-stats GetStats" [
-  resourceGroupName: string
-  circuitName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-stats get" [
+  subscription_id: string
+  resource_group_name: string
+  circuit_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -838,7 +838,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/expressRouteCircuits/($circuitName)/stats" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, circuit_name: $circuit_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteCircuits/{circuit_name}/stats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -66,17 +66,17 @@ def base-url-completer [] { ["http://pi.us-east-1.amazonaws.com" "http://pi.us-e
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["PerformanceInsightsv20180227.DescribeDimensionKeys"] }
-def X-Amz-Target-completer-1 [] { ["PerformanceInsightsv20180227.GetDimensionKeyDetails"] }
-def X-Amz-Target-completer-2 [] { ["PerformanceInsightsv20180227.GetResourceMetadata"] }
-def X-Amz-Target-completer-3 [] { ["PerformanceInsightsv20180227.GetResourceMetrics"] }
-def X-Amz-Target-completer-4 [] { ["PerformanceInsightsv20180227.ListAvailableResourceDimensions"] }
-def X-Amz-Target-completer-5 [] { ["PerformanceInsightsv20180227.ListAvailableResourceMetrics"] }
+def x-amz-target-completer [] { ["PerformanceInsightsv20180227.DescribeDimensionKeys"] }
+def x-amz-target-completer-1 [] { ["PerformanceInsightsv20180227.GetDimensionKeyDetails"] }
+def x-amz-target-completer-2 [] { ["PerformanceInsightsv20180227.GetResourceMetadata"] }
+def x-amz-target-completer-3 [] { ["PerformanceInsightsv20180227.GetResourceMetrics"] }
+def x-amz-target-completer-4 [] { ["PerformanceInsightsv20180227.ListAvailableResourceDimensions"] }
+def x-amz-target-completer-5 [] { ["PerformanceInsightsv20180227.ListAvailableResourceMetrics"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-performance-insightsv20180227-describe-dimension-keys DescribeDimensionKeys" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-performance-insightsv20180227-describe-dimension-keys post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,7 +100,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=PerformanceInsightsv20180227.DescribeDimensionKeys
 # operationId: DescribeDimensionKeys
-export def "x-amz-target-performance-insightsv20180227-describe-dimension-keys DescribeDimensionKeys" [
+export def "x-amz-target-performance-insightsv20180227-describe-dimension-keys post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,37 +109,37 @@ export def "x-amz-target-performance-insightsv20180227-describe-dimension-keys D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  ServiceType: any
-  Identifier: any
-  StartTime: any
-  EndTime: any
-  Metric: any
-  --PeriodInSeconds: any
-  GroupBy: any
-  --AdditionalMetrics: any
-  --PartitionBy: any
-  --Filter: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  service_type: any
+  identifier: any
+  start_time: any
+  end_time: any
+  metric: any
+  --period-in-seconds: any
+  group_by: any
+  --additional-metrics: any
+  --partition-by: any
+  --filter: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<AlignedStartTime: record, AlignedEndTime: record, PartitionKeys: record, Keys: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=PerformanceInsightsv20180227.DescribeDimensionKeys" $qp)
-  let body = {ServiceType: $ServiceType, Identifier: $Identifier, StartTime: $StartTime, EndTime: $EndTime, Metric: $Metric, PeriodInSeconds: $PeriodInSeconds, GroupBy: $GroupBy, AdditionalMetrics: $AdditionalMetrics, PartitionBy: $PartitionBy, Filter: $Filter, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ServiceType": $service_type, "Identifier": $identifier, "StartTime": $start_time, "EndTime": $end_time, "Metric": $metric, "PeriodInSeconds": $period_in_seconds, "GroupBy": $group_by, "AdditionalMetrics": $additional_metrics, "PartitionBy": $partition_by, "Filter": $filter, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -150,7 +150,7 @@ export def "x-amz-target-performance-insightsv20180227-describe-dimension-keys D
 #
 # POST /#X-Amz-Target=PerformanceInsightsv20180227.GetDimensionKeyDetails
 # operationId: GetDimensionKeyDetails
-export def "x-amz-target-performance-insightsv20180227-get-dimension-key-details GetDimensionKeyDetails" [
+export def "x-amz-target-performance-insightsv20180227-get-dimension-key-details get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,27 +159,27 @@ export def "x-amz-target-performance-insightsv20180227-get-dimension-key-details
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  ServiceType: any
-  Identifier: any
-  Group: any
-  GroupIdentifier: any
-  --RequestedDimensions: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  service_type: any
+  identifier: any
+  group: any
+  group_identifier: any
+  --requested-dimensions: any
 ]: any -> record<Dimensions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PerformanceInsightsv20180227.GetDimensionKeyDetails")
-  let body = {ServiceType: $ServiceType, Identifier: $Identifier, Group: $Group, GroupIdentifier: $GroupIdentifier, RequestedDimensions: $RequestedDimensions} | compact
+  let body = {"ServiceType": $service_type, "Identifier": $identifier, "Group": $group, "GroupIdentifier": $group_identifier, "RequestedDimensions": $requested_dimensions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -190,7 +190,7 @@ export def "x-amz-target-performance-insightsv20180227-get-dimension-key-details
 #
 # POST /#X-Amz-Target=PerformanceInsightsv20180227.GetResourceMetadata
 # operationId: GetResourceMetadata
-export def "x-amz-target-performance-insightsv20180227-get-resource-metadata GetResourceMetadata" [
+export def "x-amz-target-performance-insightsv20180227-get-resource-metadata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,24 +199,24 @@ export def "x-amz-target-performance-insightsv20180227-get-resource-metadata Get
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  ServiceType: any
-  Identifier: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  service_type: any
+  identifier: any
 ]: any -> record<Identifier: record, Features: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PerformanceInsightsv20180227.GetResourceMetadata")
-  let body = {ServiceType: $ServiceType, Identifier: $Identifier} | compact
+  let body = {"ServiceType": $service_type, "Identifier": $identifier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -227,7 +227,7 @@ export def "x-amz-target-performance-insightsv20180227-get-resource-metadata Get
 #
 # POST /#X-Amz-Target=PerformanceInsightsv20180227.GetResourceMetrics
 # operationId: GetResourceMetrics
-export def "x-amz-target-performance-insightsv20180227-get-resource-metrics GetResourceMetrics" [
+export def "x-amz-target-performance-insightsv20180227-get-resource-metrics get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,34 +236,34 @@ export def "x-amz-target-performance-insightsv20180227-get-resource-metrics GetR
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  ServiceType: any
-  Identifier: any
-  MetricQueries: any
-  StartTime: any
-  EndTime: any
-  --PeriodInSeconds: any
-  --MaxResults: any
-  --NextToken: any
-  --PeriodAlignment: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  service_type: any
+  identifier: any
+  metric_queries: any
+  start_time: any
+  end_time: any
+  --period-in-seconds: any
+  --max-results: any
+  --next-token: any
+  --period-alignment: any
 ]: any -> record<AlignedStartTime: record, AlignedEndTime: record, Identifier: record, MetricList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=PerformanceInsightsv20180227.GetResourceMetrics" $qp)
-  let body = {ServiceType: $ServiceType, Identifier: $Identifier, MetricQueries: $MetricQueries, StartTime: $StartTime, EndTime: $EndTime, PeriodInSeconds: $PeriodInSeconds, MaxResults: $MaxResults, NextToken: $NextToken, PeriodAlignment: $PeriodAlignment} | compact
+  let body = {"ServiceType": $service_type, "Identifier": $identifier, "MetricQueries": $metric_queries, "StartTime": $start_time, "EndTime": $end_time, "PeriodInSeconds": $period_in_seconds, "MaxResults": $max_results, "NextToken": $next_token, "PeriodAlignment": $period_alignment} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -274,7 +274,7 @@ export def "x-amz-target-performance-insightsv20180227-get-resource-metrics GetR
 #
 # POST /#X-Amz-Target=PerformanceInsightsv20180227.ListAvailableResourceDimensions
 # operationId: ListAvailableResourceDimensions
-export def "x-amz-target-performance-insightsv20180227-list-available-resource-dimensions ListAvailableResourceDimensions" [
+export def "x-amz-target-performance-insightsv20180227-list-available-resource-dimensions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,30 +283,30 @@ export def "x-amz-target-performance-insightsv20180227-list-available-resource-d
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  ServiceType: any
-  Identifier: any
-  Metrics: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  service_type: any
+  identifier: any
+  metrics: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<MetricDimensions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=PerformanceInsightsv20180227.ListAvailableResourceDimensions" $qp)
-  let body = {ServiceType: $ServiceType, Identifier: $Identifier, Metrics: $Metrics, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ServiceType": $service_type, "Identifier": $identifier, "Metrics": $metrics, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -317,7 +317,7 @@ export def "x-amz-target-performance-insightsv20180227-list-available-resource-d
 #
 # POST /#X-Amz-Target=PerformanceInsightsv20180227.ListAvailableResourceMetrics
 # operationId: ListAvailableResourceMetrics
-export def "x-amz-target-performance-insightsv20180227-list-available-resource-metrics ListAvailableResourceMetrics" [
+export def "x-amz-target-performance-insightsv20180227-list-available-resource-metrics list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,30 +326,30 @@ export def "x-amz-target-performance-insightsv20180227-list-available-resource-m
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  ServiceType: any
-  Identifier: any
-  MetricTypes: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  service_type: any
+  identifier: any
+  metric_types: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<Metrics: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=PerformanceInsightsv20180227.ListAvailableResourceMetrics" $qp)
-  let body = {ServiceType: $ServiceType, Identifier: $Identifier, MetricTypes: $MetricTypes, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ServiceType": $service_type, "Identifier": $identifier, "MetricTypes": $metric_types, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

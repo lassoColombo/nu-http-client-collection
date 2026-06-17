@@ -163,7 +163,7 @@ export def "customer-support-customers customersAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer-support/customers" $qp)
-  let body = {addresses: $addresses, bank_accounts: $bank_accounts, company_name: $company_name, currency: $currency, emails: $emails, first_name: $first_name, individual: $individual, last_name: $last_name, notes: $notes, phone_numbers: $phone_numbers, status: $status, tax_number: $tax_number} | compact
+  let body = {"addresses": $addresses, "bank_accounts": $bank_accounts, "company_name": $company_name, "currency": $currency, "emails": $emails, "first_name": $first_name, "individual": $individual, "last_name": $last_name, "notes": $notes, "phone_numbers": $phone_numbers, "status": $status, "tax_number": $tax_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -194,7 +194,7 @@ export def "customer-support-customers customersDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/customer-support/customers/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/customer-support/customers/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -225,7 +225,7 @@ export def "customer-support-customers customersOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/customer-support/customers/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/customer-support/customers/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -272,8 +272,8 @@ export def "customer-support-customers customersUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/customer-support/customers/($id)" $qp)
-  let body = {addresses: $addresses, bank_accounts: $bank_accounts, company_name: $company_name, currency: $currency, emails: $emails, first_name: $first_name, individual: $individual, last_name: $last_name, notes: $notes, phone_numbers: $phone_numbers, status: $status, tax_number: $tax_number} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/customer-support/customers/{id}") $qp)
+  let body = {"addresses": $addresses, "bank_accounts": $bank_accounts, "company_name": $company_name, "currency": $currency, "emails": $emails, "first_name": $first_name, "individual": $individual, "last_name": $last_name, "notes": $notes, "phone_numbers": $phone_numbers, "status": $status, "tax_number": $tax_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

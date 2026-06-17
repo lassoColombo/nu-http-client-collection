@@ -65,14 +65,14 @@ def base-url-completer [] { ["https://apps.gov.bc.ca/pub/bcgnws" "https://test.a
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def outputFormat-completer [] { ["json" "xml"] }
-def outputFormat-completer-1 [] { ["csv" "json" "kml" "xml"] }
-def sortBy-completer [] { ["decisionDate" "featureType" "name"] }
-def outputSRS-completer [] { ["26907" "26908" "26909" "26910" "26911" "3005" "3857" "4269" "4326"] }
+def output-format-completer [] { ["json" "xml"] }
+def output-format-completer-1 [] { ["csv" "json" "kml" "xml"] }
+def sort-by-completer [] { ["decisionDate" "featureType" "name"] }
+def output-srs-completer [] { ["26907" "26908" "26909" "26910" "26911" "3005" "3857" "4269" "4326"] }
 def embed-completer [] { ["0" "1"] }
-def outputStyle-completer [] { ["detail" "summary"] }
-def exactSpelling-completer [] { ["0" "1"] }
-def sortBy-completer-1 [] { ["decisionDate" "featureType" "name" "relevance"] }
+def output-style-completer [] { ["detail" "summary"] }
+def exact-spelling-completer [] { ["0" "1"] }
+def sort-by-completer-1 [] { ["decisionDate" "featureType" "name" "relevance"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -109,11 +109,11 @@ export def "feature-categories get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --outputFormat: string@outputFormat-completer # The format of the output. (default: json, e.g. json)
+  --output-format: string@output-format-completer # The format of the output. (default: json, e.g. json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "outputFormat" $outputFormat "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "outputFormat" $output_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/featureCategories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -132,11 +132,11 @@ export def "feature-classes get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --outputFormat: string@outputFormat-completer # The format of the output. (default: json, e.g. json)
+  --output-format: string@output-format-completer # The format of the output. (default: json, e.g. json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "outputFormat" $outputFormat "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "outputFormat" $output_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/featureClasses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -155,11 +155,11 @@ export def "feature-types get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --outputFormat: string@outputFormat-completer # The format of the output. (default: json, e.g. json)
+  --output-format: string@output-format-completer # The format of the output. (default: json, e.g. json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "outputFormat" $outputFormat "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "outputFormat" $output_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/featureTypes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -170,7 +170,7 @@ export def "feature-types get" [
 #
 # GET /features/{featureId}
 export def "features get" [
-  featureId: int
+  feature_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "features get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/features/($featureId)")
+  let full_url = (build-url $base ({feature_id: $feature_id} | format pattern "/features/{feature_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -200,11 +200,11 @@ export def "name-authorities get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --outputFormat: string@outputFormat-completer # The format of the output. (default: json, e.g. json)
+  --output-format: string@output-format-completer # The format of the output. (default: json, e.g. json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "outputFormat" $outputFormat "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "outputFormat" $output_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nameAuthorities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -223,22 +223,22 @@ export def "names-changes get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --outputFormat: string@outputFormat-completer-1 # The format of the output. (default: json, e.g. json)
-  --fromDate: int # Defines the earliest date (YYYY-MM-DD format) of the change time window for the search (e.g. 2017-01-01)
-  --toDate: int # Defines the latest date (YYYY-MM-DD format) of the change time window for the search (e.g. 2017-06-30)
-  --featureClass: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
-  --featureCategory: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
-  --featureType: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
-  --sortBy: string@sortBy-completer # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: name)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
+  --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
+  --from-date: int # Defines the earliest date (YYYY-MM-DD format) of the change time window for the search (e.g. 2017-01-01)
+  --to-date: int # Defines the latest date (YYYY-MM-DD format) of the change time window for the search (e.g. 2017-06-30)
+  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
+  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
+  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
+  --sort-by: string@sort-by-completer # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: name)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
   --embed: int@embed-completer # A flag to indicate whether to embed the corresponding 'feature' into each matching name
-  --outputStyle: string@outputStyle-completer # A flag indicating whether to include with each matching name a succinct list of attributes (summary), or a comprehensive list of attributes (detail) (default: summary)
-  --itemsPerPage: int # The number of search results to return (1-200) (default: 20)
-  --startIndex: int # The index of the first record to be returned (>= 1) (default: 1)
+  --output-style: string@output-style-completer # A flag indicating whether to include with each matching name a succinct list of attributes (summary), or a comprehensive list of attributes (detail) (default: summary)
+  --items-per-page: int # The number of search results to return (1-200) (default: 20)
+  --start-index: int # The index of the first record to be returned (>= 1) (default: 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "outputFormat" $outputFormat "scalar") (serialize-qp "fromDate" $fromDate "scalar") (serialize-qp "toDate" $toDate "scalar") (serialize-qp "featureClass" $featureClass "scalar") (serialize-qp "featureCategory" $featureCategory "scalar") (serialize-qp "featureType" $featureType "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $outputStyle "scalar") (serialize-qp "itemsPerPage" $itemsPerPage "scalar") (serialize-qp "startIndex" $startIndex "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "featureClass" $feature_class "scalar") (serialize-qp "featureCategory" $feature_category "scalar") (serialize-qp "featureType" $feature_type "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $output_style "scalar") (serialize-qp "itemsPerPage" $items_per_page "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/changes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -257,21 +257,21 @@ export def "names-decisions-recent get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --outputFormat: string@outputFormat-completer-1 # The format of the output. (default: json, e.g. json)
+  --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
   --days: int # The number of days used to define the time window of naming decisions to search.  The number is interpreted as searching for 'names affected by decisions within the last X days'. (default: 30, e.g. 30)
-  --featureClass: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
-  --featureCategory: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
-  --featureType: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
-  --sortBy: string@sortBy-completer # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: name)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
+  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
+  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
+  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
+  --sort-by: string@sort-by-completer # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: name)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
   --embed: int@embed-completer # A flag to indicate whether to embed the corresponding 'feature' into each matching name
-  --outputStyle: string@outputStyle-completer # A flag indicating whether to include with each matching name a succinct list of attributes (summary), or a comprehensive list of attributes (detail) (default: summary)
-  --itemsPerPage: int # The number of search results to return (1-200) (default: 20)
-  --startIndex: int # The index of the first record to be returned (>= 1) (default: 1)
+  --output-style: string@output-style-completer # A flag indicating whether to include with each matching name a succinct list of attributes (summary), or a comprehensive list of attributes (detail) (default: summary)
+  --items-per-page: int # The number of search results to return (1-200) (default: 20)
+  --start-index: int # The index of the first record to be returned (>= 1) (default: 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "outputFormat" $outputFormat "scalar") (serialize-qp "days" $days "scalar") (serialize-qp "featureClass" $featureClass "scalar") (serialize-qp "featureCategory" $featureCategory "scalar") (serialize-qp "featureType" $featureType "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $outputStyle "scalar") (serialize-qp "itemsPerPage" $itemsPerPage "scalar") (serialize-qp "startIndex" $startIndex "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "days" $days "scalar") (serialize-qp "featureClass" $feature_class "scalar") (serialize-qp "featureCategory" $feature_category "scalar") (serialize-qp "featureType" $feature_type "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $output_style "scalar") (serialize-qp "itemsPerPage" $items_per_page "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/decisions/recent" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -290,21 +290,21 @@ export def "names-decisions-year get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --outputFormat: string@outputFormat-completer-1 # The format of the output. (default: json, e.g. json)
+  --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
   --year: int # The year in which to search for names affected by naming decisions'. (e.g. 2007)
-  --featureClass: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
-  --featureCategory: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
-  --featureType: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
-  --sortBy: string@sortBy-completer # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: name)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
+  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
+  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
+  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
+  --sort-by: string@sort-by-completer # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: name)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
   --embed: int@embed-completer # A flag to indicate whether to embed the corresponding 'feature' into each matching name
-  --outputStyle: string@outputStyle-completer # A flag indicating whether to include with each matching name a succinct list of attributes (summary), or a comprehensive list of attributes (detail) (default: summary)
-  --itemsPerPage: int # The number of search results to return (1-200) (default: 20)
-  --startIndex: int # The index of the first record to be returned (>= 1) (default: 1)
+  --output-style: string@output-style-completer # A flag indicating whether to include with each matching name a succinct list of attributes (summary), or a comprehensive list of attributes (detail) (default: summary)
+  --items-per-page: int # The number of search results to return (1-200) (default: 20)
+  --start-index: int # The index of the first record to be returned (>= 1) (default: 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "outputFormat" $outputFormat "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "featureClass" $featureClass "scalar") (serialize-qp "featureCategory" $featureCategory "scalar") (serialize-qp "featureType" $featureType "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $outputStyle "scalar") (serialize-qp "itemsPerPage" $itemsPerPage "scalar") (serialize-qp "startIndex" $startIndex "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "featureClass" $feature_class "scalar") (serialize-qp "featureCategory" $feature_category "scalar") (serialize-qp "featureType" $feature_type "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $output_style "scalar") (serialize-qp "itemsPerPage" $items_per_page "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/decisions/year" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -323,21 +323,21 @@ export def "names-inside get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --outputFormat: string@outputFormat-completer-1 # The format of the output. (default: json, e.g. json)
+  --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
   --bbox: string # A geographic bounding box defining the search area.  Must be specified as a string of the form 'minLongitude,minLatitude,maxLongitude,maxLatitude' (WGS84). e.g. -119,49,-118,50 (e.g. -119,49,-118,50)
-  --featureClass: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
-  --featureCategory: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
-  --featureType: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
-  --sortBy: string@sortBy-completer # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: name)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
+  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
+  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
+  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
+  --sort-by: string@sort-by-completer # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: name)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
   --embed: int@embed-completer # A flag to indicate whether to embed the corresponding 'feature' into each matching name
-  --outputStyle: string@outputStyle-completer # A flag indicating whether to include with each matching name a succinct list of attributes (summary), or a comprehensive list of attributes (detail) (default: summary)
-  --itemsPerPage: int # The number of search results to return (1-200) (default: 20)
-  --startIndex: int # The index of the first record to be returned (>= 1) (default: 1)
+  --output-style: string@output-style-completer # A flag indicating whether to include with each matching name a succinct list of attributes (summary), or a comprehensive list of attributes (detail) (default: summary)
+  --items-per-page: int # The number of search results to return (1-200) (default: 20)
+  --start-index: int # The index of the first record to be returned (>= 1) (default: 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "outputFormat" $outputFormat "scalar") (serialize-qp "bbox" $bbox "scalar") (serialize-qp "featureClass" $featureClass "scalar") (serialize-qp "featureCategory" $featureCategory "scalar") (serialize-qp "featureType" $featureType "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $outputStyle "scalar") (serialize-qp "itemsPerPage" $itemsPerPage "scalar") (serialize-qp "startIndex" $startIndex "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "bbox" $bbox "scalar") (serialize-qp "featureClass" $feature_class "scalar") (serialize-qp "featureCategory" $feature_category "scalar") (serialize-qp "featureType" $feature_type "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $output_style "scalar") (serialize-qp "itemsPerPage" $items_per_page "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/inside" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -356,22 +356,22 @@ export def "names-near get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --outputFormat: string@outputFormat-completer-1 # The format of the output. (default: json, e.g. -119,49,-118,50)
-  --featurePoint: string # A geographic coordinate specifying the centre point of the search area.  Must be specified as a string of the form 'longitude,latitude' (WGS84).  e.g. -120,51 (e.g. -120,51)
+  --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. -119,49,-118,50)
+  --feature-point: string # A geographic coordinate specifying the centre point of the search area.  Must be specified as a string of the form 'longitude,latitude' (WGS84).  e.g. -120,51 (e.g. -120,51)
   --distance: string # A radius (in kilometres) around the centre point.
-  --featureClass: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
-  --featureCategory: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
-  --featureType: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
-  --sortBy: string@sortBy-completer # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: name)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
+  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
+  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
+  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
+  --sort-by: string@sort-by-completer # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: name)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
   --embed: int@embed-completer # A flag to indicate whether to embed the corresponding 'feature' into each matching name
-  --outputStyle: string@outputStyle-completer # A flag indicating whether to include with each matching name a succinct list of attributes (summary), or a comprehensive list of attributes (detail) (default: summary)
-  --itemsPerPage: int # The number of search results to return (1-200) (default: 20)
-  --startIndex: int # The index of the first record to be returned (>= 1) (default: 1)
+  --output-style: string@output-style-completer # A flag indicating whether to include with each matching name a succinct list of attributes (summary), or a comprehensive list of attributes (detail) (default: summary)
+  --items-per-page: int # The number of search results to return (1-200) (default: 20)
+  --start-index: int # The index of the first record to be returned (>= 1) (default: 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "outputFormat" $outputFormat "scalar") (serialize-qp "featurePoint" $featurePoint "scalar") (serialize-qp "distance" $distance "scalar") (serialize-qp "featureClass" $featureClass "scalar") (serialize-qp "featureCategory" $featureCategory "scalar") (serialize-qp "featureType" $featureType "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $outputStyle "scalar") (serialize-qp "itemsPerPage" $itemsPerPage "scalar") (serialize-qp "startIndex" $startIndex "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "featurePoint" $feature_point "scalar") (serialize-qp "distance" $distance "scalar") (serialize-qp "featureClass" $feature_class "scalar") (serialize-qp "featureCategory" $feature_category "scalar") (serialize-qp "featureType" $feature_type "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $output_style "scalar") (serialize-qp "itemsPerPage" $items_per_page "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/near" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -390,22 +390,22 @@ export def "names-not-official-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --outputFormat: string@outputFormat-completer-1 # The format of the output. (default: json, e.g. json)
+  --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
   --name: string # A filter to search based on the the text of the name itself.  Use the asterisk (*) as a wildcard character.  For example 'vancouv*' (e.g. Victoria)
-  --exactSpelling: int@exactSpelling-completer # If the 'name' parameter is specified, 'exactSpelling' specifies whether to include only names that exactly match the search text (exactSpelling=1), or whether to also include names with similar spellings (exactSpelling=0) (default: 0)
-  --featureClass: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
-  --featureCategory: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
-  --featureType: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
-  --sortBy: string@sortBy-completer-1 # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: relevance)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
+  --exact-spelling: int@exact-spelling-completer # If the 'name' parameter is specified, 'exactSpelling' specifies whether to include only names that exactly match the search text (exactSpelling=1), or whether to also include names with similar spellings (exactSpelling=0) (default: 0)
+  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
+  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
+  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
+  --sort-by: string@sort-by-completer-1 # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: relevance)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
   --embed: int@embed-completer # A flag to indicate whether to embed the corresponding 'feature' into each matching name
-  --outputStyle: string@outputStyle-completer # A flag indicating whether to include with each matching name a succinct list of attributes (summary), or a comprehensive list of attributes (detail) (default: summary)
-  --itemsPerPage: int # The number of search results to return (1-200) (default: 20)
-  --startIndex: int # The index of the first record to be returned (>= 1) (default: 1)
+  --output-style: string@output-style-completer # A flag indicating whether to include with each matching name a succinct list of attributes (summary), or a comprehensive list of attributes (detail) (default: summary)
+  --items-per-page: int # The number of search results to return (1-200) (default: 20)
+  --start-index: int # The index of the first record to be returned (>= 1) (default: 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "outputFormat" $outputFormat "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "exactSpelling" $exactSpelling "scalar") (serialize-qp "featureClass" $featureClass "scalar") (serialize-qp "featureCategory" $featureCategory "scalar") (serialize-qp "featureType" $featureType "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $outputStyle "scalar") (serialize-qp "itemsPerPage" $itemsPerPage "scalar") (serialize-qp "startIndex" $startIndex "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "exactSpelling" $exact_spelling "scalar") (serialize-qp "featureClass" $feature_class "scalar") (serialize-qp "featureCategory" $feature_category "scalar") (serialize-qp "featureType" $feature_type "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $output_style "scalar") (serialize-qp "itemsPerPage" $items_per_page "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/notOfficial/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -424,22 +424,22 @@ export def "names-official-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --outputFormat: string@outputFormat-completer-1 # The format of the output. (default: json, e.g. json)
+  --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
   --name: string # A filter to search based on the the text of the name itself.  Use the asterisk (*) as a wildcard character.  For example 'vancouv*' (e.g. Victoria)
-  --exactSpelling: int@exactSpelling-completer # If the 'name' parameter is specified, 'exactSpelling' specifies whether to include only names that exactly match the search text (exactSpelling=1), or whether to also include names with similar spellings (exactSpelling=0) (default: 0)
-  --featureClass: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
-  --featureCategory: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
-  --featureType: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
-  --sortBy: string@sortBy-completer-1 # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: relevance)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
+  --exact-spelling: int@exact-spelling-completer # If the 'name' parameter is specified, 'exactSpelling' specifies whether to include only names that exactly match the search text (exactSpelling=1), or whether to also include names with similar spellings (exactSpelling=0) (default: 0)
+  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
+  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
+  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
+  --sort-by: string@sort-by-completer-1 # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: relevance)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
   --embed: int@embed-completer # A flag to indicate whether to embed the corresponding 'feature' into each matching name
-  --outputStyle: string@outputStyle-completer # A flag indicating whether to include with each matching name a succinct list of attributes (summary), or a comprehensive list of attributes (detail) (default: summary)
-  --itemsPerPage: int # The number of search results to return (1-200) (default: 20)
-  --startIndex: int # The index of the first record to be returned (>= 1) (default: 1)
+  --output-style: string@output-style-completer # A flag indicating whether to include with each matching name a succinct list of attributes (summary), or a comprehensive list of attributes (detail) (default: summary)
+  --items-per-page: int # The number of search results to return (1-200) (default: 20)
+  --start-index: int # The index of the first record to be returned (>= 1) (default: 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "outputFormat" $outputFormat "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "exactSpelling" $exactSpelling "scalar") (serialize-qp "featureClass" $featureClass "scalar") (serialize-qp "featureCategory" $featureCategory "scalar") (serialize-qp "featureType" $featureType "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $outputStyle "scalar") (serialize-qp "itemsPerPage" $itemsPerPage "scalar") (serialize-qp "startIndex" $startIndex "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "exactSpelling" $exact_spelling "scalar") (serialize-qp "featureClass" $feature_class "scalar") (serialize-qp "featureCategory" $feature_category "scalar") (serialize-qp "featureType" $feature_type "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $output_style "scalar") (serialize-qp "itemsPerPage" $items_per_page "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/official/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -458,22 +458,22 @@ export def "names-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --outputFormat: string@outputFormat-completer-1 # The format of the output. (default: json, e.g. json)
+  --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
   --name: string # A filter to search based on the the text of the name itself.  Use the asterisk (*) as a wildcard character.  For example 'vancouv*' (e.g. Victoria)
-  --exactSpelling: int@exactSpelling-completer # If the 'name' parameter is specified, 'exactSpelling' specifies whether to include only names that exactly match the search text (exactSpelling=1), or whether to also include names with similar spellings (exactSpelling=0) (default: 0)
-  --featureClass: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
-  --featureCategory: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
-  --featureType: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
-  --sortBy: string@sortBy-completer-1 # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: relevance)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
+  --exact-spelling: int@exact-spelling-completer # If the 'name' parameter is specified, 'exactSpelling' specifies whether to include only names that exactly match the search text (exactSpelling=1), or whether to also include names with similar spellings (exactSpelling=0) (default: 0)
+  --feature-class: string # A filter to limit the search to names associated with features of a certain 'class'  The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
+  --feature-category: string # A filter to limit the search to names associated with features of a certain 'category'  The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
+  --feature-type: string # A filter to limit the search to names associated with features of a certain 'type'  The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
+  --sort-by: string@sort-by-completer-1 # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: relevance)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. (default: 4326)
   --embed: int@embed-completer # A flag to indicate whether to embed the corresponding 'feature' into each matching name
-  --outputStyle: string@outputStyle-completer # A flag indicating whether to include with each matching name a succinct list of attributes (summary), or a comprehensive list of attributes (detail) (default: summary)
-  --itemsPerPage: int # The number of search results to return (1-200) (default: 20)
-  --startIndex: int # The index of the first record to be returned (>= 1) (default: 1)
+  --output-style: string@output-style-completer # A flag indicating whether to include with each matching name a succinct list of attributes (summary), or a comprehensive list of attributes (detail) (default: summary)
+  --items-per-page: int # The number of search results to return (1-200) (default: 20)
+  --start-index: int # The index of the first record to be returned (>= 1) (default: 1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "outputFormat" $outputFormat "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "exactSpelling" $exactSpelling "scalar") (serialize-qp "featureClass" $featureClass "scalar") (serialize-qp "featureCategory" $featureCategory "scalar") (serialize-qp "featureType" $featureType "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $outputStyle "scalar") (serialize-qp "itemsPerPage" $itemsPerPage "scalar") (serialize-qp "startIndex" $startIndex "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "exactSpelling" $exact_spelling "scalar") (serialize-qp "featureClass" $feature_class "scalar") (serialize-qp "featureCategory" $feature_category "scalar") (serialize-qp "featureType" $feature_type "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $output_style "scalar") (serialize-qp "itemsPerPage" $items_per_page "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -484,8 +484,8 @@ export def "names-search get" [
 #
 # GET /names/{nameId}.{outputFormat}
 export def "names get" [
-  nameId: int
-  outputFormat: string
+  name_id: int
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,7 +497,7 @@ export def "names get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/names/($nameId).($outputFormat)")
+  let full_url = (build-url $base ({name_id: $name_id, output_format: $output_format} | format pattern "/names/{name_id}.{output_format}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

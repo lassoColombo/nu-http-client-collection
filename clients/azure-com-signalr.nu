@@ -66,12 +66,12 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def keyType-completer [] { ["Primary" "Secondary"] }
+def key-type-completer [] { ["Primary" "Secondary"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-signal-r-service-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-signal-r-service-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.SignalRService/operations
 # operationId: Operations_List
-export def "providers-microsoft-signal-r-service-operations List" [
+export def "providers-microsoft-signal-r-service-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,8 +119,8 @@ export def "providers-microsoft-signal-r-service-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.SignalRService/SignalR
 # operationId: SignalR_ListBySubscription
-export def "subscriptions-providers-microsoft-signal-r-service-signal-r ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-signal-r-service-signal-r list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "subscriptions-providers-microsoft-signal-r-service-signal-r ListBySu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.SignalRService/SignalR" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.SignalRService/SignalR") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,9 +144,9 @@ export def "subscriptions-providers-microsoft-signal-r-service-signal-r ListBySu
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.SignalRService/locations/{location}/checkNameAvailability
 # operationId: SignalR_CheckNameAvailability
-export def "subscriptions-providers-microsoft-signal-r-service-locations-check-name-availability CheckNameAvailability" [
+export def "subscriptions-providers-microsoft-signal-r-service-locations-check-name-availability check" [
+  subscription_id: string
   location: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,8 +163,8 @@ export def "subscriptions-providers-microsoft-signal-r-service-locations-check-n
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.SignalRService/locations/($location)/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.SignalRService/locations/{location}/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -175,9 +175,9 @@ export def "subscriptions-providers-microsoft-signal-r-service-locations-check-n
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.SignalRService/locations/{location}/usages
 # operationId: Usages_List
-export def "subscriptions-providers-microsoft-signal-r-service-locations-usages List" [
+export def "subscriptions-providers-microsoft-signal-r-service-locations-usages list" [
+  subscription_id: string
   location: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "subscriptions-providers-microsoft-signal-r-service-locations-usages 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.SignalRService/locations/($location)/usages" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.SignalRService/locations/{location}/usages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -201,9 +201,9 @@ export def "subscriptions-providers-microsoft-signal-r-service-locations-usages 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SignalRService/SignalR
 # operationId: SignalR_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SignalRService/SignalR" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SignalRService/SignalR") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -227,10 +227,10 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SignalRService/SignalR/{resourceName}/listKeys
 # operationId: SignalR_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r-list-keys ListKeys" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r-list-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SignalRService/SignalR/($resourceName)/listKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SignalRService/SignalR/{resource_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -254,10 +254,10 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SignalRService/SignalR/{resourceName}/regenerateKey
 # operationId: SignalR_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r-regenerate-key RegenerateKey" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r-regenerate-key post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,14 +267,14 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --keyType: string@keyType-completer # The keyType to regenerate. Must be either 'primary' or 'secondary'(case-insensitive).
+  --key-type: string@key-type-completer # The keyType to regenerate. Must be either 'primary' or 'secondary'(case-insensitive).
 ]: any -> record<primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SignalRService/SignalR/($resourceName)/regenerateKey" $qp)
-  let body = {keyType: $keyType} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SignalRService/SignalR/{resource_name}/regenerateKey") $qp)
+  let body = {"keyType": $key_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -285,10 +285,10 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SignalRService/signalR/{resourceName}
 # operationId: SignalR_Delete
-export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SignalRService/signalR/($resourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SignalRService/signalR/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -312,10 +312,10 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SignalRService/signalR/{resourceName}
 # operationId: SignalR_Get
-export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +329,7 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SignalRService/signalR/($resourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SignalRService/signalR/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -341,10 +341,10 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
 # operationId: SignalR_Update
 # --properties shape: {cors?: record, features?: list, hostNamePrefix?: string}
 # --sku shape: {capacity?: int, family?: string, name: string, size?: string, tier?: "Free"|"Basic"|"Standard"|"Premium"}
-export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,8 +362,8 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SignalRService/signalR/($resourceName)" $qp)
-  let body = {properties: $properties, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SignalRService/signalR/{resource_name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -376,10 +376,10 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
 # operationId: SignalR_CreateOrUpdate
 # --properties shape: {cors?: record, features?: list, hostNamePrefix?: string}
 # --sku shape: {capacity?: int, family?: string, name: string, size?: string, tier?: "Free"|"Basic"|"Standard"|"Premium"}
-export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,8 +398,8 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SignalRService/signalR/($resourceName)" $qp)
-  let body = {location: $location, properties: $properties, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SignalRService/signalR/{resource_name}") $qp)
+  let body = {"location": $location, "properties": $properties, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -410,10 +410,10 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SignalRService/signalR/{resourceName}/restart
 # operationId: SignalR_Restart
-export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r-restart Restart" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r-restart restart" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SignalRService/signalR/($resourceName)/restart" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SignalRService/signalR/{resource_name}/restart") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

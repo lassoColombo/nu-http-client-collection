@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-jit-network-access-policies List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-jit-network-access-policies list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/jitNetworkAccessPolicies
 # operationId: JitNetworkAccessPolicies_List
-export def "subscriptions-providers-microsoft-security-jit-network-access-policies List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-security-jit-network-access-policies list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "subscriptions-providers-microsoft-security-jit-network-access-polici
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/jitNetworkAccessPolicies" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/jitNetworkAccessPolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,9 +118,9 @@ export def "subscriptions-providers-microsoft-security-jit-network-access-polici
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/locations/{ascLocation}/jitNetworkAccessPolicies
 # operationId: JitNetworkAccessPolicies_ListByRegion
-export def "subscriptions-providers-microsoft-security-locations-jit-network-access-policies ListByRegion" [
-  subscriptionId: string
-  ascLocation: string
+export def "subscriptions-providers-microsoft-security-locations-jit-network-access-policies list-by-region" [
+  subscription_id: string
+  asc_location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "subscriptions-providers-microsoft-security-locations-jit-network-acc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/locations/($ascLocation)/jitNetworkAccessPolicies" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, asc_location: $asc_location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/locations/{asc_location}/jitNetworkAccessPolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,9 +144,9 @@ export def "subscriptions-providers-microsoft-security-locations-jit-network-acc
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/jitNetworkAccessPolicies
 # operationId: JitNetworkAccessPolicies_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-security-jit-network-access-policies ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-jit-network-access-policies list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-jit-netwo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/jitNetworkAccessPolicies" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/jitNetworkAccessPolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,10 +170,10 @@ export def "subscriptions-resource-groups-providers-microsoft-security-jit-netwo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/jitNetworkAccessPolicies
 # operationId: JitNetworkAccessPolicies_ListByResourceGroupAndRegion
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-jit-network-access-policies ListByResourceGroupAndRegion" [
-  subscriptionId: string
-  resourceGroupName: string
-  ascLocation: string
+export def "subscriptions-resource-groups-providers-microsoft-security-locations-jit-network-access-policies list-by-resource-group-and-region" [
+  subscription_id: string
+  resource_group_name: string
+  asc_location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/locations/($ascLocation)/jitNetworkAccessPolicies" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, asc_location: $asc_location} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/locations/{asc_location}/jitNetworkAccessPolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,11 +197,11 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/jitNetworkAccessPolicies/{jitNetworkAccessPolicyName}
 # operationId: JitNetworkAccessPolicies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-jit-network-access-policies Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  ascLocation: string
-  jitNetworkAccessPolicyName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-locations-jit-network-access-policies delete" [
+  subscription_id: string
+  resource_group_name: string
+  asc_location: string
+  jit_network_access_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/locations/($ascLocation)/jitNetworkAccessPolicies/($jitNetworkAccessPolicyName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, asc_location: $asc_location, jit_network_access_policy_name: $jit_network_access_policy_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/locations/{asc_location}/jitNetworkAccessPolicies/{jit_network_access_policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -225,11 +225,11 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/jitNetworkAccessPolicies/{jitNetworkAccessPolicyName}
 # operationId: JitNetworkAccessPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-jit-network-access-policies Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  ascLocation: string
-  jitNetworkAccessPolicyName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-locations-jit-network-access-policies get" [
+  subscription_id: string
+  resource_group_name: string
+  asc_location: string
+  jit_network_access_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/locations/($ascLocation)/jitNetworkAccessPolicies/($jitNetworkAccessPolicyName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, asc_location: $asc_location, jit_network_access_policy_name: $jit_network_access_policy_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/locations/{asc_location}/jitNetworkAccessPolicies/{jit_network_access_policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,11 +253,11 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/jitNetworkAccessPolicies/{jitNetworkAccessPolicyName}
 # operationId: JitNetworkAccessPolicies_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-jit-network-access-policies CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  ascLocation: string
-  jitNetworkAccessPolicyName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-locations-jit-network-access-policies create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  asc_location: string
+  jit_network_access_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,7 +271,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/locations/($ascLocation)/jitNetworkAccessPolicies/($jitNetworkAccessPolicyName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, asc_location: $asc_location, jit_network_access_policy_name: $jit_network_access_policy_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/locations/{asc_location}/jitNetworkAccessPolicies/{jit_network_access_policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -281,12 +281,12 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/jitNetworkAccessPolicies/{jitNetworkAccessPolicyName}/{jitNetworkAccessPolicyInitiateType}
 # operationId: JitNetworkAccessPolicies_Initiate
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-jit-network-access-policies Initiate" [
-  subscriptionId: string
-  resourceGroupName: string
-  ascLocation: string
-  jitNetworkAccessPolicyName: string
-  jitNetworkAccessPolicyInitiateType: string
+export def "subscriptions-resource-groups-providers-microsoft-security-locations-jit-network-access-policies post" [
+  subscription_id: string
+  resource_group_name: string
+  asc_location: string
+  jit_network_access_policy_name: string
+  jit_network_access_policy_initiate_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +300,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/locations/($ascLocation)/jitNetworkAccessPolicies/($jitNetworkAccessPolicyName)/($jitNetworkAccessPolicyInitiateType)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, asc_location: $asc_location, jit_network_access_policy_name: $jit_network_access_policy_name, jit_network_access_policy_initiate_type: $jit_network_access_policy_initiate_type} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/locations/{asc_location}/jitNetworkAccessPolicies/{jit_network_access_policy_name}/{jit_network_access_policy_initiate_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

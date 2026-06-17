@@ -66,67 +66,67 @@ def base-url-completer [] { ["http://ecs.us-east-1.amazonaws.com" "http://ecs.us
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AmazonEC2ContainerServiceV20141113.CreateCapacityProvider"] }
-def X-Amz-Target-completer-1 [] { ["AmazonEC2ContainerServiceV20141113.CreateCluster"] }
-def X-Amz-Target-completer-2 [] { ["AmazonEC2ContainerServiceV20141113.CreateService"] }
-def X-Amz-Target-completer-3 [] { ["AmazonEC2ContainerServiceV20141113.CreateTaskSet"] }
-def X-Amz-Target-completer-4 [] { ["AmazonEC2ContainerServiceV20141113.DeleteAccountSetting"] }
-def X-Amz-Target-completer-5 [] { ["AmazonEC2ContainerServiceV20141113.DeleteAttributes"] }
-def X-Amz-Target-completer-6 [] { ["AmazonEC2ContainerServiceV20141113.DeleteCapacityProvider"] }
-def X-Amz-Target-completer-7 [] { ["AmazonEC2ContainerServiceV20141113.DeleteCluster"] }
-def X-Amz-Target-completer-8 [] { ["AmazonEC2ContainerServiceV20141113.DeleteService"] }
-def X-Amz-Target-completer-9 [] { ["AmazonEC2ContainerServiceV20141113.DeleteTaskDefinitions"] }
-def X-Amz-Target-completer-10 [] { ["AmazonEC2ContainerServiceV20141113.DeleteTaskSet"] }
-def X-Amz-Target-completer-11 [] { ["AmazonEC2ContainerServiceV20141113.DeregisterContainerInstance"] }
-def X-Amz-Target-completer-12 [] { ["AmazonEC2ContainerServiceV20141113.DeregisterTaskDefinition"] }
-def X-Amz-Target-completer-13 [] { ["AmazonEC2ContainerServiceV20141113.DescribeCapacityProviders"] }
-def X-Amz-Target-completer-14 [] { ["AmazonEC2ContainerServiceV20141113.DescribeClusters"] }
-def X-Amz-Target-completer-15 [] { ["AmazonEC2ContainerServiceV20141113.DescribeContainerInstances"] }
-def X-Amz-Target-completer-16 [] { ["AmazonEC2ContainerServiceV20141113.DescribeServices"] }
-def X-Amz-Target-completer-17 [] { ["AmazonEC2ContainerServiceV20141113.DescribeTaskDefinition"] }
-def X-Amz-Target-completer-18 [] { ["AmazonEC2ContainerServiceV20141113.DescribeTaskSets"] }
-def X-Amz-Target-completer-19 [] { ["AmazonEC2ContainerServiceV20141113.DescribeTasks"] }
-def X-Amz-Target-completer-20 [] { ["AmazonEC2ContainerServiceV20141113.DiscoverPollEndpoint"] }
-def X-Amz-Target-completer-21 [] { ["AmazonEC2ContainerServiceV20141113.ExecuteCommand"] }
-def X-Amz-Target-completer-22 [] { ["AmazonEC2ContainerServiceV20141113.GetTaskProtection"] }
-def X-Amz-Target-completer-23 [] { ["AmazonEC2ContainerServiceV20141113.ListAccountSettings"] }
-def X-Amz-Target-completer-24 [] { ["AmazonEC2ContainerServiceV20141113.ListAttributes"] }
-def X-Amz-Target-completer-25 [] { ["AmazonEC2ContainerServiceV20141113.ListClusters"] }
-def X-Amz-Target-completer-26 [] { ["AmazonEC2ContainerServiceV20141113.ListContainerInstances"] }
-def X-Amz-Target-completer-27 [] { ["AmazonEC2ContainerServiceV20141113.ListServices"] }
-def X-Amz-Target-completer-28 [] { ["AmazonEC2ContainerServiceV20141113.ListServicesByNamespace"] }
-def X-Amz-Target-completer-29 [] { ["AmazonEC2ContainerServiceV20141113.ListTagsForResource"] }
-def X-Amz-Target-completer-30 [] { ["AmazonEC2ContainerServiceV20141113.ListTaskDefinitionFamilies"] }
-def X-Amz-Target-completer-31 [] { ["AmazonEC2ContainerServiceV20141113.ListTaskDefinitions"] }
-def X-Amz-Target-completer-32 [] { ["AmazonEC2ContainerServiceV20141113.ListTasks"] }
-def X-Amz-Target-completer-33 [] { ["AmazonEC2ContainerServiceV20141113.PutAccountSetting"] }
-def X-Amz-Target-completer-34 [] { ["AmazonEC2ContainerServiceV20141113.PutAccountSettingDefault"] }
-def X-Amz-Target-completer-35 [] { ["AmazonEC2ContainerServiceV20141113.PutAttributes"] }
-def X-Amz-Target-completer-36 [] { ["AmazonEC2ContainerServiceV20141113.PutClusterCapacityProviders"] }
-def X-Amz-Target-completer-37 [] { ["AmazonEC2ContainerServiceV20141113.RegisterContainerInstance"] }
-def X-Amz-Target-completer-38 [] { ["AmazonEC2ContainerServiceV20141113.RegisterTaskDefinition"] }
-def X-Amz-Target-completer-39 [] { ["AmazonEC2ContainerServiceV20141113.RunTask"] }
-def X-Amz-Target-completer-40 [] { ["AmazonEC2ContainerServiceV20141113.StartTask"] }
-def X-Amz-Target-completer-41 [] { ["AmazonEC2ContainerServiceV20141113.StopTask"] }
-def X-Amz-Target-completer-42 [] { ["AmazonEC2ContainerServiceV20141113.SubmitAttachmentStateChanges"] }
-def X-Amz-Target-completer-43 [] { ["AmazonEC2ContainerServiceV20141113.SubmitContainerStateChange"] }
-def X-Amz-Target-completer-44 [] { ["AmazonEC2ContainerServiceV20141113.SubmitTaskStateChange"] }
-def X-Amz-Target-completer-45 [] { ["AmazonEC2ContainerServiceV20141113.TagResource"] }
-def X-Amz-Target-completer-46 [] { ["AmazonEC2ContainerServiceV20141113.UntagResource"] }
-def X-Amz-Target-completer-47 [] { ["AmazonEC2ContainerServiceV20141113.UpdateCapacityProvider"] }
-def X-Amz-Target-completer-48 [] { ["AmazonEC2ContainerServiceV20141113.UpdateCluster"] }
-def X-Amz-Target-completer-49 [] { ["AmazonEC2ContainerServiceV20141113.UpdateClusterSettings"] }
-def X-Amz-Target-completer-50 [] { ["AmazonEC2ContainerServiceV20141113.UpdateContainerAgent"] }
-def X-Amz-Target-completer-51 [] { ["AmazonEC2ContainerServiceV20141113.UpdateContainerInstancesState"] }
-def X-Amz-Target-completer-52 [] { ["AmazonEC2ContainerServiceV20141113.UpdateService"] }
-def X-Amz-Target-completer-53 [] { ["AmazonEC2ContainerServiceV20141113.UpdateServicePrimaryTaskSet"] }
-def X-Amz-Target-completer-54 [] { ["AmazonEC2ContainerServiceV20141113.UpdateTaskProtection"] }
-def X-Amz-Target-completer-55 [] { ["AmazonEC2ContainerServiceV20141113.UpdateTaskSet"] }
+def x-amz-target-completer [] { ["AmazonEC2ContainerServiceV20141113.CreateCapacityProvider"] }
+def x-amz-target-completer-1 [] { ["AmazonEC2ContainerServiceV20141113.CreateCluster"] }
+def x-amz-target-completer-2 [] { ["AmazonEC2ContainerServiceV20141113.CreateService"] }
+def x-amz-target-completer-3 [] { ["AmazonEC2ContainerServiceV20141113.CreateTaskSet"] }
+def x-amz-target-completer-4 [] { ["AmazonEC2ContainerServiceV20141113.DeleteAccountSetting"] }
+def x-amz-target-completer-5 [] { ["AmazonEC2ContainerServiceV20141113.DeleteAttributes"] }
+def x-amz-target-completer-6 [] { ["AmazonEC2ContainerServiceV20141113.DeleteCapacityProvider"] }
+def x-amz-target-completer-7 [] { ["AmazonEC2ContainerServiceV20141113.DeleteCluster"] }
+def x-amz-target-completer-8 [] { ["AmazonEC2ContainerServiceV20141113.DeleteService"] }
+def x-amz-target-completer-9 [] { ["AmazonEC2ContainerServiceV20141113.DeleteTaskDefinitions"] }
+def x-amz-target-completer-10 [] { ["AmazonEC2ContainerServiceV20141113.DeleteTaskSet"] }
+def x-amz-target-completer-11 [] { ["AmazonEC2ContainerServiceV20141113.DeregisterContainerInstance"] }
+def x-amz-target-completer-12 [] { ["AmazonEC2ContainerServiceV20141113.DeregisterTaskDefinition"] }
+def x-amz-target-completer-13 [] { ["AmazonEC2ContainerServiceV20141113.DescribeCapacityProviders"] }
+def x-amz-target-completer-14 [] { ["AmazonEC2ContainerServiceV20141113.DescribeClusters"] }
+def x-amz-target-completer-15 [] { ["AmazonEC2ContainerServiceV20141113.DescribeContainerInstances"] }
+def x-amz-target-completer-16 [] { ["AmazonEC2ContainerServiceV20141113.DescribeServices"] }
+def x-amz-target-completer-17 [] { ["AmazonEC2ContainerServiceV20141113.DescribeTaskDefinition"] }
+def x-amz-target-completer-18 [] { ["AmazonEC2ContainerServiceV20141113.DescribeTaskSets"] }
+def x-amz-target-completer-19 [] { ["AmazonEC2ContainerServiceV20141113.DescribeTasks"] }
+def x-amz-target-completer-20 [] { ["AmazonEC2ContainerServiceV20141113.DiscoverPollEndpoint"] }
+def x-amz-target-completer-21 [] { ["AmazonEC2ContainerServiceV20141113.ExecuteCommand"] }
+def x-amz-target-completer-22 [] { ["AmazonEC2ContainerServiceV20141113.GetTaskProtection"] }
+def x-amz-target-completer-23 [] { ["AmazonEC2ContainerServiceV20141113.ListAccountSettings"] }
+def x-amz-target-completer-24 [] { ["AmazonEC2ContainerServiceV20141113.ListAttributes"] }
+def x-amz-target-completer-25 [] { ["AmazonEC2ContainerServiceV20141113.ListClusters"] }
+def x-amz-target-completer-26 [] { ["AmazonEC2ContainerServiceV20141113.ListContainerInstances"] }
+def x-amz-target-completer-27 [] { ["AmazonEC2ContainerServiceV20141113.ListServices"] }
+def x-amz-target-completer-28 [] { ["AmazonEC2ContainerServiceV20141113.ListServicesByNamespace"] }
+def x-amz-target-completer-29 [] { ["AmazonEC2ContainerServiceV20141113.ListTagsForResource"] }
+def x-amz-target-completer-30 [] { ["AmazonEC2ContainerServiceV20141113.ListTaskDefinitionFamilies"] }
+def x-amz-target-completer-31 [] { ["AmazonEC2ContainerServiceV20141113.ListTaskDefinitions"] }
+def x-amz-target-completer-32 [] { ["AmazonEC2ContainerServiceV20141113.ListTasks"] }
+def x-amz-target-completer-33 [] { ["AmazonEC2ContainerServiceV20141113.PutAccountSetting"] }
+def x-amz-target-completer-34 [] { ["AmazonEC2ContainerServiceV20141113.PutAccountSettingDefault"] }
+def x-amz-target-completer-35 [] { ["AmazonEC2ContainerServiceV20141113.PutAttributes"] }
+def x-amz-target-completer-36 [] { ["AmazonEC2ContainerServiceV20141113.PutClusterCapacityProviders"] }
+def x-amz-target-completer-37 [] { ["AmazonEC2ContainerServiceV20141113.RegisterContainerInstance"] }
+def x-amz-target-completer-38 [] { ["AmazonEC2ContainerServiceV20141113.RegisterTaskDefinition"] }
+def x-amz-target-completer-39 [] { ["AmazonEC2ContainerServiceV20141113.RunTask"] }
+def x-amz-target-completer-40 [] { ["AmazonEC2ContainerServiceV20141113.StartTask"] }
+def x-amz-target-completer-41 [] { ["AmazonEC2ContainerServiceV20141113.StopTask"] }
+def x-amz-target-completer-42 [] { ["AmazonEC2ContainerServiceV20141113.SubmitAttachmentStateChanges"] }
+def x-amz-target-completer-43 [] { ["AmazonEC2ContainerServiceV20141113.SubmitContainerStateChange"] }
+def x-amz-target-completer-44 [] { ["AmazonEC2ContainerServiceV20141113.SubmitTaskStateChange"] }
+def x-amz-target-completer-45 [] { ["AmazonEC2ContainerServiceV20141113.TagResource"] }
+def x-amz-target-completer-46 [] { ["AmazonEC2ContainerServiceV20141113.UntagResource"] }
+def x-amz-target-completer-47 [] { ["AmazonEC2ContainerServiceV20141113.UpdateCapacityProvider"] }
+def x-amz-target-completer-48 [] { ["AmazonEC2ContainerServiceV20141113.UpdateCluster"] }
+def x-amz-target-completer-49 [] { ["AmazonEC2ContainerServiceV20141113.UpdateClusterSettings"] }
+def x-amz-target-completer-50 [] { ["AmazonEC2ContainerServiceV20141113.UpdateContainerAgent"] }
+def x-amz-target-completer-51 [] { ["AmazonEC2ContainerServiceV20141113.UpdateContainerInstancesState"] }
+def x-amz-target-completer-52 [] { ["AmazonEC2ContainerServiceV20141113.UpdateService"] }
+def x-amz-target-completer-53 [] { ["AmazonEC2ContainerServiceV20141113.UpdateServicePrimaryTaskSet"] }
+def x-amz-target-completer-54 [] { ["AmazonEC2ContainerServiceV20141113.UpdateTaskProtection"] }
+def x-amz-target-completer-55 [] { ["AmazonEC2ContainerServiceV20141113.UpdateTaskSet"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-amazon-ec2-container-service-v20141113-create-capacity-provider CreateCapacityProvider" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-amazon-ec2-container-service-v20141113-create-capacity-provider create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.CreateCapacityProvider
 # operationId: CreateCapacityProvider
-export def "x-amz-target-amazon-ec2-container-service-v20141113-create-capacity-provider CreateCapacityProvider" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-create-capacity-provider create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,25 +159,25 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-create-capacity-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
   name: any
-  autoScalingGroupProvider: any
+  auto_scaling_group_provider: any
   --tags: any
 ]: any -> record<capacityProvider: record<capacityProviderArn: record, name: record, status: record, autoScalingGroupProvider: record<autoScalingGroupArn: record, managedScaling: record, managedTerminationProtection: record>, updateStatus: record, updateStatusReason: record, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.CreateCapacityProvider")
-  let body = {name: $name, autoScalingGroupProvider: $autoScalingGroupProvider, tags: $tags} | compact
+  let body = {"name": $name, "autoScalingGroupProvider": $auto_scaling_group_provider, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -188,7 +188,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-create-capacity-
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.CreateCluster
 # operationId: CreateCluster
-export def "x-amz-target-amazon-ec2-container-service-v20141113-create-cluster CreateCluster" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-create-cluster create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,29 +197,29 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-create-cluster C
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  --clusterName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  --cluster-name: any
   --tags: any
   --settings: any
   --configuration: any
-  --capacityProviders: any
-  --defaultCapacityProviderStrategy: any
-  --serviceConnectDefaults: any
+  --capacity-providers: any
+  --default-capacity-provider-strategy: any
+  --service-connect-defaults: any
 ]: any -> record<cluster: record<clusterArn: record, clusterName: record, configuration: record<executeCommandConfiguration: record>, status: record, registeredContainerInstancesCount: record, runningTasksCount: record, pendingTasksCount: record, activeServicesCount: record, statistics: record, tags: record, settings: record, capacityProviders: record, defaultCapacityProviderStrategy: record, attachments: record, attachmentsStatus: record, serviceConnectDefaults: record<namespace: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.CreateCluster")
-  let body = {clusterName: $clusterName, tags: $tags, settings: $settings, configuration: $configuration, capacityProviders: $capacityProviders, defaultCapacityProviderStrategy: $defaultCapacityProviderStrategy, serviceConnectDefaults: $serviceConnectDefaults} | compact
+  let body = {"clusterName": $cluster_name, "tags": $tags, "settings": $settings, "configuration": $configuration, "capacityProviders": $capacity_providers, "defaultCapacityProviderStrategy": $default_capacity_provider_strategy, "serviceConnectDefaults": $service_connect_defaults} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -230,7 +230,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-create-cluster C
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.CreateService
 # operationId: CreateService
-export def "x-amz-target-amazon-ec2-container-service-v20141113-create-service CreateService" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-create-service create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,45 +239,45 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-create-service C
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
   --cluster: any
-  serviceName: any
-  --taskDefinition: any
-  --loadBalancers: any
-  --serviceRegistries: any
-  --desiredCount: any
-  --clientToken: any
-  --launchType: any
-  --capacityProviderStrategy: any
-  --platformVersion: any
+  service_name: any
+  --task-definition: any
+  --load-balancers: any
+  --service-registries: any
+  --desired-count: any
+  --client-token: any
+  --launch-type: any
+  --capacity-provider-strategy: any
+  --platform-version: any
   --role: any
-  --deploymentConfiguration: any
-  --placementConstraints: any
-  --placementStrategy: any
-  --networkConfiguration: any
-  --healthCheckGracePeriodSeconds: any
-  --schedulingStrategy: any
-  --deploymentController: any
+  --deployment-configuration: any
+  --placement-constraints: any
+  --placement-strategy: any
+  --network-configuration: any
+  --health-check-grace-period-seconds: any
+  --scheduling-strategy: any
+  --deployment-controller: any
   --tags: any
-  --enableECSManagedTags: any
-  --propagateTags: any
-  --enableExecuteCommand: any
-  --serviceConnectConfiguration: any
+  --enable-ecs-managed-tags: any
+  --propagate-tags: any
+  --enable-execute-command: any
+  --service-connect-configuration: any
 ]: any -> record<service: record<serviceArn: record, serviceName: record, clusterArn: record, loadBalancers: record, serviceRegistries: record, status: record, desiredCount: record, runningCount: record, pendingCount: record, launchType: record, capacityProviderStrategy: record, platformVersion: record, platformFamily: record, taskDefinition: record, deploymentConfiguration: record<deploymentCircuitBreaker: record, maximumPercent: record, minimumHealthyPercent: record, alarms: record>, taskSets: record, deployments: record, roleArn: record, events: record, createdAt: record, placementConstraints: record, placementStrategy: record, networkConfiguration: record<awsvpcConfiguration: record>, healthCheckGracePeriodSeconds: record, schedulingStrategy: record, deploymentController: record<type: record>, tags: record, createdBy: record, enableECSManagedTags: record, propagateTags: record, enableExecuteCommand: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.CreateService")
-  let body = {cluster: $cluster, serviceName: $serviceName, taskDefinition: $taskDefinition, loadBalancers: $loadBalancers, serviceRegistries: $serviceRegistries, desiredCount: $desiredCount, clientToken: $clientToken, launchType: $launchType, capacityProviderStrategy: $capacityProviderStrategy, platformVersion: $platformVersion, role: $role, deploymentConfiguration: $deploymentConfiguration, placementConstraints: $placementConstraints, placementStrategy: $placementStrategy, networkConfiguration: $networkConfiguration, healthCheckGracePeriodSeconds: $healthCheckGracePeriodSeconds, schedulingStrategy: $schedulingStrategy, deploymentController: $deploymentController, tags: $tags, enableECSManagedTags: $enableECSManagedTags, propagateTags: $propagateTags, enableExecuteCommand: $enableExecuteCommand, serviceConnectConfiguration: $serviceConnectConfiguration} | compact
+  let body = {"cluster": $cluster, "serviceName": $service_name, "taskDefinition": $task_definition, "loadBalancers": $load_balancers, "serviceRegistries": $service_registries, "desiredCount": $desired_count, "clientToken": $client_token, "launchType": $launch_type, "capacityProviderStrategy": $capacity_provider_strategy, "platformVersion": $platform_version, "role": $role, "deploymentConfiguration": $deployment_configuration, "placementConstraints": $placement_constraints, "placementStrategy": $placement_strategy, "networkConfiguration": $network_configuration, "healthCheckGracePeriodSeconds": $health_check_grace_period_seconds, "schedulingStrategy": $scheduling_strategy, "deploymentController": $deployment_controller, "tags": $tags, "enableECSManagedTags": $enable_ecs_managed_tags, "propagateTags": $propagate_tags, "enableExecuteCommand": $enable_execute_command, "serviceConnectConfiguration": $service_connect_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -288,7 +288,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-create-service C
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.CreateTaskSet
 # operationId: CreateTaskSet
-export def "x-amz-target-amazon-ec2-container-service-v20141113-create-task-set CreateTaskSet" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-create-task-set create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -297,35 +297,35 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-create-task-set 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
   service: any
   cluster: any
-  --externalId: any
-  taskDefinition: any
-  --networkConfiguration: any
-  --loadBalancers: any
-  --serviceRegistries: any
-  --launchType: any
-  --capacityProviderStrategy: any
-  --platformVersion: any
+  --external-id: any
+  task_definition: any
+  --network-configuration: any
+  --load-balancers: any
+  --service-registries: any
+  --launch-type: any
+  --capacity-provider-strategy: any
+  --platform-version: any
   --scale: any
-  --clientToken: any
+  --client-token: any
   --tags: any
 ]: any -> record<taskSet: record<id: record, taskSetArn: record, serviceArn: record, clusterArn: record, startedBy: record, externalId: record, status: record, taskDefinition: record, computedDesiredCount: record, pendingCount: record, runningCount: record, createdAt: record, updatedAt: record, launchType: record, capacityProviderStrategy: record, platformVersion: record, platformFamily: record, networkConfiguration: record<awsvpcConfiguration: record>, loadBalancers: record, serviceRegistries: record, scale: record<value: record, unit: record>, stabilityStatus: record, stabilityStatusAt: record, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.CreateTaskSet")
-  let body = {service: $service, cluster: $cluster, externalId: $externalId, taskDefinition: $taskDefinition, networkConfiguration: $networkConfiguration, loadBalancers: $loadBalancers, serviceRegistries: $serviceRegistries, launchType: $launchType, capacityProviderStrategy: $capacityProviderStrategy, platformVersion: $platformVersion, scale: $scale, clientToken: $clientToken, tags: $tags} | compact
+  let body = {"service": $service, "cluster": $cluster, "externalId": $external_id, "taskDefinition": $task_definition, "networkConfiguration": $network_configuration, "loadBalancers": $load_balancers, "serviceRegistries": $service_registries, "launchType": $launch_type, "capacityProviderStrategy": $capacity_provider_strategy, "platformVersion": $platform_version, "scale": $scale, "clientToken": $client_token, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -336,7 +336,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-create-task-set 
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeleteAccountSetting
 # operationId: DeleteAccountSetting
-export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-account-setting DeleteAccountSetting" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-account-setting delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,24 +345,24 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-account-s
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
   name: any
-  --principalArn: any
+  --principal-arn: any
 ]: any -> record<setting: record<name: record, value: record, principalArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeleteAccountSetting")
-  let body = {name: $name, principalArn: $principalArn} | compact
+  let body = {"name": $name, "principalArn": $principal_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -373,7 +373,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-account-s
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeleteAttributes
 # operationId: DeleteAttributes
-export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-attributes DeleteAttributes" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-attributes delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,14 +382,14 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-attribute
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
   --cluster: any
   attributes: any
 ]: any -> record<attributes: record> {
@@ -397,9 +397,9 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-attribute
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeleteAttributes")
-  let body = {cluster: $cluster, attributes: $attributes} | compact
+  let body = {"cluster": $cluster, "attributes": $attributes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -410,7 +410,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-attribute
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeleteCapacityProvider
 # operationId: DeleteCapacityProvider
-export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-capacity-provider DeleteCapacityProvider" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-capacity-provider delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,23 +419,23 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-capacity-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  capacityProvider: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  capacity_provider: any
 ]: any -> record<capacityProvider: record<capacityProviderArn: record, name: record, status: record, autoScalingGroupProvider: record<autoScalingGroupArn: record, managedScaling: record, managedTerminationProtection: record>, updateStatus: record, updateStatusReason: record, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeleteCapacityProvider")
-  let body = {capacityProvider: $capacityProvider} | compact
+  let body = {"capacityProvider": $capacity_provider} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -446,7 +446,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-capacity-
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeleteCluster
 # operationId: DeleteCluster
-export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-cluster DeleteCluster" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-cluster delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,23 +455,23 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-cluster D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
   cluster: any
 ]: any -> record<cluster: record<clusterArn: record, clusterName: record, configuration: record<executeCommandConfiguration: record>, status: record, registeredContainerInstancesCount: record, runningTasksCount: record, pendingTasksCount: record, activeServicesCount: record, statistics: record, tags: record, settings: record, capacityProviders: record, defaultCapacityProviderStrategy: record, attachments: record, attachmentsStatus: record, serviceConnectDefaults: record<namespace: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeleteCluster")
-  let body = {cluster: $cluster} | compact
+  let body = {"cluster": $cluster} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -482,7 +482,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-cluster D
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeleteService
 # operationId: DeleteService
-export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-service DeleteService" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-service delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,14 +491,14 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-service D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
   --cluster: any
   service: any
   --force: any
@@ -507,9 +507,9 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-service D
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeleteService")
-  let body = {cluster: $cluster, service: $service, force: $force} | compact
+  let body = {"cluster": $cluster, "service": $service, "force": $force} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -520,7 +520,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-service D
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeleteTaskDefinitions
 # operationId: DeleteTaskDefinitions
-export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-task-definitions DeleteTaskDefinitions" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-task-definitions delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,23 +529,23 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-task-defi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  taskDefinitions: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  task_definitions: any
 ]: any -> record<taskDefinitions: record, failures: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeleteTaskDefinitions")
-  let body = {taskDefinitions: $taskDefinitions} | compact
+  let body = {"taskDefinitions": $task_definitions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -556,7 +556,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-task-defi
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeleteTaskSet
 # operationId: DeleteTaskSet
-export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-task-set DeleteTaskSet" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-task-set delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,26 +565,26 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-task-set 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
   cluster: any
   service: any
-  taskSet: any
+  task_set: any
   --force: any
 ]: any -> record<taskSet: record<id: record, taskSetArn: record, serviceArn: record, clusterArn: record, startedBy: record, externalId: record, status: record, taskDefinition: record, computedDesiredCount: record, pendingCount: record, runningCount: record, createdAt: record, updatedAt: record, launchType: record, capacityProviderStrategy: record, platformVersion: record, platformFamily: record, networkConfiguration: record<awsvpcConfiguration: record>, loadBalancers: record, serviceRegistries: record, scale: record<value: record, unit: record>, stabilityStatus: record, stabilityStatusAt: record, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeleteTaskSet")
-  let body = {cluster: $cluster, service: $service, taskSet: $taskSet, force: $force} | compact
+  let body = {"cluster": $cluster, "service": $service, "taskSet": $task_set, "force": $force} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -595,7 +595,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-delete-task-set 
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeregisterContainerInstance
 # operationId: DeregisterContainerInstance
-export def "x-amz-target-amazon-ec2-container-service-v20141113-deregister-container-instance DeregisterContainerInstance" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-deregister-container-instance post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -604,25 +604,25 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-deregister-conta
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
   --cluster: any
-  containerInstance: any
+  container_instance: any
   --force: any
 ]: any -> record<containerInstance: record<containerInstanceArn: record, ec2InstanceId: record, capacityProviderName: record, version: record, versionInfo: record<agentVersion: record, agentHash: record, dockerVersion: record>, remainingResources: record, registeredResources: record, status: record, statusReason: record, agentConnected: record, runningTasksCount: record, pendingTasksCount: record, agentUpdateStatus: record, attributes: record, registeredAt: record, attachments: record, tags: record, healthStatus: record<overallStatus: record, details: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeregisterContainerInstance")
-  let body = {cluster: $cluster, containerInstance: $containerInstance, force: $force} | compact
+  let body = {"cluster": $cluster, "containerInstance": $container_instance, "force": $force} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -633,7 +633,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-deregister-conta
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeregisterTaskDefinition
 # operationId: DeregisterTaskDefinition
-export def "x-amz-target-amazon-ec2-container-service-v20141113-deregister-task-definition DeregisterTaskDefinition" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-deregister-task-definition post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -642,23 +642,23 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-deregister-task-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  taskDefinition: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  task_definition: any
 ]: any -> record<taskDefinition: record<taskDefinitionArn: record, containerDefinitions: record, family: record, taskRoleArn: record, executionRoleArn: record, networkMode: record, revision: record, volumes: record, status: record, requiresAttributes: record, placementConstraints: record, compatibilities: record, runtimePlatform: record<cpuArchitecture: record, operatingSystemFamily: record>, requiresCompatibilities: record, cpu: record, memory: record, inferenceAccelerators: record, pidMode: record, ipcMode: record, proxyConfiguration: record<type: record, containerName: record, properties: any>, registeredAt: record, deregisteredAt: record, registeredBy: record, ephemeralStorage: record<sizeInGiB: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DeregisterTaskDefinition")
-  let body = {taskDefinition: $taskDefinition} | compact
+  let body = {"taskDefinition": $task_definition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -669,7 +669,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-deregister-task-
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DescribeCapacityProviders
 # operationId: DescribeCapacityProviders
-export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-capacity-providers DescribeCapacityProviders" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-capacity-providers post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -678,26 +678,26 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-capacit
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  --capacityProviders: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  --capacity-providers: any
   --include: any
-  --maxResults: any
-  --nextToken: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<capacityProviders: record, failures: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DescribeCapacityProviders")
-  let body = {capacityProviders: $capacityProviders, include: $include, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"capacityProviders": $capacity_providers, "include": $include, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -708,7 +708,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-capacit
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DescribeClusters
 # operationId: DescribeClusters
-export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-clusters DescribeClusters" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-clusters post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -717,14 +717,14 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-cluster
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
   --clusters: any
   --include: any
 ]: any -> record<clusters: record, failures: record> {
@@ -732,9 +732,9 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-cluster
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DescribeClusters")
-  let body = {clusters: $clusters, include: $include} | compact
+  let body = {"clusters": $clusters, "include": $include} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -745,7 +745,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-cluster
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DescribeContainerInstances
 # operationId: DescribeContainerInstances
-export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-container-instances DescribeContainerInstances" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-container-instances post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -754,25 +754,25 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-contain
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
   --cluster: any
-  containerInstances: any
+  container_instances: any
   --include: any
 ]: any -> record<containerInstances: record, failures: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DescribeContainerInstances")
-  let body = {cluster: $cluster, containerInstances: $containerInstances, include: $include} | compact
+  let body = {"cluster": $cluster, "containerInstances": $container_instances, "include": $include} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -783,7 +783,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-contain
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DescribeServices
 # operationId: DescribeServices
-export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-services DescribeServices" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-services post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -792,14 +792,14 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-service
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
   --cluster: any
   services: any
   --include: any
@@ -808,9 +808,9 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-service
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DescribeServices")
-  let body = {cluster: $cluster, services: $services, include: $include} | compact
+  let body = {"cluster": $cluster, "services": $services, "include": $include} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -821,7 +821,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-service
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DescribeTaskDefinition
 # operationId: DescribeTaskDefinition
-export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-task-definition DescribeTaskDefinition" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-task-definition post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,24 +830,24 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-task-de
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  taskDefinition: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  task_definition: any
   --include: any
 ]: any -> record<taskDefinition: record<taskDefinitionArn: record, containerDefinitions: record, family: record, taskRoleArn: record, executionRoleArn: record, networkMode: record, revision: record, volumes: record, status: record, requiresAttributes: record, placementConstraints: record, compatibilities: record, runtimePlatform: record<cpuArchitecture: record, operatingSystemFamily: record>, requiresCompatibilities: record, cpu: record, memory: record, inferenceAccelerators: record, pidMode: record, ipcMode: record, proxyConfiguration: record<type: record, containerName: record, properties: any>, registeredAt: record, deregisteredAt: record, registeredBy: record, ephemeralStorage: record<sizeInGiB: record>>, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DescribeTaskDefinition")
-  let body = {taskDefinition: $taskDefinition, include: $include} | compact
+  let body = {"taskDefinition": $task_definition, "include": $include} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -858,7 +858,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-task-de
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DescribeTaskSets
 # operationId: DescribeTaskSets
-export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-task-sets DescribeTaskSets" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-task-sets post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -867,26 +867,26 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-task-se
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
   cluster: any
   service: any
-  --taskSets: any
+  --task-sets: any
   --include: any
 ]: any -> record<taskSets: record, failures: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DescribeTaskSets")
-  let body = {cluster: $cluster, service: $service, taskSets: $taskSets, include: $include} | compact
+  let body = {"cluster": $cluster, "service": $service, "taskSets": $task_sets, "include": $include} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -897,7 +897,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-task-se
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DescribeTasks
 # operationId: DescribeTasks
-export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-tasks DescribeTasks" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-tasks post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -906,14 +906,14 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-tasks D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
   --cluster: any
   tasks: any
   --include: any
@@ -922,9 +922,9 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-tasks D
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DescribeTasks")
-  let body = {cluster: $cluster, tasks: $tasks, include: $include} | compact
+  let body = {"cluster": $cluster, "tasks": $tasks, "include": $include} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -935,7 +935,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-describe-tasks D
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DiscoverPollEndpoint
 # operationId: DiscoverPollEndpoint
-export def "x-amz-target-amazon-ec2-container-service-v20141113-discover-poll-endpoint DiscoverPollEndpoint" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-discover-poll-endpoint post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -944,24 +944,24 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-discover-poll-en
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  --containerInstance: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  --container-instance: any
   --cluster: any
 ]: any -> record<endpoint: record, telemetryEndpoint: record, serviceConnectEndpoint: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.DiscoverPollEndpoint")
-  let body = {containerInstance: $containerInstance, cluster: $cluster} | compact
+  let body = {"containerInstance": $container_instance, "cluster": $cluster} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -972,7 +972,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-discover-poll-en
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ExecuteCommand
 # operationId: ExecuteCommand
-export def "x-amz-target-amazon-ec2-container-service-v20141113-execute-command ExecuteCommand" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-execute-command exec-ute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -981,14 +981,14 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-execute-command 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
   --cluster: any
   --container: any
   command: any
@@ -999,9 +999,9 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-execute-command 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ExecuteCommand")
-  let body = {cluster: $cluster, container: $container, command: $command, interactive: $interactive, task: $task} | compact
+  let body = {"cluster": $cluster, "container": $container, "command": $command, "interactive": $interactive, "task": $task} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1012,7 +1012,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-execute-command 
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.GetTaskProtection
 # operationId: GetTaskProtection
-export def "x-amz-target-amazon-ec2-container-service-v20141113-get-task-protection GetTaskProtection" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-get-task-protection get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1021,14 +1021,14 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-get-task-protect
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
   cluster: any
   --tasks: any
 ]: any -> record<protectedTasks: record, failures: record> {
@@ -1036,9 +1036,9 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-get-task-protect
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.GetTaskProtection")
-  let body = {cluster: $cluster, tasks: $tasks} | compact
+  let body = {"cluster": $cluster, "tasks": $tasks} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1049,7 +1049,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-get-task-protect
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListAccountSettings
 # operationId: ListAccountSettings
-export def "x-amz-target-amazon-ec2-container-service-v20141113-list-account-settings ListAccountSettings" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-list-account-settings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1058,31 +1058,31 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-account-set
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
   --name: any
   --value: any
-  --principalArn: any
-  --effectiveSettings: any
-  --nextToken: any
-  --maxResults: any
+  --principal-arn: any
+  --effective-settings: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<settings: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListAccountSettings" $qp)
-  let body = {name: $name, value: $value, principalArn: $principalArn, effectiveSettings: $effectiveSettings, nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"name": $name, "value": $value, "principalArn": $principal_arn, "effectiveSettings": $effective_settings, "nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1093,7 +1093,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-account-set
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListAttributes
 # operationId: ListAttributes
-export def "x-amz-target-amazon-ec2-container-service-v20141113-list-attributes ListAttributes" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-list-attributes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1102,31 +1102,31 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-attributes 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
   --cluster: any
-  targetType: any
-  --attributeName: any
-  --attributeValue: any
-  --nextToken: any
-  --maxResults: any
+  target_type: any
+  --attribute-name: any
+  --attribute-value: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<attributes: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListAttributes" $qp)
-  let body = {cluster: $cluster, targetType: $targetType, attributeName: $attributeName, attributeValue: $attributeValue, nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"cluster": $cluster, "targetType": $target_type, "attributeName": $attribute_name, "attributeValue": $attribute_value, "nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1137,7 +1137,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-attributes 
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListClusters
 # operationId: ListClusters
-export def "x-amz-target-amazon-ec2-container-service-v20141113-list-clusters ListClusters" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-list-clusters list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1146,27 +1146,27 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-clusters Li
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  --nextToken: any
-  --maxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  --next-token: any
+  --max-results: any
 ]: any -> record<clusterArns: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListClusters" $qp)
-  let body = {nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1177,7 +1177,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-clusters Li
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListContainerInstances
 # operationId: ListContainerInstances
-export def "x-amz-target-amazon-ec2-container-service-v20141113-list-container-instances ListContainerInstances" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-list-container-instances list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1186,30 +1186,30 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-container-i
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
   --cluster: any
   --filter: any
-  --nextToken: any
-  --maxResults: any
+  --next-token: any
+  --max-results: any
   --status: any
 ]: any -> record<containerInstanceArns: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListContainerInstances" $qp)
-  let body = {cluster: $cluster, filter: $filter, nextToken: $nextToken, maxResults: $maxResults, status: $status} | compact
+  let body = {"cluster": $cluster, "filter": $filter, "nextToken": $next_token, "maxResults": $max_results, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1220,7 +1220,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-container-i
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListServices
 # operationId: ListServices
-export def "x-amz-target-amazon-ec2-container-service-v20141113-list-services ListServices" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-list-services list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1229,30 +1229,30 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-services Li
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
   --cluster: any
-  --nextToken: any
-  --maxResults: any
-  --launchType: any
-  --schedulingStrategy: any
+  --next-token: any
+  --max-results: any
+  --launch-type: any
+  --scheduling-strategy: any
 ]: any -> record<serviceArns: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListServices" $qp)
-  let body = {cluster: $cluster, nextToken: $nextToken, maxResults: $maxResults, launchType: $launchType, schedulingStrategy: $schedulingStrategy} | compact
+  let body = {"cluster": $cluster, "nextToken": $next_token, "maxResults": $max_results, "launchType": $launch_type, "schedulingStrategy": $scheduling_strategy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1263,7 +1263,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-services Li
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListServicesByNamespace
 # operationId: ListServicesByNamespace
-export def "x-amz-target-amazon-ec2-container-service-v20141113-list-services-by-namespace ListServicesByNamespace" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-list-services-by-namespace list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1272,28 +1272,28 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-services-by
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
   namespace: any
-  --nextToken: any
-  --maxResults: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<serviceArns: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListServicesByNamespace" $qp)
-  let body = {namespace: $namespace, nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"namespace": $namespace, "nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1304,7 +1304,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-services-by
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-amazon-ec2-container-service-v20141113-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1313,23 +1313,23 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-tags-for-re
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  resourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  resource_arn: any
 ]: any -> record<tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListTagsForResource")
-  let body = {resourceArn: $resourceArn} | compact
+  let body = {"resourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1340,7 +1340,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-tags-for-re
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListTaskDefinitionFamilies
 # operationId: ListTaskDefinitionFamilies
-export def "x-amz-target-amazon-ec2-container-service-v20141113-list-task-definition-families ListTaskDefinitionFamilies" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-list-task-definition-families list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1349,29 +1349,29 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-task-defini
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  --familyPrefix: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  --family-prefix: any
   --status: any
-  --nextToken: any
-  --maxResults: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<families: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListTaskDefinitionFamilies" $qp)
-  let body = {familyPrefix: $familyPrefix, status: $status, nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"familyPrefix": $family_prefix, "status": $status, "nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1382,7 +1382,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-task-defini
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListTaskDefinitions
 # operationId: ListTaskDefinitions
-export def "x-amz-target-amazon-ec2-container-service-v20141113-list-task-definitions ListTaskDefinitions" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-list-task-definitions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1391,30 +1391,30 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-task-defini
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  --familyPrefix: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  --family-prefix: any
   --status: any
   --body-sort: any
-  --nextToken: any
-  --maxResults: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<taskDefinitionArns: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListTaskDefinitions" $qp)
-  let body = {familyPrefix: $familyPrefix, status: $status, sort: $body_sort, nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"familyPrefix": $family_prefix, "status": $status, "sort": $body_sort, "nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1425,7 +1425,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-task-defini
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListTasks
 # operationId: ListTasks
-export def "x-amz-target-amazon-ec2-container-service-v20141113-list-tasks ListTasks" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-list-tasks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1434,34 +1434,34 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-tasks ListT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
   --cluster: any
-  --containerInstance: any
+  --container-instance: any
   --family: any
-  --nextToken: any
-  --maxResults: any
-  --startedBy: any
-  --serviceName: any
-  --desiredStatus: any
-  --launchType: any
+  --next-token: any
+  --max-results: any
+  --started-by: any
+  --service-name: any
+  --desired-status: any
+  --launch-type: any
 ]: any -> record<taskArns: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.ListTasks" $qp)
-  let body = {cluster: $cluster, containerInstance: $containerInstance, family: $family, nextToken: $nextToken, maxResults: $maxResults, startedBy: $startedBy, serviceName: $serviceName, desiredStatus: $desiredStatus, launchType: $launchType} | compact
+  let body = {"cluster": $cluster, "containerInstance": $container_instance, "family": $family, "nextToken": $next_token, "maxResults": $max_results, "startedBy": $started_by, "serviceName": $service_name, "desiredStatus": $desired_status, "launchType": $launch_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1472,7 +1472,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-list-tasks ListT
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.PutAccountSetting
 # operationId: PutAccountSetting
-export def "x-amz-target-amazon-ec2-container-service-v20141113-put-account-setting PutAccountSetting" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-put-account-setting update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1481,25 +1481,25 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-put-account-sett
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
   name: any
   value: any
-  --principalArn: any
+  --principal-arn: any
 ]: any -> record<setting: record<name: record, value: record, principalArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.PutAccountSetting")
-  let body = {name: $name, value: $value, principalArn: $principalArn} | compact
+  let body = {"name": $name, "value": $value, "principalArn": $principal_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1510,7 +1510,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-put-account-sett
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.PutAccountSettingDefault
 # operationId: PutAccountSettingDefault
-export def "x-amz-target-amazon-ec2-container-service-v20141113-put-account-setting-default PutAccountSettingDefault" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-put-account-setting-default update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1519,14 +1519,14 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-put-account-sett
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
   name: any
   value: any
 ]: any -> record<setting: record<name: record, value: record, principalArn: record>> {
@@ -1534,9 +1534,9 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-put-account-sett
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.PutAccountSettingDefault")
-  let body = {name: $name, value: $value} | compact
+  let body = {"name": $name, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1547,7 +1547,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-put-account-sett
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.PutAttributes
 # operationId: PutAttributes
-export def "x-amz-target-amazon-ec2-container-service-v20141113-put-attributes PutAttributes" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-put-attributes update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1556,14 +1556,14 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-put-attributes P
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
   --cluster: any
   attributes: any
 ]: any -> record<attributes: record> {
@@ -1571,9 +1571,9 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-put-attributes P
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.PutAttributes")
-  let body = {cluster: $cluster, attributes: $attributes} | compact
+  let body = {"cluster": $cluster, "attributes": $attributes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1584,7 +1584,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-put-attributes P
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.PutClusterCapacityProviders
 # operationId: PutClusterCapacityProviders
-export def "x-amz-target-amazon-ec2-container-service-v20141113-put-cluster-capacity-providers PutClusterCapacityProviders" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-put-cluster-capacity-providers update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1593,25 +1593,25 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-put-cluster-capa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
   cluster: any
-  capacityProviders: any
-  defaultCapacityProviderStrategy: any
+  capacity_providers: any
+  default_capacity_provider_strategy: any
 ]: any -> record<cluster: record<clusterArn: record, clusterName: record, configuration: record<executeCommandConfiguration: record>, status: record, registeredContainerInstancesCount: record, runningTasksCount: record, pendingTasksCount: record, activeServicesCount: record, statistics: record, tags: record, settings: record, capacityProviders: record, defaultCapacityProviderStrategy: record, attachments: record, attachmentsStatus: record, serviceConnectDefaults: record<namespace: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.PutClusterCapacityProviders")
-  let body = {cluster: $cluster, capacityProviders: $capacityProviders, defaultCapacityProviderStrategy: $defaultCapacityProviderStrategy} | compact
+  let body = {"cluster": $cluster, "capacityProviders": $capacity_providers, "defaultCapacityProviderStrategy": $default_capacity_provider_strategy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1622,7 +1622,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-put-cluster-capa
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.RegisterContainerInstance
 # operationId: RegisterContainerInstance
-export def "x-amz-target-amazon-ec2-container-service-v20141113-register-container-instance RegisterContainerInstance" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-register-container-instance create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1631,31 +1631,31 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-register-contain
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
   --cluster: any
-  --instanceIdentityDocument: any
-  --instanceIdentityDocumentSignature: any
-  --totalResources: any
-  --versionInfo: any
-  --containerInstanceArn: any
+  --instance-identity-document: any
+  --instance-identity-document-signature: any
+  --total-resources: any
+  --version-info: any
+  --container-instance-arn: any
   --attributes: any
-  --platformDevices: any
+  --platform-devices: any
   --tags: any
 ]: any -> record<containerInstance: record<containerInstanceArn: record, ec2InstanceId: record, capacityProviderName: record, version: record, versionInfo: record<agentVersion: record, agentHash: record, dockerVersion: record>, remainingResources: record, registeredResources: record, status: record, statusReason: record, agentConnected: record, runningTasksCount: record, pendingTasksCount: record, agentUpdateStatus: record, attributes: record, registeredAt: record, attachments: record, tags: record, healthStatus: record<overallStatus: record, details: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.RegisterContainerInstance")
-  let body = {cluster: $cluster, instanceIdentityDocument: $instanceIdentityDocument, instanceIdentityDocumentSignature: $instanceIdentityDocumentSignature, totalResources: $totalResources, versionInfo: $versionInfo, containerInstanceArn: $containerInstanceArn, attributes: $attributes, platformDevices: $platformDevices, tags: $tags} | compact
+  let body = {"cluster": $cluster, "instanceIdentityDocument": $instance_identity_document, "instanceIdentityDocumentSignature": $instance_identity_document_signature, "totalResources": $total_resources, "versionInfo": $version_info, "containerInstanceArn": $container_instance_arn, "attributes": $attributes, "platformDevices": $platform_devices, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1666,7 +1666,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-register-contain
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.RegisterTaskDefinition
 # operationId: RegisterTaskDefinition
-export def "x-amz-target-amazon-ec2-container-service-v20141113-register-task-definition RegisterTaskDefinition" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-register-task-definition create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1675,39 +1675,39 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-register-task-de
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
   family: any
-  --taskRoleArn: any
-  --executionRoleArn: any
-  --networkMode: any
-  containerDefinitions: any
+  --task-role-arn: any
+  --execution-role-arn: any
+  --network-mode: any
+  container_definitions: any
   --volumes: any
-  --placementConstraints: any
-  --requiresCompatibilities: any
+  --placement-constraints: any
+  --requires-compatibilities: any
   --cpu: any
   --memory: any
   --tags: any
-  --pidMode: any
-  --ipcMode: any
-  --proxyConfiguration: any
-  --inferenceAccelerators: any
-  --ephemeralStorage: any
-  --runtimePlatform: any
+  --pid-mode: any
+  --ipc-mode: any
+  --proxy-configuration: any
+  --inference-accelerators: any
+  --ephemeral-storage: any
+  --runtime-platform: any
 ]: any -> record<taskDefinition: record<taskDefinitionArn: record, containerDefinitions: record, family: record, taskRoleArn: record, executionRoleArn: record, networkMode: record, revision: record, volumes: record, status: record, requiresAttributes: record, placementConstraints: record, compatibilities: record, runtimePlatform: record<cpuArchitecture: record, operatingSystemFamily: record>, requiresCompatibilities: record, cpu: record, memory: record, inferenceAccelerators: record, pidMode: record, ipcMode: record, proxyConfiguration: record<type: record, containerName: record, properties: any>, registeredAt: record, deregisteredAt: record, registeredBy: record, ephemeralStorage: record<sizeInGiB: record>>, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.RegisterTaskDefinition")
-  let body = {family: $family, taskRoleArn: $taskRoleArn, executionRoleArn: $executionRoleArn, networkMode: $networkMode, containerDefinitions: $containerDefinitions, volumes: $volumes, placementConstraints: $placementConstraints, requiresCompatibilities: $requiresCompatibilities, cpu: $cpu, memory: $memory, tags: $tags, pidMode: $pidMode, ipcMode: $ipcMode, proxyConfiguration: $proxyConfiguration, inferenceAccelerators: $inferenceAccelerators, ephemeralStorage: $ephemeralStorage, runtimePlatform: $runtimePlatform} | compact
+  let body = {"family": $family, "taskRoleArn": $task_role_arn, "executionRoleArn": $execution_role_arn, "networkMode": $network_mode, "containerDefinitions": $container_definitions, "volumes": $volumes, "placementConstraints": $placement_constraints, "requiresCompatibilities": $requires_compatibilities, "cpu": $cpu, "memory": $memory, "tags": $tags, "pidMode": $pid_mode, "ipcMode": $ipc_mode, "proxyConfiguration": $proxy_configuration, "inferenceAccelerators": $inference_accelerators, "ephemeralStorage": $ephemeral_storage, "runtimePlatform": $runtime_platform} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1718,7 +1718,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-register-task-de
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.RunTask
 # operationId: RunTask
-export def "x-amz-target-amazon-ec2-container-service-v20141113-run-task RunTask" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-run-task post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1727,39 +1727,39 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-run-task RunTask
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  --capacityProviderStrategy: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  --capacity-provider-strategy: any
   --cluster: any
   --count: any
-  --enableECSManagedTags: any
-  --enableExecuteCommand: any
+  --enable-ecs-managed-tags: any
+  --enable-execute-command: any
   --group: any
-  --launchType: any
-  --networkConfiguration: any
+  --launch-type: any
+  --network-configuration: any
   --overrides: any
-  --placementConstraints: any
-  --placementStrategy: any
-  --platformVersion: any
-  --propagateTags: any
-  --referenceId: any
-  --startedBy: any
+  --placement-constraints: any
+  --placement-strategy: any
+  --platform-version: any
+  --propagate-tags: any
+  --reference-id: any
+  --started-by: any
   --tags: any
-  taskDefinition: any
+  task_definition: any
 ]: any -> record<tasks: record, failures: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.RunTask")
-  let body = {capacityProviderStrategy: $capacityProviderStrategy, cluster: $cluster, count: $count, enableECSManagedTags: $enableECSManagedTags, enableExecuteCommand: $enableExecuteCommand, group: $group, launchType: $launchType, networkConfiguration: $networkConfiguration, overrides: $overrides, placementConstraints: $placementConstraints, placementStrategy: $placementStrategy, platformVersion: $platformVersion, propagateTags: $propagateTags, referenceId: $referenceId, startedBy: $startedBy, tags: $tags, taskDefinition: $taskDefinition} | compact
+  let body = {"capacityProviderStrategy": $capacity_provider_strategy, "cluster": $cluster, "count": $count, "enableECSManagedTags": $enable_ecs_managed_tags, "enableExecuteCommand": $enable_execute_command, "group": $group, "launchType": $launch_type, "networkConfiguration": $network_configuration, "overrides": $overrides, "placementConstraints": $placement_constraints, "placementStrategy": $placement_strategy, "platformVersion": $platform_version, "propagateTags": $propagate_tags, "referenceId": $reference_id, "startedBy": $started_by, "tags": $tags, "taskDefinition": $task_definition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1770,7 +1770,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-run-task RunTask
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.StartTask
 # operationId: StartTask
-export def "x-amz-target-amazon-ec2-container-service-v20141113-start-task StartTask" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-start-task start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1779,34 +1779,34 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-start-task Start
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
   --cluster: any
-  containerInstances: any
-  --enableECSManagedTags: any
-  --enableExecuteCommand: any
+  container_instances: any
+  --enable-ecs-managed-tags: any
+  --enable-execute-command: any
   --group: any
-  --networkConfiguration: any
+  --network-configuration: any
   --overrides: any
-  --propagateTags: any
-  --referenceId: any
-  --startedBy: any
+  --propagate-tags: any
+  --reference-id: any
+  --started-by: any
   --tags: any
-  taskDefinition: any
+  task_definition: any
 ]: any -> record<tasks: record, failures: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.StartTask")
-  let body = {cluster: $cluster, containerInstances: $containerInstances, enableECSManagedTags: $enableECSManagedTags, enableExecuteCommand: $enableExecuteCommand, group: $group, networkConfiguration: $networkConfiguration, overrides: $overrides, propagateTags: $propagateTags, referenceId: $referenceId, startedBy: $startedBy, tags: $tags, taskDefinition: $taskDefinition} | compact
+  let body = {"cluster": $cluster, "containerInstances": $container_instances, "enableECSManagedTags": $enable_ecs_managed_tags, "enableExecuteCommand": $enable_execute_command, "group": $group, "networkConfiguration": $network_configuration, "overrides": $overrides, "propagateTags": $propagate_tags, "referenceId": $reference_id, "startedBy": $started_by, "tags": $tags, "taskDefinition": $task_definition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1817,7 +1817,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-start-task Start
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.StopTask
 # operationId: StopTask
-export def "x-amz-target-amazon-ec2-container-service-v20141113-stop-task StopTask" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-stop-task stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1826,14 +1826,14 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-stop-task StopTa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
   --cluster: any
   task: any
   --reason: any
@@ -1842,9 +1842,9 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-stop-task StopTa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.StopTask")
-  let body = {cluster: $cluster, task: $task, reason: $reason} | compact
+  let body = {"cluster": $cluster, "task": $task, "reason": $reason} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1855,7 +1855,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-stop-task StopTa
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.SubmitAttachmentStateChanges
 # operationId: SubmitAttachmentStateChanges
-export def "x-amz-target-amazon-ec2-container-service-v20141113-submit-attachment-state-changes SubmitAttachmentStateChanges" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-submit-attachment-state-changes submit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1864,14 +1864,14 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-submit-attachmen
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
   --cluster: any
   attachments: any
 ]: any -> record<acknowledgment: record> {
@@ -1879,9 +1879,9 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-submit-attachmen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.SubmitAttachmentStateChanges")
-  let body = {cluster: $cluster, attachments: $attachments} | compact
+  let body = {"cluster": $cluster, "attachments": $attachments} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1892,7 +1892,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-submit-attachmen
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.SubmitContainerStateChange
 # operationId: SubmitContainerStateChange
-export def "x-amz-target-amazon-ec2-container-service-v20141113-submit-container-state-change SubmitContainerStateChange" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-submit-container-state-change submit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1901,30 +1901,30 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-submit-container
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
   --cluster: any
   --task: any
-  --containerName: any
-  --runtimeId: any
+  --container-name: any
+  --runtime-id: any
   --status: any
-  --exitCode: any
+  --exit-code: any
   --reason: any
-  --networkBindings: any
+  --network-bindings: any
 ]: any -> record<acknowledgment: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.SubmitContainerStateChange")
-  let body = {cluster: $cluster, task: $task, containerName: $containerName, runtimeId: $runtimeId, status: $status, exitCode: $exitCode, reason: $reason, networkBindings: $networkBindings} | compact
+  let body = {"cluster": $cluster, "task": $task, "containerName": $container_name, "runtimeId": $runtime_id, "status": $status, "exitCode": $exit_code, "reason": $reason, "networkBindings": $network_bindings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1935,7 +1935,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-submit-container
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.SubmitTaskStateChange
 # operationId: SubmitTaskStateChange
-export def "x-amz-target-amazon-ec2-container-service-v20141113-submit-task-state-change SubmitTaskStateChange" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-submit-task-state-change submit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1944,32 +1944,32 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-submit-task-stat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
   --cluster: any
   --task: any
   --status: any
   --reason: any
   --containers: any
   --attachments: any
-  --managedAgents: any
-  --pullStartedAt: any
-  --pullStoppedAt: any
-  --executionStoppedAt: any
+  --managed-agents: any
+  --pull-started-at: any
+  --pull-stopped-at: any
+  --execution-stopped-at: any
 ]: any -> record<acknowledgment: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.SubmitTaskStateChange")
-  let body = {cluster: $cluster, task: $task, status: $status, reason: $reason, containers: $containers, attachments: $attachments, managedAgents: $managedAgents, pullStartedAt: $pullStartedAt, pullStoppedAt: $pullStoppedAt, executionStoppedAt: $executionStoppedAt} | compact
+  let body = {"cluster": $cluster, "task": $task, "status": $status, "reason": $reason, "containers": $containers, "attachments": $attachments, "managedAgents": $managed_agents, "pullStartedAt": $pull_started_at, "pullStoppedAt": $pull_stopped_at, "executionStoppedAt": $execution_stopped_at} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1980,7 +1980,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-submit-task-stat
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.TagResource
 # operationId: TagResource
-export def "x-amz-target-amazon-ec2-container-service-v20141113-tag-resource TagResource" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1989,24 +1989,24 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-tag-resource Tag
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  resourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  resource_arn: any
   tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.TagResource")
-  let body = {resourceArn: $resourceArn, tags: $tags} | compact
+  let body = {"resourceArn": $resource_arn, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2017,7 +2017,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-tag-resource Tag
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-amazon-ec2-container-service-v20141113-untag-resource UntagResource" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2026,24 +2026,24 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-untag-resource U
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  resourceArn: any
-  tagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UntagResource")
-  let body = {resourceArn: $resourceArn, tagKeys: $tagKeys} | compact
+  let body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2054,7 +2054,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-untag-resource U
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateCapacityProvider
 # operationId: UpdateCapacityProvider
-export def "x-amz-target-amazon-ec2-container-service-v20141113-update-capacity-provider UpdateCapacityProvider" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-update-capacity-provider update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2063,24 +2063,24 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-capacity-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
   name: any
-  autoScalingGroupProvider: any
+  auto_scaling_group_provider: any
 ]: any -> record<capacityProvider: record<capacityProviderArn: record, name: record, status: record, autoScalingGroupProvider: record<autoScalingGroupArn: record, managedScaling: record, managedTerminationProtection: record>, updateStatus: record, updateStatusReason: record, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateCapacityProvider")
-  let body = {name: $name, autoScalingGroupProvider: $autoScalingGroupProvider} | compact
+  let body = {"name": $name, "autoScalingGroupProvider": $auto_scaling_group_provider} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2091,7 +2091,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-capacity-
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateCluster
 # operationId: UpdateCluster
-export def "x-amz-target-amazon-ec2-container-service-v20141113-update-cluster UpdateCluster" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-update-cluster update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2100,26 +2100,26 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-cluster U
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
   cluster: any
   --settings: any
   --configuration: any
-  --serviceConnectDefaults: any
+  --service-connect-defaults: any
 ]: any -> record<cluster: record<clusterArn: record, clusterName: record, configuration: record<executeCommandConfiguration: record>, status: record, registeredContainerInstancesCount: record, runningTasksCount: record, pendingTasksCount: record, activeServicesCount: record, statistics: record, tags: record, settings: record, capacityProviders: record, defaultCapacityProviderStrategy: record, attachments: record, attachmentsStatus: record, serviceConnectDefaults: record<namespace: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateCluster")
-  let body = {cluster: $cluster, settings: $settings, configuration: $configuration, serviceConnectDefaults: $serviceConnectDefaults} | compact
+  let body = {"cluster": $cluster, "settings": $settings, "configuration": $configuration, "serviceConnectDefaults": $service_connect_defaults} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2130,7 +2130,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-cluster U
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateClusterSettings
 # operationId: UpdateClusterSettings
-export def "x-amz-target-amazon-ec2-container-service-v20141113-update-cluster-settings UpdateClusterSettings" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-update-cluster-settings update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2139,14 +2139,14 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-cluster-s
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-49
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-49
   cluster: any
   settings: any
 ]: any -> record<cluster: record<clusterArn: record, clusterName: record, configuration: record<executeCommandConfiguration: record>, status: record, registeredContainerInstancesCount: record, runningTasksCount: record, pendingTasksCount: record, activeServicesCount: record, statistics: record, tags: record, settings: record, capacityProviders: record, defaultCapacityProviderStrategy: record, attachments: record, attachmentsStatus: record, serviceConnectDefaults: record<namespace: record>>> {
@@ -2154,9 +2154,9 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-cluster-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateClusterSettings")
-  let body = {cluster: $cluster, settings: $settings} | compact
+  let body = {"cluster": $cluster, "settings": $settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2167,7 +2167,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-cluster-s
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateContainerAgent
 # operationId: UpdateContainerAgent
-export def "x-amz-target-amazon-ec2-container-service-v20141113-update-container-agent UpdateContainerAgent" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-update-container-agent update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2176,24 +2176,24 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-container
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-50
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-50
   --cluster: any
-  containerInstance: any
+  container_instance: any
 ]: any -> record<containerInstance: record<containerInstanceArn: record, ec2InstanceId: record, capacityProviderName: record, version: record, versionInfo: record<agentVersion: record, agentHash: record, dockerVersion: record>, remainingResources: record, registeredResources: record, status: record, statusReason: record, agentConnected: record, runningTasksCount: record, pendingTasksCount: record, agentUpdateStatus: record, attributes: record, registeredAt: record, attachments: record, tags: record, healthStatus: record<overallStatus: record, details: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateContainerAgent")
-  let body = {cluster: $cluster, containerInstance: $containerInstance} | compact
+  let body = {"cluster": $cluster, "containerInstance": $container_instance} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2204,7 +2204,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-container
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateContainerInstancesState
 # operationId: UpdateContainerInstancesState
-export def "x-amz-target-amazon-ec2-container-service-v20141113-update-container-instances-state UpdateContainerInstancesState" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-update-container-instances-state update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2213,25 +2213,25 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-container
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-51
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-51
   --cluster: any
-  containerInstances: any
+  container_instances: any
   status: any
 ]: any -> record<containerInstances: record, failures: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateContainerInstancesState")
-  let body = {cluster: $cluster, containerInstances: $containerInstances, status: $status} | compact
+  let body = {"cluster": $cluster, "containerInstances": $container_instances, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2242,7 +2242,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-container
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateService
 # operationId: UpdateService
-export def "x-amz-target-amazon-ec2-container-service-v20141113-update-service UpdateService" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-update-service update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2251,40 +2251,40 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-service U
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-52
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-52
   --cluster: any
   service: any
-  --desiredCount: any
-  --taskDefinition: any
-  --capacityProviderStrategy: any
-  --deploymentConfiguration: any
-  --networkConfiguration: any
-  --placementConstraints: any
-  --placementStrategy: any
-  --platformVersion: any
-  --forceNewDeployment: any
-  --healthCheckGracePeriodSeconds: any
-  --enableExecuteCommand: any
-  --enableECSManagedTags: any
-  --loadBalancers: any
-  --propagateTags: any
-  --serviceRegistries: any
-  --serviceConnectConfiguration: any
+  --desired-count: any
+  --task-definition: any
+  --capacity-provider-strategy: any
+  --deployment-configuration: any
+  --network-configuration: any
+  --placement-constraints: any
+  --placement-strategy: any
+  --platform-version: any
+  --force-new-deployment: any
+  --health-check-grace-period-seconds: any
+  --enable-execute-command: any
+  --enable-ecs-managed-tags: any
+  --load-balancers: any
+  --propagate-tags: any
+  --service-registries: any
+  --service-connect-configuration: any
 ]: any -> record<service: record<serviceArn: record, serviceName: record, clusterArn: record, loadBalancers: record, serviceRegistries: record, status: record, desiredCount: record, runningCount: record, pendingCount: record, launchType: record, capacityProviderStrategy: record, platformVersion: record, platformFamily: record, taskDefinition: record, deploymentConfiguration: record<deploymentCircuitBreaker: record, maximumPercent: record, minimumHealthyPercent: record, alarms: record>, taskSets: record, deployments: record, roleArn: record, events: record, createdAt: record, placementConstraints: record, placementStrategy: record, networkConfiguration: record<awsvpcConfiguration: record>, healthCheckGracePeriodSeconds: record, schedulingStrategy: record, deploymentController: record<type: record>, tags: record, createdBy: record, enableECSManagedTags: record, propagateTags: record, enableExecuteCommand: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateService")
-  let body = {cluster: $cluster, service: $service, desiredCount: $desiredCount, taskDefinition: $taskDefinition, capacityProviderStrategy: $capacityProviderStrategy, deploymentConfiguration: $deploymentConfiguration, networkConfiguration: $networkConfiguration, placementConstraints: $placementConstraints, placementStrategy: $placementStrategy, platformVersion: $platformVersion, forceNewDeployment: $forceNewDeployment, healthCheckGracePeriodSeconds: $healthCheckGracePeriodSeconds, enableExecuteCommand: $enableExecuteCommand, enableECSManagedTags: $enableECSManagedTags, loadBalancers: $loadBalancers, propagateTags: $propagateTags, serviceRegistries: $serviceRegistries, serviceConnectConfiguration: $serviceConnectConfiguration} | compact
+  let body = {"cluster": $cluster, "service": $service, "desiredCount": $desired_count, "taskDefinition": $task_definition, "capacityProviderStrategy": $capacity_provider_strategy, "deploymentConfiguration": $deployment_configuration, "networkConfiguration": $network_configuration, "placementConstraints": $placement_constraints, "placementStrategy": $placement_strategy, "platformVersion": $platform_version, "forceNewDeployment": $force_new_deployment, "healthCheckGracePeriodSeconds": $health_check_grace_period_seconds, "enableExecuteCommand": $enable_execute_command, "enableECSManagedTags": $enable_ecs_managed_tags, "loadBalancers": $load_balancers, "propagateTags": $propagate_tags, "serviceRegistries": $service_registries, "serviceConnectConfiguration": $service_connect_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2295,7 +2295,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-service U
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateServicePrimaryTaskSet
 # operationId: UpdateServicePrimaryTaskSet
-export def "x-amz-target-amazon-ec2-container-service-v20141113-update-service-primary-task-set UpdateServicePrimaryTaskSet" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-update-service-primary-task-set update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2304,25 +2304,25 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-service-p
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-53
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-53
   cluster: any
   service: any
-  primaryTaskSet: any
+  primary_task_set: any
 ]: any -> record<taskSet: record<id: record, taskSetArn: record, serviceArn: record, clusterArn: record, startedBy: record, externalId: record, status: record, taskDefinition: record, computedDesiredCount: record, pendingCount: record, runningCount: record, createdAt: record, updatedAt: record, launchType: record, capacityProviderStrategy: record, platformVersion: record, platformFamily: record, networkConfiguration: record<awsvpcConfiguration: record>, loadBalancers: record, serviceRegistries: record, scale: record<value: record, unit: record>, stabilityStatus: record, stabilityStatusAt: record, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateServicePrimaryTaskSet")
-  let body = {cluster: $cluster, service: $service, primaryTaskSet: $primaryTaskSet} | compact
+  let body = {"cluster": $cluster, "service": $service, "primaryTaskSet": $primary_task_set} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2333,7 +2333,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-service-p
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateTaskProtection
 # operationId: UpdateTaskProtection
-export def "x-amz-target-amazon-ec2-container-service-v20141113-update-task-protection UpdateTaskProtection" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-update-task-protection update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2342,26 +2342,26 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-task-prot
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-54
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-54
   cluster: any
   tasks: any
-  protectionEnabled: any
-  --expiresInMinutes: any
+  protection_enabled: any
+  --expires-in-minutes: any
 ]: any -> record<protectedTasks: record, failures: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateTaskProtection")
-  let body = {cluster: $cluster, tasks: $tasks, protectionEnabled: $protectionEnabled, expiresInMinutes: $expiresInMinutes} | compact
+  let body = {"cluster": $cluster, "tasks": $tasks, "protectionEnabled": $protection_enabled, "expiresInMinutes": $expires_in_minutes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2372,7 +2372,7 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-task-prot
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateTaskSet
 # operationId: UpdateTaskSet
-export def "x-amz-target-amazon-ec2-container-service-v20141113-update-task-set UpdateTaskSet" [
+export def "x-amz-target-amazon-ec2-container-service-v20141113-update-task-set update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2381,26 +2381,26 @@ export def "x-amz-target-amazon-ec2-container-service-v20141113-update-task-set 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-55
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-55
   cluster: any
   service: any
-  taskSet: any
+  task_set: any
   scale: any
 ]: any -> record<taskSet: record<id: record, taskSetArn: record, serviceArn: record, clusterArn: record, startedBy: record, externalId: record, status: record, taskDefinition: record, computedDesiredCount: record, pendingCount: record, runningCount: record, createdAt: record, updatedAt: record, launchType: record, capacityProviderStrategy: record, platformVersion: record, platformFamily: record, networkConfiguration: record<awsvpcConfiguration: record>, loadBalancers: record, serviceRegistries: record, scale: record<value: record, unit: record>, stabilityStatus: record, stabilityStatusAt: record, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerServiceV20141113.UpdateTaskSet")
-  let body = {cluster: $cluster, service: $service, taskSet: $taskSet, scale: $scale} | compact
+  let body = {"cluster": $cluster, "service": $service, "taskSet": $task_set, "scale": $scale} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

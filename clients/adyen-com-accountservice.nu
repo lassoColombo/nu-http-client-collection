@@ -67,11 +67,11 @@ def base-url-completer [] { ["https://cal-test.adyen.com/cal/services/Account/v6
 def auth-scheme-completer [] { ["x-api-key" "basic"] }
 
 # Completers for enum parameters
-def accountStateType-completer [] { ["LimitedPayout" "LimitedProcessing" "LimitlessPayout" "LimitlessProcessing" "Payout" "Processing"] }
-def payoutSchedule-completer [] { ["BIWEEKLY_ON_1ST_AND_15TH_AT_MIDNIGHT" "DAILY" "DAILY_AU" "DAILY_EU" "DAILY_SG" "DAILY_US" "HOLD" "MONTHLY" "WEEKLY" "WEEKLY_MON_TO_FRI_AU" "WEEKLY_MON_TO_FRI_EU" "WEEKLY_MON_TO_FRI_US" "WEEKLY_ON_TUE_FRI_MIDNIGHT" "WEEKLY_SUN_TO_THU_AU" "WEEKLY_SUN_TO_THU_US"] }
-def payoutSpeed-completer [] { ["INSTANT" "SAME_DAY" "STANDARD"] }
-def legalEntity-completer [] { ["Business" "Individual" "NonProfit" "Partnership" "PublicCompany"] }
-def stateType-completer [] { ["LimitedPayout" "LimitedProcessing" "LimitlessPayout" "LimitlessProcessing" "Payout" "Processing"] }
+def account-state-type-completer [] { ["LimitedPayout" "LimitedProcessing" "LimitlessPayout" "LimitlessProcessing" "Payout" "Processing"] }
+def payout-schedule-completer [] { ["BIWEEKLY_ON_1ST_AND_15TH_AT_MIDNIGHT" "DAILY" "DAILY_AU" "DAILY_EU" "DAILY_SG" "DAILY_US" "HOLD" "MONTHLY" "WEEKLY" "WEEKLY_MON_TO_FRI_AU" "WEEKLY_MON_TO_FRI_EU" "WEEKLY_MON_TO_FRI_US" "WEEKLY_ON_TUE_FRI_MIDNIGHT" "WEEKLY_SUN_TO_THU_AU" "WEEKLY_SUN_TO_THU_US"] }
+def payout-speed-completer [] { ["INSTANT" "SAME_DAY" "STANDARD"] }
+def legal-entity-completer [] { ["Business" "Individual" "NonProfit" "Partnership" "PublicCompany"] }
+def state-type-completer [] { ["LimitedPayout" "LimitedProcessing" "LimitlessPayout" "LimitlessProcessing" "Payout" "Processing"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -109,15 +109,15 @@ export def "check-account-holder post-checkAccountHolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of the account holder to verify.
-  accountStateType: string@accountStateType-completer # The state required for the account holder. > Permitted values: `Processing`, `Payout`.
+  account_holder_code: string # The code of the account holder to verify.
+  account_state_type: string@account-state-type-completer # The state required for the account holder. > Permitted values: `Processing`, `Payout`.
   tier: int # The tier required for the account holder. (format: int32)
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/checkAccountHolder")
-  let body = {accountHolderCode: $accountHolderCode, accountStateType: $accountStateType, tier: $tier} | compact
+  let body = {"accountHolderCode": $account_holder_code, "accountStateType": $account_state_type, "tier": $tier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -137,13 +137,13 @@ export def "close-account post-closeAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountCode: string # The code of account to be closed.
+  account_code: string # The code of account to be closed.
 ]: any -> record<accountCode: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/closeAccount")
-  let body = {accountCode: $accountCode} | compact
+  let body = {"accountCode": $account_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -163,13 +163,13 @@ export def "close-account-holder post-closeAccountHolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of the Account Holder to be closed.
+  account_holder_code: string # The code of the Account Holder to be closed.
 ]: any -> record<accountHolderStatus: record<events: list<record>, payoutState: record<allowPayout: bool, disableReason: string, disabled: bool, notAllowedReason: string, payoutLimit: record, tierNumber: int>, processingState: record<disableReason: string, disabled: bool, processedFrom: record, processedTo: record, tierNumber: int>, status: string, statusReason: string>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/closeAccountHolder")
-  let body = {accountHolderCode: $accountHolderCode} | compact
+  let body = {"accountHolderCode": $account_holder_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -189,14 +189,14 @@ export def "close-stores post-closeStores" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of the account holder.
+  account_holder_code: string # The code of the account holder.
   stores: list # List of stores to be closed.
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/closeStores")
-  let body = {accountHolderCode: $accountHolderCode, stores: $stores} | compact
+  let body = {"accountHolderCode": $account_holder_code, "stores": $stores} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -216,20 +216,20 @@ export def "create-account post-createAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of Account Holder under which to create the account.
-  --bankAccountUUID: string # The bankAccountUUID of the bank account held by the account holder to couple the account with. Scheduled payouts in currencies matching the currency of this bank account will be sent to this bank account. Payouts in different currencies will be sent to a matching bank account of the account holder.
+  account_holder_code: string # The code of Account Holder under which to create the account.
+  --bank-account-uuid: string # The bankAccountUUID of the bank account held by the account holder to couple the account with. Scheduled payouts in currencies matching the currency of this bank account will be sent to this bank account. Payouts in different currencies will be sent to a matching bank account of the account holder.
   --description: string # A description of the account, maximum 256 characters. You can use alphanumeric characters (A-Z, a-z, 0-9), white spaces, and underscores `_`.
   --metadata: record # A set of key and value pairs for general use by the merchant. The keys do not have specific names and may be used for storing miscellaneous data as desired. > Note that during an update of metadata, the omission of existing key-value pairs will result in the deletion of those key-value pairs.
-  --payoutMethodCode: string # The payout method code held by the account holder to couple the account with. Scheduled card payouts will be sent using this payout method code.
-  --payoutSchedule: string@payoutSchedule-completer # The payout schedule of the prospective account. >Permitted values: `DEFAULT`, `HOLD`, `DAILY`, `WEEKLY`, `MONTHLY`.
-  --payoutScheduleReason: string # The reason for the payout schedule choice. >Required if the payoutSchedule is `HOLD`.
-  --payoutSpeed: string@payoutSpeed-completer # Speed with which payouts for this account are processed. Permitted values: `STANDARD`, `SAME_DAY`. (default: STANDARD)
+  --payout-method-code: string # The payout method code held by the account holder to couple the account with. Scheduled card payouts will be sent using this payout method code.
+  --payout-schedule: string@payout-schedule-completer # The payout schedule of the prospective account. >Permitted values: `DEFAULT`, `HOLD`, `DAILY`, `WEEKLY`, `MONTHLY`.
+  --payout-schedule-reason: string # The reason for the payout schedule choice. >Required if the payoutSchedule is `HOLD`.
+  --payout-speed: string@payout-speed-completer # Speed with which payouts for this account are processed. Permitted values: `STANDARD`, `SAME_DAY`. (default: STANDARD)
 ]: any -> record<accountCode: string, accountHolderCode: string, bankAccountUUID: string, description: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, metadata: record, payoutMethodCode: string, payoutSchedule: record<nextScheduledPayout: string, schedule: string>, payoutSpeed: string, pspReference: string, resultCode: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createAccount")
-  let body = {accountHolderCode: $accountHolderCode, bankAccountUUID: $bankAccountUUID, description: $description, metadata: $metadata, payoutMethodCode: $payoutMethodCode, payoutSchedule: $payoutSchedule, payoutScheduleReason: $payoutScheduleReason, payoutSpeed: $payoutSpeed} | compact
+  let body = {"accountHolderCode": $account_holder_code, "bankAccountUUID": $bank_account_uuid, "description": $description, "metadata": $metadata, "payoutMethodCode": $payout_method_code, "payoutSchedule": $payout_schedule, "payoutScheduleReason": $payout_schedule_reason, "payoutSpeed": $payout_speed} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -241,7 +241,7 @@ export def "create-account post-createAccount" [
 # POST /createAccountHolder
 # operationId: post-createAccountHolder
 # --accountHolderDetails shape: {address?: record, bankAccountDetails?: list, bankAggregatorDataReference?: string, businessDetails?: record, email?: string, fullPhoneNumber?: string, individualDetails?: record, lastReviewDate?: string, legalArrangements?: list, merchantCategoryCode?: string, metadata?: record, payoutMethods?: list, principalBusinessAddress?: record, storeDetails?: list, webAddress?: string}
-@deprecated --flag primaryCurrency
+@deprecated --flag primary-currency
 export def "create-account-holder post-createAccountHolder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,20 +251,20 @@ export def "create-account-holder post-createAccountHolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # Your unique identifier for the prospective account holder. The length must be between three (3) and fifty (50) characters long. Only letters, digits, and hyphens (-) are allowed.
-  accountHolderDetails: record # shape: {address?: record, bankAccountDetails?: list, bankAggregatorDataReference?: string, businessDetails?: record, email?: string, fullPhoneNumber?: string, individualDetails?: record, lastReviewDate?: string, legalArrangements?: list, merchantCategoryCode?: string, metadata?: record, payoutMethods?: list, principalBusinessAddress?: record, storeDetails?: list, webAddress?: string}
-  --createDefaultAccount: oneof<nothing, bool> # If set to **true**, an account with the default options is automatically created for the account holder. By default, this field is set to **true**.
+  account_holder_code: string # Your unique identifier for the prospective account holder. The length must be between three (3) and fifty (50) characters long. Only letters, digits, and hyphens (-) are allowed.
+  account_holder_details: record # shape: {address?: record, bankAccountDetails?: list, bankAggregatorDataReference?: string, businessDetails?: record, email?: string, fullPhoneNumber?: string, individualDetails?: record, lastReviewDate?: string, legalArrangements?: list, merchantCategoryCode?: string, metadata?: record, payoutMethods?: list, principalBusinessAddress?: record, storeDetails?: list, webAddress?: string}
+  --create-default-account: oneof<nothing, bool> # If set to **true**, an account with the default options is automatically created for the account holder. By default, this field is set to **true**.
   --description: string # A description of the prospective account holder, maximum 256 characters. You can use alphanumeric characters (A-Z, a-z, 0-9), white spaces, and underscores `_`.
-  legalEntity: string@legalEntity-completer # The legal entity type of the account holder. This determines the information that should be provided in the request.  Possible values: **Business**, **Individual**, or **NonProfit**.  * If set to **Business** or **NonProfit**, then `accountHolderDetails.businessDetails` must be provided, with at least one entry in the `accountHolderDetails.businessDetails.shareholders` list.  * If set to **Individual**, then `accountHolderDetails.individualDetails` must be provided.
-  --primaryCurrency: string # The three-character [ISO currency code](https://docs.adyen.com/development-resources/currency-codes), with which the prospective account holder primarily deals. (DEPRECATED)
-  --processingTier: int # The starting [processing tier](https://docs.adyen.com/marketplaces-and-platforms/classic/onboarding-and-verification/precheck-kyc-information) for the prospective account holder. (format: int32)
-  --verificationProfile: string # The identifier of the profile that applies to this entity.
+  legal_entity: string@legal-entity-completer # The legal entity type of the account holder. This determines the information that should be provided in the request.  Possible values: **Business**, **Individual**, or **NonProfit**.  * If set to **Business** or **NonProfit**, then `accountHolderDetails.businessDetails` must be provided, with at least one entry in the `accountHolderDetails.businessDetails.shareholders` list.  * If set to **Individual**, then `accountHolderDetails.individualDetails` must be provided.
+  --primary-currency: string # The three-character [ISO currency code](https://docs.adyen.com/development-resources/currency-codes), with which the prospective account holder primarily deals. (DEPRECATED)
+  --processing-tier: int # The starting [processing tier](https://docs.adyen.com/marketplaces-and-platforms/classic/onboarding-and-verification/precheck-kyc-information) for the prospective account holder. (format: int32)
+  --verification-profile: string # The identifier of the profile that applies to this entity.
 ]: any -> record<accountCode: string, accountHolderCode: string, accountHolderDetails: record<address: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, bankAccountDetails: list<record>, bankAggregatorDataReference: string, businessDetails: record<doingBusinessAs: string, legalBusinessName: string, listedUltimateParentCompany: list, registrationNumber: string, shareholders: list, signatories: list, stockExchange: string, stockNumber: string, stockTicker: string, taxId: string>, email: string, fullPhoneNumber: string, individualDetails: record<name: record, personalData: record>, lastReviewDate: string, legalArrangements: list<record>, merchantCategoryCode: string, metadata: record, payoutMethods: list<record>, principalBusinessAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, storeDetails: list<record>, webAddress: string>, accountHolderStatus: record<events: list<record>, payoutState: record<allowPayout: bool, disableReason: string, disabled: bool, notAllowedReason: string, payoutLimit: record, tierNumber: int>, processingState: record<disableReason: string, disabled: bool, processedFrom: record, processedTo: record, tierNumber: int>, status: string, statusReason: string>, description: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, legalEntity: string, primaryCurrency: string, pspReference: string, resultCode: string, verification: record<accountHolder: record<checks: list>, legalArrangements: list<record>, legalArrangementsEntities: list<record>, payoutMethods: list<record>, shareholders: list<record>, signatories: list<record>, ultimateParentCompany: list<record>>, verificationProfile: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createAccountHolder")
-  let body = {accountHolderCode: $accountHolderCode, accountHolderDetails: $accountHolderDetails, createDefaultAccount: $createDefaultAccount, description: $description, legalEntity: $legalEntity, primaryCurrency: $primaryCurrency, processingTier: $processingTier, verificationProfile: $verificationProfile} | compact
+  let body = {"accountHolderCode": $account_holder_code, "accountHolderDetails": $account_holder_details, "createDefaultAccount": $create_default_account, "description": $description, "legalEntity": $legal_entity, "primaryCurrency": $primary_currency, "processingTier": $processing_tier, "verificationProfile": $verification_profile} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -284,14 +284,14 @@ export def "delete-bank-accounts post-deleteBankAccounts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of the Account Holder from which to delete the Bank Account(s).
-  bankAccountUUIDs: list # The code(s) of the Bank Accounts to be deleted.
+  account_holder_code: string # The code of the Account Holder from which to delete the Bank Account(s).
+  bank_account_uui_ds: list # The code(s) of the Bank Accounts to be deleted.
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteBankAccounts")
-  let body = {accountHolderCode: $accountHolderCode, bankAccountUUIDs: $bankAccountUUIDs} | compact
+  let body = {"accountHolderCode": $account_holder_code, "bankAccountUUIDs": $bank_account_uui_ds} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -312,14 +312,14 @@ export def "delete-legal-arrangements post-deleteLegalArrangements" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of the account holder.
-  legalArrangements: list # List of legal arrangements. — item shape: {legalArrangementCode: string, legalArrangementEntityCodes?: list}
+  account_holder_code: string # The code of the account holder.
+  legal_arrangements: list # List of legal arrangements. — item shape: {legalArrangementCode: string, legalArrangementEntityCodes?: list}
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteLegalArrangements")
-  let body = {accountHolderCode: $accountHolderCode, legalArrangements: $legalArrangements} | compact
+  let body = {"accountHolderCode": $account_holder_code, "legalArrangements": $legal_arrangements} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -339,14 +339,14 @@ export def "delete-payout-methods post-deletePayoutMethods" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of the account holder, from which to delete the payout methods.
-  payoutMethodCodes: list # The codes of the payout methods to be deleted.
+  account_holder_code: string # The code of the account holder, from which to delete the payout methods.
+  payout_method_codes: list # The codes of the payout methods to be deleted.
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deletePayoutMethods")
-  let body = {accountHolderCode: $accountHolderCode, payoutMethodCodes: $payoutMethodCodes} | compact
+  let body = {"accountHolderCode": $account_holder_code, "payoutMethodCodes": $payout_method_codes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -366,14 +366,14 @@ export def "delete-shareholders post-deleteShareholders" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of the Account Holder from which to delete the Shareholders.
-  shareholderCodes: list # The code(s) of the Shareholders to be deleted.
+  account_holder_code: string # The code of the Account Holder from which to delete the Shareholders.
+  shareholder_codes: list # The code(s) of the Shareholders to be deleted.
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteShareholders")
-  let body = {accountHolderCode: $accountHolderCode, shareholderCodes: $shareholderCodes} | compact
+  let body = {"accountHolderCode": $account_holder_code, "shareholderCodes": $shareholder_codes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -393,14 +393,14 @@ export def "delete-signatories post-deleteSignatories" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of the account holder from which to delete the signatories.
-  signatoryCodes: list # Array of codes of the signatories to be deleted.
+  account_holder_code: string # The code of the account holder from which to delete the signatories.
+  signatory_codes: list # Array of codes of the signatories to be deleted.
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteSignatories")
-  let body = {accountHolderCode: $accountHolderCode, signatoryCodes: $signatoryCodes} | compact
+  let body = {"accountHolderCode": $account_holder_code, "signatoryCodes": $signatory_codes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -420,15 +420,15 @@ export def "get-account-holder post-getAccountHolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountCode: string # The code of the account of which to retrieve the details. > Required if no `accountHolderCode` is provided.
-  --accountHolderCode: string # The code of the account holder of which to retrieve the details. > Required if no `accountCode` is provided.
-  --showDetails: oneof<nothing, bool> # True if the request should return the account holder details
+  --account-code: string # The code of the account of which to retrieve the details. > Required if no `accountHolderCode` is provided.
+  --account-holder-code: string # The code of the account holder of which to retrieve the details. > Required if no `accountCode` is provided.
+  --show-details: oneof<nothing, bool> # True if the request should return the account holder details
 ]: any -> record<accountHolderCode: string, accountHolderDetails: record<address: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, bankAccountDetails: list<record>, bankAggregatorDataReference: string, businessDetails: record<doingBusinessAs: string, legalBusinessName: string, listedUltimateParentCompany: list, registrationNumber: string, shareholders: list, signatories: list, stockExchange: string, stockNumber: string, stockTicker: string, taxId: string>, email: string, fullPhoneNumber: string, individualDetails: record<name: record, personalData: record>, lastReviewDate: string, legalArrangements: list<record>, merchantCategoryCode: string, metadata: record, payoutMethods: list<record>, principalBusinessAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, storeDetails: list<record>, webAddress: string>, accountHolderStatus: record<events: list<record>, payoutState: record<allowPayout: bool, disableReason: string, disabled: bool, notAllowedReason: string, payoutLimit: record, tierNumber: int>, processingState: record<disableReason: string, disabled: bool, processedFrom: record, processedTo: record, tierNumber: int>, status: string, statusReason: string>, accounts: table<accountCode: string, bankAccountUUID: string, beneficiaryAccount: string, beneficiaryMerchantReference: string, description: string, metadata: record, payoutMethodCode: string, payoutSchedule: record, payoutSpeed: string, status: string>, description: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, legalEntity: string, migrationData: record<accountHolderId: string, balancePlatform: string, migrated: bool, migratedAccounts: list<record>, migratedStores: list<record>, migrationDate: string>, primaryCurrency: string, pspReference: string, resultCode: string, systemUpToDateTime: string, verification: record<accountHolder: record<checks: list>, legalArrangements: list<record>, legalArrangementsEntities: list<record>, payoutMethods: list<record>, shareholders: list<record>, signatories: list<record>, ultimateParentCompany: list<record>>, verificationProfile: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getAccountHolder")
-  let body = {accountCode: $accountCode, accountHolderCode: $accountHolderCode, showDetails: $showDetails} | compact
+  let body = {"accountCode": $account_code, "accountHolderCode": $account_holder_code, "showDetails": $show_details} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -448,15 +448,15 @@ export def "get-tax-form post-getTaxForm" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The account holder code you provided when you created the account holder.
-  formType: string # Type of the requested tax form. For example, 1099-K.
+  account_holder_code: string # The account holder code you provided when you created the account holder.
+  form_type: string # Type of the requested tax form. For example, 1099-K.
   year: int # Applicable tax year in the YYYY format. (format: int32)
 ]: any -> record<content: string, contentType: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getTaxForm")
-  let body = {accountHolderCode: $accountHolderCode, formType: $formType, year: $year} | compact
+  let body = {"accountHolderCode": $account_holder_code, "formType": $form_type, "year": $year} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -476,15 +476,15 @@ export def "get-uploaded-documents post-getUploadedDocuments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of the Account Holder for which to retrieve the documents.
-  --bankAccountUUID: string # The code of the Bank Account for which to retrieve the documents.
-  --shareholderCode: string # The code of the Shareholder for which to retrieve the documents.
+  account_holder_code: string # The code of the Account Holder for which to retrieve the documents.
+  --bank-account-uuid: string # The code of the Bank Account for which to retrieve the documents.
+  --shareholder-code: string # The code of the Shareholder for which to retrieve the documents.
 ]: any -> record<documentDetails: table<accountHolderCode: string, bankAccountUUID: string, description: string, documentType: string, filename: string, legalArrangementCode: string, legalArrangementEntityCode: string, shareholderCode: string, signatoryCode: string>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getUploadedDocuments")
-  let body = {accountHolderCode: $accountHolderCode, bankAccountUUID: $bankAccountUUID, shareholderCode: $shareholderCode} | compact
+  let body = {"accountHolderCode": $account_holder_code, "bankAccountUUID": $bank_account_uuid, "shareholderCode": $shareholder_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -504,13 +504,13 @@ export def "suspend-account-holder post-suspendAccountHolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of the account holder to be suspended.
+  account_holder_code: string # The code of the account holder to be suspended.
 ]: any -> record<accountHolderStatus: record<events: list<record>, payoutState: record<allowPayout: bool, disableReason: string, disabled: bool, notAllowedReason: string, payoutLimit: record, tierNumber: int>, processingState: record<disableReason: string, disabled: bool, processedFrom: record, processedTo: record, tierNumber: int>, status: string, statusReason: string>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/suspendAccountHolder")
-  let body = {accountHolderCode: $accountHolderCode} | compact
+  let body = {"accountHolderCode": $account_holder_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -530,13 +530,13 @@ export def "un-suspend-account-holder post-unSuspendAccountHolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of the account holder to be reinstated.
+  account_holder_code: string # The code of the account holder to be reinstated.
 ]: any -> record<accountHolderStatus: record<events: list<record>, payoutState: record<allowPayout: bool, disableReason: string, disabled: bool, notAllowedReason: string, payoutLimit: record, tierNumber: int>, processingState: record<disableReason: string, disabled: bool, processedFrom: record, processedTo: record, tierNumber: int>, status: string, statusReason: string>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/unSuspendAccountHolder")
-  let body = {accountHolderCode: $accountHolderCode} | compact
+  let body = {"accountHolderCode": $account_holder_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -557,19 +557,19 @@ export def "update-account post-updateAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountCode: string # The code of the account to update.
-  --bankAccountUUID: string # The bankAccountUUID of the bank account held by the account holder to couple the account with. Scheduled payouts in currencies matching the currency of this bank account will be sent to this bank account. Payouts in different currencies will be sent to a matching bank account of the account holder.
+  account_code: string # The code of the account to update.
+  --bank-account-uuid: string # The bankAccountUUID of the bank account held by the account holder to couple the account with. Scheduled payouts in currencies matching the currency of this bank account will be sent to this bank account. Payouts in different currencies will be sent to a matching bank account of the account holder.
   --description: string # A description of the account, maximum 256 characters.You can use alphanumeric characters (A-Z, a-z, 0-9), white spaces, and underscores `_`.
   --metadata: record # A set of key and value pairs for general use by the merchant. The keys do not have specific names and may be used for storing miscellaneous data as desired. > Note that during an update of metadata, the omission of existing key-value pairs will result in the deletion of those key-value pairs.
-  --payoutMethodCode: string # The payout method code held by the account holder to couple the account with. Scheduled card payouts will be sent using this payout method code.
-  --payoutSchedule: record # shape: {action?: "CLOSE"|"NOTHING"|"UPDATE", reason?: string, schedule: "BIWEEKLY_ON_1ST_AND_15TH_AT_MIDNIGHT"|"DAILY"|"DAILY_AU"|"DAILY_EU"|"DAILY_SG"|"DAILY_US"|"HOLD"|"MONTHLY"|"WEEKLY"|"WEEKLY_MON_TO_FRI_AU"|"WEEKLY_MON_TO_FRI_EU"|"WEEKLY_MON_TO_FRI_US"|"WEEKLY_ON_TUE_FRI_MIDNIGHT"|"WEEKLY_SUN_TO_THU_AU"|"WEEKLY_SUN_TO_THU_US"}
-  --payoutSpeed: string@payoutSpeed-completer # Speed with which payouts for this account are processed. Permitted values: `STANDARD`, `SAME_DAY`.
+  --payout-method-code: string # The payout method code held by the account holder to couple the account with. Scheduled card payouts will be sent using this payout method code.
+  --payout-schedule: record # shape: {action?: "CLOSE"|"NOTHING"|"UPDATE", reason?: string, schedule: "BIWEEKLY_ON_1ST_AND_15TH_AT_MIDNIGHT"|"DAILY"|"DAILY_AU"|"DAILY_EU"|"DAILY_SG"|"DAILY_US"|"HOLD"|"MONTHLY"|"WEEKLY"|"WEEKLY_MON_TO_FRI_AU"|"WEEKLY_MON_TO_FRI_EU"|"WEEKLY_MON_TO_FRI_US"|"WEEKLY_ON_TUE_FRI_MIDNIGHT"|"WEEKLY_SUN_TO_THU_AU"|"WEEKLY_SUN_TO_THU_US"}
+  --payout-speed: string@payout-speed-completer # Speed with which payouts for this account are processed. Permitted values: `STANDARD`, `SAME_DAY`.
 ]: any -> record<accountCode: string, bankAccountUUID: string, description: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, metadata: record, payoutMethodCode: string, payoutSchedule: record<nextScheduledPayout: string, schedule: string>, payoutSpeed: string, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/updateAccount")
-  let body = {accountCode: $accountCode, bankAccountUUID: $bankAccountUUID, description: $description, metadata: $metadata, payoutMethodCode: $payoutMethodCode, payoutSchedule: $payoutSchedule, payoutSpeed: $payoutSpeed} | compact
+  let body = {"accountCode": $account_code, "bankAccountUUID": $bank_account_uuid, "description": $description, "metadata": $metadata, "payoutMethodCode": $payout_method_code, "payoutSchedule": $payout_schedule, "payoutSpeed": $payout_speed} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -581,7 +581,7 @@ export def "update-account post-updateAccount" [
 # POST /updateAccountHolder
 # operationId: post-updateAccountHolder
 # --accountHolderDetails shape: {address?: record, bankAccountDetails?: list, bankAggregatorDataReference?: string, businessDetails?: record, email?: string, fullPhoneNumber?: string, individualDetails?: record, lastReviewDate?: string, legalArrangements?: list, merchantCategoryCode?: string, metadata?: record, payoutMethods?: list, principalBusinessAddress?: record, storeDetails?: list, webAddress?: string}
-@deprecated --flag primaryCurrency
+@deprecated --flag primary-currency
 export def "update-account-holder post-updateAccountHolder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -591,19 +591,19 @@ export def "update-account-holder post-updateAccountHolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of the Account Holder to be updated.
-  --accountHolderDetails: record # shape: {address?: record, bankAccountDetails?: list, bankAggregatorDataReference?: string, businessDetails?: record, email?: string, fullPhoneNumber?: string, individualDetails?: record, lastReviewDate?: string, legalArrangements?: list, merchantCategoryCode?: string, metadata?: record, payoutMethods?: list, principalBusinessAddress?: record, storeDetails?: list, webAddress?: string}
+  account_holder_code: string # The code of the Account Holder to be updated.
+  --account-holder-details: record # shape: {address?: record, bankAccountDetails?: list, bankAggregatorDataReference?: string, businessDetails?: record, email?: string, fullPhoneNumber?: string, individualDetails?: record, lastReviewDate?: string, legalArrangements?: list, merchantCategoryCode?: string, metadata?: record, payoutMethods?: list, principalBusinessAddress?: record, storeDetails?: list, webAddress?: string}
   --description: string # A description of the account holder, maximum 256 characters. You can use alphanumeric characters (A-Z, a-z, 0-9), white spaces, and underscores `_`.
-  --legalEntity: string@legalEntity-completer # The legal entity type of the account holder. This determines the information that should be provided in the request.  Possible values: **Business**, **Individual**, or **NonProfit**.  * If set to **Business** or **NonProfit**, then `accountHolderDetails.businessDetails` must be provided, with at least one entry in the `accountHolderDetails.businessDetails.shareholders` list.  * If set to **Individual**, then `accountHolderDetails.individualDetails` must be provided.
-  --primaryCurrency: string # The primary three-character [ISO currency code](https://docs.adyen.com/development-resources/currency-codes), to which the account holder should be updated. (DEPRECATED)
-  --processingTier: int # The processing tier to which the Account Holder should be updated. >The processing tier can not be lowered through this request.  >Required if accountHolderDetails are not provided. (format: int32)
-  --verificationProfile: string # The identifier of the profile that applies to this entity.
+  --legal-entity: string@legal-entity-completer # The legal entity type of the account holder. This determines the information that should be provided in the request.  Possible values: **Business**, **Individual**, or **NonProfit**.  * If set to **Business** or **NonProfit**, then `accountHolderDetails.businessDetails` must be provided, with at least one entry in the `accountHolderDetails.businessDetails.shareholders` list.  * If set to **Individual**, then `accountHolderDetails.individualDetails` must be provided.
+  --primary-currency: string # The primary three-character [ISO currency code](https://docs.adyen.com/development-resources/currency-codes), to which the account holder should be updated. (DEPRECATED)
+  --processing-tier: int # The processing tier to which the Account Holder should be updated. >The processing tier can not be lowered through this request.  >Required if accountHolderDetails are not provided. (format: int32)
+  --verification-profile: string # The identifier of the profile that applies to this entity.
 ]: any -> record<accountHolderCode: string, accountHolderDetails: record<address: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, bankAccountDetails: list<record>, bankAggregatorDataReference: string, businessDetails: record<doingBusinessAs: string, legalBusinessName: string, listedUltimateParentCompany: list, registrationNumber: string, shareholders: list, signatories: list, stockExchange: string, stockNumber: string, stockTicker: string, taxId: string>, email: string, fullPhoneNumber: string, individualDetails: record<name: record, personalData: record>, lastReviewDate: string, legalArrangements: list<record>, merchantCategoryCode: string, metadata: record, payoutMethods: list<record>, principalBusinessAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, storeDetails: list<record>, webAddress: string>, accountHolderStatus: record<events: list<record>, payoutState: record<allowPayout: bool, disableReason: string, disabled: bool, notAllowedReason: string, payoutLimit: record, tierNumber: int>, processingState: record<disableReason: string, disabled: bool, processedFrom: record, processedTo: record, tierNumber: int>, status: string, statusReason: string>, description: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, legalEntity: string, primaryCurrency: string, pspReference: string, resultCode: string, verification: record<accountHolder: record<checks: list>, legalArrangements: list<record>, legalArrangementsEntities: list<record>, payoutMethods: list<record>, shareholders: list<record>, signatories: list<record>, ultimateParentCompany: list<record>>, verificationProfile: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/updateAccountHolder")
-  let body = {accountHolderCode: $accountHolderCode, accountHolderDetails: $accountHolderDetails, description: $description, legalEntity: $legalEntity, primaryCurrency: $primaryCurrency, processingTier: $processingTier, verificationProfile: $verificationProfile} | compact
+  let body = {"accountHolderCode": $account_holder_code, "accountHolderDetails": $account_holder_details, "description": $description, "legalEntity": $legal_entity, "primaryCurrency": $primary_currency, "processingTier": $processing_tier, "verificationProfile": $verification_profile} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -623,16 +623,16 @@ export def "update-account-holder-state post-updateAccountHolderState" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of the Account Holder on which to update the state.
+  account_holder_code: string # The code of the Account Holder on which to update the state.
   --disable: oneof<nothing, bool> # If true, disable the requested state.  If false, enable the requested state.
   --reason: string # The reason that the state is being updated. >Required if the state is being disabled.
-  stateType: string@stateType-completer # The state to be updated. >Permitted values are: `Processing`, `Payout`
+  state_type: string@state-type-completer # The state to be updated. >Permitted values are: `Processing`, `Payout`
 ]: any -> record<accountHolderCode: string, accountHolderStatus: record<events: list<record>, payoutState: record<allowPayout: bool, disableReason: string, disabled: bool, notAllowedReason: string, payoutLimit: record, tierNumber: int>, processingState: record<disableReason: string, disabled: bool, processedFrom: record, processedTo: record, tierNumber: int>, status: string, statusReason: string>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/updateAccountHolderState")
-  let body = {accountHolderCode: $accountHolderCode, disable: $disable, reason: $reason, stateType: $stateType} | compact
+  let body = {"accountHolderCode": $account_holder_code, "disable": $disable, "reason": $reason, "stateType": $state_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -653,14 +653,14 @@ export def "upload-document post-uploadDocument" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  documentContent: string # The content of the document, in Base64-encoded string format.  To learn about document requirements, refer to [Verification checks](https://docs.adyen.com/marketplaces-and-platforms/classic/verification-checks).
-  documentDetail: record # shape: {accountHolderCode?: string, bankAccountUUID?: string, description?: string, documentType: "BANK_STATEMENT"|"BSN"|"COMPANY_REGISTRATION_SCREENING"|"CONSTITUTIONAL_DOCUMENT"|"DRIVING_LICENCE"|"DRIVING_LICENCE_BACK"|"DRIVING_LICENCE_FRONT"|"ID_CARD"|"ID_CARD_BACK"|"ID_CARD_FRONT"|"PASSPORT"|"PROOF_OF_RESIDENCY"|"SSN"|"SUPPORTING_DOCUMENTS", filename?: string, legalArrangementCode?: string, legalArrangementEntityCode?: string, shareholderCode?: string, signatoryCode?: string}
+  document_content: string # The content of the document, in Base64-encoded string format.  To learn about document requirements, refer to [Verification checks](https://docs.adyen.com/marketplaces-and-platforms/classic/verification-checks).
+  document_detail: record # shape: {accountHolderCode?: string, bankAccountUUID?: string, description?: string, documentType: "BANK_STATEMENT"|"BSN"|"COMPANY_REGISTRATION_SCREENING"|"CONSTITUTIONAL_DOCUMENT"|"DRIVING_LICENCE"|"DRIVING_LICENCE_BACK"|"DRIVING_LICENCE_FRONT"|"ID_CARD"|"ID_CARD_BACK"|"ID_CARD_FRONT"|"PASSPORT"|"PROOF_OF_RESIDENCY"|"SSN"|"SUPPORTING_DOCUMENTS", filename?: string, legalArrangementCode?: string, legalArrangementEntityCode?: string, shareholderCode?: string, signatoryCode?: string}
 ]: any -> record<accountHolderCode: string, accountHolderDetails: record<address: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, bankAccountDetails: list<record>, bankAggregatorDataReference: string, businessDetails: record<doingBusinessAs: string, legalBusinessName: string, listedUltimateParentCompany: list, registrationNumber: string, shareholders: list, signatories: list, stockExchange: string, stockNumber: string, stockTicker: string, taxId: string>, email: string, fullPhoneNumber: string, individualDetails: record<name: record, personalData: record>, lastReviewDate: string, legalArrangements: list<record>, merchantCategoryCode: string, metadata: record, payoutMethods: list<record>, principalBusinessAddress: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, storeDetails: list<record>, webAddress: string>, accountHolderStatus: record<events: list<record>, payoutState: record<allowPayout: bool, disableReason: string, disabled: bool, notAllowedReason: string, payoutLimit: record, tierNumber: int>, processingState: record<disableReason: string, disabled: bool, processedFrom: record, processedTo: record, tierNumber: int>, status: string, statusReason: string>, description: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, legalEntity: string, primaryCurrency: string, pspReference: string, resultCode: string, verification: record<accountHolder: record<checks: list>, legalArrangements: list<record>, legalArrangementsEntities: list<record>, payoutMethods: list<record>, shareholders: list<record>, signatories: list<record>, ultimateParentCompany: list<record>>, verificationProfile: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/uploadDocument")
-  let body = {documentContent: $documentContent, documentDetail: $documentDetail} | compact
+  let body = {"documentContent": $document_content, "documentDetail": $document_detail} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

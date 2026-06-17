@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hackathons-comingjson GET-hackathons-coming---format-" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hackathons-comingjson get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /hackathons/coming.json
 # operationId: GET-hackathons-coming---format-
-export def "hackathons-comingjson GET-hackathons-coming---format-" [
+export def "hackathons-comingjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,7 +116,7 @@ export def "hackathons-comingjson GET-hackathons-coming---format-" [
 #
 # GET /hackathons/{id}.json
 # operationId: GET-hackathons--id---format-
-export def "hackathons GET-hackathons--id---format-" [
+export def "hackathons get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -129,7 +129,7 @@ export def "hackathons GET-hackathons--id---format-" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/hackathons/($id).json")
+  let full_url = (build-url $base ({id: $id} | format pattern "/hackathons/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -174,7 +174,7 @@ export def "swagger-doc doc--name---format-" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/swagger_doc/($name).json")
+  let full_url = (build-url $base ({name: $name} | format pattern "/swagger_doc/{name}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

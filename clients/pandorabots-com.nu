@@ -112,7 +112,7 @@ export def "atalk atalkBot" [
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "input" $input "scalar") (serialize-qp "client_name" $client_name "scalar") (serialize-qp "sessionid" $sessionid "scalar") (serialize-qp "recent" $recent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/atalk/($app_id)/($botname)" $qp)
+  let full_url = (build-url $base ({app_id: $app_id, botname: $botname} | format pattern "/atalk/{app_id}/{botname}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,7 +122,7 @@ export def "atalk atalkBot" [
 #
 # GET /bot/{app_id}
 # operationId: listBots
-export def "bot listBots" [
+export def "bot list" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -135,7 +135,7 @@ export def "bot listBots" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bot/($app_id)")
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/bot/{app_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -145,7 +145,7 @@ export def "bot listBots" [
 #
 # DELETE /bot/{app_id}/{botname}
 # operationId: deleteBot
-export def "bot delete-by-app_id-botname" [
+export def "bot delete" [
   app_id: string
   botname: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -159,7 +159,7 @@ export def "bot delete-by-app_id-botname" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bot/($app_id)/($botname)")
+  let full_url = (build-url $base ({app_id: $app_id, botname: $botname} | format pattern "/bot/{app_id}/{botname}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,7 +169,7 @@ export def "bot delete-by-app_id-botname" [
 #
 # GET /bot/{app_id}/{botname}
 # operationId: listBotFiles
-export def "bot listBotFiles" [
+export def "bot list-bot-files" [
   app_id: string
   botname: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -185,7 +185,7 @@ export def "bot listBotFiles" [
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "return" $qp_return "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bot/($app_id)/($botname)" $qp)
+  let full_url = (build-url $base ({app_id: $app_id, botname: $botname} | format pattern "/bot/{app_id}/{botname}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,7 +195,7 @@ export def "bot listBotFiles" [
 #
 # PUT /bot/{app_id}/{botname}
 # operationId: createBot
-export def "bot createBot" [
+export def "bot create" [
   app_id: string
   botname: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -209,7 +209,7 @@ export def "bot createBot" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bot/($app_id)/($botname)")
+  let full_url = (build-url $base ({app_id: $app_id, botname: $botname} | format pattern "/bot/{app_id}/{botname}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -233,7 +233,7 @@ export def "bot-verify compileBot" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bot/($app_id)/($botname)/verify")
+  let full_url = (build-url $base ({app_id: $app_id, botname: $botname} | format pattern "/bot/{app_id}/{botname}/verify"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -243,7 +243,7 @@ export def "bot-verify compileBot" [
 #
 # DELETE /bot/{app_id}/{botname}/{file-kind}
 # operationId: deleteBotFile2
-export def "bot delete-by-app_id-botname-file_kind" [
+export def "bot delete-bot-file2" [
   app_id: string
   botname: string
   file_kind: string
@@ -258,7 +258,7 @@ export def "bot delete-by-app_id-botname-file_kind" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bot/($app_id)/($botname)/($file_kind)")
+  let full_url = (build-url $base ({app_id: $app_id, botname: $botname, file_kind: $file_kind} | format pattern "/bot/{app_id}/{botname}/{file_kind}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -268,7 +268,7 @@ export def "bot delete-by-app_id-botname-file_kind" [
 #
 # GET /bot/{app_id}/{botname}/{file-kind}
 # operationId: getBotFile2
-export def "bot list" [
+export def "bot get-bot-file2" [
   app_id: string
   botname: string
   file_kind: string
@@ -283,7 +283,7 @@ export def "bot list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bot/($app_id)/($botname)/($file_kind)")
+  let full_url = (build-url $base ({app_id: $app_id, botname: $botname, file_kind: $file_kind} | format pattern "/bot/{app_id}/{botname}/{file_kind}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -293,7 +293,7 @@ export def "bot list" [
 #
 # PUT /bot/{app_id}/{botname}/{file-kind}
 # operationId: uploadFile2
-export def "bot uploadFile2" [
+export def "bot upload-file2" [
   app_id: string
   botname: string
   file_kind: string
@@ -310,7 +310,7 @@ export def "bot uploadFile2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bot/($app_id)/($botname)/($file_kind)")
+  let full_url = (build-url $base ({app_id: $app_id, botname: $botname, file_kind: $file_kind} | format pattern "/bot/{app_id}/{botname}/{file_kind}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -321,7 +321,7 @@ export def "bot uploadFile2" [
 #
 # DELETE /bot/{app_id}/{botname}/{file-kind}/{filename}
 # operationId: deleteBotFile1
-export def "bot delete-by-app_id-botname-file_kind-filename" [
+export def "bot delete-bot-file1" [
   app_id: string
   botname: string
   file_kind: string
@@ -337,7 +337,7 @@ export def "bot delete-by-app_id-botname-file_kind-filename" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bot/($app_id)/($botname)/($file_kind)/($filename)")
+  let full_url = (build-url $base ({app_id: $app_id, botname: $botname, file_kind: $file_kind, filename: $filename} | format pattern "/bot/{app_id}/{botname}/{file_kind}/{filename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -347,7 +347,7 @@ export def "bot delete-by-app_id-botname-file_kind-filename" [
 #
 # GET /bot/{app_id}/{botname}/{file-kind}/{filename}
 # operationId: getBotFile1
-export def "bot get" [
+export def "bot get-bot-file1" [
   app_id: string
   botname: string
   file_kind: string
@@ -363,7 +363,7 @@ export def "bot get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bot/($app_id)/($botname)/($file_kind)/($filename)")
+  let full_url = (build-url $base ({app_id: $app_id, botname: $botname, file_kind: $file_kind, filename: $filename} | format pattern "/bot/{app_id}/{botname}/{file_kind}/{filename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -373,7 +373,7 @@ export def "bot get" [
 #
 # PUT /bot/{app_id}/{botname}/{file-kind}/{filename}
 # operationId: uploadFile1
-export def "bot uploadFile1" [
+export def "bot upload-file1" [
   app_id: string
   botname: string
   file_kind: string
@@ -391,7 +391,7 @@ export def "bot uploadFile1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bot/($app_id)/($botname)/($file_kind)/($filename)")
+  let full_url = (build-url $base ({app_id: $app_id, botname: $botname, file_kind: $file_kind, filename: $filename} | format pattern "/bot/{app_id}/{botname}/{file_kind}/{filename}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -427,7 +427,7 @@ export def "talk debugBot" [
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "input" $input "scalar") (serialize-qp "client_name" $client_name "scalar") (serialize-qp "sessionid" $sessionid "scalar") (serialize-qp "that" $that "scalar") (serialize-qp "topic" $topic "scalar") (serialize-qp "extra" $extra "scalar") (serialize-qp "reset" $reset "scalar") (serialize-qp "trace" $trace "scalar") (serialize-qp "reload" $reload "scalar") (serialize-qp "recent" $recent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/talk/($app_id)/($botname)" $qp)
+  let full_url = (build-url $base ({app_id: $app_id, botname: $botname} | format pattern "/talk/{app_id}/{botname}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

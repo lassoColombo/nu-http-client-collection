@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authorize authorize" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authorize get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 # GET /authorize
 # Docs: http://openid.net/specs/openid-connect-core-1_0.html#AuthorizationEndpoint — OIDC Authorization Endpoint
 # operationId: authorize
-export def "authorize authorize" [
+export def "authorize get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,7 +128,7 @@ export def "authorize authorize" [
 #
 # GET /client
 # operationId: client
-export def "client client" [
+export def "client list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,7 +151,7 @@ export def "client client" [
 # POST /client
 # Docs: http://openid.net/specs/openid-connect-registration-1_0.html#ClientRegistration — OIDC Client Registration Endpoint
 # operationId: createClient
-export def "client createClient" [
+export def "client create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "client createClient" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/client")
-  let body = {application_type: $application_type, client_id: $client_id, client_name: $client_name, client_uri: $client_uri, contacts: $contacts, default_max_age: $default_max_age, default_scopes: $default_scopes, grant_types: $grant_types, logo_uri: $logo_uri, policy_uri: $policy_uri, redirect_uris: $redirect_uris, response_types: $response_types, tos_uri: $tos_uri} | compact
+  let body = {"application_type": $application_type, "client_id": $client_id, "client_name": $client_name, "client_uri": $client_uri, "contacts": $contacts, "default_max_age": $default_max_age, "default_scopes": $default_scopes, "grant_types": $grant_types, "logo_uri": $logo_uri, "policy_uri": $policy_uri, "redirect_uris": $redirect_uris, "response_types": $response_types, "tos_uri": $tos_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -203,7 +203,7 @@ export def "client id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/client/($client_id)")
+  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/client/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -227,7 +227,7 @@ export def "client get" [
 ]: nothing -> record<application_type: string, client_id: string, client_name: string, client_uri: string, contacts: list<string>, default_max_age: int, default_scopes: list<string>, grant_types: list<string>, logo_uri: string, policy_uri: string, redirect_uris: list<string>, response_types: list<string>, tos_uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/client/($client_id)")
+  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/client/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -238,7 +238,7 @@ export def "client get" [
 # PUT /client/{client_id}
 # Docs: http://openid.net/specs/openid-connect-registration-1_0.html#ClientConfigurationEndpoint — OIDC Client Configuration Endpoint
 # operationId: updateClient
-export def "client updateClient" [
+export def "client update" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -265,8 +265,8 @@ export def "client updateClient" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/client/($client_id)")
-  let body = {application_type: $application_type, client_id: $body_client_id, client_name: $client_name, client_uri: $client_uri, contacts: $contacts, default_max_age: $default_max_age, default_scopes: $default_scopes, grant_types: $grant_types, logo_uri: $logo_uri, policy_uri: $policy_uri, redirect_uris: $redirect_uris, response_types: $response_types, tos_uri: $tos_uri} | compact
+  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/client/{client_id}"))
+  let body = {"application_type": $application_type, "client_id": $body_client_id, "client_name": $client_name, "client_uri": $client_uri, "contacts": $contacts, "default_max_age": $default_max_age, "default_scopes": $default_scopes, "grant_types": $grant_types, "logo_uri": $logo_uri, "policy_uri": $policy_uri, "redirect_uris": $redirect_uris, "response_types": $response_types, "tos_uri": $tos_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -278,7 +278,7 @@ export def "client updateClient" [
 # POST /token
 # Docs: http://openid.net/specs/openid-connect-core-1_0.html#TokenEndpoint — OIDC Token Endpoint
 # operationId: token
-export def "token token" [
+export def "token post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,7 +287,7 @@ export def "token token" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # HTTP Basic authorization header.
+  --authorization: string # HTTP Basic authorization header.
   client_id: string # The registered client ID.
   client_secret: string # The registered client ID secret.  (format: password)
   code: string # The authorization code previously obtained from the Authentication endpoint.
@@ -298,9 +298,9 @@ export def "token token" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token")
-  let body = {client_id: $client_id, client_secret: $client_secret, code: $code, grant_type: $grant_type, redirect_uri: $redirect_uri} | compact
+  let body = {"client_id": $client_id, "client_secret": $client_secret, "code": $code, "grant_type": $grant_type, "redirect_uri": $redirect_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -312,7 +312,7 @@ export def "token token" [
 # GET /userinfo
 # Docs: http://openid.net/specs/openid-connect-core-1_0.html#UserInfo — OIDC UserInfo Endpoint
 # operationId: userInfo
-export def "userinfo userInfo" [
+export def "userinfo get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,7 +348,7 @@ export def "iframe authorizeIframe" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($client_id)/iframe")
+  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/{client_id}/iframe"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

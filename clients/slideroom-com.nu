@@ -68,14 +68,14 @@ def auth-scheme-completer [] { ["bearer"] }
 def pool-completer [] { ["CommonAppSDS" "Standard"] }
 def accept-completer [] { ["application/json" "application/xml" "text/json" "text/xml"] }
 def format-completer [] { ["csv" "json" "pdf" "tab" "tsv" "txt" "xlsx" "zip"] }
-def roundType-completer [] { ["All" "Assigned" "Current" "Named"] }
+def round-type-completer [] { ["All" "Assigned" "Current" "Named"] }
 def pool-completer-1 [] { ["All" "Archived" "CommonAppSDS" "Current"] }
 def status-completer [] { ["All" "InProgress" "Submitted"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "applicant-attributes DeleteAttributesV2" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "applicant-attributes delete-attributes-v2" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +99,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /api/v2/applicant/attributes
 # operationId: Applicant_DeleteAttributesV2
-export def "applicant-attributes DeleteAttributesV2" [
+export def "applicant-attributes delete-attributes-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,11 +112,11 @@ export def "applicant-attributes DeleteAttributesV2" [
   --email: string # The email address of the applicant.
   --name: string # The name of the attribute to be deleted.
   --pool: string@pool-completer
-  --commonAppYear: int # format: int32
+  --common-app-year: int # format: int32
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pool" $pool "scalar") (serialize-qp "commonAppYear" $commonAppYear "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pool" $pool "scalar") (serialize-qp "commonAppYear" $common_app_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/applicant/attributes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -127,7 +127,7 @@ export def "applicant-attributes DeleteAttributesV2" [
 #
 # GET /api/v2/applicant/attributes
 # operationId: Applicant_GetAttributesV2
-export def "applicant-attributes GetAttributesV2" [
+export def "applicant-attributes get-attributes-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,11 +139,11 @@ export def "applicant-attributes GetAttributesV2" [
   --accept: string@accept-completer # Response content type
   --email: string # The email address of the applicant.
   --pool: string@pool-completer
-  --commonAppYear: int # format: int32
+  --common-app-year: int # format: int32
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "pool" $pool "scalar") (serialize-qp "commonAppYear" $commonAppYear "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "pool" $pool "scalar") (serialize-qp "commonAppYear" $common_app_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/applicant/attributes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -154,7 +154,7 @@ export def "applicant-attributes GetAttributesV2" [
 #
 # POST /api/v2/applicant/attributes
 # operationId: Applicant_PostAttributesV2
-export def "applicant-attributes PostAttributesV2" [
+export def "applicant-attributes create-attributes-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,13 +166,13 @@ export def "applicant-attributes PostAttributesV2" [
   --accept: string@accept-completer # Response content type
   --email: string # The email address of the applicant.
   --pool: string@pool-completer
-  --commonAppYear: int # format: int32
+  --common-app-year: int # format: int32
   --body: record
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "pool" $pool "scalar") (serialize-qp "commonAppYear" $commonAppYear "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "pool" $pool "scalar") (serialize-qp "commonAppYear" $common_app_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/applicant/attributes" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
@@ -184,7 +184,7 @@ export def "applicant-attributes PostAttributesV2" [
 #
 # GET /api/v2/applicant/attributes/names
 # operationId: Applicant_GetAttributeNamesV2
-export def "applicant-attributes-names GetAttributeNamesV2" [
+export def "applicant-attributes-names get-attribute-names-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "applicant-attributes-names GetAttributeNamesV2" [
 #
 # GET /api/v2/application/attributes/names
 # operationId: Application_GetAttributeNamesV2
-export def "application-attributes-names GetAttributeNamesV2" [
+export def "application-attributes-names get-attribute-names-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "application-attributes-names GetAttributeNamesV2" [
 #
 # POST /api/v2/application/request-export
 # operationId: Application_RequestExportV2
-export def "application-request-export RequestExportV2" [
+export def "application-request-export request-export-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,39 +241,39 @@ export def "application-request-export RequestExportV2" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer
-  --roundType: string@roundType-completer
-  --roundName: string
-  --tabexport: string
-  --pdfincludeForms: oneof<nothing, bool>
-  --pdfincludeReferences: oneof<nothing, bool>
-  --pdfincludeMedia: oneof<nothing, bool>
-  --pdfincludeApplicantAttachments: oneof<nothing, bool>
-  --pdfincludeOrganizationAttachments: oneof<nothing, bool>
-  --pdfincludeRatings: oneof<nothing, bool>
-  --pdfincludeFullPageMedia: oneof<nothing, bool>
-  --pdfincludeHighlights: oneof<nothing, bool>
-  --pdfincludeComments: oneof<nothing, bool>
-  --pdfincludeCommonApp: oneof<nothing, bool>
-  --ziporiginalMedia: oneof<nothing, bool>
-  --zipincludeForms: oneof<nothing, bool>
-  --zipincludeReferences: oneof<nothing, bool>
-  --zipincludeMedia: oneof<nothing, bool>
-  --zipincludeApplicantAttachments: oneof<nothing, bool>
-  --zipincludeOrganizationAttachments: oneof<nothing, bool>
-  --zipincludeRatings: oneof<nothing, bool>
-  --zipincludeComments: oneof<nothing, bool>
-  --zipincludeCommonApp: oneof<nothing, bool>
-  --deliveryaccount: string
-  --deliveryfolder: string
+  --round-type: string@round-type-completer
+  --round-name: string
+  --tab-export: string
+  --pdf-include-forms: oneof<nothing, bool>
+  --pdf-include-references: oneof<nothing, bool>
+  --pdf-include-media: oneof<nothing, bool>
+  --pdf-include-applicant-attachments: oneof<nothing, bool>
+  --pdf-include-organization-attachments: oneof<nothing, bool>
+  --pdf-include-ratings: oneof<nothing, bool>
+  --pdf-include-full-page-media: oneof<nothing, bool>
+  --pdf-include-highlights: oneof<nothing, bool>
+  --pdf-include-comments: oneof<nothing, bool>
+  --pdf-include-common-app: oneof<nothing, bool>
+  --zip-original-media: oneof<nothing, bool>
+  --zip-include-forms: oneof<nothing, bool>
+  --zip-include-references: oneof<nothing, bool>
+  --zip-include-media: oneof<nothing, bool>
+  --zip-include-applicant-attachments: oneof<nothing, bool>
+  --zip-include-organization-attachments: oneof<nothing, bool>
+  --zip-include-ratings: oneof<nothing, bool>
+  --zip-include-comments: oneof<nothing, bool>
+  --zip-include-common-app: oneof<nothing, bool>
+  --delivery-account: string
+  --delivery-folder: string
   --since: int # format: int32
   --pool: string@pool-completer-1
   --status: string@status-completer
-  --searchName: string
+  --search-name: string
   --email: string
 ]: nothing -> record<message: string, submissions: int, token: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "roundType" $roundType "scalar") (serialize-qp "roundName" $roundName "scalar") (serialize-qp "tab.export" $tabexport "scalar") (serialize-qp "pdf.includeForms" $pdfincludeForms "scalar") (serialize-qp "pdf.includeReferences" $pdfincludeReferences "scalar") (serialize-qp "pdf.includeMedia" $pdfincludeMedia "scalar") (serialize-qp "pdf.includeApplicantAttachments" $pdfincludeApplicantAttachments "scalar") (serialize-qp "pdf.includeOrganizationAttachments" $pdfincludeOrganizationAttachments "scalar") (serialize-qp "pdf.includeRatings" $pdfincludeRatings "scalar") (serialize-qp "pdf.includeFullPageMedia" $pdfincludeFullPageMedia "scalar") (serialize-qp "pdf.includeHighlights" $pdfincludeHighlights "scalar") (serialize-qp "pdf.includeComments" $pdfincludeComments "scalar") (serialize-qp "pdf.includeCommonApp" $pdfincludeCommonApp "scalar") (serialize-qp "zip.originalMedia" $ziporiginalMedia "scalar") (serialize-qp "zip.includeForms" $zipincludeForms "scalar") (serialize-qp "zip.includeReferences" $zipincludeReferences "scalar") (serialize-qp "zip.includeMedia" $zipincludeMedia "scalar") (serialize-qp "zip.includeApplicantAttachments" $zipincludeApplicantAttachments "scalar") (serialize-qp "zip.includeOrganizationAttachments" $zipincludeOrganizationAttachments "scalar") (serialize-qp "zip.includeRatings" $zipincludeRatings "scalar") (serialize-qp "zip.includeComments" $zipincludeComments "scalar") (serialize-qp "zip.includeCommonApp" $zipincludeCommonApp "scalar") (serialize-qp "delivery.account" $deliveryaccount "scalar") (serialize-qp "delivery.folder" $deliveryfolder "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "pool" $pool "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "searchName" $searchName "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "roundType" $round_type "scalar") (serialize-qp "roundName" $round_name "scalar") (serialize-qp "tab.export" $tab_export "scalar") (serialize-qp "pdf.includeForms" $pdf_include_forms "scalar") (serialize-qp "pdf.includeReferences" $pdf_include_references "scalar") (serialize-qp "pdf.includeMedia" $pdf_include_media "scalar") (serialize-qp "pdf.includeApplicantAttachments" $pdf_include_applicant_attachments "scalar") (serialize-qp "pdf.includeOrganizationAttachments" $pdf_include_organization_attachments "scalar") (serialize-qp "pdf.includeRatings" $pdf_include_ratings "scalar") (serialize-qp "pdf.includeFullPageMedia" $pdf_include_full_page_media "scalar") (serialize-qp "pdf.includeHighlights" $pdf_include_highlights "scalar") (serialize-qp "pdf.includeComments" $pdf_include_comments "scalar") (serialize-qp "pdf.includeCommonApp" $pdf_include_common_app "scalar") (serialize-qp "zip.originalMedia" $zip_original_media "scalar") (serialize-qp "zip.includeForms" $zip_include_forms "scalar") (serialize-qp "zip.includeReferences" $zip_include_references "scalar") (serialize-qp "zip.includeMedia" $zip_include_media "scalar") (serialize-qp "zip.includeApplicantAttachments" $zip_include_applicant_attachments "scalar") (serialize-qp "zip.includeOrganizationAttachments" $zip_include_organization_attachments "scalar") (serialize-qp "zip.includeRatings" $zip_include_ratings "scalar") (serialize-qp "zip.includeComments" $zip_include_comments "scalar") (serialize-qp "zip.includeCommonApp" $zip_include_common_app "scalar") (serialize-qp "delivery.account" $delivery_account "scalar") (serialize-qp "delivery.folder" $delivery_folder "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "pool" $pool "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "searchName" $search_name "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/application/request-export" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -284,8 +284,8 @@ export def "application-request-export RequestExportV2" [
 #
 # DELETE /api/v2/application/{applicationId}/attributes
 # operationId: Application_DeleteAttributesV2
-export def "application-attributes DeleteAttributesV2" [
-  applicationId: string
+export def "application-attributes delete-attributes-v2" [
+  application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +300,7 @@ export def "application-attributes DeleteAttributesV2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v2/application/($applicationId)/attributes" $qp)
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/api/v2/application/{application_id}/attributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -310,8 +310,8 @@ export def "application-attributes DeleteAttributesV2" [
 #
 # GET /api/v2/application/{applicationId}/attributes
 # operationId: Application_GetAttributesV2
-export def "application-attributes GetAttributesV2" [
-  applicationId: string
+export def "application-attributes get-attributes-v2" [
+  application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "application-attributes GetAttributesV2" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/application/($applicationId)/attributes")
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/api/v2/application/{application_id}/attributes"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -334,8 +334,8 @@ export def "application-attributes GetAttributesV2" [
 #
 # POST /api/v2/application/{applicationId}/attributes
 # operationId: Application_PostAttributesV2
-export def "application-attributes PostAttributesV2" [
-  applicationId: string
+export def "application-attributes create-attributes-v2" [
+  application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,7 +350,7 @@ export def "application-attributes PostAttributesV2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/application/($applicationId)/attributes")
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/api/v2/application/{application_id}/attributes"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -361,8 +361,8 @@ export def "application-attributes PostAttributesV2" [
 #
 # POST /api/v2/application/{applicationId}/request-export
 # operationId: Application_RequestExportByApplicationIdV2
-export def "application-request-export RequestExportByApplicationIdV2" [
-  applicationId: string
+export def "application-request-export request" [
+  application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,35 +373,35 @@ export def "application-request-export RequestExportByApplicationIdV2" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer
-  --roundType: string@roundType-completer
-  --roundName: string
-  --tabexport: string
-  --pdfincludeForms: oneof<nothing, bool>
-  --pdfincludeReferences: oneof<nothing, bool>
-  --pdfincludeMedia: oneof<nothing, bool>
-  --pdfincludeApplicantAttachments: oneof<nothing, bool>
-  --pdfincludeOrganizationAttachments: oneof<nothing, bool>
-  --pdfincludeRatings: oneof<nothing, bool>
-  --pdfincludeFullPageMedia: oneof<nothing, bool>
-  --pdfincludeHighlights: oneof<nothing, bool>
-  --pdfincludeComments: oneof<nothing, bool>
-  --pdfincludeCommonApp: oneof<nothing, bool>
-  --ziporiginalMedia: oneof<nothing, bool>
-  --zipincludeForms: oneof<nothing, bool>
-  --zipincludeReferences: oneof<nothing, bool>
-  --zipincludeMedia: oneof<nothing, bool>
-  --zipincludeApplicantAttachments: oneof<nothing, bool>
-  --zipincludeOrganizationAttachments: oneof<nothing, bool>
-  --zipincludeRatings: oneof<nothing, bool>
-  --zipincludeComments: oneof<nothing, bool>
-  --zipincludeCommonApp: oneof<nothing, bool>
-  --deliveryaccount: string
-  --deliveryfolder: string
+  --round-type: string@round-type-completer
+  --round-name: string
+  --tab-export: string
+  --pdf-include-forms: oneof<nothing, bool>
+  --pdf-include-references: oneof<nothing, bool>
+  --pdf-include-media: oneof<nothing, bool>
+  --pdf-include-applicant-attachments: oneof<nothing, bool>
+  --pdf-include-organization-attachments: oneof<nothing, bool>
+  --pdf-include-ratings: oneof<nothing, bool>
+  --pdf-include-full-page-media: oneof<nothing, bool>
+  --pdf-include-highlights: oneof<nothing, bool>
+  --pdf-include-comments: oneof<nothing, bool>
+  --pdf-include-common-app: oneof<nothing, bool>
+  --zip-original-media: oneof<nothing, bool>
+  --zip-include-forms: oneof<nothing, bool>
+  --zip-include-references: oneof<nothing, bool>
+  --zip-include-media: oneof<nothing, bool>
+  --zip-include-applicant-attachments: oneof<nothing, bool>
+  --zip-include-organization-attachments: oneof<nothing, bool>
+  --zip-include-ratings: oneof<nothing, bool>
+  --zip-include-comments: oneof<nothing, bool>
+  --zip-include-common-app: oneof<nothing, bool>
+  --delivery-account: string
+  --delivery-folder: string
 ]: nothing -> record<message: string, submissions: int, token: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "roundType" $roundType "scalar") (serialize-qp "roundName" $roundName "scalar") (serialize-qp "tab.export" $tabexport "scalar") (serialize-qp "pdf.includeForms" $pdfincludeForms "scalar") (serialize-qp "pdf.includeReferences" $pdfincludeReferences "scalar") (serialize-qp "pdf.includeMedia" $pdfincludeMedia "scalar") (serialize-qp "pdf.includeApplicantAttachments" $pdfincludeApplicantAttachments "scalar") (serialize-qp "pdf.includeOrganizationAttachments" $pdfincludeOrganizationAttachments "scalar") (serialize-qp "pdf.includeRatings" $pdfincludeRatings "scalar") (serialize-qp "pdf.includeFullPageMedia" $pdfincludeFullPageMedia "scalar") (serialize-qp "pdf.includeHighlights" $pdfincludeHighlights "scalar") (serialize-qp "pdf.includeComments" $pdfincludeComments "scalar") (serialize-qp "pdf.includeCommonApp" $pdfincludeCommonApp "scalar") (serialize-qp "zip.originalMedia" $ziporiginalMedia "scalar") (serialize-qp "zip.includeForms" $zipincludeForms "scalar") (serialize-qp "zip.includeReferences" $zipincludeReferences "scalar") (serialize-qp "zip.includeMedia" $zipincludeMedia "scalar") (serialize-qp "zip.includeApplicantAttachments" $zipincludeApplicantAttachments "scalar") (serialize-qp "zip.includeOrganizationAttachments" $zipincludeOrganizationAttachments "scalar") (serialize-qp "zip.includeRatings" $zipincludeRatings "scalar") (serialize-qp "zip.includeComments" $zipincludeComments "scalar") (serialize-qp "zip.includeCommonApp" $zipincludeCommonApp "scalar") (serialize-qp "delivery.account" $deliveryaccount "scalar") (serialize-qp "delivery.folder" $deliveryfolder "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v2/application/($applicationId)/request-export" $qp)
+  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "roundType" $round_type "scalar") (serialize-qp "roundName" $round_name "scalar") (serialize-qp "tab.export" $tab_export "scalar") (serialize-qp "pdf.includeForms" $pdf_include_forms "scalar") (serialize-qp "pdf.includeReferences" $pdf_include_references "scalar") (serialize-qp "pdf.includeMedia" $pdf_include_media "scalar") (serialize-qp "pdf.includeApplicantAttachments" $pdf_include_applicant_attachments "scalar") (serialize-qp "pdf.includeOrganizationAttachments" $pdf_include_organization_attachments "scalar") (serialize-qp "pdf.includeRatings" $pdf_include_ratings "scalar") (serialize-qp "pdf.includeFullPageMedia" $pdf_include_full_page_media "scalar") (serialize-qp "pdf.includeHighlights" $pdf_include_highlights "scalar") (serialize-qp "pdf.includeComments" $pdf_include_comments "scalar") (serialize-qp "pdf.includeCommonApp" $pdf_include_common_app "scalar") (serialize-qp "zip.originalMedia" $zip_original_media "scalar") (serialize-qp "zip.includeForms" $zip_include_forms "scalar") (serialize-qp "zip.includeReferences" $zip_include_references "scalar") (serialize-qp "zip.includeMedia" $zip_include_media "scalar") (serialize-qp "zip.includeApplicantAttachments" $zip_include_applicant_attachments "scalar") (serialize-qp "zip.includeOrganizationAttachments" $zip_include_organization_attachments "scalar") (serialize-qp "zip.includeRatings" $zip_include_ratings "scalar") (serialize-qp "zip.includeComments" $zip_include_comments "scalar") (serialize-qp "zip.includeCommonApp" $zip_include_common_app "scalar") (serialize-qp "delivery.account" $delivery_account "scalar") (serialize-qp "delivery.folder" $delivery_folder "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/api/v2/application/{application_id}/request-export") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,8 +411,8 @@ export def "application-request-export RequestExportByApplicationIdV2" [
 #
 # GET /api/v2/export/{token}
 # operationId: Export_GetV2
-export def "export GetV2" [
-  token: int
+export def "export get-v2" [
+  token_arg: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,7 +425,7 @@ export def "export GetV2" [
 ]: nothing -> record<completed_files: int, file_urls: list<string>, status: string, total_files: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2/export/($token)")
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/api/v2/export/{token_arg}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

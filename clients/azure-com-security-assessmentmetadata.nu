@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-security-assessment-metadata List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-security-assessment-metadata list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Security/assessmentMetadata
 # operationId: AssessmentsMetadata_List
-export def "providers-microsoft-security-assessment-metadata List" [
+export def "providers-microsoft-security-assessment-metadata list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-security-assessment-metadata List" [
 #
 # GET /providers/Microsoft.Security/assessmentMetadata/{assessmentMetadataName}
 # operationId: AssessmentsMetadata_Get
-export def "providers-microsoft-security-assessment-metadata Get" [
-  assessmentMetadataName: string
+export def "providers-microsoft-security-assessment-metadata get" [
+  assessment_metadata_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "providers-microsoft-security-assessment-metadata Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Security/assessmentMetadata/($assessmentMetadataName)" $qp)
+  let full_url = (build-url $base ({assessment_metadata_name: $assessment_metadata_name} | format pattern "/providers/Microsoft.Security/assessmentMetadata/{assessment_metadata_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,8 +142,8 @@ export def "providers-microsoft-security-assessment-metadata Get" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/assessmentMetadata
 # operationId: AssessmentsMetadataSubscription_List
-export def "subscriptions-providers-microsoft-security-assessment-metadata List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-security-assessment-metadata list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,7 +157,7 @@ export def "subscriptions-providers-microsoft-security-assessment-metadata List"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/assessmentMetadata" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/assessmentMetadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -167,9 +167,9 @@ export def "subscriptions-providers-microsoft-security-assessment-metadata List"
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Security/assessmentMetadata/{assessmentMetadataName}
 # operationId: AssessmentsMetadataSubscription_Delete
-export def "subscriptions-providers-microsoft-security-assessment-metadata Delete" [
-  assessmentMetadataName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-security-assessment-metadata delete" [
+  subscription_id: string
+  assessment_metadata_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "subscriptions-providers-microsoft-security-assessment-metadata Delet
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/assessmentMetadata/($assessmentMetadataName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, assessment_metadata_name: $assessment_metadata_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/assessmentMetadata/{assessment_metadata_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -193,9 +193,9 @@ export def "subscriptions-providers-microsoft-security-assessment-metadata Delet
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/assessmentMetadata/{assessmentMetadataName}
 # operationId: AssessmentsMetadataSubscription_Get
-export def "subscriptions-providers-microsoft-security-assessment-metadata Get" [
-  assessmentMetadataName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-security-assessment-metadata get" [
+  subscription_id: string
+  assessment_metadata_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "subscriptions-providers-microsoft-security-assessment-metadata Get" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/assessmentMetadata/($assessmentMetadataName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, assessment_metadata_name: $assessment_metadata_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/assessmentMetadata/{assessment_metadata_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -219,9 +219,9 @@ export def "subscriptions-providers-microsoft-security-assessment-metadata Get" 
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Security/assessmentMetadata/{assessmentMetadataName}
 # operationId: AssessmentsMetadataSubscription_Create
-export def "subscriptions-providers-microsoft-security-assessment-metadata Create" [
-  assessmentMetadataName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-security-assessment-metadata create" [
+  subscription_id: string
+  assessment_metadata_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "subscriptions-providers-microsoft-security-assessment-metadata Creat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/assessmentMetadata/($assessmentMetadataName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, assessment_metadata_name: $assessment_metadata_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/assessmentMetadata/{assessment_metadata_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

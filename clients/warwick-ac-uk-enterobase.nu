@@ -177,7 +177,7 @@ export def "v20-lookup get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2.0/lookup/($barcode)")
+  let full_url = (build-url $base ({barcode: $barcode} | format pattern "/api/v2.0/lookup/{barcode}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -201,8 +201,8 @@ export def "v20-lookup post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2.0/lookup/($barcode)")
-  let body = {barcode: $body_barcode} | compact
+  let full_url = (build-url $base ({barcode: $barcode} | format pattern "/api/v2.0/lookup/{barcode}"))
+  let body = {"barcode": $body_barcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -238,7 +238,7 @@ export def "v20-assemblies list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "orderby" $orderby "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "barcode" $barcode "multi") (serialize-qp "n50" $n50 "scalar") (serialize-qp "top_species" $top_species "scalar") (serialize-qp "uberstrain" $uberstrain "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "assembly_status" $assembly_status "scalar") (serialize-qp "sortorder" $sortorder "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v2.0/($database)/assemblies" $qp)
+  let full_url = (build-url $base ({database: $database} | format pattern "/api/v2.0/{database}/assemblies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -248,8 +248,8 @@ export def "v20-assemblies list" [
 #
 # GET /api/v2.0/{database}/assemblies/{barcode}
 export def "v20-assemblies get" [
-  barcode: string
   database: string
+  barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,8 +274,8 @@ export def "v20-assemblies get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2.0/($database)/assemblies/($barcode)")
-  let body = {assembly_status: $assembly_status, barcode: $body_barcode, limit: $limit, n50: $n50, offset: $offset, only_fields: $only_fields, orderby: $orderby, reldate: $reldate, sortorder: $sortorder, top_species: $top_species, uberstrain: $uberstrain, version: $version} | compact
+  let full_url = (build-url $base ({database: $database, barcode: $barcode} | format pattern "/api/v2.0/{database}/assemblies/{barcode}"))
+  let body = {"assembly_status": $assembly_status, "barcode": $body_barcode, "limit": $limit, "n50": $n50, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "reldate": $reldate, "sortorder": $sortorder, "top_species": $top_species, "uberstrain": $uberstrain, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -286,8 +286,8 @@ export def "v20-assemblies get" [
 #
 # POST /api/v2.0/{database}/assemblies/{barcode}
 export def "v20-assemblies post" [
-  barcode: string
   database: string
+  barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,8 +312,8 @@ export def "v20-assemblies post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2.0/($database)/assemblies/($barcode)")
-  let body = {assembly_status: $assembly_status, barcode: $body_barcode, limit: $limit, n50: $n50, offset: $offset, only_fields: $only_fields, orderby: $orderby, reldate: $reldate, sortorder: $sortorder, top_species: $top_species, uberstrain: $uberstrain, version: $version} | compact
+  let full_url = (build-url $base ({database: $database, barcode: $barcode} | format pattern "/api/v2.0/{database}/assemblies/{barcode}"))
+  let body = {"assembly_status": $assembly_status, "barcode": $body_barcode, "limit": $limit, "n50": $n50, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "reldate": $reldate, "sortorder": $sortorder, "top_species": $top_species, "uberstrain": $uberstrain, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -324,8 +324,8 @@ export def "v20-assemblies post" [
 #
 # PUT /api/v2.0/{database}/assemblies/{barcode}
 export def "v20-assemblies put" [
-  barcode: string
   database: string
+  barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,8 +350,8 @@ export def "v20-assemblies put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2.0/($database)/assemblies/($barcode)")
-  let body = {assembly_status: $assembly_status, barcode: $body_barcode, limit: $limit, n50: $n50, offset: $offset, only_fields: $only_fields, orderby: $orderby, reldate: $reldate, sortorder: $sortorder, top_species: $top_species, uberstrain: $uberstrain, version: $version} | compact
+  let full_url = (build-url $base ({database: $database, barcode: $barcode} | format pattern "/api/v2.0/{database}/assemblies/{barcode}"))
+  let body = {"assembly_status": $assembly_status, "barcode": $body_barcode, "limit": $limit, "n50": $n50, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "reldate": $reldate, "sortorder": $sortorder, "top_species": $top_species, "uberstrain": $uberstrain, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -386,7 +386,7 @@ export def "v20-schemes list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "orderby" $orderby "scalar") (serialize-qp "scheme_name" $scheme_name "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "lastmodified" $lastmodified "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "label" $label "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "version" $version "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sortorder" $sortorder "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v2.0/($database)/schemes" $qp)
+  let full_url = (build-url $base ({database: $database} | format pattern "/api/v2.0/{database}/schemes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -396,8 +396,8 @@ export def "v20-schemes list" [
 #
 # GET /api/v2.0/{database}/schemes/{barcode}
 export def "v20-schemes get" [
-  barcode: string
   database: string
+  barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,8 +421,8 @@ export def "v20-schemes get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2.0/($database)/schemes/($barcode)")
-  let body = {barcode: $body_barcode, created: $created, label: $label, lastmodified: $lastmodified, limit: $limit, offset: $offset, only_fields: $only_fields, orderby: $orderby, scheme_name: $scheme_name, sortorder: $sortorder, version: $version} | compact
+  let full_url = (build-url $base ({database: $database, barcode: $barcode} | format pattern "/api/v2.0/{database}/schemes/{barcode}"))
+  let body = {"barcode": $body_barcode, "created": $created, "label": $label, "lastmodified": $lastmodified, "limit": $limit, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "scheme_name": $scheme_name, "sortorder": $sortorder, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -433,8 +433,8 @@ export def "v20-schemes get" [
 #
 # POST /api/v2.0/{database}/schemes/{barcode}
 export def "v20-schemes post" [
-  barcode: string
   database: string
+  barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,8 +458,8 @@ export def "v20-schemes post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2.0/($database)/schemes/($barcode)")
-  let body = {barcode: $body_barcode, created: $created, label: $label, lastmodified: $lastmodified, limit: $limit, offset: $offset, only_fields: $only_fields, orderby: $orderby, scheme_name: $scheme_name, sortorder: $sortorder, version: $version} | compact
+  let full_url = (build-url $base ({database: $database, barcode: $barcode} | format pattern "/api/v2.0/{database}/schemes/{barcode}"))
+  let body = {"barcode": $body_barcode, "created": $created, "label": $label, "lastmodified": $lastmodified, "limit": $limit, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "scheme_name": $scheme_name, "sortorder": $sortorder, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -470,8 +470,8 @@ export def "v20-schemes post" [
 #
 # PUT /api/v2.0/{database}/schemes/{barcode}
 export def "v20-schemes put" [
-  barcode: string
   database: string
+  barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -495,8 +495,8 @@ export def "v20-schemes put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2.0/($database)/schemes/($barcode)")
-  let body = {barcode: $body_barcode, created: $created, label: $label, lastmodified: $lastmodified, limit: $limit, offset: $offset, only_fields: $only_fields, orderby: $orderby, scheme_name: $scheme_name, sortorder: $sortorder, version: $version} | compact
+  let full_url = (build-url $base ({database: $database, barcode: $barcode} | format pattern "/api/v2.0/{database}/schemes/{barcode}"))
+  let body = {"barcode": $body_barcode, "created": $created, "label": $label, "lastmodified": $lastmodified, "limit": $limit, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "scheme_name": $scheme_name, "sortorder": $sortorder, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -557,7 +557,7 @@ export def "v20-straindata get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "comment" $comment "scalar") (serialize-qp "secondary_sample_accession" $secondary_sample_accession "scalar") (serialize-qp "my_strains" $my_strains "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "serotype" $serotype "scalar") (serialize-qp "n50" $n50 "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "postcode" $postcode "scalar") (serialize-qp "lab_contact" $lab_contact "scalar") (serialize-qp "substrains" $substrains "scalar") (serialize-qp "custom_fields" $custom_fields "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "strain_name" $strain_name "scalar") (serialize-qp "collection_date" $collection_date "scalar") (serialize-qp "collection_month" $collection_month "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "continent" $continent "scalar") (serialize-qp "source_details" $source_details "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "source_niche" $source_niche "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "uberstrain" $uberstrain "scalar") (serialize-qp "sortorder" $sortorder "scalar") (serialize-qp "collection_year" $collection_year "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "assembly_status" $assembly_status "scalar") (serialize-qp "source_type" $source_type "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "sample_accession" $sample_accession "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "top_species" $top_species "scalar") (serialize-qp "collection_time" $collection_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v2.0/($database)/straindata" $qp)
+  let full_url = (build-url $base ({database: $database} | format pattern "/api/v2.0/{database}/straindata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -615,7 +615,7 @@ export def "v20-strains list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "comment" $comment "scalar") (serialize-qp "secondary_sample_accession" $secondary_sample_accession "scalar") (serialize-qp "antigenic_formulas" $antigenic_formulas "scalar") (serialize-qp "my_strains" $my_strains "scalar") (serialize-qp "serotype" $serotype "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "postcode" $postcode "scalar") (serialize-qp "lab_contact" $lab_contact "scalar") (serialize-qp "substrains" $substrains "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "strain_name" $strain_name "scalar") (serialize-qp "collection_date" $collection_date "scalar") (serialize-qp "collection_month" $collection_month "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "continent" $continent "scalar") (serialize-qp "source_details" $source_details "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "assembly_barcode" $assembly_barcode "scalar") (serialize-qp "source_niche" $source_niche "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "uberstrain" $uberstrain "scalar") (serialize-qp "sortorder" $sortorder "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "collection_year" $collection_year "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "return_all" $return_all "scalar") (serialize-qp "source_type" $source_type "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "sample_accession" $sample_accession "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "collection_time" $collection_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v2.0/($database)/strains" $qp)
+  let full_url = (build-url $base ({database: $database} | format pattern "/api/v2.0/{database}/strains") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -625,8 +625,8 @@ export def "v20-strains list" [
 #
 # GET /api/v2.0/{database}/strains/{barcode}
 export def "v20-strains get" [
-  barcode: string
   database: string
+  barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,8 +674,8 @@ export def "v20-strains get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2.0/($database)/strains/($barcode)")
-  let body = {antigenic_formulas: $antigenic_formulas, assembly_barcode: $assembly_barcode, barcode: $body_barcode, city: $city, collection_date: $collection_date, collection_month: $collection_month, collection_time: $collection_time, collection_year: $collection_year, comment: $comment, continent: $continent, country: $country, county: $county, lab_contact: $lab_contact, latitude: $latitude, limit: $limit, longitude: $longitude, my_strains: $my_strains, offset: $offset, only_fields: $only_fields, orderby: $orderby, postcode: $postcode, region: $region, reldate: $reldate, return_all: $return_all, sample_accession: $sample_accession, secondary_sample_accession: $secondary_sample_accession, serotype: $serotype, sortorder: $sortorder, source_details: $source_details, source_niche: $source_niche, source_type: $source_type, strain_name: $strain_name, substrains: $substrains, uberstrain: $uberstrain, version: $version} | compact
+  let full_url = (build-url $base ({database: $database, barcode: $barcode} | format pattern "/api/v2.0/{database}/strains/{barcode}"))
+  let body = {"antigenic_formulas": $antigenic_formulas, "assembly_barcode": $assembly_barcode, "barcode": $body_barcode, "city": $city, "collection_date": $collection_date, "collection_month": $collection_month, "collection_time": $collection_time, "collection_year": $collection_year, "comment": $comment, "continent": $continent, "country": $country, "county": $county, "lab_contact": $lab_contact, "latitude": $latitude, "limit": $limit, "longitude": $longitude, "my_strains": $my_strains, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "postcode": $postcode, "region": $region, "reldate": $reldate, "return_all": $return_all, "sample_accession": $sample_accession, "secondary_sample_accession": $secondary_sample_accession, "serotype": $serotype, "sortorder": $sortorder, "source_details": $source_details, "source_niche": $source_niche, "source_type": $source_type, "strain_name": $strain_name, "substrains": $substrains, "uberstrain": $uberstrain, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -686,8 +686,8 @@ export def "v20-strains get" [
 #
 # POST /api/v2.0/{database}/strains/{barcode}
 export def "v20-strains post" [
-  barcode: string
   database: string
+  barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -735,8 +735,8 @@ export def "v20-strains post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2.0/($database)/strains/($barcode)")
-  let body = {antigenic_formulas: $antigenic_formulas, assembly_barcode: $assembly_barcode, barcode: $body_barcode, city: $city, collection_date: $collection_date, collection_month: $collection_month, collection_time: $collection_time, collection_year: $collection_year, comment: $comment, continent: $continent, country: $country, county: $county, lab_contact: $lab_contact, latitude: $latitude, limit: $limit, longitude: $longitude, my_strains: $my_strains, offset: $offset, only_fields: $only_fields, orderby: $orderby, postcode: $postcode, region: $region, reldate: $reldate, return_all: $return_all, sample_accession: $sample_accession, secondary_sample_accession: $secondary_sample_accession, serotype: $serotype, sortorder: $sortorder, source_details: $source_details, source_niche: $source_niche, source_type: $source_type, strain_name: $strain_name, substrains: $substrains, uberstrain: $uberstrain, version: $version} | compact
+  let full_url = (build-url $base ({database: $database, barcode: $barcode} | format pattern "/api/v2.0/{database}/strains/{barcode}"))
+  let body = {"antigenic_formulas": $antigenic_formulas, "assembly_barcode": $assembly_barcode, "barcode": $body_barcode, "city": $city, "collection_date": $collection_date, "collection_month": $collection_month, "collection_time": $collection_time, "collection_year": $collection_year, "comment": $comment, "continent": $continent, "country": $country, "county": $county, "lab_contact": $lab_contact, "latitude": $latitude, "limit": $limit, "longitude": $longitude, "my_strains": $my_strains, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "postcode": $postcode, "region": $region, "reldate": $reldate, "return_all": $return_all, "sample_accession": $sample_accession, "secondary_sample_accession": $secondary_sample_accession, "serotype": $serotype, "sortorder": $sortorder, "source_details": $source_details, "source_niche": $source_niche, "source_type": $source_type, "strain_name": $strain_name, "substrains": $substrains, "uberstrain": $uberstrain, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -747,8 +747,8 @@ export def "v20-strains post" [
 #
 # PUT /api/v2.0/{database}/strains/{barcode}
 export def "v20-strains put" [
-  barcode: string
   database: string
+  barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,8 +796,8 @@ export def "v20-strains put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2.0/($database)/strains/($barcode)")
-  let body = {antigenic_formulas: $antigenic_formulas, assembly_barcode: $assembly_barcode, barcode: $body_barcode, city: $city, collection_date: $collection_date, collection_month: $collection_month, collection_time: $collection_time, collection_year: $collection_year, comment: $comment, continent: $continent, country: $country, county: $county, lab_contact: $lab_contact, latitude: $latitude, limit: $limit, longitude: $longitude, my_strains: $my_strains, offset: $offset, only_fields: $only_fields, orderby: $orderby, postcode: $postcode, region: $region, reldate: $reldate, return_all: $return_all, sample_accession: $sample_accession, secondary_sample_accession: $secondary_sample_accession, serotype: $serotype, sortorder: $sortorder, source_details: $source_details, source_niche: $source_niche, source_type: $source_type, strain_name: $strain_name, substrains: $substrains, uberstrain: $uberstrain, version: $version} | compact
+  let full_url = (build-url $base ({database: $database, barcode: $barcode} | format pattern "/api/v2.0/{database}/strains/{barcode}"))
+  let body = {"antigenic_formulas": $antigenic_formulas, "assembly_barcode": $assembly_barcode, "barcode": $body_barcode, "city": $city, "collection_date": $collection_date, "collection_month": $collection_month, "collection_time": $collection_time, "collection_year": $collection_year, "comment": $comment, "continent": $continent, "country": $country, "county": $county, "lab_contact": $lab_contact, "latitude": $latitude, "limit": $limit, "longitude": $longitude, "my_strains": $my_strains, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "postcode": $postcode, "region": $region, "reldate": $reldate, "return_all": $return_all, "sample_accession": $sample_accession, "secondary_sample_accession": $secondary_sample_accession, "serotype": $serotype, "sortorder": $sortorder, "source_details": $source_details, "source_niche": $source_niche, "source_type": $source_type, "strain_name": $strain_name, "substrains": $substrains, "uberstrain": $uberstrain, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -856,7 +856,7 @@ export def "v20-strainsversion get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "comment" $comment "scalar") (serialize-qp "secondary_sample_accession" $secondary_sample_accession "scalar") (serialize-qp "antigenic_formulas" $antigenic_formulas "scalar") (serialize-qp "my_strains" $my_strains "scalar") (serialize-qp "serotype" $serotype "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "postcode" $postcode "scalar") (serialize-qp "lab_contact" $lab_contact "scalar") (serialize-qp "substrains" $substrains "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "strain_name" $strain_name "scalar") (serialize-qp "collection_date" $collection_date "scalar") (serialize-qp "collection_month" $collection_month "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "continent" $continent "scalar") (serialize-qp "source_details" $source_details "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "assembly_barcode" $assembly_barcode "scalar") (serialize-qp "source_niche" $source_niche "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "uberstrain" $uberstrain "scalar") (serialize-qp "sortorder" $sortorder "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "collection_year" $collection_year "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "return_all" $return_all "scalar") (serialize-qp "source_type" $source_type "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "sample_accession" $sample_accession "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "collection_time" $collection_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v2.0/($database)/strainsversion" $qp)
+  let full_url = (build-url $base ({database: $database} | format pattern "/api/v2.0/{database}/strainsversion") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -885,7 +885,7 @@ export def "v20-traces list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "orderby" $orderby "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "sortorder" $sortorder "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v2.0/($database)/traces" $qp)
+  let full_url = (build-url $base ({database: $database} | format pattern "/api/v2.0/{database}/traces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -895,8 +895,8 @@ export def "v20-traces list" [
 #
 # GET /api/v2.0/{database}/traces/{barcode}
 export def "v20-traces get" [
-  barcode: string
   database: string
+  barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -915,8 +915,8 @@ export def "v20-traces get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2.0/($database)/traces/($barcode)")
-  let body = {barcode: $body_barcode, limit: $limit, offset: $offset, only_fields: $only_fields, orderby: $orderby, sortorder: $sortorder} | compact
+  let full_url = (build-url $base ({database: $database, barcode: $barcode} | format pattern "/api/v2.0/{database}/traces/{barcode}"))
+  let body = {"barcode": $body_barcode, "limit": $limit, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "sortorder": $sortorder} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -927,8 +927,8 @@ export def "v20-traces get" [
 #
 # POST /api/v2.0/{database}/traces/{barcode}
 export def "v20-traces post" [
-  barcode: string
   database: string
+  barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -947,8 +947,8 @@ export def "v20-traces post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2.0/($database)/traces/($barcode)")
-  let body = {barcode: $body_barcode, limit: $limit, offset: $offset, only_fields: $only_fields, orderby: $orderby, sortorder: $sortorder} | compact
+  let full_url = (build-url $base ({database: $database, barcode: $barcode} | format pattern "/api/v2.0/{database}/traces/{barcode}"))
+  let body = {"barcode": $body_barcode, "limit": $limit, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "sortorder": $sortorder} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -959,8 +959,8 @@ export def "v20-traces post" [
 #
 # PUT /api/v2.0/{database}/traces/{barcode}
 export def "v20-traces put" [
-  barcode: string
   database: string
+  barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -979,8 +979,8 @@ export def "v20-traces put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v2.0/($database)/traces/($barcode)")
-  let body = {barcode: $body_barcode, limit: $limit, offset: $offset, only_fields: $only_fields, orderby: $orderby, sortorder: $sortorder} | compact
+  let full_url = (build-url $base ({database: $database, barcode: $barcode} | format pattern "/api/v2.0/{database}/traces/{barcode}"))
+  let body = {"barcode": $body_barcode, "limit": $limit, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "sortorder": $sortorder} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -991,8 +991,8 @@ export def "v20-traces put" [
 #
 # GET /api/v2.0/{database}/{scheme}/alleles
 export def "v20-alleles get" [
-  scheme: string
   database: string
+  scheme: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1013,7 +1013,7 @@ export def "v20-alleles get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "allele_id" $allele_id "scalar") (serialize-qp "seq" $seq "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "locus" $locus "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v2.0/($database)/($scheme)/alleles" $qp)
+  let full_url = (build-url $base ({database: $database, scheme: $scheme} | format pattern "/api/v2.0/{database}/{scheme}/alleles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1023,8 +1023,8 @@ export def "v20-alleles get" [
 #
 # GET /api/v2.0/{database}/{scheme}/loci
 export def "v20-loci get" [
-  scheme: string
   database: string
+  scheme: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1044,7 +1044,7 @@ export def "v20-loci get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "barcode" $barcode "multi") (serialize-qp "locus" $locus "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "create_time" $create_time "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "scheme" $scheme "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v2.0/($database)/($scheme)/loci" $qp)
+  let full_url = (build-url $base ({database: $database, scheme: $scheme} | format pattern "/api/v2.0/{database}/{scheme}/loci") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1054,8 +1054,8 @@ export def "v20-loci get" [
 #
 # GET /api/v2.0/{database}/{scheme}/sts
 export def "v20-sts get" [
-  scheme: string
   database: string
+  scheme: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,7 +1076,7 @@ export def "v20-sts get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "st_id" $st_id "scalar") (serialize-qp "scheme" $scheme "scalar") (serialize-qp "show_alleles" $show_alleles "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v2.0/($database)/($scheme)/sts" $qp)
+  let full_url = (build-url $base ({database: $database, scheme: $scheme} | format pattern "/api/v2.0/{database}/{scheme}/sts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

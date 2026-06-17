@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v-cms GetAllContentTypes" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v-cms get-all-content-types" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,8 +92,8 @@ export def commands []: nothing -> table {
 #
 # GET /_v/cms/api/{builderId}/
 # operationId: GetAllContentTypes
-export def "v-cms GetAllContentTypes" [
-  builderId: string
+export def "v-cms get-all-content-types" [
+  builder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,7 +105,7 @@ export def "v-cms GetAllContentTypes" [
 ]: nothing -> record<contentTypes: table<configurationSchemaSets: list, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/_v/cms/api/($builderId)/")
+  let full_url = (build-url $base ({builder_id: $builder_id} | format pattern "/_v/cms/api/{builder_id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -115,8 +115,8 @@ export def "v-cms GetAllContentTypes" [
 #
 # GET /_v/cms/api/{builderId}/{content-type}
 # operationId: GetPagesbyContentType
-export def "v-cms GetPagesbyContentType" [
-  builderId: string
+export def "v-cms get-pagesby-content-type" [
+  builder_id: string
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -126,14 +126,14 @@ export def "v-cms GetPagesbyContentType" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versionId: string # Version ID presented in the URL path of a CMS preview. (e.g. e7263fc8-bc68-4052-9e25-dd5a2572d3bb)
-  --releaseId: string # Release ID presented in the URL path of a CMS preview. (e.g. 6196c277c6dce15f9709a2a7)
-  --filters{field}: string # Filter results by a property of the page (e.g., `filters[status]`) or by a nested custom field of the `parameters` object (e.g., `filters[parameters.collection.sort]`). *Replace {field} with the desired property.* (e.g. published)
+  --version-id: string # Version ID presented in the URL path of a CMS preview. (e.g. e7263fc8-bc68-4052-9e25-dd5a2572d3bb)
+  --release-id: string # Release ID presented in the URL path of a CMS preview. (e.g. 6196c277c6dce15f9709a2a7)
+  --filters-field: string # Filter results by a property of the page (e.g., `filters[status]`) or by a nested custom field of the `parameters` object (e.g., `filters[parameters.collection.sort]`). *Replace {field} with the desired property.* (e.g. published)
 ]: nothing -> record<data: table<id: string, name: string, parameters: record, sections: list, status: string, type: string, versionId: string, versionStatus: string>, hasNextPage: bool, totalItems: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "versionId" $versionId "scalar") (serialize-qp "releaseId" $releaseId "scalar") (serialize-qp "filters[{field}]" $filters{field} "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/_v/cms/api/($builderId)/($content_type)" $qp)
+  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "releaseId" $release_id "scalar") (serialize-qp "filters[{field}]" $filters_field "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({builder_id: $builder_id, content_type: $content_type} | format pattern "/_v/cms/api/{builder_id}/{content_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,8 +143,8 @@ export def "v-cms GetPagesbyContentType" [
 #
 # GET /_v/cms/api/{builderId}/{content-type}/{document-id}/
 # operationId: GetCMSpage
-export def "v-cms GetCMSpage" [
-  builderId: string
+export def "v-cms get-cm-spage" [
+  builder_id: string
   content_type: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -155,13 +155,13 @@ export def "v-cms GetCMSpage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versionId: string # Version ID presented in the URL path of a CMS preview. (e.g. e7263fc8-bc68-4052-9e25-dd5a2572d3bb)
-  --releaseId: string # Release ID presented in the URL path of a CMS preview. (e.g. 6196c277c6dce15f9709a2a7)
+  --version-id: string # Version ID presented in the URL path of a CMS preview. (e.g. e7263fc8-bc68-4052-9e25-dd5a2572d3bb)
+  --release-id: string # Release ID presented in the URL path of a CMS preview. (e.g. 6196c277c6dce15f9709a2a7)
 ]: nothing -> record<id: string, name: string, sections: table<data: record, id: string, name: string>, status: string, type: string, versionId: string, versionStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "versionId" $versionId "scalar") (serialize-qp "releaseId" $releaseId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/_v/cms/api/($builderId)/($content_type)/($document_id)/" $qp)
+  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "releaseId" $release_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({builder_id: $builder_id, content_type: $content_type, document_id: $document_id} | format pattern "/_v/cms/api/{builder_id}/{content_type}/{document_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

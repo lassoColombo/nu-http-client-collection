@@ -106,22 +106,22 @@ export def "check post" [
   --data: string # The text to be checked, given as a JSON document that specifies what's text and what's markup. This or 'text' is required. Markup will be ignored when looking for errors. Example text: <pre>A &lt;b>test&lt;/b></pre>JSON for the example text: <pre>{"annotation":[  {"text": "A "},  {"markup": "&lt;b>"},  {"text": "test"},  {"markup": "&lt;/b>"} ]}</pre> <p>If you have markup that should be interpreted as whitespace, like <tt>&lt;p&gt;</tt> in HTML, you can have it interpreted like this: <pre>{"markup": "&lt;p&gt;", "interpretAs": "\n\n"}</pre><p>The 'data' feature is not limited to HTML or XML, it can be used for any kind of markup. Entities will need to be expanded in this input.
   language: string # A language code like `en-US`, `de-DE`, `fr`, or `auto` to guess the language automatically (see `preferredVariants` below). For languages with variants (English, German, Portuguese) spell checking will only be activated when you specify the variant, e.g. `en-GB` instead of just `en`.
   --username: string # Set to get Premium API access: Your username/email as used to log in at languagetool.org.
-  --apiKey: string # Set to get Premium API access: <a target='_blank' href='https://languagetool.org/editor/settings/access-tokens'>your API key</a>
+  --api-key: string # Set to get Premium API access: <a target='_blank' href='https://languagetool.org/editor/settings/access-tokens'>your API key</a>
   --dicts: string # Comma-separated list of dictionaries to include words from; uses special default dictionary if this is unset
-  --motherTongue: string # A language code of the user's native language, enabling false friends checks for some language pairs.
-  --preferredVariants: string # Comma-separated list of preferred language variants. The language detector used with `language=auto` can detect e.g. English, but it cannot decide whether British English or American English is used. Thus this parameter can be used to specify the preferred variants like `en-GB` and `de-AT`. Only available with `language=auto`. You should set variants for at least German and English, as otherwise the spell checking will not work for those, as no spelling dictionary can be selected for just `en` or `de`.
-  --enabledRules: string # IDs of rules to be enabled, comma-separated
-  --disabledRules: string # IDs of rules to be disabled, comma-separated
-  --enabledCategories: string # IDs of categories to be enabled, comma-separated
-  --disabledCategories: string # IDs of categories to be disabled, comma-separated
-  --enabledOnly: oneof<nothing, bool> # If true, only the rules and categories whose IDs are specified with `enabledRules` or `enabledCategories` are enabled.
+  --mother-tongue: string # A language code of the user's native language, enabling false friends checks for some language pairs.
+  --preferred-variants: string # Comma-separated list of preferred language variants. The language detector used with `language=auto` can detect e.g. English, but it cannot decide whether British English or American English is used. Thus this parameter can be used to specify the preferred variants like `en-GB` and `de-AT`. Only available with `language=auto`. You should set variants for at least German and English, as otherwise the spell checking will not work for those, as no spelling dictionary can be selected for just `en` or `de`.
+  --enabled-rules: string # IDs of rules to be enabled, comma-separated
+  --disabled-rules: string # IDs of rules to be disabled, comma-separated
+  --enabled-categories: string # IDs of categories to be enabled, comma-separated
+  --disabled-categories: string # IDs of categories to be disabled, comma-separated
+  --enabled-only: oneof<nothing, bool> # If true, only the rules and categories whose IDs are specified with `enabledRules` or `enabledCategories` are enabled.
   --level: string@level-completer # If set to `picky`, additional rules will be activated, i.e. rules that you might only find useful when checking formal text.
 ]: any -> record<language: record<code: string, detectedLanguage: record<code: string, name: string>, name: string>, matches: table<context: record, length: int, message: string, offset: int, replacements: list, rule: record, sentence: string, shortMessage: string>, software: record<apiVersion: int, buildDate: string, name: string, premium: bool, status: string, version: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/check")
-  let body = {text: $text, data: $data, language: $language, username: $username, apiKey: $apiKey, dicts: $dicts, motherTongue: $motherTongue, preferredVariants: $preferredVariants, enabledRules: $enabledRules, disabledRules: $disabledRules, enabledCategories: $enabledCategories, disabledCategories: $disabledCategories, enabledOnly: $enabledOnly, level: $level} | compact
+  let body = {"text": $text, "data": $data, "language": $language, "username": $username, "apiKey": $api_key, "dicts": $dicts, "motherTongue": $mother_tongue, "preferredVariants": $preferred_variants, "enabledRules": $enabled_rules, "disabledRules": $disabled_rules, "enabledCategories": $enabled_categories, "disabledCategories": $disabled_categories, "enabledOnly": $enabled_only, "level": $level} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -164,12 +164,12 @@ export def "words get" [
   --offset: int # Offset of where to start in the list of words. Defaults to 0.
   --limit: int # Maximum number of words to return. Defaults to 10.
   --username: string # Your username as used to log in at languagetool.org.
-  --apiKey: string # <a target='_blank' href='https://languagetool.org/editor/settings/access-tokens'>Your API key</a> (format: password)
+  --api-key: string # <a target='_blank' href='https://languagetool.org/editor/settings/access-tokens'>Your API key</a> (format: password)
   --dicts: string # Comma-separated list of dictionaries to include words from; uses special default dictionary if this is unset
 ]: nothing -> record<words: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "apiKey" $apiKey "scalar") (serialize-qp "dicts" $dicts "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "apiKey" $api_key "scalar") (serialize-qp "dicts" $dicts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/words" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -190,14 +190,14 @@ export def "words-add post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   word: string # The word to be added. Must not be a phrase, i.e. cannot contain white space. The word is added to a global dictionary that applies to all languages.
   username: string # Your username as used to log in at languagetool.org.
-  apiKey: string # <a target='_blank' href='https://languagetool.org/editor/settings/access-tokens'>Your API key</a>
+  api_key: string # <a target='_blank' href='https://languagetool.org/editor/settings/access-tokens'>Your API key</a>
   --dict: string # Name of the dictionary to add the word to; non-existent dictionaries are created after calling this; if unset, adds to special default dictionary
 ]: any -> record<added: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/words/add")
-  let body = {word: $word, username: $username, apiKey: $apiKey, dict: $dict} | compact
+  let body = {"word": $word, "username": $username, "apiKey": $api_key, "dict": $dict} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -218,14 +218,14 @@ export def "words-delete post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   word: string # The word to be removed.
   username: string # Your username as used to log in at languagetool.org.
-  apiKey: string # <a target='_blank' href='https://languagetool.org/editor/settings/access-tokens'>Your API key</a>
+  api_key: string # <a target='_blank' href='https://languagetool.org/editor/settings/access-tokens'>Your API key</a>
   --dict: string # Name of the dictionary to remove the word from; if the dictionary is empty upon calling this, it is deleted; if unset, removes from special default dictionary
 ]: any -> record<deleted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/words/delete")
-  let body = {word: $word, username: $username, apiKey: $apiKey, dict: $dict} | compact
+  let body = {"word": $word, "username": $username, "apiKey": $api_key, "dict": $dict} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

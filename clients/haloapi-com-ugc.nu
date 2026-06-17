@@ -112,7 +112,7 @@ export def "h5-players-gamevariants 58acde292109180bdcacc40d" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/h5/players/($player)/gamevariants" $qp)
+  let full_url = (build-url $base ({player: $player} | format pattern "/h5/players/{player}/gamevariants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -136,7 +136,7 @@ export def "h5-players-gamevariants 58acde292109180bdcacc40c" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/h5/players/($player)/gamevariants/($variant)")
+  let full_url = (build-url $base ({player: $player, variant: $variant} | format pattern "/h5/players/{player}/gamevariants/{variant}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -164,7 +164,7 @@ export def "h5-players-mapvariants 58acde292109180bdcacc40f" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/h5/players/($player)/mapvariants" $qp)
+  let full_url = (build-url $base ({player: $player} | format pattern "/h5/players/{player}/mapvariants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,7 +188,7 @@ export def "h5-players-mapvariants 58acde292109180bdcacc40e" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/h5/players/($player)/mapvariants/($variant)")
+  let full_url = (build-url $base ({player: $player, variant: $variant} | format pattern "/h5/players/{player}/mapvariants/{variant}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

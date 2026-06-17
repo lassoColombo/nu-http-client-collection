@@ -72,7 +72,7 @@ def accept-completer [] { ["application/json" "text/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "advanced-async get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "advanced-async get-number-insight" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +97,7 @@ export def commands []: nothing -> table {
 # GET /advanced/async/{format}
 # operationId: getNumberInsightAsync
 @deprecated --flag ip
-export def "advanced-async get" [
+export def "advanced-async get-number-insight" [
   format: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -117,7 +117,7 @@ export def "advanced-async get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "cnam" $cnam "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/advanced/async/($format)" $qp)
+  let full_url = (build-url $base ({format: $format} | format pattern "/advanced/async/{format}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -128,7 +128,7 @@ export def "advanced-async get" [
 # GET /advanced/{format}
 # operationId: getNumberInsightAdvanced
 @deprecated --flag ip
-export def "advanced get" [
+export def "advanced get-number-insight" [
   format: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -148,7 +148,7 @@ export def "advanced get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "real_time_data" $real_time_data "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "cnam" $cnam "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/advanced/($format)" $qp)
+  let full_url = (build-url $base ({format: $format} | format pattern "/advanced/{format}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -158,7 +158,7 @@ export def "advanced get" [
 #
 # GET /basic/{format}
 # operationId: getNumberInsightBasic
-export def "basic get" [
+export def "basic get-number-insight" [
   format: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -175,7 +175,7 @@ export def "basic get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/basic/($format)" $qp)
+  let full_url = (build-url $base ({format: $format} | format pattern "/basic/{format}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -185,7 +185,7 @@ export def "basic get" [
 #
 # GET /standard/{format}
 # operationId: getNumberInsightStandard
-export def "standard get" [
+export def "standard get-number-insight" [
   format: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -203,7 +203,7 @@ export def "standard get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "cnam" $cnam "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/standard/($format)" $qp)
+  let full_url = (build-url $base ({format: $format} | format pattern "/standard/{format}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

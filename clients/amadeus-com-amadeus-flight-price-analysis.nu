@@ -101,15 +101,15 @@ export def "analytics-itinerary-price-metrics get-itinerary-price-metrics" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --originIataCode: string # airport code, following [IATA standard](http://www.iata.org/publications/Pages/code-search.aspx), from which the traveler will depart  (e.g. MAD)
-  --destinationIataCode: string # airport code, following [IATA standard](http://www.iata.org/publications/Pages/code-search.aspx), to which the traveler is going. (e.g. CDG)
-  --departureDate: string # The date on which the traveler will depart from the origin to go to the destination.   Dates are specified in the[ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format. (e.g. 2021-03-21)
-  --currencyCode: string # the preferred currency for display. Currency is specified in the [ISO 4217](https://en.wikipedia.org/wiki/ISO_4217) format, e.g. EUR for Euro (default: EUR)
-  --oneWay: oneof<nothing, bool> # true to get price metrics for a one way trip, false to get price metrics for a round trip (default: false)
+  --origin-iata-code: string # airport code, following [IATA standard](http://www.iata.org/publications/Pages/code-search.aspx), from which the traveler will depart  (e.g. MAD)
+  --destination-iata-code: string # airport code, following [IATA standard](http://www.iata.org/publications/Pages/code-search.aspx), to which the traveler is going. (e.g. CDG)
+  --departure-date: string # The date on which the traveler will depart from the origin to go to the destination.   Dates are specified in the[ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format. (e.g. 2021-03-21)
+  --currency-code: string # the preferred currency for display. Currency is specified in the [ISO 4217](https://en.wikipedia.org/wiki/ISO_4217) format, e.g. EUR for Euro (default: EUR)
+  --one-way: oneof<nothing, bool> # true to get price metrics for a one way trip, false to get price metrics for a round trip (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "originIataCode" $originIataCode "scalar") (serialize-qp "destinationIataCode" $destinationIataCode "scalar") (serialize-qp "departureDate" $departureDate "scalar") (serialize-qp "currencyCode" $currencyCode "scalar") (serialize-qp "oneWay" $oneWay "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "originIataCode" $origin_iata_code "scalar") (serialize-qp "destinationIataCode" $destination_iata_code "scalar") (serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "currencyCode" $currency_code "scalar") (serialize-qp "oneWay" $one_way "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/analytics/itinerary-price-metrics" $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

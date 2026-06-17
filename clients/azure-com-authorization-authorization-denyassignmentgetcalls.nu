@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-authorization-deny-assignments List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-authorization-deny-assignments list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/denyAssignments
 # operationId: DenyAssignments_List
-export def "subscriptions-providers-microsoft-authorization-deny-assignments List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-authorization-deny-assignments list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,7 +109,7 @@ export def "subscriptions-providers-microsoft-authorization-deny-assignments Lis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Authorization/denyAssignments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Authorization/denyAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,9 +119,9 @@ export def "subscriptions-providers-microsoft-authorization-deny-assignments Lis
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/denyAssignments
 # operationId: DenyAssignments_ListForResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-authorization-deny-assignments ListForResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-authorization-deny-assignments list-for" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,7 +136,7 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-deny
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Authorization/denyAssignments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Authorization/denyAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -146,13 +146,13 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-deny
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/denyAssignments
 # operationId: DenyAssignments_ListForResource
-export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-deny-assignments ListForResource" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceProviderNamespace: string
-  parentResourcePath: string
-  resourceType: string
-  resourceName: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-deny-assignments list-for-resource" [
+  subscription_id: string
+  resource_group_name: string
+  resource_provider_namespace: string
+  parent_resource_path: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($resourceProviderNamespace)/($parentResourcePath)/($resourceType)/($resourceName)/providers/Microsoft.Authorization/denyAssignments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_provider_namespace: $resource_provider_namespace, parent_resource_path: $parent_resource_path, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{resource_provider_namespace}/{parent_resource_path}/{resource_type}/{resource_name}/providers/Microsoft.Authorization/denyAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -177,8 +177,8 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
 #
 # GET /{denyAssignmentId}
 # operationId: DenyAssignments_GetById
-export def "deny-assignments GetById" [
-  denyAssignmentId: string
+export def "deny-assignments get-by" [
+  deny_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "deny-assignments GetById" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($denyAssignmentId)" $qp)
+  let full_url = (build-url $base ({deny_assignment_id: $deny_assignment_id} | format pattern "/{deny_assignment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,7 +202,7 @@ export def "deny-assignments GetById" [
 #
 # GET /{scope}/providers/Microsoft.Authorization/denyAssignments
 # operationId: DenyAssignments_ListForScope
-export def "providers-microsoft-authorization-deny-assignments ListForScope" [
+export def "providers-microsoft-authorization-deny-assignments list-for" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,7 +218,7 @@ export def "providers-microsoft-authorization-deny-assignments ListForScope" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Authorization/denyAssignments" $qp)
+  let full_url = (build-url $base ({scope: $scope} | format pattern "/{scope}/providers/Microsoft.Authorization/denyAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -228,9 +228,9 @@ export def "providers-microsoft-authorization-deny-assignments ListForScope" [
 #
 # GET /{scope}/providers/Microsoft.Authorization/denyAssignments/{denyAssignmentId}
 # operationId: DenyAssignments_Get
-export def "providers-microsoft-authorization-deny-assignments Get" [
+export def "providers-microsoft-authorization-deny-assignments get" [
   scope: string
-  denyAssignmentId: string
+  deny_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "providers-microsoft-authorization-deny-assignments Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Authorization/denyAssignments/($denyAssignmentId)" $qp)
+  let full_url = (build-url $base ({scope: $scope, deny_assignment_id: $deny_assignment_id} | format pattern "/{scope}/providers/Microsoft.Authorization/denyAssignments/{deny_assignment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

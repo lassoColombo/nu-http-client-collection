@@ -164,7 +164,7 @@ export def "chart get" [
 #
 # GET /chart.js/2.8.0
 # operationId: getChartjs280
-export def "chartjs-280 get" [
+export def "chartjs-280 get-chartjs280" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "chartjs-280 get" [
   --chart: string # Javascript/JSON definition of the chart. Use a Chart.js configuration object.
   --width: int # Width of the chart (default: 500)
   --height: int # Height of the chart (default: 300)
-  --backgroundColor: string # Background of the chart canvas. Accepts rgb (rgb(255,255,120)), colors (red), and url-encoded hex values (%23ff00ff). Abbreviated as "bkg"
+  --background-color: string # Background of the chart canvas. Accepts rgb (rgb(255,255,120)), colors (red), and url-encoded hex values (%23ff00ff). Abbreviated as "bkg"
   --bkg: string # Background of the chart canvas. Accepts rgb (rgb(255,255,120)), colors (red), and url-encoded hex values (%23ff00ff). Abbreviated as "bkg"
   --encoding: string@encoding-completer # Encoding of your "chart" parameter. Accepted values are url and base64. (default: url)
   --icac: string # image-charts enterprise `account_id`
@@ -187,7 +187,7 @@ export def "chartjs-280 get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "c" $c "scalar") (serialize-qp "chart" $chart "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "backgroundColor" $backgroundColor "scalar") (serialize-qp "bkg" $bkg "scalar") (serialize-qp "encoding" $encoding "scalar") (serialize-qp "icac" $icac "scalar") (serialize-qp "ichm" $ichm "scalar") (serialize-qp "icretina" $icretina "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "c" $c "scalar") (serialize-qp "chart" $chart "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "bkg" $bkg "scalar") (serialize-qp "encoding" $encoding "scalar") (serialize-qp "icac" $icac "scalar") (serialize-qp "ichm" $ichm "scalar") (serialize-qp "icretina" $icretina "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/chart.js/2.8.0" $qp)
   let accept_val = ($accept | default "application/png")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

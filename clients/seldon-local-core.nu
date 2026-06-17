@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aggregate Aggregate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aggregate get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -91,7 +91,7 @@ export def commands []: nothing -> table {
 # GET /aggregate
 #
 # operationId: Aggregate
-export def "aggregate Aggregate" [
+export def "aggregate get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,7 +115,7 @@ export def "aggregate Aggregate" [
 #
 # operationId: Aggregate2
 # --json shape: {seldonMessages?: list}
-export def "aggregate Aggregate2" [
+export def "aggregate post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,7 +130,7 @@ export def "aggregate Aggregate2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/aggregate")
-  let body = {json: $json} | compact
+  let body = {"json": $json} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -140,7 +140,7 @@ export def "aggregate Aggregate2" [
 # GET /predict
 #
 # operationId: TransformInput4
-export def "predict TransformInput4" [
+export def "predict get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "predict TransformInput4" [
 #
 # operationId: TransformInput3
 # --json shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
-export def "predict TransformInput3" [
+export def "predict post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "predict TransformInput3" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/predict")
-  let body = {json: $json} | compact
+  let body = {"json": $json} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -189,7 +189,7 @@ export def "predict TransformInput3" [
 # GET /route
 #
 # operationId: Route2
-export def "route Route2" [
+export def "route get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "route Route2" [
 #
 # operationId: Route
 # --json shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
-export def "route Route" [
+export def "route post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "route Route" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/route")
-  let body = {json: $json} | compact
+  let body = {"json": $json} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -238,7 +238,7 @@ export def "route Route" [
 # GET /send-feedback
 #
 # operationId: SendFeedback2
-export def "send-feedback SendFeedback2" [
+export def "send-feedback send-feedback2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "send-feedback SendFeedback2" [
 #
 # operationId: SendFeedback
 # --json shape: {request?: record, response?: record, reward?: float, truth?: record}
-export def "send-feedback SendFeedback" [
+export def "send-feedback send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,7 +277,7 @@ export def "send-feedback SendFeedback" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/send-feedback")
-  let body = {json: $json} | compact
+  let body = {"json": $json} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -287,7 +287,7 @@ export def "send-feedback SendFeedback" [
 # GET /transform-input
 #
 # operationId: TransformInput2
-export def "transform-input TransformInput2" [
+export def "transform-input get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "transform-input TransformInput2" [
 #
 # operationId: TransformInput
 # --json shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
-export def "transform-input TransformInput" [
+export def "transform-input post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +326,7 @@ export def "transform-input TransformInput" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transform-input")
-  let body = {json: $json} | compact
+  let body = {"json": $json} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -336,7 +336,7 @@ export def "transform-input TransformInput" [
 # GET /transform-output
 #
 # operationId: TransformOutput2
-export def "transform-output TransformOutput2" [
+export def "transform-output get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,7 +360,7 @@ export def "transform-output TransformOutput2" [
 #
 # operationId: TransformOutput
 # --json shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
-export def "transform-output TransformOutput" [
+export def "transform-output post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "transform-output TransformOutput" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transform-output")
-  let body = {json: $json} | compact
+  let body = {"json": $json} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

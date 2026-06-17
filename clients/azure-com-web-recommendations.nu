@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-web-recommendations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-web-recommendations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/recommendations
 # operationId: Recommendations_List
-export def "subscriptions-providers-microsoft-web-recommendations List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-web-recommendations list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-providers-microsoft-web-recommendations List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "featured" $featured "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Web/recommendations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Web/recommendations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,8 +120,8 @@ export def "subscriptions-providers-microsoft-web-recommendations List" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Web/recommendations/reset
 # operationId: Recommendations_ResetAllFilters
-export def "subscriptions-providers-microsoft-web-recommendations-reset ResetAllFilters" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-web-recommendations-reset reset-all-filters" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,7 +135,7 @@ export def "subscriptions-providers-microsoft-web-recommendations-reset ResetAll
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Web/recommendations/reset" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Web/recommendations/reset") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -145,9 +145,9 @@ export def "subscriptions-providers-microsoft-web-recommendations-reset ResetAll
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Web/recommendations/{name}/disable
 # operationId: Recommendations_DisableRecommendationForSubscription
-export def "subscriptions-providers-microsoft-web-recommendations-disable DisableRecommendationForSubscription" [
+export def "subscriptions-providers-microsoft-web-recommendations-disable disable-recommendation-for" [
+  subscription_id: string
   name: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "subscriptions-providers-microsoft-web-recommendations-disable Disabl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Web/recommendations/($name)/disable" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, name: $name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Web/recommendations/{name}/disable") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,10 +171,10 @@ export def "subscriptions-providers-microsoft-web-recommendations-disable Disabl
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{hostingEnvironmentName}/recommendationHistory
 # operationId: Recommendations_ListHistoryForHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendation-history ListHistoryForHostingEnvironment" [
-  resourceGroupName: string
-  hostingEnvironmentName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendation-history list-history-for" [
+  subscription_id: string
+  resource_group_name: string
+  hosting_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,14 +183,14 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --expiredOnly: oneof<nothing, bool> # Specify <code>false</code> to return all recommendations. The default is <code>true</code>, which returns only expired recommendations.
+  --expired-only: oneof<nothing, bool> # Specify <code>false</code> to return all recommendations. The default is <code>true</code>, which returns only expired recommendations.
   --filter: string # Filter is specified by using OData syntax. Example: $filter=channel eq 'Api' or channel eq 'Notification' and startTime eq 2014-01-01T00:00:00Z and endTime eq 2014-12-31T23:59:59Z and timeGrain eq duration'[PT1H|PT1M|P1D]
   --api-version: string # API Version
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expiredOnly" $expiredOnly "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/hostingEnvironments/($hostingEnvironmentName)/recommendationHistory" $qp)
+  let qp = [(serialize-qp "expiredOnly" $expired_only "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, hosting_environment_name: $hosting_environment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/hostingEnvironments/{hosting_environment_name}/recommendationHistory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -200,10 +200,10 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{hostingEnvironmentName}/recommendations
 # operationId: Recommendations_ListRecommendedRulesForHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendations ListRecommendedRulesForHostingEnvironment" [
-  resourceGroupName: string
-  hostingEnvironmentName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendations list-recommended-rules-for" [
+  subscription_id: string
+  resource_group_name: string
+  hosting_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "featured" $featured "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/hostingEnvironments/($hostingEnvironmentName)/recommendations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, hosting_environment_name: $hosting_environment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/hostingEnvironments/{hosting_environment_name}/recommendations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -229,10 +229,10 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{hostingEnvironmentName}/recommendations/disable
 # operationId: Recommendations_DisableAllForHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendations-disable DisableAllForHostingEnvironment" [
-  resourceGroupName: string
-  hostingEnvironmentName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendations-disable disable-all-for" [
+  subscription_id: string
+  resource_group_name: string
+  hosting_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,13 +241,13 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environmentName: string # Name of the app.
+  --environment-name: string # Name of the app.
   --api-version: string # API Version
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "environmentName" $environmentName "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/hostingEnvironments/($hostingEnvironmentName)/recommendations/disable" $qp)
+  let qp = [(serialize-qp "environmentName" $environment_name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, hosting_environment_name: $hosting_environment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/hostingEnvironments/{hosting_environment_name}/recommendations/disable") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -257,10 +257,10 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{hostingEnvironmentName}/recommendations/reset
 # operationId: Recommendations_ResetAllFiltersForHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendations-reset ResetAllFiltersForHostingEnvironment" [
-  resourceGroupName: string
-  hostingEnvironmentName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendations-reset reset-all-filters-for" [
+  subscription_id: string
+  resource_group_name: string
+  hosting_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,13 +269,13 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environmentName: string # Name of the app.
+  --environment-name: string # Name of the app.
   --api-version: string # API Version
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "environmentName" $environmentName "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/hostingEnvironments/($hostingEnvironmentName)/recommendations/reset" $qp)
+  let qp = [(serialize-qp "environmentName" $environment_name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, hosting_environment_name: $hosting_environment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/hostingEnvironments/{hosting_environment_name}/recommendations/reset") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -285,11 +285,11 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{hostingEnvironmentName}/recommendations/{name}
 # operationId: Recommendations_GetRuleDetailsByHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendations GetRuleDetailsByHostingEnvironment" [
-  resourceGroupName: string
-  hostingEnvironmentName: string
+export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendations get-rule-details" [
+  subscription_id: string
+  resource_group_name: string
+  hosting_environment_name: string
   name: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,14 +298,14 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updateSeen: oneof<nothing, bool> # Specify <code>true</code> to update the last-seen timestamp of the recommendation object.
-  --recommendationId: string # The GUID of the recommendation object if you query an expired one. You don't need to specify it to query an active entry.
+  --update-seen: oneof<nothing, bool> # Specify <code>true</code> to update the last-seen timestamp of the recommendation object.
+  --recommendation-id: string # The GUID of the recommendation object if you query an expired one. You don't need to specify it to query an active entry.
   --api-version: string # API Version
 ]: nothing -> record<properties: record<actionName: string, bladeName: string, categoryTags: list<string>, channels: string, description: string, displayName: string, extensionName: string, forwardLink: string, isDynamic: bool, level: string, message: string, recommendationId: string, recommendationName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "updateSeen" $updateSeen "scalar") (serialize-qp "recommendationId" $recommendationId "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/hostingEnvironments/($hostingEnvironmentName)/recommendations/($name)" $qp)
+  let qp = [(serialize-qp "updateSeen" $update_seen "scalar") (serialize-qp "recommendationId" $recommendation_id "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, hosting_environment_name: $hosting_environment_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/hostingEnvironments/{hosting_environment_name}/recommendations/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -315,11 +315,11 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{hostingEnvironmentName}/recommendations/{name}/disable
 # operationId: Recommendations_DisableRecommendationForHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendations-disable DisableRecommendationForHostingEnvironment" [
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendations-disable disable-recommendation-for" [
+  subscription_id: string
+  resource_group_name: string
+  hosting_environment_name: string
   name: string
-  hostingEnvironmentName: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,13 +328,13 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environmentName: string # Site name
+  --environment-name: string # Site name
   --api-version: string # API Version
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "environmentName" $environmentName "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/hostingEnvironments/($hostingEnvironmentName)/recommendations/($name)/disable" $qp)
+  let qp = [(serialize-qp "environmentName" $environment_name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, hosting_environment_name: $hosting_environment_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/hostingEnvironments/{hosting_environment_name}/recommendations/{name}/disable") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,10 +344,10 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/recommendationHistory
 # operationId: Recommendations_ListHistoryForWebApp
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendation-history ListHistoryForWebApp" [
-  resourceGroupName: string
-  siteName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendation-history list-history-for-web-app" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,14 +356,14 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --expiredOnly: oneof<nothing, bool> # Specify <code>false</code> to return all recommendations. The default is <code>true</code>, which returns only expired recommendations.
+  --expired-only: oneof<nothing, bool> # Specify <code>false</code> to return all recommendations. The default is <code>true</code>, which returns only expired recommendations.
   --filter: string # Filter is specified by using OData syntax. Example: $filter=channel eq 'Api' or channel eq 'Notification' and startTime eq 2014-01-01T00:00:00Z and endTime eq 2014-12-31T23:59:59Z and timeGrain eq duration'[PT1H|PT1M|P1D]
   --api-version: string # API Version
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expiredOnly" $expiredOnly "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/recommendationHistory" $qp)
+  let qp = [(serialize-qp "expiredOnly" $expired_only "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/recommendationHistory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -373,10 +373,10 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/recommendations
 # operationId: Recommendations_ListRecommendedRulesForWebApp
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations ListRecommendedRulesForWebApp" [
-  resourceGroupName: string
-  siteName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations list-recommended-rules-for-web-app" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,7 +392,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "featured" $featured "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/recommendations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/recommendations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -402,10 +402,10 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/recommendations/disable
 # operationId: Recommendations_DisableAllForWebApp
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations-disable DisableAllForWebApp" [
-  resourceGroupName: string
-  siteName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations-disable disable-all-for-web-app" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,7 +419,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/recommendations/disable" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/recommendations/disable") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -429,10 +429,10 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/recommendations/reset
 # operationId: Recommendations_ResetAllFiltersForWebApp
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations-reset ResetAllFiltersForWebApp" [
-  resourceGroupName: string
-  siteName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations-reset reset-all-filters-for-web-app" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,7 +446,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/recommendations/reset" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/recommendations/reset") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -456,11 +456,11 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/recommendations/{name}
 # operationId: Recommendations_GetRuleDetailsByWebApp
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations GetRuleDetailsByWebApp" [
-  resourceGroupName: string
-  siteName: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations get-rule-details" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   name: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,14 +469,14 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updateSeen: oneof<nothing, bool> # Specify <code>true</code> to update the last-seen timestamp of the recommendation object.
-  --recommendationId: string # The GUID of the recommendation object if you query an expired one. You don't need to specify it to query an active entry.
+  --update-seen: oneof<nothing, bool> # Specify <code>true</code> to update the last-seen timestamp of the recommendation object.
+  --recommendation-id: string # The GUID of the recommendation object if you query an expired one. You don't need to specify it to query an active entry.
   --api-version: string # API Version
 ]: nothing -> record<properties: record<actionName: string, bladeName: string, categoryTags: list<string>, channels: string, description: string, displayName: string, extensionName: string, forwardLink: string, isDynamic: bool, level: string, message: string, recommendationId: string, recommendationName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "updateSeen" $updateSeen "scalar") (serialize-qp "recommendationId" $recommendationId "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/recommendations/($name)" $qp)
+  let qp = [(serialize-qp "updateSeen" $update_seen "scalar") (serialize-qp "recommendationId" $recommendation_id "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/recommendations/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -486,11 +486,11 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/recommendations/{name}/disable
 # operationId: Recommendations_DisableRecommendationForSite
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations-disable DisableRecommendationForSite" [
-  resourceGroupName: string
-  siteName: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations-disable disable-recommendation-for" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   name: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,7 +504,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/recommendations/($name)/disable" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/recommendations/{name}/disable") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

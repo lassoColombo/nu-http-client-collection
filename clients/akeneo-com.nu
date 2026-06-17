@@ -108,8 +108,8 @@ export def "oauth-token token" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-type: string # Equal to 'application/json' or 'application/x-www-form-urlencoded', no other value allowed
-  --Authorization: string # Equal to 'Basic xx', where 'xx' is the base 64 encoding of the client id and secret. Find out how to generate them in the <a href="/documentation/authentication.html#client-idsecret-generation">Client ID/secret generation</a> section.
+  --content-type: string # Equal to 'application/json' or 'application/x-www-form-urlencoded', no other value allowed
+  --authorization: string # Equal to 'Basic xx', where 'xx' is the base 64 encoding of the client id and secret. Find out how to generate them in the <a href="/documentation/authentication.html#client-idsecret-generation">Client ID/secret generation</a> section.
   grant_type: string # Always equal to "password"
   password: string # Your PIM password
   username: string # Your PIM username
@@ -118,9 +118,9 @@ export def "oauth-token token" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/oauth/v1/token")
-  let body = {grant_type: $grant_type, password: $password, username: $username} | compact
+  let body = {"grant_type": $grant_type, "password": $password, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-type": $Content_type, "Authorization": $Authorization} | compact
+  let extra_headers = {"Content-type": $content_type, "Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -197,7 +197,7 @@ export def "rest-asset-categories categories-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/asset-categories")
-  let body = {code: $code, labels: $labels, parent: $parent} | compact
+  let body = {"code": $code, "labels": $labels, "parent": $parent} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -226,7 +226,7 @@ export def "rest-asset-categories categories-2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/asset-categories")
-  let body = {code: $code, labels: $labels, parent: $parent} | compact
+  let body = {"code": $code, "labels": $labels, "parent": $parent} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -237,7 +237,7 @@ export def "rest-asset-categories categories-2" [
 #
 # GET /api/rest/v1/asset-categories/{code}
 # operationId: get_asset_categories__code_
-export def "rest-asset-categories -by-code" [
+export def "rest-asset-categories get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,7 +250,7 @@ export def "rest-asset-categories -by-code" [
 ]: nothing -> record<code: string, labels: record<localeCode: string>, parent: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-categories/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/asset-categories/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -261,7 +261,7 @@ export def "rest-asset-categories -by-code" [
 # PATCH /api/rest/v1/asset-categories/{code}
 # operationId: patch_asset_categories__code_
 # --labels shape: {localeCode?: string}
-export def "rest-asset-categories -by-code-1" [
+export def "rest-asset-categories patch" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,8 +278,8 @@ export def "rest-asset-categories -by-code-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-categories/($code)")
-  let body = {code: $body_code, labels: $labels, parent: $parent} | compact
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/asset-categories/{code}"))
+  let body = {"code": $body_code, "labels": $labels, "parent": $parent} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -332,7 +332,7 @@ export def "rest-asset-families-assets assets-by-asset_family_code" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "locales" $locales "scalar") (serialize-qp "search_after" $search_after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/rest/v1/asset-families/($asset_family_code)/assets" $qp)
+  let full_url = (build-url $base ({asset_family_code: $asset_family_code} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/assets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -357,7 +357,7 @@ export def "rest-asset-families-assets assets-by-asset_family_code-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-families/($asset_family_code)/assets")
+  let full_url = (build-url $base ({asset_family_code: $asset_family_code} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/assets"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -368,7 +368,7 @@ export def "rest-asset-families-assets assets-by-asset_family_code-1" [
 #
 # DELETE /api/rest/v1/asset-families/{asset_family_code}/assets/{code}
 # operationId: delete_assets__code_
-export def "rest-asset-families-assets -by-asset_family_code-code" [
+export def "rest-asset-families-assets delete" [
   asset_family_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -382,7 +382,7 @@ export def "rest-asset-families-assets -by-asset_family_code-code" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-families/($asset_family_code)/assets/($code)")
+  let full_url = (build-url $base ({asset_family_code: $asset_family_code, code: $code} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/assets/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -392,7 +392,7 @@ export def "rest-asset-families-assets -by-asset_family_code-code" [
 #
 # GET /api/rest/v1/asset-families/{asset_family_code}/assets/{code}
 # operationId: get_assets__code_
-export def "rest-asset-families-assets -by-asset_family_code-code-1" [
+export def "rest-asset-families-assets get" [
   asset_family_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -406,7 +406,7 @@ export def "rest-asset-families-assets -by-asset_family_code-code-1" [
 ]: nothing -> record<code: string, created: string, updated: string, values: record<attributeCode: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-families/($asset_family_code)/assets/($code)")
+  let full_url = (build-url $base ({asset_family_code: $asset_family_code, code: $code} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/assets/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -417,7 +417,7 @@ export def "rest-asset-families-assets -by-asset_family_code-code-1" [
 # PATCH /api/rest/v1/asset-families/{asset_family_code}/assets/{code}
 # operationId: patch_asset__code_
 # --values shape: {attributeCode?: list}
-export def "rest-asset-families-assets -by-asset_family_code-code-2" [
+export def "rest-asset-families-assets patch" [
   asset_family_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -436,8 +436,8 @@ export def "rest-asset-families-assets -by-asset_family_code-code-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-families/($asset_family_code)/assets/($code)")
-  let body = {code: $body_code, created: $created, updated: $updated, values: $values} | compact
+  let full_url = (build-url $base ({asset_family_code: $asset_family_code, code: $code} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/assets/{code}"))
+  let body = {"code": $body_code, "created": $created, "updated": $updated, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -461,7 +461,7 @@ export def "rest-asset-families-attributes attributes" [
 ]: nothing -> table<allowed_extensions: list<string>, code: string, decimals_allowed: bool, is_read_only: bool, is_required_for_completeness: bool, is_rich_text_editor: bool, is_textarea: bool, labels: record<localeCode: string>, max_characters: int, max_file_size: string, max_value: string, media_type: string, min_value: string, prefix: string, suffix: string, type: string, validation_regexp: string, validation_rule: string, value_per_channel: bool, value_per_locale: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-families/($asset_family_code)/attributes")
+  let full_url = (build-url $base ({asset_family_code: $asset_family_code} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/attributes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -485,7 +485,7 @@ export def "rest-asset-families-attributes-options options" [
 ]: nothing -> table<code: string, labels: record<localeCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-families/($asset_family_code)/attributes/($attribute_code)/options")
+  let full_url = (build-url $base ({asset_family_code: $asset_family_code, attribute_code: $attribute_code} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/attributes/{attribute_code}/options"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -495,7 +495,7 @@ export def "rest-asset-families-attributes-options options" [
 #
 # GET /api/rest/v1/asset-families/{asset_family_code}/attributes/{attribute_code}/options/{code}
 # operationId: get_asset_attributes__attribute_code__options__code_
-export def "rest-asset-families-attributes-options -by-asset_family_code-attribute_code-code" [
+export def "rest-asset-families-attributes-options get" [
   asset_family_code: string
   attribute_code: string
   code: string
@@ -510,7 +510,7 @@ export def "rest-asset-families-attributes-options -by-asset_family_code-attribu
 ]: nothing -> record<code: string, labels: record<localeCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-families/($asset_family_code)/attributes/($attribute_code)/options/($code)")
+  let full_url = (build-url $base ({asset_family_code: $asset_family_code, attribute_code: $attribute_code, code: $code} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/attributes/{attribute_code}/options/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -521,7 +521,7 @@ export def "rest-asset-families-attributes-options -by-asset_family_code-attribu
 # PATCH /api/rest/v1/asset-families/{asset_family_code}/attributes/{attribute_code}/options/{code}
 # operationId: patch_asset_attributes__attribute_code__options__code_
 # --labels shape: {localeCode?: string}
-export def "rest-asset-families-attributes-options -by-asset_family_code-attribute_code-code-1" [
+export def "rest-asset-families-attributes-options patch" [
   asset_family_code: string
   attribute_code: string
   code: string
@@ -539,8 +539,8 @@ export def "rest-asset-families-attributes-options -by-asset_family_code-attribu
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-families/($asset_family_code)/attributes/($attribute_code)/options/($code)")
-  let body = {code: $body_code, labels: $labels} | compact
+  let full_url = (build-url $base ({asset_family_code: $asset_family_code, attribute_code: $attribute_code, code: $code} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/attributes/{attribute_code}/options/{code}"))
+  let body = {"code": $body_code, "labels": $labels} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -551,7 +551,7 @@ export def "rest-asset-families-attributes-options -by-asset_family_code-attribu
 #
 # GET /api/rest/v1/asset-families/{asset_family_code}/attributes/{code}
 # operationId: get_asset_family_attributes__code_
-export def "rest-asset-families-attributes -by-asset_family_code-code" [
+export def "rest-asset-families-attributes get" [
   asset_family_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -565,7 +565,7 @@ export def "rest-asset-families-attributes -by-asset_family_code-code" [
 ]: nothing -> record<allowed_extensions: list<string>, code: string, decimals_allowed: bool, is_read_only: bool, is_required_for_completeness: bool, is_rich_text_editor: bool, is_textarea: bool, labels: record<localeCode: string>, max_characters: int, max_file_size: string, max_value: string, media_type: string, min_value: string, prefix: string, suffix: string, type: string, validation_regexp: string, validation_rule: string, value_per_channel: bool, value_per_locale: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-families/($asset_family_code)/attributes/($code)")
+  let full_url = (build-url $base ({asset_family_code: $asset_family_code, code: $code} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/attributes/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -576,7 +576,7 @@ export def "rest-asset-families-attributes -by-asset_family_code-code" [
 # PATCH /api/rest/v1/asset-families/{asset_family_code}/attributes/{code}
 # operationId: patch_asset_family_attributes__code_
 # --labels shape: {localeCode?: string}
-export def "rest-asset-families-attributes -by-asset_family_code-code-1" [
+export def "rest-asset-families-attributes patch" [
   asset_family_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -611,8 +611,8 @@ export def "rest-asset-families-attributes -by-asset_family_code-code-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-families/($asset_family_code)/attributes/($code)")
-  let body = {allowed_extensions: $allowed_extensions, code: $body_code, decimals_allowed: $decimals_allowed, is_read_only: $is_read_only, is_required_for_completeness: $is_required_for_completeness, is_rich_text_editor: $is_rich_text_editor, is_textarea: $is_textarea, labels: $labels, max_characters: $max_characters, max_file_size: $max_file_size, max_value: $max_value, media_type: $media_type, min_value: $min_value, prefix: $prefix, suffix: $suffix, type: $type, validation_regexp: $validation_regexp, validation_rule: $validation_rule, value_per_channel: $value_per_channel, value_per_locale: $value_per_locale} | compact
+  let full_url = (build-url $base ({asset_family_code: $asset_family_code, code: $code} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/attributes/{code}"))
+  let body = {"allowed_extensions": $allowed_extensions, "code": $body_code, "decimals_allowed": $decimals_allowed, "is_read_only": $is_read_only, "is_required_for_completeness": $is_required_for_completeness, "is_rich_text_editor": $is_rich_text_editor, "is_textarea": $is_textarea, "labels": $labels, "max_characters": $max_characters, "max_file_size": $max_file_size, "max_value": $max_value, "media_type": $media_type, "min_value": $min_value, "prefix": $prefix, "suffix": $suffix, "type": $type, "validation_regexp": $validation_regexp, "validation_rule": $validation_rule, "value_per_channel": $value_per_channel, "value_per_locale": $value_per_locale} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -623,7 +623,7 @@ export def "rest-asset-families-attributes -by-asset_family_code-code-1" [
 #
 # GET /api/rest/v1/asset-families/{code}
 # operationId: get_asset_family__code_
-export def "rest-asset-families -by-code" [
+export def "rest-asset-families get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -636,7 +636,7 @@ export def "rest-asset-families -by-code" [
 ]: nothing -> record<attribute_as_main_media: string, code: string, labels: record<localeCode: string>, naming_convention: record<abort_asset_creation_on_error: bool, pattern: string, source: record>, product_link_rules: table<assign_assets_to: list, product_selections: list>, transformations: table<filename_prefix: string, filename_suffix: string, label: string, operations: record, source: record, target: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-families/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/asset-families/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -650,7 +650,7 @@ export def "rest-asset-families -by-code" [
 # --naming_convention shape: {abort_asset_creation_on_error?: bool, pattern?: string, source?: record}
 # --product_link_rules item shape: {assign_assets_to?: list, product_selections?: list}
 # --transformations item shape: {filename_prefix?: string, filename_suffix?: string, label: string, operations: record, source: record, target: record}
-export def "rest-asset-families -by-code-1" [
+export def "rest-asset-families patch" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -670,8 +670,8 @@ export def "rest-asset-families -by-code-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-families/($code)")
-  let body = {attribute_as_main_media: $attribute_as_main_media, code: $body_code, labels: $labels, naming_convention: $naming_convention, product_link_rules: $product_link_rules, transformations: $transformations} | compact
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/asset-families/{code}"))
+  let body = {"attribute_as_main_media": $attribute_as_main_media, "code": $body_code, "labels": $labels, "naming_convention": $naming_convention, "product_link_rules": $product_link_rules, "transformations": $transformations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -691,16 +691,16 @@ export def "rest-asset-media-files files" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-type: string # Equal to 'multipart/form-data', no other value allowed
+  --content-type: string # Equal to 'multipart/form-data', no other value allowed
   file: string # The binary of the media file (format: binary)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/asset-media-files")
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-type": $Content_type} | compact
+  let extra_headers = {"Content-type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -724,7 +724,7 @@ export def "rest-asset-media-files code" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-media-files/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/asset-media-files/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -734,7 +734,7 @@ export def "rest-asset-media-files code" [
 #
 # GET /api/rest/v1/asset-tags
 # operationId: get_asset_tags
-export def "rest-asset-tags tags" [
+export def "rest-asset-tags tag-s" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -760,7 +760,7 @@ export def "rest-asset-tags tags" [
 #
 # GET /api/rest/v1/asset-tags/{code}
 # operationId: get_asset_tags__code_
-export def "rest-asset-tags -by-code" [
+export def "rest-asset-tags get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -773,7 +773,7 @@ export def "rest-asset-tags -by-code" [
 ]: nothing -> record<code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-tags/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/asset-tags/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -783,7 +783,7 @@ export def "rest-asset-tags -by-code" [
 #
 # PATCH /api/rest/v1/asset-tags/{code}
 # operationId: patch_asset_tags__code_
-export def "rest-asset-tags -by-code-1" [
+export def "rest-asset-tags patch" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -798,8 +798,8 @@ export def "rest-asset-tags -by-code-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/asset-tags/($code)")
-  let body = {code: $body_code} | compact
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/asset-tags/{code}"))
+  let body = {"code": $body_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -862,7 +862,7 @@ export def "rest-assets assets-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/assets")
-  let body = {categories: $categories, code: $code, description: $description, end_of_use: $end_of_use, localizable: $localizable, reference_files: $reference_files, tags: $tags, variation_files: $variation_files} | compact
+  let body = {"categories": $categories, "code": $code, "description": $description, "end_of_use": $end_of_use, "localizable": $localizable, "reference_files": $reference_files, "tags": $tags, "variation_files": $variation_files} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -897,7 +897,7 @@ export def "rest-assets assets-2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/assets")
-  let body = {categories: $categories, code: $code, description: $description, end_of_use: $end_of_use, localizable: $localizable, reference_files: $reference_files, tags: $tags, variation_files: $variation_files} | compact
+  let body = {"categories": $categories, "code": $code, "description": $description, "end_of_use": $end_of_use, "localizable": $localizable, "reference_files": $reference_files, "tags": $tags, "variation_files": $variation_files} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -908,7 +908,7 @@ export def "rest-assets assets-2" [
 #
 # GET /api/rest/v1/assets/{asset_code}/reference-files/{locale_code}
 # operationId: get_reference_files__locale_code_
-export def "rest-assets-reference-files -by-asset_code-locale_code" [
+export def "rest-assets-reference-files get" [
   asset_code: string
   locale_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -922,7 +922,7 @@ export def "rest-assets-reference-files -by-asset_code-locale_code" [
 ]: nothing -> record<_link: record<download: record<href: string>>, code: string, locale: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/assets/($asset_code)/reference-files/($locale_code)")
+  let full_url = (build-url $base ({asset_code: $asset_code, locale_code: $locale_code} | format pattern "/api/rest/v1/assets/{asset_code}/reference-files/{locale_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -932,7 +932,7 @@ export def "rest-assets-reference-files -by-asset_code-locale_code" [
 #
 # POST /api/rest/v1/assets/{asset_code}/reference-files/{locale_code}
 # operationId: post_reference_files__locale_code_
-export def "rest-assets-reference-files -by-asset_code-locale_code-1" [
+export def "rest-assets-reference-files post" [
   asset_code: string
   locale_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -943,16 +943,16 @@ export def "rest-assets-reference-files -by-asset_code-locale_code-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-type: string # Equal to 'multipart/form-data', no other value allowed
+  --content-type: string # Equal to 'multipart/form-data', no other value allowed
   file: string # The binaries of the file (format: binary)
 ]: any -> record<errors: table<channel: string, locale: string, message: string>, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/assets/($asset_code)/reference-files/($locale_code)")
-  let body = {file: $file} | compact
+  let full_url = (build-url $base ({asset_code: $asset_code, locale_code: $locale_code} | format pattern "/api/rest/v1/assets/{asset_code}/reference-files/{locale_code}"))
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-type": $Content_type} | compact
+  let extra_headers = {"Content-type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -977,7 +977,7 @@ export def "rest-assets-reference-files-download download" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/assets/($asset_code)/reference-files/($locale_code)/download")
+  let full_url = (build-url $base ({asset_code: $asset_code, locale_code: $locale_code} | format pattern "/api/rest/v1/assets/{asset_code}/reference-files/{locale_code}/download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1002,7 +1002,7 @@ export def "rest-assets-variation-files code" [
 ]: nothing -> record<_link: record<download: record<href: string>>, code: string, locale: string, scope: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/assets/($asset_code)/variation-files/($channel_code)/($locale_code)")
+  let full_url = (build-url $base ({asset_code: $asset_code, channel_code: $channel_code, locale_code: $locale_code} | format pattern "/api/rest/v1/assets/{asset_code}/variation-files/{channel_code}/{locale_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1012,7 +1012,7 @@ export def "rest-assets-variation-files code" [
 #
 # POST /api/rest/v1/assets/{asset_code}/variation-files/{channel_code}/{locale_code}
 # operationId: post_variation_files__channel_code__locale_code_
-export def "rest-assets-variation-files " [
+export def "rest-assets-variation-files post" [
   asset_code: string
   channel_code: string
   locale_code: string
@@ -1024,16 +1024,16 @@ export def "rest-assets-variation-files " [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-type: string # Equal to 'multipart/form-data', no other value allowed
+  --content-type: string # Equal to 'multipart/form-data', no other value allowed
   file: string # The binaries of the file (format: binary)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/assets/($asset_code)/variation-files/($channel_code)/($locale_code)")
-  let body = {file: $file} | compact
+  let full_url = (build-url $base ({asset_code: $asset_code, channel_code: $channel_code, locale_code: $locale_code} | format pattern "/api/rest/v1/assets/{asset_code}/variation-files/{channel_code}/{locale_code}"))
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-type": $Content_type} | compact
+  let extra_headers = {"Content-type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1059,7 +1059,7 @@ export def "rest-assets-variation-files-download download" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/assets/($asset_code)/variation-files/($channel_code)/($locale_code)/download")
+  let full_url = (build-url $base ({asset_code: $asset_code, channel_code: $channel_code, locale_code: $locale_code} | format pattern "/api/rest/v1/assets/{asset_code}/variation-files/{channel_code}/{locale_code}/download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1069,7 +1069,7 @@ export def "rest-assets-variation-files-download download" [
 #
 # GET /api/rest/v1/assets/{code}
 # operationId: get_pam_assets__code_
-export def "rest-assets -by-code" [
+export def "rest-assets get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1082,7 +1082,7 @@ export def "rest-assets -by-code" [
 ]: nothing -> record<categories: list<string>, code: string, description: string, end_of_use: string, localizable: bool, reference_files: table<_link: record, code: string, locale: string>, tags: list<string>, variation_files: table<_link: record, code: string, locale: string, scope: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/assets/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/assets/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1094,7 +1094,7 @@ export def "rest-assets -by-code" [
 # operationId: patch_pam_assets__code_
 # --reference_files item shape: {_link?: record, code?: string, locale?: string}
 # --variation_files item shape: {_link?: record, code?: string, locale?: string, scope?: string}
-export def "rest-assets -by-code-1" [
+export def "rest-assets patch" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1116,8 +1116,8 @@ export def "rest-assets -by-code-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/assets/($code)")
-  let body = {categories: $categories, code: $body_code, description: $description, end_of_use: $end_of_use, localizable: $localizable, reference_files: $reference_files, tags: $tags, variation_files: $variation_files} | compact
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/assets/{code}"))
+  let body = {"categories": $categories, "code": $body_code, "description": $description, "end_of_use": $end_of_use, "localizable": $localizable, "reference_files": $reference_files, "tags": $tags, "variation_files": $variation_files} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1173,7 +1173,7 @@ export def "rest-association-types patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/association-types")
-  let body = {code: $code, is_quantified: $is_quantified, is_two_way: $is_two_way, labels: $labels} | compact
+  let body = {"code": $code, "is_quantified": $is_quantified, "is_two_way": $is_two_way, "labels": $labels} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1203,7 +1203,7 @@ export def "rest-association-types post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/association-types")
-  let body = {code: $code, is_quantified: $is_quantified, is_two_way: $is_two_way, labels: $labels} | compact
+  let body = {"code": $code, "is_quantified": $is_quantified, "is_two_way": $is_two_way, "labels": $labels} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1227,7 +1227,7 @@ export def "rest-association-types get" [
 ]: nothing -> record<code: string, is_quantified: bool, is_two_way: bool, labels: record<localeCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/association-types/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/association-types/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1256,8 +1256,8 @@ export def "rest-association-types patch-by-code" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/association-types/($code)")
-  let body = {code: $body_code, is_quantified: $is_quantified, is_two_way: $is_two_way, labels: $labels} | compact
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/association-types/{code}"))
+  let body = {"code": $body_code, "is_quantified": $is_quantified, "is_two_way": $is_two_way, "labels": $labels} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1314,7 +1314,7 @@ export def "rest-attribute-groups patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/attribute-groups")
-  let body = {attributes: $attributes, code: $code, labels: $labels, sort_order: $sort_order} | compact
+  let body = {"attributes": $attributes, "code": $code, "labels": $labels, "sort_order": $sort_order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1344,7 +1344,7 @@ export def "rest-attribute-groups post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/attribute-groups")
-  let body = {attributes: $attributes, code: $code, labels: $labels, sort_order: $sort_order} | compact
+  let body = {"attributes": $attributes, "code": $code, "labels": $labels, "sort_order": $sort_order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1368,7 +1368,7 @@ export def "rest-attribute-groups get" [
 ]: nothing -> record<attributes: list<string>, code: string, labels: record<localeCode: string>, sort_order: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/attribute-groups/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/attribute-groups/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1397,8 +1397,8 @@ export def "rest-attribute-groups patch-by-code" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/attribute-groups/($code)")
-  let body = {attributes: $attributes, code: $body_code, labels: $labels, sort_order: $sort_order} | compact
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/attribute-groups/{code}"))
+  let body = {"attributes": $attributes, "code": $body_code, "labels": $labels, "sort_order": $sort_order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1482,7 +1482,7 @@ export def "rest-attributes attributes-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/attributes")
-  let body = {allowed_extensions: $allowed_extensions, available_locales: $available_locales, code: $code, date_max: $date_max, date_min: $date_min, decimals_allowed: $decimals_allowed, default_metric_unit: $default_metric_unit, default_value: $default_value, group: $group, group_labels: $group_labels, labels: $labels, localizable: $localizable, max_characters: $max_characters, max_file_size: $max_file_size, metric_family: $metric_family, negative_allowed: $negative_allowed, number_max: $number_max, number_min: $number_min, reference_data_name: $reference_data_name, scopable: $scopable, sort_order: $sort_order, table_configuration: $table_configuration, type: $type, unique: $unique, useable_as_grid_filter: $useable_as_grid_filter, validation_regexp: $validation_regexp, validation_rule: $validation_rule, wysiwyg_enabled: $wysiwyg_enabled} | compact
+  let body = {"allowed_extensions": $allowed_extensions, "available_locales": $available_locales, "code": $code, "date_max": $date_max, "date_min": $date_min, "decimals_allowed": $decimals_allowed, "default_metric_unit": $default_metric_unit, "default_value": $default_value, "group": $group, "group_labels": $group_labels, "labels": $labels, "localizable": $localizable, "max_characters": $max_characters, "max_file_size": $max_file_size, "metric_family": $metric_family, "negative_allowed": $negative_allowed, "number_max": $number_max, "number_min": $number_min, "reference_data_name": $reference_data_name, "scopable": $scopable, "sort_order": $sort_order, "table_configuration": $table_configuration, "type": $type, "unique": $unique, "useable_as_grid_filter": $useable_as_grid_filter, "validation_regexp": $validation_regexp, "validation_rule": $validation_rule, "wysiwyg_enabled": $wysiwyg_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1538,7 +1538,7 @@ export def "rest-attributes attributes-2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/attributes")
-  let body = {allowed_extensions: $allowed_extensions, available_locales: $available_locales, code: $code, date_max: $date_max, date_min: $date_min, decimals_allowed: $decimals_allowed, default_metric_unit: $default_metric_unit, default_value: $default_value, group: $group, group_labels: $group_labels, labels: $labels, localizable: $localizable, max_characters: $max_characters, max_file_size: $max_file_size, metric_family: $metric_family, negative_allowed: $negative_allowed, number_max: $number_max, number_min: $number_min, reference_data_name: $reference_data_name, scopable: $scopable, sort_order: $sort_order, table_configuration: $table_configuration, type: $type, unique: $unique, useable_as_grid_filter: $useable_as_grid_filter, validation_regexp: $validation_regexp, validation_rule: $validation_rule, wysiwyg_enabled: $wysiwyg_enabled} | compact
+  let body = {"allowed_extensions": $allowed_extensions, "available_locales": $available_locales, "code": $code, "date_max": $date_max, "date_min": $date_min, "decimals_allowed": $decimals_allowed, "default_metric_unit": $default_metric_unit, "default_value": $default_value, "group": $group, "group_labels": $group_labels, "labels": $labels, "localizable": $localizable, "max_characters": $max_characters, "max_file_size": $max_file_size, "metric_family": $metric_family, "negative_allowed": $negative_allowed, "number_max": $number_max, "number_min": $number_min, "reference_data_name": $reference_data_name, "scopable": $scopable, "sort_order": $sort_order, "table_configuration": $table_configuration, "type": $type, "unique": $unique, "useable_as_grid_filter": $useable_as_grid_filter, "validation_regexp": $validation_regexp, "validation_rule": $validation_rule, "wysiwyg_enabled": $wysiwyg_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1566,7 +1566,7 @@ export def "rest-attributes-options options-by-attribute_code" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/rest/v1/attributes/($attribute_code)/options" $qp)
+  let full_url = (build-url $base ({attribute_code: $attribute_code} | format pattern "/api/rest/v1/attributes/{attribute_code}/options") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1595,8 +1595,8 @@ export def "rest-attributes-options options-by-attribute_code-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/attributes/($attribute_code)/options")
-  let body = {attribute: $attribute, code: $code, labels: $labels, sort_order: $sort_order} | compact
+  let full_url = (build-url $base ({attribute_code: $attribute_code} | format pattern "/api/rest/v1/attributes/{attribute_code}/options"))
+  let body = {"attribute": $attribute, "code": $code, "labels": $labels, "sort_order": $sort_order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1626,8 +1626,8 @@ export def "rest-attributes-options options-by-attribute_code-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/attributes/($attribute_code)/options")
-  let body = {attribute: $attribute, code: $code, labels: $labels, sort_order: $sort_order} | compact
+  let full_url = (build-url $base ({attribute_code: $attribute_code} | format pattern "/api/rest/v1/attributes/{attribute_code}/options"))
+  let body = {"attribute": $attribute, "code": $code, "labels": $labels, "sort_order": $sort_order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1638,7 +1638,7 @@ export def "rest-attributes-options options-by-attribute_code-2" [
 #
 # GET /api/rest/v1/attributes/{attribute_code}/options/{code}
 # operationId: get_attributes__attribute_code__options__code_
-export def "rest-attributes-options -by-attribute_code-code" [
+export def "rest-attributes-options get" [
   attribute_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1652,7 +1652,7 @@ export def "rest-attributes-options -by-attribute_code-code" [
 ]: nothing -> record<attribute: string, code: string, labels: record<localeCode: string>, sort_order: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/attributes/($attribute_code)/options/($code)")
+  let full_url = (build-url $base ({attribute_code: $attribute_code, code: $code} | format pattern "/api/rest/v1/attributes/{attribute_code}/options/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1663,7 +1663,7 @@ export def "rest-attributes-options -by-attribute_code-code" [
 # PATCH /api/rest/v1/attributes/{attribute_code}/options/{code}
 # operationId: patch_attributes__attribute_code__options__code_
 # --labels shape: {localeCode?: string}
-export def "rest-attributes-options -by-attribute_code-code-1" [
+export def "rest-attributes-options patch" [
   attribute_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1682,8 +1682,8 @@ export def "rest-attributes-options -by-attribute_code-code-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/attributes/($attribute_code)/options/($code)")
-  let body = {attribute: $attribute, code: $body_code, labels: $labels, sort_order: $sort_order} | compact
+  let full_url = (build-url $base ({attribute_code: $attribute_code, code: $code} | format pattern "/api/rest/v1/attributes/{attribute_code}/options/{code}"))
+  let body = {"attribute": $attribute, "code": $body_code, "labels": $labels, "sort_order": $sort_order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1694,7 +1694,7 @@ export def "rest-attributes-options -by-attribute_code-code-1" [
 #
 # GET /api/rest/v1/attributes/{code}
 # operationId: get_attributes__code_
-export def "rest-attributes -by-code" [
+export def "rest-attributes get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1709,7 +1709,7 @@ export def "rest-attributes -by-code" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with_table_select_options" $with_table_select_options "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/rest/v1/attributes/($code)" $qp)
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/attributes/{code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1722,7 +1722,7 @@ export def "rest-attributes -by-code" [
 # --group_labels shape: {localeCode?: string}
 # --labels shape: {localeCode?: string}
 # --table_configuration item shape: {code: string, data_type: "select"|"text"|"number"|"boolean", is_required_for_completeness?: bool, labels?: record, validations?: record}
-export def "rest-attributes -by-code-1" [
+export def "rest-attributes patch" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1764,8 +1764,8 @@ export def "rest-attributes -by-code-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/attributes/($code)")
-  let body = {allowed_extensions: $allowed_extensions, available_locales: $available_locales, code: $body_code, date_max: $date_max, date_min: $date_min, decimals_allowed: $decimals_allowed, default_metric_unit: $default_metric_unit, default_value: $default_value, group: $group, group_labels: $group_labels, labels: $labels, localizable: $localizable, max_characters: $max_characters, max_file_size: $max_file_size, metric_family: $metric_family, negative_allowed: $negative_allowed, number_max: $number_max, number_min: $number_min, reference_data_name: $reference_data_name, scopable: $scopable, sort_order: $sort_order, table_configuration: $table_configuration, type: $type, unique: $unique, useable_as_grid_filter: $useable_as_grid_filter, validation_regexp: $validation_regexp, validation_rule: $validation_rule, wysiwyg_enabled: $wysiwyg_enabled} | compact
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/attributes/{code}"))
+  let body = {"allowed_extensions": $allowed_extensions, "available_locales": $available_locales, "code": $body_code, "date_max": $date_max, "date_min": $date_min, "decimals_allowed": $decimals_allowed, "default_metric_unit": $default_metric_unit, "default_value": $default_value, "group": $group, "group_labels": $group_labels, "labels": $labels, "localizable": $localizable, "max_characters": $max_characters, "max_file_size": $max_file_size, "metric_family": $metric_family, "negative_allowed": $negative_allowed, "number_max": $number_max, "number_min": $number_min, "reference_data_name": $reference_data_name, "scopable": $scopable, "sort_order": $sort_order, "table_configuration": $table_configuration, "type": $type, "unique": $unique, "useable_as_grid_filter": $useable_as_grid_filter, "validation_regexp": $validation_regexp, "validation_rule": $validation_rule, "wysiwyg_enabled": $wysiwyg_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1816,7 +1816,7 @@ export def "rest-catalogs catalog" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/catalogs")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1840,7 +1840,7 @@ export def "rest-catalogs catalog-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/catalogs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/rest/v1/catalogs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1863,7 +1863,7 @@ export def "rest-catalogs catalog-by-id-1" [
 ]: nothing -> record<enabled: bool, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/catalogs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/rest/v1/catalogs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1888,8 +1888,8 @@ export def "rest-catalogs catalog-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/catalogs/($id)")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/rest/v1/catalogs/{id}"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1918,7 +1918,7 @@ export def "rest-catalogs-product-uuids uuids" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "updated_before" $updated_before "scalar") (serialize-qp "updated_after" $updated_after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/rest/v1/catalogs/($id)/product-uuids" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/rest/v1/catalogs/{id}/product-uuids") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1946,7 +1946,7 @@ export def "rest-catalogs-products products" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "updated_before" $updated_before "scalar") (serialize-qp "updated_after" $updated_after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/rest/v1/catalogs/($id)/products" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/rest/v1/catalogs/{id}/products") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1970,7 +1970,7 @@ export def "rest-catalogs-products uuid" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/catalogs/($id)/products/($uuid)")
+  let full_url = (build-url $base ({id: $id, uuid: $uuid} | format pattern "/api/rest/v1/catalogs/{id}/products/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2031,7 +2031,7 @@ export def "rest-categories categories-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/categories")
-  let body = {code: $code, labels: $labels, parent: $parent, position: $position, updated: $updated, values: $values} | compact
+  let body = {"code": $code, "labels": $labels, "parent": $parent, "position": $position, "updated": $updated, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2064,7 +2064,7 @@ export def "rest-categories categories-2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/categories")
-  let body = {code: $code, labels: $labels, parent: $parent, position: $position, updated: $updated, values: $values} | compact
+  let body = {"code": $code, "labels": $labels, "parent": $parent, "position": $position, "updated": $updated, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2075,7 +2075,7 @@ export def "rest-categories categories-2" [
 #
 # GET /api/rest/v1/categories/{code}
 # operationId: get_categories__code_
-export def "rest-categories -by-code" [
+export def "rest-categories get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2091,7 +2091,7 @@ export def "rest-categories -by-code" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with_position" $with_position "scalar") (serialize-qp "with_enriched_attributes" $with_enriched_attributes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/rest/v1/categories/($code)" $qp)
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/categories/{code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2103,7 +2103,7 @@ export def "rest-categories -by-code" [
 # operationId: patch_categories__code_
 # --labels shape: {localeCode?: string}
 # --values shape: {attributeCode|attributeUuid|channelCode|localeCode?: list}
-export def "rest-categories -by-code-1" [
+export def "rest-categories patch" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2123,8 +2123,8 @@ export def "rest-categories -by-code-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/categories/($code)")
-  let body = {code: $body_code, labels: $labels, parent: $parent, position: $position, updated: $updated, values: $values} | compact
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/categories/{code}"))
+  let body = {"code": $body_code, "labels": $labels, "parent": $parent, "position": $position, "updated": $updated, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2148,7 +2148,7 @@ export def "rest-category-media-files-download download" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/category-media-files/($code)/download")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/category-media-files/{code}/download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2206,7 +2206,7 @@ export def "rest-channels patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/channels")
-  let body = {category_tree: $category_tree, code: $code, conversion_units: $conversion_units, currencies: $currencies, labels: $labels, locales: $locales} | compact
+  let body = {"category_tree": $category_tree, "code": $code, "conversion_units": $conversion_units, "currencies": $currencies, "labels": $labels, "locales": $locales} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2239,7 +2239,7 @@ export def "rest-channels post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/channels")
-  let body = {category_tree: $category_tree, code: $code, conversion_units: $conversion_units, currencies: $currencies, labels: $labels, locales: $locales} | compact
+  let body = {"category_tree": $category_tree, "code": $code, "conversion_units": $conversion_units, "currencies": $currencies, "labels": $labels, "locales": $locales} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2250,7 +2250,7 @@ export def "rest-channels post" [
 #
 # GET /api/rest/v1/channels/{code}
 # operationId: get_channels__code_
-export def "rest-channels " [
+export def "rest-channels get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2263,7 +2263,7 @@ export def "rest-channels " [
 ]: nothing -> record<category_tree: string, code: string, conversion_units: record<attributeCode: string>, currencies: list<string>, labels: record<localeCode: string>, locales: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/channels/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/channels/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2295,8 +2295,8 @@ export def "rest-channels patch-by-code" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/channels/($code)")
-  let body = {category_tree: $category_tree, code: $body_code, conversion_units: $conversion_units, currencies: $currencies, labels: $labels, locales: $locales} | compact
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/channels/{code}"))
+  let body = {"category_tree": $category_tree, "code": $body_code, "conversion_units": $conversion_units, "currencies": $currencies, "labels": $labels, "locales": $locales} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2346,7 +2346,7 @@ export def "rest-currencies get" [
 ]: nothing -> record<code: string, enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/currencies/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/currencies/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2405,7 +2405,7 @@ export def "rest-families families-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/families")
-  let body = {attribute_as_image: $attribute_as_image, attribute_as_label: $attribute_as_label, attribute_requirements: $attribute_requirements, attributes: $attributes, code: $code, labels: $labels} | compact
+  let body = {"attribute_as_image": $attribute_as_image, "attribute_as_label": $attribute_as_label, "attribute_requirements": $attribute_requirements, "attributes": $attributes, "code": $code, "labels": $labels} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2438,7 +2438,7 @@ export def "rest-families families-2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/families")
-  let body = {attribute_as_image: $attribute_as_image, attribute_as_label: $attribute_as_label, attribute_requirements: $attribute_requirements, attributes: $attributes, code: $code, labels: $labels} | compact
+  let body = {"attribute_as_image": $attribute_as_image, "attribute_as_label": $attribute_as_label, "attribute_requirements": $attribute_requirements, "attributes": $attributes, "code": $code, "labels": $labels} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2449,7 +2449,7 @@ export def "rest-families families-2" [
 #
 # GET /api/rest/v1/families/{code}
 # operationId: get_families__code_
-export def "rest-families -by-code" [
+export def "rest-families get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2462,7 +2462,7 @@ export def "rest-families -by-code" [
 ]: nothing -> record<attribute_as_image: string, attribute_as_label: string, attribute_requirements: record<channelCode: list<string>>, attributes: list<string>, code: string, labels: record<localeCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/families/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/families/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2474,7 +2474,7 @@ export def "rest-families -by-code" [
 # operationId: patch_families__code_
 # --attribute_requirements shape: {channelCode?: list}
 # --labels shape: {localeCode?: string}
-export def "rest-families -by-code-1" [
+export def "rest-families patch" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2494,8 +2494,8 @@ export def "rest-families -by-code-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/families/($code)")
-  let body = {attribute_as_image: $attribute_as_image, attribute_as_label: $attribute_as_label, attribute_requirements: $attribute_requirements, attributes: $attributes, code: $body_code, labels: $labels} | compact
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/families/{code}"))
+  let body = {"attribute_as_image": $attribute_as_image, "attribute_as_label": $attribute_as_label, "attribute_requirements": $attribute_requirements, "attributes": $attributes, "code": $body_code, "labels": $labels} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2523,7 +2523,7 @@ export def "rest-families-variants variants-by-family_code" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/rest/v1/families/($family_code)/variants" $qp)
+  let full_url = (build-url $base ({family_code: $family_code} | format pattern "/api/rest/v1/families/{family_code}/variants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2552,8 +2552,8 @@ export def "rest-families-variants variants-by-family_code-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/families/($family_code)/variants")
-  let body = {code: $code, labels: $labels, variant_attribute_sets: $variant_attribute_sets} | compact
+  let full_url = (build-url $base ({family_code: $family_code} | format pattern "/api/rest/v1/families/{family_code}/variants"))
+  let body = {"code": $code, "labels": $labels, "variant_attribute_sets": $variant_attribute_sets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2583,8 +2583,8 @@ export def "rest-families-variants variants-by-family_code-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/families/($family_code)/variants")
-  let body = {code: $code, labels: $labels, variant_attribute_sets: $variant_attribute_sets} | compact
+  let full_url = (build-url $base ({family_code: $family_code} | format pattern "/api/rest/v1/families/{family_code}/variants"))
+  let body = {"code": $code, "labels": $labels, "variant_attribute_sets": $variant_attribute_sets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2595,7 +2595,7 @@ export def "rest-families-variants variants-by-family_code-2" [
 #
 # GET /api/rest/v1/families/{family_code}/variants/{code}
 # operationId: get_families__family_code__variants__code__
-export def "rest-families-variants -by-family_code-code" [
+export def "rest-families-variants get" [
   family_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2609,7 +2609,7 @@ export def "rest-families-variants -by-family_code-code" [
 ]: nothing -> record<code: string, labels: record<localeCode: string>, variant_attribute_sets: table<attributes: list, axes: list, level: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/families/($family_code)/variants/($code)")
+  let full_url = (build-url $base ({family_code: $family_code, code: $code} | format pattern "/api/rest/v1/families/{family_code}/variants/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2621,7 +2621,7 @@ export def "rest-families-variants -by-family_code-code" [
 # operationId: patch_families__family_code__variants__code__
 # --labels shape: {localeCode?: string}
 # --variant_attribute_sets item shape: {attributes?: list, axes: list, level: int}
-export def "rest-families-variants -by-family_code-code-1" [
+export def "rest-families-variants patch" [
   family_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2639,8 +2639,8 @@ export def "rest-families-variants -by-family_code-code-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/families/($family_code)/variants/($code)")
-  let body = {code: $body_code, labels: $labels, variant_attribute_sets: $variant_attribute_sets} | compact
+  let full_url = (build-url $base ({family_code: $family_code, code: $code} | format pattern "/api/rest/v1/families/{family_code}/variants/{code}"))
+  let body = {"code": $body_code, "labels": $labels, "variant_attribute_sets": $variant_attribute_sets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2678,7 +2678,7 @@ export def "rest-locales locales" [
 #
 # GET /api/rest/v1/locales/{code}
 # operationId: get_locales__code_
-export def "rest-locales " [
+export def "rest-locales get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2691,7 +2691,7 @@ export def "rest-locales " [
 ]: nothing -> record<code: string, enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/locales/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/locales/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2736,7 +2736,7 @@ export def "rest-measure-families get" [
 ]: nothing -> record<code: string, standard: string, units: table<code: string, convert: record, symbol: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/measure-families/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/measure-families/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2828,7 +2828,7 @@ export def "rest-media-files files-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-type: string # Equal to 'multipart/form-data', no other value allowed
+  --content-type: string # Equal to 'multipart/form-data', no other value allowed
   file: string # The binaries of the file (format: binary)
   --product: string # The product to which the media file will be associated. It is a JSON string that follows this format '{"identifier":"product_identifier", "attribute":"attribute_code", "scope":"channel_code","locale":"locale_code"}'. You have to either use this field or the `product_model` field, but not both at the same time.
   --product-model: string # The product model to which the media file will be associated. It is a JSON string that follows this format '{"code":"product_model_code", "attribute":"attribute_code", "scope":"channel_code","locale":"locale_code"}'. You have to either use this field or the `product` field, but not both at the same time.
@@ -2837,9 +2837,9 @@ export def "rest-media-files files-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/media-files")
-  let body = {file: $file, product: $product, product_model: $product_model} | compact
+  let body = {"file": $file, "product": $product, "product_model": $product_model} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-type": $Content_type} | compact
+  let extra_headers = {"Content-type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2850,7 +2850,7 @@ export def "rest-media-files files-1" [
 #
 # GET /api/rest/v1/media-files/{code}
 # operationId: get_media_files__code_
-export def "rest-media-files " [
+export def "rest-media-files get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2863,7 +2863,7 @@ export def "rest-media-files " [
 ]: nothing -> record<_links: record<download: record<href: string>>, code: string, extension: string, mime_type: string, original_filename: string, size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/media-files/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/media-files/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2886,7 +2886,7 @@ export def "rest-media-files-download download" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/media-files/($code)/download")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/media-files/{code}/download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2959,7 +2959,7 @@ export def "rest-product-models models-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/product-models")
-  let body = {associations: $associations, categories: $categories, code: $code, created: $created, family: $family, family_variant: $family_variant, metadata: $metadata, parent: $parent, quality_scores: $quality_scores, quantified_associations: $quantified_associations, updated: $updated, values: $values} | compact
+  let body = {"associations": $associations, "categories": $categories, "code": $code, "created": $created, "family": $family, "family_variant": $family_variant, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3000,7 +3000,7 @@ export def "rest-product-models models-2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/product-models")
-  let body = {associations: $associations, categories: $categories, code: $code, created: $created, family: $family, family_variant: $family_variant, metadata: $metadata, parent: $parent, quality_scores: $quality_scores, quantified_associations: $quantified_associations, updated: $updated, values: $values} | compact
+  let body = {"associations": $associations, "categories": $categories, "code": $code, "created": $created, "family": $family, "family_variant": $family_variant, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3011,7 +3011,7 @@ export def "rest-product-models models-2" [
 #
 # DELETE /api/rest/v1/product-models/{code}
 # operationId: delete_product_models__code_
-export def "rest-product-models -by-code" [
+export def "rest-product-models delete" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3024,7 +3024,7 @@ export def "rest-product-models -by-code" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/product-models/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/product-models/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3034,7 +3034,7 @@ export def "rest-product-models -by-code" [
 #
 # GET /api/rest/v1/product-models/{code}
 # operationId: get_product_models__code_
-export def "rest-product-models -by-code-1" [
+export def "rest-product-models get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3049,7 +3049,7 @@ export def "rest-product-models -by-code-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with_quality_scores" $with_quality_scores "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/rest/v1/product-models/($code)" $qp)
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/product-models/{code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3063,7 +3063,7 @@ export def "rest-product-models -by-code-1" [
 # --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
 # --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
 # --values shape: {attributeCode?: list}
-export def "rest-product-models -by-code-2" [
+export def "rest-product-models patch" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3089,8 +3089,8 @@ export def "rest-product-models -by-code-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/product-models/($code)")
-  let body = {associations: $associations, categories: $categories, code: $body_code, created: $created, family: $family, family_variant: $family_variant, metadata: $metadata, parent: $parent, quality_scores: $quality_scores, quantified_associations: $quantified_associations, updated: $updated, values: $values} | compact
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/product-models/{code}"))
+  let body = {"associations": $associations, "categories": $categories, "code": $body_code, "created": $created, "family": $family, "family_variant": $family_variant, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3101,7 +3101,7 @@ export def "rest-product-models -by-code-2" [
 #
 # GET /api/rest/v1/product-models/{code}/draft
 # operationId: get_product_model_draft__code_
-export def "rest-product-models-draft " [
+export def "rest-product-models-draft get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3114,7 +3114,7 @@ export def "rest-product-models-draft " [
 ]: nothing -> record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, code: string, created: string, family: string, family_variant: string, metadata: record<workflow_status: string>, parent: string, quality_scores: record, quantified_associations: record<quantifiedAssociationTypeCode: record<product_models: list, products: list>>, updated: string, values: record<attributeCode: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/product-models/($code)/draft")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/product-models/{code}/draft"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3137,7 +3137,7 @@ export def "rest-product-models-proposal proposal" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/product-models/($code)/proposal")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/product-models/{code}/proposal"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3216,7 +3216,7 @@ export def "rest-products products-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/products")
-  let body = {associations: $associations, categories: $categories, completenesses: $completenesses, created: $created, enabled: $enabled, family: $family, groups: $groups, identifier: $identifier, metadata: $metadata, parent: $parent, quality_scores: $quality_scores, quantified_associations: $quantified_associations, updated: $updated, uuid: $uuid, values: $values} | compact
+  let body = {"associations": $associations, "categories": $categories, "completenesses": $completenesses, "created": $created, "enabled": $enabled, "family": $family, "groups": $groups, "identifier": $identifier, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "uuid": $uuid, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3261,7 +3261,7 @@ export def "rest-products products-2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/products")
-  let body = {associations: $associations, categories: $categories, completenesses: $completenesses, created: $created, enabled: $enabled, family: $family, groups: $groups, identifier: $identifier, metadata: $metadata, parent: $parent, quality_scores: $quality_scores, quantified_associations: $quantified_associations, updated: $updated, uuid: $uuid, values: $values} | compact
+  let body = {"associations": $associations, "categories": $categories, "completenesses": $completenesses, "created": $created, "enabled": $enabled, "family": $family, "groups": $groups, "identifier": $identifier, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "uuid": $uuid, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3340,7 +3340,7 @@ export def "rest-products-uuid uuid-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/products-uuid")
-  let body = {associations: $associations, categories: $categories, completenesses: $completenesses, created: $created, enabled: $enabled, family: $family, groups: $groups, metadata: $metadata, parent: $parent, quality_scores: $quality_scores, quantified_associations: $quantified_associations, updated: $updated, uuid: $uuid, values: $values} | compact
+  let body = {"associations": $associations, "categories": $categories, "completenesses": $completenesses, "created": $created, "enabled": $enabled, "family": $family, "groups": $groups, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "uuid": $uuid, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3384,7 +3384,7 @@ export def "rest-products-uuid uuid-2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/products-uuid")
-  let body = {associations: $associations, categories: $categories, completenesses: $completenesses, created: $created, enabled: $enabled, family: $family, groups: $groups, metadata: $metadata, parent: $parent, quality_scores: $quality_scores, quantified_associations: $quantified_associations, updated: $updated, uuid: $uuid, values: $values} | compact
+  let body = {"associations": $associations, "categories": $categories, "completenesses": $completenesses, "created": $created, "enabled": $enabled, "family": $family, "groups": $groups, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "uuid": $uuid, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3395,7 +3395,7 @@ export def "rest-products-uuid uuid-2" [
 #
 # DELETE /api/rest/v1/products-uuid/{uuid}
 # operationId: delete_products_uuid__uuid_
-export def "rest-products-uuid -by-uuid" [
+export def "rest-products-uuid delete" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3408,7 +3408,7 @@ export def "rest-products-uuid -by-uuid" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/products-uuid/($uuid)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/api/rest/v1/products-uuid/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3418,7 +3418,7 @@ export def "rest-products-uuid -by-uuid" [
 #
 # GET /api/rest/v1/products-uuid/{uuid}
 # operationId: get_products_uuid__uuid_
-export def "rest-products-uuid -by-uuid-1" [
+export def "rest-products-uuid get" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3435,7 +3435,7 @@ export def "rest-products-uuid -by-uuid-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with_attribute_options" $with_attribute_options "scalar") (serialize-qp "with_quality_scores" $with_quality_scores "scalar") (serialize-qp "with_completenesses" $with_completenesses "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/rest/v1/products-uuid/($uuid)" $qp)
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/api/rest/v1/products-uuid/{uuid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3450,7 +3450,7 @@ export def "rest-products-uuid -by-uuid-1" [
 # --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
 # --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
 # --values shape: {attributeCode?: list}
-export def "rest-products-uuid -by-uuid-2" [
+export def "rest-products-uuid patch" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3478,8 +3478,8 @@ export def "rest-products-uuid -by-uuid-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/products-uuid/($uuid)")
-  let body = {associations: $associations, categories: $categories, completenesses: $completenesses, created: $created, enabled: $enabled, family: $family, groups: $groups, metadata: $metadata, parent: $parent, quality_scores: $quality_scores, quantified_associations: $quantified_associations, updated: $updated, uuid: $body_uuid, values: $values} | compact
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/api/rest/v1/products-uuid/{uuid}"))
+  let body = {"associations": $associations, "categories": $categories, "completenesses": $completenesses, "created": $created, "enabled": $enabled, "family": $family, "groups": $groups, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "uuid": $body_uuid, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3490,7 +3490,7 @@ export def "rest-products-uuid -by-uuid-2" [
 #
 # GET /api/rest/v1/products-uuid/{uuid}/draft
 # operationId: get_draft_uuid__uuid_
-export def "rest-products-uuid-draft " [
+export def "rest-products-uuid-draft get" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3503,7 +3503,7 @@ export def "rest-products-uuid-draft " [
 ]: nothing -> record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, completenesses: table<data: int, locale: string, scope: string>, created: string, enabled: bool, family: string, groups: list<string>, metadata: record<workflow_status: string>, parent: string, quality_scores: record, quantified_associations: record<quantifiedAssociationTypeCode: record<product_models: list, products: list>>, updated: string, uuid: string, values: record<attributeCode: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/products-uuid/($uuid)/draft")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/api/rest/v1/products-uuid/{uuid}/draft"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3526,7 +3526,7 @@ export def "rest-products-uuid-proposal uuid" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/products-uuid/($uuid)/proposal")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/api/rest/v1/products-uuid/{uuid}/proposal"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3536,7 +3536,7 @@ export def "rest-products-uuid-proposal uuid" [
 #
 # DELETE /api/rest/v1/products/{code}
 # operationId: delete_products__code_
-export def "rest-products -by-code" [
+export def "rest-products delete" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3549,7 +3549,7 @@ export def "rest-products -by-code" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/products/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/products/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3559,7 +3559,7 @@ export def "rest-products -by-code" [
 #
 # GET /api/rest/v1/products/{code}
 # operationId: get_products__code_
-export def "rest-products -by-code-1" [
+export def "rest-products get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3576,7 +3576,7 @@ export def "rest-products -by-code-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with_attribute_options" $with_attribute_options "scalar") (serialize-qp "with_quality_scores" $with_quality_scores "scalar") (serialize-qp "with_completenesses" $with_completenesses "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/rest/v1/products/($code)" $qp)
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/products/{code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3591,7 +3591,7 @@ export def "rest-products -by-code-1" [
 # --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
 # --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
 # --values shape: {attributeCode?: list}
-export def "rest-products -by-code-2" [
+export def "rest-products patch" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3620,8 +3620,8 @@ export def "rest-products -by-code-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/products/($code)")
-  let body = {associations: $associations, categories: $categories, completenesses: $completenesses, created: $created, enabled: $enabled, family: $family, groups: $groups, identifier: $identifier, metadata: $metadata, parent: $parent, quality_scores: $quality_scores, quantified_associations: $quantified_associations, updated: $updated, uuid: $uuid, values: $values} | compact
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/products/{code}"))
+  let body = {"associations": $associations, "categories": $categories, "completenesses": $completenesses, "created": $created, "enabled": $enabled, "family": $family, "groups": $groups, "identifier": $identifier, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "uuid": $uuid, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3632,7 +3632,7 @@ export def "rest-products -by-code-2" [
 #
 # GET /api/rest/v1/products/{code}/draft
 # operationId: get_draft__code_
-export def "rest-products-draft " [
+export def "rest-products-draft get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3645,7 +3645,7 @@ export def "rest-products-draft " [
 ]: nothing -> record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, completenesses: table<data: int, locale: string, scope: string>, created: string, enabled: bool, family: string, groups: list<string>, identifier: string, metadata: record<workflow_status: string>, parent: string, quality_scores: record, quantified_associations: record<quantifiedAssociationTypeCode: record<product_models: list, products: list>>, updated: string, uuid: string, values: record<attributeCode: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/products/($code)/draft")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/products/{code}/draft"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3668,7 +3668,7 @@ export def "rest-products-proposal proposal" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/products/($code)/proposal")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/products/{code}/proposal"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3710,7 +3710,7 @@ export def "rest-published-products products" [
 #
 # GET /api/rest/v1/published-products/{code}
 # operationId: get_published_products__code_
-export def "rest-published-products " [
+export def "rest-published-products get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3723,7 +3723,7 @@ export def "rest-published-products " [
 ]: nothing -> record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, created: string, enabled: bool, family: string, groups: list<string>, identifier: string, quantified_associations: record, updated: string, values: record<attributeCode: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/published-products/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/published-products/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3766,16 +3766,16 @@ export def "rest-reference-entities-media-files files" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-type: string # Equal to 'multipart/form-data', no other value allowed
+  --content-type: string # Equal to 'multipart/form-data', no other value allowed
   file: string # The binary of the media file (format: binary)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/reference-entities-media-files")
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-type": $Content_type} | compact
+  let extra_headers = {"Content-type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3799,7 +3799,7 @@ export def "rest-reference-entities-media-files code" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/reference-entities-media-files/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/reference-entities-media-files/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3809,7 +3809,7 @@ export def "rest-reference-entities-media-files code" [
 #
 # GET /api/rest/v1/reference-entities/{code}
 # operationId: get_reference_entities__code_
-export def "rest-reference-entities -by-code" [
+export def "rest-reference-entities get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3822,7 +3822,7 @@ export def "rest-reference-entities -by-code" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/reference-entities/($code)")
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/reference-entities/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3833,7 +3833,7 @@ export def "rest-reference-entities -by-code" [
 # PATCH /api/rest/v1/reference-entities/{code}
 # operationId: patch_reference_entity__code_
 # --labels shape: {localeCode?: string}
-export def "rest-reference-entities -by-code-1" [
+export def "rest-reference-entities patch" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3850,8 +3850,8 @@ export def "rest-reference-entities -by-code-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/reference-entities/($code)")
-  let body = {code: $body_code, image: $image, labels: $labels} | compact
+  let full_url = (build-url $base ({code: $code} | format pattern "/api/rest/v1/reference-entities/{code}"))
+  let body = {"code": $body_code, "image": $image, "labels": $labels} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3875,7 +3875,7 @@ export def "rest-reference-entities-attributes attributes" [
 ]: nothing -> table<allowed_extensions: list<string>, code: string, decimals_allowed: bool, is_required_for_completeness: bool, is_rich_text_editor: bool, is_textarea: bool, labels: record<localeCode: string>, max_characters: int, max_file_size: string, max_value: string, min_value: string, reference_entity_code: string, type: string, validation_regexp: string, validation_rule: string, value_per_channel: bool, value_per_locale: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/reference-entities/($reference_entity_code)/attributes")
+  let full_url = (build-url $base ({reference_entity_code: $reference_entity_code} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/attributes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3899,7 +3899,7 @@ export def "rest-reference-entities-attributes-options options" [
 ]: nothing -> table<code: string, labels: record<localeCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/reference-entities/($reference_entity_code)/attributes/($attribute_code)/options")
+  let full_url = (build-url $base ({reference_entity_code: $reference_entity_code, attribute_code: $attribute_code} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/attributes/{attribute_code}/options"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3909,7 +3909,7 @@ export def "rest-reference-entities-attributes-options options" [
 #
 # GET /api/rest/v1/reference-entities/{reference_entity_code}/attributes/{attribute_code}/options/{code}
 # operationId: get_reference_entity_attributes__attribute_code__options__code_
-export def "rest-reference-entities-attributes-options -by-reference_entity_code-attribute_code-code" [
+export def "rest-reference-entities-attributes-options get" [
   reference_entity_code: string
   attribute_code: string
   code: string
@@ -3924,7 +3924,7 @@ export def "rest-reference-entities-attributes-options -by-reference_entity_code
 ]: nothing -> record<code: string, labels: record<localeCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/reference-entities/($reference_entity_code)/attributes/($attribute_code)/options/($code)")
+  let full_url = (build-url $base ({reference_entity_code: $reference_entity_code, attribute_code: $attribute_code, code: $code} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/attributes/{attribute_code}/options/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3935,7 +3935,7 @@ export def "rest-reference-entities-attributes-options -by-reference_entity_code
 # PATCH /api/rest/v1/reference-entities/{reference_entity_code}/attributes/{attribute_code}/options/{code}
 # operationId: patch_reference_entity_attributes__attribute_code__options__code_
 # --labels shape: {localeCode?: string}
-export def "rest-reference-entities-attributes-options -by-reference_entity_code-attribute_code-code-1" [
+export def "rest-reference-entities-attributes-options patch" [
   reference_entity_code: string
   attribute_code: string
   code: string
@@ -3953,8 +3953,8 @@ export def "rest-reference-entities-attributes-options -by-reference_entity_code
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/reference-entities/($reference_entity_code)/attributes/($attribute_code)/options/($code)")
-  let body = {code: $body_code, labels: $labels} | compact
+  let full_url = (build-url $base ({reference_entity_code: $reference_entity_code, attribute_code: $attribute_code, code: $code} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/attributes/{attribute_code}/options/{code}"))
+  let body = {"code": $body_code, "labels": $labels} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3965,7 +3965,7 @@ export def "rest-reference-entities-attributes-options -by-reference_entity_code
 #
 # GET /api/rest/v1/reference-entities/{reference_entity_code}/attributes/{code}
 # operationId: get_reference_entity_attributes__code_
-export def "rest-reference-entities-attributes -by-reference_entity_code-code" [
+export def "rest-reference-entities-attributes get" [
   reference_entity_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3979,7 +3979,7 @@ export def "rest-reference-entities-attributes -by-reference_entity_code-code" [
 ]: nothing -> record<allowed_extensions: list<string>, code: string, decimals_allowed: bool, is_required_for_completeness: bool, is_rich_text_editor: bool, is_textarea: bool, labels: record<localeCode: string>, max_characters: int, max_file_size: string, max_value: string, min_value: string, reference_entity_code: string, type: string, validation_regexp: string, validation_rule: string, value_per_channel: bool, value_per_locale: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/reference-entities/($reference_entity_code)/attributes/($code)")
+  let full_url = (build-url $base ({reference_entity_code: $reference_entity_code, code: $code} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/attributes/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3990,7 +3990,7 @@ export def "rest-reference-entities-attributes -by-reference_entity_code-code" [
 # PATCH /api/rest/v1/reference-entities/{reference_entity_code}/attributes/{code}
 # operationId: patch_reference_entity_attributes__code_
 # --labels shape: {localeCode?: string}
-export def "rest-reference-entities-attributes -by-reference_entity_code-code-1" [
+export def "rest-reference-entities-attributes patch" [
   reference_entity_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4022,8 +4022,8 @@ export def "rest-reference-entities-attributes -by-reference_entity_code-code-1"
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/reference-entities/($reference_entity_code)/attributes/($code)")
-  let body = {allowed_extensions: $allowed_extensions, code: $body_code, decimals_allowed: $decimals_allowed, is_required_for_completeness: $is_required_for_completeness, is_rich_text_editor: $is_rich_text_editor, is_textarea: $is_textarea, labels: $labels, max_characters: $max_characters, max_file_size: $max_file_size, max_value: $max_value, min_value: $min_value, reference_entity_code: $body_reference_entity_code, type: $type, validation_regexp: $validation_regexp, validation_rule: $validation_rule, value_per_channel: $value_per_channel, value_per_locale: $value_per_locale} | compact
+  let full_url = (build-url $base ({reference_entity_code: $reference_entity_code, code: $code} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/attributes/{code}"))
+  let body = {"allowed_extensions": $allowed_extensions, "code": $body_code, "decimals_allowed": $decimals_allowed, "is_required_for_completeness": $is_required_for_completeness, "is_rich_text_editor": $is_rich_text_editor, "is_textarea": $is_textarea, "labels": $labels, "max_characters": $max_characters, "max_file_size": $max_file_size, "max_value": $max_value, "min_value": $min_value, "reference_entity_code": $body_reference_entity_code, "type": $type, "validation_regexp": $validation_regexp, "validation_rule": $validation_rule, "value_per_channel": $value_per_channel, "value_per_locale": $value_per_locale} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4052,7 +4052,7 @@ export def "rest-reference-entities-records records-by-reference_entity_code" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "locales" $locales "scalar") (serialize-qp "search_after" $search_after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/rest/v1/reference-entities/($reference_entity_code)/records" $qp)
+  let full_url = (build-url $base ({reference_entity_code: $reference_entity_code} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/records") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4077,7 +4077,7 @@ export def "rest-reference-entities-records records-by-reference_entity_code-1" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/reference-entities/($reference_entity_code)/records")
+  let full_url = (build-url $base ({reference_entity_code: $reference_entity_code} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/records"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4088,7 +4088,7 @@ export def "rest-reference-entities-records records-by-reference_entity_code-1" 
 #
 # GET /api/rest/v1/reference-entities/{reference_entity_code}/records/{code}
 # operationId: get_reference_entity_records__code_
-export def "rest-reference-entities-records -by-reference_entity_code-code" [
+export def "rest-reference-entities-records get" [
   reference_entity_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4102,7 +4102,7 @@ export def "rest-reference-entities-records -by-reference_entity_code-code" [
 ]: nothing -> record<code: string, created: string, updated: string, values: record<attributeCode: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/reference-entities/($reference_entity_code)/records/($code)")
+  let full_url = (build-url $base ({reference_entity_code: $reference_entity_code, code: $code} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/records/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4113,7 +4113,7 @@ export def "rest-reference-entities-records -by-reference_entity_code-code" [
 # PATCH /api/rest/v1/reference-entities/{reference_entity_code}/records/{code}
 # operationId: patch_reference_entity_records__code_
 # --values shape: {attributeCode?: list}
-export def "rest-reference-entities-records -by-reference_entity_code-code-1" [
+export def "rest-reference-entities-records patch" [
   reference_entity_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4132,8 +4132,8 @@ export def "rest-reference-entities-records -by-reference_entity_code-code-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/rest/v1/reference-entities/($reference_entity_code)/records/($code)")
-  let body = {code: $body_code, created: $created, updated: $updated, values: $values} | compact
+  let full_url = (build-url $base ({reference_entity_code: $reference_entity_code, code: $code} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/records/{code}"))
+  let body = {"code": $body_code, "created": $created, "updated": $updated, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4144,7 +4144,7 @@ export def "rest-reference-entities-records -by-reference_entity_code-code-1" [
 #
 # GET /api/rest/v1/system-information
 # operationId: get_system_information
-export def "rest-system-information information" [
+export def "rest-system-information get-rmation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

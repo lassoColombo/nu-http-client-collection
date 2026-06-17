@@ -67,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def xgafv-completer [] { ["1" "2"] }
 def alt-completer [] { ["json" "media" "proto"] }
-def cancellationReason-completer [] { ["CANCELLATION_REASON_ACCIDENTAL_PURCHASE" "CANCELLATION_REASON_ACCOUNT_CLOSED" "CANCELLATION_REASON_FRAUD" "CANCELLATION_REASON_OTHER" "CANCELLATION_REASON_PAST_DUE" "CANCELLATION_REASON_REMORSE" "CANCELLATION_REASON_SYSTEM_ERROR" "CANCELLATION_REASON_UNSPECIFIED" "CANCELLATION_REASON_UPGRADE_DOWNGRADE" "CANCELLATION_REASON_USER_DELINQUENCY"] }
+def cancellation-reason-completer [] { ["CANCELLATION_REASON_ACCIDENTAL_PURCHASE" "CANCELLATION_REASON_ACCOUNT_CLOSED" "CANCELLATION_REASON_FRAUD" "CANCELLATION_REASON_OTHER" "CANCELLATION_REASON_PAST_DUE" "CANCELLATION_REASON_REMORSE" "CANCELLATION_REASON_SYSTEM_ERROR" "CANCELLATION_REASON_UNSPECIFIED" "CANCELLATION_REASON_UPGRADE_DOWNGRADE" "CANCELLATION_REASON_USER_DELINQUENCY"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -113,15 +113,15 @@ export def "partners paymentsresellersubscriptionpartnerssubscriptionsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<cancellationDetails: record<reason: string>, createTime: string, cycleEndTime: string, endUserEntitled: bool, freeTrialEndTime: string, lineItems: table<amount: record, description: string, lineItemFreeTrialEndTime: string, lineItemPromotionSpecs: list, oneTimeRecurrenceDetails: record, product: string, productPayload: record, recurrenceType: string, state: string>, name: string, partnerUserToken: string, processingState: string, products: list<string>, promotionSpecs: table<freeTrialDuration: record, introductoryPricingDetails: record, promotion: string, type: string>, promotions: list<string>, redirectUri: string, renewalTime: string, serviceLocation: record<postalCode: string, regionCode: string>, state: string, updateTime: string, upgradeDowngradeDetails: record<billingCycleSpec: string, previousSubscriptionId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,19 +148,19 @@ export def "partners paymentsresellersubscriptionpartnerssubscriptionscancel" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --cancelImmediately: oneof<nothing, bool> # Optional. If true, Google will cancel the subscription immediately, and may or may not (based on the contract) issue a prorated refund for the remainder of the billing cycle. Otherwise, Google defers the cancelation at renewal_time, and will not issue a refund.
-  --cancellationReason: string@cancellationReason-completer # Specifies the reason for the cancellation.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --cancel-immediately: oneof<nothing, bool> # Optional. If true, Google will cancel the subscription immediately, and may or may not (based on the contract) issue a prorated refund for the remainder of the billing cycle. Otherwise, Google defers the cancelation at renewal_time, and will not issue a refund.
+  --cancellation-reason: string@cancellation-reason-completer # Specifies the reason for the cancellation.
 ]: any -> record<subscription: record<cancellationDetails: record<reason: string>, createTime: string, cycleEndTime: string, endUserEntitled: bool, freeTrialEndTime: string, lineItems: list<record>, name: string, partnerUserToken: string, processingState: string, products: list<string>, promotionSpecs: list<record>, promotions: list<string>, redirectUri: string, renewalTime: string, serviceLocation: record<postalCode: string, regionCode: string>, state: string, updateTime: string, upgradeDowngradeDetails: record<billingCycleSpec: string, previousSubscriptionId: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name):cancel" $qp)
-  let body = {cancelImmediately: $cancelImmediately, cancellationReason: $cancellationReason} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:cancel") $qp)
+  let body = {"cancelImmediately": $cancel_immediately, "cancellationReason": $cancellation_reason} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -188,17 +188,17 @@ export def "partners paymentsresellersubscriptionpartnerssubscriptionsentitle" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
 ]: any -> record<subscription: record<cancellationDetails: record<reason: string>, createTime: string, cycleEndTime: string, endUserEntitled: bool, freeTrialEndTime: string, lineItems: list<record>, name: string, partnerUserToken: string, processingState: string, products: list<string>, promotionSpecs: list<record>, promotions: list<string>, redirectUri: string, renewalTime: string, serviceLocation: record<postalCode: string, regionCode: string>, state: string, updateTime: string, upgradeDowngradeDetails: record<billingCycleSpec: string, previousSubscriptionId: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name):entitle" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:entitle") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -227,19 +227,19 @@ export def "partners paymentsresellersubscriptionpartnerssubscriptionsextend" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --extension: record # Describes the details of an extension request. — shape: {duration?: record, partnerUserToken?: string}
-  --requestId: string # Required. Restricted to 36 ASCII characters. A random UUID is recommended. The idempotency key for the request. The ID generation logic is controlled by the partner. request_id should be the same as on retries of the same request. A different request_id must be used for a extension of a different cycle. A random UUID is recommended.
+  --request-id: string # Required. Restricted to 36 ASCII characters. A random UUID is recommended. The idempotency key for the request. The ID generation logic is controlled by the partner. request_id should be the same as on retries of the same request. A different request_id must be used for a extension of a different cycle. A random UUID is recommended.
 ]: any -> record<cycleEndTime: string, freeTrialEndTime: string, renewalTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name):extend" $qp)
-  let body = {extension: $extension, requestId: $requestId} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:extend") $qp)
+  let body = {"extension": $extension, "requestId": $request_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -267,17 +267,17 @@ export def "partners paymentsresellersubscriptionpartnerssubscriptionsundoCancel
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
 ]: any -> record<subscription: record<cancellationDetails: record<reason: string>, createTime: string, cycleEndTime: string, endUserEntitled: bool, freeTrialEndTime: string, lineItems: list<record>, name: string, partnerUserToken: string, processingState: string, products: list<string>, promotionSpecs: list<record>, promotions: list<string>, redirectUri: string, renewalTime: string, serviceLocation: record<postalCode: string, regionCode: string>, state: string, updateTime: string, upgradeDowngradeDetails: record<billingCycleSpec: string, previousSubscriptionId: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($name):undoCancel" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:undoCancel") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -305,18 +305,18 @@ export def "products paymentsresellersubscriptionpartnersproductslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Optional. Specifies the filters for the product results. The syntax is defined in https://google.aip.dev/160 with the following caveats: - Only the following features are supported: - Logical operator `AND` - Comparison operator `=` (no wildcards `*`) - Traversal operator `.` - Has operator `:` (no wildcards `*`) - Only the following fields are supported: - `regionCodes` - `youtubePayload.partnerEligibilityId` - `youtubePayload.postalCode` - Unless explicitly mentioned above, other features are not supported. Example: `regionCodes:US AND youtubePayload.postalCode=94043 AND youtubePayload.partnerEligibilityId=eligibility-id`
-  --pageSize: int # Optional. The maximum number of products to return. The service may return fewer than this value. If unspecified, at most 50 products will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
-  --pageToken: string # Optional. A page token, received from a previous `ListProducts` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListProducts` must match the call that provided the page token.
+  --page-size: int # Optional. The maximum number of products to return. The service may return fewer than this value. If unspecified, at most 50 products will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
+  --page-token: string # Optional. A page token, received from a previous `ListProducts` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListProducts` must match the call that provided the page token.
 ]: nothing -> record<nextPageToken: string, products: table<name: string, priceConfigs: list, regionCodes: list, subscriptionBillingCycleDuration: record, titles: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/products" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/products") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -343,18 +343,18 @@ export def "promotions paymentsresellersubscriptionpartnerspromotionslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Optional. Specifies the filters for the promotion results. The syntax is defined in https://google.aip.dev/160 with the following caveats: - Only the following features are supported: - Logical operator `AND` - Comparison operator `=` (no wildcards `*`) - Traversal operator `.` - Has operator `:` (no wildcards `*`) - Only the following fields are supported: - `applicableProducts` - `regionCodes` - `youtubePayload.partnerEligibilityId` - `youtubePayload.postalCode` - Unless explicitly mentioned above, other features are not supported. Example: `applicableProducts:partners/partner1/products/product1 AND regionCodes:US AND youtubePayload.postalCode=94043 AND youtubePayload.partnerEligibilityId=eligibility-id`
-  --pageSize: int # Optional. The maximum number of promotions to return. The service may return fewer than this value. If unspecified, at most 50 products will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
-  --pageToken: string # Optional. A page token, received from a previous `ListPromotions` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListPromotions` must match the call that provided the page token.
+  --page-size: int # Optional. The maximum number of promotions to return. The service may return fewer than this value. If unspecified, at most 50 products will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
+  --page-token: string # Optional. A page token, received from a previous `ListPromotions` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListPromotions` must match the call that provided the page token.
 ]: nothing -> record<nextPageToken: string, promotions: table<applicableProducts: list, endTime: string, freeTrialDuration: record, introductoryPricingDetails: record, name: string, promotionType: string, regionCodes: list, startTime: string, titles: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/promotions" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/promotions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -381,20 +381,20 @@ export def "promotions-find-eligible paymentsresellersubscriptionpartnerspromoti
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Optional. Specifies the filters for the promotion results. The syntax is defined in https://google.aip.dev/160 with the following caveats: - Only the following features are supported: - Logical operator `AND` - Comparison operator `=` (no wildcards `*`) - Traversal operator `.` - Has operator `:` (no wildcards `*`) - Only the following fields are supported: - `applicableProducts` - `regionCodes` - `youtubePayload.partnerEligibilityId` - `youtubePayload.postalCode` - Unless explicitly mentioned above, other features are not supported. Example: `applicableProducts:partners/partner1/products/product1 AND regionCodes:US AND youtubePayload.postalCode=94043 AND youtubePayload.partnerEligibilityId=eligibility-id`
-  --pageSize: int # Optional. The maximum number of promotions to return. The service may return fewer than this value. If unspecified, at most 50 products will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000. (format: int32)
-  --pageToken: string # Optional. A page token, received from a previous `ListPromotions` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListPromotions` must match the call that provided the page token.
+  --page-size: int # Optional. The maximum number of promotions to return. The service may return fewer than this value. If unspecified, at most 50 products will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000. (format: int32)
+  --page-token: string # Optional. A page token, received from a previous `ListPromotions` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListPromotions` must match the call that provided the page token.
 ]: any -> record<nextPageToken: string, promotions: table<applicableProducts: list, endTime: string, freeTrialDuration: record, introductoryPricingDetails: record, name: string, promotionType: string, regionCodes: list, startTime: string, titles: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/promotions:findEligible" $qp)
-  let body = {filter: $filter, pageSize: $pageSize, pageToken: $pageToken} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/promotions:findEligible") $qp)
+  let body = {"filter": $filter, "pageSize": $page_size, "pageToken": $page_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -427,27 +427,27 @@ export def "subscriptions paymentsresellersubscriptionpartnerssubscriptionscreat
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --subscriptionId: string # Required. Identifies the subscription resource on the Partner side. The value is restricted to 63 ASCII characters at the maximum. If a subscription was previously created with the same subscription_id, we will directly return that one.
-  --cancellationDetails: record # Describes the details of a cancelled or cancelling subscription. — shape: {reason?: "CANCELLATION_REASON_UNSPECIFIED"|"CANCELLATION_REASON_FRAUD"|"CANCELLATION_REASON_REMORSE"|"CANCELLATION_REASON_ACCIDENTAL_PURCHASE"|"CANCELLATION_REASON_PAST_DUE"|"CANCELLATION_REASON_ACCOUNT_CLOSED"|"CANCELLATION_REASON_UPGRADE_DOWNGRADE"|"CANCELLATION_REASON_USER_DELINQUENCY"|"CANCELLATION_REASON_SYSTEM_ERROR"|"CANCELLATION_REASON_OTHER"}
-  --lineItems: list # Required. The line items of the subscription. — item shape: {amount?: record, lineItemPromotionSpecs?: list, oneTimeRecurrenceDetails?: record, product?: string, productPayload?: record}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --subscription-id: string # Required. Identifies the subscription resource on the Partner side. The value is restricted to 63 ASCII characters at the maximum. If a subscription was previously created with the same subscription_id, we will directly return that one.
+  --cancellation-details: record # Describes the details of a cancelled or cancelling subscription. — shape: {reason?: "CANCELLATION_REASON_UNSPECIFIED"|"CANCELLATION_REASON_FRAUD"|"CANCELLATION_REASON_REMORSE"|"CANCELLATION_REASON_ACCIDENTAL_PURCHASE"|"CANCELLATION_REASON_PAST_DUE"|"CANCELLATION_REASON_ACCOUNT_CLOSED"|"CANCELLATION_REASON_UPGRADE_DOWNGRADE"|"CANCELLATION_REASON_USER_DELINQUENCY"|"CANCELLATION_REASON_SYSTEM_ERROR"|"CANCELLATION_REASON_OTHER"}
+  --line-items: list # Required. The line items of the subscription. — item shape: {amount?: record, lineItemPromotionSpecs?: list, oneTimeRecurrenceDetails?: record, product?: string, productPayload?: record}
   --name: string # Optional. Resource name of the subscription. It will have the format of "partners/{partner_id}/subscriptions/{subscription_id}". This is available for authorizeAddon, but otherwise is response only.
-  --partnerUserToken: string # Required. Identifier of the end-user in partner’s system. The value is restricted to 63 ASCII characters at the maximum.
+  --partner-user-token: string # Required. Identifier of the end-user in partner’s system. The value is restricted to 63 ASCII characters at the maximum.
   --products: list # Required. Deprecated: consider using `line_items` as the input. Required. Resource name that identifies the purchased products. The format will be 'partners/{partner_id}/products/{product_id}'.
-  --promotionSpecs: list # Optional. Subscription-level promotions. Only free trial is supported on this level. It determines the first renewal time of the subscription to be the end of the free trial period. Specify the promotion resource name only when used as input. — item shape: {freeTrialDuration?: record, introductoryPricingDetails?: record, promotion?: string}
+  --promotion-specs: list # Optional. Subscription-level promotions. Only free trial is supported on this level. It determines the first renewal time of the subscription to be the end of the free trial period. Specify the promotion resource name only when used as input. — item shape: {freeTrialDuration?: record, introductoryPricingDetails?: record, promotion?: string}
   --promotions: list # Optional. Deprecated: consider using the top-level `promotion_specs` as the input. Optional. Resource name that identifies one or more promotions that can be applied on the product. A typical promotion for a subscription is Free trial. The format will be 'partners/{partner_id}/promotions/{promotion_id}'.
-  --serviceLocation: record # Describes a location of an end user. — shape: {postalCode?: string, regionCode?: string}
-  --upgradeDowngradeDetails: record # Details about the previous subscription that this new subscription upgrades/downgrades from. — shape: {billingCycleSpec?: "BILLING_CYCLE_SPEC_UNSPECIFIED"|"BILLING_CYCLE_SPEC_ALIGN_WITH_PREVIOUS_SUBSCRIPTION"|"BILLING_CYCLE_SPEC_START_IMMEDIATELY", previousSubscriptionId?: string}
+  --service-location: record # Describes a location of an end user. — shape: {postalCode?: string, regionCode?: string}
+  --upgrade-downgrade-details: record # Details about the previous subscription that this new subscription upgrades/downgrades from. — shape: {billingCycleSpec?: "BILLING_CYCLE_SPEC_UNSPECIFIED"|"BILLING_CYCLE_SPEC_ALIGN_WITH_PREVIOUS_SUBSCRIPTION"|"BILLING_CYCLE_SPEC_START_IMMEDIATELY", previousSubscriptionId?: string}
 ]: any -> record<cancellationDetails: record<reason: string>, createTime: string, cycleEndTime: string, endUserEntitled: bool, freeTrialEndTime: string, lineItems: table<amount: record, description: string, lineItemFreeTrialEndTime: string, lineItemPromotionSpecs: list, oneTimeRecurrenceDetails: record, product: string, productPayload: record, recurrenceType: string, state: string>, name: string, partnerUserToken: string, processingState: string, products: list<string>, promotionSpecs: table<freeTrialDuration: record, introductoryPricingDetails: record, promotion: string, type: string>, promotions: list<string>, redirectUri: string, renewalTime: string, serviceLocation: record<postalCode: string, regionCode: string>, state: string, updateTime: string, upgradeDowngradeDetails: record<billingCycleSpec: string, previousSubscriptionId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "subscriptionId" $subscriptionId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/subscriptions" $qp)
-  let body = {cancellationDetails: $cancellationDetails, lineItems: $lineItems, name: $name, partnerUserToken: $partnerUserToken, products: $products, promotionSpecs: $promotionSpecs, promotions: $promotions, serviceLocation: $serviceLocation, upgradeDowngradeDetails: $upgradeDowngradeDetails} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "subscriptionId" $subscription_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/subscriptions") $qp)
+  let body = {"cancellationDetails": $cancellation_details, "lineItems": $line_items, "name": $name, "partnerUserToken": $partner_user_token, "products": $products, "promotionSpecs": $promotion_specs, "promotions": $promotions, "serviceLocation": $service_location, "upgradeDowngradeDetails": $upgrade_downgrade_details} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -480,27 +480,27 @@ export def "subscriptions-provision paymentsresellersubscriptionpartnerssubscrip
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --subscriptionId: string # Required. Identifies the subscription resource on the Partner side. The value is restricted to 63 ASCII characters at the maximum. If a subscription was previously created with the same subscription_id, we will directly return that one.
-  --cancellationDetails: record # Describes the details of a cancelled or cancelling subscription. — shape: {reason?: "CANCELLATION_REASON_UNSPECIFIED"|"CANCELLATION_REASON_FRAUD"|"CANCELLATION_REASON_REMORSE"|"CANCELLATION_REASON_ACCIDENTAL_PURCHASE"|"CANCELLATION_REASON_PAST_DUE"|"CANCELLATION_REASON_ACCOUNT_CLOSED"|"CANCELLATION_REASON_UPGRADE_DOWNGRADE"|"CANCELLATION_REASON_USER_DELINQUENCY"|"CANCELLATION_REASON_SYSTEM_ERROR"|"CANCELLATION_REASON_OTHER"}
-  --lineItems: list # Required. The line items of the subscription. — item shape: {amount?: record, lineItemPromotionSpecs?: list, oneTimeRecurrenceDetails?: record, product?: string, productPayload?: record}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --subscription-id: string # Required. Identifies the subscription resource on the Partner side. The value is restricted to 63 ASCII characters at the maximum. If a subscription was previously created with the same subscription_id, we will directly return that one.
+  --cancellation-details: record # Describes the details of a cancelled or cancelling subscription. — shape: {reason?: "CANCELLATION_REASON_UNSPECIFIED"|"CANCELLATION_REASON_FRAUD"|"CANCELLATION_REASON_REMORSE"|"CANCELLATION_REASON_ACCIDENTAL_PURCHASE"|"CANCELLATION_REASON_PAST_DUE"|"CANCELLATION_REASON_ACCOUNT_CLOSED"|"CANCELLATION_REASON_UPGRADE_DOWNGRADE"|"CANCELLATION_REASON_USER_DELINQUENCY"|"CANCELLATION_REASON_SYSTEM_ERROR"|"CANCELLATION_REASON_OTHER"}
+  --line-items: list # Required. The line items of the subscription. — item shape: {amount?: record, lineItemPromotionSpecs?: list, oneTimeRecurrenceDetails?: record, product?: string, productPayload?: record}
   --name: string # Optional. Resource name of the subscription. It will have the format of "partners/{partner_id}/subscriptions/{subscription_id}". This is available for authorizeAddon, but otherwise is response only.
-  --partnerUserToken: string # Required. Identifier of the end-user in partner’s system. The value is restricted to 63 ASCII characters at the maximum.
+  --partner-user-token: string # Required. Identifier of the end-user in partner’s system. The value is restricted to 63 ASCII characters at the maximum.
   --products: list # Required. Deprecated: consider using `line_items` as the input. Required. Resource name that identifies the purchased products. The format will be 'partners/{partner_id}/products/{product_id}'.
-  --promotionSpecs: list # Optional. Subscription-level promotions. Only free trial is supported on this level. It determines the first renewal time of the subscription to be the end of the free trial period. Specify the promotion resource name only when used as input. — item shape: {freeTrialDuration?: record, introductoryPricingDetails?: record, promotion?: string}
+  --promotion-specs: list # Optional. Subscription-level promotions. Only free trial is supported on this level. It determines the first renewal time of the subscription to be the end of the free trial period. Specify the promotion resource name only when used as input. — item shape: {freeTrialDuration?: record, introductoryPricingDetails?: record, promotion?: string}
   --promotions: list # Optional. Deprecated: consider using the top-level `promotion_specs` as the input. Optional. Resource name that identifies one or more promotions that can be applied on the product. A typical promotion for a subscription is Free trial. The format will be 'partners/{partner_id}/promotions/{promotion_id}'.
-  --serviceLocation: record # Describes a location of an end user. — shape: {postalCode?: string, regionCode?: string}
-  --upgradeDowngradeDetails: record # Details about the previous subscription that this new subscription upgrades/downgrades from. — shape: {billingCycleSpec?: "BILLING_CYCLE_SPEC_UNSPECIFIED"|"BILLING_CYCLE_SPEC_ALIGN_WITH_PREVIOUS_SUBSCRIPTION"|"BILLING_CYCLE_SPEC_START_IMMEDIATELY", previousSubscriptionId?: string}
+  --service-location: record # Describes a location of an end user. — shape: {postalCode?: string, regionCode?: string}
+  --upgrade-downgrade-details: record # Details about the previous subscription that this new subscription upgrades/downgrades from. — shape: {billingCycleSpec?: "BILLING_CYCLE_SPEC_UNSPECIFIED"|"BILLING_CYCLE_SPEC_ALIGN_WITH_PREVIOUS_SUBSCRIPTION"|"BILLING_CYCLE_SPEC_START_IMMEDIATELY", previousSubscriptionId?: string}
 ]: any -> record<cancellationDetails: record<reason: string>, createTime: string, cycleEndTime: string, endUserEntitled: bool, freeTrialEndTime: string, lineItems: table<amount: record, description: string, lineItemFreeTrialEndTime: string, lineItemPromotionSpecs: list, oneTimeRecurrenceDetails: record, product: string, productPayload: record, recurrenceType: string, state: string>, name: string, partnerUserToken: string, processingState: string, products: list<string>, promotionSpecs: table<freeTrialDuration: record, introductoryPricingDetails: record, promotion: string, type: string>, promotions: list<string>, redirectUri: string, renewalTime: string, serviceLocation: record<postalCode: string, regionCode: string>, state: string, updateTime: string, upgradeDowngradeDetails: record<billingCycleSpec: string, previousSubscriptionId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "subscriptionId" $subscriptionId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/subscriptions:provision" $qp)
-  let body = {cancellationDetails: $cancellationDetails, lineItems: $lineItems, name: $name, partnerUserToken: $partnerUserToken, products: $products, promotionSpecs: $promotionSpecs, promotions: $promotions, serviceLocation: $serviceLocation, upgradeDowngradeDetails: $upgradeDowngradeDetails} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "subscriptionId" $subscription_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/subscriptions:provision") $qp)
+  let body = {"cancellationDetails": $cancellation_details, "lineItems": $line_items, "name": $name, "partnerUserToken": $partner_user_token, "products": $products, "promotionSpecs": $promotion_specs, "promotions": $promotions, "serviceLocation": $service_location, "upgradeDowngradeDetails": $upgrade_downgrade_details} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

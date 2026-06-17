@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "play-by-play PlayByPlay" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "play-by-play get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /{format}/PlayByPlay/{gameid}
 # operationId: PlayByPlay
-export def "play-by-play PlayByPlay" [
+export def "play-by-play get" [
   format: string
   gameid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -108,7 +108,7 @@ export def "play-by-play PlayByPlay" [
 ]: nothing -> record<Game: record<Attendance: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamErrors: int, AwayTeamHits: int, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamProbablePitcherID: int, AwayTeamRuns: int, AwayTeamStartingPitcher: string, AwayTeamStartingPitcherID: int, Balls: int, Channel: string, CurrentHitter: string, CurrentHitterID: int, CurrentHittingTeamID: int, CurrentPitcher: string, CurrentPitcherID: int, CurrentPitchingTeamID: int, DateTime: string, DateTimeUTC: string, Day: string, DueUpHitterID1: int, DueUpHitterID2: int, DueUpHitterID3: int, ForecastDescription: string, ForecastTempHigh: int, ForecastTempLow: int, ForecastWindChill: int, ForecastWindDirection: int, ForecastWindSpeed: int, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamErrors: int, HomeTeamHits: int, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamProbablePitcherID: int, HomeTeamRuns: int, HomeTeamStartingPitcher: string, HomeTeamStartingPitcherID: int, Inning: int, InningDescription: string, InningHalf: string, Innings: list<record>, IsClosed: bool, LastPlay: string, LosingPitcher: string, LosingPitcherID: int, NeutralVenue: bool, Outs: int, OverPayout: int, OverUnder: float, PointSpread: float, PointSpreadAwayTeamMoneyLine: int, PointSpreadHomeTeamMoneyLine: int, RescheduledFromGameID: int, RescheduledGameID: int, RunnerOnFirst: bool, RunnerOnSecond: bool, RunnerOnThird: bool, SavingPitcher: string, SavingPitcherID: int, Season: int, SeasonType: int, SeriesInfo: record<AwayTeamWins: int, GameNumber: int, HomeTeamWins: int, MaxLength: int>, StadiumID: int, Status: string, Strikes: int, UnderPayout: int, Updated: string, WinningPitcher: string, WinningPitcherID: int>, Plays: table<AtBat: bool, AwayTeamRuns: int, Balls: int, Description: string, Error: bool, Hit: bool, HitterBatHand: string, HitterID: int, HitterName: string, HitterPosition: string, HitterTeamID: int, HomeTeamRuns: int, InningBatterNumber: int, InningHalf: string, InningID: int, InningNumber: int, NumberOfOutsOnPlay: int, Out: bool, Outs: int, PitchNumberThisAtBat: int, PitcherID: int, PitcherName: string, PitcherTeamID: int, PitcherThrowHand: string, Pitches: list, PlayID: int, PlayNumber: int, Result: string, Runner1ID: int, Runner2ID: int, Runner3ID: int, RunsBattedIn: int, Sacrifice: bool, Strikeout: bool, Strikes: int, Updated: string, Walk: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/PlayByPlay/($gameid)")
+  let full_url = (build-url $base ({format: $format, gameid: $gameid} | format pattern "/{format}/PlayByPlay/{gameid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,7 +118,7 @@ export def "play-by-play PlayByPlay" [
 #
 # GET /{format}/PlayByPlayDelta/{date}/{minutes}
 # operationId: PlayByPlayDelta
-export def "play-by-play-delta PlayByPlayDelta" [
+export def "play-by-play-delta get" [
   format: string
   date: string
   minutes: string
@@ -133,7 +133,7 @@ export def "play-by-play-delta PlayByPlayDelta" [
 ]: nothing -> table<Game: record<Attendance: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamErrors: int, AwayTeamHits: int, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamProbablePitcherID: int, AwayTeamRuns: int, AwayTeamStartingPitcher: string, AwayTeamStartingPitcherID: int, Balls: int, Channel: string, CurrentHitter: string, CurrentHitterID: int, CurrentHittingTeamID: int, CurrentPitcher: string, CurrentPitcherID: int, CurrentPitchingTeamID: int, DateTime: string, DateTimeUTC: string, Day: string, DueUpHitterID1: int, DueUpHitterID2: int, DueUpHitterID3: int, ForecastDescription: string, ForecastTempHigh: int, ForecastTempLow: int, ForecastWindChill: int, ForecastWindDirection: int, ForecastWindSpeed: int, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamErrors: int, HomeTeamHits: int, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamProbablePitcherID: int, HomeTeamRuns: int, HomeTeamStartingPitcher: string, HomeTeamStartingPitcherID: int, Inning: int, InningDescription: string, InningHalf: string, Innings: list, IsClosed: bool, LastPlay: string, LosingPitcher: string, LosingPitcherID: int, NeutralVenue: bool, Outs: int, OverPayout: int, OverUnder: float, PointSpread: float, PointSpreadAwayTeamMoneyLine: int, PointSpreadHomeTeamMoneyLine: int, RescheduledFromGameID: int, RescheduledGameID: int, RunnerOnFirst: bool, RunnerOnSecond: bool, RunnerOnThird: bool, SavingPitcher: string, SavingPitcherID: int, Season: int, SeasonType: int, SeriesInfo: record, StadiumID: int, Status: string, Strikes: int, UnderPayout: int, Updated: string, WinningPitcher: string, WinningPitcherID: int>, Plays: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/PlayByPlayDelta/($date)/($minutes)")
+  let full_url = (build-url $base ({format: $format, date: $date, minutes: $minutes} | format pattern "/{format}/PlayByPlayDelta/{date}/{minutes}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

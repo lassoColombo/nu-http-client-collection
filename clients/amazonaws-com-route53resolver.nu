@@ -66,74 +66,74 @@ def base-url-completer [] { ["http://route53resolver.us-east-1.amazonaws.com" "h
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["Route53Resolver.AssociateFirewallRuleGroup"] }
-def X-Amz-Target-completer-1 [] { ["Route53Resolver.AssociateResolverEndpointIpAddress"] }
-def X-Amz-Target-completer-2 [] { ["Route53Resolver.AssociateResolverQueryLogConfig"] }
-def X-Amz-Target-completer-3 [] { ["Route53Resolver.AssociateResolverRule"] }
-def X-Amz-Target-completer-4 [] { ["Route53Resolver.CreateFirewallDomainList"] }
-def X-Amz-Target-completer-5 [] { ["Route53Resolver.CreateFirewallRule"] }
-def X-Amz-Target-completer-6 [] { ["Route53Resolver.CreateFirewallRuleGroup"] }
-def X-Amz-Target-completer-7 [] { ["Route53Resolver.CreateResolverEndpoint"] }
-def X-Amz-Target-completer-8 [] { ["Route53Resolver.CreateResolverQueryLogConfig"] }
-def X-Amz-Target-completer-9 [] { ["Route53Resolver.CreateResolverRule"] }
-def X-Amz-Target-completer-10 [] { ["Route53Resolver.DeleteFirewallDomainList"] }
-def X-Amz-Target-completer-11 [] { ["Route53Resolver.DeleteFirewallRule"] }
-def X-Amz-Target-completer-12 [] { ["Route53Resolver.DeleteFirewallRuleGroup"] }
-def X-Amz-Target-completer-13 [] { ["Route53Resolver.DeleteResolverEndpoint"] }
-def X-Amz-Target-completer-14 [] { ["Route53Resolver.DeleteResolverQueryLogConfig"] }
-def X-Amz-Target-completer-15 [] { ["Route53Resolver.DeleteResolverRule"] }
-def X-Amz-Target-completer-16 [] { ["Route53Resolver.DisassociateFirewallRuleGroup"] }
-def X-Amz-Target-completer-17 [] { ["Route53Resolver.DisassociateResolverEndpointIpAddress"] }
-def X-Amz-Target-completer-18 [] { ["Route53Resolver.DisassociateResolverQueryLogConfig"] }
-def X-Amz-Target-completer-19 [] { ["Route53Resolver.DisassociateResolverRule"] }
-def X-Amz-Target-completer-20 [] { ["Route53Resolver.GetFirewallConfig"] }
-def X-Amz-Target-completer-21 [] { ["Route53Resolver.GetFirewallDomainList"] }
-def X-Amz-Target-completer-22 [] { ["Route53Resolver.GetFirewallRuleGroup"] }
-def X-Amz-Target-completer-23 [] { ["Route53Resolver.GetFirewallRuleGroupAssociation"] }
-def X-Amz-Target-completer-24 [] { ["Route53Resolver.GetFirewallRuleGroupPolicy"] }
-def X-Amz-Target-completer-25 [] { ["Route53Resolver.GetResolverConfig"] }
-def X-Amz-Target-completer-26 [] { ["Route53Resolver.GetResolverDnssecConfig"] }
-def X-Amz-Target-completer-27 [] { ["Route53Resolver.GetResolverEndpoint"] }
-def X-Amz-Target-completer-28 [] { ["Route53Resolver.GetResolverQueryLogConfig"] }
-def X-Amz-Target-completer-29 [] { ["Route53Resolver.GetResolverQueryLogConfigAssociation"] }
-def X-Amz-Target-completer-30 [] { ["Route53Resolver.GetResolverQueryLogConfigPolicy"] }
-def X-Amz-Target-completer-31 [] { ["Route53Resolver.GetResolverRule"] }
-def X-Amz-Target-completer-32 [] { ["Route53Resolver.GetResolverRuleAssociation"] }
-def X-Amz-Target-completer-33 [] { ["Route53Resolver.GetResolverRulePolicy"] }
-def X-Amz-Target-completer-34 [] { ["Route53Resolver.ImportFirewallDomains"] }
-def X-Amz-Target-completer-35 [] { ["Route53Resolver.ListFirewallConfigs"] }
-def X-Amz-Target-completer-36 [] { ["Route53Resolver.ListFirewallDomainLists"] }
-def X-Amz-Target-completer-37 [] { ["Route53Resolver.ListFirewallDomains"] }
-def X-Amz-Target-completer-38 [] { ["Route53Resolver.ListFirewallRuleGroupAssociations"] }
-def X-Amz-Target-completer-39 [] { ["Route53Resolver.ListFirewallRuleGroups"] }
-def X-Amz-Target-completer-40 [] { ["Route53Resolver.ListFirewallRules"] }
-def X-Amz-Target-completer-41 [] { ["Route53Resolver.ListResolverConfigs"] }
-def X-Amz-Target-completer-42 [] { ["Route53Resolver.ListResolverDnssecConfigs"] }
-def X-Amz-Target-completer-43 [] { ["Route53Resolver.ListResolverEndpointIpAddresses"] }
-def X-Amz-Target-completer-44 [] { ["Route53Resolver.ListResolverEndpoints"] }
-def X-Amz-Target-completer-45 [] { ["Route53Resolver.ListResolverQueryLogConfigAssociations"] }
-def X-Amz-Target-completer-46 [] { ["Route53Resolver.ListResolverQueryLogConfigs"] }
-def X-Amz-Target-completer-47 [] { ["Route53Resolver.ListResolverRuleAssociations"] }
-def X-Amz-Target-completer-48 [] { ["Route53Resolver.ListResolverRules"] }
-def X-Amz-Target-completer-49 [] { ["Route53Resolver.ListTagsForResource"] }
-def X-Amz-Target-completer-50 [] { ["Route53Resolver.PutFirewallRuleGroupPolicy"] }
-def X-Amz-Target-completer-51 [] { ["Route53Resolver.PutResolverQueryLogConfigPolicy"] }
-def X-Amz-Target-completer-52 [] { ["Route53Resolver.PutResolverRulePolicy"] }
-def X-Amz-Target-completer-53 [] { ["Route53Resolver.TagResource"] }
-def X-Amz-Target-completer-54 [] { ["Route53Resolver.UntagResource"] }
-def X-Amz-Target-completer-55 [] { ["Route53Resolver.UpdateFirewallConfig"] }
-def X-Amz-Target-completer-56 [] { ["Route53Resolver.UpdateFirewallDomains"] }
-def X-Amz-Target-completer-57 [] { ["Route53Resolver.UpdateFirewallRule"] }
-def X-Amz-Target-completer-58 [] { ["Route53Resolver.UpdateFirewallRuleGroupAssociation"] }
-def X-Amz-Target-completer-59 [] { ["Route53Resolver.UpdateResolverConfig"] }
-def X-Amz-Target-completer-60 [] { ["Route53Resolver.UpdateResolverDnssecConfig"] }
-def X-Amz-Target-completer-61 [] { ["Route53Resolver.UpdateResolverEndpoint"] }
-def X-Amz-Target-completer-62 [] { ["Route53Resolver.UpdateResolverRule"] }
+def x-amz-target-completer [] { ["Route53Resolver.AssociateFirewallRuleGroup"] }
+def x-amz-target-completer-1 [] { ["Route53Resolver.AssociateResolverEndpointIpAddress"] }
+def x-amz-target-completer-2 [] { ["Route53Resolver.AssociateResolverQueryLogConfig"] }
+def x-amz-target-completer-3 [] { ["Route53Resolver.AssociateResolverRule"] }
+def x-amz-target-completer-4 [] { ["Route53Resolver.CreateFirewallDomainList"] }
+def x-amz-target-completer-5 [] { ["Route53Resolver.CreateFirewallRule"] }
+def x-amz-target-completer-6 [] { ["Route53Resolver.CreateFirewallRuleGroup"] }
+def x-amz-target-completer-7 [] { ["Route53Resolver.CreateResolverEndpoint"] }
+def x-amz-target-completer-8 [] { ["Route53Resolver.CreateResolverQueryLogConfig"] }
+def x-amz-target-completer-9 [] { ["Route53Resolver.CreateResolverRule"] }
+def x-amz-target-completer-10 [] { ["Route53Resolver.DeleteFirewallDomainList"] }
+def x-amz-target-completer-11 [] { ["Route53Resolver.DeleteFirewallRule"] }
+def x-amz-target-completer-12 [] { ["Route53Resolver.DeleteFirewallRuleGroup"] }
+def x-amz-target-completer-13 [] { ["Route53Resolver.DeleteResolverEndpoint"] }
+def x-amz-target-completer-14 [] { ["Route53Resolver.DeleteResolverQueryLogConfig"] }
+def x-amz-target-completer-15 [] { ["Route53Resolver.DeleteResolverRule"] }
+def x-amz-target-completer-16 [] { ["Route53Resolver.DisassociateFirewallRuleGroup"] }
+def x-amz-target-completer-17 [] { ["Route53Resolver.DisassociateResolverEndpointIpAddress"] }
+def x-amz-target-completer-18 [] { ["Route53Resolver.DisassociateResolverQueryLogConfig"] }
+def x-amz-target-completer-19 [] { ["Route53Resolver.DisassociateResolverRule"] }
+def x-amz-target-completer-20 [] { ["Route53Resolver.GetFirewallConfig"] }
+def x-amz-target-completer-21 [] { ["Route53Resolver.GetFirewallDomainList"] }
+def x-amz-target-completer-22 [] { ["Route53Resolver.GetFirewallRuleGroup"] }
+def x-amz-target-completer-23 [] { ["Route53Resolver.GetFirewallRuleGroupAssociation"] }
+def x-amz-target-completer-24 [] { ["Route53Resolver.GetFirewallRuleGroupPolicy"] }
+def x-amz-target-completer-25 [] { ["Route53Resolver.GetResolverConfig"] }
+def x-amz-target-completer-26 [] { ["Route53Resolver.GetResolverDnssecConfig"] }
+def x-amz-target-completer-27 [] { ["Route53Resolver.GetResolverEndpoint"] }
+def x-amz-target-completer-28 [] { ["Route53Resolver.GetResolverQueryLogConfig"] }
+def x-amz-target-completer-29 [] { ["Route53Resolver.GetResolverQueryLogConfigAssociation"] }
+def x-amz-target-completer-30 [] { ["Route53Resolver.GetResolverQueryLogConfigPolicy"] }
+def x-amz-target-completer-31 [] { ["Route53Resolver.GetResolverRule"] }
+def x-amz-target-completer-32 [] { ["Route53Resolver.GetResolverRuleAssociation"] }
+def x-amz-target-completer-33 [] { ["Route53Resolver.GetResolverRulePolicy"] }
+def x-amz-target-completer-34 [] { ["Route53Resolver.ImportFirewallDomains"] }
+def x-amz-target-completer-35 [] { ["Route53Resolver.ListFirewallConfigs"] }
+def x-amz-target-completer-36 [] { ["Route53Resolver.ListFirewallDomainLists"] }
+def x-amz-target-completer-37 [] { ["Route53Resolver.ListFirewallDomains"] }
+def x-amz-target-completer-38 [] { ["Route53Resolver.ListFirewallRuleGroupAssociations"] }
+def x-amz-target-completer-39 [] { ["Route53Resolver.ListFirewallRuleGroups"] }
+def x-amz-target-completer-40 [] { ["Route53Resolver.ListFirewallRules"] }
+def x-amz-target-completer-41 [] { ["Route53Resolver.ListResolverConfigs"] }
+def x-amz-target-completer-42 [] { ["Route53Resolver.ListResolverDnssecConfigs"] }
+def x-amz-target-completer-43 [] { ["Route53Resolver.ListResolverEndpointIpAddresses"] }
+def x-amz-target-completer-44 [] { ["Route53Resolver.ListResolverEndpoints"] }
+def x-amz-target-completer-45 [] { ["Route53Resolver.ListResolverQueryLogConfigAssociations"] }
+def x-amz-target-completer-46 [] { ["Route53Resolver.ListResolverQueryLogConfigs"] }
+def x-amz-target-completer-47 [] { ["Route53Resolver.ListResolverRuleAssociations"] }
+def x-amz-target-completer-48 [] { ["Route53Resolver.ListResolverRules"] }
+def x-amz-target-completer-49 [] { ["Route53Resolver.ListTagsForResource"] }
+def x-amz-target-completer-50 [] { ["Route53Resolver.PutFirewallRuleGroupPolicy"] }
+def x-amz-target-completer-51 [] { ["Route53Resolver.PutResolverQueryLogConfigPolicy"] }
+def x-amz-target-completer-52 [] { ["Route53Resolver.PutResolverRulePolicy"] }
+def x-amz-target-completer-53 [] { ["Route53Resolver.TagResource"] }
+def x-amz-target-completer-54 [] { ["Route53Resolver.UntagResource"] }
+def x-amz-target-completer-55 [] { ["Route53Resolver.UpdateFirewallConfig"] }
+def x-amz-target-completer-56 [] { ["Route53Resolver.UpdateFirewallDomains"] }
+def x-amz-target-completer-57 [] { ["Route53Resolver.UpdateFirewallRule"] }
+def x-amz-target-completer-58 [] { ["Route53Resolver.UpdateFirewallRuleGroupAssociation"] }
+def x-amz-target-completer-59 [] { ["Route53Resolver.UpdateResolverConfig"] }
+def x-amz-target-completer-60 [] { ["Route53Resolver.UpdateResolverDnssecConfig"] }
+def x-amz-target-completer-61 [] { ["Route53Resolver.UpdateResolverEndpoint"] }
+def x-amz-target-completer-62 [] { ["Route53Resolver.UpdateResolverRule"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-route53-resolver-associate-firewall-rule-group AssociateFirewallRuleGroup" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-route53-resolver-associate-firewall-rule-group post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=Route53Resolver.AssociateFirewallRuleGroup
 # operationId: AssociateFirewallRuleGroup
-export def "x-amz-target-route53-resolver-associate-firewall-rule-group AssociateFirewallRuleGroup" [
+export def "x-amz-target-route53-resolver-associate-firewall-rule-group post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,29 +166,29 @@ export def "x-amz-target-route53-resolver-associate-firewall-rule-group Associat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  CreatorRequestId: any
-  FirewallRuleGroupId: any
-  VpcId: any
-  Priority: any
-  Name: any
-  --MutationProtection: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  creator_request_id: any
+  firewall_rule_group_id: any
+  vpc_id: any
+  priority: any
+  name: any
+  --mutation-protection: any
+  --tags: any
 ]: any -> record<FirewallRuleGroupAssociation: record<Id: record, Arn: record, FirewallRuleGroupId: record, VpcId: record, Name: record, Priority: record, MutationProtection: record, ManagedOwnerName: record, Status: record, StatusMessage: record, CreatorRequestId: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.AssociateFirewallRuleGroup")
-  let body = {CreatorRequestId: $CreatorRequestId, FirewallRuleGroupId: $FirewallRuleGroupId, VpcId: $VpcId, Priority: $Priority, Name: $Name, MutationProtection: $MutationProtection, Tags: $Tags} | compact
+  let body = {"CreatorRequestId": $creator_request_id, "FirewallRuleGroupId": $firewall_rule_group_id, "VpcId": $vpc_id, "Priority": $priority, "Name": $name, "MutationProtection": $mutation_protection, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -199,7 +199,7 @@ export def "x-amz-target-route53-resolver-associate-firewall-rule-group Associat
 #
 # POST /#X-Amz-Target=Route53Resolver.AssociateResolverEndpointIpAddress
 # operationId: AssociateResolverEndpointIpAddress
-export def "x-amz-target-route53-resolver-associate-resolver-endpoint-ip-address AssociateResolverEndpointIpAddress" [
+export def "x-amz-target-route53-resolver-associate-resolver-endpoint-ip-address post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,24 +208,24 @@ export def "x-amz-target-route53-resolver-associate-resolver-endpoint-ip-address
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  ResolverEndpointId: any
-  IpAddress: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  resolver_endpoint_id: any
+  ip_address: any
 ]: any -> record<ResolverEndpoint: record<Id: record, CreatorRequestId: record, Arn: record, Name: record, SecurityGroupIds: record, Direction: record, IpAddressCount: record, HostVPCId: record, Status: record, StatusMessage: record, CreationTime: record, ModificationTime: record, ResolverEndpointType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.AssociateResolverEndpointIpAddress")
-  let body = {ResolverEndpointId: $ResolverEndpointId, IpAddress: $IpAddress} | compact
+  let body = {"ResolverEndpointId": $resolver_endpoint_id, "IpAddress": $ip_address} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -236,7 +236,7 @@ export def "x-amz-target-route53-resolver-associate-resolver-endpoint-ip-address
 #
 # POST /#X-Amz-Target=Route53Resolver.AssociateResolverQueryLogConfig
 # operationId: AssociateResolverQueryLogConfig
-export def "x-amz-target-route53-resolver-associate-resolver-query-log-config AssociateResolverQueryLogConfig" [
+export def "x-amz-target-route53-resolver-associate-resolver-query-log-config post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,24 +245,24 @@ export def "x-amz-target-route53-resolver-associate-resolver-query-log-config As
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  ResolverQueryLogConfigId: any
-  ResourceId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  resolver_query_log_config_id: any
+  resource_id: any
 ]: any -> record<ResolverQueryLogConfigAssociation: record<Id: record, ResolverQueryLogConfigId: record, ResourceId: record, Status: record, Error: record, ErrorMessage: record, CreationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.AssociateResolverQueryLogConfig")
-  let body = {ResolverQueryLogConfigId: $ResolverQueryLogConfigId, ResourceId: $ResourceId} | compact
+  let body = {"ResolverQueryLogConfigId": $resolver_query_log_config_id, "ResourceId": $resource_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -273,7 +273,7 @@ export def "x-amz-target-route53-resolver-associate-resolver-query-log-config As
 #
 # POST /#X-Amz-Target=Route53Resolver.AssociateResolverRule
 # operationId: AssociateResolverRule
-export def "x-amz-target-route53-resolver-associate-resolver-rule AssociateResolverRule" [
+export def "x-amz-target-route53-resolver-associate-resolver-rule post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,25 +282,25 @@ export def "x-amz-target-route53-resolver-associate-resolver-rule AssociateResol
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  ResolverRuleId: any
-  --Name: any
-  VPCId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  resolver_rule_id: any
+  --name: any
+  vpc_id: any
 ]: any -> record<ResolverRuleAssociation: record<Id: record, ResolverRuleId: record, Name: record, VPCId: record, Status: record, StatusMessage: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.AssociateResolverRule")
-  let body = {ResolverRuleId: $ResolverRuleId, Name: $Name, VPCId: $VPCId} | compact
+  let body = {"ResolverRuleId": $resolver_rule_id, "Name": $name, "VPCId": $vpc_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -311,7 +311,7 @@ export def "x-amz-target-route53-resolver-associate-resolver-rule AssociateResol
 #
 # POST /#X-Amz-Target=Route53Resolver.CreateFirewallDomainList
 # operationId: CreateFirewallDomainList
-export def "x-amz-target-route53-resolver-create-firewall-domain-list CreateFirewallDomainList" [
+export def "x-amz-target-route53-resolver-create-firewall-domain-list create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,25 +320,25 @@ export def "x-amz-target-route53-resolver-create-firewall-domain-list CreateFire
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  CreatorRequestId: any
-  Name: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  creator_request_id: any
+  name: any
+  --tags: any
 ]: any -> record<FirewallDomainList: record<Id: record, Arn: record, Name: record, DomainCount: record, Status: record, StatusMessage: record, ManagedOwnerName: record, CreatorRequestId: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.CreateFirewallDomainList")
-  let body = {CreatorRequestId: $CreatorRequestId, Name: $Name, Tags: $Tags} | compact
+  let body = {"CreatorRequestId": $creator_request_id, "Name": $name, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -349,7 +349,7 @@ export def "x-amz-target-route53-resolver-create-firewall-domain-list CreateFire
 #
 # POST /#X-Amz-Target=Route53Resolver.CreateFirewallRule
 # operationId: CreateFirewallRule
-export def "x-amz-target-route53-resolver-create-firewall-rule CreateFirewallRule" [
+export def "x-amz-target-route53-resolver-create-firewall-rule create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,32 +358,32 @@ export def "x-amz-target-route53-resolver-create-firewall-rule CreateFirewallRul
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  CreatorRequestId: any
-  FirewallRuleGroupId: any
-  FirewallDomainListId: any
-  Priority: any
-  Action: any
-  --BlockResponse: any
-  --BlockOverrideDomain: any
-  --BlockOverrideDnsType: any
-  --BlockOverrideTtl: any
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  creator_request_id: any
+  firewall_rule_group_id: any
+  firewall_domain_list_id: any
+  priority: any
+  action: any
+  --block-response: any
+  --block-override-domain: any
+  --block-override-dns-type: any
+  --block-override-ttl: any
+  name: any
 ]: any -> record<FirewallRule: record<FirewallRuleGroupId: record, FirewallDomainListId: record, Name: record, Priority: record, Action: record, BlockResponse: record, BlockOverrideDomain: record, BlockOverrideDnsType: record, BlockOverrideTtl: record, CreatorRequestId: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.CreateFirewallRule")
-  let body = {CreatorRequestId: $CreatorRequestId, FirewallRuleGroupId: $FirewallRuleGroupId, FirewallDomainListId: $FirewallDomainListId, Priority: $Priority, Action: $Action, BlockResponse: $BlockResponse, BlockOverrideDomain: $BlockOverrideDomain, BlockOverrideDnsType: $BlockOverrideDnsType, BlockOverrideTtl: $BlockOverrideTtl, Name: $Name} | compact
+  let body = {"CreatorRequestId": $creator_request_id, "FirewallRuleGroupId": $firewall_rule_group_id, "FirewallDomainListId": $firewall_domain_list_id, "Priority": $priority, "Action": $action, "BlockResponse": $block_response, "BlockOverrideDomain": $block_override_domain, "BlockOverrideDnsType": $block_override_dns_type, "BlockOverrideTtl": $block_override_ttl, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -394,7 +394,7 @@ export def "x-amz-target-route53-resolver-create-firewall-rule CreateFirewallRul
 #
 # POST /#X-Amz-Target=Route53Resolver.CreateFirewallRuleGroup
 # operationId: CreateFirewallRuleGroup
-export def "x-amz-target-route53-resolver-create-firewall-rule-group CreateFirewallRuleGroup" [
+export def "x-amz-target-route53-resolver-create-firewall-rule-group create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,25 +403,25 @@ export def "x-amz-target-route53-resolver-create-firewall-rule-group CreateFirew
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  CreatorRequestId: any
-  Name: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  creator_request_id: any
+  name: any
+  --tags: any
 ]: any -> record<FirewallRuleGroup: record<Id: record, Arn: record, Name: record, RuleCount: record, Status: record, StatusMessage: record, OwnerId: record, CreatorRequestId: record, ShareStatus: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.CreateFirewallRuleGroup")
-  let body = {CreatorRequestId: $CreatorRequestId, Name: $Name, Tags: $Tags} | compact
+  let body = {"CreatorRequestId": $creator_request_id, "Name": $name, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -432,7 +432,7 @@ export def "x-amz-target-route53-resolver-create-firewall-rule-group CreateFirew
 #
 # POST /#X-Amz-Target=Route53Resolver.CreateResolverEndpoint
 # operationId: CreateResolverEndpoint
-export def "x-amz-target-route53-resolver-create-resolver-endpoint CreateResolverEndpoint" [
+export def "x-amz-target-route53-resolver-create-resolver-endpoint create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,29 +441,29 @@ export def "x-amz-target-route53-resolver-create-resolver-endpoint CreateResolve
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  CreatorRequestId: any
-  --Name: any
-  SecurityGroupIds: any
-  Direction: any
-  IpAddresses: any
-  --Tags: any
-  --ResolverEndpointType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  creator_request_id: any
+  --name: any
+  security_group_ids: any
+  direction: any
+  ip_addresses: any
+  --tags: any
+  --resolver-endpoint-type: any
 ]: any -> record<ResolverEndpoint: record<Id: record, CreatorRequestId: record, Arn: record, Name: record, SecurityGroupIds: record, Direction: record, IpAddressCount: record, HostVPCId: record, Status: record, StatusMessage: record, CreationTime: record, ModificationTime: record, ResolverEndpointType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.CreateResolverEndpoint")
-  let body = {CreatorRequestId: $CreatorRequestId, Name: $Name, SecurityGroupIds: $SecurityGroupIds, Direction: $Direction, IpAddresses: $IpAddresses, Tags: $Tags, ResolverEndpointType: $ResolverEndpointType} | compact
+  let body = {"CreatorRequestId": $creator_request_id, "Name": $name, "SecurityGroupIds": $security_group_ids, "Direction": $direction, "IpAddresses": $ip_addresses, "Tags": $tags, "ResolverEndpointType": $resolver_endpoint_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -474,7 +474,7 @@ export def "x-amz-target-route53-resolver-create-resolver-endpoint CreateResolve
 #
 # POST /#X-Amz-Target=Route53Resolver.CreateResolverQueryLogConfig
 # operationId: CreateResolverQueryLogConfig
-export def "x-amz-target-route53-resolver-create-resolver-query-log-config CreateResolverQueryLogConfig" [
+export def "x-amz-target-route53-resolver-create-resolver-query-log-config create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,26 +483,26 @@ export def "x-amz-target-route53-resolver-create-resolver-query-log-config Creat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  Name: any
-  DestinationArn: any
-  CreatorRequestId: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  name: any
+  destination_arn: any
+  creator_request_id: any
+  --tags: any
 ]: any -> record<ResolverQueryLogConfig: record<Id: record, OwnerId: record, Status: record, ShareStatus: record, AssociationCount: record, Arn: record, Name: record, DestinationArn: record, CreatorRequestId: record, CreationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.CreateResolverQueryLogConfig")
-  let body = {Name: $Name, DestinationArn: $DestinationArn, CreatorRequestId: $CreatorRequestId, Tags: $Tags} | compact
+  let body = {"Name": $name, "DestinationArn": $destination_arn, "CreatorRequestId": $creator_request_id, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -513,7 +513,7 @@ export def "x-amz-target-route53-resolver-create-resolver-query-log-config Creat
 #
 # POST /#X-Amz-Target=Route53Resolver.CreateResolverRule
 # operationId: CreateResolverRule
-export def "x-amz-target-route53-resolver-create-resolver-rule CreateResolverRule" [
+export def "x-amz-target-route53-resolver-create-resolver-rule create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,29 +522,29 @@ export def "x-amz-target-route53-resolver-create-resolver-rule CreateResolverRul
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  CreatorRequestId: any
-  --Name: any
-  RuleType: any
-  DomainName: any
-  --TargetIps: any
-  --ResolverEndpointId: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  creator_request_id: any
+  --name: any
+  rule_type: any
+  domain_name: any
+  --target-ips: any
+  --resolver-endpoint-id: any
+  --tags: any
 ]: any -> record<ResolverRule: record<Id: record, CreatorRequestId: record, Arn: record, DomainName: record, Status: record, StatusMessage: record, RuleType: record, Name: record, TargetIps: record, ResolverEndpointId: record, OwnerId: record, ShareStatus: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.CreateResolverRule")
-  let body = {CreatorRequestId: $CreatorRequestId, Name: $Name, RuleType: $RuleType, DomainName: $DomainName, TargetIps: $TargetIps, ResolverEndpointId: $ResolverEndpointId, Tags: $Tags} | compact
+  let body = {"CreatorRequestId": $creator_request_id, "Name": $name, "RuleType": $rule_type, "DomainName": $domain_name, "TargetIps": $target_ips, "ResolverEndpointId": $resolver_endpoint_id, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -555,7 +555,7 @@ export def "x-amz-target-route53-resolver-create-resolver-rule CreateResolverRul
 #
 # POST /#X-Amz-Target=Route53Resolver.DeleteFirewallDomainList
 # operationId: DeleteFirewallDomainList
-export def "x-amz-target-route53-resolver-delete-firewall-domain-list DeleteFirewallDomainList" [
+export def "x-amz-target-route53-resolver-delete-firewall-domain-list delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,23 +564,23 @@ export def "x-amz-target-route53-resolver-delete-firewall-domain-list DeleteFire
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  FirewallDomainListId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  firewall_domain_list_id: any
 ]: any -> record<FirewallDomainList: record<Id: record, Arn: record, Name: record, DomainCount: record, Status: record, StatusMessage: record, ManagedOwnerName: record, CreatorRequestId: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.DeleteFirewallDomainList")
-  let body = {FirewallDomainListId: $FirewallDomainListId} | compact
+  let body = {"FirewallDomainListId": $firewall_domain_list_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -591,7 +591,7 @@ export def "x-amz-target-route53-resolver-delete-firewall-domain-list DeleteFire
 #
 # POST /#X-Amz-Target=Route53Resolver.DeleteFirewallRule
 # operationId: DeleteFirewallRule
-export def "x-amz-target-route53-resolver-delete-firewall-rule DeleteFirewallRule" [
+export def "x-amz-target-route53-resolver-delete-firewall-rule delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,24 +600,24 @@ export def "x-amz-target-route53-resolver-delete-firewall-rule DeleteFirewallRul
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  FirewallRuleGroupId: any
-  FirewallDomainListId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  firewall_rule_group_id: any
+  firewall_domain_list_id: any
 ]: any -> record<FirewallRule: record<FirewallRuleGroupId: record, FirewallDomainListId: record, Name: record, Priority: record, Action: record, BlockResponse: record, BlockOverrideDomain: record, BlockOverrideDnsType: record, BlockOverrideTtl: record, CreatorRequestId: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.DeleteFirewallRule")
-  let body = {FirewallRuleGroupId: $FirewallRuleGroupId, FirewallDomainListId: $FirewallDomainListId} | compact
+  let body = {"FirewallRuleGroupId": $firewall_rule_group_id, "FirewallDomainListId": $firewall_domain_list_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -628,7 +628,7 @@ export def "x-amz-target-route53-resolver-delete-firewall-rule DeleteFirewallRul
 #
 # POST /#X-Amz-Target=Route53Resolver.DeleteFirewallRuleGroup
 # operationId: DeleteFirewallRuleGroup
-export def "x-amz-target-route53-resolver-delete-firewall-rule-group DeleteFirewallRuleGroup" [
+export def "x-amz-target-route53-resolver-delete-firewall-rule-group delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,23 +637,23 @@ export def "x-amz-target-route53-resolver-delete-firewall-rule-group DeleteFirew
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  FirewallRuleGroupId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  firewall_rule_group_id: any
 ]: any -> record<FirewallRuleGroup: record<Id: record, Arn: record, Name: record, RuleCount: record, Status: record, StatusMessage: record, OwnerId: record, CreatorRequestId: record, ShareStatus: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.DeleteFirewallRuleGroup")
-  let body = {FirewallRuleGroupId: $FirewallRuleGroupId} | compact
+  let body = {"FirewallRuleGroupId": $firewall_rule_group_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -664,7 +664,7 @@ export def "x-amz-target-route53-resolver-delete-firewall-rule-group DeleteFirew
 #
 # POST /#X-Amz-Target=Route53Resolver.DeleteResolverEndpoint
 # operationId: DeleteResolverEndpoint
-export def "x-amz-target-route53-resolver-delete-resolver-endpoint DeleteResolverEndpoint" [
+export def "x-amz-target-route53-resolver-delete-resolver-endpoint delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -673,23 +673,23 @@ export def "x-amz-target-route53-resolver-delete-resolver-endpoint DeleteResolve
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  ResolverEndpointId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  resolver_endpoint_id: any
 ]: any -> record<ResolverEndpoint: record<Id: record, CreatorRequestId: record, Arn: record, Name: record, SecurityGroupIds: record, Direction: record, IpAddressCount: record, HostVPCId: record, Status: record, StatusMessage: record, CreationTime: record, ModificationTime: record, ResolverEndpointType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.DeleteResolverEndpoint")
-  let body = {ResolverEndpointId: $ResolverEndpointId} | compact
+  let body = {"ResolverEndpointId": $resolver_endpoint_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -700,7 +700,7 @@ export def "x-amz-target-route53-resolver-delete-resolver-endpoint DeleteResolve
 #
 # POST /#X-Amz-Target=Route53Resolver.DeleteResolverQueryLogConfig
 # operationId: DeleteResolverQueryLogConfig
-export def "x-amz-target-route53-resolver-delete-resolver-query-log-config DeleteResolverQueryLogConfig" [
+export def "x-amz-target-route53-resolver-delete-resolver-query-log-config delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -709,23 +709,23 @@ export def "x-amz-target-route53-resolver-delete-resolver-query-log-config Delet
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  ResolverQueryLogConfigId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  resolver_query_log_config_id: any
 ]: any -> record<ResolverQueryLogConfig: record<Id: record, OwnerId: record, Status: record, ShareStatus: record, AssociationCount: record, Arn: record, Name: record, DestinationArn: record, CreatorRequestId: record, CreationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.DeleteResolverQueryLogConfig")
-  let body = {ResolverQueryLogConfigId: $ResolverQueryLogConfigId} | compact
+  let body = {"ResolverQueryLogConfigId": $resolver_query_log_config_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -736,7 +736,7 @@ export def "x-amz-target-route53-resolver-delete-resolver-query-log-config Delet
 #
 # POST /#X-Amz-Target=Route53Resolver.DeleteResolverRule
 # operationId: DeleteResolverRule
-export def "x-amz-target-route53-resolver-delete-resolver-rule DeleteResolverRule" [
+export def "x-amz-target-route53-resolver-delete-resolver-rule delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -745,23 +745,23 @@ export def "x-amz-target-route53-resolver-delete-resolver-rule DeleteResolverRul
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  ResolverRuleId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  resolver_rule_id: any
 ]: any -> record<ResolverRule: record<Id: record, CreatorRequestId: record, Arn: record, DomainName: record, Status: record, StatusMessage: record, RuleType: record, Name: record, TargetIps: record, ResolverEndpointId: record, OwnerId: record, ShareStatus: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.DeleteResolverRule")
-  let body = {ResolverRuleId: $ResolverRuleId} | compact
+  let body = {"ResolverRuleId": $resolver_rule_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -772,7 +772,7 @@ export def "x-amz-target-route53-resolver-delete-resolver-rule DeleteResolverRul
 #
 # POST /#X-Amz-Target=Route53Resolver.DisassociateFirewallRuleGroup
 # operationId: DisassociateFirewallRuleGroup
-export def "x-amz-target-route53-resolver-disassociate-firewall-rule-group DisassociateFirewallRuleGroup" [
+export def "x-amz-target-route53-resolver-disassociate-firewall-rule-group post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -781,23 +781,23 @@ export def "x-amz-target-route53-resolver-disassociate-firewall-rule-group Disas
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  FirewallRuleGroupAssociationId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  firewall_rule_group_association_id: any
 ]: any -> record<FirewallRuleGroupAssociation: record<Id: record, Arn: record, FirewallRuleGroupId: record, VpcId: record, Name: record, Priority: record, MutationProtection: record, ManagedOwnerName: record, Status: record, StatusMessage: record, CreatorRequestId: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.DisassociateFirewallRuleGroup")
-  let body = {FirewallRuleGroupAssociationId: $FirewallRuleGroupAssociationId} | compact
+  let body = {"FirewallRuleGroupAssociationId": $firewall_rule_group_association_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -808,7 +808,7 @@ export def "x-amz-target-route53-resolver-disassociate-firewall-rule-group Disas
 #
 # POST /#X-Amz-Target=Route53Resolver.DisassociateResolverEndpointIpAddress
 # operationId: DisassociateResolverEndpointIpAddress
-export def "x-amz-target-route53-resolver-disassociate-resolver-endpoint-ip-address DisassociateResolverEndpointIpAddress" [
+export def "x-amz-target-route53-resolver-disassociate-resolver-endpoint-ip-address post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -817,24 +817,24 @@ export def "x-amz-target-route53-resolver-disassociate-resolver-endpoint-ip-addr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  ResolverEndpointId: any
-  IpAddress: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  resolver_endpoint_id: any
+  ip_address: any
 ]: any -> record<ResolverEndpoint: record<Id: record, CreatorRequestId: record, Arn: record, Name: record, SecurityGroupIds: record, Direction: record, IpAddressCount: record, HostVPCId: record, Status: record, StatusMessage: record, CreationTime: record, ModificationTime: record, ResolverEndpointType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.DisassociateResolverEndpointIpAddress")
-  let body = {ResolverEndpointId: $ResolverEndpointId, IpAddress: $IpAddress} | compact
+  let body = {"ResolverEndpointId": $resolver_endpoint_id, "IpAddress": $ip_address} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -845,7 +845,7 @@ export def "x-amz-target-route53-resolver-disassociate-resolver-endpoint-ip-addr
 #
 # POST /#X-Amz-Target=Route53Resolver.DisassociateResolverQueryLogConfig
 # operationId: DisassociateResolverQueryLogConfig
-export def "x-amz-target-route53-resolver-disassociate-resolver-query-log-config DisassociateResolverQueryLogConfig" [
+export def "x-amz-target-route53-resolver-disassociate-resolver-query-log-config post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -854,24 +854,24 @@ export def "x-amz-target-route53-resolver-disassociate-resolver-query-log-config
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  ResolverQueryLogConfigId: any
-  ResourceId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  resolver_query_log_config_id: any
+  resource_id: any
 ]: any -> record<ResolverQueryLogConfigAssociation: record<Id: record, ResolverQueryLogConfigId: record, ResourceId: record, Status: record, Error: record, ErrorMessage: record, CreationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.DisassociateResolverQueryLogConfig")
-  let body = {ResolverQueryLogConfigId: $ResolverQueryLogConfigId, ResourceId: $ResourceId} | compact
+  let body = {"ResolverQueryLogConfigId": $resolver_query_log_config_id, "ResourceId": $resource_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -882,7 +882,7 @@ export def "x-amz-target-route53-resolver-disassociate-resolver-query-log-config
 #
 # POST /#X-Amz-Target=Route53Resolver.DisassociateResolverRule
 # operationId: DisassociateResolverRule
-export def "x-amz-target-route53-resolver-disassociate-resolver-rule DisassociateResolverRule" [
+export def "x-amz-target-route53-resolver-disassociate-resolver-rule post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -891,24 +891,24 @@ export def "x-amz-target-route53-resolver-disassociate-resolver-rule Disassociat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  VPCId: any
-  ResolverRuleId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  vpc_id: any
+  resolver_rule_id: any
 ]: any -> record<ResolverRuleAssociation: record<Id: record, ResolverRuleId: record, Name: record, VPCId: record, Status: record, StatusMessage: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.DisassociateResolverRule")
-  let body = {VPCId: $VPCId, ResolverRuleId: $ResolverRuleId} | compact
+  let body = {"VPCId": $vpc_id, "ResolverRuleId": $resolver_rule_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -919,7 +919,7 @@ export def "x-amz-target-route53-resolver-disassociate-resolver-rule Disassociat
 #
 # POST /#X-Amz-Target=Route53Resolver.GetFirewallConfig
 # operationId: GetFirewallConfig
-export def "x-amz-target-route53-resolver-get-firewall-config GetFirewallConfig" [
+export def "x-amz-target-route53-resolver-get-firewall-config get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -928,23 +928,23 @@ export def "x-amz-target-route53-resolver-get-firewall-config GetFirewallConfig"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  ResourceId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  resource_id: any
 ]: any -> record<FirewallConfig: record<Id: record, ResourceId: record, OwnerId: record, FirewallFailOpen: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.GetFirewallConfig")
-  let body = {ResourceId: $ResourceId} | compact
+  let body = {"ResourceId": $resource_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -955,7 +955,7 @@ export def "x-amz-target-route53-resolver-get-firewall-config GetFirewallConfig"
 #
 # POST /#X-Amz-Target=Route53Resolver.GetFirewallDomainList
 # operationId: GetFirewallDomainList
-export def "x-amz-target-route53-resolver-get-firewall-domain-list GetFirewallDomainList" [
+export def "x-amz-target-route53-resolver-get-firewall-domain-list get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -964,23 +964,23 @@ export def "x-amz-target-route53-resolver-get-firewall-domain-list GetFirewallDo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  FirewallDomainListId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  firewall_domain_list_id: any
 ]: any -> record<FirewallDomainList: record<Id: record, Arn: record, Name: record, DomainCount: record, Status: record, StatusMessage: record, ManagedOwnerName: record, CreatorRequestId: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.GetFirewallDomainList")
-  let body = {FirewallDomainListId: $FirewallDomainListId} | compact
+  let body = {"FirewallDomainListId": $firewall_domain_list_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -991,7 +991,7 @@ export def "x-amz-target-route53-resolver-get-firewall-domain-list GetFirewallDo
 #
 # POST /#X-Amz-Target=Route53Resolver.GetFirewallRuleGroup
 # operationId: GetFirewallRuleGroup
-export def "x-amz-target-route53-resolver-get-firewall-rule-group GetFirewallRuleGroup" [
+export def "x-amz-target-route53-resolver-get-firewall-rule-group get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,23 +1000,23 @@ export def "x-amz-target-route53-resolver-get-firewall-rule-group GetFirewallRul
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  FirewallRuleGroupId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  firewall_rule_group_id: any
 ]: any -> record<FirewallRuleGroup: record<Id: record, Arn: record, Name: record, RuleCount: record, Status: record, StatusMessage: record, OwnerId: record, CreatorRequestId: record, ShareStatus: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.GetFirewallRuleGroup")
-  let body = {FirewallRuleGroupId: $FirewallRuleGroupId} | compact
+  let body = {"FirewallRuleGroupId": $firewall_rule_group_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1027,7 +1027,7 @@ export def "x-amz-target-route53-resolver-get-firewall-rule-group GetFirewallRul
 #
 # POST /#X-Amz-Target=Route53Resolver.GetFirewallRuleGroupAssociation
 # operationId: GetFirewallRuleGroupAssociation
-export def "x-amz-target-route53-resolver-get-firewall-rule-group-association GetFirewallRuleGroupAssociation" [
+export def "x-amz-target-route53-resolver-get-firewall-rule-group-association get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1036,23 +1036,23 @@ export def "x-amz-target-route53-resolver-get-firewall-rule-group-association Ge
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  FirewallRuleGroupAssociationId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  firewall_rule_group_association_id: any
 ]: any -> record<FirewallRuleGroupAssociation: record<Id: record, Arn: record, FirewallRuleGroupId: record, VpcId: record, Name: record, Priority: record, MutationProtection: record, ManagedOwnerName: record, Status: record, StatusMessage: record, CreatorRequestId: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.GetFirewallRuleGroupAssociation")
-  let body = {FirewallRuleGroupAssociationId: $FirewallRuleGroupAssociationId} | compact
+  let body = {"FirewallRuleGroupAssociationId": $firewall_rule_group_association_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1063,7 +1063,7 @@ export def "x-amz-target-route53-resolver-get-firewall-rule-group-association Ge
 #
 # POST /#X-Amz-Target=Route53Resolver.GetFirewallRuleGroupPolicy
 # operationId: GetFirewallRuleGroupPolicy
-export def "x-amz-target-route53-resolver-get-firewall-rule-group-policy GetFirewallRuleGroupPolicy" [
+export def "x-amz-target-route53-resolver-get-firewall-rule-group-policy get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1072,23 +1072,23 @@ export def "x-amz-target-route53-resolver-get-firewall-rule-group-policy GetFire
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  Arn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  arn: any
 ]: any -> record<FirewallRuleGroupPolicy: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.GetFirewallRuleGroupPolicy")
-  let body = {Arn: $Arn} | compact
+  let body = {"Arn": $arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1099,7 +1099,7 @@ export def "x-amz-target-route53-resolver-get-firewall-rule-group-policy GetFire
 #
 # POST /#X-Amz-Target=Route53Resolver.GetResolverConfig
 # operationId: GetResolverConfig
-export def "x-amz-target-route53-resolver-get-resolver-config GetResolverConfig" [
+export def "x-amz-target-route53-resolver-get-resolver-config get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1108,23 +1108,23 @@ export def "x-amz-target-route53-resolver-get-resolver-config GetResolverConfig"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  ResourceId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  resource_id: any
 ]: any -> record<ResolverConfig: record<Id: record, ResourceId: record, OwnerId: record, AutodefinedReverse: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.GetResolverConfig")
-  let body = {ResourceId: $ResourceId} | compact
+  let body = {"ResourceId": $resource_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1135,7 +1135,7 @@ export def "x-amz-target-route53-resolver-get-resolver-config GetResolverConfig"
 #
 # POST /#X-Amz-Target=Route53Resolver.GetResolverDnssecConfig
 # operationId: GetResolverDnssecConfig
-export def "x-amz-target-route53-resolver-get-resolver-dnssec-config GetResolverDnssecConfig" [
+export def "x-amz-target-route53-resolver-get-resolver-dnssec-config get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1144,23 +1144,23 @@ export def "x-amz-target-route53-resolver-get-resolver-dnssec-config GetResolver
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  ResourceId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  resource_id: any
 ]: any -> record<ResolverDNSSECConfig: record<Id: record, OwnerId: record, ResourceId: record, ValidationStatus: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.GetResolverDnssecConfig")
-  let body = {ResourceId: $ResourceId} | compact
+  let body = {"ResourceId": $resource_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1171,7 +1171,7 @@ export def "x-amz-target-route53-resolver-get-resolver-dnssec-config GetResolver
 #
 # POST /#X-Amz-Target=Route53Resolver.GetResolverEndpoint
 # operationId: GetResolverEndpoint
-export def "x-amz-target-route53-resolver-get-resolver-endpoint GetResolverEndpoint" [
+export def "x-amz-target-route53-resolver-get-resolver-endpoint get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1180,23 +1180,23 @@ export def "x-amz-target-route53-resolver-get-resolver-endpoint GetResolverEndpo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  ResolverEndpointId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  resolver_endpoint_id: any
 ]: any -> record<ResolverEndpoint: record<Id: record, CreatorRequestId: record, Arn: record, Name: record, SecurityGroupIds: record, Direction: record, IpAddressCount: record, HostVPCId: record, Status: record, StatusMessage: record, CreationTime: record, ModificationTime: record, ResolverEndpointType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.GetResolverEndpoint")
-  let body = {ResolverEndpointId: $ResolverEndpointId} | compact
+  let body = {"ResolverEndpointId": $resolver_endpoint_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1207,7 +1207,7 @@ export def "x-amz-target-route53-resolver-get-resolver-endpoint GetResolverEndpo
 #
 # POST /#X-Amz-Target=Route53Resolver.GetResolverQueryLogConfig
 # operationId: GetResolverQueryLogConfig
-export def "x-amz-target-route53-resolver-get-resolver-query-log-config GetResolverQueryLogConfig" [
+export def "x-amz-target-route53-resolver-get-resolver-query-log-config get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1216,23 +1216,23 @@ export def "x-amz-target-route53-resolver-get-resolver-query-log-config GetResol
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  ResolverQueryLogConfigId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  resolver_query_log_config_id: any
 ]: any -> record<ResolverQueryLogConfig: record<Id: record, OwnerId: record, Status: record, ShareStatus: record, AssociationCount: record, Arn: record, Name: record, DestinationArn: record, CreatorRequestId: record, CreationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.GetResolverQueryLogConfig")
-  let body = {ResolverQueryLogConfigId: $ResolverQueryLogConfigId} | compact
+  let body = {"ResolverQueryLogConfigId": $resolver_query_log_config_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1243,7 +1243,7 @@ export def "x-amz-target-route53-resolver-get-resolver-query-log-config GetResol
 #
 # POST /#X-Amz-Target=Route53Resolver.GetResolverQueryLogConfigAssociation
 # operationId: GetResolverQueryLogConfigAssociation
-export def "x-amz-target-route53-resolver-get-resolver-query-log-config-association GetResolverQueryLogConfigAssociation" [
+export def "x-amz-target-route53-resolver-get-resolver-query-log-config-association get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1252,23 +1252,23 @@ export def "x-amz-target-route53-resolver-get-resolver-query-log-config-associat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  ResolverQueryLogConfigAssociationId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  resolver_query_log_config_association_id: any
 ]: any -> record<ResolverQueryLogConfigAssociation: record<Id: record, ResolverQueryLogConfigId: record, ResourceId: record, Status: record, Error: record, ErrorMessage: record, CreationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.GetResolverQueryLogConfigAssociation")
-  let body = {ResolverQueryLogConfigAssociationId: $ResolverQueryLogConfigAssociationId} | compact
+  let body = {"ResolverQueryLogConfigAssociationId": $resolver_query_log_config_association_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1279,7 +1279,7 @@ export def "x-amz-target-route53-resolver-get-resolver-query-log-config-associat
 #
 # POST /#X-Amz-Target=Route53Resolver.GetResolverQueryLogConfigPolicy
 # operationId: GetResolverQueryLogConfigPolicy
-export def "x-amz-target-route53-resolver-get-resolver-query-log-config-policy GetResolverQueryLogConfigPolicy" [
+export def "x-amz-target-route53-resolver-get-resolver-query-log-config-policy get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1288,23 +1288,23 @@ export def "x-amz-target-route53-resolver-get-resolver-query-log-config-policy G
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  Arn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  arn: any
 ]: any -> record<ResolverQueryLogConfigPolicy: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.GetResolverQueryLogConfigPolicy")
-  let body = {Arn: $Arn} | compact
+  let body = {"Arn": $arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1315,7 +1315,7 @@ export def "x-amz-target-route53-resolver-get-resolver-query-log-config-policy G
 #
 # POST /#X-Amz-Target=Route53Resolver.GetResolverRule
 # operationId: GetResolverRule
-export def "x-amz-target-route53-resolver-get-resolver-rule GetResolverRule" [
+export def "x-amz-target-route53-resolver-get-resolver-rule get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1324,23 +1324,23 @@ export def "x-amz-target-route53-resolver-get-resolver-rule GetResolverRule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  ResolverRuleId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  resolver_rule_id: any
 ]: any -> record<ResolverRule: record<Id: record, CreatorRequestId: record, Arn: record, DomainName: record, Status: record, StatusMessage: record, RuleType: record, Name: record, TargetIps: record, ResolverEndpointId: record, OwnerId: record, ShareStatus: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.GetResolverRule")
-  let body = {ResolverRuleId: $ResolverRuleId} | compact
+  let body = {"ResolverRuleId": $resolver_rule_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1351,7 +1351,7 @@ export def "x-amz-target-route53-resolver-get-resolver-rule GetResolverRule" [
 #
 # POST /#X-Amz-Target=Route53Resolver.GetResolverRuleAssociation
 # operationId: GetResolverRuleAssociation
-export def "x-amz-target-route53-resolver-get-resolver-rule-association GetResolverRuleAssociation" [
+export def "x-amz-target-route53-resolver-get-resolver-rule-association get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1360,23 +1360,23 @@ export def "x-amz-target-route53-resolver-get-resolver-rule-association GetResol
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  ResolverRuleAssociationId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  resolver_rule_association_id: any
 ]: any -> record<ResolverRuleAssociation: record<Id: record, ResolverRuleId: record, Name: record, VPCId: record, Status: record, StatusMessage: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.GetResolverRuleAssociation")
-  let body = {ResolverRuleAssociationId: $ResolverRuleAssociationId} | compact
+  let body = {"ResolverRuleAssociationId": $resolver_rule_association_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1387,7 +1387,7 @@ export def "x-amz-target-route53-resolver-get-resolver-rule-association GetResol
 #
 # POST /#X-Amz-Target=Route53Resolver.GetResolverRulePolicy
 # operationId: GetResolverRulePolicy
-export def "x-amz-target-route53-resolver-get-resolver-rule-policy GetResolverRulePolicy" [
+export def "x-amz-target-route53-resolver-get-resolver-rule-policy get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1396,23 +1396,23 @@ export def "x-amz-target-route53-resolver-get-resolver-rule-policy GetResolverRu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  Arn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  arn: any
 ]: any -> record<ResolverRulePolicy: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.GetResolverRulePolicy")
-  let body = {Arn: $Arn} | compact
+  let body = {"Arn": $arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1423,7 +1423,7 @@ export def "x-amz-target-route53-resolver-get-resolver-rule-policy GetResolverRu
 #
 # POST /#X-Amz-Target=Route53Resolver.ImportFirewallDomains
 # operationId: ImportFirewallDomains
-export def "x-amz-target-route53-resolver-import-firewall-domains ImportFirewallDomains" [
+export def "x-amz-target-route53-resolver-import-firewall-domains import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1432,25 +1432,25 @@ export def "x-amz-target-route53-resolver-import-firewall-domains ImportFirewall
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  FirewallDomainListId: any
-  Operation: any
-  DomainFileUrl: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  firewall_domain_list_id: any
+  operation: any
+  domain_file_url: any
 ]: any -> record<Id: record, Name: record, Status: record, StatusMessage: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.ImportFirewallDomains")
-  let body = {FirewallDomainListId: $FirewallDomainListId, Operation: $Operation, DomainFileUrl: $DomainFileUrl} | compact
+  let body = {"FirewallDomainListId": $firewall_domain_list_id, "Operation": $operation, "DomainFileUrl": $domain_file_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1461,7 +1461,7 @@ export def "x-amz-target-route53-resolver-import-firewall-domains ImportFirewall
 #
 # POST /#X-Amz-Target=Route53Resolver.ListFirewallConfigs
 # operationId: ListFirewallConfigs
-export def "x-amz-target-route53-resolver-list-firewall-configs ListFirewallConfigs" [
+export def "x-amz-target-route53-resolver-list-firewall-configs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1470,27 +1470,27 @@ export def "x-amz-target-route53-resolver-list-firewall-configs ListFirewallConf
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  --max-results: any
+  --next-token: any
 ]: any -> record<NextToken: record, FirewallConfigs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.ListFirewallConfigs" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1501,7 +1501,7 @@ export def "x-amz-target-route53-resolver-list-firewall-configs ListFirewallConf
 #
 # POST /#X-Amz-Target=Route53Resolver.ListFirewallDomainLists
 # operationId: ListFirewallDomainLists
-export def "x-amz-target-route53-resolver-list-firewall-domain-lists ListFirewallDomainLists" [
+export def "x-amz-target-route53-resolver-list-firewall-domain-lists list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1510,27 +1510,27 @@ export def "x-amz-target-route53-resolver-list-firewall-domain-lists ListFirewal
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  --max-results: any
+  --next-token: any
 ]: any -> record<NextToken: record, FirewallDomainLists: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.ListFirewallDomainLists" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1541,7 +1541,7 @@ export def "x-amz-target-route53-resolver-list-firewall-domain-lists ListFirewal
 #
 # POST /#X-Amz-Target=Route53Resolver.ListFirewallDomains
 # operationId: ListFirewallDomains
-export def "x-amz-target-route53-resolver-list-firewall-domains ListFirewallDomains" [
+export def "x-amz-target-route53-resolver-list-firewall-domains list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1550,28 +1550,28 @@ export def "x-amz-target-route53-resolver-list-firewall-domains ListFirewallDoma
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  FirewallDomainListId: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  firewall_domain_list_id: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<NextToken: record, Domains: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.ListFirewallDomains" $qp)
-  let body = {FirewallDomainListId: $FirewallDomainListId, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"FirewallDomainListId": $firewall_domain_list_id, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1582,7 +1582,7 @@ export def "x-amz-target-route53-resolver-list-firewall-domains ListFirewallDoma
 #
 # POST /#X-Amz-Target=Route53Resolver.ListFirewallRuleGroupAssociations
 # operationId: ListFirewallRuleGroupAssociations
-export def "x-amz-target-route53-resolver-list-firewall-rule-group-associations ListFirewallRuleGroupAssociations" [
+export def "x-amz-target-route53-resolver-list-firewall-rule-group-associations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1591,31 +1591,31 @@ export def "x-amz-target-route53-resolver-list-firewall-rule-group-associations 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  --FirewallRuleGroupId: any
-  --VpcId: any
-  --Priority: any
-  --Status: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  --firewall-rule-group-id: any
+  --vpc-id: any
+  --priority: any
+  --status: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<NextToken: record, FirewallRuleGroupAssociations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.ListFirewallRuleGroupAssociations" $qp)
-  let body = {FirewallRuleGroupId: $FirewallRuleGroupId, VpcId: $VpcId, Priority: $Priority, Status: $Status, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"FirewallRuleGroupId": $firewall_rule_group_id, "VpcId": $vpc_id, "Priority": $priority, "Status": $status, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1626,7 +1626,7 @@ export def "x-amz-target-route53-resolver-list-firewall-rule-group-associations 
 #
 # POST /#X-Amz-Target=Route53Resolver.ListFirewallRuleGroups
 # operationId: ListFirewallRuleGroups
-export def "x-amz-target-route53-resolver-list-firewall-rule-groups ListFirewallRuleGroups" [
+export def "x-amz-target-route53-resolver-list-firewall-rule-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1635,27 +1635,27 @@ export def "x-amz-target-route53-resolver-list-firewall-rule-groups ListFirewall
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  --max-results: any
+  --next-token: any
 ]: any -> record<NextToken: record, FirewallRuleGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.ListFirewallRuleGroups" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1666,7 +1666,7 @@ export def "x-amz-target-route53-resolver-list-firewall-rule-groups ListFirewall
 #
 # POST /#X-Amz-Target=Route53Resolver.ListFirewallRules
 # operationId: ListFirewallRules
-export def "x-amz-target-route53-resolver-list-firewall-rules ListFirewallRules" [
+export def "x-amz-target-route53-resolver-list-firewall-rules list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1675,30 +1675,30 @@ export def "x-amz-target-route53-resolver-list-firewall-rules ListFirewallRules"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  FirewallRuleGroupId: any
-  --Priority: any
-  --Action: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  firewall_rule_group_id: any
+  --priority: any
+  --action: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<NextToken: record, FirewallRules: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.ListFirewallRules" $qp)
-  let body = {FirewallRuleGroupId: $FirewallRuleGroupId, Priority: $Priority, Action: $Action, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"FirewallRuleGroupId": $firewall_rule_group_id, "Priority": $priority, "Action": $action, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1709,7 +1709,7 @@ export def "x-amz-target-route53-resolver-list-firewall-rules ListFirewallRules"
 #
 # POST /#X-Amz-Target=Route53Resolver.ListResolverConfigs
 # operationId: ListResolverConfigs
-export def "x-amz-target-route53-resolver-list-resolver-configs ListResolverConfigs" [
+export def "x-amz-target-route53-resolver-list-resolver-configs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1718,27 +1718,27 @@ export def "x-amz-target-route53-resolver-list-resolver-configs ListResolverConf
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  --max-results: any
+  --next-token: any
 ]: any -> record<NextToken: record, ResolverConfigs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.ListResolverConfigs" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1749,7 +1749,7 @@ export def "x-amz-target-route53-resolver-list-resolver-configs ListResolverConf
 #
 # POST /#X-Amz-Target=Route53Resolver.ListResolverDnssecConfigs
 # operationId: ListResolverDnssecConfigs
-export def "x-amz-target-route53-resolver-list-resolver-dnssec-configs ListResolverDnssecConfigs" [
+export def "x-amz-target-route53-resolver-list-resolver-dnssec-configs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1758,28 +1758,28 @@ export def "x-amz-target-route53-resolver-list-resolver-dnssec-configs ListResol
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  --MaxResults: any
-  --NextToken: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  --max-results: any
+  --next-token: any
+  --filters: any
 ]: any -> record<NextToken: record, ResolverDnssecConfigs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.ListResolverDnssecConfigs" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken, Filters: $Filters} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1790,7 +1790,7 @@ export def "x-amz-target-route53-resolver-list-resolver-dnssec-configs ListResol
 #
 # POST /#X-Amz-Target=Route53Resolver.ListResolverEndpointIpAddresses
 # operationId: ListResolverEndpointIpAddresses
-export def "x-amz-target-route53-resolver-list-resolver-endpoint-ip-addresses ListResolverEndpointIpAddresses" [
+export def "x-amz-target-route53-resolver-list-resolver-endpoint-ip-addresses list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1799,28 +1799,28 @@ export def "x-amz-target-route53-resolver-list-resolver-endpoint-ip-addresses Li
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  ResolverEndpointId: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  resolver_endpoint_id: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<NextToken: record, MaxResults: record, IpAddresses: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.ListResolverEndpointIpAddresses" $qp)
-  let body = {ResolverEndpointId: $ResolverEndpointId, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ResolverEndpointId": $resolver_endpoint_id, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1831,7 +1831,7 @@ export def "x-amz-target-route53-resolver-list-resolver-endpoint-ip-addresses Li
 #
 # POST /#X-Amz-Target=Route53Resolver.ListResolverEndpoints
 # operationId: ListResolverEndpoints
-export def "x-amz-target-route53-resolver-list-resolver-endpoints ListResolverEndpoints" [
+export def "x-amz-target-route53-resolver-list-resolver-endpoints list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1840,28 +1840,28 @@ export def "x-amz-target-route53-resolver-list-resolver-endpoints ListResolverEn
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  --MaxResults: any
-  --NextToken: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  --max-results: any
+  --next-token: any
+  --filters: any
 ]: any -> record<NextToken: record, MaxResults: record, ResolverEndpoints: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.ListResolverEndpoints" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken, Filters: $Filters} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1872,7 +1872,7 @@ export def "x-amz-target-route53-resolver-list-resolver-endpoints ListResolverEn
 #
 # POST /#X-Amz-Target=Route53Resolver.ListResolverQueryLogConfigAssociations
 # operationId: ListResolverQueryLogConfigAssociations
-export def "x-amz-target-route53-resolver-list-resolver-query-log-config-associations ListResolverQueryLogConfigAssociations" [
+export def "x-amz-target-route53-resolver-list-resolver-query-log-config-associations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1881,30 +1881,30 @@ export def "x-amz-target-route53-resolver-list-resolver-query-log-config-associa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  --MaxResults: any
-  --NextToken: any
-  --Filters: any
-  --SortBy: any
-  --SortOrder: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  --max-results: any
+  --next-token: any
+  --filters: any
+  --sort-by: any
+  --sort-order: any
 ]: any -> record<NextToken: record, TotalCount: record, TotalFilteredCount: record, ResolverQueryLogConfigAssociations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.ListResolverQueryLogConfigAssociations" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken, Filters: $Filters, SortBy: $SortBy, SortOrder: $SortOrder} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token, "Filters": $filters, "SortBy": $sort_by, "SortOrder": $sort_order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1915,7 +1915,7 @@ export def "x-amz-target-route53-resolver-list-resolver-query-log-config-associa
 #
 # POST /#X-Amz-Target=Route53Resolver.ListResolverQueryLogConfigs
 # operationId: ListResolverQueryLogConfigs
-export def "x-amz-target-route53-resolver-list-resolver-query-log-configs ListResolverQueryLogConfigs" [
+export def "x-amz-target-route53-resolver-list-resolver-query-log-configs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1924,30 +1924,30 @@ export def "x-amz-target-route53-resolver-list-resolver-query-log-configs ListRe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  --MaxResults: any
-  --NextToken: any
-  --Filters: any
-  --SortBy: any
-  --SortOrder: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  --max-results: any
+  --next-token: any
+  --filters: any
+  --sort-by: any
+  --sort-order: any
 ]: any -> record<NextToken: record, TotalCount: record, TotalFilteredCount: record, ResolverQueryLogConfigs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.ListResolverQueryLogConfigs" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken, Filters: $Filters, SortBy: $SortBy, SortOrder: $SortOrder} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token, "Filters": $filters, "SortBy": $sort_by, "SortOrder": $sort_order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1958,7 +1958,7 @@ export def "x-amz-target-route53-resolver-list-resolver-query-log-configs ListRe
 #
 # POST /#X-Amz-Target=Route53Resolver.ListResolverRuleAssociations
 # operationId: ListResolverRuleAssociations
-export def "x-amz-target-route53-resolver-list-resolver-rule-associations ListResolverRuleAssociations" [
+export def "x-amz-target-route53-resolver-list-resolver-rule-associations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1967,28 +1967,28 @@ export def "x-amz-target-route53-resolver-list-resolver-rule-associations ListRe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
-  --MaxResults: any
-  --NextToken: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
+  --max-results: any
+  --next-token: any
+  --filters: any
 ]: any -> record<NextToken: record, MaxResults: record, ResolverRuleAssociations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.ListResolverRuleAssociations" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken, Filters: $Filters} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1999,7 +1999,7 @@ export def "x-amz-target-route53-resolver-list-resolver-rule-associations ListRe
 #
 # POST /#X-Amz-Target=Route53Resolver.ListResolverRules
 # operationId: ListResolverRules
-export def "x-amz-target-route53-resolver-list-resolver-rules ListResolverRules" [
+export def "x-amz-target-route53-resolver-list-resolver-rules list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2008,28 +2008,28 @@ export def "x-amz-target-route53-resolver-list-resolver-rules ListResolverRules"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
-  --MaxResults: any
-  --NextToken: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
+  --max-results: any
+  --next-token: any
+  --filters: any
 ]: any -> record<NextToken: record, MaxResults: record, ResolverRules: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.ListResolverRules" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken, Filters: $Filters} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2040,7 +2040,7 @@ export def "x-amz-target-route53-resolver-list-resolver-rules ListResolverRules"
 #
 # POST /#X-Amz-Target=Route53Resolver.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-route53-resolver-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-route53-resolver-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2049,28 +2049,28 @@ export def "x-amz-target-route53-resolver-list-tags-for-resource ListTagsForReso
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-49
-  ResourceArn: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-49
+  resource_arn: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<Tags: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.ListTagsForResource" $qp)
-  let body = {ResourceArn: $ResourceArn, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ResourceArn": $resource_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2081,7 +2081,7 @@ export def "x-amz-target-route53-resolver-list-tags-for-resource ListTagsForReso
 #
 # POST /#X-Amz-Target=Route53Resolver.PutFirewallRuleGroupPolicy
 # operationId: PutFirewallRuleGroupPolicy
-export def "x-amz-target-route53-resolver-put-firewall-rule-group-policy PutFirewallRuleGroupPolicy" [
+export def "x-amz-target-route53-resolver-put-firewall-rule-group-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2090,24 +2090,24 @@ export def "x-amz-target-route53-resolver-put-firewall-rule-group-policy PutFire
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-50
-  Arn: any
-  FirewallRuleGroupPolicy: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-50
+  arn: any
+  firewall_rule_group_policy: any
 ]: any -> record<ReturnValue: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.PutFirewallRuleGroupPolicy")
-  let body = {Arn: $Arn, FirewallRuleGroupPolicy: $FirewallRuleGroupPolicy} | compact
+  let body = {"Arn": $arn, "FirewallRuleGroupPolicy": $firewall_rule_group_policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2118,7 +2118,7 @@ export def "x-amz-target-route53-resolver-put-firewall-rule-group-policy PutFire
 #
 # POST /#X-Amz-Target=Route53Resolver.PutResolverQueryLogConfigPolicy
 # operationId: PutResolverQueryLogConfigPolicy
-export def "x-amz-target-route53-resolver-put-resolver-query-log-config-policy PutResolverQueryLogConfigPolicy" [
+export def "x-amz-target-route53-resolver-put-resolver-query-log-config-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2127,24 +2127,24 @@ export def "x-amz-target-route53-resolver-put-resolver-query-log-config-policy P
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-51
-  Arn: any
-  ResolverQueryLogConfigPolicy: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-51
+  arn: any
+  resolver_query_log_config_policy: any
 ]: any -> record<ReturnValue: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.PutResolverQueryLogConfigPolicy")
-  let body = {Arn: $Arn, ResolverQueryLogConfigPolicy: $ResolverQueryLogConfigPolicy} | compact
+  let body = {"Arn": $arn, "ResolverQueryLogConfigPolicy": $resolver_query_log_config_policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2155,7 +2155,7 @@ export def "x-amz-target-route53-resolver-put-resolver-query-log-config-policy P
 #
 # POST /#X-Amz-Target=Route53Resolver.PutResolverRulePolicy
 # operationId: PutResolverRulePolicy
-export def "x-amz-target-route53-resolver-put-resolver-rule-policy PutResolverRulePolicy" [
+export def "x-amz-target-route53-resolver-put-resolver-rule-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2164,24 +2164,24 @@ export def "x-amz-target-route53-resolver-put-resolver-rule-policy PutResolverRu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-52
-  Arn: any
-  ResolverRulePolicy: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-52
+  arn: any
+  resolver_rule_policy: any
 ]: any -> record<ReturnValue: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.PutResolverRulePolicy")
-  let body = {Arn: $Arn, ResolverRulePolicy: $ResolverRulePolicy} | compact
+  let body = {"Arn": $arn, "ResolverRulePolicy": $resolver_rule_policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2192,7 +2192,7 @@ export def "x-amz-target-route53-resolver-put-resolver-rule-policy PutResolverRu
 #
 # POST /#X-Amz-Target=Route53Resolver.TagResource
 # operationId: TagResource
-export def "x-amz-target-route53-resolver-tag-resource TagResource" [
+export def "x-amz-target-route53-resolver-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2201,24 +2201,24 @@ export def "x-amz-target-route53-resolver-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-53
-  ResourceArn: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-53
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.TagResource")
-  let body = {ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2229,7 +2229,7 @@ export def "x-amz-target-route53-resolver-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=Route53Resolver.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-route53-resolver-untag-resource UntagResource" [
+export def "x-amz-target-route53-resolver-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2238,24 +2238,24 @@ export def "x-amz-target-route53-resolver-untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-54
-  ResourceArn: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-54
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.UntagResource")
-  let body = {ResourceArn: $ResourceArn, TagKeys: $TagKeys} | compact
+  let body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2266,7 +2266,7 @@ export def "x-amz-target-route53-resolver-untag-resource UntagResource" [
 #
 # POST /#X-Amz-Target=Route53Resolver.UpdateFirewallConfig
 # operationId: UpdateFirewallConfig
-export def "x-amz-target-route53-resolver-update-firewall-config UpdateFirewallConfig" [
+export def "x-amz-target-route53-resolver-update-firewall-config update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2275,24 +2275,24 @@ export def "x-amz-target-route53-resolver-update-firewall-config UpdateFirewallC
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-55
-  ResourceId: any
-  FirewallFailOpen: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-55
+  resource_id: any
+  firewall_fail_open: any
 ]: any -> record<FirewallConfig: record<Id: record, ResourceId: record, OwnerId: record, FirewallFailOpen: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.UpdateFirewallConfig")
-  let body = {ResourceId: $ResourceId, FirewallFailOpen: $FirewallFailOpen} | compact
+  let body = {"ResourceId": $resource_id, "FirewallFailOpen": $firewall_fail_open} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2303,7 +2303,7 @@ export def "x-amz-target-route53-resolver-update-firewall-config UpdateFirewallC
 #
 # POST /#X-Amz-Target=Route53Resolver.UpdateFirewallDomains
 # operationId: UpdateFirewallDomains
-export def "x-amz-target-route53-resolver-update-firewall-domains UpdateFirewallDomains" [
+export def "x-amz-target-route53-resolver-update-firewall-domains update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2312,25 +2312,25 @@ export def "x-amz-target-route53-resolver-update-firewall-domains UpdateFirewall
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-56
-  FirewallDomainListId: any
-  Operation: any
-  Domains: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-56
+  firewall_domain_list_id: any
+  operation: any
+  domains: any
 ]: any -> record<Id: record, Name: record, Status: record, StatusMessage: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.UpdateFirewallDomains")
-  let body = {FirewallDomainListId: $FirewallDomainListId, Operation: $Operation, Domains: $Domains} | compact
+  let body = {"FirewallDomainListId": $firewall_domain_list_id, "Operation": $operation, "Domains": $domains} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2341,7 +2341,7 @@ export def "x-amz-target-route53-resolver-update-firewall-domains UpdateFirewall
 #
 # POST /#X-Amz-Target=Route53Resolver.UpdateFirewallRule
 # operationId: UpdateFirewallRule
-export def "x-amz-target-route53-resolver-update-firewall-rule UpdateFirewallRule" [
+export def "x-amz-target-route53-resolver-update-firewall-rule update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2350,31 +2350,31 @@ export def "x-amz-target-route53-resolver-update-firewall-rule UpdateFirewallRul
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-57
-  FirewallRuleGroupId: any
-  FirewallDomainListId: any
-  --Priority: any
-  --Action: any
-  --BlockResponse: any
-  --BlockOverrideDomain: any
-  --BlockOverrideDnsType: any
-  --BlockOverrideTtl: any
-  --Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-57
+  firewall_rule_group_id: any
+  firewall_domain_list_id: any
+  --priority: any
+  --action: any
+  --block-response: any
+  --block-override-domain: any
+  --block-override-dns-type: any
+  --block-override-ttl: any
+  --name: any
 ]: any -> record<FirewallRule: record<FirewallRuleGroupId: record, FirewallDomainListId: record, Name: record, Priority: record, Action: record, BlockResponse: record, BlockOverrideDomain: record, BlockOverrideDnsType: record, BlockOverrideTtl: record, CreatorRequestId: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.UpdateFirewallRule")
-  let body = {FirewallRuleGroupId: $FirewallRuleGroupId, FirewallDomainListId: $FirewallDomainListId, Priority: $Priority, Action: $Action, BlockResponse: $BlockResponse, BlockOverrideDomain: $BlockOverrideDomain, BlockOverrideDnsType: $BlockOverrideDnsType, BlockOverrideTtl: $BlockOverrideTtl, Name: $Name} | compact
+  let body = {"FirewallRuleGroupId": $firewall_rule_group_id, "FirewallDomainListId": $firewall_domain_list_id, "Priority": $priority, "Action": $action, "BlockResponse": $block_response, "BlockOverrideDomain": $block_override_domain, "BlockOverrideDnsType": $block_override_dns_type, "BlockOverrideTtl": $block_override_ttl, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2385,7 +2385,7 @@ export def "x-amz-target-route53-resolver-update-firewall-rule UpdateFirewallRul
 #
 # POST /#X-Amz-Target=Route53Resolver.UpdateFirewallRuleGroupAssociation
 # operationId: UpdateFirewallRuleGroupAssociation
-export def "x-amz-target-route53-resolver-update-firewall-rule-group-association UpdateFirewallRuleGroupAssociation" [
+export def "x-amz-target-route53-resolver-update-firewall-rule-group-association update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2394,26 +2394,26 @@ export def "x-amz-target-route53-resolver-update-firewall-rule-group-association
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-58
-  FirewallRuleGroupAssociationId: any
-  --Priority: any
-  --MutationProtection: any
-  --Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-58
+  firewall_rule_group_association_id: any
+  --priority: any
+  --mutation-protection: any
+  --name: any
 ]: any -> record<FirewallRuleGroupAssociation: record<Id: record, Arn: record, FirewallRuleGroupId: record, VpcId: record, Name: record, Priority: record, MutationProtection: record, ManagedOwnerName: record, Status: record, StatusMessage: record, CreatorRequestId: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.UpdateFirewallRuleGroupAssociation")
-  let body = {FirewallRuleGroupAssociationId: $FirewallRuleGroupAssociationId, Priority: $Priority, MutationProtection: $MutationProtection, Name: $Name} | compact
+  let body = {"FirewallRuleGroupAssociationId": $firewall_rule_group_association_id, "Priority": $priority, "MutationProtection": $mutation_protection, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2424,7 +2424,7 @@ export def "x-amz-target-route53-resolver-update-firewall-rule-group-association
 #
 # POST /#X-Amz-Target=Route53Resolver.UpdateResolverConfig
 # operationId: UpdateResolverConfig
-export def "x-amz-target-route53-resolver-update-resolver-config UpdateResolverConfig" [
+export def "x-amz-target-route53-resolver-update-resolver-config update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2433,24 +2433,24 @@ export def "x-amz-target-route53-resolver-update-resolver-config UpdateResolverC
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-59
-  ResourceId: any
-  AutodefinedReverseFlag: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-59
+  resource_id: any
+  autodefined_reverse_flag: any
 ]: any -> record<ResolverConfig: record<Id: record, ResourceId: record, OwnerId: record, AutodefinedReverse: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.UpdateResolverConfig")
-  let body = {ResourceId: $ResourceId, AutodefinedReverseFlag: $AutodefinedReverseFlag} | compact
+  let body = {"ResourceId": $resource_id, "AutodefinedReverseFlag": $autodefined_reverse_flag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2461,7 +2461,7 @@ export def "x-amz-target-route53-resolver-update-resolver-config UpdateResolverC
 #
 # POST /#X-Amz-Target=Route53Resolver.UpdateResolverDnssecConfig
 # operationId: UpdateResolverDnssecConfig
-export def "x-amz-target-route53-resolver-update-resolver-dnssec-config UpdateResolverDnssecConfig" [
+export def "x-amz-target-route53-resolver-update-resolver-dnssec-config update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2470,24 +2470,24 @@ export def "x-amz-target-route53-resolver-update-resolver-dnssec-config UpdateRe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-60
-  ResourceId: any
-  Validation: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-60
+  resource_id: any
+  validation: any
 ]: any -> record<ResolverDNSSECConfig: record<Id: record, OwnerId: record, ResourceId: record, ValidationStatus: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.UpdateResolverDnssecConfig")
-  let body = {ResourceId: $ResourceId, Validation: $Validation} | compact
+  let body = {"ResourceId": $resource_id, "Validation": $validation} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2498,7 +2498,7 @@ export def "x-amz-target-route53-resolver-update-resolver-dnssec-config UpdateRe
 #
 # POST /#X-Amz-Target=Route53Resolver.UpdateResolverEndpoint
 # operationId: UpdateResolverEndpoint
-export def "x-amz-target-route53-resolver-update-resolver-endpoint UpdateResolverEndpoint" [
+export def "x-amz-target-route53-resolver-update-resolver-endpoint update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2507,26 +2507,26 @@ export def "x-amz-target-route53-resolver-update-resolver-endpoint UpdateResolve
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-61
-  ResolverEndpointId: any
-  --Name: any
-  --ResolverEndpointType: any
-  --UpdateIpAddresses: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-61
+  resolver_endpoint_id: any
+  --name: any
+  --resolver-endpoint-type: any
+  --update-ip-addresses: any
 ]: any -> record<ResolverEndpoint: record<Id: record, CreatorRequestId: record, Arn: record, Name: record, SecurityGroupIds: record, Direction: record, IpAddressCount: record, HostVPCId: record, Status: record, StatusMessage: record, CreationTime: record, ModificationTime: record, ResolverEndpointType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.UpdateResolverEndpoint")
-  let body = {ResolverEndpointId: $ResolverEndpointId, Name: $Name, ResolverEndpointType: $ResolverEndpointType, UpdateIpAddresses: $UpdateIpAddresses} | compact
+  let body = {"ResolverEndpointId": $resolver_endpoint_id, "Name": $name, "ResolverEndpointType": $resolver_endpoint_type, "UpdateIpAddresses": $update_ip_addresses} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2537,7 +2537,7 @@ export def "x-amz-target-route53-resolver-update-resolver-endpoint UpdateResolve
 #
 # POST /#X-Amz-Target=Route53Resolver.UpdateResolverRule
 # operationId: UpdateResolverRule
-export def "x-amz-target-route53-resolver-update-resolver-rule UpdateResolverRule" [
+export def "x-amz-target-route53-resolver-update-resolver-rule update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2546,24 +2546,24 @@ export def "x-amz-target-route53-resolver-update-resolver-rule UpdateResolverRul
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-62
-  ResolverRuleId: any
-  Config: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-62
+  resolver_rule_id: any
+  config: any
 ]: any -> record<ResolverRule: record<Id: record, CreatorRequestId: record, Arn: record, DomainName: record, Status: record, StatusMessage: record, RuleType: record, Name: record, TargetIps: record, ResolverEndpointId: record, OwnerId: record, ShareStatus: record, CreationTime: record, ModificationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Route53Resolver.UpdateResolverRule")
-  let body = {ResolverRuleId: $ResolverRuleId, Config: $Config} | compact
+  let body = {"ResolverRuleId": $resolver_rule_id, "Config": $config} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

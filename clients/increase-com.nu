@@ -155,7 +155,7 @@ export def "account-numbers number" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account_numbers")
-  let body = {account_id: $account_id, name: $name} | compact
+  let body = {"account_id": $account_id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -179,7 +179,7 @@ export def "account-numbers number-by-account_number_id" [
 ]: nothing -> record<account_id: string, account_number: string, created_at: string, id: string, name: string, routing_number: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account_numbers/($account_number_id)")
+  let full_url = (build-url $base ({account_number_id: $account_number_id} | format pattern "/account_numbers/{account_number_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -205,8 +205,8 @@ export def "account-numbers number-by-account_number_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account_numbers/($account_number_id)")
-  let body = {name: $name, status: $status} | compact
+  let full_url = (build-url $base ({account_number_id: $account_number_id} | format pattern "/account_numbers/{account_number_id}"))
+  let body = {"name": $name, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -229,14 +229,14 @@ export def "account-statements statements" [
   --cursor: string
   --limit: int
   --account-id: string # e.g. account_in71c4amph0vgo2qllky
-  --statement-period-startafter: string # format: date-time
-  --statement-period-startbefore: string # format: date-time
-  --statement-period-starton-or-after: string # format: date-time
-  --statement-period-starton-or-before: string # format: date-time
+  --statement-period-start-after: string # format: date-time
+  --statement-period-start-before: string # format: date-time
+  --statement-period-start-on-or-after: string # format: date-time
+  --statement-period-start-on-or-before: string # format: date-time
 ]: nothing -> record<data: table<account_id: string, created_at: string, ending_balance: int, file_id: string, id: string, starting_balance: int, statement_period_end: string, statement_period_start: string, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "statement_period_start.after" $statement_period_startafter "scalar") (serialize-qp "statement_period_start.before" $statement_period_startbefore "scalar") (serialize-qp "statement_period_start.on_or_after" $statement_period_starton_or_after "scalar") (serialize-qp "statement_period_start.on_or_before" $statement_period_starton_or_before "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "statement_period_start.after" $statement_period_start_after "scalar") (serialize-qp "statement_period_start.before" $statement_period_start_before "scalar") (serialize-qp "statement_period_start.on_or_after" $statement_period_start_on_or_after "scalar") (serialize-qp "statement_period_start.on_or_before" $statement_period_start_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account_statements" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -260,7 +260,7 @@ export def "account-statements statement" [
 ]: nothing -> record<account_id: string, created_at: string, ending_balance: int, file_id: string, id: string, starting_balance: int, statement_period_end: string, statement_period_start: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account_statements/($account_statement_id)")
+  let full_url = (build-url $base ({account_statement_id: $account_statement_id} | format pattern "/account_statements/{account_statement_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -282,14 +282,14 @@ export def "account-transfers transfers" [
   --cursor: string
   --limit: int
   --account-id: string # e.g. account_in71c4amph0vgo2qllky
-  --created-atafter: string # format: date-time
-  --created-atbefore: string # format: date-time
-  --created-aton-or-after: string # format: date-time
-  --created-aton-or-before: string # format: date-time
+  --created-at-after: string # format: date-time
+  --created-at-before: string # format: date-time
+  --created-at-on-or-after: string # format: date-time
+  --created-at-on-or-before: string # format: date-time
 ]: nothing -> record<data: table<account_id: string, amount: int, approval: record, cancellation: record, created_at: string, currency: string, description: string, destination_account_id: string, destination_transaction_id: string, id: string, network: string, status: string, template_id: string, transaction_id: string, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_atafter "scalar") (serialize-qp "created_at.before" $created_atbefore "scalar") (serialize-qp "created_at.on_or_after" $created_aton_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_aton_or_before "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account_transfers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -319,7 +319,7 @@ export def "account-transfers transfer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account_transfers")
-  let body = {account_id: $account_id, amount: $amount, description: $description, destination_account_id: $destination_account_id, require_approval: $require_approval} | compact
+  let body = {"account_id": $account_id, "amount": $amount, "description": $description, "destination_account_id": $destination_account_id, "require_approval": $require_approval} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -343,7 +343,7 @@ export def "account-transfers transfer-by-account_transfer_id" [
 ]: nothing -> record<account_id: string, amount: int, approval: record<approved_at: string>, cancellation: record<canceled_at: string>, created_at: string, currency: string, description: string, destination_account_id: string, destination_transaction_id: string, id: string, network: string, status: string, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account_transfers/($account_transfer_id)")
+  let full_url = (build-url $base ({account_transfer_id: $account_transfer_id} | format pattern "/account_transfers/{account_transfer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -366,7 +366,7 @@ export def "account-transfers-approve transfer" [
 ]: nothing -> record<account_id: string, amount: int, approval: record<approved_at: string>, cancellation: record<canceled_at: string>, created_at: string, currency: string, description: string, destination_account_id: string, destination_transaction_id: string, id: string, network: string, status: string, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account_transfers/($account_transfer_id)/approve")
+  let full_url = (build-url $base ({account_transfer_id: $account_transfer_id} | format pattern "/account_transfers/{account_transfer_id}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -389,7 +389,7 @@ export def "account-transfers-cancel transfer" [
 ]: nothing -> record<account_id: string, amount: int, approval: record<approved_at: string>, cancellation: record<canceled_at: string>, created_at: string, currency: string, description: string, destination_account_id: string, destination_transaction_id: string, id: string, network: string, status: string, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account_transfers/($account_transfer_id)/cancel")
+  let full_url = (build-url $base ({account_transfer_id: $account_transfer_id} | format pattern "/account_transfers/{account_transfer_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -399,7 +399,7 @@ export def "account-transfers-cancel transfer" [
 #
 # GET /accounts
 # operationId: list_accounts
-export def "accounts accounts" [
+export def "accounts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +443,7 @@ export def "accounts account" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts")
-  let body = {entity_id: $entity_id, informational_entity_id: $informational_entity_id, name: $name} | compact
+  let body = {"entity_id": $entity_id, "informational_entity_id": $informational_entity_id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -467,7 +467,7 @@ export def "accounts account-by-account_id" [
 ]: nothing -> record<balances: record<available_balance: int, current_balance: int>, created_at: string, currency: string, entity_id: string, id: string, informational_entity_id: string, interest_accrued: string, interest_accrued_at: string, name: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account_id)")
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -492,8 +492,8 @@ export def "accounts account-by-account_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account_id)")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -517,7 +517,7 @@ export def "accounts-close account" [
 ]: nothing -> record<balances: record<available_balance: int, current_balance: int>, created_at: string, currency: string, entity_id: string, id: string, informational_entity_id: string, interest_accrued: string, interest_accrued_at: string, name: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account_id)/close")
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/close"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -538,14 +538,14 @@ export def "ach-prenotifications prenotifications" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string
   --limit: int
-  --created-atafter: string # format: date-time
-  --created-atbefore: string # format: date-time
-  --created-aton-or-after: string # format: date-time
-  --created-aton-or-before: string # format: date-time
+  --created-at-after: string # format: date-time
+  --created-at-before: string # format: date-time
+  --created-at-on-or-after: string # format: date-time
+  --created-at-on-or-before: string # format: date-time
 ]: nothing -> record<data: table<account_number: string, addendum: string, company_descriptive_date: string, company_discretionary_data: string, company_entry_description: string, company_name: string, created_at: string, credit_debit_indicator: string, effective_date: string, id: string, prenotification_return: record, routing_number: string, status: string, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "created_at.after" $created_atafter "scalar") (serialize-qp "created_at.before" $created_atbefore "scalar") (serialize-qp "created_at.on_or_after" $created_aton_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_aton_or_before "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ach_prenotifications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -582,7 +582,7 @@ export def "ach-prenotifications prenotification" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ach_prenotifications")
-  let body = {account_number: $account_number, addendum: $addendum, company_descriptive_date: $company_descriptive_date, company_discretionary_data: $company_discretionary_data, company_entry_description: $company_entry_description, company_name: $company_name, credit_debit_indicator: $credit_debit_indicator, effective_date: $effective_date, individual_id: $individual_id, individual_name: $individual_name, routing_number: $routing_number, standard_entry_class_code: $standard_entry_class_code} | compact
+  let body = {"account_number": $account_number, "addendum": $addendum, "company_descriptive_date": $company_descriptive_date, "company_discretionary_data": $company_discretionary_data, "company_entry_description": $company_entry_description, "company_name": $company_name, "credit_debit_indicator": $credit_debit_indicator, "effective_date": $effective_date, "individual_id": $individual_id, "individual_name": $individual_name, "routing_number": $routing_number, "standard_entry_class_code": $standard_entry_class_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -606,7 +606,7 @@ export def "ach-prenotifications prenotification-by-ach_prenotification_id" [
 ]: nothing -> record<account_number: string, addendum: string, company_descriptive_date: string, company_discretionary_data: string, company_entry_description: string, company_name: string, created_at: string, credit_debit_indicator: string, effective_date: string, id: string, prenotification_return: record<created_at: string, return_reason_code: string>, routing_number: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ach_prenotifications/($ach_prenotification_id)")
+  let full_url = (build-url $base ({ach_prenotification_id: $ach_prenotification_id} | format pattern "/ach_prenotifications/{ach_prenotification_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -629,14 +629,14 @@ export def "ach-transfers transfers" [
   --limit: int
   --account-id: string # e.g. account_in71c4amph0vgo2qllky
   --external-account-id: string
-  --created-atafter: string # format: date-time
-  --created-atbefore: string # format: date-time
-  --created-aton-or-after: string # format: date-time
-  --created-aton-or-before: string # format: date-time
+  --created-at-after: string # format: date-time
+  --created-at-before: string # format: date-time
+  --created-at-on-or-after: string # format: date-time
+  --created-at-on-or-before: string # format: date-time
 ]: nothing -> record<data: table<account_id: string, account_number: string, addendum: string, amount: int, approval: record, cancellation: record, company_descriptive_date: string, company_discretionary_data: string, company_entry_description: string, company_name: string, created_at: string, currency: string, external_account_id: string, funding: string, id: string, individual_id: string, individual_name: string, network: string, notification_of_change: record, return: record, routing_number: string, standard_entry_class_code: string, statement_descriptor: string, status: string, submission: record, template_id: string, transaction_id: string, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "external_account_id" $external_account_id "scalar") (serialize-qp "created_at.after" $created_atafter "scalar") (serialize-qp "created_at.before" $created_atbefore "scalar") (serialize-qp "created_at.on_or_after" $created_aton_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_aton_or_before "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "external_account_id" $external_account_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ach_transfers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -678,7 +678,7 @@ export def "ach-transfers transfer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ach_transfers")
-  let body = {account_id: $account_id, account_number: $account_number, addendum: $addendum, amount: $amount, company_descriptive_date: $company_descriptive_date, company_discretionary_data: $company_discretionary_data, company_entry_description: $company_entry_description, company_name: $company_name, effective_date: $effective_date, external_account_id: $external_account_id, funding: $funding, individual_id: $individual_id, individual_name: $individual_name, require_approval: $require_approval, routing_number: $routing_number, standard_entry_class_code: $standard_entry_class_code, statement_descriptor: $statement_descriptor} | compact
+  let body = {"account_id": $account_id, "account_number": $account_number, "addendum": $addendum, "amount": $amount, "company_descriptive_date": $company_descriptive_date, "company_discretionary_data": $company_discretionary_data, "company_entry_description": $company_entry_description, "company_name": $company_name, "effective_date": $effective_date, "external_account_id": $external_account_id, "funding": $funding, "individual_id": $individual_id, "individual_name": $individual_name, "require_approval": $require_approval, "routing_number": $routing_number, "standard_entry_class_code": $standard_entry_class_code, "statement_descriptor": $statement_descriptor} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -702,7 +702,7 @@ export def "ach-transfers transfer-by-ach_transfer_id" [
 ]: nothing -> record<account_id: string, account_number: string, addendum: string, amount: int, approval: record<approved_at: string>, cancellation: record<canceled_at: string>, company_descriptive_date: string, company_discretionary_data: string, company_entry_description: string, company_name: string, created_at: string, currency: string, external_account_id: string, funding: string, id: string, individual_id: string, individual_name: string, network: string, notification_of_change: record<change_code: string, corrected_data: string, created_at: string>, return: record<created_at: string, return_reason_code: string, transaction_id: string, transfer_id: string>, routing_number: string, standard_entry_class_code: string, statement_descriptor: string, status: string, submission: record<submitted_at: string, trace_number: string>, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ach_transfers/($ach_transfer_id)")
+  let full_url = (build-url $base ({ach_transfer_id: $ach_transfer_id} | format pattern "/ach_transfers/{ach_transfer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -725,7 +725,7 @@ export def "ach-transfers-approve transfer" [
 ]: nothing -> record<account_id: string, account_number: string, addendum: string, amount: int, approval: record<approved_at: string>, cancellation: record<canceled_at: string>, company_descriptive_date: string, company_discretionary_data: string, company_entry_description: string, company_name: string, created_at: string, currency: string, external_account_id: string, funding: string, id: string, individual_id: string, individual_name: string, network: string, notification_of_change: record<change_code: string, corrected_data: string, created_at: string>, return: record<created_at: string, return_reason_code: string, transaction_id: string, transfer_id: string>, routing_number: string, standard_entry_class_code: string, statement_descriptor: string, status: string, submission: record<submitted_at: string, trace_number: string>, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ach_transfers/($ach_transfer_id)/approve")
+  let full_url = (build-url $base ({ach_transfer_id: $ach_transfer_id} | format pattern "/ach_transfers/{ach_transfer_id}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -748,7 +748,7 @@ export def "ach-transfers-cancel transfer" [
 ]: nothing -> record<account_id: string, account_number: string, addendum: string, amount: int, approval: record<approved_at: string>, cancellation: record<canceled_at: string>, company_descriptive_date: string, company_discretionary_data: string, company_entry_description: string, company_name: string, created_at: string, currency: string, external_account_id: string, funding: string, id: string, individual_id: string, individual_name: string, network: string, notification_of_change: record<change_code: string, corrected_data: string, created_at: string>, return: record<created_at: string, return_reason_code: string, transaction_id: string, transfer_id: string>, routing_number: string, standard_entry_class_code: string, statement_descriptor: string, status: string, submission: record<submitted_at: string, trace_number: string>, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ach_transfers/($ach_transfer_id)/cancel")
+  let full_url = (build-url $base ({ach_transfer_id: $ach_transfer_id} | format pattern "/ach_transfers/{ach_transfer_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -769,15 +769,15 @@ export def "card-disputes disputes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string
   --limit: int
-  --created-atafter: string # format: date-time
-  --created-atbefore: string # format: date-time
-  --created-aton-or-after: string # format: date-time
-  --created-aton-or-before: string # format: date-time
-  --statusin: list
+  --created-at-after: string # format: date-time
+  --created-at-before: string # format: date-time
+  --created-at-on-or-after: string # format: date-time
+  --created-at-on-or-before: string # format: date-time
+  --status-in: list
 ]: nothing -> record<data: table<acceptance: record, created_at: string, disputed_transaction_id: string, explanation: string, id: string, rejection: record, status: string, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "created_at.after" $created_atafter "scalar") (serialize-qp "created_at.before" $created_atbefore "scalar") (serialize-qp "created_at.on_or_after" $created_aton_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_aton_or_before "scalar") (serialize-qp "status.in" $statusin "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar") (serialize-qp "status.in" $status_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/card_disputes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -804,7 +804,7 @@ export def "card-disputes dispute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/card_disputes")
-  let body = {disputed_transaction_id: $disputed_transaction_id, explanation: $explanation} | compact
+  let body = {"disputed_transaction_id": $disputed_transaction_id, "explanation": $explanation} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -828,7 +828,7 @@ export def "card-disputes dispute-by-card_dispute_id" [
 ]: nothing -> record<acceptance: record<accepted_at: string, card_dispute_id: string, transaction_id: string>, created_at: string, disputed_transaction_id: string, explanation: string, id: string, rejection: record<card_dispute_id: string, explanation: string, rejected_at: string>, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/card_disputes/($card_dispute_id)")
+  let full_url = (build-url $base ({card_dispute_id: $card_dispute_id} | format pattern "/card_disputes/{card_dispute_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -849,11 +849,11 @@ export def "card-profiles profiles" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string
   --limit: int
-  --statusin: list
+  --status-in: list
 ]: nothing -> record<data: table<created_at: string, description: string, digital_wallets: record, id: string, status: string, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status.in" $statusin "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status.in" $status_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/card_profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -881,7 +881,7 @@ export def "card-profiles profile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/card_profiles")
-  let body = {description: $description, digital_wallets: $digital_wallets} | compact
+  let body = {"description": $description, "digital_wallets": $digital_wallets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -905,7 +905,7 @@ export def "card-profiles profile-by-card_profile_id" [
 ]: nothing -> record<created_at: string, description: string, digital_wallets: record<app_icon_file_id: string, background_image_file_id: string, card_description: string, contact_email: string, contact_phone: string, contact_website: string, issuer_name: string, text_color: record<blue: int, green: int, red: int>>, id: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/card_profiles/($card_profile_id)")
+  let full_url = (build-url $base ({card_profile_id: $card_profile_id} | format pattern "/card_profiles/{card_profile_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -915,7 +915,7 @@ export def "card-profiles profile-by-card_profile_id" [
 #
 # GET /cards
 # operationId: list_cards
-export def "cards cards" [
+export def "cards get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -927,14 +927,14 @@ export def "cards cards" [
   --cursor: string
   --limit: int
   --account-id: string # e.g. account_in71c4amph0vgo2qllky
-  --created-atafter: string # format: date-time
-  --created-atbefore: string # format: date-time
-  --created-aton-or-after: string # format: date-time
-  --created-aton-or-before: string # format: date-time
+  --created-at-after: string # format: date-time
+  --created-at-before: string # format: date-time
+  --created-at-on-or-after: string # format: date-time
+  --created-at-on-or-before: string # format: date-time
 ]: nothing -> record<data: table<account_id: string, billing_address: record, created_at: string, description: string, digital_wallet: record, expiration_month: int, expiration_year: int, id: string, last4: string, status: string, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_atafter "scalar") (serialize-qp "created_at.before" $created_atbefore "scalar") (serialize-qp "created_at.on_or_after" $created_aton_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_aton_or_before "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -965,7 +965,7 @@ export def "cards card" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cards")
-  let body = {account_id: $account_id, billing_address: $billing_address, description: $description, digital_wallet: $digital_wallet} | compact
+  let body = {"account_id": $account_id, "billing_address": $billing_address, "description": $description, "digital_wallet": $digital_wallet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -989,7 +989,7 @@ export def "cards card-by-card_id" [
 ]: nothing -> record<account_id: string, billing_address: record<city: string, line1: string, line2: string, postal_code: string, state: string>, created_at: string, description: string, digital_wallet: record<card_profile_id: string, email: string, phone: string>, expiration_month: int, expiration_year: int, id: string, last4: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/cards/($card_id)")
+  let full_url = (build-url $base ({card_id: $card_id} | format pattern "/cards/{card_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1019,8 +1019,8 @@ export def "cards card-by-card_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/cards/($card_id)")
-  let body = {billing_address: $billing_address, description: $description, digital_wallet: $digital_wallet, status: $status} | compact
+  let full_url = (build-url $base ({card_id: $card_id} | format pattern "/cards/{card_id}"))
+  let body = {"billing_address": $billing_address, "description": $description, "digital_wallet": $digital_wallet, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1044,7 +1044,7 @@ export def "cards-details card" [
 ]: nothing -> record<card_id: string, expiration_month: int, expiration_year: int, primary_account_number: string, type: string, verification_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/cards/($card_id)/details")
+  let full_url = (build-url $base ({card_id: $card_id} | format pattern "/cards/{card_id}/details"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1066,14 +1066,14 @@ export def "check-deposits deposits" [
   --cursor: string
   --limit: int
   --account-id: string # e.g. account_in71c4amph0vgo2qllky
-  --created-atafter: string # format: date-time
-  --created-atbefore: string # format: date-time
-  --created-aton-or-after: string # format: date-time
-  --created-aton-or-before: string # format: date-time
+  --created-at-after: string # format: date-time
+  --created-at-before: string # format: date-time
+  --created-at-on-or-after: string # format: date-time
+  --created-at-on-or-before: string # format: date-time
 ]: nothing -> record<data: table<account_id: string, amount: int, back_image_file_id: string, created_at: string, currency: string, deposit_acceptance: record, deposit_rejection: record, deposit_return: record, front_image_file_id: string, id: string, status: string, transaction_id: string, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_atafter "scalar") (serialize-qp "created_at.before" $created_atbefore "scalar") (serialize-qp "created_at.on_or_after" $created_aton_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_aton_or_before "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/check_deposits" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1103,7 +1103,7 @@ export def "check-deposits deposit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/check_deposits")
-  let body = {account_id: $account_id, amount: $amount, back_image_file_id: $back_image_file_id, currency: $currency, front_image_file_id: $front_image_file_id} | compact
+  let body = {"account_id": $account_id, "amount": $amount, "back_image_file_id": $back_image_file_id, "currency": $currency, "front_image_file_id": $front_image_file_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1127,7 +1127,7 @@ export def "check-deposits deposit-by-check_deposit_id" [
 ]: nothing -> record<account_id: string, amount: int, back_image_file_id: string, created_at: string, currency: string, deposit_acceptance: record<account_number: string, amount: int, auxiliary_on_us: string, check_deposit_id: string, currency: string, routing_number: string, serial_number: string>, deposit_rejection: record<amount: int, currency: string, reason: string, rejected_at: string>, deposit_return: record<amount: int, check_deposit_id: string, currency: string, return_reason: string, returned_at: string, transaction_id: string>, front_image_file_id: string, id: string, status: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/check_deposits/($check_deposit_id)")
+  let full_url = (build-url $base ({check_deposit_id: $check_deposit_id} | format pattern "/check_deposits/{check_deposit_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1149,14 +1149,14 @@ export def "check-transfers transfers" [
   --cursor: string
   --limit: int
   --account-id: string # e.g. account_in71c4amph0vgo2qllky
-  --created-atafter: string # format: date-time
-  --created-atbefore: string # format: date-time
-  --created-aton-or-after: string # format: date-time
-  --created-aton-or-before: string # format: date-time
+  --created-at-after: string # format: date-time
+  --created-at-before: string # format: date-time
+  --created-at-on-or-after: string # format: date-time
+  --created-at-on-or-before: string # format: date-time
 ]: nothing -> record<data: table<account_id: string, address_city: string, address_line1: string, address_line2: string, address_state: string, address_zip: string, amount: int, created_at: string, currency: string, deposit: record, id: string, mailed_at: string, message: string, note: string, recipient_name: string, return_address: record, status: string, stop_payment_request: record, submission: record, submitted_at: string, template_id: string, transaction_id: string, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_atafter "scalar") (serialize-qp "created_at.before" $created_atbefore "scalar") (serialize-qp "created_at.on_or_after" $created_aton_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_aton_or_before "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/check_transfers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1194,7 +1194,7 @@ export def "check-transfers transfer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/check_transfers")
-  let body = {account_id: $account_id, address_city: $address_city, address_line1: $address_line1, address_line2: $address_line2, address_state: $address_state, address_zip: $address_zip, amount: $amount, message: $message, note: $note, recipient_name: $recipient_name, require_approval: $require_approval, return_address: $return_address} | compact
+  let body = {"account_id": $account_id, "address_city": $address_city, "address_line1": $address_line1, "address_line2": $address_line2, "address_state": $address_state, "address_zip": $address_zip, "amount": $amount, "message": $message, "note": $note, "recipient_name": $recipient_name, "require_approval": $require_approval, "return_address": $return_address} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1218,7 +1218,7 @@ export def "check-transfers transfer-by-check_transfer_id" [
 ]: nothing -> record<account_id: string, address_city: string, address_line1: string, address_line2: string, address_state: string, address_zip: string, amount: int, created_at: string, currency: string, deposit: record<back_image_file_id: string, front_image_file_id: string, type: string>, id: string, mailed_at: string, message: string, note: string, recipient_name: string, return_address: record<city: string, line1: string, line2: string, name: string, state: string, zip: string>, status: string, stop_payment_request: record<requested_at: string, transaction_id: string, transfer_id: string, type: string>, submission: record<check_number: string>, submitted_at: string, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/check_transfers/($check_transfer_id)")
+  let full_url = (build-url $base ({check_transfer_id: $check_transfer_id} | format pattern "/check_transfers/{check_transfer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1241,7 +1241,7 @@ export def "check-transfers-approve transfer" [
 ]: nothing -> record<account_id: string, address_city: string, address_line1: string, address_line2: string, address_state: string, address_zip: string, amount: int, created_at: string, currency: string, deposit: record<back_image_file_id: string, front_image_file_id: string, type: string>, id: string, mailed_at: string, message: string, note: string, recipient_name: string, return_address: record<city: string, line1: string, line2: string, name: string, state: string, zip: string>, status: string, stop_payment_request: record<requested_at: string, transaction_id: string, transfer_id: string, type: string>, submission: record<check_number: string>, submitted_at: string, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/check_transfers/($check_transfer_id)/approve")
+  let full_url = (build-url $base ({check_transfer_id: $check_transfer_id} | format pattern "/check_transfers/{check_transfer_id}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1264,7 +1264,7 @@ export def "check-transfers-cancel transfer" [
 ]: nothing -> record<account_id: string, address_city: string, address_line1: string, address_line2: string, address_state: string, address_zip: string, amount: int, created_at: string, currency: string, deposit: record<back_image_file_id: string, front_image_file_id: string, type: string>, id: string, mailed_at: string, message: string, note: string, recipient_name: string, return_address: record<city: string, line1: string, line2: string, name: string, state: string, zip: string>, status: string, stop_payment_request: record<requested_at: string, transaction_id: string, transfer_id: string, type: string>, submission: record<check_number: string>, submitted_at: string, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/check_transfers/($check_transfer_id)/cancel")
+  let full_url = (build-url $base ({check_transfer_id: $check_transfer_id} | format pattern "/check_transfers/{check_transfer_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1287,7 +1287,7 @@ export def "check-transfers-stop-payment transfer" [
 ]: nothing -> record<account_id: string, address_city: string, address_line1: string, address_line2: string, address_state: string, address_zip: string, amount: int, created_at: string, currency: string, deposit: record<back_image_file_id: string, front_image_file_id: string, type: string>, id: string, mailed_at: string, message: string, note: string, recipient_name: string, return_address: record<city: string, line1: string, line2: string, name: string, state: string, zip: string>, status: string, stop_payment_request: record<requested_at: string, transaction_id: string, transfer_id: string, type: string>, submission: record<check_number: string>, submitted_at: string, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/check_transfers/($check_transfer_id)/stop_payment")
+  let full_url = (build-url $base ({check_transfer_id: $check_transfer_id} | format pattern "/check_transfers/{check_transfer_id}/stop_payment"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1309,15 +1309,15 @@ export def "declined-transactions transactions" [
   --cursor: string
   --limit: int
   --account-id: string
-  --created-atafter: string # format: date-time
-  --created-atbefore: string # format: date-time
-  --created-aton-or-after: string # format: date-time
-  --created-aton-or-before: string # format: date-time
+  --created-at-after: string # format: date-time
+  --created-at-before: string # format: date-time
+  --created-at-on-or-after: string # format: date-time
+  --created-at-on-or-before: string # format: date-time
   --route-id: string
 ]: nothing -> record<data: table<account_id: string, amount: int, created_at: string, currency: string, description: string, id: string, route_id: string, route_type: string, source: record, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_atafter "scalar") (serialize-qp "created_at.before" $created_atbefore "scalar") (serialize-qp "created_at.on_or_after" $created_aton_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_aton_or_before "scalar") (serialize-qp "route_id" $route_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar") (serialize-qp "route_id" $route_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/declined_transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1341,7 +1341,7 @@ export def "declined-transactions transaction" [
 ]: nothing -> record<account_id: string, amount: int, created_at: string, currency: string, description: string, id: string, route_id: string, route_type: string, source: record<ach_decline: record<amount: int, originator_company_descriptive_date: string, originator_company_discretionary_data: string, originator_company_id: string, originator_company_name: string, reason: string, receiver_id_number: string, receiver_name: string, trace_number: string>, card_decline: record<amount: int, currency: string, digital_wallet_token_id: string, merchant_acceptor_id: string, merchant_category_code: string, merchant_city: string, merchant_country: string, merchant_descriptor: string, merchant_state: string, network: string, network_details: record, real_time_decision_id: string, reason: string>, card_route_decline: record<amount: int, currency: string, merchant_acceptor_id: string, merchant_category_code: string, merchant_city: string, merchant_country: string, merchant_descriptor: string, merchant_state: string>, category: string, check_decline: record<amount: int, auxiliary_on_us: string, reason: string>, inbound_real_time_payments_transfer_decline: record<amount: int, creditor_name: string, currency: string, debtor_account_number: string, debtor_name: string, debtor_routing_number: string, reason: string, remittance_information: string, transaction_identification: string>, international_ach_decline: record<amount: int, destination_country_code: string, destination_currency_code: string, foreign_exchange_indicator: string, foreign_exchange_reference: string, foreign_exchange_reference_indicator: string, foreign_payment_amount: int, foreign_trace_number: string, international_transaction_type_code: string, originating_currency_code: string, originating_depository_financial_institution_branch_country: string, originating_depository_financial_institution_id: string, originating_depository_financial_institution_id_qualifier: string, originating_depository_financial_institution_name: string, originator_city: string, originator_company_entry_description: string, originator_country: string, originator_identification: string, originator_name: string, originator_postal_code: string, originator_state_or_province: string, originator_street_address: string, payment_related_information: string, payment_related_information2: string, receiver_city: string, receiver_country: string, receiver_identification_number: string, receiver_postal_code: string, receiver_state_or_province: string, receiver_street_address: string, receiving_company_or_individual_name: string, receiving_depository_financial_institution_country: string, receiving_depository_financial_institution_id: string, receiving_depository_financial_institution_id_qualifier: string, receiving_depository_financial_institution_name: string, trace_number: string>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/declined_transactions/($declined_transaction_id)")
+  let full_url = (build-url $base ({declined_transaction_id: $declined_transaction_id} | format pattern "/declined_transactions/{declined_transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1363,14 +1363,14 @@ export def "digital-wallet-tokens tokens" [
   --cursor: string
   --limit: int
   --card-id: string # e.g. card_oubs0hwk5rn6knuecxg2
-  --created-atafter: string # format: date-time
-  --created-atbefore: string # format: date-time
-  --created-aton-or-after: string # format: date-time
-  --created-aton-or-before: string # format: date-time
+  --created-at-after: string # format: date-time
+  --created-at-before: string # format: date-time
+  --created-at-on-or-after: string # format: date-time
+  --created-at-on-or-before: string # format: date-time
 ]: nothing -> record<data: table<card_id: string, created_at: string, id: string, status: string, token_requestor: string, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "card_id" $card_id "scalar") (serialize-qp "created_at.after" $created_atafter "scalar") (serialize-qp "created_at.before" $created_atbefore "scalar") (serialize-qp "created_at.on_or_after" $created_aton_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_aton_or_before "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "card_id" $card_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/digital_wallet_tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1394,7 +1394,7 @@ export def "digital-wallet-tokens token" [
 ]: nothing -> record<card_id: string, created_at: string, id: string, status: string, token_requestor: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/digital_wallet_tokens/($digital_wallet_token_id)")
+  let full_url = (build-url $base ({digital_wallet_token_id: $digital_wallet_token_id} | format pattern "/digital_wallet_tokens/{digital_wallet_token_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1404,7 +1404,7 @@ export def "digital-wallet-tokens token" [
 #
 # GET /documents
 # operationId: list_documents
-export def "documents documents" [
+export def "documents get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1416,15 +1416,15 @@ export def "documents documents" [
   --cursor: string
   --limit: int
   --entity-id: string
-  --categoryin: list
-  --created-atafter: string # format: date-time
-  --created-atbefore: string # format: date-time
-  --created-aton-or-after: string # format: date-time
-  --created-aton-or-before: string # format: date-time
+  --category-in: list
+  --created-at-after: string # format: date-time
+  --created-at-before: string # format: date-time
+  --created-at-on-or-after: string # format: date-time
+  --created-at-on-or-before: string # format: date-time
 ]: nothing -> record<data: table<category: string, created_at: string, entity_id: string, file_id: string, id: string, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "category.in" $categoryin "multi") (serialize-qp "created_at.after" $created_atafter "scalar") (serialize-qp "created_at.before" $created_atbefore "scalar") (serialize-qp "created_at.on_or_after" $created_aton_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_aton_or_before "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "category.in" $category_in "multi") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/documents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1448,7 +1448,7 @@ export def "documents document" [
 ]: nothing -> record<category: string, created_at: string, entity_id: string, file_id: string, id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($document_id)")
+  let full_url = (build-url $base ({document_id: $document_id} | format pattern "/documents/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1458,7 +1458,7 @@ export def "documents document" [
 #
 # GET /entities
 # operationId: list_entities
-export def "entities entities" [
+export def "entities get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1510,7 +1510,7 @@ export def "entities entity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/entities")
-  let body = {corporation: $corporation, description: $description, joint: $joint, natural_person: $natural_person, relationship: $relationship, structure: $structure, supplemental_documents: $supplemental_documents, trust: $trust} | compact
+  let body = {"corporation": $corporation, "description": $description, "joint": $joint, "natural_person": $natural_person, "relationship": $relationship, "structure": $structure, "supplemental_documents": $supplemental_documents, "trust": $trust} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1534,7 +1534,7 @@ export def "entities entity-by-entity_id" [
 ]: nothing -> record<corporation: record<address: record<city: string, line1: string, line2: string, state: string, zip: string>, beneficial_owners: list<record>, incorporation_state: string, name: string, tax_identifier: string, website: string>, description: string, id: string, joint: record<individuals: list<record>, name: string>, natural_person: record<address: record<city: string, line1: string, line2: string, state: string, zip: string>, date_of_birth: string, identification: record<method: string, number_last4: string>, name: string>, relationship: string, structure: string, supplemental_documents: table<file_id: string>, trust: record<address: record<city: string, line1: string, line2: string, state: string, zip: string>, category: string, formation_document_file_id: string, formation_state: string, grantor: record<address: record, date_of_birth: string, identification: record, name: string>, name: string, tax_identifier: string, trustees: list<record>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entities/($entity_id)")
+  let full_url = (build-url $base ({entity_id: $entity_id} | format pattern "/entities/{entity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1559,8 +1559,8 @@ export def "entities-supplemental-documents entity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entities/($entity_id)/supplemental_documents")
-  let body = {file_id: $file_id} | compact
+  let full_url = (build-url $base ({entity_id: $entity_id} | format pattern "/entities/{entity_id}/supplemental_documents"))
+  let body = {"file_id": $file_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1613,7 +1613,7 @@ export def "event-subscriptions subscription" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/event_subscriptions")
-  let body = {selected_event_category: $selected_event_category, shared_secret: $shared_secret, url: $body_url} | compact
+  let body = {"selected_event_category": $selected_event_category, "shared_secret": $shared_secret, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1637,7 +1637,7 @@ export def "event-subscriptions subscription-by-event_subscription_id" [
 ]: nothing -> record<created_at: string, id: string, selected_event_category: string, shared_secret: string, status: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event_subscriptions/($event_subscription_id)")
+  let full_url = (build-url $base ({event_subscription_id: $event_subscription_id} | format pattern "/event_subscriptions/{event_subscription_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1662,8 +1662,8 @@ export def "event-subscriptions subscription-by-event_subscription_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/event_subscriptions/($event_subscription_id)")
-  let body = {status: $status} | compact
+  let full_url = (build-url $base ({event_subscription_id: $event_subscription_id} | format pattern "/event_subscriptions/{event_subscription_id}"))
+  let body = {"status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1674,7 +1674,7 @@ export def "event-subscriptions subscription-by-event_subscription_id-1" [
 #
 # GET /events
 # operationId: list_events
-export def "events events" [
+export def "events get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1685,16 +1685,16 @@ export def "events events" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string
   --limit: int
-  --created-atafter: string # format: date-time
-  --created-atbefore: string # format: date-time
-  --created-aton-or-after: string # format: date-time
-  --created-aton-or-before: string # format: date-time
-  --categoryin: list
+  --created-at-after: string # format: date-time
+  --created-at-before: string # format: date-time
+  --created-at-on-or-after: string # format: date-time
+  --created-at-on-or-before: string # format: date-time
+  --category-in: list
   --associated-object-id: string
 ]: nothing -> record<data: table<associated_object_id: string, associated_object_type: string, category: string, created_at: string, id: string, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "created_at.after" $created_atafter "scalar") (serialize-qp "created_at.before" $created_atbefore "scalar") (serialize-qp "created_at.on_or_after" $created_aton_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_aton_or_before "scalar") (serialize-qp "category.in" $categoryin "multi") (serialize-qp "associated_object_id" $associated_object_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar") (serialize-qp "category.in" $category_in "multi") (serialize-qp "associated_object_id" $associated_object_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1718,7 +1718,7 @@ export def "events event" [
 ]: nothing -> record<associated_object_id: string, associated_object_type: string, category: string, created_at: string, id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($event_id)")
+  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/events/{event_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1739,11 +1739,11 @@ export def "external-accounts accounts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string
   --limit: int
-  --statusin: list
+  --status-in: list
 ]: nothing -> record<data: table<account_number: string, created_at: string, description: string, funding: string, id: string, routing_number: string, status: string, type: string, verification_status: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status.in" $statusin "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status.in" $status_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/external_accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1772,7 +1772,7 @@ export def "external-accounts account" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/external_accounts")
-  let body = {account_number: $account_number, description: $description, funding: $funding, routing_number: $routing_number} | compact
+  let body = {"account_number": $account_number, "description": $description, "funding": $funding, "routing_number": $routing_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1796,7 +1796,7 @@ export def "external-accounts account-by-external_account_id" [
 ]: nothing -> record<account_number: string, created_at: string, description: string, funding: string, id: string, routing_number: string, status: string, type: string, verification_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/external_accounts/($external_account_id)")
+  let full_url = (build-url $base ({external_account_id: $external_account_id} | format pattern "/external_accounts/{external_account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1822,8 +1822,8 @@ export def "external-accounts account-by-external_account_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/external_accounts/($external_account_id)")
-  let body = {description: $description, status: $status} | compact
+  let full_url = (build-url $base ({external_account_id: $external_account_id} | format pattern "/external_accounts/{external_account_id}"))
+  let body = {"description": $description, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1834,7 +1834,7 @@ export def "external-accounts account-by-external_account_id-1" [
 #
 # GET /files
 # operationId: list_files
-export def "files files" [
+export def "files get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1845,15 +1845,15 @@ export def "files files" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string
   --limit: int
-  --created-atafter: string # format: date-time
-  --created-atbefore: string # format: date-time
-  --created-aton-or-after: string # format: date-time
-  --created-aton-or-before: string # format: date-time
-  --purposein: list
+  --created-at-after: string # format: date-time
+  --created-at-before: string # format: date-time
+  --created-at-on-or-after: string # format: date-time
+  --created-at-on-or-before: string # format: date-time
+  --purpose-in: list
 ]: nothing -> record<data: table<created_at: string, description: string, direction: string, download_url: string, filename: string, id: string, purpose: string, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "created_at.after" $created_atafter "scalar") (serialize-qp "created_at.before" $created_atbefore "scalar") (serialize-qp "created_at.on_or_after" $created_aton_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_aton_or_before "scalar") (serialize-qp "purpose.in" $purposein "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar") (serialize-qp "purpose.in" $purpose_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/files" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1881,7 +1881,7 @@ export def "files file" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files")
-  let body = {description: $description, file: $file, purpose: $purpose} | compact
+  let body = {"description": $description, "file": $file, "purpose": $purpose} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1905,7 +1905,7 @@ export def "files file-by-file_id" [
 ]: nothing -> record<created_at: string, description: string, direction: string, download_url: string, filename: string, id: string, purpose: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/files/($file_id)")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1978,7 +1978,7 @@ export def "inbound-ach-transfer-returns return" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound_ach_transfer_returns")
-  let body = {reason: $reason, transaction_id: $transaction_id} | compact
+  let body = {"reason": $reason, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2002,7 +2002,7 @@ export def "inbound-ach-transfer-returns return-by-inbound_ach_transfer_return_i
 ]: nothing -> record<id: string, inbound_ach_transfer_transaction_id: string, reason: string, status: string, submission: record<submitted_at: string, trace_number: string>, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/inbound_ach_transfer_returns/($inbound_ach_transfer_return_id)")
+  let full_url = (build-url $base ({inbound_ach_transfer_return_id: $inbound_ach_transfer_return_id} | format pattern "/inbound_ach_transfer_returns/{inbound_ach_transfer_return_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2012,7 +2012,7 @@ export def "inbound-ach-transfer-returns return-by-inbound_ach_transfer_return_i
 #
 # GET /inbound_wire_drawdown_requests
 # operationId: list_inbound_wire_drawdown_requests
-export def "inbound-wire-drawdown-requests requests" [
+export def "inbound-wire-drawdown-requests request-s" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2050,7 +2050,7 @@ export def "inbound-wire-drawdown-requests request" [
 ]: nothing -> record<amount: int, beneficiary_account_number: string, beneficiary_address_line1: string, beneficiary_address_line2: string, beneficiary_address_line3: string, beneficiary_name: string, beneficiary_routing_number: string, currency: string, id: string, message_to_recipient: string, originator_account_number: string, originator_address_line1: string, originator_address_line2: string, originator_address_line3: string, originator_name: string, originator_routing_number: string, originator_to_beneficiary_information_line1: string, originator_to_beneficiary_information_line2: string, originator_to_beneficiary_information_line3: string, originator_to_beneficiary_information_line4: string, recipient_account_number_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/inbound_wire_drawdown_requests/($inbound_wire_drawdown_request_id)")
+  let full_url = (build-url $base ({inbound_wire_drawdown_request_id: $inbound_wire_drawdown_request_id} | format pattern "/inbound_wire_drawdown_requests/{inbound_wire_drawdown_request_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2060,7 +2060,7 @@ export def "inbound-wire-drawdown-requests request" [
 #
 # GET /limits
 # operationId: list_limits
-export def "limits limits" [
+export def "limits get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2105,7 +2105,7 @@ export def "limits limit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/limits")
-  let body = {interval: $interval, metric: $metric, model_id: $model_id, value: $value} | compact
+  let body = {"interval": $interval, "metric": $metric, "model_id": $model_id, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2129,7 +2129,7 @@ export def "limits limit-by-limit_id" [
 ]: nothing -> record<id: string, interval: string, metric: string, model_id: string, model_type: string, status: string, type: string, value: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/limits/($limit_id)")
+  let full_url = (build-url $base ({limit_id: $limit_id} | format pattern "/limits/{limit_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2154,8 +2154,8 @@ export def "limits limit-by-limit_id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/limits/($limit_id)")
-  let body = {status: $status} | compact
+  let full_url = (build-url $base ({limit_id: $limit_id} | format pattern "/limits/{limit_id}"))
+  let body = {"status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2204,7 +2204,7 @@ export def "oauth-connections connection" [
 ]: nothing -> record<created_at: string, group_id: string, id: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/oauth_connections/($oauth_connection_id)")
+  let full_url = (build-url $base ({oauth_connection_id: $oauth_connection_id} | format pattern "/oauth_connections/{oauth_connection_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2228,11 +2228,11 @@ export def "pending-transactions transactions" [
   --account-id: string
   --route-id: string
   --source-id: string
-  --statusin: list
+  --status-in: list
 ]: nothing -> record<data: table<account_id: string, amount: int, created_at: string, currency: string, description: string, id: string, route_id: string, route_type: string, source: record, status: string, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "route_id" $route_id "scalar") (serialize-qp "source_id" $source_id "scalar") (serialize-qp "status.in" $statusin "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "route_id" $route_id "scalar") (serialize-qp "source_id" $source_id "scalar") (serialize-qp "status.in" $status_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/pending_transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2256,7 +2256,7 @@ export def "pending-transactions transaction" [
 ]: nothing -> record<account_id: string, amount: int, created_at: string, currency: string, description: string, id: string, route_id: string, route_type: string, source: record<account_transfer_instruction: record<amount: int, currency: string, transfer_id: string>, ach_transfer_instruction: record<amount: int, transfer_id: string>, card_authorization: record<amount: int, currency: string, digital_wallet_token_id: string, merchant_acceptor_id: string, merchant_category_code: string, merchant_city: string, merchant_country: string, merchant_descriptor: string, network: string, network_details: record, real_time_decision_id: string>, card_route_authorization: record<amount: int, currency: string, merchant_acceptor_id: string, merchant_category_code: string, merchant_city: string, merchant_country: string, merchant_descriptor: string, merchant_state: string>, category: string, check_deposit_instruction: record<amount: int, back_image_file_id: string, check_deposit_id: string, currency: string, front_image_file_id: string>, check_transfer_instruction: record<amount: int, currency: string, transfer_id: string>, inbound_funds_hold: record<amount: int, automatically_releases_at: string, currency: string, held_transaction_id: string, released_at: string, status: string>, wire_drawdown_payment_instruction: record<account_number: string, amount: int, message_to_recipient: string, routing_number: string>, wire_transfer_instruction: record<account_number: string, amount: int, message_to_recipient: string, routing_number: string, transfer_id: string>>, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pending_transactions/($pending_transaction_id)")
+  let full_url = (build-url $base ({pending_transaction_id: $pending_transaction_id} | format pattern "/pending_transactions/{pending_transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2279,7 +2279,7 @@ export def "real-time-decisions decision" [
 ]: nothing -> record<card_authorization: record<account_id: string, card_id: string, decision: string, merchant_acceptor_id: string, merchant_category_code: string, merchant_city: string, merchant_country: string, merchant_descriptor: string, network: string, network_details: record<visa: record>, presentment_amount: int, presentment_currency: string, settlement_amount: int, settlement_currency: string>, category: string, created_at: string, digital_wallet_authentication: record<card_id: string, channel: string, digital_wallet: string, email: string, one_time_passcode: string, phone: string, result: string>, digital_wallet_token: record<card_id: string, card_profile_id: string, decision: string, digital_wallet: string>, id: string, status: string, timeout_at: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/real_time_decisions/($real_time_decision_id)")
+  let full_url = (build-url $base ({real_time_decision_id: $real_time_decision_id} | format pattern "/real_time_decisions/{real_time_decision_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2309,8 +2309,8 @@ export def "real-time-decisions-action decision" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/real_time_decisions/($real_time_decision_id)/action")
-  let body = {card_authorization: $card_authorization, digital_wallet_authentication: $digital_wallet_authentication, digital_wallet_token: $digital_wallet_token} | compact
+  let full_url = (build-url $base ({real_time_decision_id: $real_time_decision_id} | format pattern "/real_time_decisions/{real_time_decision_id}/action"))
+  let body = {"card_authorization": $card_authorization, "digital_wallet_authentication": $digital_wallet_authentication, "digital_wallet_token": $digital_wallet_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2347,7 +2347,7 @@ export def "routing-numbers numbers" [
 #
 # POST /simulations/account_statements
 # operationId: simulate_an_account_statement_being_created
-export def "simulations-account-statements created" [
+export def "simulations-account-statements create-d" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2362,7 +2362,7 @@ export def "simulations-account-statements created" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/account_statements")
-  let body = {account_id: $account_id} | compact
+  let body = {"account_id": $account_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2386,7 +2386,7 @@ export def "simulations-account-transfers-complete transfer" [
 ]: nothing -> record<account_id: string, amount: int, approval: record<approved_at: string>, cancellation: record<canceled_at: string>, created_at: string, currency: string, description: string, destination_account_id: string, destination_transaction_id: string, id: string, network: string, status: string, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/simulations/account_transfers/($account_transfer_id)/complete")
+  let full_url = (build-url $base ({account_transfer_id: $account_transfer_id} | format pattern "/simulations/account_transfers/{account_transfer_id}/complete"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2411,8 +2411,8 @@ export def "simulations-ach-transfers-return transfer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/simulations/ach_transfers/($ach_transfer_id)/return")
-  let body = {reason: $reason} | compact
+  let full_url = (build-url $base ({ach_transfer_id: $ach_transfer_id} | format pattern "/simulations/ach_transfers/{ach_transfer_id}/return"))
+  let body = {"reason": $reason} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2436,7 +2436,7 @@ export def "simulations-ach-transfers-submit transfer" [
 ]: nothing -> record<account_id: string, account_number: string, addendum: string, amount: int, approval: record<approved_at: string>, cancellation: record<canceled_at: string>, company_descriptive_date: string, company_discretionary_data: string, company_entry_description: string, company_name: string, created_at: string, currency: string, external_account_id: string, funding: string, id: string, individual_id: string, individual_name: string, network: string, notification_of_change: record<change_code: string, corrected_data: string, created_at: string>, return: record<created_at: string, return_reason_code: string, transaction_id: string, transfer_id: string>, routing_number: string, standard_entry_class_code: string, statement_descriptor: string, status: string, submission: record<submitted_at: string, trace_number: string>, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/simulations/ach_transfers/($ach_transfer_id)/submit")
+  let full_url = (build-url $base ({ach_transfer_id: $ach_transfer_id} | format pattern "/simulations/ach_transfers/{ach_transfer_id}/submit"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2463,7 +2463,7 @@ export def "simulations-card-authorizations card" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/card_authorizations")
-  let body = {amount: $amount, card_id: $card_id, digital_wallet_token_id: $digital_wallet_token_id} | compact
+  let body = {"amount": $amount, "card_id": $card_id, "digital_wallet_token_id": $digital_wallet_token_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2490,8 +2490,8 @@ export def "simulations-card-disputes-action dispute" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/simulations/card_disputes/($card_dispute_id)/action")
-  let body = {explanation: $explanation, status: $status} | compact
+  let full_url = (build-url $base ({card_dispute_id: $card_dispute_id} | format pattern "/simulations/card_disputes/{card_dispute_id}/action"))
+  let body = {"explanation": $explanation, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2517,7 +2517,7 @@ export def "simulations-card-refunds card" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/card_refunds")
-  let body = {transaction_id: $transaction_id} | compact
+  let body = {"transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2545,7 +2545,7 @@ export def "simulations-card-settlements authorization" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/card_settlements")
-  let body = {amount: $amount, card_id: $card_id, pending_transaction_id: $pending_transaction_id} | compact
+  let body = {"amount": $amount, "card_id": $card_id, "pending_transaction_id": $pending_transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2569,7 +2569,7 @@ export def "simulations-check-deposits-reject deposit" [
 ]: nothing -> record<account_id: string, amount: int, back_image_file_id: string, created_at: string, currency: string, deposit_acceptance: record<account_number: string, amount: int, auxiliary_on_us: string, check_deposit_id: string, currency: string, routing_number: string, serial_number: string>, deposit_rejection: record<amount: int, currency: string, reason: string, rejected_at: string>, deposit_return: record<amount: int, check_deposit_id: string, currency: string, return_reason: string, returned_at: string, transaction_id: string>, front_image_file_id: string, id: string, status: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/simulations/check_deposits/($check_deposit_id)/reject")
+  let full_url = (build-url $base ({check_deposit_id: $check_deposit_id} | format pattern "/simulations/check_deposits/{check_deposit_id}/reject"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2592,7 +2592,7 @@ export def "simulations-check-deposits-return deposit" [
 ]: nothing -> record<account_id: string, amount: int, back_image_file_id: string, created_at: string, currency: string, deposit_acceptance: record<account_number: string, amount: int, auxiliary_on_us: string, check_deposit_id: string, currency: string, routing_number: string, serial_number: string>, deposit_rejection: record<amount: int, currency: string, reason: string, rejected_at: string>, deposit_return: record<amount: int, check_deposit_id: string, currency: string, return_reason: string, returned_at: string, transaction_id: string>, front_image_file_id: string, id: string, status: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/simulations/check_deposits/($check_deposit_id)/return")
+  let full_url = (build-url $base ({check_deposit_id: $check_deposit_id} | format pattern "/simulations/check_deposits/{check_deposit_id}/return"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2615,7 +2615,7 @@ export def "simulations-check-deposits-submit deposit" [
 ]: nothing -> record<account_id: string, amount: int, back_image_file_id: string, created_at: string, currency: string, deposit_acceptance: record<account_number: string, amount: int, auxiliary_on_us: string, check_deposit_id: string, currency: string, routing_number: string, serial_number: string>, deposit_rejection: record<amount: int, currency: string, reason: string, rejected_at: string>, deposit_return: record<amount: int, check_deposit_id: string, currency: string, return_reason: string, returned_at: string, transaction_id: string>, front_image_file_id: string, id: string, status: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/simulations/check_deposits/($check_deposit_id)/submit")
+  let full_url = (build-url $base ({check_deposit_id: $check_deposit_id} | format pattern "/simulations/check_deposits/{check_deposit_id}/submit"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2638,7 +2638,7 @@ export def "simulations-check-transfers-deposit transfer" [
 ]: nothing -> record<account_id: string, address_city: string, address_line1: string, address_line2: string, address_state: string, address_zip: string, amount: int, created_at: string, currency: string, deposit: record<back_image_file_id: string, front_image_file_id: string, type: string>, id: string, mailed_at: string, message: string, note: string, recipient_name: string, return_address: record<city: string, line1: string, line2: string, name: string, state: string, zip: string>, status: string, stop_payment_request: record<requested_at: string, transaction_id: string, transfer_id: string, type: string>, submission: record<check_number: string>, submitted_at: string, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/simulations/check_transfers/($check_transfer_id)/deposit")
+  let full_url = (build-url $base ({check_transfer_id: $check_transfer_id} | format pattern "/simulations/check_transfers/{check_transfer_id}/deposit"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2661,7 +2661,7 @@ export def "simulations-check-transfers-mail transfer" [
 ]: nothing -> record<account_id: string, address_city: string, address_line1: string, address_line2: string, address_state: string, address_zip: string, amount: int, created_at: string, currency: string, deposit: record<back_image_file_id: string, front_image_file_id: string, type: string>, id: string, mailed_at: string, message: string, note: string, recipient_name: string, return_address: record<city: string, line1: string, line2: string, name: string, state: string, zip: string>, status: string, stop_payment_request: record<requested_at: string, transaction_id: string, transfer_id: string, type: string>, submission: record<check_number: string>, submitted_at: string, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/simulations/check_transfers/($check_transfer_id)/mail")
+  let full_url = (build-url $base ({check_transfer_id: $check_transfer_id} | format pattern "/simulations/check_transfers/{check_transfer_id}/mail"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2686,7 +2686,7 @@ export def "simulations-digital-wallet-token-requests card" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/digital_wallet_token_requests")
-  let body = {card_id: $card_id} | compact
+  let body = {"card_id": $card_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2697,7 +2697,7 @@ export def "simulations-digital-wallet-token-requests card" [
 #
 # POST /simulations/documents
 # operationId: simulate_a_tax_document_being_created
-export def "simulations-documents created" [
+export def "simulations-documents create-d" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2712,7 +2712,7 @@ export def "simulations-documents created" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/documents")
-  let body = {account_id: $account_id} | compact
+  let body = {"account_id": $account_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2744,7 +2744,7 @@ export def "simulations-inbound-ach-transfers account" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/inbound_ach_transfers")
-  let body = {account_number_id: $account_number_id, amount: $amount, company_descriptive_date: $company_descriptive_date, company_discretionary_data: $company_discretionary_data, company_entry_description: $company_entry_description, company_id: $company_id, company_name: $company_name} | compact
+  let body = {"account_number_id": $account_number_id, "amount": $amount, "company_descriptive_date": $company_descriptive_date, "company_discretionary_data": $company_discretionary_data, "company_entry_description": $company_entry_description, "company_id": $company_id, "company_name": $company_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2776,7 +2776,7 @@ export def "simulations-inbound-real-time-payments-transfers account" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/inbound_real_time_payments_transfers")
-  let body = {account_number_id: $account_number_id, amount: $amount, debtor_account_number: $debtor_account_number, debtor_name: $debtor_name, debtor_routing_number: $debtor_routing_number, remittance_information: $remittance_information, request_for_payment_id: $request_for_payment_id} | compact
+  let body = {"account_number_id": $account_number_id, "amount": $amount, "debtor_account_number": $debtor_account_number, "debtor_name": $debtor_name, "debtor_routing_number": $debtor_routing_number, "remittance_information": $remittance_information, "request_for_payment_id": $request_for_payment_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2787,7 +2787,7 @@ export def "simulations-inbound-real-time-payments-transfers account" [
 #
 # POST /simulations/inbound_wire_drawdown_requests
 # operationId: simulate_an_inbound_wire_drawdown_request_being_created
-export def "simulations-inbound-wire-drawdown-requests created" [
+export def "simulations-inbound-wire-drawdown-requests create-d" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2821,7 +2821,7 @@ export def "simulations-inbound-wire-drawdown-requests created" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/inbound_wire_drawdown_requests")
-  let body = {amount: $amount, beneficiary_account_number: $beneficiary_account_number, beneficiary_address_line1: $beneficiary_address_line1, beneficiary_address_line2: $beneficiary_address_line2, beneficiary_address_line3: $beneficiary_address_line3, beneficiary_name: $beneficiary_name, beneficiary_routing_number: $beneficiary_routing_number, currency: $currency, message_to_recipient: $message_to_recipient, originator_account_number: $originator_account_number, originator_address_line1: $originator_address_line1, originator_address_line2: $originator_address_line2, originator_address_line3: $originator_address_line3, originator_name: $originator_name, originator_routing_number: $originator_routing_number, originator_to_beneficiary_information_line1: $originator_to_beneficiary_information_line1, originator_to_beneficiary_information_line2: $originator_to_beneficiary_information_line2, originator_to_beneficiary_information_line3: $originator_to_beneficiary_information_line3, originator_to_beneficiary_information_line4: $originator_to_beneficiary_information_line4, recipient_account_number_id: $recipient_account_number_id} | compact
+  let body = {"amount": $amount, "beneficiary_account_number": $beneficiary_account_number, "beneficiary_address_line1": $beneficiary_address_line1, "beneficiary_address_line2": $beneficiary_address_line2, "beneficiary_address_line3": $beneficiary_address_line3, "beneficiary_name": $beneficiary_name, "beneficiary_routing_number": $beneficiary_routing_number, "currency": $currency, "message_to_recipient": $message_to_recipient, "originator_account_number": $originator_account_number, "originator_address_line1": $originator_address_line1, "originator_address_line2": $originator_address_line2, "originator_address_line3": $originator_address_line3, "originator_name": $originator_name, "originator_routing_number": $originator_routing_number, "originator_to_beneficiary_information_line1": $originator_to_beneficiary_information_line1, "originator_to_beneficiary_information_line2": $originator_to_beneficiary_information_line2, "originator_to_beneficiary_information_line3": $originator_to_beneficiary_information_line3, "originator_to_beneficiary_information_line4": $originator_to_beneficiary_information_line4, "recipient_account_number_id": $recipient_account_number_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2861,7 +2861,7 @@ export def "simulations-inbound-wire-transfers account" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/inbound_wire_transfers")
-  let body = {account_number_id: $account_number_id, amount: $amount, beneficiary_address_line1: $beneficiary_address_line1, beneficiary_address_line2: $beneficiary_address_line2, beneficiary_address_line3: $beneficiary_address_line3, beneficiary_name: $beneficiary_name, beneficiary_reference: $beneficiary_reference, originator_address_line1: $originator_address_line1, originator_address_line2: $originator_address_line2, originator_address_line3: $originator_address_line3, originator_name: $originator_name, originator_to_beneficiary_information_line1: $originator_to_beneficiary_information_line1, originator_to_beneficiary_information_line2: $originator_to_beneficiary_information_line2, originator_to_beneficiary_information_line3: $originator_to_beneficiary_information_line3, originator_to_beneficiary_information_line4: $originator_to_beneficiary_information_line4} | compact
+  let body = {"account_number_id": $account_number_id, "amount": $amount, "beneficiary_address_line1": $beneficiary_address_line1, "beneficiary_address_line2": $beneficiary_address_line2, "beneficiary_address_line3": $beneficiary_address_line3, "beneficiary_name": $beneficiary_name, "beneficiary_reference": $beneficiary_reference, "originator_address_line1": $originator_address_line1, "originator_address_line2": $originator_address_line2, "originator_address_line3": $originator_address_line3, "originator_name": $originator_name, "originator_to_beneficiary_information_line1": $originator_to_beneficiary_information_line1, "originator_to_beneficiary_information_line2": $originator_to_beneficiary_information_line2, "originator_to_beneficiary_information_line3": $originator_to_beneficiary_information_line3, "originator_to_beneficiary_information_line4": $originator_to_beneficiary_information_line4} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2885,7 +2885,7 @@ export def "simulations-wire-transfers-reverse transfer" [
 ]: nothing -> record<account_id: string, account_number: string, amount: int, approval: record<approved_at: string>, beneficiary_address_line1: string, beneficiary_address_line2: string, beneficiary_address_line3: string, beneficiary_name: string, cancellation: record<canceled_at: string>, created_at: string, currency: string, external_account_id: string, id: string, message_to_recipient: string, network: string, reversal: record<amount: int, description: string, financial_institution_to_financial_institution_information: string, input_cycle_date: string, input_message_accountability_data: string, input_sequence_number: string, input_source: string, previous_message_input_cycle_date: string, previous_message_input_message_accountability_data: string, previous_message_input_sequence_number: string, previous_message_input_source: string, receiver_financial_institution_information: string>, routing_number: string, status: string, submission: record<input_message_accountability_data: string, submitted_at: string>, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/simulations/wire_transfers/($wire_transfer_id)/reverse")
+  let full_url = (build-url $base ({wire_transfer_id: $wire_transfer_id} | format pattern "/simulations/wire_transfers/{wire_transfer_id}/reverse"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2908,7 +2908,7 @@ export def "simulations-wire-transfers-submit transfer" [
 ]: nothing -> record<account_id: string, account_number: string, amount: int, approval: record<approved_at: string>, beneficiary_address_line1: string, beneficiary_address_line2: string, beneficiary_address_line3: string, beneficiary_name: string, cancellation: record<canceled_at: string>, created_at: string, currency: string, external_account_id: string, id: string, message_to_recipient: string, network: string, reversal: record<amount: int, description: string, financial_institution_to_financial_institution_information: string, input_cycle_date: string, input_message_accountability_data: string, input_sequence_number: string, input_source: string, previous_message_input_cycle_date: string, previous_message_input_message_accountability_data: string, previous_message_input_sequence_number: string, previous_message_input_source: string, receiver_financial_institution_information: string>, routing_number: string, status: string, submission: record<input_message_accountability_data: string, submitted_at: string>, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/simulations/wire_transfers/($wire_transfer_id)/submit")
+  let full_url = (build-url $base ({wire_transfer_id: $wire_transfer_id} | format pattern "/simulations/wire_transfers/{wire_transfer_id}/submit"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2918,7 +2918,7 @@ export def "simulations-wire-transfers-submit transfer" [
 #
 # GET /transactions
 # operationId: list_transactions
-export def "transactions transactions" [
+export def "transactions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2930,16 +2930,16 @@ export def "transactions transactions" [
   --cursor: string
   --limit: int
   --account-id: string
-  --created-atafter: string # format: date-time
-  --created-atbefore: string # format: date-time
-  --created-aton-or-after: string # format: date-time
-  --created-aton-or-before: string # format: date-time
-  --categoryin: list
+  --created-at-after: string # format: date-time
+  --created-at-before: string # format: date-time
+  --created-at-on-or-after: string # format: date-time
+  --created-at-on-or-before: string # format: date-time
+  --category-in: list
   --route-id: string
 ]: nothing -> record<data: table<account_id: string, amount: int, created_at: string, currency: string, description: string, id: string, route_id: string, route_type: string, source: record, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_atafter "scalar") (serialize-qp "created_at.before" $created_atbefore "scalar") (serialize-qp "created_at.on_or_after" $created_aton_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_aton_or_before "scalar") (serialize-qp "category.in" $categoryin "multi") (serialize-qp "route_id" $route_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar") (serialize-qp "category.in" $category_in "multi") (serialize-qp "route_id" $route_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2963,7 +2963,7 @@ export def "transactions transaction" [
 ]: nothing -> record<account_id: string, amount: int, created_at: string, currency: string, description: string, id: string, route_id: string, route_type: string, source: record<account_transfer_intention: record<amount: int, currency: string, description: string, destination_account_id: string, source_account_id: string, transfer_id: string>, ach_check_conversion: record<amount: int, file_id: string>, ach_check_conversion_return: record<amount: int, return_reason_code: string>, ach_transfer_intention: record<account_number: string, amount: int, routing_number: string, statement_descriptor: string, transfer_id: string>, ach_transfer_rejection: record<transfer_id: string>, ach_transfer_return: record<created_at: string, return_reason_code: string, transaction_id: string, transfer_id: string>, card_dispute_acceptance: record<accepted_at: string, card_dispute_id: string, transaction_id: string>, card_refund: record<amount: int, card_settlement_transaction_id: string, currency: string, type: string>, card_route_refund: record<amount: int, currency: string, merchant_acceptor_id: string, merchant_category_code: string, merchant_city: string, merchant_country: string, merchant_descriptor: string, merchant_state: string>, card_route_settlement: record<amount: int, currency: string, merchant_acceptor_id: string, merchant_category_code: string, merchant_city: string, merchant_country: string, merchant_descriptor: string, merchant_state: string>, card_settlement: record<amount: int, currency: string, merchant_category_code: string, merchant_city: string, merchant_country: string, merchant_name: string, merchant_state: string, pending_transaction_id: string, presentment_amount: int, presentment_currency: string, type: string>, category: string, check_deposit_acceptance: record<account_number: string, amount: int, auxiliary_on_us: string, check_deposit_id: string, currency: string, routing_number: string, serial_number: string>, check_deposit_return: record<amount: int, check_deposit_id: string, currency: string, return_reason: string, returned_at: string, transaction_id: string>, check_transfer_intention: record<address_city: string, address_line1: string, address_line2: string, address_state: string, address_zip: string, amount: int, currency: string, recipient_name: string, transfer_id: string>, check_transfer_rejection: record<transfer_id: string>, check_transfer_return: record<file_id: string, transfer_id: string>, check_transfer_stop_payment_request: record<requested_at: string, transaction_id: string, transfer_id: string, type: string>, dispute_resolution: record<amount: int, currency: string, disputed_transaction_id: string>, empyreal_cash_deposit: record<amount: int, bag_id: string, deposit_date: string>, inbound_ach_transfer: record<amount: int, originator_company_descriptive_date: string, originator_company_discretionary_data: string, originator_company_entry_description: string, originator_company_id: string, originator_company_name: string, receiver_id_number: string, receiver_name: string, trace_number: string>, inbound_check: record<amount: int, check_front_image_file_id: string, check_number: string, check_rear_image_file_id: string, currency: string>, inbound_international_ach_transfer: record<amount: int, destination_country_code: string, destination_currency_code: string, foreign_exchange_indicator: string, foreign_exchange_reference: string, foreign_exchange_reference_indicator: string, foreign_payment_amount: int, foreign_trace_number: string, international_transaction_type_code: string, originating_currency_code: string, originating_depository_financial_institution_branch_country: string, originating_depository_financial_institution_id: string, originating_depository_financial_institution_id_qualifier: string, originating_depository_financial_institution_name: string, originator_city: string, originator_company_entry_description: string, originator_country: string, originator_identification: string, originator_name: string, originator_postal_code: string, originator_state_or_province: string, originator_street_address: string, payment_related_information: string, payment_related_information2: string, receiver_city: string, receiver_country: string, receiver_identification_number: string, receiver_postal_code: string, receiver_state_or_province: string, receiver_street_address: string, receiving_company_or_individual_name: string, receiving_depository_financial_institution_country: string, receiving_depository_financial_institution_id: string, receiving_depository_financial_institution_id_qualifier: string, receiving_depository_financial_institution_name: string, trace_number: string>, inbound_real_time_payments_transfer_confirmation: record<amount: int, creditor_name: string, currency: string, debtor_account_number: string, debtor_name: string, debtor_routing_number: string, remittance_information: string, transaction_identification: string>, inbound_wire_drawdown_payment: record<amount: int, beneficiary_address_line1: string, beneficiary_address_line2: string, beneficiary_address_line3: string, beneficiary_name: string, beneficiary_reference: string, description: string, input_message_accountability_data: string, originator_address_line1: string, originator_address_line2: string, originator_address_line3: string, originator_name: string, originator_to_beneficiary_information: string>, inbound_wire_drawdown_payment_reversal: record<amount: int, description: string, input_cycle_date: string, input_message_accountability_data: string, input_sequence_number: string, input_source: string, previous_message_input_cycle_date: string, previous_message_input_message_accountability_data: string, previous_message_input_sequence_number: string, previous_message_input_source: string>, inbound_wire_reversal: record<amount: int, description: string, financial_institution_to_financial_institution_information: string, input_cycle_date: string, input_message_accountability_data: string, input_sequence_number: string, input_source: string, previous_message_input_cycle_date: string, previous_message_input_message_accountability_data: string, previous_message_input_sequence_number: string, previous_message_input_source: string, receiver_financial_institution_information: string>, inbound_wire_transfer: record<amount: int, beneficiary_address_line1: string, beneficiary_address_line2: string, beneficiary_address_line3: string, beneficiary_name: string, beneficiary_reference: string, description: string, input_message_accountability_data: string, originator_address_line1: string, originator_address_line2: string, originator_address_line3: string, originator_name: string, originator_to_beneficiary_information: string, originator_to_beneficiary_information_line1: string, originator_to_beneficiary_information_line2: string, originator_to_beneficiary_information_line3: string, originator_to_beneficiary_information_line4: string>, interest_payment: record<accrued_on_account_id: string, amount: int, currency: string, period_end: string, period_start: string>, internal_source: record<amount: int, currency: string, reason: string>, sample_funds: record<originator: string>, wire_drawdown_payment_intention: record<account_number: string, amount: int, message_to_recipient: string, routing_number: string, transfer_id: string>, wire_drawdown_payment_rejection: record<transfer_id: string>, wire_transfer_intention: record<account_number: string, amount: int, message_to_recipient: string, routing_number: string, transfer_id: string>, wire_transfer_rejection: record<transfer_id: string>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transactions/($transaction_id)")
+  let full_url = (build-url $base ({transaction_id: $transaction_id} | format pattern "/transactions/{transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2973,7 +2973,7 @@ export def "transactions transaction" [
 #
 # GET /wire_drawdown_requests
 # operationId: list_wire_drawdown_requests
-export def "wire-drawdown-requests requests" [
+export def "wire-drawdown-requests request-s" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3021,7 +3021,7 @@ export def "wire-drawdown-requests request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wire_drawdown_requests")
-  let body = {account_number_id: $account_number_id, amount: $amount, message_to_recipient: $message_to_recipient, recipient_account_number: $recipient_account_number, recipient_address_line1: $recipient_address_line1, recipient_address_line2: $recipient_address_line2, recipient_address_line3: $recipient_address_line3, recipient_name: $recipient_name, recipient_routing_number: $recipient_routing_number} | compact
+  let body = {"account_number_id": $account_number_id, "amount": $amount, "message_to_recipient": $message_to_recipient, "recipient_account_number": $recipient_account_number, "recipient_address_line1": $recipient_address_line1, "recipient_address_line2": $recipient_address_line2, "recipient_address_line3": $recipient_address_line3, "recipient_name": $recipient_name, "recipient_routing_number": $recipient_routing_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3045,7 +3045,7 @@ export def "wire-drawdown-requests request-by-wire_drawdown_request_id" [
 ]: nothing -> record<account_number_id: string, amount: int, currency: string, fulfillment_transaction_id: string, id: string, message_to_recipient: string, recipient_account_number: string, recipient_address_line1: string, recipient_address_line2: string, recipient_address_line3: string, recipient_name: string, recipient_routing_number: string, status: string, submission: record<input_message_accountability_data: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/wire_drawdown_requests/($wire_drawdown_request_id)")
+  let full_url = (build-url $base ({wire_drawdown_request_id: $wire_drawdown_request_id} | format pattern "/wire_drawdown_requests/{wire_drawdown_request_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3068,14 +3068,14 @@ export def "wire-transfers transfers" [
   --limit: int
   --account-id: string # e.g. account_in71c4amph0vgo2qllky
   --external-account-id: string
-  --created-atafter: string # format: date-time
-  --created-atbefore: string # format: date-time
-  --created-aton-or-after: string # format: date-time
-  --created-aton-or-before: string # format: date-time
+  --created-at-after: string # format: date-time
+  --created-at-before: string # format: date-time
+  --created-at-on-or-after: string # format: date-time
+  --created-at-on-or-before: string # format: date-time
 ]: nothing -> record<data: table<account_id: string, account_number: string, amount: int, approval: record, beneficiary_address_line1: string, beneficiary_address_line2: string, beneficiary_address_line3: string, beneficiary_name: string, cancellation: record, created_at: string, currency: string, external_account_id: string, id: string, message_to_recipient: string, network: string, reversal: record, routing_number: string, status: string, submission: record, template_id: string, transaction_id: string, type: string>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "external_account_id" $external_account_id "scalar") (serialize-qp "created_at.after" $created_atafter "scalar") (serialize-qp "created_at.before" $created_atbefore "scalar") (serialize-qp "created_at.on_or_after" $created_aton_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_aton_or_before "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "external_account_id" $external_account_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/wire_transfers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3111,7 +3111,7 @@ export def "wire-transfers transfer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wire_transfers")
-  let body = {account_id: $account_id, account_number: $account_number, amount: $amount, beneficiary_address_line1: $beneficiary_address_line1, beneficiary_address_line2: $beneficiary_address_line2, beneficiary_address_line3: $beneficiary_address_line3, beneficiary_name: $beneficiary_name, external_account_id: $external_account_id, message_to_recipient: $message_to_recipient, require_approval: $require_approval, routing_number: $routing_number} | compact
+  let body = {"account_id": $account_id, "account_number": $account_number, "amount": $amount, "beneficiary_address_line1": $beneficiary_address_line1, "beneficiary_address_line2": $beneficiary_address_line2, "beneficiary_address_line3": $beneficiary_address_line3, "beneficiary_name": $beneficiary_name, "external_account_id": $external_account_id, "message_to_recipient": $message_to_recipient, "require_approval": $require_approval, "routing_number": $routing_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3135,7 +3135,7 @@ export def "wire-transfers transfer-by-wire_transfer_id" [
 ]: nothing -> record<account_id: string, account_number: string, amount: int, approval: record<approved_at: string>, beneficiary_address_line1: string, beneficiary_address_line2: string, beneficiary_address_line3: string, beneficiary_name: string, cancellation: record<canceled_at: string>, created_at: string, currency: string, external_account_id: string, id: string, message_to_recipient: string, network: string, reversal: record<amount: int, description: string, financial_institution_to_financial_institution_information: string, input_cycle_date: string, input_message_accountability_data: string, input_sequence_number: string, input_source: string, previous_message_input_cycle_date: string, previous_message_input_message_accountability_data: string, previous_message_input_sequence_number: string, previous_message_input_source: string, receiver_financial_institution_information: string>, routing_number: string, status: string, submission: record<input_message_accountability_data: string, submitted_at: string>, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/wire_transfers/($wire_transfer_id)")
+  let full_url = (build-url $base ({wire_transfer_id: $wire_transfer_id} | format pattern "/wire_transfers/{wire_transfer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3158,7 +3158,7 @@ export def "wire-transfers-approve transfer" [
 ]: nothing -> record<account_id: string, account_number: string, amount: int, approval: record<approved_at: string>, beneficiary_address_line1: string, beneficiary_address_line2: string, beneficiary_address_line3: string, beneficiary_name: string, cancellation: record<canceled_at: string>, created_at: string, currency: string, external_account_id: string, id: string, message_to_recipient: string, network: string, reversal: record<amount: int, description: string, financial_institution_to_financial_institution_information: string, input_cycle_date: string, input_message_accountability_data: string, input_sequence_number: string, input_source: string, previous_message_input_cycle_date: string, previous_message_input_message_accountability_data: string, previous_message_input_sequence_number: string, previous_message_input_source: string, receiver_financial_institution_information: string>, routing_number: string, status: string, submission: record<input_message_accountability_data: string, submitted_at: string>, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/wire_transfers/($wire_transfer_id)/approve")
+  let full_url = (build-url $base ({wire_transfer_id: $wire_transfer_id} | format pattern "/wire_transfers/{wire_transfer_id}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3181,7 +3181,7 @@ export def "wire-transfers-cancel transfer" [
 ]: nothing -> record<account_id: string, account_number: string, amount: int, approval: record<approved_at: string>, beneficiary_address_line1: string, beneficiary_address_line2: string, beneficiary_address_line3: string, beneficiary_name: string, cancellation: record<canceled_at: string>, created_at: string, currency: string, external_account_id: string, id: string, message_to_recipient: string, network: string, reversal: record<amount: int, description: string, financial_institution_to_financial_institution_information: string, input_cycle_date: string, input_message_accountability_data: string, input_sequence_number: string, input_source: string, previous_message_input_cycle_date: string, previous_message_input_message_accountability_data: string, previous_message_input_sequence_number: string, previous_message_input_source: string, receiver_financial_institution_information: string>, routing_number: string, status: string, submission: record<input_message_accountability_data: string, submitted_at: string>, template_id: string, transaction_id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/wire_transfers/($wire_transfer_id)/cancel")
+  let full_url = (build-url $base ({wire_transfer_id: $wire_transfer_id} | format pattern "/wire_transfers/{wire_transfer_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

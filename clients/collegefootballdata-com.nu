@@ -126,16 +126,16 @@ export def "coaches get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --firstName: string # First name filter
-  --lastName: string # Last name filter
+  --first-name: string # First name filter
+  --last-name: string # Last name filter
   --team: string # Team name filter
   --year: int # Year filter
-  --minYear: int # Minimum year filter (inclusive)
-  --maxYear: int # Maximum year filter (inclusive)
+  --min-year: int # Minimum year filter (inclusive)
+  --max-year: int # Maximum year filter (inclusive)
 ]: nothing -> table<first_name: string, hire_date: string, last_name: string, seasons: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "firstName" $firstName "scalar") (serialize-qp "lastName" $lastName "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "minYear" $minYear "scalar") (serialize-qp "maxYear" $maxYear "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "minYear" $min_year "scalar") (serialize-qp "maxYear" $max_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/coaches" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -178,14 +178,14 @@ export def "draft-picks get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --year: int # Year filter
-  --nflTeam: string # NFL team filter
+  --nfl-team: string # NFL team filter
   --college: string # Player college filter
   --conference: string # College confrence abbreviation filter
   --position: string # NFL position filter
 ]: nothing -> table<collegeAthleteId: int, collegeConference: string, collegeId: int, collegeTeam: string, height: int, hometownInfo: record<city: string, country: string, countryFips: int, latitude: float, longitude: float, state: string>, name: string, nflAthleteId: int, nflTeam: string, overall: int, pick: int, position: string, preDraftGrade: int, preDraftPositionRanking: int, preDraftRanking: int, round: int, weight: int, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "nflTeam" $nflTeam "scalar") (serialize-qp "college" $college "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "position" $position "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "nflTeam" $nfl_team "scalar") (serialize-qp "college" $college "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "position" $position "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/draft/picks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -196,7 +196,7 @@ export def "draft-picks get" [
 #
 # GET /draft/positions
 # operationId: getNFLPositions
-export def "draft-positions get" [
+export def "draft-positions get-nfl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "draft-positions get" [
 #
 # GET /draft/teams
 # operationId: getNFLTeams
-export def "draft-teams get" [
+export def "draft-teams get-nfl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,20 +249,20 @@ export def "drives get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --seasonType: string # Season type filter (default: regular)
+  --season-type: string # Season type filter (default: regular)
   --year: int # Year filter
   --week: int # Week filter
   --team: string # Team filter
   --offense: string # Offensive team filter
   --defense: string # Defensive team filter
   --conference: string # Conference filter
-  --offenseConference: string # Offensive conference filter
-  --defenseConference: string # Defensive conference filter
+  --offense-conference: string # Offensive conference filter
+  --defense-conference: string # Defensive conference filter
   --classification: string # Division classification filter (fbs/fcs/ii/iii)
 ]: nothing -> table<defense: string, defense_conference: string, drive_number: int, drive_result: string, end_defense_score: int, end_offense_score: int, end_period: int, end_time: record<minutes: int, seconds: int>, end_yardline: int, end_yards_to_goal: int, game_id: int, id: int, is_home_offense: bool, offense: string, offense_conference: string, plays: int, scoring: bool, start_defense_score: int, start_offense_score: int, start_period: int, start_time: record<minutes: int, seconds: int>, start_yardline: int, start_yards_to_goal: int, yards: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "seasonType" $seasonType "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "offense" $offense "scalar") (serialize-qp "defense" $defense "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "offenseConference" $offenseConference "scalar") (serialize-qp "defenseConference" $defenseConference "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "seasonType" $season_type "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "offense" $offense "scalar") (serialize-qp "defense" $defense "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "offenseConference" $offense_conference "scalar") (serialize-qp "defenseConference" $defense_conference "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/drives" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -273,7 +273,7 @@ export def "drives get" [
 #
 # GET /game/box/advanced
 # operationId: getAdvancedBoxScore
-export def "game-box-advanced get" [
+export def "game-box-advanced get-advanced-box-score" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,11 +282,11 @@ export def "game-box-advanced get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --gameId: int # Game id parameters
+  --game-id: int # Game id parameters
 ]: nothing -> record<players: record<ppa: list<record>, usage: list<record>>, teams: record<cumulativePpa: list<record>, explosiveness: list<record>, fieldPosition: list<record>, havoc: list<record>, ppa: list<record>, rushing: list<record>, scoringOpportunities: list<record>, successRates: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "gameId" $gameId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "gameId" $game_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/game/box/advanced" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -308,7 +308,7 @@ export def "games get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --year: int # Year/season filter for games
   --week: int # Week filter
-  --seasonType: string # Season type filter (regular or postseason) (default: regular)
+  --season-type: string # Season type filter (regular or postseason) (default: regular)
   --team: string # Team
   --home: string # Home team filter
   --away: string # Away team filter
@@ -318,7 +318,7 @@ export def "games get" [
 ]: nothing -> table<attendance: int, away_conference: string, away_division: string, away_id: int, away_line_scores: list<int>, away_points: int, away_post_win_prob: float, away_postgame_elo: int, away_pregame_elo: int, away_team: string, completed: bool, conference_game: bool, excitement_index: float, highlights: string, home_conference: string, home_division: string, home_id: int, home_line_scores: list<int>, home_points: int, home_post_win_prob: float, home_postgame_elo: int, home_pregame_elo: int, home_team: string, id: int, neutral_site: bool, notes: string, season: int, season_type: string, start_date: string, start_time_tbd: bool, venue: string, venue_id: int, week: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $seasonType "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "home" $home "scalar") (serialize-qp "away" $away "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "division" $division "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "home" $home "scalar") (serialize-qp "away" $away "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "division" $division "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -340,15 +340,15 @@ export def "games-media get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --year: int # Year filter
   --week: int # Week filter
-  --seasonType: string # Season type filter (regular, postseason, or both)
+  --season-type: string # Season type filter (regular, postseason, or both)
   --team: string # Team filter
   --conference: string # Conference filter
-  --mediaType: string # Media type filter (tv, radio, web, ppv, or mobile)
+  --media-type: string # Media type filter (tv, radio, web, ppv, or mobile)
   --classification: string # Division classification filter (fbs/fcs/ii/iii)
 ]: nothing -> table<awayConference: string, awayTeam: string, homeConference: string, homeTeam: string, id: int, isStartTimeTBD: bool, mediaType: string, outlet: string, season: int, seasonType: string, startTime: string, week: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $seasonType "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "mediaType" $mediaType "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "mediaType" $media_type "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/media" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -359,7 +359,7 @@ export def "games-media get" [
 #
 # GET /games/players
 # operationId: getPlayerGameStats
-export def "games-players get" [
+export def "games-players get-player-game-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,15 +370,15 @@ export def "games-players get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --year: int # Year/season filter for games
   --week: int # Week filter
-  --seasonType: string # Season type filter (regular or postseason) (default: regular)
+  --season-type: string # Season type filter (regular or postseason) (default: regular)
   --team: string # Team filter
   --conference: string # Conference abbreviation filter
   --category: string # Category filter (e.g defensive)
-  --gameId: int # Game id filter
+  --game-id: int # Game id filter
 ]: nothing -> table<id: int, teams: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $seasonType "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "gameId" $gameId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "gameId" $game_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/players" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -389,7 +389,7 @@ export def "games-players get" [
 #
 # GET /games/teams
 # operationId: getTeamGameStats
-export def "games-teams get" [
+export def "games-teams get-team-game-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,15 +400,15 @@ export def "games-teams get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --year: int # Year/season filter for games
   --week: int # Week filter
-  --seasonType: string # Season type filter (regular or postseason) (default: regular)
+  --season-type: string # Season type filter (regular or postseason) (default: regular)
   --team: string # Team filter
   --conference: string # Conference abbreviation filter
-  --gameId: int # Game id filter
+  --game-id: int # Game id filter
   --classification: string # Division classification filter (fbs/fcs/ii/iii)
 ]: nothing -> table<id: int, teams: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $seasonType "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "gameId" $gameId "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "gameId" $game_id "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/teams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -428,17 +428,17 @@ export def "games-weather get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --gameId: int # Game id filter (required if no year)
+  --game-id: int # Game id filter (required if no year)
   --year: int # Year filter (required if no game id)
   --week: int # Week filter
-  --seasonType: string # Season type filter (regular, postseason, or both)
+  --season-type: string # Season type filter (regular, postseason, or both)
   --team: string # Team filter
   --conference: string # Conference filter
   --classification: string # Division classification filter (fbs/fcs/ii/iii)
 ]: nothing -> table<awayConference: string, awayTeam: string, dewPoint: float, gameIndoors: bool, homeConference: string, homeTeam: string, humidity: float, id: int, precipitation: float, pressure: float, season: int, seasonType: string, snowfall: float, startTime: string, temperature: float, venue: string, venueId: int, weatherCondition: string, weatherConditionCode: int, week: int, windDirection: float, windSpeed: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "gameId" $gameId "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $seasonType "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "gameId" $game_id "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/weather" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -458,10 +458,10 @@ export def "lines get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --gameId: int # Game id filter
+  --game-id: int # Game id filter
   --year: int # Year/season filter for games
   --week: int # Week filter
-  --seasonType: string # Season type filter (regular or postseason) (default: regular)
+  --season-type: string # Season type filter (regular or postseason) (default: regular)
   --team: string # Team
   --home: string # Home team filter
   --away: string # Away team filter
@@ -469,7 +469,7 @@ export def "lines get" [
 ]: nothing -> table<awayConference: string, awayScore: int, awayTeam: string, homeConference: string, homeScore: int, homeTeam: string, id: int, lines: list<record>, season: int, seasonType: string, startDate: string, week: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "gameId" $gameId "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $seasonType "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "home" $home "scalar") (serialize-qp "away" $away "scalar") (serialize-qp "conference" $conference "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "gameId" $game_id "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "home" $home "scalar") (serialize-qp "away" $away "scalar") (serialize-qp "conference" $conference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lines" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -504,7 +504,7 @@ export def "live-plays get" [
 #
 # GET /metrics/wp
 # operationId: getWinProbabilityData
-export def "metrics-wp get" [
+export def "metrics-wp get-win-probability-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -513,11 +513,11 @@ export def "metrics-wp get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --gameId: int # Game id filter
+  --game-id: int # Game id filter
 ]: nothing -> table<away: string, awayId: int, awayScore: int, distance: int, down: int, gamesId: int, home: string, homeBall: bool, homeId: int, homeScore: int, homeWinProb: float, playId: int, playNumber: int, playText: string, spread: float, timeRemaining: int, yardLine: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "gameId" $gameId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "gameId" $game_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metrics/wp" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -528,7 +528,7 @@ export def "metrics-wp get" [
 #
 # GET /metrics/wp/pregame
 # operationId: getPregameWinProbabilities
-export def "metrics-wp-pregame get" [
+export def "metrics-wp-pregame get-pregame-win-probabilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,11 +540,11 @@ export def "metrics-wp-pregame get" [
   --year: int # Year filter
   --week: int # Week filter
   --team: string # Team filter
-  --seasonType: string # regular or postseason
+  --season-type: string # regular or postseason
 ]: nothing -> table<awayTeam: string, gameId: int, homeTeam: string, homeWinProb: float, season: int, seasonType: string, spread: float, week: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "seasonType" $seasonType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "seasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metrics/wp/pregame" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -589,15 +589,15 @@ export def "play-stats get" [
   --year: int # Year filter
   --week: int # Week filter
   --team: string # Team filter
-  --gameId: int # gameId filter (from /games endpoint)
-  --athleteId: int # athleteId filter (from /roster endpoint)
-  --statTypeId: int # statTypeId filter (from /play/stat/types endpoint)
-  --seasonType: string # regular, postseason, or both
+  --game-id: int # gameId filter (from /games endpoint)
+  --athlete-id: int # athleteId filter (from /roster endpoint)
+  --stat-type-id: int # statTypeId filter (from /play/stat/types endpoint)
+  --season-type: string # regular, postseason, or both
   --conference: string # conference abbreviation filter
 ]: nothing -> table<athleteId: int, athleteName: string, clock: record<minutes: int, seconds: int>, conference: string, distance: int, down: int, driveId: int, gameId: int, opponent: string, opponentScore: int, period: int, playId: int, season: int, stat: int, statType: string, team: string, teamScore: int, week: int, yardsToGoal: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "gameId" $gameId "scalar") (serialize-qp "athleteId" $athleteId "scalar") (serialize-qp "statTypeId" $statTypeId "scalar") (serialize-qp "seasonType" $seasonType "scalar") (serialize-qp "conference" $conference "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "gameId" $game_id "scalar") (serialize-qp "athleteId" $athlete_id "scalar") (serialize-qp "statTypeId" $stat_type_id "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "conference" $conference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/play/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -630,7 +630,7 @@ export def "play-types get" [
 #
 # GET /player/portal
 # operationId: getTransferPortal
-export def "player-portal get" [
+export def "player-portal get-transfer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -654,7 +654,7 @@ export def "player-portal get" [
 #
 # GET /player/returning
 # operationId: getReturningProduction
-export def "player-returning get" [
+export def "player-returning get-returning-production" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,14 +689,14 @@ export def "player-search playerSearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --searchTerm: string # Term to search on
+  --search-term: string # Term to search on
   --position: string # Position abbreviation filter
   --team: string # Team filter
   --year: int # Year filter
 ]: nothing -> table<firstName: string, height: int, hometown: string, id: int, jersey: int, lastName: string, name: string, position: string, team: string, teamColor: string, teamColorSecondary: string, weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "searchTerm" $searchTerm "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "year" $year "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "year" $year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/player/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -720,12 +720,12 @@ export def "player-usage get" [
   --team: string # Team filter
   --conference: string # Conference abbreviation filter
   --position: string # Position abbreviation filter
-  --playerId: int # Player id filter
-  --excludeGarbageTime: oneof<nothing, bool> # Filter to remove garbage time plays from calculations
+  --player-id: int # Player id filter
+  --exclude-garbage-time: oneof<nothing, bool> # Filter to remove garbage time plays from calculations
 ]: nothing -> table<conference: string, id: int, name: string, position: string, season: int, team: string, usage: record<firstDown: float, overall: float, pass: float, passingDowns: float, rush: float, secondDown: float, standardDowns: float, thirdDown: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "playerId" $playerId "scalar") (serialize-qp "excludeGarbageTime" $excludeGarbageTime "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "playerId" $player_id "scalar") (serialize-qp "excludeGarbageTime" $exclude_garbage_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/player/usage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -745,21 +745,21 @@ export def "plays get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --seasonType: string # Season type filter (default: regular)
+  --season-type: string # Season type filter (default: regular)
   --year: int # Year filter
   --week: int # Week filter (required if team, offense, or defense, not specified)
   --team: string # Team filter
   --offense: string # Offensive team filter
   --defense: string # Defensive team filter
   --conference: string # Conference filter
-  --offenseConference: string # Offensive conference filter
-  --defenseConference: string # Defensive conference filter
-  --playType: int # Play type filter
+  --offense-conference: string # Offensive conference filter
+  --defense-conference: string # Defensive conference filter
+  --play-type: int # Play type filter
   --classification: string # Division classification filter (fbs/fcs/ii/iii)
 ]: nothing -> table<away: string, clock: record<minutes: int, seconds: int>, defense: string, defense_conference: string, defense_score: int, defense_timeouts: int, distance: int, down: int, drive_id: int, drive_number: int, game_id: int, home: string, id: int, offense: string, offense_conference: string, offense_score: int, offense_timeouts: int, period: int, play_number: int, play_text: string, play_type: string, ppa: float, scoring: bool, wallclock: string, yard_line: int, yards_gained: int, yards_to_goal: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "seasonType" $seasonType "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "offense" $offense "scalar") (serialize-qp "defense" $defense "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "offenseConference" $offenseConference "scalar") (serialize-qp "defenseConference" $defenseConference "scalar") (serialize-qp "playType" $playType "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "seasonType" $season_type "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "offense" $offense "scalar") (serialize-qp "defense" $defense "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "offenseConference" $offense_conference "scalar") (serialize-qp "defenseConference" $defense_conference "scalar") (serialize-qp "playType" $play_type "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/plays" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -783,12 +783,12 @@ export def "ppa-games get" [
   --week: int # Week filter
   --team: string # Team filter
   --conference: string # Conference filter
-  --excludeGarbageTime: oneof<nothing, bool> # Filter to remove garbage time plays from calculations
-  --seasonType: string # Season type filter (regular or postseason) (default: regular)
+  --exclude-garbage-time: oneof<nothing, bool> # Filter to remove garbage time plays from calculations
+  --season-type: string # Season type filter (regular or postseason) (default: regular)
 ]: nothing -> table<conference: string, defense: record<firstDown: float, overall: float, passing: float, rushing: float, secondDown: float, thirdDown: float>, gameId: int, offense: record<firstDown: float, overall: float, passing: float, rushing: float, secondDown: float, thirdDown: float>, opponent: string, season: int, team: string, week: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "excludeGarbageTime" $excludeGarbageTime "scalar") (serialize-qp "seasonType" $seasonType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "excludeGarbageTime" $exclude_garbage_time "scalar") (serialize-qp "seasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ppa/games" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -812,14 +812,14 @@ export def "ppa-players-games get" [
   --week: int # Week filter
   --team: string # Team filter
   --position: string # Position abbreviation filter
-  --playerId: int # Player id filter
+  --player-id: int # Player id filter
   --threshold: string # Minimum play threshold filter
-  --excludeGarbageTime: oneof<nothing, bool> # Filter to remove garbage time plays from calculations
-  --seasonType: string # Season type filter (regular or postseason) (default: regular)
+  --exclude-garbage-time: oneof<nothing, bool> # Filter to remove garbage time plays from calculations
+  --season-type: string # Season type filter (regular or postseason) (default: regular)
 ]: nothing -> table<averagePPA: record<all: float, pass: float, rush: float>, name: string, opponent: string, position: string, season: int, team: string, week: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "playerId" $playerId "scalar") (serialize-qp "threshold" $threshold "scalar") (serialize-qp "excludeGarbageTime" $excludeGarbageTime "scalar") (serialize-qp "seasonType" $seasonType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "playerId" $player_id "scalar") (serialize-qp "threshold" $threshold "scalar") (serialize-qp "excludeGarbageTime" $exclude_garbage_time "scalar") (serialize-qp "seasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ppa/players/games" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -843,13 +843,13 @@ export def "ppa-players-season get" [
   --team: string # Team filter
   --conference: string # Conference abbreviation filter
   --position: string # Position abbreviation filter
-  --playerId: int # Player id filter
+  --player-id: int # Player id filter
   --threshold: string # Minimum play threshold filter
-  --excludeGarbageTime: oneof<nothing, bool> # Filter to remove garbage time plays from calculations
+  --exclude-garbage-time: oneof<nothing, bool> # Filter to remove garbage time plays from calculations
 ]: nothing -> table<averagePPA: record<all: float, firstDown: float, pass: float, passingDowns: float, rush: float, secondDown: float, standardDowns: float, thirdDown: float>, conference: string, id: int, name: string, position: string, season: int, team: string, totalPPA: record<all: float, firstDown: float, pass: float, passingDowns: float, rush: float, secondDown: float, standardDowns: float, thirdDown: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "playerId" $playerId "scalar") (serialize-qp "threshold" $threshold "scalar") (serialize-qp "excludeGarbageTime" $excludeGarbageTime "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "playerId" $player_id "scalar") (serialize-qp "threshold" $threshold "scalar") (serialize-qp "excludeGarbageTime" $exclude_garbage_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ppa/players/season" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -860,7 +860,7 @@ export def "ppa-players-season get" [
 #
 # GET /ppa/predicted
 # operationId: getPredictedPoints
-export def "ppa-predicted get" [
+export def "ppa-predicted get-predicted-points" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -897,11 +897,11 @@ export def "ppa-teams get" [
   --year: int # Year filter (required if team not specified)
   --team: string # Team filter (required if year not specified)
   --conference: string # Conference filter
-  --excludeGarbageTime: oneof<nothing, bool> # Filter to remove garbage time plays from calculations
+  --exclude-garbage-time: oneof<nothing, bool> # Filter to remove garbage time plays from calculations
 ]: nothing -> table<conference: string, defense: record<cumulative: record, firstDown: float, overall: float, passing: float, rushing: float, secondDown: float, thirdDown: float>, offense: record<cumulative: record, firstDown: float, overall: float, passing: float, rushing: float, secondDown: float, thirdDown: float>, season: int, team: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "excludeGarbageTime" $excludeGarbageTime "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "excludeGarbageTime" $exclude_garbage_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ppa/teams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -923,11 +923,11 @@ export def "rankings get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --year: int # Year/season filter for games
   --week: int # Week filter
-  --seasonType: string # Season type filter (regular or postseason) (default: regular)
+  --season-type: string # Season type filter (regular or postseason) (default: regular)
 ]: nothing -> table<polls: list<record>, season: int, seasonType: string, week: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $seasonType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rankings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1041,7 +1041,7 @@ export def "ratings-srs get" [
 #
 # GET /records
 # operationId: getTeamRecords
-export def "records get" [
+export def "records get-team" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,14 +1076,14 @@ export def "recruiting-groups get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startYear: int # Starting year
-  --endYear: int # Ending year
+  --start-year: int # Starting year
+  --end-year: int # Ending year
   --team: string # Team filter
   --conference: string # conference filter
 ]: nothing -> table<averageRating: float, averageStars: float, commits: float, conference: string, positionGroup: string, team: string, totalRating: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startYear" $startYear "scalar") (serialize-qp "endYear" $endYear "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startYear" $start_year "scalar") (serialize-qp "endYear" $end_year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recruiting/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1219,7 +1219,7 @@ export def "stats-categories get" [
 #
 # GET /stats/game/advanced
 # operationId: getAdvancedTeamGameStats
-export def "stats-game-advanced get" [
+export def "stats-game-advanced get-advanced-team" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1232,12 +1232,12 @@ export def "stats-game-advanced get" [
   --week: int # Week filter
   --team: string # Team filter (required if no year specified)
   --opponent: string # Opponent filter
-  --excludeGarbageTime: oneof<nothing, bool> # Filter to remove garbage time plays from calculations
-  --seasonType: string # Season type filter (regular, postseason, or both)
+  --exclude-garbage-time: oneof<nothing, bool> # Filter to remove garbage time plays from calculations
+  --season-type: string # Season type filter (regular, postseason, or both)
 ]: nothing -> table<defense: record<drives: int, explosiveness: float, lineYards: float, lineYardsTotal: float, openFieldYards: float, openFieldYardsTotal: int, passingDowns: record, passingPlays: record, plays: int, powerSuccess: float, ppa: float, rushingPlays: record, secondLevelYards: float, secondLevelYardsTotal: int, standardDowns: record, stuffRate: float, successRate: float, totalPPA: float>, gameId: int, offense: record<drives: int, explosiveness: float, lineYards: float, lineYardsTotal: float, openFieldYards: float, openFieldYardsTotal: int, passingDowns: record, passingPlays: record, plays: int, powerSuccess: float, ppa: float, rushingPlays: record, secondLevelYards: float, secondLevelYardsTotal: int, standardDowns: record, stuffRate: float, successRate: float, totalPPA: float>, opponent: string, season: int, team: string, week: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "opponent" $opponent "scalar") (serialize-qp "excludeGarbageTime" $excludeGarbageTime "scalar") (serialize-qp "seasonType" $seasonType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "opponent" $opponent "scalar") (serialize-qp "excludeGarbageTime" $exclude_garbage_time "scalar") (serialize-qp "seasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/game/advanced" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1260,14 +1260,14 @@ export def "stats-player-season get" [
   --year: int # Year filter
   --team: string # Team filter
   --conference: string # Conference abbreviation filter
-  --startWeek: int # Start week filter
-  --endWeek: int # Start week filter
-  --seasonType: string # Season type filter (regular, postseason, or both)
+  --start-week: int # Start week filter
+  --end-week: int # Start week filter
+  --season-type: string # Season type filter (regular, postseason, or both)
   --category: string # Stat category filter (e.g. passing)
 ]: nothing -> table<category: string, conference: string, player: string, playerId: int, season: int, stat: float, statType: string, team: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "startWeek" $startWeek "scalar") (serialize-qp "endWeek" $endWeek "scalar") (serialize-qp "seasonType" $seasonType "scalar") (serialize-qp "category" $category "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "startWeek" $start_week "scalar") (serialize-qp "endWeek" $end_week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "category" $category "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/player/season" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1278,7 +1278,7 @@ export def "stats-player-season get" [
 #
 # GET /stats/season
 # operationId: getTeamSeasonStats
-export def "stats-season get" [
+export def "stats-season get-team" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1290,12 +1290,12 @@ export def "stats-season get" [
   --year: int # Year filter (required if no team specified)
   --team: string # Team filter (required if no year specified)
   --conference: string # Conference abbreviation filter
-  --startWeek: int # Starting week filter
-  --endWeek: int # Starting week filter
+  --start-week: int # Starting week filter
+  --end-week: int # Starting week filter
 ]: nothing -> table<conference: string, season: int, statName: string, statValue: int, team: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "startWeek" $startWeek "scalar") (serialize-qp "endWeek" $endWeek "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "startWeek" $start_week "scalar") (serialize-qp "endWeek" $end_week "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/season" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1306,7 +1306,7 @@ export def "stats-season get" [
 #
 # GET /stats/season/advanced
 # operationId: getAdvancedTeamSeasonStats
-export def "stats-season-advanced get" [
+export def "stats-season-advanced get-advanced-team" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1317,13 +1317,13 @@ export def "stats-season-advanced get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --year: int # Year filter (required if no team specified)
   --team: string # Team filter (required if no year specified)
-  --excludeGarbageTime: oneof<nothing, bool> # Filter to remove garbage time plays from calculations
-  --startWeek: int # Starting week filter
-  --endWeek: int # Starting week filter
+  --exclude-garbage-time: oneof<nothing, bool> # Filter to remove garbage time plays from calculations
+  --start-week: int # Starting week filter
+  --end-week: int # Starting week filter
 ]: nothing -> table<conference: string, defense: record<drives: int, explosiveness: float, fieldPosition: record, havoc: record, lineYards: float, lineYardsTotal: float, openFieldYards: float, openFieldYardsTotal: int, passingDowns: record, passingPlays: record, plays: int, pointsPerOpportunity: float, powerSuccess: float, ppa: float, rushingPlays: record, secondLevelYards: float, secondLevelYardsTotal: int, standardDowns: record, stuffRate: float, successRate: float, totalOpportunies: int, totalPPA: float>, offense: record<drives: int, explosiveness: float, fieldPosition: record, havoc: record, lineYards: float, lineYardsTotal: float, openFieldYards: float, openFieldYardsTotal: int, passingDowns: record, passingPlays: record, plays: int, pointsPerOpportunity: float, powerSuccess: float, ppa: float, rushingPlays: record, secondLevelYards: float, secondLevelYardsTotal: int, standardDowns: record, stuffRate: float, successRate: float, totalOpportunies: int, totalPPA: float>, season: int, team: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "excludeGarbageTime" $excludeGarbageTime "scalar") (serialize-qp "startWeek" $startWeek "scalar") (serialize-qp "endWeek" $endWeek "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "excludeGarbageTime" $exclude_garbage_time "scalar") (serialize-qp "startWeek" $start_week "scalar") (serialize-qp "endWeek" $end_week "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/season/advanced" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1417,12 +1417,12 @@ export def "teams-matchup get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --team1: string # First team
   --team2: string # Second team
-  --minYear: int # Minimum year
-  --maxYear: int # Maximum year
+  --min-year: int # Minimum year
+  --max-year: int # Maximum year
 ]: nothing -> record<endYear: int, games: table<awayScore: int, awayTeam: string, date: string, homeScore: int, homeTeam: string, neutralSite: bool, season: int, season_type: string, venue: string, week: int, winner: string>, startYear: int, team1: string, team1Wins: int, team2: string, team2Wins: int, ties: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "team1" $team1 "scalar") (serialize-qp "team2" $team2 "scalar") (serialize-qp "minYear" $minYear "scalar") (serialize-qp "maxYear" $maxYear "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "team1" $team1 "scalar") (serialize-qp "team2" $team2 "scalar") (serialize-qp "minYear" $min_year "scalar") (serialize-qp "maxYear" $max_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teams/matchup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

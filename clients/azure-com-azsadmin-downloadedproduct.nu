@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations-downloaded-products List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations-downloaded-products list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroup}/providers/Microsoft.AzureBridge.Admin/activations/{activationName}/downloadedProducts
 # operationId: DownloadedProducts_List
-export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations-downloaded-products List" [
-  subscriptionId: string
-  resourceGroup: string
-  activationName: string
+export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations-downloaded-products list" [
+  subscription_id: string
+  resource_group: string
+  activation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroup)/providers/Microsoft.AzureBridge.Admin/activations/($activationName)/downloadedProducts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, activation_name: $activation_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group}/providers/Microsoft.AzureBridge.Admin/activations/{activation_name}/downloadedProducts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,11 +120,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroup}/providers/Microsoft.AzureBridge.Admin/activations/{activationName}/downloadedProducts/{productName}
 # operationId: DownloadedProducts_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations-downloaded-products Delete" [
-  subscriptionId: string
-  resourceGroup: string
-  activationName: string
-  productName: string
+export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations-downloaded-products delete" [
+  subscription_id: string
+  resource_group: string
+  activation_name: string
+  product_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,7 +138,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroup)/providers/Microsoft.AzureBridge.Admin/activations/($activationName)/downloadedProducts/($productName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, activation_name: $activation_name, product_name: $product_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group}/providers/Microsoft.AzureBridge.Admin/activations/{activation_name}/downloadedProducts/{product_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,11 +148,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroup}/providers/Microsoft.AzureBridge.Admin/activations/{activationName}/downloadedProducts/{productName}
 # operationId: DownloadedProducts_Get
-export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations-downloaded-products Get" [
-  subscriptionId: string
-  resourceGroup: string
-  activationName: string
-  productName: string
+export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations-downloaded-products get" [
+  subscription_id: string
+  resource_group: string
+  activation_name: string
+  product_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroup)/providers/Microsoft.AzureBridge.Admin/activations/($activationName)/downloadedProducts/($productName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, activation_name: $activation_name, product_name: $product_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group}/providers/Microsoft.AzureBridge.Admin/activations/{activation_name}/downloadedProducts/{product_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,11 +176,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-
 #
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroup}/providers/Microsoft.AzureBridge.Admin/activations/{activationName}/downloadedProducts/{productName}
 # operationId: DownloadedProducts_Create
-export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations-downloaded-products Create" [
-  subscriptionId: string
-  resourceGroup: string
-  activationName: string
-  productName: string
+export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations-downloaded-products create" [
+  subscription_id: string
+  resource_group: string
+  activation_name: string
+  product_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroup)/providers/Microsoft.AzureBridge.Admin/activations/($activationName)/downloadedProducts/($productName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, activation_name: $activation_name, product_name: $product_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group}/providers/Microsoft.AzureBridge.Admin/activations/{activation_name}/downloadedProducts/{product_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

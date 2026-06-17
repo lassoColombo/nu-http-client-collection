@@ -66,52 +66,52 @@ def base-url-completer [] { ["http://api.ecr.us-east-1.amazonaws.com" "http://ap
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AmazonEC2ContainerRegistry_V20150921.BatchCheckLayerAvailability"] }
-def X-Amz-Target-completer-1 [] { ["AmazonEC2ContainerRegistry_V20150921.BatchDeleteImage"] }
-def X-Amz-Target-completer-2 [] { ["AmazonEC2ContainerRegistry_V20150921.BatchGetImage"] }
-def X-Amz-Target-completer-3 [] { ["AmazonEC2ContainerRegistry_V20150921.BatchGetRepositoryScanningConfiguration"] }
-def X-Amz-Target-completer-4 [] { ["AmazonEC2ContainerRegistry_V20150921.CompleteLayerUpload"] }
-def X-Amz-Target-completer-5 [] { ["AmazonEC2ContainerRegistry_V20150921.CreatePullThroughCacheRule"] }
-def X-Amz-Target-completer-6 [] { ["AmazonEC2ContainerRegistry_V20150921.CreateRepository"] }
-def X-Amz-Target-completer-7 [] { ["AmazonEC2ContainerRegistry_V20150921.DeleteLifecyclePolicy"] }
-def X-Amz-Target-completer-8 [] { ["AmazonEC2ContainerRegistry_V20150921.DeletePullThroughCacheRule"] }
-def X-Amz-Target-completer-9 [] { ["AmazonEC2ContainerRegistry_V20150921.DeleteRegistryPolicy"] }
-def X-Amz-Target-completer-10 [] { ["AmazonEC2ContainerRegistry_V20150921.DeleteRepository"] }
-def X-Amz-Target-completer-11 [] { ["AmazonEC2ContainerRegistry_V20150921.DeleteRepositoryPolicy"] }
-def X-Amz-Target-completer-12 [] { ["AmazonEC2ContainerRegistry_V20150921.DescribeImageReplicationStatus"] }
-def X-Amz-Target-completer-13 [] { ["AmazonEC2ContainerRegistry_V20150921.DescribeImageScanFindings"] }
-def X-Amz-Target-completer-14 [] { ["AmazonEC2ContainerRegistry_V20150921.DescribeImages"] }
-def X-Amz-Target-completer-15 [] { ["AmazonEC2ContainerRegistry_V20150921.DescribePullThroughCacheRules"] }
-def X-Amz-Target-completer-16 [] { ["AmazonEC2ContainerRegistry_V20150921.DescribeRegistry"] }
-def X-Amz-Target-completer-17 [] { ["AmazonEC2ContainerRegistry_V20150921.DescribeRepositories"] }
-def X-Amz-Target-completer-18 [] { ["AmazonEC2ContainerRegistry_V20150921.GetAuthorizationToken"] }
-def X-Amz-Target-completer-19 [] { ["AmazonEC2ContainerRegistry_V20150921.GetDownloadUrlForLayer"] }
-def X-Amz-Target-completer-20 [] { ["AmazonEC2ContainerRegistry_V20150921.GetLifecyclePolicy"] }
-def X-Amz-Target-completer-21 [] { ["AmazonEC2ContainerRegistry_V20150921.GetLifecyclePolicyPreview"] }
-def X-Amz-Target-completer-22 [] { ["AmazonEC2ContainerRegistry_V20150921.GetRegistryPolicy"] }
-def X-Amz-Target-completer-23 [] { ["AmazonEC2ContainerRegistry_V20150921.GetRegistryScanningConfiguration"] }
-def X-Amz-Target-completer-24 [] { ["AmazonEC2ContainerRegistry_V20150921.GetRepositoryPolicy"] }
-def X-Amz-Target-completer-25 [] { ["AmazonEC2ContainerRegistry_V20150921.InitiateLayerUpload"] }
-def X-Amz-Target-completer-26 [] { ["AmazonEC2ContainerRegistry_V20150921.ListImages"] }
-def X-Amz-Target-completer-27 [] { ["AmazonEC2ContainerRegistry_V20150921.ListTagsForResource"] }
-def X-Amz-Target-completer-28 [] { ["AmazonEC2ContainerRegistry_V20150921.PutImage"] }
-def X-Amz-Target-completer-29 [] { ["AmazonEC2ContainerRegistry_V20150921.PutImageScanningConfiguration"] }
-def X-Amz-Target-completer-30 [] { ["AmazonEC2ContainerRegistry_V20150921.PutImageTagMutability"] }
-def X-Amz-Target-completer-31 [] { ["AmazonEC2ContainerRegistry_V20150921.PutLifecyclePolicy"] }
-def X-Amz-Target-completer-32 [] { ["AmazonEC2ContainerRegistry_V20150921.PutRegistryPolicy"] }
-def X-Amz-Target-completer-33 [] { ["AmazonEC2ContainerRegistry_V20150921.PutRegistryScanningConfiguration"] }
-def X-Amz-Target-completer-34 [] { ["AmazonEC2ContainerRegistry_V20150921.PutReplicationConfiguration"] }
-def X-Amz-Target-completer-35 [] { ["AmazonEC2ContainerRegistry_V20150921.SetRepositoryPolicy"] }
-def X-Amz-Target-completer-36 [] { ["AmazonEC2ContainerRegistry_V20150921.StartImageScan"] }
-def X-Amz-Target-completer-37 [] { ["AmazonEC2ContainerRegistry_V20150921.StartLifecyclePolicyPreview"] }
-def X-Amz-Target-completer-38 [] { ["AmazonEC2ContainerRegistry_V20150921.TagResource"] }
-def X-Amz-Target-completer-39 [] { ["AmazonEC2ContainerRegistry_V20150921.UntagResource"] }
-def X-Amz-Target-completer-40 [] { ["AmazonEC2ContainerRegistry_V20150921.UploadLayerPart"] }
+def x-amz-target-completer [] { ["AmazonEC2ContainerRegistry_V20150921.BatchCheckLayerAvailability"] }
+def x-amz-target-completer-1 [] { ["AmazonEC2ContainerRegistry_V20150921.BatchDeleteImage"] }
+def x-amz-target-completer-2 [] { ["AmazonEC2ContainerRegistry_V20150921.BatchGetImage"] }
+def x-amz-target-completer-3 [] { ["AmazonEC2ContainerRegistry_V20150921.BatchGetRepositoryScanningConfiguration"] }
+def x-amz-target-completer-4 [] { ["AmazonEC2ContainerRegistry_V20150921.CompleteLayerUpload"] }
+def x-amz-target-completer-5 [] { ["AmazonEC2ContainerRegistry_V20150921.CreatePullThroughCacheRule"] }
+def x-amz-target-completer-6 [] { ["AmazonEC2ContainerRegistry_V20150921.CreateRepository"] }
+def x-amz-target-completer-7 [] { ["AmazonEC2ContainerRegistry_V20150921.DeleteLifecyclePolicy"] }
+def x-amz-target-completer-8 [] { ["AmazonEC2ContainerRegistry_V20150921.DeletePullThroughCacheRule"] }
+def x-amz-target-completer-9 [] { ["AmazonEC2ContainerRegistry_V20150921.DeleteRegistryPolicy"] }
+def x-amz-target-completer-10 [] { ["AmazonEC2ContainerRegistry_V20150921.DeleteRepository"] }
+def x-amz-target-completer-11 [] { ["AmazonEC2ContainerRegistry_V20150921.DeleteRepositoryPolicy"] }
+def x-amz-target-completer-12 [] { ["AmazonEC2ContainerRegistry_V20150921.DescribeImageReplicationStatus"] }
+def x-amz-target-completer-13 [] { ["AmazonEC2ContainerRegistry_V20150921.DescribeImageScanFindings"] }
+def x-amz-target-completer-14 [] { ["AmazonEC2ContainerRegistry_V20150921.DescribeImages"] }
+def x-amz-target-completer-15 [] { ["AmazonEC2ContainerRegistry_V20150921.DescribePullThroughCacheRules"] }
+def x-amz-target-completer-16 [] { ["AmazonEC2ContainerRegistry_V20150921.DescribeRegistry"] }
+def x-amz-target-completer-17 [] { ["AmazonEC2ContainerRegistry_V20150921.DescribeRepositories"] }
+def x-amz-target-completer-18 [] { ["AmazonEC2ContainerRegistry_V20150921.GetAuthorizationToken"] }
+def x-amz-target-completer-19 [] { ["AmazonEC2ContainerRegistry_V20150921.GetDownloadUrlForLayer"] }
+def x-amz-target-completer-20 [] { ["AmazonEC2ContainerRegistry_V20150921.GetLifecyclePolicy"] }
+def x-amz-target-completer-21 [] { ["AmazonEC2ContainerRegistry_V20150921.GetLifecyclePolicyPreview"] }
+def x-amz-target-completer-22 [] { ["AmazonEC2ContainerRegistry_V20150921.GetRegistryPolicy"] }
+def x-amz-target-completer-23 [] { ["AmazonEC2ContainerRegistry_V20150921.GetRegistryScanningConfiguration"] }
+def x-amz-target-completer-24 [] { ["AmazonEC2ContainerRegistry_V20150921.GetRepositoryPolicy"] }
+def x-amz-target-completer-25 [] { ["AmazonEC2ContainerRegistry_V20150921.InitiateLayerUpload"] }
+def x-amz-target-completer-26 [] { ["AmazonEC2ContainerRegistry_V20150921.ListImages"] }
+def x-amz-target-completer-27 [] { ["AmazonEC2ContainerRegistry_V20150921.ListTagsForResource"] }
+def x-amz-target-completer-28 [] { ["AmazonEC2ContainerRegistry_V20150921.PutImage"] }
+def x-amz-target-completer-29 [] { ["AmazonEC2ContainerRegistry_V20150921.PutImageScanningConfiguration"] }
+def x-amz-target-completer-30 [] { ["AmazonEC2ContainerRegistry_V20150921.PutImageTagMutability"] }
+def x-amz-target-completer-31 [] { ["AmazonEC2ContainerRegistry_V20150921.PutLifecyclePolicy"] }
+def x-amz-target-completer-32 [] { ["AmazonEC2ContainerRegistry_V20150921.PutRegistryPolicy"] }
+def x-amz-target-completer-33 [] { ["AmazonEC2ContainerRegistry_V20150921.PutRegistryScanningConfiguration"] }
+def x-amz-target-completer-34 [] { ["AmazonEC2ContainerRegistry_V20150921.PutReplicationConfiguration"] }
+def x-amz-target-completer-35 [] { ["AmazonEC2ContainerRegistry_V20150921.SetRepositoryPolicy"] }
+def x-amz-target-completer-36 [] { ["AmazonEC2ContainerRegistry_V20150921.StartImageScan"] }
+def x-amz-target-completer-37 [] { ["AmazonEC2ContainerRegistry_V20150921.StartLifecyclePolicyPreview"] }
+def x-amz-target-completer-38 [] { ["AmazonEC2ContainerRegistry_V20150921.TagResource"] }
+def x-amz-target-completer-39 [] { ["AmazonEC2ContainerRegistry_V20150921.UntagResource"] }
+def x-amz-target-completer-40 [] { ["AmazonEC2ContainerRegistry_V20150921.UploadLayerPart"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-amazon-ec2-container-registry-v20150921-batch-check-layer-availability BatchCheckLayerAvailability" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-amazon-ec2-container-registry-v20150921-batch-check-layer-availability post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.BatchCheckLayerAvailability
 # operationId: BatchCheckLayerAvailability
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-batch-check-layer-availability BatchCheckLayerAvailability" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-batch-check-layer-availability post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -144,25 +144,25 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-batch-check-lay
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  --registryId: any
-  repositoryName: any
-  layerDigests: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  --registry-id: any
+  repository_name: any
+  layer_digests: any
 ]: any -> record<layers: record, failures: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.BatchCheckLayerAvailability")
-  let body = {registryId: $registryId, repositoryName: $repositoryName, layerDigests: $layerDigests} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "layerDigests": $layer_digests} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -173,7 +173,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-batch-check-lay
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.BatchDeleteImage
 # operationId: BatchDeleteImage
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-batch-delete-image BatchDeleteImage" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-batch-delete-image post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,25 +182,25 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-batch-delete-im
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  --registryId: any
-  repositoryName: any
-  imageIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  --registry-id: any
+  repository_name: any
+  image_ids: any
 ]: any -> record<imageIds: record, failures: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.BatchDeleteImage")
-  let body = {registryId: $registryId, repositoryName: $repositoryName, imageIds: $imageIds} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageIds": $image_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -211,7 +211,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-batch-delete-im
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.BatchGetImage
 # operationId: BatchGetImage
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-batch-get-image BatchGetImage" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-batch-get-image post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,26 +220,26 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-batch-get-image
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  --registryId: any
-  repositoryName: any
-  imageIds: any
-  --acceptedMediaTypes: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  --registry-id: any
+  repository_name: any
+  image_ids: any
+  --accepted-media-types: any
 ]: any -> record<images: record, failures: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.BatchGetImage")
-  let body = {registryId: $registryId, repositoryName: $repositoryName, imageIds: $imageIds, acceptedMediaTypes: $acceptedMediaTypes} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageIds": $image_ids, "acceptedMediaTypes": $accepted_media_types} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -250,7 +250,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-batch-get-image
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.BatchGetRepositoryScanningConfiguration
 # operationId: BatchGetRepositoryScanningConfiguration
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-batch-get-repository-scanning-configuration BatchGetRepositoryScanningConfiguration" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-batch-get-repository-scanning-configuration post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,23 +259,23 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-batch-get-repos
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  repositoryNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  repository_names: any
 ]: any -> record<scanningConfigurations: record, failures: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.BatchGetRepositoryScanningConfiguration")
-  let body = {repositoryNames: $repositoryNames} | compact
+  let body = {"repositoryNames": $repository_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -286,7 +286,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-batch-get-repos
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.CompleteLayerUpload
 # operationId: CompleteLayerUpload
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-complete-layer-upload CompleteLayerUpload" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-complete-layer-upload upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,26 +295,26 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-complete-layer-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  --registryId: any
-  repositoryName: any
-  uploadId: any
-  layerDigests: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  --registry-id: any
+  repository_name: any
+  upload_id: any
+  layer_digests: any
 ]: any -> record<registryId: record, repositoryName: record, uploadId: record, layerDigest: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.CompleteLayerUpload")
-  let body = {registryId: $registryId, repositoryName: $repositoryName, uploadId: $uploadId, layerDigests: $layerDigests} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "uploadId": $upload_id, "layerDigests": $layer_digests} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -325,7 +325,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-complete-layer-
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.CreatePullThroughCacheRule
 # operationId: CreatePullThroughCacheRule
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-create-pull-through-cache-rule CreatePullThroughCacheRule" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-create-pull-through-cache-rule create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,25 +334,25 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-create-pull-thr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  ecrRepositoryPrefix: any
-  upstreamRegistryUrl: any
-  --registryId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  ecr_repository_prefix: any
+  upstream_registry_url: any
+  --registry-id: any
 ]: any -> record<ecrRepositoryPrefix: record, upstreamRegistryUrl: record, createdAt: record, registryId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.CreatePullThroughCacheRule")
-  let body = {ecrRepositoryPrefix: $ecrRepositoryPrefix, upstreamRegistryUrl: $upstreamRegistryUrl, registryId: $registryId} | compact
+  let body = {"ecrRepositoryPrefix": $ecr_repository_prefix, "upstreamRegistryUrl": $upstream_registry_url, "registryId": $registry_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -363,7 +363,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-create-pull-thr
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.CreateRepository
 # operationId: CreateRepository
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-create-repository CreateRepository" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-create-repository create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,28 +372,28 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-create-reposito
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  --registryId: any
-  repositoryName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  --registry-id: any
+  repository_name: any
   --tags: any
-  --imageTagMutability: any
-  --imageScanningConfiguration: any
-  --encryptionConfiguration: any
+  --image-tag-mutability: any
+  --image-scanning-configuration: any
+  --encryption-configuration: any
 ]: any -> record<repository: record<repositoryArn: record, registryId: record, repositoryName: record, repositoryUri: record, createdAt: record, imageTagMutability: record, imageScanningConfiguration: record<scanOnPush: record>, encryptionConfiguration: record<encryptionType: record, kmsKey: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.CreateRepository")
-  let body = {registryId: $registryId, repositoryName: $repositoryName, tags: $tags, imageTagMutability: $imageTagMutability, imageScanningConfiguration: $imageScanningConfiguration, encryptionConfiguration: $encryptionConfiguration} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "tags": $tags, "imageTagMutability": $image_tag_mutability, "imageScanningConfiguration": $image_scanning_configuration, "encryptionConfiguration": $encryption_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -404,7 +404,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-create-reposito
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DeleteLifecyclePolicy
 # operationId: DeleteLifecyclePolicy
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-lifecycle-policy DeleteLifecyclePolicy" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-lifecycle-policy delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,24 +413,24 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-lifecycl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  --registryId: any
-  repositoryName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  --registry-id: any
+  repository_name: any
 ]: any -> record<registryId: record, repositoryName: record, lifecyclePolicyText: record, lastEvaluatedAt: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DeleteLifecyclePolicy")
-  let body = {registryId: $registryId, repositoryName: $repositoryName} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -441,7 +441,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-lifecycl
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DeletePullThroughCacheRule
 # operationId: DeletePullThroughCacheRule
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-pull-through-cache-rule DeletePullThroughCacheRule" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-pull-through-cache-rule delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,24 +450,24 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-pull-thr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  ecrRepositoryPrefix: any
-  --registryId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  ecr_repository_prefix: any
+  --registry-id: any
 ]: any -> record<ecrRepositoryPrefix: record, upstreamRegistryUrl: record, createdAt: record, registryId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DeletePullThroughCacheRule")
-  let body = {ecrRepositoryPrefix: $ecrRepositoryPrefix, registryId: $registryId} | compact
+  let body = {"ecrRepositoryPrefix": $ecr_repository_prefix, "registryId": $registry_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -478,7 +478,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-pull-thr
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DeleteRegistryPolicy
 # operationId: DeleteRegistryPolicy
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-registry-policy DeleteRegistryPolicy" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-registry-policy delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,14 +487,14 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-registry
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
   --body: record
 ]: any -> record<registryId: record, policyText: record> {
   let input = $in
@@ -502,7 +502,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-registry
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DeleteRegistryPolicy")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -513,7 +513,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-registry
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DeleteRepository
 # operationId: DeleteRepository
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-repository DeleteRepository" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-repository delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,25 +522,25 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-reposito
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  --registryId: any
-  repositoryName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  --registry-id: any
+  repository_name: any
   --force: any
 ]: any -> record<repository: record<repositoryArn: record, registryId: record, repositoryName: record, repositoryUri: record, createdAt: record, imageTagMutability: record, imageScanningConfiguration: record<scanOnPush: record>, encryptionConfiguration: record<encryptionType: record, kmsKey: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DeleteRepository")
-  let body = {registryId: $registryId, repositoryName: $repositoryName, force: $force} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "force": $force} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -551,7 +551,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-reposito
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DeleteRepositoryPolicy
 # operationId: DeleteRepositoryPolicy
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-repository-policy DeleteRepositoryPolicy" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-repository-policy delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,24 +560,24 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-reposito
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  --registryId: any
-  repositoryName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  --registry-id: any
+  repository_name: any
 ]: any -> record<registryId: record, repositoryName: record, policyText: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DeleteRepositoryPolicy")
-  let body = {registryId: $registryId, repositoryName: $repositoryName} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -589,7 +589,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-delete-reposito
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DescribeImageReplicationStatus
 # operationId: DescribeImageReplicationStatus
 # --imageId shape: {imageDigest?: any, imageTag?: any}
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-image-replication-status DescribeImageReplicationStatus" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-image-replication-status post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -598,25 +598,25 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-image-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  repositoryName: any
-  imageId: record # An object with identifying information for an image in an Amazon ECR repository. — shape: {imageDigest?: any, imageTag?: any}
-  --registryId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  repository_name: any
+  image_id: record # An object with identifying information for an image in an Amazon ECR repository. — shape: {imageDigest?: any, imageTag?: any}
+  --registry-id: any
 ]: any -> record<repositoryName: record, imageId: record<imageDigest: record, imageTag: record>, replicationStatuses: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DescribeImageReplicationStatus")
-  let body = {repositoryName: $repositoryName, imageId: $imageId, registryId: $registryId} | compact
+  let body = {"repositoryName": $repository_name, "imageId": $image_id, "registryId": $registry_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -628,7 +628,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-image-
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DescribeImageScanFindings
 # operationId: DescribeImageScanFindings
 # --imageId shape: {imageDigest?: any, imageTag?: any}
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-image-scan-findings DescribeImageScanFindings" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-image-scan-findings post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,30 +637,30 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-image-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  --registryId: any
-  repositoryName: any
-  imageId: record # An object with identifying information for an image in an Amazon ECR repository. — shape: {imageDigest?: any, imageTag?: any}
-  --nextToken: any
-  --maxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  --registry-id: any
+  repository_name: any
+  image_id: record # An object with identifying information for an image in an Amazon ECR repository. — shape: {imageDigest?: any, imageTag?: any}
+  --next-token: any
+  --max-results: any
 ]: any -> record<registryId: record, repositoryName: record, imageId: record<imageDigest: record, imageTag: record>, imageScanStatus: record<status: record, description: record>, imageScanFindings: record<imageScanCompletedAt: record, vulnerabilitySourceUpdatedAt: record, findingSeverityCounts: record, findings: record, enhancedFindings: record>, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DescribeImageScanFindings" $qp)
-  let body = {registryId: $registryId, repositoryName: $repositoryName, imageId: $imageId, nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageId": $image_id, "nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -671,7 +671,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-image-
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DescribeImages
 # operationId: DescribeImages
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-images DescribeImages" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-images post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,31 +680,31 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-images
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  --registryId: any
-  repositoryName: any
-  --imageIds: any
-  --nextToken: any
-  --maxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  --registry-id: any
+  repository_name: any
+  --image-ids: any
+  --next-token: any
+  --max-results: any
   --filter: any
 ]: any -> record<imageDetails: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DescribeImages" $qp)
-  let body = {registryId: $registryId, repositoryName: $repositoryName, imageIds: $imageIds, nextToken: $nextToken, maxResults: $maxResults, filter: $filter} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageIds": $image_ids, "nextToken": $next_token, "maxResults": $max_results, "filter": $filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -715,7 +715,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-images
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DescribePullThroughCacheRules
 # operationId: DescribePullThroughCacheRules
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-pull-through-cache-rules DescribePullThroughCacheRules" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-pull-through-cache-rules post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -724,29 +724,29 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-pull-t
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  --registryId: any
-  --ecrRepositoryPrefixes: any
-  --nextToken: any
-  --maxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  --registry-id: any
+  --ecr-repository-prefixes: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<pullThroughCacheRules: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DescribePullThroughCacheRules" $qp)
-  let body = {registryId: $registryId, ecrRepositoryPrefixes: $ecrRepositoryPrefixes, nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"registryId": $registry_id, "ecrRepositoryPrefixes": $ecr_repository_prefixes, "nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -757,7 +757,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-pull-t
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DescribeRegistry
 # operationId: DescribeRegistry
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-registry DescribeRegistry" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-registry post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -766,14 +766,14 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-regist
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
   --body: record
 ]: any -> record<registryId: record, replicationConfiguration: record<rules: record>> {
   let input = $in
@@ -781,7 +781,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-regist
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DescribeRegistry")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -792,7 +792,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-regist
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DescribeRepositories
 # operationId: DescribeRepositories
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-repositories DescribeRepositories" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-repositories post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -801,29 +801,29 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-reposi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  --registryId: any
-  --repositoryNames: any
-  --nextToken: any
-  --maxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  --registry-id: any
+  --repository-names: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<repositories: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.DescribeRepositories" $qp)
-  let body = {registryId: $registryId, repositoryNames: $repositoryNames, nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"registryId": $registry_id, "repositoryNames": $repository_names, "nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -834,7 +834,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-describe-reposi
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.GetAuthorizationToken
 # operationId: GetAuthorizationToken
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-authorization-token GetAuthorizationToken" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-authorization-token get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -843,23 +843,23 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-authorizati
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  --registryIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  --registry-ids: any
 ]: any -> record<authorizationData: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.GetAuthorizationToken")
-  let body = {registryIds: $registryIds} | compact
+  let body = {"registryIds": $registry_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -870,7 +870,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-authorizati
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.GetDownloadUrlForLayer
 # operationId: GetDownloadUrlForLayer
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-download-url-for-layer GetDownloadUrlForLayer" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-download-url-for-layer get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,25 +879,25 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-download-ur
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  --registryId: any
-  repositoryName: any
-  layerDigest: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  --registry-id: any
+  repository_name: any
+  layer_digest: any
 ]: any -> record<downloadUrl: record, layerDigest: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.GetDownloadUrlForLayer")
-  let body = {registryId: $registryId, repositoryName: $repositoryName, layerDigest: $layerDigest} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "layerDigest": $layer_digest} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -908,7 +908,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-download-ur
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.GetLifecyclePolicy
 # operationId: GetLifecyclePolicy
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-lifecycle-policy GetLifecyclePolicy" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-lifecycle-policy get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -917,24 +917,24 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-lifecycle-p
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  --registryId: any
-  repositoryName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  --registry-id: any
+  repository_name: any
 ]: any -> record<registryId: record, repositoryName: record, lifecyclePolicyText: record, lastEvaluatedAt: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.GetLifecyclePolicy")
-  let body = {registryId: $registryId, repositoryName: $repositoryName} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -945,7 +945,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-lifecycle-p
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.GetLifecyclePolicyPreview
 # operationId: GetLifecyclePolicyPreview
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-lifecycle-policy-preview GetLifecyclePolicyPreview" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-lifecycle-policy-preview get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -954,31 +954,31 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-lifecycle-p
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  --registryId: any
-  repositoryName: any
-  --imageIds: any
-  --nextToken: any
-  --maxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  --registry-id: any
+  repository_name: any
+  --image-ids: any
+  --next-token: any
+  --max-results: any
   --filter: any
 ]: any -> record<registryId: record, repositoryName: record, lifecyclePolicyText: record, status: record, nextToken: record, previewResults: record, summary: record<expiringImageTotalCount: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.GetLifecyclePolicyPreview" $qp)
-  let body = {registryId: $registryId, repositoryName: $repositoryName, imageIds: $imageIds, nextToken: $nextToken, maxResults: $maxResults, filter: $filter} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageIds": $image_ids, "nextToken": $next_token, "maxResults": $max_results, "filter": $filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -989,7 +989,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-lifecycle-p
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.GetRegistryPolicy
 # operationId: GetRegistryPolicy
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-registry-policy GetRegistryPolicy" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-registry-policy get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -998,14 +998,14 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-registry-po
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
   --body: record
 ]: any -> record<registryId: record, policyText: record> {
   let input = $in
@@ -1013,7 +1013,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-registry-po
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.GetRegistryPolicy")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1024,7 +1024,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-registry-po
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.GetRegistryScanningConfiguration
 # operationId: GetRegistryScanningConfiguration
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-registry-scanning-configuration GetRegistryScanningConfiguration" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-registry-scanning-configuration get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1033,14 +1033,14 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-registry-sc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
   --body: record
 ]: any -> record<registryId: record, scanningConfiguration: record<scanType: record, rules: record>> {
   let input = $in
@@ -1048,7 +1048,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-registry-sc
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.GetRegistryScanningConfiguration")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1059,7 +1059,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-registry-sc
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.GetRepositoryPolicy
 # operationId: GetRepositoryPolicy
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-repository-policy GetRepositoryPolicy" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-repository-policy get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1068,24 +1068,24 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-repository-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  --registryId: any
-  repositoryName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  --registry-id: any
+  repository_name: any
 ]: any -> record<registryId: record, repositoryName: record, policyText: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.GetRepositoryPolicy")
-  let body = {registryId: $registryId, repositoryName: $repositoryName} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1096,7 +1096,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-get-repository-
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.InitiateLayerUpload
 # operationId: InitiateLayerUpload
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-initiate-layer-upload InitiateLayerUpload" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-initiate-layer-upload upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1105,24 +1105,24 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-initiate-layer-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  --registryId: any
-  repositoryName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  --registry-id: any
+  repository_name: any
 ]: any -> record<uploadId: record, partSize: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.InitiateLayerUpload")
-  let body = {registryId: $registryId, repositoryName: $repositoryName} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1133,7 +1133,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-initiate-layer-
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.ListImages
 # operationId: ListImages
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-list-images ListImages" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-list-images list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1142,30 +1142,30 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-list-images Lis
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  --registryId: any
-  repositoryName: any
-  --nextToken: any
-  --maxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  --registry-id: any
+  repository_name: any
+  --next-token: any
+  --max-results: any
   --filter: any
 ]: any -> record<imageIds: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.ListImages" $qp)
-  let body = {registryId: $registryId, repositoryName: $repositoryName, nextToken: $nextToken, maxResults: $maxResults, filter: $filter} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "nextToken": $next_token, "maxResults": $max_results, "filter": $filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1176,7 +1176,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-list-images Lis
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1185,23 +1185,23 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-list-tags-for-r
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  resourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  resource_arn: any
 ]: any -> record<tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.ListTagsForResource")
-  let body = {resourceArn: $resourceArn} | compact
+  let body = {"resourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1212,7 +1212,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-list-tags-for-r
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.PutImage
 # operationId: PutImage
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-image PutImage" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-image update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1221,28 +1221,28 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-image PutIm
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  --registryId: any
-  repositoryName: any
-  imageManifest: any
-  --imageManifestMediaType: any
-  --imageTag: any
-  --imageDigest: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  --registry-id: any
+  repository_name: any
+  image_manifest: any
+  --image-manifest-media-type: any
+  --image-tag: any
+  --image-digest: any
 ]: any -> record<image: record<registryId: record, repositoryName: record, imageId: record<imageDigest: record, imageTag: record>, imageManifest: record, imageManifestMediaType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.PutImage")
-  let body = {registryId: $registryId, repositoryName: $repositoryName, imageManifest: $imageManifest, imageManifestMediaType: $imageManifestMediaType, imageTag: $imageTag, imageDigest: $imageDigest} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageManifest": $image_manifest, "imageManifestMediaType": $image_manifest_media_type, "imageTag": $image_tag, "imageDigest": $image_digest} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1253,7 +1253,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-image PutIm
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.PutImageScanningConfiguration
 # operationId: PutImageScanningConfiguration
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-image-scanning-configuration PutImageScanningConfiguration" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-image-scanning-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1262,25 +1262,25 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-image-scann
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  --registryId: any
-  repositoryName: any
-  imageScanningConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  --registry-id: any
+  repository_name: any
+  image_scanning_configuration: any
 ]: any -> record<registryId: record, repositoryName: record, imageScanningConfiguration: record<scanOnPush: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.PutImageScanningConfiguration")
-  let body = {registryId: $registryId, repositoryName: $repositoryName, imageScanningConfiguration: $imageScanningConfiguration} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageScanningConfiguration": $image_scanning_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1291,7 +1291,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-image-scann
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.PutImageTagMutability
 # operationId: PutImageTagMutability
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-image-tag-mutability PutImageTagMutability" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-image-tag-mutability update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1300,25 +1300,25 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-image-tag-m
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  --registryId: any
-  repositoryName: any
-  imageTagMutability: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  --registry-id: any
+  repository_name: any
+  image_tag_mutability: any
 ]: any -> record<registryId: record, repositoryName: record, imageTagMutability: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.PutImageTagMutability")
-  let body = {registryId: $registryId, repositoryName: $repositoryName, imageTagMutability: $imageTagMutability} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageTagMutability": $image_tag_mutability} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1329,7 +1329,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-image-tag-m
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.PutLifecyclePolicy
 # operationId: PutLifecyclePolicy
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-lifecycle-policy PutLifecyclePolicy" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-lifecycle-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1338,25 +1338,25 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-lifecycle-p
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  --registryId: any
-  repositoryName: any
-  lifecyclePolicyText: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  --registry-id: any
+  repository_name: any
+  lifecycle_policy_text: any
 ]: any -> record<registryId: record, repositoryName: record, lifecyclePolicyText: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.PutLifecyclePolicy")
-  let body = {registryId: $registryId, repositoryName: $repositoryName, lifecyclePolicyText: $lifecyclePolicyText} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "lifecyclePolicyText": $lifecycle_policy_text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1367,7 +1367,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-lifecycle-p
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.PutRegistryPolicy
 # operationId: PutRegistryPolicy
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-registry-policy PutRegistryPolicy" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-registry-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1376,23 +1376,23 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-registry-po
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  policyText: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  policy_text: any
 ]: any -> record<registryId: record, policyText: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.PutRegistryPolicy")
-  let body = {policyText: $policyText} | compact
+  let body = {"policyText": $policy_text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1403,7 +1403,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-registry-po
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.PutRegistryScanningConfiguration
 # operationId: PutRegistryScanningConfiguration
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-registry-scanning-configuration PutRegistryScanningConfiguration" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-registry-scanning-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1412,24 +1412,24 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-registry-sc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  --scanType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  --scan-type: any
   --rules: any
 ]: any -> record<registryScanningConfiguration: record<scanType: record, rules: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.PutRegistryScanningConfiguration")
-  let body = {scanType: $scanType, rules: $rules} | compact
+  let body = {"scanType": $scan_type, "rules": $rules} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1440,7 +1440,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-registry-sc
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.PutReplicationConfiguration
 # operationId: PutReplicationConfiguration
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-replication-configuration PutReplicationConfiguration" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-replication-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1449,23 +1449,23 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-replication
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  replicationConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  replication_configuration: any
 ]: any -> record<replicationConfiguration: record<rules: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.PutReplicationConfiguration")
-  let body = {replicationConfiguration: $replicationConfiguration} | compact
+  let body = {"replicationConfiguration": $replication_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1476,7 +1476,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-put-replication
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.SetRepositoryPolicy
 # operationId: SetRepositoryPolicy
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-set-repository-policy SetRepositoryPolicy" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-set-repository-policy post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1485,26 +1485,26 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-set-repository-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  --registryId: any
-  repositoryName: any
-  policyText: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  --registry-id: any
+  repository_name: any
+  policy_text: any
   --force: any
 ]: any -> record<registryId: record, repositoryName: record, policyText: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.SetRepositoryPolicy")
-  let body = {registryId: $registryId, repositoryName: $repositoryName, policyText: $policyText, force: $force} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "policyText": $policy_text, "force": $force} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1516,7 +1516,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-set-repository-
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.StartImageScan
 # operationId: StartImageScan
 # --imageId shape: {imageDigest?: any, imageTag?: any}
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-start-image-scan StartImageScan" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-start-image-scan start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1525,25 +1525,25 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-start-image-sca
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  --registryId: any
-  repositoryName: any
-  imageId: record # An object with identifying information for an image in an Amazon ECR repository. — shape: {imageDigest?: any, imageTag?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  --registry-id: any
+  repository_name: any
+  image_id: record # An object with identifying information for an image in an Amazon ECR repository. — shape: {imageDigest?: any, imageTag?: any}
 ]: any -> record<registryId: record, repositoryName: record, imageId: record<imageDigest: record, imageTag: record>, imageScanStatus: record<status: record, description: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.StartImageScan")
-  let body = {registryId: $registryId, repositoryName: $repositoryName, imageId: $imageId} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageId": $image_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1554,7 +1554,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-start-image-sca
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.StartLifecyclePolicyPreview
 # operationId: StartLifecyclePolicyPreview
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-start-lifecycle-policy-preview StartLifecyclePolicyPreview" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-start-lifecycle-policy-preview start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1563,25 +1563,25 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-start-lifecycle
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  --registryId: any
-  repositoryName: any
-  --lifecyclePolicyText: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  --registry-id: any
+  repository_name: any
+  --lifecycle-policy-text: any
 ]: any -> record<registryId: record, repositoryName: record, lifecyclePolicyText: record, status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.StartLifecyclePolicyPreview")
-  let body = {registryId: $registryId, repositoryName: $repositoryName, lifecyclePolicyText: $lifecyclePolicyText} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "lifecyclePolicyText": $lifecycle_policy_text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1592,7 +1592,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-start-lifecycle
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.TagResource
 # operationId: TagResource
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-tag-resource TagResource" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1601,24 +1601,24 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-tag-resource Ta
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  resourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  resource_arn: any
   tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.TagResource")
-  let body = {resourceArn: $resourceArn, tags: $tags} | compact
+  let body = {"resourceArn": $resource_arn, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1629,7 +1629,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-tag-resource Ta
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-untag-resource UntagResource" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1638,24 +1638,24 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-untag-resource 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  resourceArn: any
-  tagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.UntagResource")
-  let body = {resourceArn: $resourceArn, tagKeys: $tagKeys} | compact
+  let body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1666,7 +1666,7 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-untag-resource 
 #
 # POST /#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.UploadLayerPart
 # operationId: UploadLayerPart
-export def "x-amz-target-amazon-ec2-container-registry-v20150921-upload-layer-part UploadLayerPart" [
+export def "x-amz-target-amazon-ec2-container-registry-v20150921-upload-layer-part upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1675,28 +1675,28 @@ export def "x-amz-target-amazon-ec2-container-registry-v20150921-upload-layer-pa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  --registryId: any
-  repositoryName: any
-  uploadId: any
-  partFirstByte: any
-  partLastByte: any
-  layerPartBlob: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  --registry-id: any
+  repository_name: any
+  upload_id: any
+  part_first_byte: any
+  part_last_byte: any
+  layer_part_blob: any
 ]: any -> record<registryId: record, repositoryName: record, uploadId: record, lastByteReceived: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonEC2ContainerRegistry_V20150921.UploadLayerPart")
-  let body = {registryId: $registryId, repositoryName: $repositoryName, uploadId: $uploadId, partFirstByte: $partFirstByte, partLastByte: $partLastByte, layerPartBlob: $layerPartBlob} | compact
+  let body = {"registryId": $registry_id, "repositoryName": $repository_name, "uploadId": $upload_id, "partFirstByte": $part_first_byte, "partLastByte": $part_last_byte, "layerPartBlob": $layer_part_blob} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

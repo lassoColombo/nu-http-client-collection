@@ -65,15 +65,14 @@ def base-url-completer [] { ["https://developer.walmart.com/orderProxy/order-api
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def Content-Type-completer [] { ["application/json" "application/xml"] }
-def Accept-completer [] { ["application/json" "application/xml"] }
-def WM-CONSUMERCHANNELTYPE-completer [] { ["SWAGGER_CHANNEL_TYPE"] }
+def content-type-completer [] { ["application/json" "application/xml"] }
 def accept-completer [] { ["application/json" "application/xml"] }
+def wm-consumer-channel-type-completer [] { ["SWAGGER_CHANNEL_TYPE"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "orders list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "orders get-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/orders
 # operationId: getAllOrders
-export def "orders list" [
+export def "orders get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,30 +106,30 @@ export def "orders list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --shipNode: string # Ship Node
+  --ship-node: string # Ship Node
   --sku: string # Retrieves all orders with the specified SKU.
-  --customerOrderId: string # Retrives the details of the specified customerOrderId.
-  --purchaseOrderId: string # The purchase order ID associated with the order to retrieve. One customer order can have multiple purchase orders associated with it.
+  --customer-order-id: string # Retrives the details of the specified customerOrderId.
+  --purchase-order-id: string # The purchase order ID associated with the order to retrieve. One customer order can have multiple purchase orders associated with it.
   --status: string # The list of orders corresponding to the requested status.
-  --createdStartDate: string # Limit orders to those created after this date or a timestamp.
-  --createdEndDate: string # Limit orders to those created before this date or timestamp.
-  --fromExpectedShipDate: string # Limit orders to those that have order lines with an expected ship date after this date.
-  --toExpectedShipDate: string # Limit orders to those that have order lines with an expected ship date before this date. 
+  --created-start-date: string # Limit orders to those created after this date or a timestamp.
+  --created-end-date: string # Limit orders to those created before this date or timestamp.
+  --from-expected-ship-date: string # Limit orders to those that have order lines with an expected ship date after this date.
+  --to-expected-ship-date: string # Limit orders to those that have order lines with an expected ship date before this date. 
   --limit: int # The number of orders to be returned. Do not set this parameter to over 200 orders. (format: int32, default: 10)
-  --Content-Type: string@Content-Type-completer # application/xml, application/json
-  --Accept: string@Accept-completer # application/xml, application/json
-  --WM-CONSUMERCHANNELTYPE: string@WM-CONSUMERCHANNELTYPE-completer # Channel Type
-  --WM-CONSUMERID: string # Your Consumer ID
-  --WM-SECTIMESTAMP: string # Epoch timestamp
-  --WM-SECAUTH-SIGNATURE: string # Authentication signature
-  --WM-SVCNAME: string # The Service name
-  --WM-QOSCORRELATION-ID: string # A Transaction ID
+  --content-type: string@content-type-completer # application/xml, application/json
+  --hdr-accept: string@accept-completer # application/xml, application/json
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
+  --wm-consumer-id: string # Your Consumer ID
+  --wm-sec-timestamp: string # Epoch timestamp
+  --wm-sec-auth-signature: string # Authentication signature
+  --wm-svc-name: string # The Service name
+  --wm-qos-correlation-id: string # A Transaction ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "shipNode" $shipNode "scalar") (serialize-qp "sku" $sku "scalar") (serialize-qp "customerOrderId" $customerOrderId "scalar") (serialize-qp "purchaseOrderId" $purchaseOrderId "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "createdStartDate" $createdStartDate "scalar") (serialize-qp "createdEndDate" $createdEndDate "scalar") (serialize-qp "fromExpectedShipDate" $fromExpectedShipDate "scalar") (serialize-qp "toExpectedShipDate" $toExpectedShipDate "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "shipNode" $ship_node "scalar") (serialize-qp "sku" $sku "scalar") (serialize-qp "customerOrderId" $customer_order_id "scalar") (serialize-qp "purchaseOrderId" $purchase_order_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "createdStartDate" $created_start_date "scalar") (serialize-qp "createdEndDate" $created_end_date "scalar") (serialize-qp "fromExpectedShipDate" $from_expected_ship_date "scalar") (serialize-qp "toExpectedShipDate" $to_expected_ship_date "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/orders" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_CONSUMER.ID": $WM_CONSUMERID, "WM_SEC.TIMESTAMP": $WM_SECTIMESTAMP, "WM_SEC.AUTH_SIGNATURE": $WM_SECAUTH_SIGNATURE, "WM_SVC.NAME": $WM_SVCNAME, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -151,23 +150,23 @@ export def "orders-released get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --shipNode: string # Ship Node
-  --createdStartDate: string # Limit orders to those created after this date or a timestamp.
+  --ship-node: string # Ship Node
+  --created-start-date: string # Limit orders to those created after this date or a timestamp.
   --limit: int # The number of orders to be returned. Do not set this parameter to over 200 orders. (format: int32)
-  --Content-Type: string@Content-Type-completer # application/xml, application/json
-  --Accept: string@Accept-completer # application/xml, application/json
-  --WM-CONSUMERCHANNELTYPE: string@WM-CONSUMERCHANNELTYPE-completer # Channel Type
-  --WM-CONSUMERID: string # Your Consumer ID
-  --WM-SECTIMESTAMP: string # Epoch timestamp
-  --WM-SECAUTH-SIGNATURE: string # Authentication signature
-  --WM-SVCNAME: string # The Service name
-  --WM-QOSCORRELATION-ID: string # A Transaction ID
+  --content-type: string@content-type-completer # application/xml, application/json
+  --hdr-accept: string@accept-completer # application/xml, application/json
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
+  --wm-consumer-id: string # Your Consumer ID
+  --wm-sec-timestamp: string # Epoch timestamp
+  --wm-sec-auth-signature: string # Authentication signature
+  --wm-svc-name: string # The Service name
+  --wm-qos-correlation-id: string # A Transaction ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "shipNode" $shipNode "scalar") (serialize-qp "createdStartDate" $createdStartDate "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "shipNode" $ship_node "scalar") (serialize-qp "createdStartDate" $created_start_date "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/orders/released" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_CONSUMER.ID": $WM_CONSUMERID, "WM_SEC.TIMESTAMP": $WM_SECTIMESTAMP, "WM_SEC.AUTH_SIGNATURE": $WM_SECAUTH_SIGNATURE, "WM_SVC.NAME": $WM_SVCNAME, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -179,7 +178,7 @@ export def "orders-released get" [
 # GET /v3/orders/released{nextCursor}
 # operationId: getNextCursorReleasedOrders
 export def "orders-released-next-cursor get" [
-  nextCursor: string
+  next_cursor: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,19 +188,19 @@ export def "orders-released-next-cursor get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Content-Type: string@Content-Type-completer # application/xml, application/json
-  --Accept: string@Accept-completer # application/xml, application/json
-  --WM-CONSUMERCHANNELTYPE: string@WM-CONSUMERCHANNELTYPE-completer # Channel Type
-  --WM-CONSUMERID: string # Your Consumer ID
-  --WM-SECTIMESTAMP: string # Epoch timestamp
-  --WM-SECAUTH-SIGNATURE: string # Authentication signature
-  --WM-SVCNAME: string # The Service name
-  --WM-QOSCORRELATION-ID: string # A Transaction ID
+  --content-type: string@content-type-completer # application/xml, application/json
+  --hdr-accept: string@accept-completer # application/xml, application/json
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
+  --wm-consumer-id: string # Your Consumer ID
+  --wm-sec-timestamp: string # Epoch timestamp
+  --wm-sec-auth-signature: string # Authentication signature
+  --wm-svc-name: string # The Service name
+  --wm-qos-correlation-id: string # A Transaction ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/orders/released($nextCursor)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_CONSUMER.ID": $WM_CONSUMERID, "WM_SEC.TIMESTAMP": $WM_SECTIMESTAMP, "WM_SEC.AUTH_SIGNATURE": $WM_SECAUTH_SIGNATURE, "WM_SVC.NAME": $WM_SVCNAME, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID} | compact
+  let full_url = (build-url $base ({next_cursor: $next_cursor} | format pattern "/v3/orders/released{next_cursor}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -213,7 +212,7 @@ export def "orders-released-next-cursor get" [
 # GET /v3/orders/{purchaseOrderId}
 # operationId: getOrderByPurchaseOrderId
 export def "orders get" [
-  purchaseOrderId: string
+  purchase_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,21 +222,21 @@ export def "orders get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --shipNode: string # Ship Node
-  --Content-Type: string@Content-Type-completer # application/xml, application/json
-  --Accept: string@Accept-completer # application/xml, application/json
-  --WM-CONSUMERCHANNELTYPE: string@WM-CONSUMERCHANNELTYPE-completer # Channel Type
-  --WM-CONSUMERID: string # Your Consumer ID
-  --WM-SECTIMESTAMP: string # Epoch timestamp
-  --WM-SECAUTH-SIGNATURE: string # Authentication signature
-  --WM-SVCNAME: string # The Service name
-  --WM-QOSCORRELATION-ID: string # A Transaction ID
+  --ship-node: string # Ship Node
+  --content-type: string@content-type-completer # application/xml, application/json
+  --hdr-accept: string@accept-completer # application/xml, application/json
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
+  --wm-consumer-id: string # Your Consumer ID
+  --wm-sec-timestamp: string # Epoch timestamp
+  --wm-sec-auth-signature: string # Authentication signature
+  --wm-svc-name: string # The Service name
+  --wm-qos-correlation-id: string # A Transaction ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "shipNode" $shipNode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/orders/($purchaseOrderId)" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_CONSUMER.ID": $WM_CONSUMERID, "WM_SEC.TIMESTAMP": $WM_SECTIMESTAMP, "WM_SEC.AUTH_SIGNATURE": $WM_SECAUTH_SIGNATURE, "WM_SVC.NAME": $WM_SVCNAME, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID} | compact
+  let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({purchase_order_id: $purchase_order_id} | format pattern "/v3/orders/{purchase_order_id}") $qp)
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -249,7 +248,7 @@ export def "orders get" [
 # POST /v3/orders/{purchaseOrderId}/acknowledge
 # operationId: acknowledgeOrders
 export def "orders-acknowledge acknowledgeOrders" [
-  purchaseOrderId: string
+  purchase_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,21 +258,21 @@ export def "orders-acknowledge acknowledgeOrders" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --shipNode: string # Ship Node
-  --Content-Type: string@Content-Type-completer # application/xml, application/json
-  --Accept: string@Accept-completer # application/xml, application/json
-  --WM-CONSUMERCHANNELTYPE: string@WM-CONSUMERCHANNELTYPE-completer # Channel Type
-  --WM-CONSUMERID: string # Your Consumer ID
-  --WM-SECTIMESTAMP: string # Epoch timestamp
-  --WM-SECAUTH-SIGNATURE: string # Authentication signature
-  --WM-SVCNAME: string # The Service name
-  --WM-QOSCORRELATION-ID: string # A Transaction ID
+  --ship-node: string # Ship Node
+  --content-type: string@content-type-completer # application/xml, application/json
+  --hdr-accept: string@accept-completer # application/xml, application/json
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
+  --wm-consumer-id: string # Your Consumer ID
+  --wm-sec-timestamp: string # Epoch timestamp
+  --wm-sec-auth-signature: string # Authentication signature
+  --wm-svc-name: string # The Service name
+  --wm-qos-correlation-id: string # A Transaction ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "shipNode" $shipNode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/orders/($purchaseOrderId)/acknowledge" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_CONSUMER.ID": $WM_CONSUMERID, "WM_SEC.TIMESTAMP": $WM_SECTIMESTAMP, "WM_SEC.AUTH_SIGNATURE": $WM_SECAUTH_SIGNATURE, "WM_SVC.NAME": $WM_SVCNAME, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID} | compact
+  let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({purchase_order_id: $purchase_order_id} | format pattern "/v3/orders/{purchase_order_id}/acknowledge") $qp)
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -284,8 +283,8 @@ export def "orders-acknowledge acknowledgeOrders" [
 #
 # POST /v3/orders/{purchaseOrderId}/cancel
 # operationId: cancelOrder
-export def "orders-cancel cancelOrder" [
-  purchaseOrderId: string
+export def "orders-cancel cancel" [
+  purchase_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,24 +294,24 @@ export def "orders-cancel cancelOrder" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --shipNode: string # Ship Node
-  --Content-Type: string@Content-Type-completer # application/xml, application/json
-  --Accept: string@Accept-completer # application/xml, application/json
-  --WM-CONSUMERCHANNELTYPE: string@WM-CONSUMERCHANNELTYPE-completer # Channel Type
-  --WM-CONSUMERID: string # Your Consumer ID
-  --WM-SECTIMESTAMP: string # Epoch timestamp
-  --WM-SECAUTH-SIGNATURE: string # Authentication signature
-  --WM-SVCNAME: string # The Service name
-  --WM-QOSCORRELATION-ID: string # A Transaction ID
+  --ship-node: string # Ship Node
+  --content-type: string@content-type-completer # application/xml, application/json
+  --hdr-accept: string@accept-completer # application/xml, application/json
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
+  --wm-consumer-id: string # Your Consumer ID
+  --wm-sec-timestamp: string # Epoch timestamp
+  --wm-sec-auth-signature: string # Authentication signature
+  --wm-svc-name: string # The Service name
+  --wm-qos-correlation-id: string # A Transaction ID
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "shipNode" $shipNode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/orders/($purchaseOrderId)/cancel" $qp)
+  let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({purchase_order_id: $purchase_order_id} | format pattern "/v3/orders/{purchase_order_id}/cancel") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_CONSUMER.ID": $WM_CONSUMERID, "WM_SEC.TIMESTAMP": $WM_SECTIMESTAMP, "WM_SEC.AUTH_SIGNATURE": $WM_SECAUTH_SIGNATURE, "WM_SVC.NAME": $WM_SVCNAME, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -324,7 +323,7 @@ export def "orders-cancel cancelOrder" [
 # POST /v3/orders/{purchaseOrderId}/refund
 # operationId: refundOrder
 export def "orders-refund refundOrder" [
-  purchaseOrderId: string
+  purchase_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,24 +333,24 @@ export def "orders-refund refundOrder" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --shipNode: string # Ship Node
-  --Content-Type: string@Content-Type-completer # application/xml, application/json
-  --Accept: string@Accept-completer # application/xml, application/json
-  --WM-CONSUMERCHANNELTYPE: string@WM-CONSUMERCHANNELTYPE-completer # Channel Type
-  --WM-CONSUMERID: string # Your Consumer ID
-  --WM-SECTIMESTAMP: string # Epoch timestamp
-  --WM-SECAUTH-SIGNATURE: string # Authentication signature
-  --WM-SVCNAME: string # The Service name
-  --WM-QOSCORRELATION-ID: string # A Transaction ID
+  --ship-node: string # Ship Node
+  --content-type: string@content-type-completer # application/xml, application/json
+  --hdr-accept: string@accept-completer # application/xml, application/json
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
+  --wm-consumer-id: string # Your Consumer ID
+  --wm-sec-timestamp: string # Epoch timestamp
+  --wm-sec-auth-signature: string # Authentication signature
+  --wm-svc-name: string # The Service name
+  --wm-qos-correlation-id: string # A Transaction ID
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "shipNode" $shipNode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/orders/($purchaseOrderId)/refund" $qp)
+  let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({purchase_order_id: $purchase_order_id} | format pattern "/v3/orders/{purchase_order_id}/refund") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_CONSUMER.ID": $WM_CONSUMERID, "WM_SEC.TIMESTAMP": $WM_SECTIMESTAMP, "WM_SEC.AUTH_SIGNATURE": $WM_SECAUTH_SIGNATURE, "WM_SVC.NAME": $WM_SVCNAME, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -363,7 +362,7 @@ export def "orders-refund refundOrder" [
 # POST /v3/orders/{purchaseOrderId}/shipping
 # operationId: shippingOrder
 export def "orders-shipping shippingOrder" [
-  purchaseOrderId: string
+  purchase_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,24 +372,24 @@ export def "orders-shipping shippingOrder" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --shipNode: string # Ship Node
-  --Content-Type: string@Content-Type-completer # application/xml, application/json
-  --Accept: string@Accept-completer # application/xml, application/json
-  --WM-CONSUMERCHANNELTYPE: string@WM-CONSUMERCHANNELTYPE-completer # Channel Type
-  --WM-CONSUMERID: string # Your Consumer ID
-  --WM-SECTIMESTAMP: string # Epoch timestamp
-  --WM-SECAUTH-SIGNATURE: string # Authentication signature
-  --WM-SVCNAME: string # The Service name
-  --WM-QOSCORRELATION-ID: string # A Transaction ID
+  --ship-node: string # Ship Node
+  --content-type: string@content-type-completer # application/xml, application/json
+  --hdr-accept: string@accept-completer # application/xml, application/json
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
+  --wm-consumer-id: string # Your Consumer ID
+  --wm-sec-timestamp: string # Epoch timestamp
+  --wm-sec-auth-signature: string # Authentication signature
+  --wm-svc-name: string # The Service name
+  --wm-qos-correlation-id: string # A Transaction ID
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "shipNode" $shipNode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/orders/($purchaseOrderId)/shipping" $qp)
+  let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({purchase_order_id: $purchase_order_id} | format pattern "/v3/orders/{purchase_order_id}/shipping") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_CONSUMER.ID": $WM_CONSUMERID, "WM_SEC.TIMESTAMP": $WM_SECTIMESTAMP, "WM_SEC.AUTH_SIGNATURE": $WM_SECAUTH_SIGNATURE, "WM_SVC.NAME": $WM_SVCNAME, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -401,8 +400,8 @@ export def "orders-shipping shippingOrder" [
 #
 # GET /v3/orders{nextCursor}
 # operationId: getAllOrdersNext
-export def "orders-next-cursor get" [
-  nextCursor: string
+export def "orders-next-cursor get-all" [
+  next_cursor: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,19 +411,19 @@ export def "orders-next-cursor get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Content-Type: string@Content-Type-completer # application/xml, application/json
-  --Accept: string@Accept-completer # application/xml, application/json
-  --WM-CONSUMERCHANNELTYPE: string@WM-CONSUMERCHANNELTYPE-completer # Channel Type
-  --WM-CONSUMERID: string # Your Consumer ID
-  --WM-SECTIMESTAMP: string # Epoch timestamp
-  --WM-SECAUTH-SIGNATURE: string # Authentication signature
-  --WM-SVCNAME: string # The Service name
-  --WM-QOSCORRELATION-ID: string # A Transaction ID
+  --content-type: string@content-type-completer # application/xml, application/json
+  --hdr-accept: string@accept-completer # application/xml, application/json
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
+  --wm-consumer-id: string # Your Consumer ID
+  --wm-sec-timestamp: string # Epoch timestamp
+  --wm-sec-auth-signature: string # Authentication signature
+  --wm-svc-name: string # The Service name
+  --wm-qos-correlation-id: string # A Transaction ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/orders($nextCursor)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_CONSUMER.ID": $WM_CONSUMERID, "WM_SEC.TIMESTAMP": $WM_SECTIMESTAMP, "WM_SEC.AUTH_SIGNATURE": $WM_SECAUTH_SIGNATURE, "WM_SVC.NAME": $WM_SVCNAME, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID} | compact
+  let full_url = (build-url $base ({next_cursor: $next_cursor} | format pattern "/v3/orders{next_cursor}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

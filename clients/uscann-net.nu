@@ -101,16 +101,16 @@ export def "authentication-forgot-password forgotPassword" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string
+  --content-type: string
   email: string # The email of user
 ]: any -> record<code: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authentication/forgotPassword")
-  let body = {email: $email} | compact
+  let body = {"email": $email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -130,17 +130,17 @@ export def "authentication-register register" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string
+  --content-type: string
   --city: string # The city of address
-  --companyDescription: string # The company Description
-  companyName: string # The company name of customer
+  --company-description: string # The company Description
+  company_name: string # The company name of customer
   --country: string # The country of address
   --date1: string # The buffer date 1
   --date2: string # The buffer date 2
   --date3: string # The buffer date 3
   email: string # The email of customer
-  --firstName: string # The first name of customer
-  --lastName: string # The last name of customer
+  --first-name: string # The first name of customer
+  --last-name: string # The last name of customer
   --number1: int # The buffer number 1 (format: int32)
   --number2: int # The buffer number 2 (format: int32)
   --number3: int # The buffer number 3 (format: int32)
@@ -148,7 +148,7 @@ export def "authentication-register register" [
   --phone: string # The mobile number
   --state: string # The state of customer
   --storage: string # The facial recognition type of customer
-  --streetAddress: string # The street of address
+  --street-address: string # The street of address
   --string1: string # The buffer string 1
   --string2: string # The buffer string 2
   --string3: string # The buffer string 3
@@ -159,9 +159,9 @@ export def "authentication-register register" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authentication/register")
-  let body = {city: $city, companyDescription: $companyDescription, companyName: $companyName, country: $country, date1: $date1, date2: $date2, date3: $date3, email: $email, firstName: $firstName, lastName: $lastName, number1: $number1, number2: $number2, number3: $number3, password: $password, phone: $phone, state: $state, storage: $storage, streetAddress: $streetAddress, string1: $string1, string2: $string2, string3: $string3, username: $username, zip: $zip} | compact
+  let body = {"city": $city, "companyDescription": $company_description, "companyName": $company_name, "country": $country, "date1": $date1, "date2": $date2, "date3": $date3, "email": $email, "firstName": $first_name, "lastName": $last_name, "number1": $number1, "number2": $number2, "number3": $number3, "password": $password, "phone": $phone, "state": $state, "storage": $storage, "streetAddress": $street_address, "string1": $string1, "string2": $string2, "string3": $string3, "username": $username, "zip": $zip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -181,7 +181,7 @@ export def "authentication-set-forgot-password setForgotPassword" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string
+  --content-type: string
   activity: string # The user activity
   --password: string # The user password
   --body-token: string # The token
@@ -190,9 +190,9 @@ export def "authentication-set-forgot-password setForgotPassword" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authentication/setForgotPassword")
-  let body = {activity: $activity, password: $password, token: $body_token} | compact
+  let body = {"activity": $activity, "password": $password, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,7 +212,7 @@ export def "authentication-token authenticateUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string
+  --content-type: string
   password: string # The user password
   username: string # The name of user
 ]: any -> record<activities: string, customerId: int, email: string, fullName: string, partnerId: int, role: string, settings: string, token: string, type: string, userId: int, username: string> {
@@ -220,9 +220,9 @@ export def "authentication-token authenticateUser" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authentication/token")
-  let body = {password: $password, username: $username} | compact
+  let body = {"password": $password, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -233,7 +233,7 @@ export def "authentication-token authenticateUser" [
 #
 # POST /authentication/validateMailToken
 # operationId: validateMailToken
-export def "authentication-validate-mail-token validateMailToken" [
+export def "authentication-validate-mail-token validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "authentication-validate-mail-token validateMailToken" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string
+  --content-type: string
   activity: string # The user activity
   --body-token: string # The token
 ]: any -> record<code: string, message: string> {
@@ -250,9 +250,9 @@ export def "authentication-validate-mail-token validateMailToken" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authentication/validateMailToken")
-  let body = {activity: $activity, token: $body_token} | compact
+  let body = {"activity": $activity, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

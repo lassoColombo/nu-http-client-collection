@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-extensions ExtensionCtrlgetAccountExtensions" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-extensions list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/accounts/{account_id}/extensions
 # operationId: ExtensionCtrl.getAccountExtensions
-export def "accounts-extensions ExtensionCtrlgetAccountExtensions" [
+export def "accounts-extensions list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -113,7 +113,7 @@ export def "accounts-extensions ExtensionCtrlgetAccountExtensions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "phone_number" $phone_number "scalar") (serialize-qp "login_name" $login_name "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/accounts/($account_id)/extensions" $qp)
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/api/accounts/{account_id}/extensions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -123,7 +123,7 @@ export def "accounts-extensions ExtensionCtrlgetAccountExtensions" [
 #
 # GET /api/accounts/{account_id}/extensions/{extension_number}
 # operationId: ExtensionCtrl.getAccountExtensionByID
-export def "accounts-extensions ExtensionCtrlgetAccountExtensionByID" [
+export def "accounts-extensions get" [
   account_id: string
   extension_number: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -137,7 +137,7 @@ export def "accounts-extensions ExtensionCtrlgetAccountExtensionByID" [
 ]: nothing -> record<_embedded: record<data: record<block_caller_id: bool, caller_id: string, dids: list, dnd_enabled: bool, extension_handsets: list, extension_number: string, location_id: float, user: record, vtt_enabled: bool>>, _links: record<first: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, page: float, page_size: float, total_items: float, total_pages: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/accounts/($account_id)/extensions/($extension_number)")
+  let full_url = (build-url $base ({account_id: $account_id, extension_number: $extension_number} | format pattern "/api/accounts/{account_id}/extensions/{extension_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

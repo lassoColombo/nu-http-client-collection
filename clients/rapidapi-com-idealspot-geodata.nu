@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-insights FetchAvailableInsights" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-insights get-available" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /data/insights
 # operationId: FetchAvailableInsights
-export def "data-insights FetchAvailableInsights" [
+export def "data-insights get-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,13 +101,13 @@ export def "data-insights FetchAvailableInsights" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-RapidAPI-Key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
-  --X-RapidAPI-Host: string
+  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
+  --x-rapid-api-host: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data/insights")
-  let extra_headers = {"X-RapidAPI-Key": $X_RapidAPI_Key, "X-RapidAPI-Host": $X_RapidAPI_Host} | compact
+  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -118,8 +118,8 @@ export def "data-insights FetchAvailableInsights" [
 #
 # GET /data/insights/{insight_id:}
 # operationId: FetchInsightQueryParameters
-export def "data-insights FetchInsightQueryParameters" [
-  insight_id:: string
+export def "data-insights get-insight-query-parameters" [
+  insight_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,13 +128,13 @@ export def "data-insights FetchInsightQueryParameters" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-RapidAPI-Key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
-  --X-RapidAPI-Host: string
+  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
+  --x-rapid-api-host: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data/insights/($insight_id:)")
-  let extra_headers = {"X-RapidAPI-Key": $X_RapidAPI_Key, "X-RapidAPI-Host": $X_RapidAPI_Host} | compact
+  let full_url = (build-url $base ({insight_id: $insight_id} | format pattern "/data/insights/{insight_id}"))
+  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -145,8 +145,8 @@ export def "data-insights FetchInsightQueryParameters" [
 #
 # GET /data/insights/{insight_id:}/query
 # operationId: QueryInsightatLocation
-export def "data-insights-query QueryInsightatLocation" [
-  insight_id:: string
+export def "data-insights-query list-insightat-location" [
+  insight_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,14 +157,14 @@ export def "data-insights-query QueryInsightatLocation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # (Required) Insight version. Insight versions are incremented when a response format changes in any way, including the addition of new groups. Old versions are retained, unmodified, for backwards compatibility.
   --location: string # (Required) Represents a buffer, region, or custom polygon specification. Accepts the `Location` model (as a `Buffer`, `Region`, or `Custom Polygon`) formatted as a JSON string. Multiple `location` query parameters are allowed. NOTE: When requesting multiple locations, you must include brackets(i.e. `?location[]=...&location[]=...`). If not included, only the last location will be used. For more detail, see https://idealspot.gitlab.io/developer-docs/#location
-  --X-RapidAPI-Key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
-  --X-RapidAPI-Host: string
+  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
+  --x-rapid-api-host: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "location[]" $location "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/insights/($insight_id:)/query" $qp)
-  let extra_headers = {"X-RapidAPI-Key": $X_RapidAPI_Key, "X-RapidAPI-Host": $X_RapidAPI_Host} | compact
+  let full_url = (build-url $base ({insight_id: $insight_id} | format pattern "/data/insights/{insight_id}/query") $qp)
+  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -175,7 +175,7 @@ export def "data-insights-query QueryInsightatLocation" [
 #
 # GET /geometries/geometry
 # operationId: FetchGeometries
-export def "geometries-geometry FetchGeometries" [
+export def "geometries-geometry get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,14 +185,14 @@ export def "geometries-geometry FetchGeometries" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --location: string # (Required) Represents a buffer, region, or custom polygon specification. Accepts the `Location` model (as a `Buffer`, `Region`, or `Custom Polygon`) formatted as a JSON string. Multiple `location` query parameters are allowed. NOTE: When requesting multiple locations, you must include brackets(i.e. `?location[]=...&location[]=...`). If not included, only the last location will be used.
-  --X-RapidAPI-Key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
-  --X-RapidAPI-Host: string
+  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
+  --x-rapid-api-host: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "location[]" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geometries/geometry" $qp)
-  let extra_headers = {"X-RapidAPI-Key": $X_RapidAPI_Key, "X-RapidAPI-Host": $X_RapidAPI_Host} | compact
+  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -203,7 +203,7 @@ export def "geometries-geometry FetchGeometries" [
 #
 # GET /geometries/regions/intersecting/{latitude}/{longitude}
 # operationId: FetchAdministrativeRegionsusingLat/Lng
-export def "geometries-regions-intersecting FetchAdministrativeRegionsusingLat/Lng" [
+export def "geometries-regions-intersecting get-administrative-regionsusing-lat-lng" [
   latitude: float
   longitude: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -214,13 +214,13 @@ export def "geometries-regions-intersecting FetchAdministrativeRegionsusingLat/L
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-RapidAPI-Key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
-  --X-RapidAPI-Host: string
+  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
+  --x-rapid-api-host: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/geometries/regions/intersecting/($latitude)/($longitude)")
-  let extra_headers = {"X-RapidAPI-Key": $X_RapidAPI_Key, "X-RapidAPI-Host": $X_RapidAPI_Host} | compact
+  let full_url = (build-url $base ({latitude: $latitude, longitude: $longitude} | format pattern "/geometries/regions/intersecting/{latitude}/{longitude}"))
+  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -231,7 +231,7 @@ export def "geometries-regions-intersecting FetchAdministrativeRegionsusingLat/L
 #
 # GET /traffic/counts/{segment_id}
 # operationId: VehicleTrafficCountsforRoadSegment
-export def "traffic-counts VehicleTrafficCountsforRoadSegment" [
+export def "traffic-counts get" [
   segment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -241,13 +241,13 @@ export def "traffic-counts VehicleTrafficCountsforRoadSegment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-RapidAPI-Key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
-  --X-RapidAPI-Host: string
+  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
+  --x-rapid-api-host: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/traffic/counts/($segment_id)")
-  let extra_headers = {"X-RapidAPI-Key": $X_RapidAPI_Key, "X-RapidAPI-Host": $X_RapidAPI_Host} | compact
+  let full_url = (build-url $base ({segment_id: $segment_id} | format pattern "/traffic/counts/{segment_id}"))
+  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -258,7 +258,7 @@ export def "traffic-counts VehicleTrafficCountsforRoadSegment" [
 #
 # GET /traffic/roads/nearest/{latitude}/{longitude}
 # operationId: FetchNearestRoadSegments
-export def "traffic-roads-nearest FetchNearestRoadSegments" [
+export def "traffic-roads-nearest get-nearest-road-segments" [
   latitude: float
   longitude: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -270,14 +270,14 @@ export def "traffic-roads-nearest FetchNearestRoadSegments" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --n: int # Number of road segments to return (between 1 and 20) (format: int32)
-  --X-RapidAPI-Key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
-  --X-RapidAPI-Host: string
+  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
+  --x-rapid-api-host: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "n" $n "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/traffic/roads/nearest/($latitude)/($longitude)" $qp)
-  let extra_headers = {"X-RapidAPI-Key": $X_RapidAPI_Key, "X-RapidAPI-Host": $X_RapidAPI_Host} | compact
+  let full_url = (build-url $base ({latitude: $latitude, longitude: $longitude} | format pattern "/traffic/roads/nearest/{latitude}/{longitude}") $qp)
+  let extra_headers = {"X-RapidAPI-Key": $x_rapid_api_key, "X-RapidAPI-Host": $x_rapid_api_host} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

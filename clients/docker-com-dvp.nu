@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "discovery get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "discovery get-namespaces" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: getNamespaces
-export def "discovery get" [
+export def "discovery get-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,7 +128,7 @@ export def "namespaces get" [
 ]: nothing -> record<datasets: table<name: string, timespans: list, views: list>, extraRepos: list<string>, namespace: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/namespaces/($namespace)")
+  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/namespaces/{namespace}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -138,7 +138,7 @@ export def "namespaces get" [
 #
 # GET /namespaces/{namespace}/pulls/exports/years
 # operationId: getNamespaceYears
-export def "namespaces-pulls-exports-years get-by-namespace" [
+export def "namespaces-pulls-exports-years get" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -151,7 +151,7 @@ export def "namespaces-pulls-exports-years get-by-namespace" [
 ]: nothing -> record<years: table<year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/namespaces/($namespace)/pulls/exports/years")
+  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/namespaces/{namespace}/pulls/exports/years"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -161,7 +161,7 @@ export def "namespaces-pulls-exports-years get-by-namespace" [
 #
 # GET /namespaces/{namespace}/pulls/exports/years/{year}/{timespantype}
 # operationId: getNamespaceTimespans
-export def "namespaces-pulls-exports-years get-by-namespace-year-timespantype" [
+export def "namespaces-pulls-exports-years get-timespans" [
   namespace: string
   year: int
   timespantype: string
@@ -176,7 +176,7 @@ export def "namespaces-pulls-exports-years get-by-namespace-year-timespantype" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/namespaces/($namespace)/pulls/exports/years/($year)/($timespantype)")
+  let full_url = (build-url $base ({namespace: $namespace, year: $year, timespantype: $timespantype} | format pattern "/namespaces/{namespace}/pulls/exports/years/{year}/{timespantype}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -186,7 +186,7 @@ export def "namespaces-pulls-exports-years get-by-namespace-year-timespantype" [
 #
 # GET /namespaces/{namespace}/pulls/exports/years/{year}/{timespantype}/{timespan}
 # operationId: getNamespaceTimespanMetadata
-export def "namespaces-pulls-exports-years get-by-namespace-year-timespantype-timespan" [
+export def "namespaces-pulls-exports-years get-metadata" [
   namespace: string
   year: int
   timespantype: string
@@ -202,7 +202,7 @@ export def "namespaces-pulls-exports-years get-by-namespace-year-timespantype-ti
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/namespaces/($namespace)/pulls/exports/years/($year)/($timespantype)/($timespan)")
+  let full_url = (build-url $base ({namespace: $namespace, year: $year, timespantype: $timespantype, timespan: $timespan} | format pattern "/namespaces/{namespace}/pulls/exports/years/{year}/{timespantype}/{timespan}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +212,7 @@ export def "namespaces-pulls-exports-years get-by-namespace-year-timespantype-ti
 #
 # GET /namespaces/{namespace}/pulls/exports/years/{year}/{timespantype}/{timespan}/{dataview}
 # operationId: getNamespaceDataByTimespan
-export def "namespaces-pulls-exports-years get-by-namespace-year-timespantype-timespan-dataview" [
+export def "namespaces-pulls-exports-years get-data" [
   namespace: string
   year: int
   timespantype: string
@@ -229,7 +229,7 @@ export def "namespaces-pulls-exports-years get-by-namespace-year-timespantype-ti
 ]: nothing -> record<data: table<size: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/namespaces/($namespace)/pulls/exports/years/($year)/($timespantype)/($timespan)/($dataview)")
+  let full_url = (build-url $base ({namespace: $namespace, year: $year, timespantype: $timespantype, timespan: $timespan, dataview: $dataview} | format pattern "/namespaces/{namespace}/pulls/exports/years/{year}/{timespantype}/{timespan}/{dataview}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -239,7 +239,7 @@ export def "namespaces-pulls-exports-years get-by-namespace-year-timespantype-ti
 #
 # POST /v2/users/2fa-login
 # operationId: PostUsers2FALogin
-export def "users-2fa-login PostUsers2FALogin" [
+export def "users-2fa-login create-users2-fa" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "users-2fa-login PostUsers2FALogin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://hub.docker.com")
   let full_url = (build-url $base "/v2/users/2fa-login")
-  let body = {code: $code, login_2fa_token: $login_2fa_token} | compact
+  let body = {"code": $code, "login_2fa_token": $login_2fa_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -266,7 +266,7 @@ export def "users-2fa-login PostUsers2FALogin" [
 #
 # POST /v2/users/login
 # operationId: PostUsersLogin
-export def "users-login PostUsersLogin" [
+export def "users-login create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "users-login PostUsersLogin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://hub.docker.com")
   let full_url = (build-url $base "/v2/users/login")
-  let body = {password: $password, username: $username} | compact
+  let body = {"password": $password, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

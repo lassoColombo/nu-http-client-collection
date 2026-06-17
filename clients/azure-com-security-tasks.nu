@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-locations-tasks ListByHomeRegion" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-locations-tasks list-by-home-region" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,9 +93,9 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/locations/{ascLocation}/tasks
 # operationId: Tasks_ListByHomeRegion
-export def "subscriptions-providers-microsoft-security-locations-tasks ListByHomeRegion" [
-  subscriptionId: string
-  ascLocation: string
+export def "subscriptions-providers-microsoft-security-locations-tasks list-by-home-region" [
+  subscription_id: string
+  asc_location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-providers-microsoft-security-locations-tasks ListByHom
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/locations/($ascLocation)/tasks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, asc_location: $asc_location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/locations/{asc_location}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,10 +120,10 @@ export def "subscriptions-providers-microsoft-security-locations-tasks ListByHom
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/locations/{ascLocation}/tasks/{taskName}
 # operationId: Tasks_GetSubscriptionLevelTask
-export def "subscriptions-providers-microsoft-security-locations-tasks GetSubscriptionLevelTask" [
-  subscriptionId: string
-  ascLocation: string
-  taskName: string
+export def "subscriptions-providers-microsoft-security-locations-tasks get-subscription-level" [
+  subscription_id: string
+  asc_location: string
+  task_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,7 +137,7 @@ export def "subscriptions-providers-microsoft-security-locations-tasks GetSubscr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/locations/($ascLocation)/tasks/($taskName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, asc_location: $asc_location, task_name: $task_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/locations/{asc_location}/tasks/{task_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,11 +147,11 @@ export def "subscriptions-providers-microsoft-security-locations-tasks GetSubscr
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Security/locations/{ascLocation}/tasks/{taskName}/{taskUpdateActionType}
 # operationId: Tasks_UpdateSubscriptionLevelTaskState
-export def "subscriptions-providers-microsoft-security-locations-tasks UpdateSubscriptionLevelTaskState" [
-  subscriptionId: string
-  ascLocation: string
-  taskName: string
-  taskUpdateActionType: string
+export def "subscriptions-providers-microsoft-security-locations-tasks update-subscription-level-task-state" [
+  subscription_id: string
+  asc_location: string
+  task_name: string
+  task_update_action_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "subscriptions-providers-microsoft-security-locations-tasks UpdateSub
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/locations/($ascLocation)/tasks/($taskName)/($taskUpdateActionType)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, asc_location: $asc_location, task_name: $task_name, task_update_action_type: $task_update_action_type} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/locations/{asc_location}/tasks/{task_name}/{task_update_action_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -175,8 +175,8 @@ export def "subscriptions-providers-microsoft-security-locations-tasks UpdateSub
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/tasks
 # operationId: Tasks_List
-export def "subscriptions-providers-microsoft-security-tasks List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-security-tasks list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "subscriptions-providers-microsoft-security-tasks List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/tasks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -201,10 +201,10 @@ export def "subscriptions-providers-microsoft-security-tasks List" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/tasks
 # operationId: Tasks_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-tasks ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
-  ascLocation: string
+export def "subscriptions-resource-groups-providers-microsoft-security-locations-tasks list-by" [
+  subscription_id: string
+  resource_group_name: string
+  asc_location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/locations/($ascLocation)/tasks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, asc_location: $asc_location} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/locations/{asc_location}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -229,11 +229,11 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/tasks/{taskName}
 # operationId: Tasks_GetResourceGroupLevelTask
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-tasks GetResourceGroupLevelTask" [
-  subscriptionId: string
-  resourceGroupName: string
-  ascLocation: string
-  taskName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-locations-tasks get-resource-group-level" [
+  subscription_id: string
+  resource_group_name: string
+  asc_location: string
+  task_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/locations/($ascLocation)/tasks/($taskName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, asc_location: $asc_location, task_name: $task_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/locations/{asc_location}/tasks/{task_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -257,12 +257,12 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/tasks/{taskName}/{taskUpdateActionType}
 # operationId: Tasks_UpdateResourceGroupLevelTaskState
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-tasks UpdateResourceGroupLevelTaskState" [
-  subscriptionId: string
-  resourceGroupName: string
-  ascLocation: string
-  taskName: string
-  taskUpdateActionType: string
+export def "subscriptions-resource-groups-providers-microsoft-security-locations-tasks update-resource-group-level-task-state" [
+  subscription_id: string
+  resource_group_name: string
+  asc_location: string
+  task_name: string
+  task_update_action_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/locations/($ascLocation)/tasks/($taskName)/($taskUpdateActionType)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, asc_location: $asc_location, task_name: $task_name, task_update_action_type: $task_update_action_type} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/locations/{asc_location}/tasks/{task_name}/{task_update_action_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

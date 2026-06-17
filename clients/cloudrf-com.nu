@@ -119,7 +119,7 @@ export def "archive-delete delete" [
 #
 # GET /archive/delete/network
 # operationId: deleteNetwork
-export def "archive-delete-network get" [
+export def "archive-delete-network delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "archive-list list" [
 # --output shape: {ber?: int, col?: string, mod?: int, nf?: int, out?: int, rad?: float, res?: int, units?: "metric"|"imperial"}
 # --receiver shape: {alt?: float, lat?: float, lon?: float, rxg?: float, rxs?: float}
 # --transmitter shape: {alt?: float, bwi?: float, frq?: float, lat?: float, lon?: float, txw?: float}
-export def "area area" [
+export def "area post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "area area" [
   let auth = (build-auth $token ($auth_scheme | default "key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/area")
-  let body = {antenna: $antenna, environment: $environment, model: $model, network: $network, output: $output, receiver: $receiver, site: $site, transmitter: $transmitter} | compact
+  let body = {"antenna": $antenna, "environment": $environment, "model": $model, "network": $network, "output": $output, "receiver": $receiver, "site": $site, "transmitter": $transmitter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -235,7 +235,7 @@ export def "area area" [
 # POST /clutter/add
 # operationId: addClutter
 # --features item shape: {geometry?: string, properties?: string, type?: string}
-export def "clutter-add addClutter" [
+export def "clutter-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "clutter-add addClutter" [
   let auth = (build-auth $token ($auth_scheme | default "key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/clutter/add")
-  let body = {features: $features, name: $name, type: $type} | compact
+  let body = {"features": $features, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -263,7 +263,7 @@ export def "clutter-add addClutter" [
 #
 # GET /interference
 # operationId: interference
-export def "interference interference" [
+export def "interference get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,7 +288,7 @@ export def "interference interference" [
 #
 # GET /mesh
 # operationId: mesh
-export def "mesh mesh" [
+export def "mesh get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "mesh mesh" [
 #
 # GET /network
 # operationId: network
-export def "network network" [
+export def "network get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,7 +348,7 @@ export def "network network" [
 # --output shape: {ber?: int, col?: string, mod?: int, nf?: int, out?: int, rad?: float, res?: int, units?: "metric"|"imperial"}
 # --receiver shape: {alt?: float, lat?: float, lon?: float, rxg?: float, rxs?: float}
 # --transmitter shape: {alt?: float, bwi?: float, frq?: float, lat?: float, lon?: float, txw?: float}
-export def "path path" [
+export def "path post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "path path" [
   let auth = (build-auth $token ($auth_scheme | default "key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/path")
-  let body = {antenna: $antenna, environment: $environment, model: $model, network: $network, output: $output, receiver: $receiver, site: $site, transmitter: $transmitter} | compact
+  let body = {"antenna": $antenna, "environment": $environment, "model": $model, "network": $network, "output": $output, "receiver": $receiver, "site": $site, "transmitter": $transmitter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -388,7 +388,7 @@ export def "path path" [
 # --points item shape: {alt?: float, lat?: float, lon?: float}
 # --receiver shape: {alt?: float, lat?: float, lon?: float, rxg?: float, rxs?: float}
 # --transmitter shape: {alt?: float, bwi?: float, frq?: float, lat?: float, lon?: float, txw?: float}
-export def "points points" [
+export def "points post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,7 +411,7 @@ export def "points points" [
   let auth = (build-auth $token ($auth_scheme | default "key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/points")
-  let body = {antenna: $antenna, environment: $environment, model: $model, network: $network, output: $output, points: $points, receiver: $receiver, site: $site, transmitter: $transmitter} | compact
+  let body = {"antenna": $antenna, "environment": $environment, "model": $model, "network": $network, "output": $output, "points": $points, "receiver": $receiver, "site": $site, "transmitter": $transmitter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

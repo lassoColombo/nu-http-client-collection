@@ -71,7 +71,7 @@ def accept-completer [] { ["application/json" "application/vnd.collection.doc+js
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "stations searchStations" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "stations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/stations
 # operationId: searchStations
-export def "stations searchStations" [
+export def "stations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,13 +110,13 @@ export def "stations searchStations" [
   --state: string # A state to look for stations from (using the 2-letter abbreviation); intended to be paired with `city`
   --lat: float # A latitude value from a geographic coordinate system; only works if paired with `lon` (format: float)
   --lon: float # A longitude value from a geographic coordinate system; only works if paired with `lat` (format: float)
-  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
 ]: nothing -> record<attributes: record<city: string, countryCode: string, lat: float, lon: float, query: string, state: string>, errors: list<record>, href: string, items: table<attributes: record, errors: list, href: string, items: list, links: record, version: string>, links: record, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/stations" $qp)
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -128,7 +128,7 @@ export def "stations searchStations" [
 # GET /v3/stations/{stationId}
 # operationId: getStationById
 export def "stations get" [
-  stationId: int
+  station_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,12 +138,12 @@ export def "stations get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
 ]: nothing -> record<attributes: record<brand: record<band: string, call: string, frequency: string, marketCity: string, marketState: string, name: string, tagline: string>, eligibility: record<format: string, localization: string, musicOnly: bool, nprOne: bool, status: string>, guid: string, network: record<currentOrgId: string, tier1: record, usesInheritance: bool>, newscast: record<id: string, recency: int>, orgId: string>, errors: list<record>, href: string, items: list<record>, links: record<brand: list<record>, donation: list<record>, podcasts: list<record>, related: list<record>, streams: list<record>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/stations/($stationId)")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({station_id: $station_id} | format pattern "/v3/stations/{station_id}"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

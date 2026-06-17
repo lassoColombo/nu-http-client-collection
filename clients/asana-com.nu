@@ -77,7 +77,7 @@ def type-completer [] { ["custom_field" "portfolio" "project" "tag" "task" "user
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attachments list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attachments get-attachments-for-object" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /attachments
 # operationId: getAttachmentsForObject
-export def "attachments list" [
+export def "attachments get-attachments-for-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,7 +127,7 @@ export def "attachments list" [
 #
 # POST /attachments
 # operationId: createAttachmentForObject
-export def "attachments createAttachmentForObject" [
+export def "attachments create-attachment-for-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,7 +150,7 @@ export def "attachments createAttachmentForObject" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/attachments" $qp)
-  let body = {connect_to_app: $connect_to_app, file: $file, name: $name, parent: $parent, resource_subtype: $resource_subtype, url: $body_url} | compact
+  let body = {"connect_to_app": $connect_to_app, "file": $file, "name": $name, "parent": $parent, "resource_subtype": $resource_subtype, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -177,7 +177,7 @@ export def "attachments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/attachments/($attachment_gid)" $qp)
+  let full_url = (build-url $base ({attachment_gid: $attachment_gid} | format pattern "/attachments/{attachment_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -203,7 +203,7 @@ export def "attachments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/attachments/($attachment_gid)" $qp)
+  let full_url = (build-url $base ({attachment_gid: $attachment_gid} | format pattern "/attachments/{attachment_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -214,7 +214,7 @@ export def "attachments get" [
 # POST /batch
 # operationId: createBatchRequest
 # --data shape: {actions?: list}
-export def "batch createBatchRequest" [
+export def "batch create-batch-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "batch createBatchRequest" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/batch" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -243,7 +243,7 @@ export def "batch createBatchRequest" [
 #
 # POST /custom_fields
 # operationId: createCustomField
-export def "custom-fields createCustomField" [
+export def "custom-fields create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "custom-fields createCustomField" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/custom_fields" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -290,7 +290,7 @@ export def "custom-fields delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/custom_fields/($custom_field_gid)" $qp)
+  let full_url = (build-url $base ({custom_field_gid: $custom_field_gid} | format pattern "/custom_fields/{custom_field_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -316,7 +316,7 @@ export def "custom-fields get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/custom_fields/($custom_field_gid)" $qp)
+  let full_url = (build-url $base ({custom_field_gid: $custom_field_gid} | format pattern "/custom_fields/{custom_field_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -326,7 +326,7 @@ export def "custom-fields get" [
 #
 # PUT /custom_fields/{custom_field_gid}
 # operationId: updateCustomField
-export def "custom-fields updateCustomField" [
+export def "custom-fields update" [
   custom_field_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -344,8 +344,8 @@ export def "custom-fields updateCustomField" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/custom_fields/($custom_field_gid)" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({custom_field_gid: $custom_field_gid} | format pattern "/custom_fields/{custom_field_gid}") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -356,7 +356,7 @@ export def "custom-fields updateCustomField" [
 #
 # POST /custom_fields/{custom_field_gid}/enum_options
 # operationId: createEnumOptionForCustomField
-export def "custom-fields-enum-options createEnumOptionForCustomField" [
+export def "custom-fields-enum-options create-enum-option-for" [
   custom_field_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -376,8 +376,8 @@ export def "custom-fields-enum-options createEnumOptionForCustomField" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/custom_fields/($custom_field_gid)/enum_options" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({custom_field_gid: $custom_field_gid} | format pattern "/custom_fields/{custom_field_gid}/enum_options") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -389,7 +389,7 @@ export def "custom-fields-enum-options createEnumOptionForCustomField" [
 # POST /custom_fields/{custom_field_gid}/enum_options/insert
 # operationId: insertEnumOptionForCustomField
 # --data shape: {after_enum_option?: string, before_enum_option?: string, enum_option: string}
-export def "custom-fields-enum-options-insert insertEnumOptionForCustomField" [
+export def "custom-fields-enum-options-insert create-enum-option-for" [
   custom_field_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -407,8 +407,8 @@ export def "custom-fields-enum-options-insert insertEnumOptionForCustomField" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/custom_fields/($custom_field_gid)/enum_options/insert" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({custom_field_gid: $custom_field_gid} | format pattern "/custom_fields/{custom_field_gid}/enum_options/insert") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -419,7 +419,7 @@ export def "custom-fields-enum-options-insert insertEnumOptionForCustomField" [
 #
 # PUT /enum_options/{enum_option_gid}
 # operationId: updateEnumOption
-export def "enum-options updateEnumOption" [
+export def "enum-options update" [
   enum_option_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,8 +437,8 @@ export def "enum-options updateEnumOption" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/enum_options/($enum_option_gid)" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({enum_option_gid: $enum_option_gid} | format pattern "/enum_options/{enum_option_gid}") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -519,7 +519,7 @@ export def "goal-relationships get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/goal_relationships/($goal_relationship_gid)" $qp)
+  let full_url = (build-url $base ({goal_relationship_gid: $goal_relationship_gid} | format pattern "/goal_relationships/{goal_relationship_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -529,7 +529,7 @@ export def "goal-relationships get" [
 #
 # PUT /goal_relationships/{goal_relationship_gid}
 # operationId: updateGoalRelationship
-export def "goal-relationships updateGoalRelationship" [
+export def "goal-relationships update" [
   goal_relationship_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -547,8 +547,8 @@ export def "goal-relationships updateGoalRelationship" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/goal_relationships/($goal_relationship_gid)" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({goal_relationship_gid: $goal_relationship_gid} | format pattern "/goal_relationships/{goal_relationship_gid}") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -592,7 +592,7 @@ export def "goals list" [
 #
 # POST /goals
 # operationId: createGoal
-export def "goals createGoal" [
+export def "goals create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -612,7 +612,7 @@ export def "goals createGoal" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/goals" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -639,7 +639,7 @@ export def "goals delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/goals/($goal_gid)" $qp)
+  let full_url = (build-url $base ({goal_gid: $goal_gid} | format pattern "/goals/{goal_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -665,7 +665,7 @@ export def "goals get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/goals/($goal_gid)" $qp)
+  let full_url = (build-url $base ({goal_gid: $goal_gid} | format pattern "/goals/{goal_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -675,7 +675,7 @@ export def "goals get" [
 #
 # PUT /goals/{goal_gid}
 # operationId: updateGoal
-export def "goals updateGoal" [
+export def "goals update" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -693,8 +693,8 @@ export def "goals updateGoal" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/goals/($goal_gid)" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({goal_gid: $goal_gid} | format pattern "/goals/{goal_gid}") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -706,7 +706,7 @@ export def "goals updateGoal" [
 # POST /goals/{goal_gid}/addFollowers
 # operationId: addFollowers
 # --data shape: {followers: list}
-export def "goals-add-followers addFollowers" [
+export def "goals-add-followers create" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -724,8 +724,8 @@ export def "goals-add-followers addFollowers" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/goals/($goal_gid)/addFollowers" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({goal_gid: $goal_gid} | format pattern "/goals/{goal_gid}/addFollowers") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -737,7 +737,7 @@ export def "goals-add-followers addFollowers" [
 # POST /goals/{goal_gid}/addSupportingRelationship
 # operationId: addSupportingRelationship
 # --data shape: {contribution_weight?: float, insert_after?: string, insert_before?: string, supporting_resource: string}
-export def "goals-add-supporting-relationship addSupportingRelationship" [
+export def "goals-add-supporting-relationship create" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -755,8 +755,8 @@ export def "goals-add-supporting-relationship addSupportingRelationship" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/goals/($goal_gid)/addSupportingRelationship" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({goal_gid: $goal_gid} | format pattern "/goals/{goal_gid}/addSupportingRelationship") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -767,7 +767,7 @@ export def "goals-add-supporting-relationship addSupportingRelationship" [
 #
 # GET /goals/{goal_gid}/parentGoals
 # operationId: getParentGoalsForGoal
-export def "goals-parent-goals get" [
+export def "goals-parent-goals get-parent-goals-for" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -783,7 +783,7 @@ export def "goals-parent-goals get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/goals/($goal_gid)/parentGoals" $qp)
+  let full_url = (build-url $base ({goal_gid: $goal_gid} | format pattern "/goals/{goal_gid}/parentGoals") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -794,7 +794,7 @@ export def "goals-parent-goals get" [
 # POST /goals/{goal_gid}/removeFollowers
 # operationId: removeFollowers
 # --data shape: {followers: list}
-export def "goals-remove-followers removeFollowers" [
+export def "goals-remove-followers delete" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -812,8 +812,8 @@ export def "goals-remove-followers removeFollowers" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/goals/($goal_gid)/removeFollowers" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({goal_gid: $goal_gid} | format pattern "/goals/{goal_gid}/removeFollowers") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -825,7 +825,7 @@ export def "goals-remove-followers removeFollowers" [
 # POST /goals/{goal_gid}/removeSupportingRelationship
 # operationId: removeSupportingRelationship
 # --data shape: {supporting_resource: string}
-export def "goals-remove-supporting-relationship removeSupportingRelationship" [
+export def "goals-remove-supporting-relationship delete" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -843,8 +843,8 @@ export def "goals-remove-supporting-relationship removeSupportingRelationship" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/goals/($goal_gid)/removeSupportingRelationship" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({goal_gid: $goal_gid} | format pattern "/goals/{goal_gid}/removeSupportingRelationship") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -855,7 +855,7 @@ export def "goals-remove-supporting-relationship removeSupportingRelationship" [
 #
 # POST /goals/{goal_gid}/setMetric
 # operationId: createGoalMetric
-export def "goals-set-metric createGoalMetric" [
+export def "goals-set-metric create" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -873,8 +873,8 @@ export def "goals-set-metric createGoalMetric" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/goals/($goal_gid)/setMetric" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({goal_gid: $goal_gid} | format pattern "/goals/{goal_gid}/setMetric") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -885,7 +885,7 @@ export def "goals-set-metric createGoalMetric" [
 #
 # POST /goals/{goal_gid}/setMetricCurrentValue
 # operationId: updateGoalMetric
-export def "goals-set-metric-current-value updateGoalMetric" [
+export def "goals-set-metric-current-value update" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -903,8 +903,8 @@ export def "goals-set-metric-current-value updateGoalMetric" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/goals/($goal_gid)/setMetricCurrentValue" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({goal_gid: $goal_gid} | format pattern "/goals/{goal_gid}/setMetricCurrentValue") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -931,7 +931,7 @@ export def "jobs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/jobs/($job_gid)" $qp)
+  let full_url = (build-url $base ({job_gid: $job_gid} | format pattern "/jobs/{job_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -942,7 +942,7 @@ export def "jobs get" [
 # POST /organization_exports
 # operationId: createOrganizationExport
 # --data shape: {organization?: string}
-export def "organization-exports createOrganizationExport" [
+export def "organization-exports create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,7 +962,7 @@ export def "organization-exports createOrganizationExport" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/organization_exports" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -989,7 +989,7 @@ export def "organization-exports get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organization_exports/($organization_export_gid)" $qp)
+  let full_url = (build-url $base ({organization_export_gid: $organization_export_gid} | format pattern "/organization_exports/{organization_export_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1045,7 +1045,7 @@ export def "portfolio-memberships get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/portfolio_memberships/($portfolio_membership_gid)" $qp)
+  let full_url = (build-url $base ({portfolio_membership_gid: $portfolio_membership_gid} | format pattern "/portfolio_memberships/{portfolio_membership_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1082,7 +1082,7 @@ export def "portfolios list" [
 #
 # POST /portfolios
 # operationId: createPortfolio
-export def "portfolios createPortfolio" [
+export def "portfolios create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1100,7 +1100,7 @@ export def "portfolios createPortfolio" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/portfolios" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1127,7 +1127,7 @@ export def "portfolios delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/portfolios/($portfolio_gid)" $qp)
+  let full_url = (build-url $base ({portfolio_gid: $portfolio_gid} | format pattern "/portfolios/{portfolio_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1153,7 +1153,7 @@ export def "portfolios get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/portfolios/($portfolio_gid)" $qp)
+  let full_url = (build-url $base ({portfolio_gid: $portfolio_gid} | format pattern "/portfolios/{portfolio_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1163,7 +1163,7 @@ export def "portfolios get" [
 #
 # PUT /portfolios/{portfolio_gid}
 # operationId: updatePortfolio
-export def "portfolios updatePortfolio" [
+export def "portfolios update" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1181,8 +1181,8 @@ export def "portfolios updatePortfolio" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/portfolios/($portfolio_gid)" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({portfolio_gid: $portfolio_gid} | format pattern "/portfolios/{portfolio_gid}") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1194,7 +1194,7 @@ export def "portfolios updatePortfolio" [
 # POST /portfolios/{portfolio_gid}/addCustomFieldSetting
 # operationId: addCustomFieldSettingForPortfolio
 # --data shape: {custom_field: string, insert_after?: string, insert_before?: string, is_important?: bool}
-export def "portfolios-add-custom-field-setting addCustomFieldSettingForPortfolio" [
+export def "portfolios-add-custom-field-setting create-custom-field-setting-for" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1211,8 +1211,8 @@ export def "portfolios-add-custom-field-setting addCustomFieldSettingForPortfoli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/portfolios/($portfolio_gid)/addCustomFieldSetting" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({portfolio_gid: $portfolio_gid} | format pattern "/portfolios/{portfolio_gid}/addCustomFieldSetting") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1224,7 +1224,7 @@ export def "portfolios-add-custom-field-setting addCustomFieldSettingForPortfoli
 # POST /portfolios/{portfolio_gid}/addItem
 # operationId: addItemForPortfolio
 # --data shape: {insert_after?: string, insert_before?: string, item: string}
-export def "portfolios-add-item addItemForPortfolio" [
+export def "portfolios-add-item create-item-for" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1242,8 +1242,8 @@ export def "portfolios-add-item addItemForPortfolio" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/portfolios/($portfolio_gid)/addItem" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({portfolio_gid: $portfolio_gid} | format pattern "/portfolios/{portfolio_gid}/addItem") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1255,7 +1255,7 @@ export def "portfolios-add-item addItemForPortfolio" [
 # POST /portfolios/{portfolio_gid}/addMembers
 # operationId: addMembersForPortfolio
 # --data shape: {members: string}
-export def "portfolios-add-members addMembersForPortfolio" [
+export def "portfolios-add-members create-members-for" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1273,8 +1273,8 @@ export def "portfolios-add-members addMembersForPortfolio" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/portfolios/($portfolio_gid)/addMembers" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({portfolio_gid: $portfolio_gid} | format pattern "/portfolios/{portfolio_gid}/addMembers") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1285,7 +1285,7 @@ export def "portfolios-add-members addMembersForPortfolio" [
 #
 # GET /portfolios/{portfolio_gid}/custom_field_settings
 # operationId: getCustomFieldSettingsForPortfolio
-export def "portfolios-custom-field-settings get" [
+export def "portfolios-custom-field-settings get-custom-field-settings-for" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1303,7 +1303,7 @@ export def "portfolios-custom-field-settings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/portfolios/($portfolio_gid)/custom_field_settings" $qp)
+  let full_url = (build-url $base ({portfolio_gid: $portfolio_gid} | format pattern "/portfolios/{portfolio_gid}/custom_field_settings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1313,7 +1313,7 @@ export def "portfolios-custom-field-settings get" [
 #
 # GET /portfolios/{portfolio_gid}/items
 # operationId: getItemsForPortfolio
-export def "portfolios-items get" [
+export def "portfolios-items get-items-for" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1331,7 +1331,7 @@ export def "portfolios-items get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/portfolios/($portfolio_gid)/items" $qp)
+  let full_url = (build-url $base ({portfolio_gid: $portfolio_gid} | format pattern "/portfolios/{portfolio_gid}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1341,7 +1341,7 @@ export def "portfolios-items get" [
 #
 # GET /portfolios/{portfolio_gid}/portfolio_memberships
 # operationId: getPortfolioMembershipsForPortfolio
-export def "portfolios-portfolio-memberships get" [
+export def "portfolios-portfolio-memberships get-portfolio-memberships-for" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1360,7 +1360,7 @@ export def "portfolios-portfolio-memberships get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/portfolios/($portfolio_gid)/portfolio_memberships" $qp)
+  let full_url = (build-url $base ({portfolio_gid: $portfolio_gid} | format pattern "/portfolios/{portfolio_gid}/portfolio_memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1371,7 +1371,7 @@ export def "portfolios-portfolio-memberships get" [
 # POST /portfolios/{portfolio_gid}/removeCustomFieldSetting
 # operationId: removeCustomFieldSettingForPortfolio
 # --data shape: {custom_field: string}
-export def "portfolios-remove-custom-field-setting removeCustomFieldSettingForPortfolio" [
+export def "portfolios-remove-custom-field-setting delete-custom-field-setting-for" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1388,8 +1388,8 @@ export def "portfolios-remove-custom-field-setting removeCustomFieldSettingForPo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/portfolios/($portfolio_gid)/removeCustomFieldSetting" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({portfolio_gid: $portfolio_gid} | format pattern "/portfolios/{portfolio_gid}/removeCustomFieldSetting") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1401,7 +1401,7 @@ export def "portfolios-remove-custom-field-setting removeCustomFieldSettingForPo
 # POST /portfolios/{portfolio_gid}/removeItem
 # operationId: removeItemForPortfolio
 # --data shape: {item: string}
-export def "portfolios-remove-item removeItemForPortfolio" [
+export def "portfolios-remove-item delete-item-for" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1419,8 +1419,8 @@ export def "portfolios-remove-item removeItemForPortfolio" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/portfolios/($portfolio_gid)/removeItem" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({portfolio_gid: $portfolio_gid} | format pattern "/portfolios/{portfolio_gid}/removeItem") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1432,7 +1432,7 @@ export def "portfolios-remove-item removeItemForPortfolio" [
 # POST /portfolios/{portfolio_gid}/removeMembers
 # operationId: removeMembersForPortfolio
 # --data shape: {members: string}
-export def "portfolios-remove-members removeMembersForPortfolio" [
+export def "portfolios-remove-members delete-members-for" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1450,8 +1450,8 @@ export def "portfolios-remove-members removeMembersForPortfolio" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/portfolios/($portfolio_gid)/removeMembers" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({portfolio_gid: $portfolio_gid} | format pattern "/portfolios/{portfolio_gid}/removeMembers") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1478,7 +1478,7 @@ export def "project-briefs delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/project_briefs/($project_brief_gid)" $qp)
+  let full_url = (build-url $base ({project_brief_gid: $project_brief_gid} | format pattern "/project_briefs/{project_brief_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1504,7 +1504,7 @@ export def "project-briefs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/project_briefs/($project_brief_gid)" $qp)
+  let full_url = (build-url $base ({project_brief_gid: $project_brief_gid} | format pattern "/project_briefs/{project_brief_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1514,7 +1514,7 @@ export def "project-briefs get" [
 #
 # PUT /project_briefs/{project_brief_gid}
 # operationId: updateProjectBrief
-export def "project-briefs updateProjectBrief" [
+export def "project-briefs update" [
   project_brief_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1532,8 +1532,8 @@ export def "project-briefs updateProjectBrief" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/project_briefs/($project_brief_gid)" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({project_brief_gid: $project_brief_gid} | format pattern "/project_briefs/{project_brief_gid}") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1560,7 +1560,7 @@ export def "project-memberships get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/project_memberships/($project_membership_gid)" $qp)
+  let full_url = (build-url $base ({project_membership_gid: $project_membership_gid} | format pattern "/project_memberships/{project_membership_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1570,7 +1570,7 @@ export def "project-memberships get" [
 #
 # DELETE /project_statuses/{project_status_gid}
 # operationId: deleteProjectStatus
-export def "project-statuses delete" [
+export def "project-statuses delete-project-status" [
   project_status_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1586,7 +1586,7 @@ export def "project-statuses delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/project_statuses/($project_status_gid)" $qp)
+  let full_url = (build-url $base ({project_status_gid: $project_status_gid} | format pattern "/project_statuses/{project_status_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1596,7 +1596,7 @@ export def "project-statuses delete" [
 #
 # GET /project_statuses/{project_status_gid}
 # operationId: getProjectStatus
-export def "project-statuses get" [
+export def "project-statuses get-project-status" [
   project_status_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1612,7 +1612,7 @@ export def "project-statuses get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/project_statuses/($project_status_gid)" $qp)
+  let full_url = (build-url $base ({project_status_gid: $project_status_gid} | format pattern "/project_statuses/{project_status_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1665,7 +1665,7 @@ export def "project-templates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/project_templates/($project_template_gid)" $qp)
+  let full_url = (build-url $base ({project_template_gid: $project_template_gid} | format pattern "/project_templates/{project_template_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1694,8 +1694,8 @@ export def "project-templates-instantiate-project instantiateProject" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/project_templates/($project_template_gid)/instantiateProject" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({project_template_gid: $project_template_gid} | format pattern "/project_templates/{project_template_gid}/instantiateProject") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1734,7 +1734,7 @@ export def "projects list" [
 #
 # POST /projects
 # operationId: createProject
-export def "projects createProject" [
+export def "projects create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1752,7 +1752,7 @@ export def "projects createProject" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/projects" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1779,7 +1779,7 @@ export def "projects delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)" $qp)
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1805,7 +1805,7 @@ export def "projects get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)" $qp)
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1815,7 +1815,7 @@ export def "projects get" [
 #
 # PUT /projects/{project_gid}
 # operationId: updateProject
-export def "projects updateProject" [
+export def "projects update" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1833,8 +1833,8 @@ export def "projects updateProject" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1846,7 +1846,7 @@ export def "projects updateProject" [
 # POST /projects/{project_gid}/addCustomFieldSetting
 # operationId: addCustomFieldSettingForProject
 # --data shape: {custom_field: string, insert_after?: string, insert_before?: string, is_important?: bool}
-export def "projects-add-custom-field-setting addCustomFieldSettingForProject" [
+export def "projects-add-custom-field-setting create-custom-field-setting-for" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1863,8 +1863,8 @@ export def "projects-add-custom-field-setting addCustomFieldSettingForProject" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/addCustomFieldSetting" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/addCustomFieldSetting") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1876,7 +1876,7 @@ export def "projects-add-custom-field-setting addCustomFieldSettingForProject" [
 # POST /projects/{project_gid}/addFollowers
 # operationId: addFollowersForProject
 # --data shape: {followers: string}
-export def "projects-add-followers addFollowersForProject" [
+export def "projects-add-followers create-followers-for" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1894,8 +1894,8 @@ export def "projects-add-followers addFollowersForProject" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/addFollowers" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/addFollowers") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1907,7 +1907,7 @@ export def "projects-add-followers addFollowersForProject" [
 # POST /projects/{project_gid}/addMembers
 # operationId: addMembersForProject
 # --data shape: {members: string}
-export def "projects-add-members addMembersForProject" [
+export def "projects-add-members create-members-for" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1925,8 +1925,8 @@ export def "projects-add-members addMembersForProject" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/addMembers" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/addMembers") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1937,7 +1937,7 @@ export def "projects-add-members addMembersForProject" [
 #
 # GET /projects/{project_gid}/custom_field_settings
 # operationId: getCustomFieldSettingsForProject
-export def "projects-custom-field-settings get" [
+export def "projects-custom-field-settings get-custom-field-settings-for" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1955,7 +1955,7 @@ export def "projects-custom-field-settings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/custom_field_settings" $qp)
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/custom_field_settings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1984,8 +1984,8 @@ export def "projects-duplicate duplicateProject" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/duplicate" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/duplicate") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1996,7 +1996,7 @@ export def "projects-duplicate duplicateProject" [
 #
 # POST /projects/{project_gid}/project_briefs
 # operationId: createProjectBrief
-export def "projects-project-briefs createProjectBrief" [
+export def "projects-project-briefs create" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2014,8 +2014,8 @@ export def "projects-project-briefs createProjectBrief" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/project_briefs" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/project_briefs") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2026,7 +2026,7 @@ export def "projects-project-briefs createProjectBrief" [
 #
 # GET /projects/{project_gid}/project_memberships
 # operationId: getProjectMembershipsForProject
-export def "projects-project-memberships get" [
+export def "projects-project-memberships get-project-memberships-for" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2045,7 +2045,7 @@ export def "projects-project-memberships get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/project_memberships" $qp)
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/project_memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2055,7 +2055,7 @@ export def "projects-project-memberships get" [
 #
 # GET /projects/{project_gid}/project_statuses
 # operationId: getProjectStatusesForProject
-export def "projects-project-statuses get" [
+export def "projects-project-statuses get-project-statuses-for" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2073,7 +2073,7 @@ export def "projects-project-statuses get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/project_statuses" $qp)
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/project_statuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2083,7 +2083,7 @@ export def "projects-project-statuses get" [
 #
 # POST /projects/{project_gid}/project_statuses
 # operationId: createProjectStatusForProject
-export def "projects-project-statuses createProjectStatusForProject" [
+export def "projects-project-statuses create-project-status-for" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2101,8 +2101,8 @@ export def "projects-project-statuses createProjectStatusForProject" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/project_statuses" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/project_statuses") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2114,7 +2114,7 @@ export def "projects-project-statuses createProjectStatusForProject" [
 # POST /projects/{project_gid}/removeCustomFieldSetting
 # operationId: removeCustomFieldSettingForProject
 # --data shape: {custom_field: string}
-export def "projects-remove-custom-field-setting removeCustomFieldSettingForProject" [
+export def "projects-remove-custom-field-setting delete-custom-field-setting-for" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2131,8 +2131,8 @@ export def "projects-remove-custom-field-setting removeCustomFieldSettingForProj
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/removeCustomFieldSetting" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/removeCustomFieldSetting") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2144,7 +2144,7 @@ export def "projects-remove-custom-field-setting removeCustomFieldSettingForProj
 # POST /projects/{project_gid}/removeFollowers
 # operationId: removeFollowersForProject
 # --data shape: {followers: string}
-export def "projects-remove-followers removeFollowersForProject" [
+export def "projects-remove-followers delete-followers-for" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2162,8 +2162,8 @@ export def "projects-remove-followers removeFollowersForProject" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/removeFollowers" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/removeFollowers") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2175,7 +2175,7 @@ export def "projects-remove-followers removeFollowersForProject" [
 # POST /projects/{project_gid}/removeMembers
 # operationId: removeMembersForProject
 # --data shape: {members: string}
-export def "projects-remove-members removeMembersForProject" [
+export def "projects-remove-members delete-members-for" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2193,8 +2193,8 @@ export def "projects-remove-members removeMembersForProject" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/removeMembers" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/removeMembers") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2224,8 +2224,8 @@ export def "projects-save-as-template projectSaveAsTemplate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/saveAsTemplate" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/saveAsTemplate") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2236,7 +2236,7 @@ export def "projects-save-as-template projectSaveAsTemplate" [
 #
 # GET /projects/{project_gid}/sections
 # operationId: getSectionsForProject
-export def "projects-sections get" [
+export def "projects-sections get-sections-for" [
   project_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2252,7 +2252,7 @@ export def "projects-sections get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/sections" $qp)
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/sections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2263,7 +2263,7 @@ export def "projects-sections get" [
 # POST /projects/{project_gid}/sections
 # operationId: createSectionForProject
 # --data shape: {insert_after?: string, insert_before?: string, name: string}
-export def "projects-sections createSectionForProject" [
+export def "projects-sections create-section-for" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2281,8 +2281,8 @@ export def "projects-sections createSectionForProject" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/sections" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/sections") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2294,7 +2294,7 @@ export def "projects-sections createSectionForProject" [
 # POST /projects/{project_gid}/sections/insert
 # operationId: insertSectionForProject
 # --data shape: {after_section?: string, before_section?: string, project: string, section: string}
-export def "projects-sections-insert insertSectionForProject" [
+export def "projects-sections-insert create-section-for" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2312,8 +2312,8 @@ export def "projects-sections-insert insertSectionForProject" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/sections/insert" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/sections/insert") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2324,7 +2324,7 @@ export def "projects-sections-insert insertSectionForProject" [
 #
 # GET /projects/{project_gid}/task_counts
 # operationId: getTaskCountsForProject
-export def "projects-task-counts get" [
+export def "projects-task-counts get-task-counts-for" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2342,7 +2342,7 @@ export def "projects-task-counts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/task_counts" $qp)
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/task_counts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2352,7 +2352,7 @@ export def "projects-task-counts get" [
 #
 # GET /projects/{project_gid}/tasks
 # operationId: getTasksForProject
-export def "projects-tasks get" [
+export def "projects-tasks get-tasks-for" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2371,7 +2371,7 @@ export def "projects-tasks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "completed_since" $completed_since "scalar") (serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/tasks" $qp)
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2397,7 +2397,7 @@ export def "sections delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sections/($section_gid)" $qp)
+  let full_url = (build-url $base ({section_gid: $section_gid} | format pattern "/sections/{section_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2423,7 +2423,7 @@ export def "sections get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sections/($section_gid)" $qp)
+  let full_url = (build-url $base ({section_gid: $section_gid} | format pattern "/sections/{section_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2434,7 +2434,7 @@ export def "sections get" [
 # PUT /sections/{section_gid}
 # operationId: updateSection
 # --data shape: {insert_after?: string, insert_before?: string, name: string}
-export def "sections updateSection" [
+export def "sections update" [
   section_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2452,8 +2452,8 @@ export def "sections updateSection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sections/($section_gid)" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({section_gid: $section_gid} | format pattern "/sections/{section_gid}") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2465,7 +2465,7 @@ export def "sections updateSection" [
 # POST /sections/{section_gid}/addTask
 # operationId: addTaskForSection
 # --data shape: {insert_after?: string, insert_before?: string, task: string}
-export def "sections-add-task addTaskForSection" [
+export def "sections-add-task create-task-for" [
   section_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2483,8 +2483,8 @@ export def "sections-add-task addTaskForSection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sections/($section_gid)/addTask" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({section_gid: $section_gid} | format pattern "/sections/{section_gid}/addTask") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2495,7 +2495,7 @@ export def "sections-add-task addTaskForSection" [
 #
 # GET /sections/{section_gid}/tasks
 # operationId: getTasksForSection
-export def "sections-tasks get" [
+export def "sections-tasks get-tasks-for" [
   section_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2513,7 +2513,7 @@ export def "sections-tasks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sections/($section_gid)/tasks" $qp)
+  let full_url = (build-url $base ({section_gid: $section_gid} | format pattern "/sections/{section_gid}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2523,7 +2523,7 @@ export def "sections-tasks get" [
 #
 # GET /status_updates
 # operationId: getStatusesForObject
-export def "status-updates list" [
+export def "status-updates get-statuses-for-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2552,7 +2552,7 @@ export def "status-updates list" [
 #
 # POST /status_updates
 # operationId: createStatusForObject
-export def "status-updates createStatusForObject" [
+export def "status-updates create-status-for-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2572,7 +2572,7 @@ export def "status-updates createStatusForObject" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/status_updates" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2599,7 +2599,7 @@ export def "status-updates delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/status_updates/($status_gid)" $qp)
+  let full_url = (build-url $base ({status_gid: $status_gid} | format pattern "/status_updates/{status_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2625,7 +2625,7 @@ export def "status-updates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/status_updates/($status_gid)" $qp)
+  let full_url = (build-url $base ({status_gid: $status_gid} | format pattern "/status_updates/{status_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2635,7 +2635,7 @@ export def "status-updates get" [
 #
 # DELETE /stories/{story_gid}
 # operationId: deleteStory
-export def "stories delete" [
+export def "stories delete-story" [
   story_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2651,7 +2651,7 @@ export def "stories delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/stories/($story_gid)" $qp)
+  let full_url = (build-url $base ({story_gid: $story_gid} | format pattern "/stories/{story_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2661,7 +2661,7 @@ export def "stories delete" [
 #
 # GET /stories/{story_gid}
 # operationId: getStory
-export def "stories get" [
+export def "stories get-story" [
   story_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2677,7 +2677,7 @@ export def "stories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/stories/($story_gid)" $qp)
+  let full_url = (build-url $base ({story_gid: $story_gid} | format pattern "/stories/{story_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2687,7 +2687,7 @@ export def "stories get" [
 #
 # PUT /stories/{story_gid}
 # operationId: updateStory
-export def "stories updateStory" [
+export def "stories update-story" [
   story_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2705,8 +2705,8 @@ export def "stories updateStory" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/stories/($story_gid)" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({story_gid: $story_gid} | format pattern "/stories/{story_gid}") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2743,7 +2743,7 @@ export def "tags list" [
 #
 # POST /tags
 # operationId: createTag
-export def "tags createTag" [
+export def "tags create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2761,7 +2761,7 @@ export def "tags createTag" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/tags" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2790,7 +2790,7 @@ export def "tags delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($tag_gid)" $qp)
+  let full_url = (build-url $base ({tag_gid: $tag_gid} | format pattern "/tags/{tag_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2818,7 +2818,7 @@ export def "tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($tag_gid)" $qp)
+  let full_url = (build-url $base ({tag_gid: $tag_gid} | format pattern "/tags/{tag_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2828,7 +2828,7 @@ export def "tags get" [
 #
 # PUT /tags/{tag_gid}
 # operationId: updateTag
-export def "tags updateTag" [
+export def "tags update" [
   tag_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2846,7 +2846,7 @@ export def "tags updateTag" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($tag_gid)" $qp)
+  let full_url = (build-url $base ({tag_gid: $tag_gid} | format pattern "/tags/{tag_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2856,7 +2856,7 @@ export def "tags updateTag" [
 #
 # GET /tags/{tag_gid}/tasks
 # operationId: getTasksForTag
-export def "tags-tasks get" [
+export def "tags-tasks get-tasks-for" [
   tag_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2874,7 +2874,7 @@ export def "tags-tasks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($tag_gid)/tasks" $qp)
+  let full_url = (build-url $base ({tag_gid: $tag_gid} | format pattern "/tags/{tag_gid}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2915,7 +2915,7 @@ export def "tasks list" [
 #
 # POST /tasks
 # operationId: createTask
-export def "tasks createTask" [
+export def "tasks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2933,7 +2933,7 @@ export def "tasks createTask" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/tasks" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2960,7 +2960,7 @@ export def "tasks delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)" $qp)
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2986,7 +2986,7 @@ export def "tasks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)" $qp)
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2996,7 +2996,7 @@ export def "tasks get" [
 #
 # PUT /tasks/{task_gid}
 # operationId: updateTask
-export def "tasks updateTask" [
+export def "tasks update" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3014,8 +3014,8 @@ export def "tasks updateTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3027,7 +3027,7 @@ export def "tasks updateTask" [
 # POST /tasks/{task_gid}/addDependencies
 # operationId: addDependenciesForTask
 # --data shape: {dependencies?: list}
-export def "tasks-add-dependencies addDependenciesForTask" [
+export def "tasks-add-dependencies create-dependencies-for" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3045,8 +3045,8 @@ export def "tasks-add-dependencies addDependenciesForTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/addDependencies" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/addDependencies") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3058,7 +3058,7 @@ export def "tasks-add-dependencies addDependenciesForTask" [
 # POST /tasks/{task_gid}/addDependents
 # operationId: addDependentsForTask
 # --data shape: {dependents?: list}
-export def "tasks-add-dependents addDependentsForTask" [
+export def "tasks-add-dependents create-dependents-for" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3076,8 +3076,8 @@ export def "tasks-add-dependents addDependentsForTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/addDependents" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/addDependents") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3089,7 +3089,7 @@ export def "tasks-add-dependents addDependentsForTask" [
 # POST /tasks/{task_gid}/addFollowers
 # operationId: addFollowersForTask
 # --data shape: {followers: list}
-export def "tasks-add-followers addFollowersForTask" [
+export def "tasks-add-followers create-followers-for" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3107,8 +3107,8 @@ export def "tasks-add-followers addFollowersForTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/addFollowers" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/addFollowers") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3120,7 +3120,7 @@ export def "tasks-add-followers addFollowersForTask" [
 # POST /tasks/{task_gid}/addProject
 # operationId: addProjectForTask
 # --data shape: {insert_after?: string, insert_before?: string, project: string, section?: string}
-export def "tasks-add-project addProjectForTask" [
+export def "tasks-add-project create-project-for" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3138,8 +3138,8 @@ export def "tasks-add-project addProjectForTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/addProject" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/addProject") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3151,7 +3151,7 @@ export def "tasks-add-project addProjectForTask" [
 # POST /tasks/{task_gid}/addTag
 # operationId: addTagForTask
 # --data shape: {tag: string}
-export def "tasks-add-tag addTagForTask" [
+export def "tasks-add-tag create-tag-for" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3169,8 +3169,8 @@ export def "tasks-add-tag addTagForTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/addTag" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/addTag") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3181,7 +3181,7 @@ export def "tasks-add-tag addTagForTask" [
 #
 # GET /tasks/{task_gid}/dependencies
 # operationId: getDependenciesForTask
-export def "tasks-dependencies get" [
+export def "tasks-dependencies get-dependencies-for" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3199,7 +3199,7 @@ export def "tasks-dependencies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/dependencies" $qp)
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/dependencies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3209,7 +3209,7 @@ export def "tasks-dependencies get" [
 #
 # GET /tasks/{task_gid}/dependents
 # operationId: getDependentsForTask
-export def "tasks-dependents get" [
+export def "tasks-dependents get-dependents-for" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3227,7 +3227,7 @@ export def "tasks-dependents get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/dependents" $qp)
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/dependents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3256,8 +3256,8 @@ export def "tasks-duplicate duplicateTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/duplicate" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/duplicate") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3268,7 +3268,7 @@ export def "tasks-duplicate duplicateTask" [
 #
 # GET /tasks/{task_gid}/projects
 # operationId: getProjectsForTask
-export def "tasks-projects get" [
+export def "tasks-projects get-projects-for" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3286,7 +3286,7 @@ export def "tasks-projects get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/projects" $qp)
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3297,7 +3297,7 @@ export def "tasks-projects get" [
 # POST /tasks/{task_gid}/removeDependencies
 # operationId: removeDependenciesForTask
 # --data shape: {dependencies?: list}
-export def "tasks-remove-dependencies removeDependenciesForTask" [
+export def "tasks-remove-dependencies delete-dependencies-for" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3315,8 +3315,8 @@ export def "tasks-remove-dependencies removeDependenciesForTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/removeDependencies" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/removeDependencies") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3328,7 +3328,7 @@ export def "tasks-remove-dependencies removeDependenciesForTask" [
 # POST /tasks/{task_gid}/removeDependents
 # operationId: removeDependentsForTask
 # --data shape: {dependents?: list}
-export def "tasks-remove-dependents removeDependentsForTask" [
+export def "tasks-remove-dependents delete-dependents-for" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3346,8 +3346,8 @@ export def "tasks-remove-dependents removeDependentsForTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/removeDependents" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/removeDependents") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3359,7 +3359,7 @@ export def "tasks-remove-dependents removeDependentsForTask" [
 # POST /tasks/{task_gid}/removeFollowers
 # operationId: removeFollowerForTask
 # --data shape: {followers: list}
-export def "tasks-remove-followers removeFollowerForTask" [
+export def "tasks-remove-followers delete-follower-for" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3377,8 +3377,8 @@ export def "tasks-remove-followers removeFollowerForTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/removeFollowers" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/removeFollowers") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3390,7 +3390,7 @@ export def "tasks-remove-followers removeFollowerForTask" [
 # POST /tasks/{task_gid}/removeProject
 # operationId: removeProjectForTask
 # --data shape: {project: string}
-export def "tasks-remove-project removeProjectForTask" [
+export def "tasks-remove-project delete-project-for" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3408,8 +3408,8 @@ export def "tasks-remove-project removeProjectForTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/removeProject" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/removeProject") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3421,7 +3421,7 @@ export def "tasks-remove-project removeProjectForTask" [
 # POST /tasks/{task_gid}/removeTag
 # operationId: removeTagForTask
 # --data shape: {tag: string}
-export def "tasks-remove-tag removeTagForTask" [
+export def "tasks-remove-tag delete-tag-for" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3439,8 +3439,8 @@ export def "tasks-remove-tag removeTagForTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/removeTag" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/removeTag") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3470,8 +3470,8 @@ export def "tasks-set-parent setParentForTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/setParent" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/setParent") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3482,7 +3482,7 @@ export def "tasks-set-parent setParentForTask" [
 #
 # GET /tasks/{task_gid}/stories
 # operationId: getStoriesForTask
-export def "tasks-stories get" [
+export def "tasks-stories get-stories-for" [
   task_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3498,7 +3498,7 @@ export def "tasks-stories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/stories" $qp)
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/stories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3508,7 +3508,7 @@ export def "tasks-stories get" [
 #
 # POST /tasks/{task_gid}/stories
 # operationId: createStoryForTask
-export def "tasks-stories createStoryForTask" [
+export def "tasks-stories create-story-for" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3526,8 +3526,8 @@ export def "tasks-stories createStoryForTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/stories" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/stories") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3538,7 +3538,7 @@ export def "tasks-stories createStoryForTask" [
 #
 # GET /tasks/{task_gid}/subtasks
 # operationId: getSubtasksForTask
-export def "tasks-subtasks get" [
+export def "tasks-subtasks get-subtasks-for" [
   task_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3554,7 +3554,7 @@ export def "tasks-subtasks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/subtasks" $qp)
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/subtasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3564,7 +3564,7 @@ export def "tasks-subtasks get" [
 #
 # POST /tasks/{task_gid}/subtasks
 # operationId: createSubtaskForTask
-export def "tasks-subtasks createSubtaskForTask" [
+export def "tasks-subtasks create-subtask-for" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3582,8 +3582,8 @@ export def "tasks-subtasks createSubtaskForTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/subtasks" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/subtasks") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3594,7 +3594,7 @@ export def "tasks-subtasks createSubtaskForTask" [
 #
 # GET /tasks/{task_gid}/tags
 # operationId: getTagsForTask
-export def "tasks-tags get" [
+export def "tasks-tags get-tags-for" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3612,7 +3612,7 @@ export def "tasks-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tasks/($task_gid)/tags" $qp)
+  let full_url = (build-url $base ({task_gid: $task_gid} | format pattern "/tasks/{task_gid}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3668,7 +3668,7 @@ export def "team-memberships get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/team_memberships/($team_membership_gid)" $qp)
+  let full_url = (build-url $base ({team_membership_gid: $team_membership_gid} | format pattern "/team_memberships/{team_membership_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3678,7 +3678,7 @@ export def "team-memberships get" [
 #
 # POST /teams
 # operationId: createTeam
-export def "teams createTeam" [
+export def "teams create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3698,7 +3698,7 @@ export def "teams createTeam" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teams" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3709,7 +3709,7 @@ export def "teams createTeam" [
 #
 # PUT /teams
 # operationId: updateTeam
-export def "teams updateTeam" [
+export def "teams update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3729,7 +3729,7 @@ export def "teams updateTeam" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teams" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3758,7 +3758,7 @@ export def "teams get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/teams/($team_gid)" $qp)
+  let full_url = (build-url $base ({team_gid: $team_gid} | format pattern "/teams/{team_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3769,7 +3769,7 @@ export def "teams get" [
 # POST /teams/{team_gid}/addUser
 # operationId: addUserForTeam
 # --data shape: {user?: string}
-export def "teams-add-user addUserForTeam" [
+export def "teams-add-user create-user-for" [
   team_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3787,8 +3787,8 @@ export def "teams-add-user addUserForTeam" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/teams/($team_gid)/addUser" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({team_gid: $team_gid} | format pattern "/teams/{team_gid}/addUser") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3799,7 +3799,7 @@ export def "teams-add-user addUserForTeam" [
 #
 # GET /teams/{team_gid}/project_templates
 # operationId: getProjectTemplatesForTeam
-export def "teams-project-templates get" [
+export def "teams-project-templates get-project-templates-for" [
   team_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3815,7 +3815,7 @@ export def "teams-project-templates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/teams/($team_gid)/project_templates" $qp)
+  let full_url = (build-url $base ({team_gid: $team_gid} | format pattern "/teams/{team_gid}/project_templates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3825,7 +3825,7 @@ export def "teams-project-templates get" [
 #
 # GET /teams/{team_gid}/projects
 # operationId: getProjectsForTeam
-export def "teams-projects get" [
+export def "teams-projects get-projects-for" [
   team_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3842,7 +3842,7 @@ export def "teams-projects get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "archived" $archived "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/teams/($team_gid)/projects" $qp)
+  let full_url = (build-url $base ({team_gid: $team_gid} | format pattern "/teams/{team_gid}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3852,7 +3852,7 @@ export def "teams-projects get" [
 #
 # POST /teams/{team_gid}/projects
 # operationId: createProjectForTeam
-export def "teams-projects createProjectForTeam" [
+export def "teams-projects create-project-for" [
   team_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3870,8 +3870,8 @@ export def "teams-projects createProjectForTeam" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/teams/($team_gid)/projects" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({team_gid: $team_gid} | format pattern "/teams/{team_gid}/projects") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3883,7 +3883,7 @@ export def "teams-projects createProjectForTeam" [
 # POST /teams/{team_gid}/removeUser
 # operationId: removeUserForTeam
 # --data shape: {user?: string}
-export def "teams-remove-user removeUserForTeam" [
+export def "teams-remove-user delete-user-for" [
   team_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3901,8 +3901,8 @@ export def "teams-remove-user removeUserForTeam" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/teams/($team_gid)/removeUser" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({team_gid: $team_gid} | format pattern "/teams/{team_gid}/removeUser") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3913,7 +3913,7 @@ export def "teams-remove-user removeUserForTeam" [
 #
 # GET /teams/{team_gid}/team_memberships
 # operationId: getTeamMembershipsForTeam
-export def "teams-team-memberships get" [
+export def "teams-team-memberships get-team-memberships-for" [
   team_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3931,7 +3931,7 @@ export def "teams-team-memberships get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/teams/($team_gid)/team_memberships" $qp)
+  let full_url = (build-url $base ({team_gid: $team_gid} | format pattern "/teams/{team_gid}/team_memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3941,7 +3941,7 @@ export def "teams-team-memberships get" [
 #
 # GET /teams/{team_gid}/users
 # operationId: getUsersForTeam
-export def "teams-users get" [
+export def "teams-users get-users-for" [
   team_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3958,7 +3958,7 @@ export def "teams-users get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/teams/($team_gid)/users" $qp)
+  let full_url = (build-url $base ({team_gid: $team_gid} | format pattern "/teams/{team_gid}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4014,7 +4014,7 @@ export def "time-periods get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/time_periods/($time_period_gid)" $qp)
+  let full_url = (build-url $base ({time_period_gid: $time_period_gid} | format pattern "/time_periods/{time_period_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4040,7 +4040,7 @@ export def "user-task-lists get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/user_task_lists/($user_task_list_gid)" $qp)
+  let full_url = (build-url $base ({user_task_list_gid: $user_task_list_gid} | format pattern "/user_task_lists/{user_task_list_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4050,7 +4050,7 @@ export def "user-task-lists get" [
 #
 # GET /user_task_lists/{user_task_list_gid}/tasks
 # operationId: getTasksForUserTaskList
-export def "user-task-lists-tasks get" [
+export def "user-task-lists-tasks get-tasks-for" [
   user_task_list_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4069,7 +4069,7 @@ export def "user-task-lists-tasks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "completed_since" $completed_since "scalar") (serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/user_task_lists/($user_task_list_gid)/tasks" $qp)
+  let full_url = (build-url $base ({user_task_list_gid: $user_task_list_gid} | format pattern "/user_task_lists/{user_task_list_gid}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4124,7 +4124,7 @@ export def "users get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_gid)" $qp)
+  let full_url = (build-url $base ({user_gid: $user_gid} | format pattern "/users/{user_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4134,7 +4134,7 @@ export def "users get" [
 #
 # GET /users/{user_gid}/favorites
 # operationId: getFavoritesForUser
-export def "users-favorites get" [
+export def "users-favorites get-favorites-for" [
   user_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4152,7 +4152,7 @@ export def "users-favorites get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "resource_type" $resource_type "scalar") (serialize-qp "workspace" $workspace "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_gid)/favorites" $qp)
+  let full_url = (build-url $base ({user_gid: $user_gid} | format pattern "/users/{user_gid}/favorites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4162,7 +4162,7 @@ export def "users-favorites get" [
 #
 # GET /users/{user_gid}/team_memberships
 # operationId: getTeamMembershipsForUser
-export def "users-team-memberships get" [
+export def "users-team-memberships get-team-memberships-for" [
   user_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4181,7 +4181,7 @@ export def "users-team-memberships get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "workspace" $workspace "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_gid)/team_memberships" $qp)
+  let full_url = (build-url $base ({user_gid: $user_gid} | format pattern "/users/{user_gid}/team_memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4191,7 +4191,7 @@ export def "users-team-memberships get" [
 #
 # GET /users/{user_gid}/teams
 # operationId: getTeamsForUser
-export def "users-teams get" [
+export def "users-teams get-teams-for" [
   user_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4210,7 +4210,7 @@ export def "users-teams get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "organization" $organization "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_gid)/teams" $qp)
+  let full_url = (build-url $base ({user_gid: $user_gid} | format pattern "/users/{user_gid}/teams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4220,7 +4220,7 @@ export def "users-teams get" [
 #
 # GET /users/{user_gid}/user_task_list
 # operationId: getUserTaskListForUser
-export def "users-user-task-list get" [
+export def "users-user-task-list get-user-task-list-for" [
   user_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4237,7 +4237,7 @@ export def "users-user-task-list get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "workspace" $workspace "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_gid)/user_task_list" $qp)
+  let full_url = (build-url $base ({user_gid: $user_gid} | format pattern "/users/{user_gid}/user_task_list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4247,7 +4247,7 @@ export def "users-user-task-list get" [
 #
 # GET /users/{user_gid}/workspace_memberships
 # operationId: getWorkspaceMembershipsForUser
-export def "users-workspace-memberships get" [
+export def "users-workspace-memberships get-workspace-memberships-for" [
   user_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4265,7 +4265,7 @@ export def "users-workspace-memberships get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($user_gid)/workspace_memberships" $qp)
+  let full_url = (build-url $base ({user_gid: $user_gid} | format pattern "/users/{user_gid}/workspace_memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4303,7 +4303,7 @@ export def "webhooks list" [
 # POST /webhooks
 # operationId: createWebhook
 # --data shape: {filters?: list, resource: string, target: string}
-export def "webhooks createWebhook" [
+export def "webhooks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4321,7 +4321,7 @@ export def "webhooks createWebhook" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/webhooks" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4348,7 +4348,7 @@ export def "webhooks delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/webhooks/($webhook_gid)" $qp)
+  let full_url = (build-url $base ({webhook_gid: $webhook_gid} | format pattern "/webhooks/{webhook_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4374,7 +4374,7 @@ export def "webhooks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/webhooks/($webhook_gid)" $qp)
+  let full_url = (build-url $base ({webhook_gid: $webhook_gid} | format pattern "/webhooks/{webhook_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4385,7 +4385,7 @@ export def "webhooks get" [
 # PUT /webhooks/{webhook_gid}
 # operationId: updateWebhook
 # --data shape: {filters?: list}
-export def "webhooks updateWebhook" [
+export def "webhooks update" [
   webhook_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4403,8 +4403,8 @@ export def "webhooks updateWebhook" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/webhooks/($webhook_gid)" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({webhook_gid: $webhook_gid} | format pattern "/webhooks/{webhook_gid}") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4431,7 +4431,7 @@ export def "workspace-memberships get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspace_memberships/($workspace_membership_gid)" $qp)
+  let full_url = (build-url $base ({workspace_membership_gid: $workspace_membership_gid} | format pattern "/workspace_memberships/{workspace_membership_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4484,7 +4484,7 @@ export def "workspaces get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)" $qp)
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4494,7 +4494,7 @@ export def "workspaces get" [
 #
 # PUT /workspaces/{workspace_gid}
 # operationId: updateWorkspace
-export def "workspaces updateWorkspace" [
+export def "workspaces update" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4512,8 +4512,8 @@ export def "workspaces updateWorkspace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4525,7 +4525,7 @@ export def "workspaces updateWorkspace" [
 # POST /workspaces/{workspace_gid}/addUser
 # operationId: addUserForWorkspace
 # --data shape: {user?: string}
-export def "workspaces-add-user addUserForWorkspace" [
+export def "workspaces-add-user create-user-for" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4543,8 +4543,8 @@ export def "workspaces-add-user addUserForWorkspace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)/addUser" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}/addUser") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4577,7 +4577,7 @@ export def "workspaces-audit-log-events get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "event_type" $event_type "scalar") (serialize-qp "actor_type" $actor_type "scalar") (serialize-qp "actor_gid" $actor_gid "scalar") (serialize-qp "resource_gid" $resource_gid "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)/audit_log_events" $qp)
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}/audit_log_events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4587,7 +4587,7 @@ export def "workspaces-audit-log-events get" [
 #
 # GET /workspaces/{workspace_gid}/custom_fields
 # operationId: getCustomFieldsForWorkspace
-export def "workspaces-custom-fields get" [
+export def "workspaces-custom-fields get-custom-fields-for" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4605,7 +4605,7 @@ export def "workspaces-custom-fields get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)/custom_fields" $qp)
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}/custom_fields") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4615,7 +4615,7 @@ export def "workspaces-custom-fields get" [
 #
 # GET /workspaces/{workspace_gid}/projects
 # operationId: getProjectsForWorkspace
-export def "workspaces-projects get" [
+export def "workspaces-projects get-projects-for" [
   workspace_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4632,7 +4632,7 @@ export def "workspaces-projects get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "archived" $archived "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)/projects" $qp)
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4642,7 +4642,7 @@ export def "workspaces-projects get" [
 #
 # POST /workspaces/{workspace_gid}/projects
 # operationId: createProjectForWorkspace
-export def "workspaces-projects createProjectForWorkspace" [
+export def "workspaces-projects create-project-for" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4660,8 +4660,8 @@ export def "workspaces-projects createProjectForWorkspace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)/projects" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}/projects") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4673,7 +4673,7 @@ export def "workspaces-projects createProjectForWorkspace" [
 # POST /workspaces/{workspace_gid}/removeUser
 # operationId: removeUserForWorkspace
 # --data shape: {user?: string}
-export def "workspaces-remove-user removeUserForWorkspace" [
+export def "workspaces-remove-user delete-user-for" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4691,8 +4691,8 @@ export def "workspaces-remove-user removeUserForWorkspace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)/removeUser" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}/removeUser") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4703,7 +4703,7 @@ export def "workspaces-remove-user removeUserForWorkspace" [
 #
 # GET /workspaces/{workspace_gid}/tags
 # operationId: getTagsForWorkspace
-export def "workspaces-tags get" [
+export def "workspaces-tags get-tags-for" [
   workspace_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4719,7 +4719,7 @@ export def "workspaces-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)/tags" $qp)
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4729,7 +4729,7 @@ export def "workspaces-tags get" [
 #
 # POST /workspaces/{workspace_gid}/tags
 # operationId: createTagForWorkspace
-export def "workspaces-tags createTagForWorkspace" [
+export def "workspaces-tags create-tag-for" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4747,8 +4747,8 @@ export def "workspaces-tags createTagForWorkspace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)/tags" $qp)
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}/tags") $qp)
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4759,7 +4759,7 @@ export def "workspaces-tags createTagForWorkspace" [
 #
 # GET /workspaces/{workspace_gid}/tasks/search
 # operationId: searchTasksForWorkspace
-export def "workspaces-tasks-search searchTasksForWorkspace" [
+export def "workspaces-tasks-search list-tasks-for" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4773,49 +4773,49 @@ export def "workspaces-tasks-search searchTasksForWorkspace" [
   --opt-fields: list # Defines fields to return. Some requests return *compact* representations of objects in order to conserve resources and complete the request more efficiently. Other times requests return more information than you may need. This option allows you to list the exact set of fields that the API should be sure to return for the objects. The field names should be provided as paths, described below. The id of included objects will always be returned, regardless of the field options. (e.g. [followers, assignee])
   --text: string # Performs full-text search on both task name and description (e.g. Bug)
   --resource-subtype: string@resource-subtype-completer-1 # Filters results by the task's resource_subtype (default: milestone)
-  --assigneeany: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
-  --assigneenot: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
-  --portfoliosany: string # Comma-separated list of portfolio IDs (e.g. 12345,23456,34567)
-  --projectsany: string # Comma-separated list of project IDs (e.g. 12345,23456,34567)
-  --projectsnot: string # Comma-separated list of project IDs (e.g. 12345,23456,34567)
-  --projectsall: string # Comma-separated list of project IDs (e.g. 12345,23456,34567)
-  --sectionsany: string # Comma-separated list of section or column IDs (e.g. 12345,23456,34567)
-  --sectionsnot: string # Comma-separated list of section or column IDs (e.g. 12345,23456,34567)
-  --sectionsall: string # Comma-separated list of section or column IDs (e.g. 12345,23456,34567)
-  --tagsany: string # Comma-separated list of tag IDs (e.g. 12345,23456,34567)
-  --tagsnot: string # Comma-separated list of tag IDs (e.g. 12345,23456,34567)
-  --tagsall: string # Comma-separated list of tag IDs (e.g. 12345,23456,34567)
-  --teamsany: string # Comma-separated list of team IDs (e.g. 12345,23456,34567)
-  --followersnot: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
-  --created-byany: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
-  --created-bynot: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
-  --assigned-byany: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
-  --assigned-bynot: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
-  --liked-bynot: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
-  --commented-on-bynot: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
-  --due-onbefore: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
-  --due-onafter: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
+  --assignee-any: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
+  --assignee-not: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
+  --portfolios-any: string # Comma-separated list of portfolio IDs (e.g. 12345,23456,34567)
+  --projects-any: string # Comma-separated list of project IDs (e.g. 12345,23456,34567)
+  --projects-not: string # Comma-separated list of project IDs (e.g. 12345,23456,34567)
+  --projects-all: string # Comma-separated list of project IDs (e.g. 12345,23456,34567)
+  --sections-any: string # Comma-separated list of section or column IDs (e.g. 12345,23456,34567)
+  --sections-not: string # Comma-separated list of section or column IDs (e.g. 12345,23456,34567)
+  --sections-all: string # Comma-separated list of section or column IDs (e.g. 12345,23456,34567)
+  --tags-any: string # Comma-separated list of tag IDs (e.g. 12345,23456,34567)
+  --tags-not: string # Comma-separated list of tag IDs (e.g. 12345,23456,34567)
+  --tags-all: string # Comma-separated list of tag IDs (e.g. 12345,23456,34567)
+  --teams-any: string # Comma-separated list of team IDs (e.g. 12345,23456,34567)
+  --followers-not: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
+  --created-by-any: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
+  --created-by-not: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
+  --assigned-by-any: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
+  --assigned-by-not: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
+  --liked-by-not: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
+  --commented-on-by-not: string # Comma-separated list of user identifiers (e.g. 12345,23456,34567)
+  --due-on-before: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
+  --due-on-after: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
   --due-on: string # ISO 8601 date string or `null` (nullable, format: date, e.g. 2019-09-15)
-  --due-atbefore: string # ISO 8601 datetime string (format: date-time, e.g. 2019-04-15T01:01:46.055Z)
-  --due-atafter: string # ISO 8601 datetime string (format: date-time, e.g. 2019-04-15T01:01:46.055Z)
-  --start-onbefore: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
-  --start-onafter: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
+  --due-at-before: string # ISO 8601 datetime string (format: date-time, e.g. 2019-04-15T01:01:46.055Z)
+  --due-at-after: string # ISO 8601 datetime string (format: date-time, e.g. 2019-04-15T01:01:46.055Z)
+  --start-on-before: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
+  --start-on-after: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
   --start-on: string # ISO 8601 date string or `null` (nullable, format: date, e.g. 2019-09-15)
-  --created-onbefore: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
-  --created-onafter: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
+  --created-on-before: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
+  --created-on-after: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
   --created-on: string # ISO 8601 date string or `null` (nullable, format: date, e.g. 2019-09-15)
-  --created-atbefore: string # ISO 8601 datetime string (format: date-time, e.g. 2019-04-15T01:01:46.055Z)
-  --created-atafter: string # ISO 8601 datetime string (format: date-time, e.g. 2019-04-15T01:01:46.055Z)
-  --completed-onbefore: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
-  --completed-onafter: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
+  --created-at-before: string # ISO 8601 datetime string (format: date-time, e.g. 2019-04-15T01:01:46.055Z)
+  --created-at-after: string # ISO 8601 datetime string (format: date-time, e.g. 2019-04-15T01:01:46.055Z)
+  --completed-on-before: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
+  --completed-on-after: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
   --completed-on: string # ISO 8601 date string or `null` (nullable, format: date, e.g. 2019-09-15)
-  --completed-atbefore: string # ISO 8601 datetime string (format: date-time, e.g. 2019-04-15T01:01:46.055Z)
-  --completed-atafter: string # ISO 8601 datetime string (format: date-time, e.g. 2019-04-15T01:01:46.055Z)
-  --modified-onbefore: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
-  --modified-onafter: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
+  --completed-at-before: string # ISO 8601 datetime string (format: date-time, e.g. 2019-04-15T01:01:46.055Z)
+  --completed-at-after: string # ISO 8601 datetime string (format: date-time, e.g. 2019-04-15T01:01:46.055Z)
+  --modified-on-before: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
+  --modified-on-after: string # ISO 8601 date string (format: date, e.g. 2019-09-15)
   --modified-on: string # ISO 8601 date string or `null` (nullable, format: date, e.g. 2019-09-15)
-  --modified-atbefore: string # ISO 8601 datetime string (format: date-time, e.g. 2019-04-15T01:01:46.055Z)
-  --modified-atafter: string # ISO 8601 datetime string (format: date-time, e.g. 2019-04-15T01:01:46.055Z)
+  --modified-at-before: string # ISO 8601 datetime string (format: date-time, e.g. 2019-04-15T01:01:46.055Z)
+  --modified-at-after: string # ISO 8601 datetime string (format: date-time, e.g. 2019-04-15T01:01:46.055Z)
   --is-blocking: oneof<nothing, bool> # Filter to incomplete tasks with dependents (e.g. false)
   --is-blocked: oneof<nothing, bool> # Filter to tasks with incomplete dependencies (e.g. false)
   --has-attachment: oneof<nothing, bool> # Filter to tasks with attachments (e.g. false)
@@ -4826,8 +4826,8 @@ export def "workspaces-tasks-search searchTasksForWorkspace" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "text" $text "scalar") (serialize-qp "resource_subtype" $resource_subtype "scalar") (serialize-qp "assignee.any" $assigneeany "scalar") (serialize-qp "assignee.not" $assigneenot "scalar") (serialize-qp "portfolios.any" $portfoliosany "scalar") (serialize-qp "projects.any" $projectsany "scalar") (serialize-qp "projects.not" $projectsnot "scalar") (serialize-qp "projects.all" $projectsall "scalar") (serialize-qp "sections.any" $sectionsany "scalar") (serialize-qp "sections.not" $sectionsnot "scalar") (serialize-qp "sections.all" $sectionsall "scalar") (serialize-qp "tags.any" $tagsany "scalar") (serialize-qp "tags.not" $tagsnot "scalar") (serialize-qp "tags.all" $tagsall "scalar") (serialize-qp "teams.any" $teamsany "scalar") (serialize-qp "followers.not" $followersnot "scalar") (serialize-qp "created_by.any" $created_byany "scalar") (serialize-qp "created_by.not" $created_bynot "scalar") (serialize-qp "assigned_by.any" $assigned_byany "scalar") (serialize-qp "assigned_by.not" $assigned_bynot "scalar") (serialize-qp "liked_by.not" $liked_bynot "scalar") (serialize-qp "commented_on_by.not" $commented_on_bynot "scalar") (serialize-qp "due_on.before" $due_onbefore "scalar") (serialize-qp "due_on.after" $due_onafter "scalar") (serialize-qp "due_on" $due_on "scalar") (serialize-qp "due_at.before" $due_atbefore "scalar") (serialize-qp "due_at.after" $due_atafter "scalar") (serialize-qp "start_on.before" $start_onbefore "scalar") (serialize-qp "start_on.after" $start_onafter "scalar") (serialize-qp "start_on" $start_on "scalar") (serialize-qp "created_on.before" $created_onbefore "scalar") (serialize-qp "created_on.after" $created_onafter "scalar") (serialize-qp "created_on" $created_on "scalar") (serialize-qp "created_at.before" $created_atbefore "scalar") (serialize-qp "created_at.after" $created_atafter "scalar") (serialize-qp "completed_on.before" $completed_onbefore "scalar") (serialize-qp "completed_on.after" $completed_onafter "scalar") (serialize-qp "completed_on" $completed_on "scalar") (serialize-qp "completed_at.before" $completed_atbefore "scalar") (serialize-qp "completed_at.after" $completed_atafter "scalar") (serialize-qp "modified_on.before" $modified_onbefore "scalar") (serialize-qp "modified_on.after" $modified_onafter "scalar") (serialize-qp "modified_on" $modified_on "scalar") (serialize-qp "modified_at.before" $modified_atbefore "scalar") (serialize-qp "modified_at.after" $modified_atafter "scalar") (serialize-qp "is_blocking" $is_blocking "scalar") (serialize-qp "is_blocked" $is_blocked "scalar") (serialize-qp "has_attachment" $has_attachment "scalar") (serialize-qp "completed" $completed "scalar") (serialize-qp "is_subtask" $is_subtask "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_ascending" $sort_ascending "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)/tasks/search" $qp)
+  let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "text" $text "scalar") (serialize-qp "resource_subtype" $resource_subtype "scalar") (serialize-qp "assignee.any" $assignee_any "scalar") (serialize-qp "assignee.not" $assignee_not "scalar") (serialize-qp "portfolios.any" $portfolios_any "scalar") (serialize-qp "projects.any" $projects_any "scalar") (serialize-qp "projects.not" $projects_not "scalar") (serialize-qp "projects.all" $projects_all "scalar") (serialize-qp "sections.any" $sections_any "scalar") (serialize-qp "sections.not" $sections_not "scalar") (serialize-qp "sections.all" $sections_all "scalar") (serialize-qp "tags.any" $tags_any "scalar") (serialize-qp "tags.not" $tags_not "scalar") (serialize-qp "tags.all" $tags_all "scalar") (serialize-qp "teams.any" $teams_any "scalar") (serialize-qp "followers.not" $followers_not "scalar") (serialize-qp "created_by.any" $created_by_any "scalar") (serialize-qp "created_by.not" $created_by_not "scalar") (serialize-qp "assigned_by.any" $assigned_by_any "scalar") (serialize-qp "assigned_by.not" $assigned_by_not "scalar") (serialize-qp "liked_by.not" $liked_by_not "scalar") (serialize-qp "commented_on_by.not" $commented_on_by_not "scalar") (serialize-qp "due_on.before" $due_on_before "scalar") (serialize-qp "due_on.after" $due_on_after "scalar") (serialize-qp "due_on" $due_on "scalar") (serialize-qp "due_at.before" $due_at_before "scalar") (serialize-qp "due_at.after" $due_at_after "scalar") (serialize-qp "start_on.before" $start_on_before "scalar") (serialize-qp "start_on.after" $start_on_after "scalar") (serialize-qp "start_on" $start_on "scalar") (serialize-qp "created_on.before" $created_on_before "scalar") (serialize-qp "created_on.after" $created_on_after "scalar") (serialize-qp "created_on" $created_on "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "completed_on.before" $completed_on_before "scalar") (serialize-qp "completed_on.after" $completed_on_after "scalar") (serialize-qp "completed_on" $completed_on "scalar") (serialize-qp "completed_at.before" $completed_at_before "scalar") (serialize-qp "completed_at.after" $completed_at_after "scalar") (serialize-qp "modified_on.before" $modified_on_before "scalar") (serialize-qp "modified_on.after" $modified_on_after "scalar") (serialize-qp "modified_on" $modified_on "scalar") (serialize-qp "modified_at.before" $modified_at_before "scalar") (serialize-qp "modified_at.after" $modified_at_after "scalar") (serialize-qp "is_blocking" $is_blocking "scalar") (serialize-qp "is_blocked" $is_blocked "scalar") (serialize-qp "has_attachment" $has_attachment "scalar") (serialize-qp "completed" $completed "scalar") (serialize-qp "is_subtask" $is_subtask "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_ascending" $sort_ascending "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}/tasks/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4837,7 +4837,7 @@ export def "workspaces-tasks-search searchTasksForWorkspace" [
 #
 # GET /workspaces/{workspace_gid}/teams
 # operationId: getTeamsForWorkspace
-export def "workspaces-teams get" [
+export def "workspaces-teams get-teams-for" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4855,7 +4855,7 @@ export def "workspaces-teams get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)/teams" $qp)
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}/teams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4885,7 +4885,7 @@ export def "workspaces-typeahead typeaheadForWorkspace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resource_type" $resource_type "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)/typeahead" $qp)
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}/typeahead") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4895,7 +4895,7 @@ export def "workspaces-typeahead typeaheadForWorkspace" [
 #
 # GET /workspaces/{workspace_gid}/users
 # operationId: getUsersForWorkspace
-export def "workspaces-users get" [
+export def "workspaces-users get-users-for" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4912,7 +4912,7 @@ export def "workspaces-users get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)/users" $qp)
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4922,7 +4922,7 @@ export def "workspaces-users get" [
 #
 # GET /workspaces/{workspace_gid}/workspace_memberships
 # operationId: getWorkspaceMembershipsForWorkspace
-export def "workspaces-workspace-memberships get" [
+export def "workspaces-workspace-memberships get-workspace-memberships-for" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4941,7 +4941,7 @@ export def "workspaces-workspace-memberships get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)/workspace_memberships" $qp)
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}/workspace_memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

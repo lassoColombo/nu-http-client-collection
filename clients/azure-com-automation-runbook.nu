@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks ListByAutomationAccount" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks list-by" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,10 +94,10 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks
 # Docs: http://aka.ms/azureautomationsdk/runbookoperations
 # operationId: Runbook_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks ListByAutomationAccount" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks list-by" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,7 +111,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,11 +122,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}
 # Docs: http://aka.ms/azureautomationsdk/runbookoperations
 # operationId: Runbook_Delete
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks delete" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +140,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -151,11 +151,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}
 # Docs: http://aka.ms/azureautomationsdk/runbookoperations
 # operationId: Runbook_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks get" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -181,11 +181,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/runbookoperations
 # operationId: Runbook_Update
 # --properties shape: {description?: string, logActivityTrace?: int, logProgress?: bool, logVerbose?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks update" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,8 +204,8 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)" $qp)
-  let body = {location: $location, name: $name, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}") $qp)
+  let body = {"location": $location, "name": $name, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -218,11 +218,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/runbookoperations
 # operationId: Runbook_CreateOrUpdate
 # --properties shape: {description?: string, draft?: any, logActivityTrace?: int, logProgress?: bool, logVerbose?: bool, publishContentLink?: any, runbookType: "Script"|"Graph"|"PowerShellWorkflow"|"PowerShell"|"GraphPowerShellWorkflow"|"GraphPowerShell"}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,8 +241,8 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)" $qp)
-  let body = {location: $location, name: $name, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}") $qp)
+  let body = {"location": $location, "name": $name, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -254,11 +254,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/content
 # Docs: http://aka.ms/azureautomationsdk/runbookoperations
 # operationId: Runbook_GetContent
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-content GetContent" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-content get" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,7 +272,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)/content" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}/content") $qp)
   let accept_val = "text/powershell"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -283,11 +283,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft
 # Docs: http://aka.ms/azureautomationsdk/runbookdraftoperations
 # operationId: RunbookDraft_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft get" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)/draft" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}/draft") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -312,11 +312,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/content
 # Docs: http://aka.ms/azureautomationsdk/runbookdraftoperations
 # operationId: RunbookDraft_GetContent
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-content GetContent" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-content get" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,7 +330,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)/draft/content" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}/draft/content") $qp)
   let accept_val = "text/powershell"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -341,11 +341,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/content
 # Docs: http://aka.ms/azureautomationsdk/runbookdraftoperations
 # operationId: RunbookDraft_ReplaceContent
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-content ReplaceContent" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-content update" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,7 +361,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)/draft/content" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}/draft/content") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -373,11 +373,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/testJob
 # Docs: http://aka.ms/azureautomationsdk/testjoboperations
 # operationId: TestJob_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job get" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,7 +391,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)/draft/testJob" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}/draft/testJob") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -402,11 +402,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/testJob
 # Docs: http://aka.ms/azureautomationsdk/testjoboperations
 # operationId: TestJob_Create
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job create" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,14 +417,14 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --parameters: record # Gets or sets the parameters of the test job.
-  --runOn: string # Gets or sets the runOn which specifies the group name where the job is to be executed.
+  --run-on: string # Gets or sets the runOn which specifies the group name where the job is to be executed.
 ]: any -> record<creationTime: string, endTime: string, exception: string, lastModifiedTime: string, lastStatusModifiedTime: string, logActivityTrace: int, parameters: record, runOn: string, startTime: string, status: string, statusDetails: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)/draft/testJob" $qp)
-  let body = {parameters: $parameters, runOn: $runOn} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}/draft/testJob") $qp)
+  let body = {"parameters": $parameters, "runOn": $run_on} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -436,11 +436,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/testJob/resume
 # Docs: http://aka.ms/azureautomationsdk/testjoboperations
 # operationId: TestJob_Resume
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job-resume Resume" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job-resume post" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,7 +454,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)/draft/testJob/resume" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}/draft/testJob/resume") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -465,11 +465,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/testJob/stop
 # Docs: http://aka.ms/azureautomationsdk/testjoboperations
 # operationId: TestJob_Stop
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job-stop Stop" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job-stop stop" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,7 +483,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)/draft/testJob/stop" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}/draft/testJob/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -494,11 +494,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/testJob/streams
 # Docs: http://aka.ms/azureautomationsdk/jobstreamoperations
 # operationId: TestJobStreams_ListByTestJob
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job-streams ListByTestJob" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job-streams list-by" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -513,7 +513,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)/draft/testJob/streams" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}/draft/testJob/streams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -524,12 +524,12 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/testJob/streams/{jobStreamId}
 # Docs: http://aka.ms/azureautomationsdk/jobstreamoperations
 # operationId: TestJobStreams_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job-streams Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
-  jobStreamId: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job-streams get" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
+  job_stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,7 +543,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)/draft/testJob/streams/($jobStreamId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name, job_stream_id: $job_stream_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}/draft/testJob/streams/{job_stream_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -554,11 +554,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/testJob/suspend
 # Docs: http://aka.ms/azureautomationsdk/testjoboperations
 # operationId: TestJob_Suspend
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job-suspend Suspend" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job-suspend post" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)/draft/testJob/suspend" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}/draft/testJob/suspend") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -583,11 +583,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/undoEdit
 # Docs: http://aka.ms/azureautomationsdk/runbookdraftoperations
 # operationId: RunbookDraft_UndoEdit
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-undo-edit UndoEdit" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-undo-edit post" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,7 +601,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)/draft/undoEdit" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}/draft/undoEdit") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -612,11 +612,11 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/publish
 # Docs: http://aka.ms/azureautomationsdk/runbookdraftoperations
 # operationId: Runbook_Publish
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-publish Publish" [
-  subscriptionId: string
-  resourceGroupName: string
-  automationAccountName: string
-  runbookName: string
+export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-publish publish" [
+  subscription_id: string
+  resource_group_name: string
+  automation_account_name: string
+  runbook_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,7 +630,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Automation/automationAccounts/($automationAccountName)/runbooks/($runbookName)/publish" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, automation_account_name: $automation_account_name, runbook_name: $runbook_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}/publish") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -88,7 +88,7 @@ def xml-completer [] { ["0" "1"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analytics Analytics" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analytics get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -111,7 +111,7 @@ export def commands []: nothing -> table {
 # GET /analytics
 #
 # operationId: Analytics
-export def "analytics Analytics" [
+export def "analytics get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,7 +138,7 @@ export def "analytics Analytics" [
 # GET /balance
 #
 # operationId: Balance
-export def "balance Balance" [
+export def "balance get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "balance Balance" [
 # GET /contacts
 #
 # operationId: ContactsGet
-export def "contacts ContactsGet" [
+export def "contacts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "contacts ContactsGet" [
 # POST /contacts
 #
 # operationId: ContactsPOST
-export def "contacts ContactsPOST" [
+export def "contacts post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "contacts ContactsPOST" [
 # GET /hooks
 #
 # operationId: HooksGet
-export def "hooks HooksGet" [
+export def "hooks get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +236,7 @@ export def "hooks HooksGet" [
 # POST /hooks
 #
 # operationId: HooksPOST
-export def "hooks HooksPOST" [
+export def "hooks post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "hooks HooksPOST" [
 # POST /lookup
 #
 # operationId: Lookup
-export def "lookup Lookup" [
+export def "lookup post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,7 +288,7 @@ export def "lookup Lookup" [
 # POST /lookup/cnam
 #
 # operationId: LookupCnam
-export def "lookup-cnam LookupCnam" [
+export def "lookup-cnam post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "lookup-cnam LookupCnam" [
 # POST /lookup/format
 #
 # operationId: LookupFormat
-export def "lookup-format LookupFormat" [
+export def "lookup-format post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "lookup-format LookupFormat" [
 # POST /lookup/hlr
 #
 # operationId: LookupHlr
-export def "lookup-hlr LookupHlr" [
+export def "lookup-hlr post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +357,7 @@ export def "lookup-hlr LookupHlr" [
 # POST /lookup/mnp
 #
 # operationId: LookupMnp
-export def "lookup-mnp LookupMnp" [
+export def "lookup-mnp post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,7 +381,7 @@ export def "lookup-mnp LookupMnp" [
 # GET /pricing
 #
 # operationId: Pricing
-export def "pricing Pricing" [
+export def "pricing get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -406,7 +406,7 @@ export def "pricing Pricing" [
 # POST /sms
 #
 # operationId: Sms
-export def "sms Sms" [
+export def "sms post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -445,7 +445,7 @@ export def "sms Sms" [
 # GET /status
 #
 # operationId: Status
-export def "status Status" [
+export def "status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -468,7 +468,7 @@ export def "status Status" [
 # POST /validate_for_voice
 #
 # operationId: ValidateForVoice
-export def "validate-for-voice ValidateForVoice" [
+export def "validate-for-voice validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,7 +492,7 @@ export def "validate-for-voice ValidateForVoice" [
 # POST /voice
 #
 # operationId: Voice
-export def "voice Voice" [
+export def "voice post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

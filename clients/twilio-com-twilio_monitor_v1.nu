@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alerts ListAlert" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alerts list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 # GET /v1/Alerts
 #
 # operationId: ListAlert
-export def "alerts ListAlert" [
+export def "alerts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,16 +101,16 @@ export def "alerts ListAlert" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --LogLevel: string # Only show alerts for this log-level.  Can be: `error`, `warning`, `notice`, or `debug`.
-  --StartDate: string # Only include alerts that occurred on or after this date and time. Specify the date and time in GMT and format as `YYYY-MM-DD` or `YYYY-MM-DDThh:mm:ssZ`. Queries for alerts older than 30 days are not supported. (format: date-time)
-  --EndDate: string # Only include alerts that occurred on or before this date and time. Specify the date and time in GMT and format as `YYYY-MM-DD` or `YYYY-MM-DDThh:mm:ssZ`. Queries for alerts older than 30 days are not supported. (format: date-time)
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --log-level: string # Only show alerts for this log-level.  Can be: `error`, `warning`, `notice`, or `debug`.
+  --start-date: string # Only include alerts that occurred on or after this date and time. Specify the date and time in GMT and format as `YYYY-MM-DD` or `YYYY-MM-DDThh:mm:ssZ`. Queries for alerts older than 30 days are not supported. (format: date-time)
+  --end-date: string # Only include alerts that occurred on or before this date and time. Specify the date and time in GMT and format as `YYYY-MM-DD` or `YYYY-MM-DDThh:mm:ssZ`. Queries for alerts older than 30 days are not supported. (format: date-time)
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<alerts: table<account_sid: string, alert_text: string, api_version: string, date_created: string, date_generated: string, date_updated: string, error_code: string, log_level: string, more_info: string, request_method: string, request_url: string, resource_sid: string, service_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://monitor.twilio.com")
-  let qp = [(serialize-qp "LogLevel" $LogLevel "scalar") (serialize-qp "StartDate" $StartDate "scalar") (serialize-qp "EndDate" $EndDate "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "LogLevel" $log_level "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Alerts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,8 +120,8 @@ export def "alerts ListAlert" [
 # GET /v1/Alerts/{Sid}
 #
 # operationId: FetchAlert
-export def "alerts FetchAlert" [
-  Sid: string
+export def "alerts get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,7 +133,7 @@ export def "alerts FetchAlert" [
 ]: nothing -> record<account_sid: string, alert_text: string, api_version: string, date_created: string, date_generated: string, date_updated: string, error_code: string, log_level: string, more_info: string, request_headers: string, request_method: string, request_url: string, request_variables: string, resource_sid: string, response_body: string, response_headers: string, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://monitor.twilio.com")
-  let full_url = (build-url $base $"/v1/Alerts/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Alerts/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,7 +143,7 @@ export def "alerts FetchAlert" [
 #
 # GET /v1/Events
 # operationId: ListEvent
-export def "events ListEvent" [
+export def "events list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -152,19 +152,19 @@ export def "events ListEvent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ActorSid: string # Only include events initiated by this Actor. Useful for auditing actions taken by specific users or API credentials.
-  --EventType: string # Only include events of this [Event Type](https://www.twilio.com/docs/usage/monitor-events#event-types).
-  --ResourceSid: string # Only include events that refer to this resource. Useful for discovering the history of a specific resource.
-  --SourceIpAddress: string # Only include events that originated from this IP address. Useful for tracking suspicious activity originating from the API or the Twilio Console.
-  --StartDate: string # Only include events that occurred on or after this date. Specify the date in GMT and [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
-  --EndDate: string # Only include events that occurred on or before this date. Specify the date in GMT and [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --actor-sid: string # Only include events initiated by this Actor. Useful for auditing actions taken by specific users or API credentials.
+  --event-type: string # Only include events of this [Event Type](https://www.twilio.com/docs/usage/monitor-events#event-types).
+  --resource-sid: string # Only include events that refer to this resource. Useful for discovering the history of a specific resource.
+  --source-ip-address: string # Only include events that originated from this IP address. Useful for tracking suspicious activity originating from the API or the Twilio Console.
+  --start-date: string # Only include events that occurred on or after this date. Specify the date in GMT and [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
+  --end-date: string # Only include events that occurred on or before this date. Specify the date in GMT and [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<events: table<account_sid: string, actor_sid: string, actor_type: string, description: string, event_data: any, event_date: string, event_type: string, links: record, resource_sid: string, resource_type: string, sid: string, source: string, source_ip_address: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://monitor.twilio.com")
-  let qp = [(serialize-qp "ActorSid" $ActorSid "scalar") (serialize-qp "EventType" $EventType "scalar") (serialize-qp "ResourceSid" $ResourceSid "scalar") (serialize-qp "SourceIpAddress" $SourceIpAddress "scalar") (serialize-qp "StartDate" $StartDate "scalar") (serialize-qp "EndDate" $EndDate "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ActorSid" $actor_sid "scalar") (serialize-qp "EventType" $event_type "scalar") (serialize-qp "ResourceSid" $resource_sid "scalar") (serialize-qp "SourceIpAddress" $source_ip_address "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -174,8 +174,8 @@ export def "events ListEvent" [
 # GET /v1/Events/{Sid}
 #
 # operationId: FetchEvent
-export def "events FetchEvent" [
-  Sid: string
+export def "events get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "events FetchEvent" [
 ]: nothing -> record<account_sid: string, actor_sid: string, actor_type: string, description: string, event_data: any, event_date: string, event_type: string, links: record, resource_sid: string, resource_type: string, sid: string, source: string, source_ip_address: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://monitor.twilio.com")
-  let full_url = (build-url $base $"/v1/Events/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Events/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

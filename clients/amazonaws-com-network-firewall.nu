@@ -66,47 +66,47 @@ def base-url-completer [] { ["http://network-firewall.us-east-1.amazonaws.com" "
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["NetworkFirewall_20201112.AssociateFirewallPolicy"] }
-def X-Amz-Target-completer-1 [] { ["NetworkFirewall_20201112.AssociateSubnets"] }
-def X-Amz-Target-completer-2 [] { ["NetworkFirewall_20201112.CreateFirewall"] }
-def X-Amz-Target-completer-3 [] { ["NetworkFirewall_20201112.CreateFirewallPolicy"] }
-def X-Amz-Target-completer-4 [] { ["NetworkFirewall_20201112.CreateRuleGroup"] }
-def X-Amz-Target-completer-5 [] { ["NetworkFirewall_20201112.CreateTLSInspectionConfiguration"] }
-def X-Amz-Target-completer-6 [] { ["NetworkFirewall_20201112.DeleteFirewall"] }
-def X-Amz-Target-completer-7 [] { ["NetworkFirewall_20201112.DeleteFirewallPolicy"] }
-def X-Amz-Target-completer-8 [] { ["NetworkFirewall_20201112.DeleteResourcePolicy"] }
-def X-Amz-Target-completer-9 [] { ["NetworkFirewall_20201112.DeleteRuleGroup"] }
-def X-Amz-Target-completer-10 [] { ["NetworkFirewall_20201112.DeleteTLSInspectionConfiguration"] }
-def X-Amz-Target-completer-11 [] { ["NetworkFirewall_20201112.DescribeFirewall"] }
-def X-Amz-Target-completer-12 [] { ["NetworkFirewall_20201112.DescribeFirewallPolicy"] }
-def X-Amz-Target-completer-13 [] { ["NetworkFirewall_20201112.DescribeLoggingConfiguration"] }
-def X-Amz-Target-completer-14 [] { ["NetworkFirewall_20201112.DescribeResourcePolicy"] }
-def X-Amz-Target-completer-15 [] { ["NetworkFirewall_20201112.DescribeRuleGroup"] }
-def X-Amz-Target-completer-16 [] { ["NetworkFirewall_20201112.DescribeRuleGroupMetadata"] }
-def X-Amz-Target-completer-17 [] { ["NetworkFirewall_20201112.DescribeTLSInspectionConfiguration"] }
-def X-Amz-Target-completer-18 [] { ["NetworkFirewall_20201112.DisassociateSubnets"] }
-def X-Amz-Target-completer-19 [] { ["NetworkFirewall_20201112.ListFirewallPolicies"] }
-def X-Amz-Target-completer-20 [] { ["NetworkFirewall_20201112.ListFirewalls"] }
-def X-Amz-Target-completer-21 [] { ["NetworkFirewall_20201112.ListRuleGroups"] }
-def X-Amz-Target-completer-22 [] { ["NetworkFirewall_20201112.ListTLSInspectionConfigurations"] }
-def X-Amz-Target-completer-23 [] { ["NetworkFirewall_20201112.ListTagsForResource"] }
-def X-Amz-Target-completer-24 [] { ["NetworkFirewall_20201112.PutResourcePolicy"] }
-def X-Amz-Target-completer-25 [] { ["NetworkFirewall_20201112.TagResource"] }
-def X-Amz-Target-completer-26 [] { ["NetworkFirewall_20201112.UntagResource"] }
-def X-Amz-Target-completer-27 [] { ["NetworkFirewall_20201112.UpdateFirewallDeleteProtection"] }
-def X-Amz-Target-completer-28 [] { ["NetworkFirewall_20201112.UpdateFirewallDescription"] }
-def X-Amz-Target-completer-29 [] { ["NetworkFirewall_20201112.UpdateFirewallEncryptionConfiguration"] }
-def X-Amz-Target-completer-30 [] { ["NetworkFirewall_20201112.UpdateFirewallPolicy"] }
-def X-Amz-Target-completer-31 [] { ["NetworkFirewall_20201112.UpdateFirewallPolicyChangeProtection"] }
-def X-Amz-Target-completer-32 [] { ["NetworkFirewall_20201112.UpdateLoggingConfiguration"] }
-def X-Amz-Target-completer-33 [] { ["NetworkFirewall_20201112.UpdateRuleGroup"] }
-def X-Amz-Target-completer-34 [] { ["NetworkFirewall_20201112.UpdateSubnetChangeProtection"] }
-def X-Amz-Target-completer-35 [] { ["NetworkFirewall_20201112.UpdateTLSInspectionConfiguration"] }
+def x-amz-target-completer [] { ["NetworkFirewall_20201112.AssociateFirewallPolicy"] }
+def x-amz-target-completer-1 [] { ["NetworkFirewall_20201112.AssociateSubnets"] }
+def x-amz-target-completer-2 [] { ["NetworkFirewall_20201112.CreateFirewall"] }
+def x-amz-target-completer-3 [] { ["NetworkFirewall_20201112.CreateFirewallPolicy"] }
+def x-amz-target-completer-4 [] { ["NetworkFirewall_20201112.CreateRuleGroup"] }
+def x-amz-target-completer-5 [] { ["NetworkFirewall_20201112.CreateTLSInspectionConfiguration"] }
+def x-amz-target-completer-6 [] { ["NetworkFirewall_20201112.DeleteFirewall"] }
+def x-amz-target-completer-7 [] { ["NetworkFirewall_20201112.DeleteFirewallPolicy"] }
+def x-amz-target-completer-8 [] { ["NetworkFirewall_20201112.DeleteResourcePolicy"] }
+def x-amz-target-completer-9 [] { ["NetworkFirewall_20201112.DeleteRuleGroup"] }
+def x-amz-target-completer-10 [] { ["NetworkFirewall_20201112.DeleteTLSInspectionConfiguration"] }
+def x-amz-target-completer-11 [] { ["NetworkFirewall_20201112.DescribeFirewall"] }
+def x-amz-target-completer-12 [] { ["NetworkFirewall_20201112.DescribeFirewallPolicy"] }
+def x-amz-target-completer-13 [] { ["NetworkFirewall_20201112.DescribeLoggingConfiguration"] }
+def x-amz-target-completer-14 [] { ["NetworkFirewall_20201112.DescribeResourcePolicy"] }
+def x-amz-target-completer-15 [] { ["NetworkFirewall_20201112.DescribeRuleGroup"] }
+def x-amz-target-completer-16 [] { ["NetworkFirewall_20201112.DescribeRuleGroupMetadata"] }
+def x-amz-target-completer-17 [] { ["NetworkFirewall_20201112.DescribeTLSInspectionConfiguration"] }
+def x-amz-target-completer-18 [] { ["NetworkFirewall_20201112.DisassociateSubnets"] }
+def x-amz-target-completer-19 [] { ["NetworkFirewall_20201112.ListFirewallPolicies"] }
+def x-amz-target-completer-20 [] { ["NetworkFirewall_20201112.ListFirewalls"] }
+def x-amz-target-completer-21 [] { ["NetworkFirewall_20201112.ListRuleGroups"] }
+def x-amz-target-completer-22 [] { ["NetworkFirewall_20201112.ListTLSInspectionConfigurations"] }
+def x-amz-target-completer-23 [] { ["NetworkFirewall_20201112.ListTagsForResource"] }
+def x-amz-target-completer-24 [] { ["NetworkFirewall_20201112.PutResourcePolicy"] }
+def x-amz-target-completer-25 [] { ["NetworkFirewall_20201112.TagResource"] }
+def x-amz-target-completer-26 [] { ["NetworkFirewall_20201112.UntagResource"] }
+def x-amz-target-completer-27 [] { ["NetworkFirewall_20201112.UpdateFirewallDeleteProtection"] }
+def x-amz-target-completer-28 [] { ["NetworkFirewall_20201112.UpdateFirewallDescription"] }
+def x-amz-target-completer-29 [] { ["NetworkFirewall_20201112.UpdateFirewallEncryptionConfiguration"] }
+def x-amz-target-completer-30 [] { ["NetworkFirewall_20201112.UpdateFirewallPolicy"] }
+def x-amz-target-completer-31 [] { ["NetworkFirewall_20201112.UpdateFirewallPolicyChangeProtection"] }
+def x-amz-target-completer-32 [] { ["NetworkFirewall_20201112.UpdateLoggingConfiguration"] }
+def x-amz-target-completer-33 [] { ["NetworkFirewall_20201112.UpdateRuleGroup"] }
+def x-amz-target-completer-34 [] { ["NetworkFirewall_20201112.UpdateSubnetChangeProtection"] }
+def x-amz-target-completer-35 [] { ["NetworkFirewall_20201112.UpdateTLSInspectionConfiguration"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-network-firewall-20201112associate-firewall-policy AssociateFirewallPolicy" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-network-firewall-20201112associate-firewall-policy post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.AssociateFirewallPolicy
 # operationId: AssociateFirewallPolicy
-export def "x-amz-target-network-firewall-20201112associate-firewall-policy AssociateFirewallPolicy" [
+export def "x-amz-target-network-firewall-20201112associate-firewall-policy post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,26 +139,26 @@ export def "x-amz-target-network-firewall-20201112associate-firewall-policy Asso
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  --UpdateToken: any
-  --FirewallArn: any
-  --FirewallName: any
-  FirewallPolicyArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  --update-token: any
+  --firewall-arn: any
+  --firewall-name: any
+  firewall_policy_arn: any
 ]: any -> record<FirewallArn: record, FirewallName: record, FirewallPolicyArn: record, UpdateToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.AssociateFirewallPolicy")
-  let body = {UpdateToken: $UpdateToken, FirewallArn: $FirewallArn, FirewallName: $FirewallName, FirewallPolicyArn: $FirewallPolicyArn} | compact
+  let body = {"UpdateToken": $update_token, "FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "FirewallPolicyArn": $firewall_policy_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -169,7 +169,7 @@ export def "x-amz-target-network-firewall-20201112associate-firewall-policy Asso
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.AssociateSubnets
 # operationId: AssociateSubnets
-export def "x-amz-target-network-firewall-20201112associate-subnets AssociateSubnets" [
+export def "x-amz-target-network-firewall-20201112associate-subnets post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,26 +178,26 @@ export def "x-amz-target-network-firewall-20201112associate-subnets AssociateSub
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  --UpdateToken: any
-  --FirewallArn: any
-  --FirewallName: any
-  SubnetMappings: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  --update-token: any
+  --firewall-arn: any
+  --firewall-name: any
+  subnet_mappings: any
 ]: any -> record<FirewallArn: record, FirewallName: record, SubnetMappings: record, UpdateToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.AssociateSubnets")
-  let body = {UpdateToken: $UpdateToken, FirewallArn: $FirewallArn, FirewallName: $FirewallName, SubnetMappings: $SubnetMappings} | compact
+  let body = {"UpdateToken": $update_token, "FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "SubnetMappings": $subnet_mappings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -208,7 +208,7 @@ export def "x-amz-target-network-firewall-20201112associate-subnets AssociateSub
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.CreateFirewall
 # operationId: CreateFirewall
-export def "x-amz-target-network-firewall-20201112create-firewall CreateFirewall" [
+export def "x-amz-target-network-firewall-20201112create-firewall create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,32 +217,32 @@ export def "x-amz-target-network-firewall-20201112create-firewall CreateFirewall
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  FirewallName: any
-  FirewallPolicyArn: any
-  VpcId: any
-  SubnetMappings: any
-  --DeleteProtection: any
-  --SubnetChangeProtection: any
-  --FirewallPolicyChangeProtection: any
-  --Description: any
-  --Tags: any
-  --EncryptionConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  firewall_name: any
+  firewall_policy_arn: any
+  vpc_id: any
+  subnet_mappings: any
+  --delete-protection: any
+  --subnet-change-protection: any
+  --firewall-policy-change-protection: any
+  --description: any
+  --tags: any
+  --encryption-configuration: any
 ]: any -> record<Firewall: record<FirewallName: record, FirewallArn: record, FirewallPolicyArn: record, VpcId: record, SubnetMappings: record, DeleteProtection: record, SubnetChangeProtection: record, FirewallPolicyChangeProtection: record, Description: record, FirewallId: record, Tags: record, EncryptionConfiguration: record<KeyId: record, Type: record>>, FirewallStatus: record<Status: record, ConfigurationSyncStateSummary: record, SyncStates: record, CapacityUsageSummary: record<CIDRs: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.CreateFirewall")
-  let body = {FirewallName: $FirewallName, FirewallPolicyArn: $FirewallPolicyArn, VpcId: $VpcId, SubnetMappings: $SubnetMappings, DeleteProtection: $DeleteProtection, SubnetChangeProtection: $SubnetChangeProtection, FirewallPolicyChangeProtection: $FirewallPolicyChangeProtection, Description: $Description, Tags: $Tags, EncryptionConfiguration: $EncryptionConfiguration} | compact
+  let body = {"FirewallName": $firewall_name, "FirewallPolicyArn": $firewall_policy_arn, "VpcId": $vpc_id, "SubnetMappings": $subnet_mappings, "DeleteProtection": $delete_protection, "SubnetChangeProtection": $subnet_change_protection, "FirewallPolicyChangeProtection": $firewall_policy_change_protection, "Description": $description, "Tags": $tags, "EncryptionConfiguration": $encryption_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,7 +253,7 @@ export def "x-amz-target-network-firewall-20201112create-firewall CreateFirewall
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.CreateFirewallPolicy
 # operationId: CreateFirewallPolicy
-export def "x-amz-target-network-firewall-20201112create-firewall-policy CreateFirewallPolicy" [
+export def "x-amz-target-network-firewall-20201112create-firewall-policy create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,28 +262,28 @@ export def "x-amz-target-network-firewall-20201112create-firewall-policy CreateF
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  FirewallPolicyName: any
-  FirewallPolicy: any
-  --Description: any
-  --Tags: any
-  --DryRun: any
-  --EncryptionConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  firewall_policy_name: any
+  firewall_policy: any
+  --description: any
+  --tags: any
+  --body-dry-run: any
+  --encryption-configuration: any
 ]: any -> record<UpdateToken: record, FirewallPolicyResponse: record<FirewallPolicyName: record, FirewallPolicyArn: record, FirewallPolicyId: record, Description: record, FirewallPolicyStatus: record, Tags: record, ConsumedStatelessRuleCapacity: record, ConsumedStatefulRuleCapacity: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, LastModifiedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.CreateFirewallPolicy")
-  let body = {FirewallPolicyName: $FirewallPolicyName, FirewallPolicy: $FirewallPolicy, Description: $Description, Tags: $Tags, DryRun: $DryRun, EncryptionConfiguration: $EncryptionConfiguration} | compact
+  let body = {"FirewallPolicyName": $firewall_policy_name, "FirewallPolicy": $firewall_policy, "Description": $description, "Tags": $tags, "DryRun": $body_dry_run, "EncryptionConfiguration": $encryption_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -294,7 +294,7 @@ export def "x-amz-target-network-firewall-20201112create-firewall-policy CreateF
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.CreateRuleGroup
 # operationId: CreateRuleGroup
-export def "x-amz-target-network-firewall-20201112create-rule-group CreateRuleGroup" [
+export def "x-amz-target-network-firewall-20201112create-rule-group create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,32 +303,32 @@ export def "x-amz-target-network-firewall-20201112create-rule-group CreateRuleGr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  RuleGroupName: any
-  --RuleGroup: any
-  --Rules: any
-  Type: any
-  --Description: any
-  Capacity: any
-  --Tags: any
-  --DryRun: any
-  --EncryptionConfiguration: any
-  --SourceMetadata: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  rule_group_name: any
+  --rule-group: any
+  --rules: any
+  type: any
+  --description: any
+  capacity: any
+  --tags: any
+  --body-dry-run: any
+  --encryption-configuration: any
+  --source-metadata: any
 ]: any -> record<UpdateToken: record, RuleGroupResponse: record<RuleGroupArn: record, RuleGroupName: record, RuleGroupId: record, Description: record, Type: record, Capacity: record, RuleGroupStatus: record, Tags: record, ConsumedCapacity: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, SourceMetadata: record<SourceArn: record, SourceUpdateToken: record>, SnsTopic: record, LastModifiedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.CreateRuleGroup")
-  let body = {RuleGroupName: $RuleGroupName, RuleGroup: $RuleGroup, Rules: $Rules, Type: $Type, Description: $Description, Capacity: $Capacity, Tags: $Tags, DryRun: $DryRun, EncryptionConfiguration: $EncryptionConfiguration, SourceMetadata: $SourceMetadata} | compact
+  let body = {"RuleGroupName": $rule_group_name, "RuleGroup": $rule_group, "Rules": $rules, "Type": $type, "Description": $description, "Capacity": $capacity, "Tags": $tags, "DryRun": $body_dry_run, "EncryptionConfiguration": $encryption_configuration, "SourceMetadata": $source_metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -340,7 +340,7 @@ export def "x-amz-target-network-firewall-20201112create-rule-group CreateRuleGr
 # POST /#X-Amz-Target=NetworkFirewall_20201112.CreateTLSInspectionConfiguration
 # operationId: CreateTLSInspectionConfiguration
 # --EncryptionConfiguration shape: {KeyId?: any, Type: any}
-export def "x-amz-target-network-firewall-20201112create-tls-inspection-configuration CreateTLSInspectionConfiguration" [
+export def "x-amz-target-network-firewall-20201112create-tls-inspection-configuration create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,27 +349,27 @@ export def "x-amz-target-network-firewall-20201112create-tls-inspection-configur
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  TLSInspectionConfigurationName: any
-  TLSInspectionConfiguration: any
-  --Description: any
-  --Tags: any
-  --EncryptionConfiguration: record # A complex type that contains optional Amazon Web Services Key Management Service (KMS) encryption settings for your Network Firewall resources. Your data is encrypted by default with an Amazon Web Services owned key that Amazon Web Services owns and manages for you. You can use either the Amazon Web Services owned key, or provide your own customer managed key. To learn more about KMS encryption of your Network Firewall resources, see <a href="https://docs.aws.amazon.com/kms/latest/developerguide/kms-encryption-at-rest.html">Encryption at rest with Amazon Web Services Key Managment Service</a> in the <i>Network Firewall Developer Guide</i>. — shape: {KeyId?: any, Type: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  tls_inspection_configuration_name: any
+  tls_inspection_configuration: any
+  --description: any
+  --tags: any
+  --encryption-configuration: record # A complex type that contains optional Amazon Web Services Key Management Service (KMS) encryption settings for your Network Firewall resources. Your data is encrypted by default with an Amazon Web Services owned key that Amazon Web Services owns and manages for you. You can use either the Amazon Web Services owned key, or provide your own customer managed key. To learn more about KMS encryption of your Network Firewall resources, see <a href="https://docs.aws.amazon.com/kms/latest/developerguide/kms-encryption-at-rest.html">Encryption at rest with Amazon Web Services Key Managment Service</a> in the <i>Network Firewall Developer Guide</i>. — shape: {KeyId?: any, Type: any}
 ]: any -> record<UpdateToken: record, TLSInspectionConfigurationResponse: record<TLSInspectionConfigurationArn: record, TLSInspectionConfigurationName: record, TLSInspectionConfigurationId: record, TLSInspectionConfigurationStatus: record, Description: record, Tags: record, LastModifiedTime: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, Certificates: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.CreateTLSInspectionConfiguration")
-  let body = {TLSInspectionConfigurationName: $TLSInspectionConfigurationName, TLSInspectionConfiguration: $TLSInspectionConfiguration, Description: $Description, Tags: $Tags, EncryptionConfiguration: $EncryptionConfiguration} | compact
+  let body = {"TLSInspectionConfigurationName": $tls_inspection_configuration_name, "TLSInspectionConfiguration": $tls_inspection_configuration, "Description": $description, "Tags": $tags, "EncryptionConfiguration": $encryption_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -380,7 +380,7 @@ export def "x-amz-target-network-firewall-20201112create-tls-inspection-configur
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.DeleteFirewall
 # operationId: DeleteFirewall
-export def "x-amz-target-network-firewall-20201112delete-firewall DeleteFirewall" [
+export def "x-amz-target-network-firewall-20201112delete-firewall delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,24 +389,24 @@ export def "x-amz-target-network-firewall-20201112delete-firewall DeleteFirewall
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  --FirewallName: any
-  --FirewallArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  --firewall-name: any
+  --firewall-arn: any
 ]: any -> record<Firewall: record<FirewallName: record, FirewallArn: record, FirewallPolicyArn: record, VpcId: record, SubnetMappings: record, DeleteProtection: record, SubnetChangeProtection: record, FirewallPolicyChangeProtection: record, Description: record, FirewallId: record, Tags: record, EncryptionConfiguration: record<KeyId: record, Type: record>>, FirewallStatus: record<Status: record, ConfigurationSyncStateSummary: record, SyncStates: record, CapacityUsageSummary: record<CIDRs: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.DeleteFirewall")
-  let body = {FirewallName: $FirewallName, FirewallArn: $FirewallArn} | compact
+  let body = {"FirewallName": $firewall_name, "FirewallArn": $firewall_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -417,7 +417,7 @@ export def "x-amz-target-network-firewall-20201112delete-firewall DeleteFirewall
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.DeleteFirewallPolicy
 # operationId: DeleteFirewallPolicy
-export def "x-amz-target-network-firewall-20201112delete-firewall-policy DeleteFirewallPolicy" [
+export def "x-amz-target-network-firewall-20201112delete-firewall-policy delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,24 +426,24 @@ export def "x-amz-target-network-firewall-20201112delete-firewall-policy DeleteF
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  --FirewallPolicyName: any
-  --FirewallPolicyArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  --firewall-policy-name: any
+  --firewall-policy-arn: any
 ]: any -> record<FirewallPolicyResponse: record<FirewallPolicyName: record, FirewallPolicyArn: record, FirewallPolicyId: record, Description: record, FirewallPolicyStatus: record, Tags: record, ConsumedStatelessRuleCapacity: record, ConsumedStatefulRuleCapacity: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, LastModifiedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.DeleteFirewallPolicy")
-  let body = {FirewallPolicyName: $FirewallPolicyName, FirewallPolicyArn: $FirewallPolicyArn} | compact
+  let body = {"FirewallPolicyName": $firewall_policy_name, "FirewallPolicyArn": $firewall_policy_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -454,7 +454,7 @@ export def "x-amz-target-network-firewall-20201112delete-firewall-policy DeleteF
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.DeleteResourcePolicy
 # operationId: DeleteResourcePolicy
-export def "x-amz-target-network-firewall-20201112delete-resource-policy DeleteResourcePolicy" [
+export def "x-amz-target-network-firewall-20201112delete-resource-policy delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,23 +463,23 @@ export def "x-amz-target-network-firewall-20201112delete-resource-policy DeleteR
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  resource_arn: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.DeleteResourcePolicy")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -490,7 +490,7 @@ export def "x-amz-target-network-firewall-20201112delete-resource-policy DeleteR
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.DeleteRuleGroup
 # operationId: DeleteRuleGroup
-export def "x-amz-target-network-firewall-20201112delete-rule-group DeleteRuleGroup" [
+export def "x-amz-target-network-firewall-20201112delete-rule-group delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -499,25 +499,25 @@ export def "x-amz-target-network-firewall-20201112delete-rule-group DeleteRuleGr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  --RuleGroupName: any
-  --RuleGroupArn: any
-  --Type: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  --rule-group-name: any
+  --rule-group-arn: any
+  --type: any
 ]: any -> record<RuleGroupResponse: record<RuleGroupArn: record, RuleGroupName: record, RuleGroupId: record, Description: record, Type: record, Capacity: record, RuleGroupStatus: record, Tags: record, ConsumedCapacity: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, SourceMetadata: record<SourceArn: record, SourceUpdateToken: record>, SnsTopic: record, LastModifiedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.DeleteRuleGroup")
-  let body = {RuleGroupName: $RuleGroupName, RuleGroupArn: $RuleGroupArn, Type: $Type} | compact
+  let body = {"RuleGroupName": $rule_group_name, "RuleGroupArn": $rule_group_arn, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -528,7 +528,7 @@ export def "x-amz-target-network-firewall-20201112delete-rule-group DeleteRuleGr
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.DeleteTLSInspectionConfiguration
 # operationId: DeleteTLSInspectionConfiguration
-export def "x-amz-target-network-firewall-20201112delete-tls-inspection-configuration DeleteTLSInspectionConfiguration" [
+export def "x-amz-target-network-firewall-20201112delete-tls-inspection-configuration delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,24 +537,24 @@ export def "x-amz-target-network-firewall-20201112delete-tls-inspection-configur
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  --TLSInspectionConfigurationArn: any
-  --TLSInspectionConfigurationName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  --tls-inspection-configuration-arn: any
+  --tls-inspection-configuration-name: any
 ]: any -> record<TLSInspectionConfigurationResponse: record<TLSInspectionConfigurationArn: record, TLSInspectionConfigurationName: record, TLSInspectionConfigurationId: record, TLSInspectionConfigurationStatus: record, Description: record, Tags: record, LastModifiedTime: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, Certificates: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.DeleteTLSInspectionConfiguration")
-  let body = {TLSInspectionConfigurationArn: $TLSInspectionConfigurationArn, TLSInspectionConfigurationName: $TLSInspectionConfigurationName} | compact
+  let body = {"TLSInspectionConfigurationArn": $tls_inspection_configuration_arn, "TLSInspectionConfigurationName": $tls_inspection_configuration_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -565,7 +565,7 @@ export def "x-amz-target-network-firewall-20201112delete-tls-inspection-configur
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.DescribeFirewall
 # operationId: DescribeFirewall
-export def "x-amz-target-network-firewall-20201112describe-firewall DescribeFirewall" [
+export def "x-amz-target-network-firewall-20201112describe-firewall post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -574,24 +574,24 @@ export def "x-amz-target-network-firewall-20201112describe-firewall DescribeFire
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  --FirewallName: any
-  --FirewallArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  --firewall-name: any
+  --firewall-arn: any
 ]: any -> record<UpdateToken: record, Firewall: record<FirewallName: record, FirewallArn: record, FirewallPolicyArn: record, VpcId: record, SubnetMappings: record, DeleteProtection: record, SubnetChangeProtection: record, FirewallPolicyChangeProtection: record, Description: record, FirewallId: record, Tags: record, EncryptionConfiguration: record<KeyId: record, Type: record>>, FirewallStatus: record<Status: record, ConfigurationSyncStateSummary: record, SyncStates: record, CapacityUsageSummary: record<CIDRs: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.DescribeFirewall")
-  let body = {FirewallName: $FirewallName, FirewallArn: $FirewallArn} | compact
+  let body = {"FirewallName": $firewall_name, "FirewallArn": $firewall_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -602,7 +602,7 @@ export def "x-amz-target-network-firewall-20201112describe-firewall DescribeFire
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.DescribeFirewallPolicy
 # operationId: DescribeFirewallPolicy
-export def "x-amz-target-network-firewall-20201112describe-firewall-policy DescribeFirewallPolicy" [
+export def "x-amz-target-network-firewall-20201112describe-firewall-policy post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -611,24 +611,24 @@ export def "x-amz-target-network-firewall-20201112describe-firewall-policy Descr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  --FirewallPolicyName: any
-  --FirewallPolicyArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  --firewall-policy-name: any
+  --firewall-policy-arn: any
 ]: any -> record<UpdateToken: record, FirewallPolicyResponse: record<FirewallPolicyName: record, FirewallPolicyArn: record, FirewallPolicyId: record, Description: record, FirewallPolicyStatus: record, Tags: record, ConsumedStatelessRuleCapacity: record, ConsumedStatefulRuleCapacity: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, LastModifiedTime: record>, FirewallPolicy: record<StatelessRuleGroupReferences: record, StatelessDefaultActions: record, StatelessFragmentDefaultActions: record, StatelessCustomActions: record, StatefulRuleGroupReferences: record, StatefulDefaultActions: record, StatefulEngineOptions: record<RuleOrder: record, StreamExceptionPolicy: record>, TLSInspectionConfigurationArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.DescribeFirewallPolicy")
-  let body = {FirewallPolicyName: $FirewallPolicyName, FirewallPolicyArn: $FirewallPolicyArn} | compact
+  let body = {"FirewallPolicyName": $firewall_policy_name, "FirewallPolicyArn": $firewall_policy_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -639,7 +639,7 @@ export def "x-amz-target-network-firewall-20201112describe-firewall-policy Descr
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.DescribeLoggingConfiguration
 # operationId: DescribeLoggingConfiguration
-export def "x-amz-target-network-firewall-20201112describe-logging-configuration DescribeLoggingConfiguration" [
+export def "x-amz-target-network-firewall-20201112describe-logging-configuration post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -648,24 +648,24 @@ export def "x-amz-target-network-firewall-20201112describe-logging-configuration
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  --FirewallArn: any
-  --FirewallName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  --firewall-arn: any
+  --firewall-name: any
 ]: any -> record<FirewallArn: record, LoggingConfiguration: record<LogDestinationConfigs: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.DescribeLoggingConfiguration")
-  let body = {FirewallArn: $FirewallArn, FirewallName: $FirewallName} | compact
+  let body = {"FirewallArn": $firewall_arn, "FirewallName": $firewall_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -676,7 +676,7 @@ export def "x-amz-target-network-firewall-20201112describe-logging-configuration
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.DescribeResourcePolicy
 # operationId: DescribeResourcePolicy
-export def "x-amz-target-network-firewall-20201112describe-resource-policy DescribeResourcePolicy" [
+export def "x-amz-target-network-firewall-20201112describe-resource-policy post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -685,23 +685,23 @@ export def "x-amz-target-network-firewall-20201112describe-resource-policy Descr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  resource_arn: any
 ]: any -> record<Policy: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.DescribeResourcePolicy")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -712,7 +712,7 @@ export def "x-amz-target-network-firewall-20201112describe-resource-policy Descr
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.DescribeRuleGroup
 # operationId: DescribeRuleGroup
-export def "x-amz-target-network-firewall-20201112describe-rule-group DescribeRuleGroup" [
+export def "x-amz-target-network-firewall-20201112describe-rule-group post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -721,25 +721,25 @@ export def "x-amz-target-network-firewall-20201112describe-rule-group DescribeRu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  --RuleGroupName: any
-  --RuleGroupArn: any
-  --Type: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  --rule-group-name: any
+  --rule-group-arn: any
+  --type: any
 ]: any -> record<UpdateToken: record, RuleGroup: record<RuleVariables: record<IPSets: record, PortSets: record>, ReferenceSets: record<IPSetReferences: record>, RulesSource: record<RulesString: record, RulesSourceList: record, StatefulRules: record, StatelessRulesAndCustomActions: record>, StatefulRuleOptions: record<RuleOrder: record>>, RuleGroupResponse: record<RuleGroupArn: record, RuleGroupName: record, RuleGroupId: record, Description: record, Type: record, Capacity: record, RuleGroupStatus: record, Tags: record, ConsumedCapacity: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, SourceMetadata: record<SourceArn: record, SourceUpdateToken: record>, SnsTopic: record, LastModifiedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.DescribeRuleGroup")
-  let body = {RuleGroupName: $RuleGroupName, RuleGroupArn: $RuleGroupArn, Type: $Type} | compact
+  let body = {"RuleGroupName": $rule_group_name, "RuleGroupArn": $rule_group_arn, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -750,7 +750,7 @@ export def "x-amz-target-network-firewall-20201112describe-rule-group DescribeRu
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.DescribeRuleGroupMetadata
 # operationId: DescribeRuleGroupMetadata
-export def "x-amz-target-network-firewall-20201112describe-rule-group-metadata DescribeRuleGroupMetadata" [
+export def "x-amz-target-network-firewall-20201112describe-rule-group-metadata post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,25 +759,25 @@ export def "x-amz-target-network-firewall-20201112describe-rule-group-metadata D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  --RuleGroupName: any
-  --RuleGroupArn: any
-  --Type: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  --rule-group-name: any
+  --rule-group-arn: any
+  --type: any
 ]: any -> record<RuleGroupArn: record, RuleGroupName: record, Description: record, Type: record, Capacity: record, StatefulRuleOptions: record<RuleOrder: record>, LastModifiedTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.DescribeRuleGroupMetadata")
-  let body = {RuleGroupName: $RuleGroupName, RuleGroupArn: $RuleGroupArn, Type: $Type} | compact
+  let body = {"RuleGroupName": $rule_group_name, "RuleGroupArn": $rule_group_arn, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -788,7 +788,7 @@ export def "x-amz-target-network-firewall-20201112describe-rule-group-metadata D
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.DescribeTLSInspectionConfiguration
 # operationId: DescribeTLSInspectionConfiguration
-export def "x-amz-target-network-firewall-20201112describe-tls-inspection-configuration DescribeTLSInspectionConfiguration" [
+export def "x-amz-target-network-firewall-20201112describe-tls-inspection-configuration post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -797,24 +797,24 @@ export def "x-amz-target-network-firewall-20201112describe-tls-inspection-config
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  --TLSInspectionConfigurationArn: any
-  --TLSInspectionConfigurationName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  --tls-inspection-configuration-arn: any
+  --tls-inspection-configuration-name: any
 ]: any -> record<UpdateToken: record, TLSInspectionConfiguration: record<ServerCertificateConfigurations: record>, TLSInspectionConfigurationResponse: record<TLSInspectionConfigurationArn: record, TLSInspectionConfigurationName: record, TLSInspectionConfigurationId: record, TLSInspectionConfigurationStatus: record, Description: record, Tags: record, LastModifiedTime: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, Certificates: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.DescribeTLSInspectionConfiguration")
-  let body = {TLSInspectionConfigurationArn: $TLSInspectionConfigurationArn, TLSInspectionConfigurationName: $TLSInspectionConfigurationName} | compact
+  let body = {"TLSInspectionConfigurationArn": $tls_inspection_configuration_arn, "TLSInspectionConfigurationName": $tls_inspection_configuration_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -825,7 +825,7 @@ export def "x-amz-target-network-firewall-20201112describe-tls-inspection-config
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.DisassociateSubnets
 # operationId: DisassociateSubnets
-export def "x-amz-target-network-firewall-20201112disassociate-subnets DisassociateSubnets" [
+export def "x-amz-target-network-firewall-20201112disassociate-subnets post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -834,26 +834,26 @@ export def "x-amz-target-network-firewall-20201112disassociate-subnets Disassoci
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  --UpdateToken: any
-  --FirewallArn: any
-  --FirewallName: any
-  SubnetIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  --update-token: any
+  --firewall-arn: any
+  --firewall-name: any
+  subnet_ids: any
 ]: any -> record<FirewallArn: record, FirewallName: record, SubnetMappings: record, UpdateToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.DisassociateSubnets")
-  let body = {UpdateToken: $UpdateToken, FirewallArn: $FirewallArn, FirewallName: $FirewallName, SubnetIds: $SubnetIds} | compact
+  let body = {"UpdateToken": $update_token, "FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "SubnetIds": $subnet_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -864,7 +864,7 @@ export def "x-amz-target-network-firewall-20201112disassociate-subnets Disassoci
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.ListFirewallPolicies
 # operationId: ListFirewallPolicies
-export def "x-amz-target-network-firewall-20201112list-firewall-policies ListFirewallPolicies" [
+export def "x-amz-target-network-firewall-20201112list-firewall-policies list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -873,27 +873,27 @@ export def "x-amz-target-network-firewall-20201112list-firewall-policies ListFir
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: record, FirewallPolicies: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.ListFirewallPolicies" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -904,7 +904,7 @@ export def "x-amz-target-network-firewall-20201112list-firewall-policies ListFir
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.ListFirewalls
 # operationId: ListFirewalls
-export def "x-amz-target-network-firewall-20201112list-firewalls ListFirewalls" [
+export def "x-amz-target-network-firewall-20201112list-firewalls list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,28 +913,28 @@ export def "x-amz-target-network-firewall-20201112list-firewalls ListFirewalls" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  --NextToken: any
-  --VpcIds: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  --next-token: any
+  --vpc-ids: any
+  --max-results: any
 ]: any -> record<NextToken: record, Firewalls: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.ListFirewalls" $qp)
-  let body = {NextToken: $NextToken, VpcIds: $VpcIds, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "VpcIds": $vpc_ids, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -945,7 +945,7 @@ export def "x-amz-target-network-firewall-20201112list-firewalls ListFirewalls" 
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.ListRuleGroups
 # operationId: ListRuleGroups
-export def "x-amz-target-network-firewall-20201112list-rule-groups ListRuleGroups" [
+export def "x-amz-target-network-firewall-20201112list-rule-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -954,30 +954,30 @@ export def "x-amz-target-network-firewall-20201112list-rule-groups ListRuleGroup
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  --NextToken: any
-  --MaxResults: any
-  --Scope: any
-  --ManagedType: any
-  --Type: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  --next-token: any
+  --max-results: any
+  --scope: any
+  --managed-type: any
+  --type: any
 ]: any -> record<NextToken: record, RuleGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.ListRuleGroups" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Scope: $Scope, ManagedType: $ManagedType, Type: $Type} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Scope": $scope, "ManagedType": $managed_type, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -988,7 +988,7 @@ export def "x-amz-target-network-firewall-20201112list-rule-groups ListRuleGroup
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.ListTLSInspectionConfigurations
 # operationId: ListTLSInspectionConfigurations
-export def "x-amz-target-network-firewall-20201112list-tls-inspection-configurations ListTLSInspectionConfigurations" [
+export def "x-amz-target-network-firewall-20201112list-tls-inspection-configurations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -997,27 +997,27 @@ export def "x-amz-target-network-firewall-20201112list-tls-inspection-configurat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: record, TLSInspectionConfigurations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.ListTLSInspectionConfigurations" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1028,7 +1028,7 @@ export def "x-amz-target-network-firewall-20201112list-tls-inspection-configurat
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-network-firewall-20201112list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-network-firewall-20201112list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,28 +1037,28 @@ export def "x-amz-target-network-firewall-20201112list-tags-for-resource ListTag
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  --NextToken: any
-  --MaxResults: any
-  ResourceArn: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  --next-token: any
+  --max-results: any
+  resource_arn: any
 ]: any -> record<NextToken: record, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.ListTagsForResource" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, ResourceArn: $ResourceArn} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1069,7 +1069,7 @@ export def "x-amz-target-network-firewall-20201112list-tags-for-resource ListTag
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.PutResourcePolicy
 # operationId: PutResourcePolicy
-export def "x-amz-target-network-firewall-20201112put-resource-policy PutResourcePolicy" [
+export def "x-amz-target-network-firewall-20201112put-resource-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1078,24 +1078,24 @@ export def "x-amz-target-network-firewall-20201112put-resource-policy PutResourc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  ResourceArn: any
-  Policy: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  resource_arn: any
+  policy: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.PutResourcePolicy")
-  let body = {ResourceArn: $ResourceArn, Policy: $Policy} | compact
+  let body = {"ResourceArn": $resource_arn, "Policy": $policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1106,7 +1106,7 @@ export def "x-amz-target-network-firewall-20201112put-resource-policy PutResourc
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.TagResource
 # operationId: TagResource
-export def "x-amz-target-network-firewall-20201112tag-resource TagResource" [
+export def "x-amz-target-network-firewall-20201112tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1115,24 +1115,24 @@ export def "x-amz-target-network-firewall-20201112tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  ResourceArn: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.TagResource")
-  let body = {ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1143,7 +1143,7 @@ export def "x-amz-target-network-firewall-20201112tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-network-firewall-20201112untag-resource UntagResource" [
+export def "x-amz-target-network-firewall-20201112untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1152,24 +1152,24 @@ export def "x-amz-target-network-firewall-20201112untag-resource UntagResource" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  ResourceArn: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.UntagResource")
-  let body = {ResourceArn: $ResourceArn, TagKeys: $TagKeys} | compact
+  let body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1180,7 +1180,7 @@ export def "x-amz-target-network-firewall-20201112untag-resource UntagResource" 
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.UpdateFirewallDeleteProtection
 # operationId: UpdateFirewallDeleteProtection
-export def "x-amz-target-network-firewall-20201112update-firewall-delete-protection UpdateFirewallDeleteProtection" [
+export def "x-amz-target-network-firewall-20201112update-firewall-delete-protection update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1189,26 +1189,26 @@ export def "x-amz-target-network-firewall-20201112update-firewall-delete-protect
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  --UpdateToken: any
-  --FirewallArn: any
-  --FirewallName: any
-  DeleteProtection: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  --update-token: any
+  --firewall-arn: any
+  --firewall-name: any
+  delete_protection: any
 ]: any -> record<FirewallArn: record, FirewallName: record, DeleteProtection: record, UpdateToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.UpdateFirewallDeleteProtection")
-  let body = {UpdateToken: $UpdateToken, FirewallArn: $FirewallArn, FirewallName: $FirewallName, DeleteProtection: $DeleteProtection} | compact
+  let body = {"UpdateToken": $update_token, "FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "DeleteProtection": $delete_protection} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1219,7 +1219,7 @@ export def "x-amz-target-network-firewall-20201112update-firewall-delete-protect
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.UpdateFirewallDescription
 # operationId: UpdateFirewallDescription
-export def "x-amz-target-network-firewall-20201112update-firewall-description UpdateFirewallDescription" [
+export def "x-amz-target-network-firewall-20201112update-firewall-description update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1228,26 +1228,26 @@ export def "x-amz-target-network-firewall-20201112update-firewall-description Up
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  --UpdateToken: any
-  --FirewallArn: any
-  --FirewallName: any
-  --Description: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  --update-token: any
+  --firewall-arn: any
+  --firewall-name: any
+  --description: any
 ]: any -> record<FirewallArn: record, FirewallName: record, Description: record, UpdateToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.UpdateFirewallDescription")
-  let body = {UpdateToken: $UpdateToken, FirewallArn: $FirewallArn, FirewallName: $FirewallName, Description: $Description} | compact
+  let body = {"UpdateToken": $update_token, "FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "Description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1259,7 +1259,7 @@ export def "x-amz-target-network-firewall-20201112update-firewall-description Up
 # POST /#X-Amz-Target=NetworkFirewall_20201112.UpdateFirewallEncryptionConfiguration
 # operationId: UpdateFirewallEncryptionConfiguration
 # --EncryptionConfiguration shape: {KeyId?: any, Type: any}
-export def "x-amz-target-network-firewall-20201112update-firewall-encryption-configuration UpdateFirewallEncryptionConfiguration" [
+export def "x-amz-target-network-firewall-20201112update-firewall-encryption-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1268,26 +1268,26 @@ export def "x-amz-target-network-firewall-20201112update-firewall-encryption-con
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  --UpdateToken: any
-  --FirewallArn: any
-  --FirewallName: any
-  --EncryptionConfiguration: record # A complex type that contains optional Amazon Web Services Key Management Service (KMS) encryption settings for your Network Firewall resources. Your data is encrypted by default with an Amazon Web Services owned key that Amazon Web Services owns and manages for you. You can use either the Amazon Web Services owned key, or provide your own customer managed key. To learn more about KMS encryption of your Network Firewall resources, see <a href="https://docs.aws.amazon.com/kms/latest/developerguide/kms-encryption-at-rest.html">Encryption at rest with Amazon Web Services Key Managment Service</a> in the <i>Network Firewall Developer Guide</i>. — shape: {KeyId?: any, Type: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  --update-token: any
+  --firewall-arn: any
+  --firewall-name: any
+  --encryption-configuration: record # A complex type that contains optional Amazon Web Services Key Management Service (KMS) encryption settings for your Network Firewall resources. Your data is encrypted by default with an Amazon Web Services owned key that Amazon Web Services owns and manages for you. You can use either the Amazon Web Services owned key, or provide your own customer managed key. To learn more about KMS encryption of your Network Firewall resources, see <a href="https://docs.aws.amazon.com/kms/latest/developerguide/kms-encryption-at-rest.html">Encryption at rest with Amazon Web Services Key Managment Service</a> in the <i>Network Firewall Developer Guide</i>. — shape: {KeyId?: any, Type: any}
 ]: any -> record<FirewallArn: record, FirewallName: record, UpdateToken: record, EncryptionConfiguration: record<KeyId: record, Type: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.UpdateFirewallEncryptionConfiguration")
-  let body = {UpdateToken: $UpdateToken, FirewallArn: $FirewallArn, FirewallName: $FirewallName, EncryptionConfiguration: $EncryptionConfiguration} | compact
+  let body = {"UpdateToken": $update_token, "FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "EncryptionConfiguration": $encryption_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1298,7 +1298,7 @@ export def "x-amz-target-network-firewall-20201112update-firewall-encryption-con
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.UpdateFirewallPolicy
 # operationId: UpdateFirewallPolicy
-export def "x-amz-target-network-firewall-20201112update-firewall-policy UpdateFirewallPolicy" [
+export def "x-amz-target-network-firewall-20201112update-firewall-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1307,29 +1307,29 @@ export def "x-amz-target-network-firewall-20201112update-firewall-policy UpdateF
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  UpdateToken: any
-  --FirewallPolicyArn: any
-  --FirewallPolicyName: any
-  FirewallPolicy: any
-  --Description: any
-  --DryRun: any
-  --EncryptionConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  update_token: any
+  --firewall-policy-arn: any
+  --firewall-policy-name: any
+  firewall_policy: any
+  --description: any
+  --body-dry-run: any
+  --encryption-configuration: any
 ]: any -> record<UpdateToken: record, FirewallPolicyResponse: record<FirewallPolicyName: record, FirewallPolicyArn: record, FirewallPolicyId: record, Description: record, FirewallPolicyStatus: record, Tags: record, ConsumedStatelessRuleCapacity: record, ConsumedStatefulRuleCapacity: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, LastModifiedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.UpdateFirewallPolicy")
-  let body = {UpdateToken: $UpdateToken, FirewallPolicyArn: $FirewallPolicyArn, FirewallPolicyName: $FirewallPolicyName, FirewallPolicy: $FirewallPolicy, Description: $Description, DryRun: $DryRun, EncryptionConfiguration: $EncryptionConfiguration} | compact
+  let body = {"UpdateToken": $update_token, "FirewallPolicyArn": $firewall_policy_arn, "FirewallPolicyName": $firewall_policy_name, "FirewallPolicy": $firewall_policy, "Description": $description, "DryRun": $body_dry_run, "EncryptionConfiguration": $encryption_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1340,7 +1340,7 @@ export def "x-amz-target-network-firewall-20201112update-firewall-policy UpdateF
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.UpdateFirewallPolicyChangeProtection
 # operationId: UpdateFirewallPolicyChangeProtection
-export def "x-amz-target-network-firewall-20201112update-firewall-policy-change-protection UpdateFirewallPolicyChangeProtection" [
+export def "x-amz-target-network-firewall-20201112update-firewall-policy-change-protection update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1349,26 +1349,26 @@ export def "x-amz-target-network-firewall-20201112update-firewall-policy-change-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  --UpdateToken: any
-  --FirewallArn: any
-  --FirewallName: any
-  FirewallPolicyChangeProtection: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  --update-token: any
+  --firewall-arn: any
+  --firewall-name: any
+  firewall_policy_change_protection: any
 ]: any -> record<UpdateToken: record, FirewallArn: record, FirewallName: record, FirewallPolicyChangeProtection: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.UpdateFirewallPolicyChangeProtection")
-  let body = {UpdateToken: $UpdateToken, FirewallArn: $FirewallArn, FirewallName: $FirewallName, FirewallPolicyChangeProtection: $FirewallPolicyChangeProtection} | compact
+  let body = {"UpdateToken": $update_token, "FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "FirewallPolicyChangeProtection": $firewall_policy_change_protection} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1379,7 +1379,7 @@ export def "x-amz-target-network-firewall-20201112update-firewall-policy-change-
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.UpdateLoggingConfiguration
 # operationId: UpdateLoggingConfiguration
-export def "x-amz-target-network-firewall-20201112update-logging-configuration UpdateLoggingConfiguration" [
+export def "x-amz-target-network-firewall-20201112update-logging-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1388,25 +1388,25 @@ export def "x-amz-target-network-firewall-20201112update-logging-configuration U
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  --FirewallArn: any
-  --FirewallName: any
-  --LoggingConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  --firewall-arn: any
+  --firewall-name: any
+  --logging-configuration: any
 ]: any -> record<FirewallArn: record, FirewallName: record, LoggingConfiguration: record<LogDestinationConfigs: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.UpdateLoggingConfiguration")
-  let body = {FirewallArn: $FirewallArn, FirewallName: $FirewallName, LoggingConfiguration: $LoggingConfiguration} | compact
+  let body = {"FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "LoggingConfiguration": $logging_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1417,7 +1417,7 @@ export def "x-amz-target-network-firewall-20201112update-logging-configuration U
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.UpdateRuleGroup
 # operationId: UpdateRuleGroup
-export def "x-amz-target-network-firewall-20201112update-rule-group UpdateRuleGroup" [
+export def "x-amz-target-network-firewall-20201112update-rule-group update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1426,32 +1426,32 @@ export def "x-amz-target-network-firewall-20201112update-rule-group UpdateRuleGr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  UpdateToken: any
-  --RuleGroupArn: any
-  --RuleGroupName: any
-  --RuleGroup: any
-  --Rules: any
-  --Type: any
-  --Description: any
-  --DryRun: any
-  --EncryptionConfiguration: any
-  --SourceMetadata: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  update_token: any
+  --rule-group-arn: any
+  --rule-group-name: any
+  --rule-group: any
+  --rules: any
+  --type: any
+  --description: any
+  --body-dry-run: any
+  --encryption-configuration: any
+  --source-metadata: any
 ]: any -> record<UpdateToken: record, RuleGroupResponse: record<RuleGroupArn: record, RuleGroupName: record, RuleGroupId: record, Description: record, Type: record, Capacity: record, RuleGroupStatus: record, Tags: record, ConsumedCapacity: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, SourceMetadata: record<SourceArn: record, SourceUpdateToken: record>, SnsTopic: record, LastModifiedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.UpdateRuleGroup")
-  let body = {UpdateToken: $UpdateToken, RuleGroupArn: $RuleGroupArn, RuleGroupName: $RuleGroupName, RuleGroup: $RuleGroup, Rules: $Rules, Type: $Type, Description: $Description, DryRun: $DryRun, EncryptionConfiguration: $EncryptionConfiguration, SourceMetadata: $SourceMetadata} | compact
+  let body = {"UpdateToken": $update_token, "RuleGroupArn": $rule_group_arn, "RuleGroupName": $rule_group_name, "RuleGroup": $rule_group, "Rules": $rules, "Type": $type, "Description": $description, "DryRun": $body_dry_run, "EncryptionConfiguration": $encryption_configuration, "SourceMetadata": $source_metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1462,7 +1462,7 @@ export def "x-amz-target-network-firewall-20201112update-rule-group UpdateRuleGr
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.UpdateSubnetChangeProtection
 # operationId: UpdateSubnetChangeProtection
-export def "x-amz-target-network-firewall-20201112update-subnet-change-protection UpdateSubnetChangeProtection" [
+export def "x-amz-target-network-firewall-20201112update-subnet-change-protection update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1471,26 +1471,26 @@ export def "x-amz-target-network-firewall-20201112update-subnet-change-protectio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  --UpdateToken: any
-  --FirewallArn: any
-  --FirewallName: any
-  SubnetChangeProtection: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  --update-token: any
+  --firewall-arn: any
+  --firewall-name: any
+  subnet_change_protection: any
 ]: any -> record<UpdateToken: record, FirewallArn: record, FirewallName: record, SubnetChangeProtection: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.UpdateSubnetChangeProtection")
-  let body = {UpdateToken: $UpdateToken, FirewallArn: $FirewallArn, FirewallName: $FirewallName, SubnetChangeProtection: $SubnetChangeProtection} | compact
+  let body = {"UpdateToken": $update_token, "FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "SubnetChangeProtection": $subnet_change_protection} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1501,7 +1501,7 @@ export def "x-amz-target-network-firewall-20201112update-subnet-change-protectio
 #
 # POST /#X-Amz-Target=NetworkFirewall_20201112.UpdateTLSInspectionConfiguration
 # operationId: UpdateTLSInspectionConfiguration
-export def "x-amz-target-network-firewall-20201112update-tls-inspection-configuration UpdateTLSInspectionConfiguration" [
+export def "x-amz-target-network-firewall-20201112update-tls-inspection-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1510,28 +1510,28 @@ export def "x-amz-target-network-firewall-20201112update-tls-inspection-configur
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  --TLSInspectionConfigurationArn: any
-  --TLSInspectionConfigurationName: any
-  TLSInspectionConfiguration: any
-  --Description: any
-  --EncryptionConfiguration: any
-  UpdateToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  --tls-inspection-configuration-arn: any
+  --tls-inspection-configuration-name: any
+  tls_inspection_configuration: any
+  --description: any
+  --encryption-configuration: any
+  update_token: any
 ]: any -> record<UpdateToken: record, TLSInspectionConfigurationResponse: record<TLSInspectionConfigurationArn: record, TLSInspectionConfigurationName: record, TLSInspectionConfigurationId: record, TLSInspectionConfigurationStatus: record, Description: record, Tags: record, LastModifiedTime: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, Certificates: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=NetworkFirewall_20201112.UpdateTLSInspectionConfiguration")
-  let body = {TLSInspectionConfigurationArn: $TLSInspectionConfigurationArn, TLSInspectionConfigurationName: $TLSInspectionConfigurationName, TLSInspectionConfiguration: $TLSInspectionConfiguration, Description: $Description, EncryptionConfiguration: $EncryptionConfiguration, UpdateToken: $UpdateToken} | compact
+  let body = {"TLSInspectionConfigurationArn": $tls_inspection_configuration_arn, "TLSInspectionConfigurationName": $tls_inspection_configuration_name, "TLSInspectionConfiguration": $tls_inspection_configuration, "Description": $description, "EncryptionConfiguration": $encryption_configuration, "UpdateToken": $update_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

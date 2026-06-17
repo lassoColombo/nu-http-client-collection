@@ -72,7 +72,7 @@ def language-completer-1 [] { ["ar" "cs" "da" "de" "el" "en" "es" "fi" "fr" "hu"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyze AnalyzeImage" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyze post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # POST /analyze
 # operationId: AnalyzeImage
-export def "analyze AnalyzeImage" [
+export def "analyze post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,18 +105,18 @@ export def "analyze AnalyzeImage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --visualFeatures: list # A string indicating what visual feature types to return. Multiple values should be comma-separated. Valid visual feature types include: Categories - categorizes image content according to a taxonomy defined in documentation. Tags - tags the image with a detailed list of words related to the image content. Description - describes the image content with a complete English sentence. Faces - detects if faces are present. If present, generate coordinates, gender and age. ImageType - detects if image is clipart or a line drawing. Color - determines the accent color, dominant color, and whether an image is black&white. Adult - detects if the image is pornographic in nature (depicts nudity or a sex act), or is gory (depicts extreme violence or blood). Sexually suggestive content (aka racy content) is also detected. Objects - detects various objects within an image, including the approximate location. The Objects argument is only available in English. Brands - detects various brands within an image, including the approximate location. The Brands argument is only available in English.
+  --visual-features: list # A string indicating what visual feature types to return. Multiple values should be comma-separated. Valid visual feature types include: Categories - categorizes image content according to a taxonomy defined in documentation. Tags - tags the image with a detailed list of words related to the image content. Description - describes the image content with a complete English sentence. Faces - detects if faces are present. If present, generate coordinates, gender and age. ImageType - detects if image is clipart or a line drawing. Color - determines the accent color, dominant color, and whether an image is black&white. Adult - detects if the image is pornographic in nature (depicts nudity or a sex act), or is gory (depicts extreme violence or blood). Sexually suggestive content (aka racy content) is also detected. Objects - detects various objects within an image, including the approximate location. The Objects argument is only available in English. Brands - detects various brands within an image, including the approximate location. The Brands argument is only available in English.
   --details: list # A string indicating which domain-specific details to return. Multiple values should be comma-separated. Valid visual feature types include: Celebrities - identifies celebrities if detected in the image, Landmarks - identifies notable landmarks in the image.
   --language: string@language-completer # The desired language for output generation. If this parameter is not specified, the default value is &quot;en&quot;.Supported languages:en - English, Default. es - Spanish, ja - Japanese, pt - Portuguese, zh - Simplified Chinese. (default: en)
-  --descriptionExclude: list # Turn off specified domain models when generating the description.
+  --description-exclude: list # Turn off specified domain models when generating the description.
   --body-url: string # Publicly reachable URL of an image.
 ]: any -> record<adult: record<adultScore: float, goreScore: float, isAdultContent: bool, isGoryContent: bool, isRacyContent: bool, racyScore: float>, brands: table<confidence: float, name: string, rectangle: record>, categories: table<detail: record, name: string, score: float>, color: record<accentColor: string, dominantColorBackground: string, dominantColorForeground: string, dominantColors: list<string>, isBWImg: bool>, description: record<captions: list<record>, tags: list<string>>, faces: table<age: int, faceRectangle: record, gender: string>, imageType: record<clipArtType: int, lineDrawingType: int>, metadata: record<format: string, height: int, width: int>, objects: table<confidence: float, object: string, parent: record, rectangle: record>, requestId: string, tags: table<confidence: float, hint: string, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "visualFeatures" $visualFeatures "csv") (serialize-qp "details" $details "csv") (serialize-qp "language" $language "scalar") (serialize-qp "descriptionExclude" $descriptionExclude "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "visualFeatures" $visual_features "csv") (serialize-qp "details" $details "csv") (serialize-qp "language" $language "scalar") (serialize-qp "descriptionExclude" $description_exclude "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/analyze" $qp)
-  let body = {url: $body_url} | compact
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -127,7 +127,7 @@ export def "analyze AnalyzeImage" [
 #
 # POST /areaOfInterest
 # operationId: GetAreaOfInterest
-export def "area-of-interest GetAreaOfInterest" [
+export def "area-of-interest get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,7 +142,7 @@ export def "area-of-interest GetAreaOfInterest" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/areaOfInterest")
-  let body = {url: $body_url} | compact
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -153,7 +153,7 @@ export def "area-of-interest GetAreaOfInterest" [
 #
 # POST /describe
 # operationId: DescribeImage
-export def "describe DescribeImage" [
+export def "describe post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,17 +162,17 @@ export def "describe DescribeImage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxCandidates: int # Maximum number of candidate descriptions to be returned.  The default is 1. (format: int32, default: 1)
+  --max-candidates: int # Maximum number of candidate descriptions to be returned.  The default is 1. (format: int32, default: 1)
   --language: string@language-completer # The desired language for output generation. If this parameter is not specified, the default value is &quot;en&quot;.Supported languages:en - English, Default. es - Spanish, ja - Japanese, pt - Portuguese, zh - Simplified Chinese. (default: en)
-  --descriptionExclude: list # Turn off specified domain models when generating the description.
+  --description-exclude: list # Turn off specified domain models when generating the description.
   --body-url: string # Publicly reachable URL of an image.
 ]: any -> record<description: record<captions: list<record>, tags: list<string>>, metadata: record<format: string, height: int, width: int>, requestId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxCandidates" $maxCandidates "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "descriptionExclude" $descriptionExclude "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxCandidates" $max_candidates "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "descriptionExclude" $description_exclude "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/describe" $qp)
-  let body = {url: $body_url} | compact
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -183,7 +183,7 @@ export def "describe DescribeImage" [
 #
 # POST /detect
 # operationId: DetectObjects
-export def "detect DetectObjects" [
+export def "detect post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "detect DetectObjects" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/detect")
-  let body = {url: $body_url} | compact
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -209,7 +209,7 @@ export def "detect DetectObjects" [
 #
 # POST /generateThumbnail
 # operationId: GenerateThumbnail
-export def "generate-thumbnail GenerateThumbnail" [
+export def "generate-thumbnail post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,15 +220,15 @@ export def "generate-thumbnail GenerateThumbnail" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --width: int # Width of the thumbnail, in pixels. It must be between 1 and 1024. Recommended minimum of 50. (format: int32)
   --height: int # Height of the thumbnail, in pixels. It must be between 1 and 1024. Recommended minimum of 50. (format: int32)
-  --smartCropping: oneof<nothing, bool> # Boolean flag for enabling smart cropping. (default: false)
+  --smart-cropping: oneof<nothing, bool> # Boolean flag for enabling smart cropping. (default: false)
   --body-url: string # Publicly reachable URL of an image.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "smartCropping" $smartCropping "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "smartCropping" $smart_cropping "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/generateThumbnail" $qp)
-  let body = {url: $body_url} | compact
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -239,7 +239,7 @@ export def "generate-thumbnail GenerateThumbnail" [
 #
 # GET /models
 # operationId: ListModels
-export def "models ListModels" [
+export def "models list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "models ListModels" [
 #
 # POST /models/{model}/analyze
 # operationId: AnalyzeImageByDomain
-export def "models-analyze AnalyzeImageByDomain" [
+export def "models-analyze post" [
   model: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,8 +278,8 @@ export def "models-analyze AnalyzeImageByDomain" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/models/($model)/analyze" $qp)
-  let body = {url: $body_url} | compact
+  let full_url = (build-url $base ({model: $model} | format pattern "/models/{model}/analyze") $qp)
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -290,7 +290,7 @@ export def "models-analyze AnalyzeImageByDomain" [
 #
 # POST /ocr
 # operationId: RecognizePrintedText
-export def "ocr RecognizePrintedText" [
+export def "ocr post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,16 +299,16 @@ export def "ocr RecognizePrintedText" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --detectOrientation: oneof<nothing, bool> # Whether detect the text orientation in the image. With detectOrientation=true the OCR service tries to detect the image orientation and correct it before further processing (e.g. if it's upside-down). (default: true)
+  --detect-orientation: oneof<nothing, bool> # Whether detect the text orientation in the image. With detectOrientation=true the OCR service tries to detect the image orientation and correct it before further processing (e.g. if it's upside-down). (default: true)
   --language: string@language-completer-1 # The BCP-47 language code of the text to be detected in the image. The default value is 'unk'. (default: unk)
   --body-url: string # Publicly reachable URL of an image.
 ]: any -> record<language: string, orientation: string, regions: table<boundingBox: string, lines: list>, textAngle: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "detectOrientation" $detectOrientation "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "detectOrientation" $detect_orientation "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ocr" $qp)
-  let body = {url: $body_url} | compact
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -319,7 +319,7 @@ export def "ocr RecognizePrintedText" [
 #
 # POST /tag
 # operationId: TagImage
-export def "tag TagImage" [
+export def "tag tag-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,7 +336,7 @@ export def "tag TagImage" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tag" $qp)
-  let body = {url: $body_url} | compact
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

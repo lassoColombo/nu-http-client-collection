@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-event-grid-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-event-grid-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.EventGrid/operations
 # operationId: Operations_List
-export def "providers-microsoft-event-grid-operations List" [
+export def "providers-microsoft-event-grid-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,7 +117,7 @@ export def "providers-microsoft-event-grid-operations List" [
 #
 # GET /providers/Microsoft.EventGrid/topicTypes
 # operationId: TopicTypes_List
-export def "providers-microsoft-event-grid-topic-types List" [
+export def "providers-microsoft-event-grid-topic-types list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,8 +141,8 @@ export def "providers-microsoft-event-grid-topic-types List" [
 #
 # GET /providers/Microsoft.EventGrid/topicTypes/{topicTypeName}
 # operationId: TopicTypes_Get
-export def "providers-microsoft-event-grid-topic-types Get" [
-  topicTypeName: string
+export def "providers-microsoft-event-grid-topic-types get" [
+  topic_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "providers-microsoft-event-grid-topic-types Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.EventGrid/topicTypes/($topicTypeName)" $qp)
+  let full_url = (build-url $base ({topic_type_name: $topic_type_name} | format pattern "/providers/Microsoft.EventGrid/topicTypes/{topic_type_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -166,8 +166,8 @@ export def "providers-microsoft-event-grid-topic-types Get" [
 #
 # GET /providers/Microsoft.EventGrid/topicTypes/{topicTypeName}/eventTypes
 # operationId: TopicTypes_ListEventTypes
-export def "providers-microsoft-event-grid-topic-types-event-types ListEventTypes" [
-  topicTypeName: string
+export def "providers-microsoft-event-grid-topic-types-event-types list" [
+  topic_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "providers-microsoft-event-grid-topic-types-event-types ListEventType
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.EventGrid/topicTypes/($topicTypeName)/eventTypes" $qp)
+  let full_url = (build-url $base ({topic_type_name: $topic_type_name} | format pattern "/providers/Microsoft.EventGrid/topicTypes/{topic_type_name}/eventTypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -191,8 +191,8 @@ export def "providers-microsoft-event-grid-topic-types-event-types ListEventType
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventGrid/domains
 # operationId: Domains_ListBySubscription
-export def "subscriptions-providers-microsoft-event-grid-domains ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-event-grid-domains list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "subscriptions-providers-microsoft-event-grid-domains ListBySubscript
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.EventGrid/domains" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.EventGrid/domains") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -218,8 +218,8 @@ export def "subscriptions-providers-microsoft-event-grid-domains ListBySubscript
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventGrid/eventSubscriptions
 # operationId: EventSubscriptions_ListGlobalBySubscription
-export def "subscriptions-providers-microsoft-event-grid-event-subscriptions ListGlobalBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-event-grid-event-subscriptions list-global" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "subscriptions-providers-microsoft-event-grid-event-subscriptions Lis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.EventGrid/eventSubscriptions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.EventGrid/eventSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -245,8 +245,8 @@ export def "subscriptions-providers-microsoft-event-grid-event-subscriptions Lis
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventGrid/locations/{location}/eventSubscriptions
 # operationId: EventSubscriptions_ListRegionalBySubscription
-export def "subscriptions-providers-microsoft-event-grid-locations-event-subscriptions ListRegionalBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-event-grid-locations-event-subscriptions list-regional" [
+  subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,7 +263,7 @@ export def "subscriptions-providers-microsoft-event-grid-locations-event-subscri
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.EventGrid/locations/($location)/eventSubscriptions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.EventGrid/locations/{location}/eventSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -273,10 +273,10 @@ export def "subscriptions-providers-microsoft-event-grid-locations-event-subscri
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventGrid/locations/{location}/topicTypes/{topicTypeName}/eventSubscriptions
 # operationId: EventSubscriptions_ListRegionalBySubscriptionForTopicType
-export def "subscriptions-providers-microsoft-event-grid-locations-topic-types-event-subscriptions ListRegionalBySubscriptionForTopicType" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-event-grid-locations-topic-types-event-subscriptions list-regional" [
+  subscription_id: string
   location: string
-  topicTypeName: string
+  topic_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "subscriptions-providers-microsoft-event-grid-locations-topic-types-e
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.EventGrid/locations/($location)/topicTypes/($topicTypeName)/eventSubscriptions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location, topic_type_name: $topic_type_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.EventGrid/locations/{location}/topicTypes/{topic_type_name}/eventSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -302,9 +302,9 @@ export def "subscriptions-providers-microsoft-event-grid-locations-topic-types-e
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventGrid/topicTypes/{topicTypeName}/eventSubscriptions
 # operationId: EventSubscriptions_ListGlobalBySubscriptionForTopicType
-export def "subscriptions-providers-microsoft-event-grid-topic-types-event-subscriptions ListGlobalBySubscriptionForTopicType" [
-  subscriptionId: string
-  topicTypeName: string
+export def "subscriptions-providers-microsoft-event-grid-topic-types-event-subscriptions list-global" [
+  subscription_id: string
+  topic_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,7 +320,7 @@ export def "subscriptions-providers-microsoft-event-grid-topic-types-event-subsc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.EventGrid/topicTypes/($topicTypeName)/eventSubscriptions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, topic_type_name: $topic_type_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.EventGrid/topicTypes/{topic_type_name}/eventSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -330,8 +330,8 @@ export def "subscriptions-providers-microsoft-event-grid-topic-types-event-subsc
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventGrid/topics
 # operationId: Topics_ListBySubscription
-export def "subscriptions-providers-microsoft-event-grid-topics ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-event-grid-topics list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,7 +347,7 @@ export def "subscriptions-providers-microsoft-event-grid-topics ListBySubscripti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.EventGrid/topics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.EventGrid/topics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -357,9 +357,9 @@ export def "subscriptions-providers-microsoft-event-grid-topics ListBySubscripti
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains
 # operationId: Domains_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/domains" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/domains") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -385,10 +385,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}
 # operationId: Domains_Delete
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  domainName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains delete" [
+  subscription_id: string
+  resource_group_name: string
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,7 +402,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/domains/($domainName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, domain_name: $domain_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/domains/{domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -412,10 +412,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}
 # operationId: Domains_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  domainName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains get" [
+  subscription_id: string
+  resource_group_name: string
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,7 +429,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/domains/($domainName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, domain_name: $domain_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/domains/{domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -439,10 +439,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}
 # operationId: Domains_Update
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  domainName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains update" [
+  subscription_id: string
+  resource_group_name: string
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,8 +458,8 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/domains/($domainName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, domain_name: $domain_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/domains/{domain_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -470,10 +470,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}
 # operationId: Domains_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  domainName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,8 +491,8 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/domains/($domainName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, domain_name: $domain_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/domains/{domain_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -503,10 +503,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}/listKeys
 # operationId: Domains_ListSharedAccessKeys
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-list-keys ListSharedAccessKeys" [
-  subscriptionId: string
-  resourceGroupName: string
-  domainName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-list-keys list-shared-access" [
+  subscription_id: string
+  resource_group_name: string
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -520,7 +520,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/domains/($domainName)/listKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, domain_name: $domain_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/domains/{domain_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -530,10 +530,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}/regenerateKey
 # operationId: Domains_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-regenerate-key RegenerateKey" [
-  subscriptionId: string
-  resourceGroupName: string
-  domainName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-regenerate-key post" [
+  subscription_id: string
+  resource_group_name: string
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,14 +543,14 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request.
-  keyName: string # Key name to regenerate key1 or key2.
+  key_name: string # Key name to regenerate key1 or key2.
 ]: any -> record<key1: string, key2: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/domains/($domainName)/regenerateKey" $qp)
-  let body = {keyName: $keyName} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, domain_name: $domain_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/domains/{domain_name}/regenerateKey") $qp)
+  let body = {"keyName": $key_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -561,10 +561,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}/topics
 # operationId: DomainTopics_ListByDomain
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-topics ListByDomain" [
-  subscriptionId: string
-  resourceGroupName: string
-  domainName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-topics list-by" [
+  subscription_id: string
+  resource_group_name: string
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,7 +580,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/domains/($domainName)/topics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, domain_name: $domain_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/domains/{domain_name}/topics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -590,11 +590,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}/topics/{domainTopicName}
 # operationId: DomainTopics_Delete
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-topics Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  domainName: string
-  domainTopicName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-topics delete" [
+  subscription_id: string
+  resource_group_name: string
+  domain_name: string
+  domain_topic_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,7 +608,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/domains/($domainName)/topics/($domainTopicName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, domain_name: $domain_name, domain_topic_name: $domain_topic_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/domains/{domain_name}/topics/{domain_topic_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -618,11 +618,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}/topics/{domainTopicName}
 # operationId: DomainTopics_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-topics Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  domainName: string
-  domainTopicName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-topics get" [
+  subscription_id: string
+  resource_group_name: string
+  domain_name: string
+  domain_topic_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,7 +636,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/domains/($domainName)/topics/($domainTopicName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, domain_name: $domain_name, domain_topic_name: $domain_topic_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/domains/{domain_name}/topics/{domain_topic_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -646,11 +646,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}/topics/{domainTopicName}
 # operationId: DomainTopics_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-topics CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  domainName: string
-  domainTopicName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-topics create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  domain_name: string
+  domain_topic_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,7 +664,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/domains/($domainName)/topics/($domainTopicName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, domain_name: $domain_name, domain_topic_name: $domain_topic_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/domains/{domain_name}/topics/{domain_topic_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -674,11 +674,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}/topics/{topicName}/providers/Microsoft.EventGrid/eventSubscriptions
 # operationId: EventSubscriptions_ListByDomainTopic
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-topics-providers-microsoft-event-grid-event-subscriptions ListByDomainTopic" [
-  subscriptionId: string
-  resourceGroupName: string
-  domainName: string
-  topicName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-topics-providers-microsoft-event-grid-event-subscriptions list-by" [
+  subscription_id: string
+  resource_group_name: string
+  domain_name: string
+  topic_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,7 +694,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/domains/($domainName)/topics/($topicName)/providers/Microsoft.EventGrid/eventSubscriptions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, domain_name: $domain_name, topic_name: $topic_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/domains/{domain_name}/topics/{topic_name}/providers/Microsoft.EventGrid/eventSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -704,9 +704,9 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/eventSubscriptions
 # operationId: EventSubscriptions_ListGlobalByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-event-subscriptions ListGlobalByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-event-subscriptions list-global" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,7 +722,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-event-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/eventSubscriptions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/eventSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -732,9 +732,9 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-event-s
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/locations/{location}/eventSubscriptions
 # operationId: EventSubscriptions_ListRegionalByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-locations-event-subscriptions ListRegionalByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-locations-event-subscriptions list-regional" [
+  subscription_id: string
+  resource_group_name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -751,7 +751,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-locatio
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/locations/($location)/eventSubscriptions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location: $location} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/locations/{location}/eventSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -761,11 +761,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-locatio
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/locations/{location}/topicTypes/{topicTypeName}/eventSubscriptions
 # operationId: EventSubscriptions_ListRegionalByResourceGroupForTopicType
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-locations-topic-types-event-subscriptions ListRegionalByResourceGroupForTopicType" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-locations-topic-types-event-subscriptions list-regional" [
+  subscription_id: string
+  resource_group_name: string
   location: string
-  topicTypeName: string
+  topic_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -781,7 +781,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-locatio
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/locations/($location)/topicTypes/($topicTypeName)/eventSubscriptions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location: $location, topic_type_name: $topic_type_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/locations/{location}/topicTypes/{topic_type_name}/eventSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -791,10 +791,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-locatio
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/topicTypes/{topicTypeName}/eventSubscriptions
 # operationId: EventSubscriptions_ListGlobalByResourceGroupForTopicType
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-topic-types-event-subscriptions ListGlobalByResourceGroupForTopicType" [
-  subscriptionId: string
-  resourceGroupName: string
-  topicTypeName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-topic-types-event-subscriptions list-global" [
+  subscription_id: string
+  resource_group_name: string
+  topic_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -810,7 +810,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topic-t
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/topicTypes/($topicTypeName)/eventSubscriptions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, topic_type_name: $topic_type_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/topicTypes/{topic_type_name}/eventSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -820,9 +820,9 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topic-t
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/topics
 # operationId: Topics_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -838,7 +838,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/topics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/topics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -848,10 +848,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics 
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/topics/{topicName}
 # operationId: Topics_Delete
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  topicName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics delete" [
+  subscription_id: string
+  resource_group_name: string
+  topic_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -865,7 +865,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/topics/($topicName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, topic_name: $topic_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/topics/{topic_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -875,10 +875,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/topics/{topicName}
 # operationId: Topics_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  topicName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics get" [
+  subscription_id: string
+  resource_group_name: string
+  topic_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -892,7 +892,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/topics/($topicName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, topic_name: $topic_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/topics/{topic_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -902,10 +902,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics 
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/topics/{topicName}
 # operationId: Topics_Update
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  topicName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics update" [
+  subscription_id: string
+  resource_group_name: string
+  topic_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -921,8 +921,8 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/topics/($topicName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, topic_name: $topic_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/topics/{topic_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -933,10 +933,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics 
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/topics/{topicName}
 # operationId: Topics_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  topicName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  topic_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -954,8 +954,8 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/topics/($topicName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, topic_name: $topic_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/topics/{topic_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -966,10 +966,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics 
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/topics/{topicName}/listKeys
 # operationId: Topics_ListSharedAccessKeys
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics-list-keys ListSharedAccessKeys" [
-  subscriptionId: string
-  resourceGroupName: string
-  topicName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics-list-keys list-shared-access" [
+  subscription_id: string
+  resource_group_name: string
+  topic_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -983,7 +983,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/topics/($topicName)/listKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, topic_name: $topic_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/topics/{topic_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -993,10 +993,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/topics/{topicName}/regenerateKey
 # operationId: Topics_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics-regenerate-key RegenerateKey" [
-  subscriptionId: string
-  resourceGroupName: string
-  topicName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics-regenerate-key post" [
+  subscription_id: string
+  resource_group_name: string
+  topic_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1006,14 +1006,14 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request.
-  keyName: string # Key name to regenerate key1 or key2
+  key_name: string # Key name to regenerate key1 or key2
 ]: any -> record<key1: string, key2: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventGrid/topics/($topicName)/regenerateKey" $qp)
-  let body = {keyName: $keyName} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, topic_name: $topic_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventGrid/topics/{topic_name}/regenerateKey") $qp)
+  let body = {"keyName": $key_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1024,12 +1024,12 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{providerNamespace}/{resourceTypeName}/{resourceName}/providers/Microsoft.EventGrid/eventSubscriptions
 # operationId: EventSubscriptions_ListByResource
-export def "subscriptions-resource-groups-providers-providers-microsoft-event-grid-event-subscriptions ListByResource" [
-  subscriptionId: string
-  resourceGroupName: string
-  providerNamespace: string
-  resourceTypeName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-providers-microsoft-event-grid-event-subscriptions list-by" [
+  subscription_id: string
+  resource_group_name: string
+  provider_namespace: string
+  resource_type_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1045,7 +1045,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-event-gr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/($providerNamespace)/($resourceTypeName)/($resourceName)/providers/Microsoft.EventGrid/eventSubscriptions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provider_namespace: $provider_namespace, resource_type_name: $resource_type_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{provider_namespace}/{resource_type_name}/{resource_name}/providers/Microsoft.EventGrid/eventSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1055,12 +1055,12 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-event-gr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{providerNamespace}/{resourceTypeName}/{resourceName}/providers/Microsoft.EventGrid/eventTypes
 # operationId: Topics_ListEventTypes
-export def "subscriptions-resource-groups-providers-providers-microsoft-event-grid-event-types ListEventTypes" [
-  subscriptionId: string
-  resourceGroupName: string
-  providerNamespace: string
-  resourceTypeName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-providers-microsoft-event-grid-event-types list" [
+  subscription_id: string
+  resource_group_name: string
+  provider_namespace: string
+  resource_type_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1074,7 +1074,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-event-gr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/($providerNamespace)/($resourceTypeName)/($resourceName)/providers/Microsoft.EventGrid/eventTypes" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provider_namespace: $provider_namespace, resource_type_name: $resource_type_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{provider_namespace}/{resource_type_name}/{resource_name}/providers/Microsoft.EventGrid/eventTypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1084,9 +1084,9 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-event-gr
 #
 # DELETE /{scope}/providers/Microsoft.EventGrid/eventSubscriptions/{eventSubscriptionName}
 # operationId: EventSubscriptions_Delete
-export def "providers-microsoft-event-grid-event-subscriptions Delete" [
+export def "providers-microsoft-event-grid-event-subscriptions delete" [
   scope: string
-  eventSubscriptionName: string
+  event_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1100,7 +1100,7 @@ export def "providers-microsoft-event-grid-event-subscriptions Delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.EventGrid/eventSubscriptions/($eventSubscriptionName)" $qp)
+  let full_url = (build-url $base ({scope: $scope, event_subscription_name: $event_subscription_name} | format pattern "/{scope}/providers/Microsoft.EventGrid/eventSubscriptions/{event_subscription_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1110,9 +1110,9 @@ export def "providers-microsoft-event-grid-event-subscriptions Delete" [
 #
 # GET /{scope}/providers/Microsoft.EventGrid/eventSubscriptions/{eventSubscriptionName}
 # operationId: EventSubscriptions_Get
-export def "providers-microsoft-event-grid-event-subscriptions Get" [
+export def "providers-microsoft-event-grid-event-subscriptions get" [
   scope: string
-  eventSubscriptionName: string
+  event_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1126,7 +1126,7 @@ export def "providers-microsoft-event-grid-event-subscriptions Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.EventGrid/eventSubscriptions/($eventSubscriptionName)" $qp)
+  let full_url = (build-url $base ({scope: $scope, event_subscription_name: $event_subscription_name} | format pattern "/{scope}/providers/Microsoft.EventGrid/eventSubscriptions/{event_subscription_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1140,9 +1140,9 @@ export def "providers-microsoft-event-grid-event-subscriptions Get" [
 # --destination shape: {endpointType: "WebHook"|"EventHub"|"StorageQueue"|"HybridConnection"|"ServiceBusQueue"}
 # --filter shape: {advancedFilters?: list, includedEventTypes?: list, isSubjectCaseSensitive?: bool, subjectBeginsWith?: string, subjectEndsWith?: string}
 # --retryPolicy shape: {eventTimeToLiveInMinutes?: int, maxDeliveryAttempts?: int}
-export def "providers-microsoft-event-grid-event-subscriptions Update" [
+export def "providers-microsoft-event-grid-event-subscriptions update" [
   scope: string
-  eventSubscriptionName: string
+  event_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1152,19 +1152,19 @@ export def "providers-microsoft-event-grid-event-subscriptions Update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request.
-  --deadLetterDestination: record # Information about the dead letter destination for an event subscription. To configure a deadletter destination, do not directly instantiate an object of this class. Instead, instantiate an object of a derived class. Currently, StorageBlobDeadLetterDestination is the only class that derives from this class. — shape: {endpointType: "StorageBlob"}
+  --dead-letter-destination: record # Information about the dead letter destination for an event subscription. To configure a deadletter destination, do not directly instantiate an object of this class. Instead, instantiate an object of a derived class. Currently, StorageBlobDeadLetterDestination is the only class that derives from this class. — shape: {endpointType: "StorageBlob"}
   --destination: record # Information about the destination for an event subscription — shape: {endpointType: "WebHook"|"EventHub"|"StorageQueue"|"HybridConnection"|"ServiceBusQueue"}
-  --expirationTimeUtc: string # Information about the expiration time for the event subscription. (format: date-time)
+  --expiration-time-utc: string # Information about the expiration time for the event subscription. (format: date-time)
   --filter: record # Filter for the Event Subscription. — shape: {advancedFilters?: list, includedEventTypes?: list, isSubjectCaseSensitive?: bool, subjectBeginsWith?: string, subjectEndsWith?: string}
   --labels: list # List of user defined labels.
-  --retryPolicy: record # Information about the retry policy for an event subscription. — shape: {eventTimeToLiveInMinutes?: int, maxDeliveryAttempts?: int}
+  --retry-policy: record # Information about the retry policy for an event subscription. — shape: {eventTimeToLiveInMinutes?: int, maxDeliveryAttempts?: int}
 ]: any -> record<properties: record<deadLetterDestination: record<endpointType: string>, destination: record<endpointType: string>, expirationTimeUtc: string, filter: record<advancedFilters: list, includedEventTypes: list, isSubjectCaseSensitive: bool, subjectBeginsWith: string, subjectEndsWith: string>, labels: list<string>, provisioningState: string, retryPolicy: record<eventTimeToLiveInMinutes: int, maxDeliveryAttempts: int>, topic: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.EventGrid/eventSubscriptions/($eventSubscriptionName)" $qp)
-  let body = {deadLetterDestination: $deadLetterDestination, destination: $destination, expirationTimeUtc: $expirationTimeUtc, filter: $filter, labels: $labels, retryPolicy: $retryPolicy} | compact
+  let full_url = (build-url $base ({scope: $scope, event_subscription_name: $event_subscription_name} | format pattern "/{scope}/providers/Microsoft.EventGrid/eventSubscriptions/{event_subscription_name}") $qp)
+  let body = {"deadLetterDestination": $dead_letter_destination, "destination": $destination, "expirationTimeUtc": $expiration_time_utc, "filter": $filter, "labels": $labels, "retryPolicy": $retry_policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1176,9 +1176,9 @@ export def "providers-microsoft-event-grid-event-subscriptions Update" [
 # PUT /{scope}/providers/Microsoft.EventGrid/eventSubscriptions/{eventSubscriptionName}
 # operationId: EventSubscriptions_CreateOrUpdate
 # --properties shape: {deadLetterDestination?: record, destination?: record, expirationTimeUtc?: string, filter?: record, labels?: list, retryPolicy?: record}
-export def "providers-microsoft-event-grid-event-subscriptions CreateOrUpdate" [
+export def "providers-microsoft-event-grid-event-subscriptions create-or-update" [
   scope: string
-  eventSubscriptionName: string
+  event_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,8 +1194,8 @@ export def "providers-microsoft-event-grid-event-subscriptions CreateOrUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.EventGrid/eventSubscriptions/($eventSubscriptionName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({scope: $scope, event_subscription_name: $event_subscription_name} | format pattern "/{scope}/providers/Microsoft.EventGrid/eventSubscriptions/{event_subscription_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1206,9 +1206,9 @@ export def "providers-microsoft-event-grid-event-subscriptions CreateOrUpdate" [
 #
 # POST /{scope}/providers/Microsoft.EventGrid/eventSubscriptions/{eventSubscriptionName}/getFullUrl
 # operationId: EventSubscriptions_GetFullUrl
-export def "providers-microsoft-event-grid-event-subscriptions-get-full-url GetFullUrl" [
+export def "providers-microsoft-event-grid-event-subscriptions-get-full-url get" [
   scope: string
-  eventSubscriptionName: string
+  event_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1222,7 +1222,7 @@ export def "providers-microsoft-event-grid-event-subscriptions-get-full-url GetF
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.EventGrid/eventSubscriptions/($eventSubscriptionName)/getFullUrl" $qp)
+  let full_url = (build-url $base ({scope: $scope, event_subscription_name: $event_subscription_name} | format pattern "/{scope}/providers/Microsoft.EventGrid/eventSubscriptions/{event_subscription_name}/getFullUrl") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["api-key" "user-id"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bad-word-filter BadWordFilter" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bad-word-filter post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # POST /bad-word-filter
 # operationId: BadWordFilter
-export def "bad-word-filter BadWordFilter" [
+export def "bad-word-filter post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,7 +111,7 @@ export def "bad-word-filter BadWordFilter" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bad-word-filter")
-  let body = {catalog: $catalog, censor-character: $censor_character, content: $content} | compact
+  let body = {"catalog": $catalog, "censor-character": $censor_character, "content": $content} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -122,7 +122,7 @@ export def "bad-word-filter BadWordFilter" [
 #
 # GET /bin-list-download
 # operationId: BINListDownload
-export def "bin-list-download BINListDownload" [
+export def "bin-list-download get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,7 +147,7 @@ export def "bin-list-download BINListDownload" [
 #
 # GET /bin-lookup
 # operationId: BINLookup
-export def "bin-lookup BINLookup" [
+export def "bin-lookup get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +172,7 @@ export def "bin-lookup BINLookup" [
 #
 # POST /browser-bot
 # operationId: BrowserBot
-export def "browser-bot BrowserBot" [
+export def "browser-bot post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "browser-bot BrowserBot" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/browser-bot")
-  let body = {delay: $delay, exec: $exec, ignore-certificate-errors: $ignore_certificate_errors, selector: $selector, timeout: $timeout, url: $body_url, user-agent: $user_agent} | compact
+  let body = {"delay": $delay, "exec": $exec, "ignore-certificate-errors": $ignore_certificate_errors, "selector": $selector, "timeout": $timeout, "url": $body_url, "user-agent": $user_agent} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -204,7 +204,7 @@ export def "browser-bot BrowserBot" [
 #
 # GET /convert
 # operationId: Convert
-export def "convert Convert" [
+export def "convert get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "convert Convert" [
 #
 # GET /email-validate
 # operationId: EmailValidate
-export def "email-validate EmailValidate" [
+export def "email-validate validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "email-validate EmailValidate" [
 #
 # GET /email-verify
 # operationId: EmailVerify
-export def "email-verify EmailVerify" [
+export def "email-verify verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "email-verify EmailVerify" [
 #
 # GET /geocode-address
 # operationId: GeocodeAddress
-export def "geocode-address GeocodeAddress" [
+export def "geocode-address get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "geocode-address GeocodeAddress" [
 #
 # GET /geocode-reverse
 # operationId: GeocodeReverse
-export def "geocode-reverse GeocodeReverse" [
+export def "geocode-reverse get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,7 +340,7 @@ export def "geocode-reverse GeocodeReverse" [
 #
 # GET /hlr-lookup
 # operationId: HLRLookup
-export def "hlr-lookup HLRLookup" [
+export def "hlr-lookup get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +365,7 @@ export def "hlr-lookup HLRLookup" [
 #
 # GET /host-reputation
 # operationId: HostReputation
-export def "host-reputation HostReputation" [
+export def "host-reputation get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,7 +391,7 @@ export def "host-reputation HostReputation" [
 #
 # POST /html-clean
 # operationId: HTMLClean
-export def "html-clean HTMLClean" [
+export def "html-clean post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,7 +407,7 @@ export def "html-clean HTMLClean" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/html-clean")
-  let body = {content: $content, output-type: $output_type} | compact
+  let body = {"content": $content, "output-type": $output_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -418,7 +418,7 @@ export def "html-clean HTMLClean" [
 #
 # POST /html-render
 # operationId: HTMLRender
-export def "html-render HTMLRender" [
+export def "html-render post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,7 +454,7 @@ export def "html-render HTMLRender" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/html-render")
-  let body = {content: $content, css: $css, delay: $delay, footer: $footer, format: $format, grayscale: $grayscale, header: $header, ignore-certificate-errors: $ignore_certificate_errors, image-height: $image_height, image-width: $image_width, landscape: $landscape, margin: $margin, margin-bottom: $margin_bottom, margin-left: $margin_left, margin-right: $margin_right, margin-top: $margin_top, page-height: $page_height, page-size: $page_size, page-width: $page_width, timeout: $timeout, title: $title, zoom: $zoom} | compact
+  let body = {"content": $content, "css": $css, "delay": $delay, "footer": $footer, "format": $format, "grayscale": $grayscale, "header": $header, "ignore-certificate-errors": $ignore_certificate_errors, "image-height": $image_height, "image-width": $image_width, "landscape": $landscape, "margin": $margin, "margin-bottom": $margin_bottom, "margin-left": $margin_left, "margin-right": $margin_right, "margin-top": $margin_top, "page-height": $page_height, "page-size": $page_size, "page-width": $page_width, "timeout": $timeout, "title": $title, "zoom": $zoom} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -465,7 +465,7 @@ export def "html-render HTMLRender" [
 #
 # POST /image-resize
 # operationId: ImageResize
-export def "image-resize ImageResize" [
+export def "image-resize resize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,7 +485,7 @@ export def "image-resize ImageResize" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/image-resize")
-  let body = {bg-color: $bg_color, format: $format, height: $height, image-url: $image_url, resize-mode: $resize_mode, width: $width} | compact
+  let body = {"bg-color": $bg_color, "format": $format, "height": $height, "image-url": $image_url, "resize-mode": $resize_mode, "width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -496,7 +496,7 @@ export def "image-resize ImageResize" [
 #
 # POST /image-watermark
 # operationId: ImageWatermark
-export def "image-watermark ImageWatermark" [
+export def "image-watermark post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,7 +519,7 @@ export def "image-watermark ImageWatermark" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/image-watermark")
-  let body = {bg-color: $bg_color, format: $format, height: $height, image-url: $image_url, opacity: $opacity, position: $position, resize-mode: $resize_mode, watermark-url: $watermark_url, width: $width} | compact
+  let body = {"bg-color": $bg_color, "format": $format, "height": $height, "image-url": $image_url, "opacity": $opacity, "position": $position, "resize-mode": $resize_mode, "watermark-url": $watermark_url, "width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -530,7 +530,7 @@ export def "image-watermark ImageWatermark" [
 #
 # GET /ip-blocklist
 # operationId: IPBlocklist
-export def "ip-blocklist IPBlocklist" [
+export def "ip-blocklist get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -555,7 +555,7 @@ export def "ip-blocklist IPBlocklist" [
 #
 # GET /ip-blocklist-download
 # operationId: IPBlocklistDownload
-export def "ip-blocklist-download IPBlocklistDownload" [
+export def "ip-blocklist-download get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -582,7 +582,7 @@ export def "ip-blocklist-download IPBlocklistDownload" [
 #
 # GET /ip-info
 # operationId: IPInfo
-export def "ip-info IPInfo" [
+export def "ip-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,7 +607,7 @@ export def "ip-info IPInfo" [
 #
 # GET /ip-probe
 # operationId: IPProbe
-export def "ip-probe IPProbe" [
+export def "ip-probe get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -631,7 +631,7 @@ export def "ip-probe IPProbe" [
 #
 # POST /phone-playback
 # operationId: PhonePlayback
-export def "phone-playback PhonePlayback" [
+export def "phone-playback post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -649,7 +649,7 @@ export def "phone-playback PhonePlayback" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone-playback")
-  let body = {audio-url: $audio_url, limit: $limit, limit-ttl: $limit_ttl, number: $number} | compact
+  let body = {"audio-url": $audio_url, "limit": $limit, "limit-ttl": $limit_ttl, "number": $number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -660,7 +660,7 @@ export def "phone-playback PhonePlayback" [
 #
 # GET /phone-validate
 # operationId: PhoneValidate
-export def "phone-validate PhoneValidate" [
+export def "phone-validate validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,7 +686,7 @@ export def "phone-validate PhoneValidate" [
 #
 # POST /phone-verify
 # operationId: PhoneVerify
-export def "phone-verify PhoneVerify" [
+export def "phone-verify verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -708,7 +708,7 @@ export def "phone-verify PhoneVerify" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone-verify")
-  let body = {code-length: $code_length, country-code: $country_code, language-code: $language_code, limit: $limit, limit-ttl: $limit_ttl, number: $number, playback-delay: $playback_delay, security-code: $security_code} | compact
+  let body = {"code-length": $code_length, "country-code": $country_code, "language-code": $language_code, "limit": $limit, "limit-ttl": $limit_ttl, "number": $number, "playback-delay": $playback_delay, "security-code": $security_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -719,7 +719,7 @@ export def "phone-verify PhoneVerify" [
 #
 # POST /qr-code
 # operationId: QRCode
-export def "qr-code QRCode" [
+export def "qr-code post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -738,7 +738,7 @@ export def "qr-code QRCode" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qr-code")
-  let body = {bg-color: $bg_color, content: $content, fg-color: $fg_color, height: $height, width: $width} | compact
+  let body = {"bg-color": $bg_color, "content": $content, "fg-color": $fg_color, "height": $height, "width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -749,7 +749,7 @@ export def "qr-code QRCode" [
 #
 # POST /sms-verify
 # operationId: SMSVerify
-export def "sms-verify SMSVerify" [
+export def "sms-verify post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -770,7 +770,7 @@ export def "sms-verify SMSVerify" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms-verify")
-  let body = {code-length: $code_length, country-code: $country_code, language-code: $language_code, limit: $limit, limit-ttl: $limit_ttl, number: $number, security-code: $security_code} | compact
+  let body = {"code-length": $code_length, "country-code": $country_code, "language-code": $language_code, "limit": $limit, "limit-ttl": $limit_ttl, "number": $number, "security-code": $security_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -781,7 +781,7 @@ export def "sms-verify SMSVerify" [
 #
 # GET /ua-lookup
 # operationId: UALookup
-export def "ua-lookup UALookup" [
+export def "ua-lookup get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -811,7 +811,7 @@ export def "ua-lookup UALookup" [
 #
 # GET /url-info
 # operationId: URLInfo
-export def "url-info URLInfo" [
+export def "url-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -839,7 +839,7 @@ export def "url-info URLInfo" [
 #
 # GET /verify-security-code
 # operationId: VerifySecurityCode
-export def "verify-security-code VerifySecurityCode" [
+export def "verify-security-code verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

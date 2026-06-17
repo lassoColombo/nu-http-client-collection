@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectionMonitors
 # operationId: ConnectionMonitors_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors List" [
-  resourceGroupName: string
-  networkWatcherName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors list" [
+  subscription_id: string
+  resource_group_name: string
+  network_watcher_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkWatchers/($networkWatcherName)/connectionMonitors" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_watcher_name: $network_watcher_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/connectionMonitors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,11 +120,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectionMonitors/{connectionMonitorName}
 # operationId: ConnectionMonitors_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors Delete" [
-  resourceGroupName: string
-  networkWatcherName: string
-  connectionMonitorName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors delete" [
+  subscription_id: string
+  resource_group_name: string
+  network_watcher_name: string
+  connection_monitor_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,7 +138,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkWatchers/($networkWatcherName)/connectionMonitors/($connectionMonitorName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_watcher_name: $network_watcher_name, connection_monitor_name: $connection_monitor_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/connectionMonitors/{connection_monitor_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,11 +148,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectionMonitors/{connectionMonitorName}
 # operationId: ConnectionMonitors_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors Get" [
-  resourceGroupName: string
-  networkWatcherName: string
-  connectionMonitorName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors get" [
+  subscription_id: string
+  resource_group_name: string
+  network_watcher_name: string
+  connection_monitor_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkWatchers/($networkWatcherName)/connectionMonitors/($connectionMonitorName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_watcher_name: $network_watcher_name, connection_monitor_name: $connection_monitor_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/connectionMonitors/{connection_monitor_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,11 +176,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectionMonitors/{connectionMonitorName}
 # operationId: ConnectionMonitors_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors UpdateTags" [
-  resourceGroupName: string
-  networkWatcherName: string
-  connectionMonitorName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors update-tags" [
+  subscription_id: string
+  resource_group_name: string
+  network_watcher_name: string
+  connection_monitor_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,8 +196,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkWatchers/($networkWatcherName)/connectionMonitors/($connectionMonitorName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_watcher_name: $network_watcher_name, connection_monitor_name: $connection_monitor_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/connectionMonitors/{connection_monitor_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -209,11 +209,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectionMonitors/{connectionMonitorName}
 # operationId: ConnectionMonitors_CreateOrUpdate
 # --properties shape: {autoStart?: bool, destination: any, monitoringIntervalInSeconds?: int, source: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors CreateOrUpdate" [
-  resourceGroupName: string
-  networkWatcherName: string
-  connectionMonitorName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  network_watcher_name: string
+  connection_monitor_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,8 +231,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkWatchers/($networkWatcherName)/connectionMonitors/($connectionMonitorName)" $qp)
-  let body = {location: $location, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_watcher_name: $network_watcher_name, connection_monitor_name: $connection_monitor_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/connectionMonitors/{connection_monitor_name}") $qp)
+  let body = {"location": $location, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -243,11 +243,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectionMonitors/{connectionMonitorName}/query
 # operationId: ConnectionMonitors_Query
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors-query Query" [
-  resourceGroupName: string
-  networkWatcherName: string
-  connectionMonitorName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors-query list" [
+  subscription_id: string
+  resource_group_name: string
+  network_watcher_name: string
+  connection_monitor_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkWatchers/($networkWatcherName)/connectionMonitors/($connectionMonitorName)/query" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_watcher_name: $network_watcher_name, connection_monitor_name: $connection_monitor_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/connectionMonitors/{connection_monitor_name}/query") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -271,11 +271,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectionMonitors/{connectionMonitorName}/start
 # operationId: ConnectionMonitors_Start
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors-start Start" [
-  resourceGroupName: string
-  networkWatcherName: string
-  connectionMonitorName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors-start start" [
+  subscription_id: string
+  resource_group_name: string
+  network_watcher_name: string
+  connection_monitor_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkWatchers/($networkWatcherName)/connectionMonitors/($connectionMonitorName)/start" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_watcher_name: $network_watcher_name, connection_monitor_name: $connection_monitor_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/connectionMonitors/{connection_monitor_name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,11 +299,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectionMonitors/{connectionMonitorName}/stop
 # operationId: ConnectionMonitors_Stop
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors-stop Stop" [
-  resourceGroupName: string
-  networkWatcherName: string
-  connectionMonitorName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors-stop stop" [
+  subscription_id: string
+  resource_group_name: string
+  network_watcher_name: string
+  connection_monitor_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +317,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/networkWatchers/($networkWatcherName)/connectionMonitors/($connectionMonitorName)/stop" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, network_watcher_name: $network_watcher_name, connection_monitor_name: $connection_monitor_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/connectionMonitors/{connection_monitor_name}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

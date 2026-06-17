@@ -70,7 +70,7 @@ def accept-completer [] { ["application/json" "application/xml" "text/json" "tex
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "password-generate Generate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "password-generate post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 # POST /api/password/generate
 #
 # operationId: Password_Generate
-export def "password-generate Generate" [
+export def "password-generate post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,13 +104,13 @@ export def "password-generate Generate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --length: int # format: int32
-  --upperCase: oneof<nothing, bool>
+  --upper-case: oneof<nothing, bool>
   --digits: oneof<nothing, bool>
-  --specialCharacters: oneof<nothing, bool>
+  --special-characters: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "length" $length "scalar") (serialize-qp "upperCase" $upperCase "scalar") (serialize-qp "digits" $digits "scalar") (serialize-qp "specialCharacters" $specialCharacters "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "length" $length "scalar") (serialize-qp "upperCase" $upper_case "scalar") (serialize-qp "digits" $digits "scalar") (serialize-qp "specialCharacters" $special_characters "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/password/generate" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,7 +120,7 @@ export def "password-generate Generate" [
 # POST /api/password/validate
 #
 # operationId: Password_Validate
-export def "password-validate Validate" [
+export def "password-validate validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

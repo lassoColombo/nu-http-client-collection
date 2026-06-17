@@ -68,8 +68,8 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def xgafv-completer [] { ["1" "2"] }
 def alt-completer [] { ["json" "media" "proto"] }
-def resolutionStatus-completer [] { ["ACKNOWLEDGED" "MUTED" "OPEN" "RESOLUTION_STATUS_UNSPECIFIED" "RESOLVED"] }
-def timeRangeperiod-completer [] { ["PERIOD_1_DAY" "PERIOD_1_HOUR" "PERIOD_1_WEEK" "PERIOD_30_DAYS" "PERIOD_6_HOURS" "PERIOD_UNSPECIFIED"] }
+def resolution-status-completer [] { ["ACKNOWLEDGED" "MUTED" "OPEN" "RESOLUTION_STATUS_UNSPECIFIED" "RESOLVED"] }
+def time-range-period-completer [] { ["PERIOD_1_DAY" "PERIOD_1_HOUR" "PERIOD_1_WEEK" "PERIOD_30_DAYS" "PERIOD_6_HOURS" "PERIOD_UNSPECIFIED"] }
 def alignment-completer [] { ["ALIGNMENT_EQUAL_AT_END" "ALIGNMENT_EQUAL_ROUNDED" "ERROR_COUNT_ALIGNMENT_UNSPECIFIED"] }
 def order-completer [] { ["AFFECTED_USERS_DESC" "COUNT_DESC" "CREATED_DESC" "GROUP_ORDER_UNSPECIFIED" "LAST_SEEN_DESC"] }
 
@@ -101,7 +101,7 @@ export def commands []: nothing -> table {
 # GET /v1beta1/{groupName}
 # operationId: clouderrorreporting.projects.groups.get
 export def "v1beta1 clouderrorreportingprojectsgroupsget" [
-  groupName: string
+  group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,15 +117,15 @@ export def "v1beta1 clouderrorreportingprojectsgroupsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<groupId: string, name: string, resolutionStatus: string, trackingIssues: table<url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta1/($groupName)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({group_name: $group_name} | format pattern "/v1beta1/{group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -153,21 +153,21 @@ export def "v1beta1 clouderrorreportingprojectsgroupsupdate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --groupId: string # Group IDs are unique for a given project. If the same kind of error occurs in different service contexts, it will receive the same group ID.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --group-id: string # Group IDs are unique for a given project. If the same kind of error occurs in different service contexts, it will receive the same group ID.
   --body-name: string # The group resource name. Example: projects/my-project-123/groups/CNSgkpnppqKCUw
-  --resolutionStatus: string@resolutionStatus-completer # Error group's resolution status. An unspecified resolution status will be interpreted as OPEN
-  --trackingIssues: list # Associated tracking issues. — item shape: {url?: string}
+  --resolution-status: string@resolution-status-completer # Error group's resolution status. An unspecified resolution status will be interpreted as OPEN
+  --tracking-issues: list # Associated tracking issues. — item shape: {url?: string}
 ]: any -> record<groupId: string, name: string, resolutionStatus: string, trackingIssues: table<url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta1/($name)" $qp)
-  let body = {groupId: $groupId, name: $body_name, resolutionStatus: $resolutionStatus, trackingIssues: $trackingIssues} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
+  let body = {"groupId": $group_id, "name": $body_name, "resolutionStatus": $resolution_status, "trackingIssues": $tracking_issues} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -179,7 +179,7 @@ export def "v1beta1 clouderrorreportingprojectsgroupsupdate" [
 # DELETE /v1beta1/{projectName}/events
 # operationId: clouderrorreporting.projects.deleteEvents
 export def "v1beta1-events clouderrorreportingprojectsdeleteEvents" [
-  projectName: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,15 +195,15 @@ export def "v1beta1-events clouderrorreportingprojectsdeleteEvents" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta1/($projectName)/events" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_name: $project_name} | format pattern "/v1beta1/{project_name}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -214,7 +214,7 @@ export def "v1beta1-events clouderrorreportingprojectsdeleteEvents" [
 # GET /v1beta1/{projectName}/events
 # operationId: clouderrorreporting.projects.events.list
 export def "v1beta1-events clouderrorreportingprojectseventslist" [
-  projectName: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,22 +230,22 @@ export def "v1beta1-events clouderrorreportingprojectseventslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --groupId: string # Required. The group for which events shall be returned.
-  --pageSize: int # Optional. The maximum number of results to return per response.
-  --pageToken: string # Optional. A `next_page_token` provided by a previous response.
-  --serviceFilterresourceType: string # Optional. The exact value to match against [`ServiceContext.resource_type`](/error-reporting/reference/rest/v1beta1/ServiceContext#FIELDS.resource_type).
-  --serviceFilterservice: string # Optional. The exact value to match against [`ServiceContext.service`](/error-reporting/reference/rest/v1beta1/ServiceContext#FIELDS.service).
-  --serviceFilterversion: string # Optional. The exact value to match against [`ServiceContext.version`](/error-reporting/reference/rest/v1beta1/ServiceContext#FIELDS.version).
-  --timeRangeperiod: string@timeRangeperiod-completer # Restricts the query to the specified time range.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --group-id: string # Required. The group for which events shall be returned.
+  --page-size: int # Optional. The maximum number of results to return per response.
+  --page-token: string # Optional. A `next_page_token` provided by a previous response.
+  --service-filter-resource-type: string # Optional. The exact value to match against [`ServiceContext.resource_type`](/error-reporting/reference/rest/v1beta1/ServiceContext#FIELDS.resource_type).
+  --service-filter-service: string # Optional. The exact value to match against [`ServiceContext.service`](/error-reporting/reference/rest/v1beta1/ServiceContext#FIELDS.service).
+  --service-filter-version: string # Optional. The exact value to match against [`ServiceContext.version`](/error-reporting/reference/rest/v1beta1/ServiceContext#FIELDS.version).
+  --time-range-period: string@time-range-period-completer # Restricts the query to the specified time range.
 ]: nothing -> record<errorEvents: table<context: record, eventTime: string, message: string, serviceContext: record>, nextPageToken: string, timeRangeBegin: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "groupId" $groupId "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "serviceFilter.resourceType" $serviceFilterresourceType "scalar") (serialize-qp "serviceFilter.service" $serviceFilterservice "scalar") (serialize-qp "serviceFilter.version" $serviceFilterversion "scalar") (serialize-qp "timeRange.period" $timeRangeperiod "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta1/($projectName)/events" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "serviceFilter.resourceType" $service_filter_resource_type "scalar") (serialize-qp "serviceFilter.service" $service_filter_service "scalar") (serialize-qp "serviceFilter.version" $service_filter_version "scalar") (serialize-qp "timeRange.period" $time_range_period "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_name: $project_name} | format pattern "/v1beta1/{project_name}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,7 +258,7 @@ export def "v1beta1-events clouderrorreportingprojectseventslist" [
 # --context shape: {httpRequest?: record, reportLocation?: record, sourceReferences?: list, user?: string}
 # --serviceContext shape: {resourceType?: string, service?: string, version?: string}
 export def "v1beta1-events-report clouderrorreportingprojectseventsreport" [
-  projectName: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,21 +274,21 @@ export def "v1beta1-events-report clouderrorreportingprojectseventsreport" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --context: record # A description of the context in which an error occurred. This data should be provided by the application when reporting an error, unless the error report has been generated automatically from Google App Engine logs. — shape: {httpRequest?: record, reportLocation?: record, sourceReferences?: list, user?: string}
-  --eventTime: string # Optional. Time when the event occurred. If not provided, the time when the event was received by the Error Reporting system is used. If provided, the time must not exceed the [logs retention period](https://cloud.google.com/logging/quotas#logs_retention_periods) in the past, or be more than 24 hours in the future. If an invalid time is provided, then an error is returned. (format: google-datetime)
+  --event-time: string # Optional. Time when the event occurred. If not provided, the time when the event was received by the Error Reporting system is used. If provided, the time must not exceed the [logs retention period](https://cloud.google.com/logging/quotas#logs_retention_periods) in the past, or be more than 24 hours in the future. If an invalid time is provided, then an error is returned. (format: google-datetime)
   --message: string # Required. The error message. If no `context.reportLocation` is provided, the message must contain a header (typically consisting of the exception type name and an error message) and an exception stack trace in one of the supported programming languages and formats. Supported languages are Java, Python, JavaScript, Ruby, C#, PHP, and Go. Supported stack trace formats are: * **Java**: Must be the return value of [`Throwable.printStackTrace()`](https://docs.oracle.com/javase/7/docs/api/java/lang/Throwable.html#printStackTrace%28%29). * **Python**: Must be the return value of [`traceback.format_exc()`](https://docs.python.org/2/library/traceback.html#traceback.format_exc). * **JavaScript**: Must be the value of [`error.stack`](https://github.com/v8/v8/wiki/Stack-Trace-API) as returned by V8. * **Ruby**: Must contain frames returned by [`Exception.backtrace`](https://ruby-doc.org/core-2.2.0/Exception.html#method-i-backtrace). * **C#**: Must be the return value of [`Exception.ToString()`](https://msdn.microsoft.com/en-us/library/system.exception.tostring.aspx). * **PHP**: Must be prefixed with `"PHP (Notice|Parse error|Fatal error|Warning): "` and contain the result of [`(string)$exception`](https://php.net/manual/en/exception.tostring.php). * **Go**: Must be the return value of [`runtime.Stack()`](https://golang.org/pkg/runtime/debug/#Stack).
-  --serviceContext: record # Describes a running service that sends errors. Its version changes over time and multiple versions can run in parallel. — shape: {resourceType?: string, service?: string, version?: string}
+  --service-context: record # Describes a running service that sends errors. Its version changes over time and multiple versions can run in parallel. — shape: {resourceType?: string, service?: string, version?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta1/($projectName)/events:report" $qp)
-  let body = {context: $context, eventTime: $eventTime, message: $message, serviceContext: $serviceContext} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_name: $project_name} | format pattern "/v1beta1/{project_name}/events:report") $qp)
+  let body = {"context": $context, "eventTime": $event_time, "message": $message, "serviceContext": $service_context} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -300,7 +300,7 @@ export def "v1beta1-events-report clouderrorreportingprojectseventsreport" [
 # GET /v1beta1/{projectName}/groupStats
 # operationId: clouderrorreporting.projects.groupStats.list
 export def "v1beta1-group-stats clouderrorreportingprojectsgroupStatslist" [
-  projectName: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,26 +316,26 @@ export def "v1beta1-group-stats clouderrorreportingprojectsgroupStatslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --alignment: string@alignment-completer # Optional. The alignment of the timed counts to be returned. Default is `ALIGNMENT_EQUAL_AT_END`.
-  --alignmentTime: string # Optional. Time where the timed counts shall be aligned if rounded alignment is chosen. Default is 00:00 UTC.
-  --groupId: list # Optional. List all ErrorGroupStats with these IDs.
+  --alignment-time: string # Optional. Time where the timed counts shall be aligned if rounded alignment is chosen. Default is 00:00 UTC.
+  --group-id: list # Optional. List all ErrorGroupStats with these IDs.
   --order: string@order-completer # Optional. The sort order in which the results are returned. Default is `COUNT_DESC`.
-  --pageSize: int # Optional. The maximum number of results to return per response. Default is 20.
-  --pageToken: string # Optional. A next_page_token provided by a previous response. To view additional results, pass this token along with the identical query parameters as the first request.
-  --serviceFilterresourceType: string # Optional. The exact value to match against [`ServiceContext.resource_type`](/error-reporting/reference/rest/v1beta1/ServiceContext#FIELDS.resource_type).
-  --serviceFilterservice: string # Optional. The exact value to match against [`ServiceContext.service`](/error-reporting/reference/rest/v1beta1/ServiceContext#FIELDS.service).
-  --serviceFilterversion: string # Optional. The exact value to match against [`ServiceContext.version`](/error-reporting/reference/rest/v1beta1/ServiceContext#FIELDS.version).
-  --timeRangeperiod: string@timeRangeperiod-completer # Restricts the query to the specified time range.
-  --timedCountDuration: string # Optional. The preferred duration for a single returned TimedCount. If not set, no timed counts are returned.
+  --page-size: int # Optional. The maximum number of results to return per response. Default is 20.
+  --page-token: string # Optional. A next_page_token provided by a previous response. To view additional results, pass this token along with the identical query parameters as the first request.
+  --service-filter-resource-type: string # Optional. The exact value to match against [`ServiceContext.resource_type`](/error-reporting/reference/rest/v1beta1/ServiceContext#FIELDS.resource_type).
+  --service-filter-service: string # Optional. The exact value to match against [`ServiceContext.service`](/error-reporting/reference/rest/v1beta1/ServiceContext#FIELDS.service).
+  --service-filter-version: string # Optional. The exact value to match against [`ServiceContext.version`](/error-reporting/reference/rest/v1beta1/ServiceContext#FIELDS.version).
+  --time-range-period: string@time-range-period-completer # Restricts the query to the specified time range.
+  --timed-count-duration: string # Optional. The preferred duration for a single returned TimedCount. If not set, no timed counts are returned.
 ]: nothing -> record<errorGroupStats: table<affectedServices: list, affectedUsersCount: string, count: string, firstSeenTime: string, group: record, lastSeenTime: string, numAffectedServices: int, representative: record, timedCounts: list>, nextPageToken: string, timeRangeBegin: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "alignment" $alignment "scalar") (serialize-qp "alignmentTime" $alignmentTime "scalar") (serialize-qp "groupId" $groupId "multi") (serialize-qp "order" $order "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "serviceFilter.resourceType" $serviceFilterresourceType "scalar") (serialize-qp "serviceFilter.service" $serviceFilterservice "scalar") (serialize-qp "serviceFilter.version" $serviceFilterversion "scalar") (serialize-qp "timeRange.period" $timeRangeperiod "scalar") (serialize-qp "timedCountDuration" $timedCountDuration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta1/($projectName)/groupStats" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "alignment" $alignment "scalar") (serialize-qp "alignmentTime" $alignment_time "scalar") (serialize-qp "groupId" $group_id "multi") (serialize-qp "order" $order "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "serviceFilter.resourceType" $service_filter_resource_type "scalar") (serialize-qp "serviceFilter.service" $service_filter_service "scalar") (serialize-qp "serviceFilter.version" $service_filter_version "scalar") (serialize-qp "timeRange.period" $time_range_period "scalar") (serialize-qp "timedCountDuration" $timed_count_duration "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_name: $project_name} | format pattern "/v1beta1/{project_name}/groupStats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

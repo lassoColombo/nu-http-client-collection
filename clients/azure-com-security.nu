@@ -71,7 +71,7 @@ def api-version-completer [] { ["2017-08-01-preview"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-auto-provisioning-settings List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-auto-provisioning-settings list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,8 +95,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/autoProvisioningSettings
 # operationId: AutoProvisioningSettings_List
-export def "subscriptions-providers-microsoft-security-auto-provisioning-settings List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-security-auto-provisioning-settings list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-providers-microsoft-security-auto-provisioning-setting
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/autoProvisioningSettings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/autoProvisioningSettings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,9 +120,9 @@ export def "subscriptions-providers-microsoft-security-auto-provisioning-setting
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/autoProvisioningSettings/{settingName}
 # operationId: AutoProvisioningSettings_Get
-export def "subscriptions-providers-microsoft-security-auto-provisioning-settings Get" [
-  subscriptionId: string
-  settingName: string
+export def "subscriptions-providers-microsoft-security-auto-provisioning-settings get" [
+  subscription_id: string
+  setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,7 +136,7 @@ export def "subscriptions-providers-microsoft-security-auto-provisioning-setting
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/autoProvisioningSettings/($settingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, setting_name: $setting_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/autoProvisioningSettings/{setting_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -146,9 +146,9 @@ export def "subscriptions-providers-microsoft-security-auto-provisioning-setting
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Security/autoProvisioningSettings/{settingName}
 # operationId: AutoProvisioningSettings_Create
-export def "subscriptions-providers-microsoft-security-auto-provisioning-settings Create" [
-  subscriptionId: string
-  settingName: string
+export def "subscriptions-providers-microsoft-security-auto-provisioning-settings create" [
+  subscription_id: string
+  setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "subscriptions-providers-microsoft-security-auto-provisioning-setting
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/autoProvisioningSettings/($settingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, setting_name: $setting_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/autoProvisioningSettings/{setting_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -172,8 +172,8 @@ export def "subscriptions-providers-microsoft-security-auto-provisioning-setting
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/pricings
 # operationId: Pricings_List
-export def "subscriptions-providers-microsoft-security-pricings List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-security-pricings list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "subscriptions-providers-microsoft-security-pricings List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/pricings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/pricings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,9 +197,9 @@ export def "subscriptions-providers-microsoft-security-pricings List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/pricings/{pricingName}
 # operationId: Pricings_GetSubscriptionPricing
-export def "subscriptions-providers-microsoft-security-pricings GetSubscriptionPricing" [
-  subscriptionId: string
-  pricingName: string
+export def "subscriptions-providers-microsoft-security-pricings get" [
+  subscription_id: string
+  pricing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "subscriptions-providers-microsoft-security-pricings GetSubscriptionP
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/pricings/($pricingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, pricing_name: $pricing_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/pricings/{pricing_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -223,9 +223,9 @@ export def "subscriptions-providers-microsoft-security-pricings GetSubscriptionP
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Security/pricings/{pricingName}
 # operationId: Pricings_UpdateSubscriptionPricing
-export def "subscriptions-providers-microsoft-security-pricings UpdateSubscriptionPricing" [
-  subscriptionId: string
-  pricingName: string
+export def "subscriptions-providers-microsoft-security-pricings update" [
+  subscription_id: string
+  pricing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "subscriptions-providers-microsoft-security-pricings UpdateSubscripti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/pricings/($pricingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, pricing_name: $pricing_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/pricings/{pricing_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -249,8 +249,8 @@ export def "subscriptions-providers-microsoft-security-pricings UpdateSubscripti
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/securityContacts
 # operationId: SecurityContacts_List
-export def "subscriptions-providers-microsoft-security-security-contacts List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-security-security-contacts list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "subscriptions-providers-microsoft-security-security-contacts List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/securityContacts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/securityContacts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -274,9 +274,9 @@ export def "subscriptions-providers-microsoft-security-security-contacts List" [
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Security/securityContacts/{securityContactName}
 # operationId: SecurityContacts_Delete
-export def "subscriptions-providers-microsoft-security-security-contacts Delete" [
-  subscriptionId: string
-  securityContactName: string
+export def "subscriptions-providers-microsoft-security-security-contacts delete" [
+  subscription_id: string
+  security_contact_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "subscriptions-providers-microsoft-security-security-contacts Delete"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/securityContacts/($securityContactName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, security_contact_name: $security_contact_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/securityContacts/{security_contact_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -300,9 +300,9 @@ export def "subscriptions-providers-microsoft-security-security-contacts Delete"
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/securityContacts/{securityContactName}
 # operationId: SecurityContacts_Get
-export def "subscriptions-providers-microsoft-security-security-contacts Get" [
-  subscriptionId: string
-  securityContactName: string
+export def "subscriptions-providers-microsoft-security-security-contacts get" [
+  subscription_id: string
+  security_contact_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "subscriptions-providers-microsoft-security-security-contacts Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/securityContacts/($securityContactName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, security_contact_name: $security_contact_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/securityContacts/{security_contact_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -326,9 +326,9 @@ export def "subscriptions-providers-microsoft-security-security-contacts Get" [
 #
 # PATCH /subscriptions/{subscriptionId}/providers/Microsoft.Security/securityContacts/{securityContactName}
 # operationId: SecurityContacts_Update
-export def "subscriptions-providers-microsoft-security-security-contacts Update" [
-  subscriptionId: string
-  securityContactName: string
+export def "subscriptions-providers-microsoft-security-security-contacts update" [
+  subscription_id: string
+  security_contact_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,7 +342,7 @@ export def "subscriptions-providers-microsoft-security-security-contacts Update"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/securityContacts/($securityContactName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, security_contact_name: $security_contact_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/securityContacts/{security_contact_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -352,9 +352,9 @@ export def "subscriptions-providers-microsoft-security-security-contacts Update"
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Security/securityContacts/{securityContactName}
 # operationId: SecurityContacts_Create
-export def "subscriptions-providers-microsoft-security-security-contacts Create" [
-  subscriptionId: string
-  securityContactName: string
+export def "subscriptions-providers-microsoft-security-security-contacts create" [
+  subscription_id: string
+  security_contact_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,7 +368,7 @@ export def "subscriptions-providers-microsoft-security-security-contacts Create"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/securityContacts/($securityContactName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, security_contact_name: $security_contact_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/securityContacts/{security_contact_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -378,8 +378,8 @@ export def "subscriptions-providers-microsoft-security-security-contacts Create"
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/settings
 # operationId: Settings_List
-export def "subscriptions-providers-microsoft-security-settings List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-security-settings list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,7 +393,7 @@ export def "subscriptions-providers-microsoft-security-settings List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/settings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/settings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -403,9 +403,9 @@ export def "subscriptions-providers-microsoft-security-settings List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/settings/{settingName}
 # operationId: Settings_Get
-export def "subscriptions-providers-microsoft-security-settings Get" [
-  subscriptionId: string
-  settingName: string
+export def "subscriptions-providers-microsoft-security-settings get" [
+  subscription_id: string
+  setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,7 +419,7 @@ export def "subscriptions-providers-microsoft-security-settings Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/settings/($settingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, setting_name: $setting_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/settings/{setting_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -429,9 +429,9 @@ export def "subscriptions-providers-microsoft-security-settings Get" [
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Security/settings/{settingName}
 # operationId: Settings_Update
-export def "subscriptions-providers-microsoft-security-settings Update" [
-  subscriptionId: string
-  settingName: string
+export def "subscriptions-providers-microsoft-security-settings update" [
+  subscription_id: string
+  setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -445,7 +445,7 @@ export def "subscriptions-providers-microsoft-security-settings Update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/settings/($settingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, setting_name: $setting_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/settings/{setting_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -455,8 +455,8 @@ export def "subscriptions-providers-microsoft-security-settings Update" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/workspaceSettings
 # operationId: WorkspaceSettings_List
-export def "subscriptions-providers-microsoft-security-workspace-settings List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-security-workspace-settings list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,7 +470,7 @@ export def "subscriptions-providers-microsoft-security-workspace-settings List" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/workspaceSettings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/workspaceSettings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -480,9 +480,9 @@ export def "subscriptions-providers-microsoft-security-workspace-settings List" 
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Security/workspaceSettings/{workspaceSettingName}
 # operationId: WorkspaceSettings_Delete
-export def "subscriptions-providers-microsoft-security-workspace-settings Delete" [
-  subscriptionId: string
-  workspaceSettingName: string
+export def "subscriptions-providers-microsoft-security-workspace-settings delete" [
+  subscription_id: string
+  workspace_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,7 +496,7 @@ export def "subscriptions-providers-microsoft-security-workspace-settings Delete
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/workspaceSettings/($workspaceSettingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, workspace_setting_name: $workspace_setting_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/workspaceSettings/{workspace_setting_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -506,9 +506,9 @@ export def "subscriptions-providers-microsoft-security-workspace-settings Delete
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/workspaceSettings/{workspaceSettingName}
 # operationId: WorkspaceSettings_Get
-export def "subscriptions-providers-microsoft-security-workspace-settings Get" [
-  subscriptionId: string
-  workspaceSettingName: string
+export def "subscriptions-providers-microsoft-security-workspace-settings get" [
+  subscription_id: string
+  workspace_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,7 +522,7 @@ export def "subscriptions-providers-microsoft-security-workspace-settings Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/workspaceSettings/($workspaceSettingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, workspace_setting_name: $workspace_setting_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/workspaceSettings/{workspace_setting_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -532,9 +532,9 @@ export def "subscriptions-providers-microsoft-security-workspace-settings Get" [
 #
 # PATCH /subscriptions/{subscriptionId}/providers/Microsoft.Security/workspaceSettings/{workspaceSettingName}
 # operationId: WorkspaceSettings_Update
-export def "subscriptions-providers-microsoft-security-workspace-settings Update" [
-  subscriptionId: string
-  workspaceSettingName: string
+export def "subscriptions-providers-microsoft-security-workspace-settings update" [
+  subscription_id: string
+  workspace_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -548,7 +548,7 @@ export def "subscriptions-providers-microsoft-security-workspace-settings Update
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/workspaceSettings/($workspaceSettingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, workspace_setting_name: $workspace_setting_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/workspaceSettings/{workspace_setting_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -558,9 +558,9 @@ export def "subscriptions-providers-microsoft-security-workspace-settings Update
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Security/workspaceSettings/{workspaceSettingName}
 # operationId: WorkspaceSettings_Create
-export def "subscriptions-providers-microsoft-security-workspace-settings Create" [
-  subscriptionId: string
-  workspaceSettingName: string
+export def "subscriptions-providers-microsoft-security-workspace-settings create" [
+  subscription_id: string
+  workspace_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -574,7 +574,7 @@ export def "subscriptions-providers-microsoft-security-workspace-settings Create
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/workspaceSettings/($workspaceSettingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, workspace_setting_name: $workspace_setting_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/workspaceSettings/{workspace_setting_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -584,9 +584,9 @@ export def "subscriptions-providers-microsoft-security-workspace-settings Create
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/pricings
 # operationId: Pricings_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-security-pricings ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-pricings list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +600,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-pricings 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/pricings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/pricings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -610,10 +610,10 @@ export def "subscriptions-resource-groups-providers-microsoft-security-pricings 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/pricings/{pricingName}
 # operationId: Pricings_GetResourceGroupPricing
-export def "subscriptions-resource-groups-providers-microsoft-security-pricings GetResourceGroupPricing" [
-  subscriptionId: string
-  resourceGroupName: string
-  pricingName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-pricings get" [
+  subscription_id: string
+  resource_group_name: string
+  pricing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -627,7 +627,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-pricings 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/pricings/($pricingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, pricing_name: $pricing_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/pricings/{pricing_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -637,10 +637,10 @@ export def "subscriptions-resource-groups-providers-microsoft-security-pricings 
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/pricings/{pricingName}
 # operationId: Pricings_CreateOrUpdateResourceGroupPricing
-export def "subscriptions-resource-groups-providers-microsoft-security-pricings CreateOrUpdateResourceGroupPricing" [
-  subscriptionId: string
-  resourceGroupName: string
-  pricingName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-pricings create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  pricing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -654,7 +654,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-pricings 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/pricings/($pricingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, pricing_name: $pricing_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/pricings/{pricing_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -664,9 +664,9 @@ export def "subscriptions-resource-groups-providers-microsoft-security-pricings 
 #
 # GET /{resourceId}/providers/Microsoft.Security/advancedThreatProtectionSettings/{settingName}
 # operationId: AdvancedThreatProtection_Get
-export def "providers-microsoft-security-advanced-threat-protection-settings Get" [
-  resourceId: string
-  settingName: string
+export def "providers-microsoft-security-advanced-threat-protection-settings get" [
+  resource_id: string
+  setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,7 +680,7 @@ export def "providers-microsoft-security-advanced-threat-protection-settings Get
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceId)/providers/Microsoft.Security/advancedThreatProtectionSettings/($settingName)" $qp)
+  let full_url = (build-url $base ({resource_id: $resource_id, setting_name: $setting_name} | format pattern "/{resource_id}/providers/Microsoft.Security/advancedThreatProtectionSettings/{setting_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -690,9 +690,9 @@ export def "providers-microsoft-security-advanced-threat-protection-settings Get
 #
 # PUT /{resourceId}/providers/Microsoft.Security/advancedThreatProtectionSettings/{settingName}
 # operationId: AdvancedThreatProtection_Create
-export def "providers-microsoft-security-advanced-threat-protection-settings Create" [
-  resourceId: string
-  settingName: string
+export def "providers-microsoft-security-advanced-threat-protection-settings create" [
+  resource_id: string
+  setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -706,7 +706,7 @@ export def "providers-microsoft-security-advanced-threat-protection-settings Cre
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceId)/providers/Microsoft.Security/advancedThreatProtectionSettings/($settingName)" $qp)
+  let full_url = (build-url $base ({resource_id: $resource_id, setting_name: $setting_name} | format pattern "/{resource_id}/providers/Microsoft.Security/advancedThreatProtectionSettings/{setting_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -716,7 +716,7 @@ export def "providers-microsoft-security-advanced-threat-protection-settings Cre
 #
 # GET /{scope}/providers/Microsoft.Security/compliances
 # operationId: Compliances_List
-export def "providers-microsoft-security-compliances List" [
+export def "providers-microsoft-security-compliances list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -731,7 +731,7 @@ export def "providers-microsoft-security-compliances List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Security/compliances" $qp)
+  let full_url = (build-url $base ({scope: $scope} | format pattern "/{scope}/providers/Microsoft.Security/compliances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -741,9 +741,9 @@ export def "providers-microsoft-security-compliances List" [
 #
 # GET /{scope}/providers/Microsoft.Security/compliances/{complianceName}
 # operationId: Compliances_Get
-export def "providers-microsoft-security-compliances Get" [
+export def "providers-microsoft-security-compliances get" [
   scope: string
-  complianceName: string
+  compliance_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -757,7 +757,7 @@ export def "providers-microsoft-security-compliances Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Security/compliances/($complianceName)" $qp)
+  let full_url = (build-url $base ({scope: $scope, compliance_name: $compliance_name} | format pattern "/{scope}/providers/Microsoft.Security/compliances/{compliance_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -767,7 +767,7 @@ export def "providers-microsoft-security-compliances Get" [
 #
 # GET /{scope}/providers/Microsoft.Security/informationProtectionPolicies
 # operationId: InformationProtectionPolicies_List
-export def "providers-microsoft-security-information-protection-policies List" [
+export def "providers-microsoft-security-information-protection-policies list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -782,7 +782,7 @@ export def "providers-microsoft-security-information-protection-policies List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Security/informationProtectionPolicies" $qp)
+  let full_url = (build-url $base ({scope: $scope} | format pattern "/{scope}/providers/Microsoft.Security/informationProtectionPolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -792,9 +792,9 @@ export def "providers-microsoft-security-information-protection-policies List" [
 #
 # GET /{scope}/providers/Microsoft.Security/informationProtectionPolicies/{informationProtectionPolicyName}
 # operationId: InformationProtectionPolicies_Get
-export def "providers-microsoft-security-information-protection-policies Get" [
+export def "providers-microsoft-security-information-protection-policies get" [
   scope: string
-  informationProtectionPolicyName: string
+  information_protection_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -808,7 +808,7 @@ export def "providers-microsoft-security-information-protection-policies Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Security/informationProtectionPolicies/($informationProtectionPolicyName)" $qp)
+  let full_url = (build-url $base ({scope: $scope, information_protection_policy_name: $information_protection_policy_name} | format pattern "/{scope}/providers/Microsoft.Security/informationProtectionPolicies/{information_protection_policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -818,9 +818,9 @@ export def "providers-microsoft-security-information-protection-policies Get" [
 #
 # PUT /{scope}/providers/Microsoft.Security/informationProtectionPolicies/{informationProtectionPolicyName}
 # operationId: InformationProtectionPolicies_CreateOrUpdate
-export def "providers-microsoft-security-information-protection-policies CreateOrUpdate" [
+export def "providers-microsoft-security-information-protection-policies create-or-update" [
   scope: string
-  informationProtectionPolicyName: string
+  information_protection_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -834,7 +834,7 @@ export def "providers-microsoft-security-information-protection-policies CreateO
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Security/informationProtectionPolicies/($informationProtectionPolicyName)" $qp)
+  let full_url = (build-url $base ({scope: $scope, information_protection_policy_name: $information_protection_policy_name} | format pattern "/{scope}/providers/Microsoft.Security/informationProtectionPolicies/{information_protection_policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

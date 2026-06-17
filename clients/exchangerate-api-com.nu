@@ -104,7 +104,7 @@ export def "latest get" [
 ]: nothing -> record<base: string, date: string, rates: record, time_last_updated: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/latest/($base_currency)")
+  let full_url = (build-url $base ({base_currency: $base_currency} | format pattern "/latest/{base_currency}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

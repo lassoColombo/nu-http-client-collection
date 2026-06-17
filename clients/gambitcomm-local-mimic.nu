@@ -108,7 +108,7 @@ export def "mimic-access-add add" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/access/add/($user)/($agents)/($mask)")
+  let full_url = (build-url $base ({user: $user, agents: $agents, mask: $mask} | format pattern "/mimic/access/add/{user}/{agents}/{mask}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -131,7 +131,7 @@ export def "mimic-access-del del" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/access/del/($user)")
+  let full_url = (build-url $base ({user: $user} | format pattern "/mimic/access/del/{user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,7 +207,7 @@ export def "mimic-access-get-adminuser adminuser" [
 #
 # GET /mimic/access/get/enabled
 # operationId: access_get_enabled
-export def "mimic-access-get-enabled enabled" [
+export def "mimic-access-get-enabled enable-d" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "mimic-access-load load" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/access/load/($filename)")
+  let full_url = (build-url $base ({filename: $filename} | format pattern "/mimic/access/load/{filename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -287,7 +287,7 @@ export def "mimic-access-save save" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/access/save/($filename)")
+  let full_url = (build-url $base ({filename: $filename} | format pattern "/mimic/access/save/{filename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -298,7 +298,7 @@ export def "mimic-access-save save" [
 # PUT /mimic/access/set/acldb/{databaseName}
 # operationId: access_set_acldb
 export def "mimic-access-set-acldb acldb" [
-  databaseName: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -310,7 +310,7 @@ export def "mimic-access-set-acldb acldb" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/access/set/acldb/($databaseName)")
+  let full_url = (build-url $base ({database_name: $database_name} | format pattern "/mimic/access/set/acldb/{database_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -320,8 +320,8 @@ export def "mimic-access-set-acldb acldb" [
 #
 # PUT /mimic/access/set/enabled/{enabledOrNot}
 # operationId: access_set_enabled
-export def "mimic-access-set-enabled enabled" [
-  enabledOrNot: string
+export def "mimic-access-set-enabled enable-d" [
+  enabled_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "mimic-access-set-enabled enabled" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/access/set/enabled/($enabledOrNot)")
+  let full_url = (build-url $base ({enabled_or_not: $enabled_or_not} | format pattern "/mimic/access/set/enabled/{enabled_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,8 +344,8 @@ export def "mimic-access-set-enabled enabled" [
 # POST /mimic/agent/{agentNum}/add/{IP}
 # operationId: new
 export def "mimic-agent-add new" [
-  agentNum: int
-  IP: string
+  agent_num: int
+  ip: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +359,7 @@ export def "mimic-agent-add new" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/add/($IP)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ip: $ip} | format pattern "/mimic/agent/{agent_num}/add/{ip}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -371,8 +371,8 @@ export def "mimic-agent-add new" [
 # POST /mimic/agent/{agentNum}/from/add/{IP}/{port}
 # operationId: from_add
 export def "mimic-agent-from-add add" [
-  agentNum: int
-  IP: string
+  agent_num: int
+  ip: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -385,7 +385,7 @@ export def "mimic-agent-from-add add" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/from/add/($IP)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ip: $ip, port: $port} | format pattern "/mimic/agent/{agent_num}/from/add/{ip}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -396,8 +396,8 @@ export def "mimic-agent-from-add add" [
 # DELETE /mimic/agent/{agentNum}/from/delete/{IP}/{port}
 # operationId: from_del
 export def "mimic-agent-from-delete del" [
-  agentNum: int
-  IP: string
+  agent_num: int
+  ip: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +410,7 @@ export def "mimic-agent-from-delete del" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/from/delete/($IP)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ip: $ip, port: $port} | format pattern "/mimic/agent/{agent_num}/from/delete/{ip}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -421,7 +421,7 @@ export def "mimic-agent-from-delete del" [
 # GET /mimic/agent/{agentNum}/from/list
 # operationId: from_list
 export def "mimic-agent-from-list list" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -433,7 +433,7 @@ export def "mimic-agent-from-list list" [
 ]: nothing -> table<IP: string, port: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/from/list")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/from/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -444,7 +444,7 @@ export def "mimic-agent-from-list list" [
 # GET /mimic/agent/{agentNum}/get/changed
 # operationId: get_changed
 export def "mimic-agent-get-changed changed" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "mimic-agent-get-changed changed" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/changed")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/changed"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -467,7 +467,7 @@ export def "mimic-agent-get-changed changed" [
 # GET /mimic/agent/{agentNum}/get/config_changed
 # operationId: get_config_changed
 export def "mimic-agent-get-config-changed changed" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,7 +479,7 @@ export def "mimic-agent-get-config-changed changed" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/config_changed")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/config_changed"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -490,7 +490,7 @@ export def "mimic-agent-get-config-changed changed" [
 # GET /mimic/agent/{agentNum}/get/delay
 # operationId: get_delay
 export def "mimic-agent-get-delay delay" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,7 +502,7 @@ export def "mimic-agent-get-delay delay" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/delay")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/delay"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -513,7 +513,7 @@ export def "mimic-agent-get-delay delay" [
 # GET /mimic/agent/{agentNum}/get/drops
 # operationId: get_drops
 export def "mimic-agent-get-drops drops" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -525,7 +525,7 @@ export def "mimic-agent-get-drops drops" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/drops")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/drops"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -536,7 +536,7 @@ export def "mimic-agent-get-drops drops" [
 # GET /mimic/agent/{agentNum}/get/host
 # operationId: get_host
 export def "mimic-agent-get-host host" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -548,7 +548,7 @@ export def "mimic-agent-get-host host" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/host")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/host"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -559,7 +559,7 @@ export def "mimic-agent-get-host host" [
 # GET /mimic/agent/{agentNum}/get/inform_timeout
 # operationId: get_inform_timeout
 export def "mimic-agent-get-inform-timeout timeout" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -571,7 +571,7 @@ export def "mimic-agent-get-inform-timeout timeout" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/inform_timeout")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/inform_timeout"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -582,7 +582,7 @@ export def "mimic-agent-get-inform-timeout timeout" [
 # GET /mimic/agent/{agentNum}/get/interface
 # operationId: get_interface
 export def "mimic-agent-get-interface interface" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,7 +594,7 @@ export def "mimic-agent-get-interface interface" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/interface")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/interface"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -605,7 +605,7 @@ export def "mimic-agent-get-interface interface" [
 # GET /mimic/agent/{agentNum}/get/mask
 # operationId: get_mask
 export def "mimic-agent-get-mask mask" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,7 +617,7 @@ export def "mimic-agent-get-mask mask" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/mask")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/mask"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -628,7 +628,7 @@ export def "mimic-agent-get-mask mask" [
 # GET /mimic/agent/{agentNum}/get/mibs
 # operationId: get_mibs
 export def "mimic-agent-get-mibs mibs" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,7 +640,7 @@ export def "mimic-agent-get-mibs mibs" [
 ]: nothing -> table<device: string, mib: string, scenario: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/mibs")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/mibs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -650,8 +650,8 @@ export def "mimic-agent-get-mibs mibs" [
 #
 # GET /mimic/agent/{agentNum}/get/num_starts
 # operationId: get_number_starts
-export def "mimic-agent-get-num-starts starts" [
-  agentNum: int
+export def "mimic-agent-get-num-starts start-s" [
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,7 +663,7 @@ export def "mimic-agent-get-num-starts starts" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/num_starts")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/num_starts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -674,7 +674,7 @@ export def "mimic-agent-get-num-starts starts" [
 # GET /mimic/agent/{agentNum}/get/oiddir
 # operationId: get_oiddir
 export def "mimic-agent-get-oiddir oiddir" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,7 +686,7 @@ export def "mimic-agent-get-oiddir oiddir" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/oiddir")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/oiddir"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -697,7 +697,7 @@ export def "mimic-agent-get-oiddir oiddir" [
 # GET /mimic/agent/{agentNum}/get/owner
 # operationId: get_owner
 export def "mimic-agent-get-owner owner" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -709,7 +709,7 @@ export def "mimic-agent-get-owner owner" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/owner")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/owner"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -720,7 +720,7 @@ export def "mimic-agent-get-owner owner" [
 # GET /mimic/agent/{agentNum}/get/pdusize
 # operationId: get_pdusize
 export def "mimic-agent-get-pdusize pdusize" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -732,7 +732,7 @@ export def "mimic-agent-get-pdusize pdusize" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/pdusize")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/pdusize"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -743,7 +743,7 @@ export def "mimic-agent-get-pdusize pdusize" [
 # GET /mimic/agent/{agentNum}/get/port
 # operationId: get_port
 export def "mimic-agent-get-port port" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -755,7 +755,7 @@ export def "mimic-agent-get-port port" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/port")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/port"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -766,7 +766,7 @@ export def "mimic-agent-get-port port" [
 # GET /mimic/agent/{agentNum}/get/privdir
 # operationId: get_privdir
 export def "mimic-agent-get-privdir privdir" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,7 +778,7 @@ export def "mimic-agent-get-privdir privdir" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/privdir")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/privdir"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -789,7 +789,7 @@ export def "mimic-agent-get-privdir privdir" [
 # GET /mimic/agent/{agentNum}/get/protocol
 # operationId: get_protocols
 export def "mimic-agent-get-protocol protocols" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -801,7 +801,7 @@ export def "mimic-agent-get-protocol protocols" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/protocol")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/protocol"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -812,7 +812,7 @@ export def "mimic-agent-get-protocol protocols" [
 # GET /mimic/agent/{agentNum}/get/read
 # operationId: get_read_community
 export def "mimic-agent-get-read community" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -824,7 +824,7 @@ export def "mimic-agent-get-read community" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/read")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/read"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -835,7 +835,7 @@ export def "mimic-agent-get-read community" [
 # GET /mimic/agent/{agentNum}/get/scen
 # operationId: get_scen
 export def "mimic-agent-get-scen scen" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -847,7 +847,7 @@ export def "mimic-agent-get-scen scen" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/scen")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/scen"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -858,7 +858,7 @@ export def "mimic-agent-get-scen scen" [
 # GET /mimic/agent/{agentNum}/get/sim
 # operationId: get_sim
 export def "mimic-agent-get-sim sim" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -870,7 +870,7 @@ export def "mimic-agent-get-sim sim" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/sim")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/sim"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -880,8 +880,8 @@ export def "mimic-agent-get-sim sim" [
 #
 # GET /mimic/agent/{agentNum}/get/start
 # operationId: get_starttime
-export def "mimic-agent-get-start starttime" [
-  agentNum: int
+export def "mimic-agent-get-start start-time" [
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -893,7 +893,7 @@ export def "mimic-agent-get-start starttime" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/start")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -904,7 +904,7 @@ export def "mimic-agent-get-start starttime" [
 # GET /mimic/agent/{agentNum}/get/state
 # operationId: get_agent_state
 export def "mimic-agent-get-state state" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -916,7 +916,7 @@ export def "mimic-agent-get-state state" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/state")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -927,7 +927,7 @@ export def "mimic-agent-get-state state" [
 # GET /mimic/agent/{agentNum}/get/state_changed
 # operationId: get_state_changed
 export def "mimic-agent-get-state-changed changed" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -939,7 +939,7 @@ export def "mimic-agent-get-state-changed changed" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/state_changed")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/state_changed"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -950,7 +950,7 @@ export def "mimic-agent-get-state-changed changed" [
 # GET /mimic/agent/{agentNum}/get/statistics
 # operationId: get_statistics
 export def "mimic-agent-get-statistics statistics" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,7 +962,7 @@ export def "mimic-agent-get-statistics statistics" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/statistics")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -973,7 +973,7 @@ export def "mimic-agent-get-statistics statistics" [
 # GET /mimic/agent/{agentNum}/get/trace
 # operationId: get_trace
 export def "mimic-agent-get-trace trace" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -985,7 +985,7 @@ export def "mimic-agent-get-trace trace" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/trace")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -996,7 +996,7 @@ export def "mimic-agent-get-trace trace" [
 # GET /mimic/agent/{agentNum}/get/validate
 # operationId: get_validate
 export def "mimic-agent-get-validate validate" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1008,7 +1008,7 @@ export def "mimic-agent-get-validate validate" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/validate")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/validate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1019,7 +1019,7 @@ export def "mimic-agent-get-validate validate" [
 # GET /mimic/agent/{agentNum}/get/write
 # operationId: get_write_community
 export def "mimic-agent-get-write community" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1031,7 +1031,7 @@ export def "mimic-agent-get-write community" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/get/write")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/get/write"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1042,7 +1042,7 @@ export def "mimic-agent-get-write community" [
 # PUT /mimic/agent/{agentNum}/halt
 # operationId: halt
 export def "mimic-agent-halt halt" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1054,7 +1054,7 @@ export def "mimic-agent-halt halt" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/halt")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/halt"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1065,8 +1065,8 @@ export def "mimic-agent-halt halt" [
 # POST /mimic/agent/{agentNum}/ipalias/add/{IP}/{port}/{mask}/{interface}
 # operationId: add_ipalias
 export def "mimic-agent-ipalias-add ipalias" [
-  agentNum: int
-  IP: string
+  agent_num: int
+  ip: string
   port: int
   mask: string
   interface: string
@@ -1081,7 +1081,7 @@ export def "mimic-agent-ipalias-add ipalias" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/ipalias/add/($IP)/($port)/($mask)/($interface)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ip: $ip, port: $port, mask: $mask, interface: $interface} | format pattern "/mimic/agent/{agent_num}/ipalias/add/{ip}/{port}/{mask}/{interface}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1092,8 +1092,8 @@ export def "mimic-agent-ipalias-add ipalias" [
 # DELETE /mimic/agent/{agentNum}/ipalias/delete/{IP}/{port}
 # operationId: del_ipalias
 export def "mimic-agent-ipalias-delete ipalias" [
-  agentNum: int
-  IP: string
+  agent_num: int
+  ip: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1106,7 +1106,7 @@ export def "mimic-agent-ipalias-delete ipalias" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/ipalias/delete/($IP)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ip: $ip, port: $port} | format pattern "/mimic/agent/{agent_num}/ipalias/delete/{ip}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1117,7 +1117,7 @@ export def "mimic-agent-ipalias-delete ipalias" [
 # GET /mimic/agent/{agentNum}/ipalias/list
 # operationId: list_ipaliases
 export def "mimic-agent-ipalias-list ipaliases" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1129,7 +1129,7 @@ export def "mimic-agent-ipalias-list ipaliases" [
 ]: nothing -> table<IP: string, interface: string, mask: string, port: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/ipalias/list")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/ipalias/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1140,8 +1140,8 @@ export def "mimic-agent-ipalias-list ipaliases" [
 # PUT /mimic/agent/{agentNum}/ipalias/start/{IP}/{port}
 # operationId: start_ipalias
 export def "mimic-agent-ipalias-start ipalias" [
-  agentNum: int
-  IP: string
+  agent_num: int
+  ip: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1154,7 +1154,7 @@ export def "mimic-agent-ipalias-start ipalias" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/ipalias/start/($IP)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ip: $ip, port: $port} | format pattern "/mimic/agent/{agent_num}/ipalias/start/{ip}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1165,8 +1165,8 @@ export def "mimic-agent-ipalias-start ipalias" [
 # GET /mimic/agent/{agentNum}/ipalias/status/{IP}/{port}
 # operationId: status_ipalias
 export def "mimic-agent-ipalias-status ipalias" [
-  agentNum: int
-  IP: string
+  agent_num: int
+  ip: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1179,7 +1179,7 @@ export def "mimic-agent-ipalias-status ipalias" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/ipalias/status/($IP)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ip: $ip, port: $port} | format pattern "/mimic/agent/{agent_num}/ipalias/status/{ip}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1190,8 +1190,8 @@ export def "mimic-agent-ipalias-status ipalias" [
 # PUT /mimic/agent/{agentNum}/ipalias/stop/{IP}/{port}
 # operationId: stop_ipalias
 export def "mimic-agent-ipalias-stop ipalias" [
-  agentNum: int
-  IP: string
+  agent_num: int
+  ip: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1204,7 +1204,7 @@ export def "mimic-agent-ipalias-stop ipalias" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/ipalias/stop/($IP)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ip: $ip, port: $port} | format pattern "/mimic/agent/{agent_num}/ipalias/stop/{ip}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1215,7 +1215,7 @@ export def "mimic-agent-ipalias-stop ipalias" [
 # PUT /mimic/agent/{agentNum}/pause
 # operationId: pause_now
 export def "mimic-agent-pause now" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1227,7 +1227,7 @@ export def "mimic-agent-pause now" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/pause")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/pause"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1238,7 +1238,7 @@ export def "mimic-agent-pause now" [
 # GET /mimic/agent/{agentNum}/protocol/msg/coap/get/args
 # operationId: protocol_coap_get_args
 export def "mimic-agent-protocol-msg-coap-get-args args" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1250,7 +1250,7 @@ export def "mimic-agent-protocol-msg-coap-get-args args" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/coap/get/args")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1261,7 +1261,7 @@ export def "mimic-agent-protocol-msg-coap-get-args args" [
 # GET /mimic/agent/{agentNum}/protocol/msg/coap/get/config
 # operationId: protocol_coap_get_config
 export def "mimic-agent-protocol-msg-coap-get-config config" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1273,7 +1273,7 @@ export def "mimic-agent-protocol-msg-coap-get-config config" [
 ]: nothing -> record<keystore: string, primary_port: int, rule: string, secure_port: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/coap/get/config")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1284,7 +1284,7 @@ export def "mimic-agent-protocol-msg-coap-get-config config" [
 # GET /mimic/agent/{agentNum}/protocol/msg/coap/get/statistics
 # operationId: protocol_coap_get_statistics
 export def "mimic-agent-protocol-msg-coap-get-statistics statistics" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1296,7 +1296,7 @@ export def "mimic-agent-protocol-msg-coap-get-statistics statistics" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/coap/get/statistics")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1307,7 +1307,7 @@ export def "mimic-agent-protocol-msg-coap-get-statistics statistics" [
 # GET /mimic/agent/{agentNum}/protocol/msg/coap/get/trace
 # operationId: protocol_coap_get_trace
 export def "mimic-agent-protocol-msg-coap-get-trace trace" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1319,7 +1319,7 @@ export def "mimic-agent-protocol-msg-coap-get-trace trace" [
 ]: nothing -> record<keystore: string, primary_port: int, rule: string, secure_port: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/coap/get/trace")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1330,7 +1330,7 @@ export def "mimic-agent-protocol-msg-coap-get-trace trace" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/coap/set/config/{argument}/{value}
 # operationId: protocol_coap_set_config
 export def "mimic-agent-protocol-msg-coap-set-config config" [
-  agentNum: int
+  agent_num: int
   argument: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1344,7 +1344,7 @@ export def "mimic-agent-protocol-msg-coap-set-config config" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/coap/set/config/($argument)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, argument: $argument, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1355,8 +1355,8 @@ export def "mimic-agent-protocol-msg-coap-set-config config" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/coap/set/trace/{enableOrNot}
 # operationId: protocol_coap_set_trace
 export def "mimic-agent-protocol-msg-coap-set-trace trace" [
-  agentNum: int
-  enableOrNot: string
+  agent_num: int
+  enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1368,7 +1368,7 @@ export def "mimic-agent-protocol-msg-coap-set-trace trace" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/coap/set/trace/($enableOrNot)")
+  let full_url = (build-url $base ({agent_num: $agent_num, enable_or_not: $enable_or_not} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1379,7 +1379,7 @@ export def "mimic-agent-protocol-msg-coap-set-trace trace" [
 # GET /mimic/agent/{agentNum}/protocol/msg/dhcp/get/args
 # operationId: protocol_dhcp_get_args
 export def "mimic-agent-protocol-msg-dhcp-get-args args" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1391,7 +1391,7 @@ export def "mimic-agent-protocol-msg-dhcp-get-args args" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/dhcp/get/args")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1402,7 +1402,7 @@ export def "mimic-agent-protocol-msg-dhcp-get-args args" [
 # GET /mimic/agent/{agentNum}/protocol/msg/dhcp/get/config
 # operationId: protocol_dhcp_get_config
 export def "mimic-agent-protocol-msg-dhcp-get-config config" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1414,7 +1414,7 @@ export def "mimic-agent-protocol-msg-dhcp-get-config config" [
 ]: nothing -> record<add_options: string, classid: string, hwaddr: string, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/dhcp/get/config")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1425,7 +1425,7 @@ export def "mimic-agent-protocol-msg-dhcp-get-config config" [
 # GET /mimic/agent/{agentNum}/protocol/msg/dhcp/get/statistics
 # operationId: protocol_dhcp_get_statistics
 export def "mimic-agent-protocol-msg-dhcp-get-statistics statistics" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1437,7 +1437,7 @@ export def "mimic-agent-protocol-msg-dhcp-get-statistics statistics" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/dhcp/get/statistics")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1448,7 +1448,7 @@ export def "mimic-agent-protocol-msg-dhcp-get-statistics statistics" [
 # GET /mimic/agent/{agentNum}/protocol/msg/dhcp/get/trace
 # operationId: protocol_dhcp_get_trace
 export def "mimic-agent-protocol-msg-dhcp-get-trace trace" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1460,7 +1460,7 @@ export def "mimic-agent-protocol-msg-dhcp-get-trace trace" [
 ]: nothing -> record<add_options: string, classid: string, hwaddr: string, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/dhcp/get/trace")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1471,7 +1471,7 @@ export def "mimic-agent-protocol-msg-dhcp-get-trace trace" [
 # GET /mimic/agent/{agentNum}/protocol/msg/dhcp/params
 # operationId: protocol_dhcp_params
 export def "mimic-agent-protocol-msg-dhcp-params params" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1483,7 +1483,7 @@ export def "mimic-agent-protocol-msg-dhcp-params params" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/dhcp/params")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/params"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1494,7 +1494,7 @@ export def "mimic-agent-protocol-msg-dhcp-params params" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/dhcp/set/config/{argument}/{value}
 # operationId: protocol_dhcp_set_config
 export def "mimic-agent-protocol-msg-dhcp-set-config config" [
-  agentNum: int
+  agent_num: int
   argument: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1508,7 +1508,7 @@ export def "mimic-agent-protocol-msg-dhcp-set-config config" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/dhcp/set/config/($argument)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, argument: $argument, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1519,8 +1519,8 @@ export def "mimic-agent-protocol-msg-dhcp-set-config config" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/dhcp/set/trace/{enableOrNot}
 # operationId: protocol_dhcp_set_trace
 export def "mimic-agent-protocol-msg-dhcp-set-trace trace" [
-  agentNum: int
-  enableOrNot: string
+  agent_num: int
+  enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1532,7 +1532,7 @@ export def "mimic-agent-protocol-msg-dhcp-set-trace trace" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/dhcp/set/trace/($enableOrNot)")
+  let full_url = (build-url $base ({agent_num: $agent_num, enable_or_not: $enable_or_not} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1543,7 +1543,7 @@ export def "mimic-agent-protocol-msg-dhcp-set-trace trace" [
 # GET /mimic/agent/{agentNum}/protocol/msg/ipmi/get/args
 # operationId: protocol_ipmi_get_args
 export def "mimic-agent-protocol-msg-ipmi-get-args args" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1555,7 +1555,7 @@ export def "mimic-agent-protocol-msg-ipmi-get-args args" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ipmi/get/args")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1566,7 +1566,7 @@ export def "mimic-agent-protocol-msg-ipmi-get-args args" [
 # GET /mimic/agent/{agentNum}/protocol/msg/ipmi/get/config
 # operationId: protocol_ipmi_get_config
 export def "mimic-agent-protocol-msg-ipmi-get-config config" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1578,7 +1578,7 @@ export def "mimic-agent-protocol-msg-ipmi-get-config config" [
 ]: nothing -> record<primary_port: int, secure_port: int, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ipmi/get/config")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1589,7 +1589,7 @@ export def "mimic-agent-protocol-msg-ipmi-get-config config" [
 # GET /mimic/agent/{agentNum}/protocol/msg/ipmi/get/statistics
 # operationId: protocol_ipmi_get_statistics
 export def "mimic-agent-protocol-msg-ipmi-get-statistics statistics" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1601,7 +1601,7 @@ export def "mimic-agent-protocol-msg-ipmi-get-statistics statistics" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ipmi/get/statistics")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1612,7 +1612,7 @@ export def "mimic-agent-protocol-msg-ipmi-get-statistics statistics" [
 # GET /mimic/agent/{agentNum}/protocol/msg/ipmi/get/trace
 # operationId: protocol_ipmi_get_trace
 export def "mimic-agent-protocol-msg-ipmi-get-trace trace" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1624,7 +1624,7 @@ export def "mimic-agent-protocol-msg-ipmi-get-trace trace" [
 ]: nothing -> record<primary_port: int, secure_port: int, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ipmi/get/trace")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1635,7 +1635,7 @@ export def "mimic-agent-protocol-msg-ipmi-get-trace trace" [
 # GET /mimic/agent/{agentNum}/protocol/msg/ipmi/get/{attr}
 # operationId: protocol_ipmi_get_attr
 export def "mimic-agent-protocol-msg-ipmi-get attr" [
-  agentNum: int
+  agent_num: int
   attr: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1648,7 +1648,7 @@ export def "mimic-agent-protocol-msg-ipmi-get attr" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ipmi/get/($attr)")
+  let full_url = (build-url $base ({agent_num: $agent_num, attr: $attr} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/get/{attr}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1659,7 +1659,7 @@ export def "mimic-agent-protocol-msg-ipmi-get attr" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/ipmi/set/config/{argument}/{value}
 # operationId: protocol_ipmi_set_config
 export def "mimic-agent-protocol-msg-ipmi-set-config config" [
-  agentNum: int
+  agent_num: int
   argument: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1673,7 +1673,7 @@ export def "mimic-agent-protocol-msg-ipmi-set-config config" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ipmi/set/config/($argument)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, argument: $argument, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1684,8 +1684,8 @@ export def "mimic-agent-protocol-msg-ipmi-set-config config" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/ipmi/set/trace/{enableOrNot}
 # operationId: protocol_ipmi_set_trace
 export def "mimic-agent-protocol-msg-ipmi-set-trace trace" [
-  agentNum: int
-  enableOrNot: string
+  agent_num: int
+  enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1697,7 +1697,7 @@ export def "mimic-agent-protocol-msg-ipmi-set-trace trace" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ipmi/set/trace/($enableOrNot)")
+  let full_url = (build-url $base ({agent_num: $agent_num, enable_or_not: $enable_or_not} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1708,7 +1708,7 @@ export def "mimic-agent-protocol-msg-ipmi-set-trace trace" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/ipmi/set/{attr}/{value}
 # operationId: protocol_ipmi_set_attr
 export def "mimic-agent-protocol-msg-ipmi-set attr" [
-  agentNum: int
+  agent_num: int
   attr: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1722,7 +1722,7 @@ export def "mimic-agent-protocol-msg-ipmi-set attr" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ipmi/set/($attr)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, attr: $attr, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/set/{attr}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1733,7 +1733,7 @@ export def "mimic-agent-protocol-msg-ipmi-set attr" [
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/client/get/protstate
 # operationId: protocol_mqtt_client_get_protstate
 export def "mimic-agent-protocol-msg-mqtt-client-get-protstate protstate" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1745,7 +1745,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-get-protstate protstate" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/get/protstate")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/get/protstate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1756,7 +1756,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-get-protstate protstate" [
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/client/get/state
 # operationId: protocol_mqtt_client_get_state
 export def "mimic-agent-protocol-msg-mqtt-client-get-state state" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1768,7 +1768,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-get-state state" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/get/state")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/get/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1779,7 +1779,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-get-state state" [
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/client/message/card
 # operationId: protocol_mqtt_client_message_card
 export def "mimic-agent-protocol-msg-mqtt-client-message-card card" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1791,7 +1791,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-message-card card" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/message/card")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/message/card"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1802,8 +1802,8 @@ export def "mimic-agent-protocol-msg-mqtt-client-message-card card" [
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/client/message/get/{msgNum}/{attr}
 # operationId: protocol_mqtt_client_message_get
 export def "mimic-agent-protocol-msg-mqtt-client-message-get get" [
-  agentNum: int
-  msgNum: int
+  agent_num: int
+  msg_num: int
   attr: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1816,7 +1816,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-message-get get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/message/get/($msgNum)/($attr)")
+  let full_url = (build-url $base ({agent_num: $agent_num, msg_num: $msg_num, attr: $attr} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/message/get/{msg_num}/{attr}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1827,8 +1827,8 @@ export def "mimic-agent-protocol-msg-mqtt-client-message-get get" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/message/set/{msgNum}/{attr}/{value}
 # operationId: protocol_mqtt_client_message_set
 export def "mimic-agent-protocol-msg-mqtt-client-message-set set" [
-  agentNum: int
-  msgNum: int
+  agent_num: int
+  msg_num: int
   attr: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1842,7 +1842,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-message-set set" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/message/set/($msgNum)/($attr)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, msg_num: $msg_num, attr: $attr, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/message/set/{msg_num}/{attr}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1853,8 +1853,8 @@ export def "mimic-agent-protocol-msg-mqtt-client-message-set set" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/resubscribe/{subNum}
 # operationId: protocol_mqtt_client_resubscribe
 export def "mimic-agent-protocol-msg-mqtt-client-resubscribe resubscribe" [
-  agentNum: int
-  subNum: int
+  agent_num: int
+  sub_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1866,7 +1866,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-resubscribe resubscribe" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/resubscribe/($subNum)")
+  let full_url = (build-url $base ({agent_num: $agent_num, sub_num: $sub_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/resubscribe/{sub_num}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1877,7 +1877,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-resubscribe resubscribe" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/runtime/abort
 # operationId: protocol_mqtt_client_runtime_abort
 export def "mimic-agent-protocol-msg-mqtt-client-runtime-abort abort" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1889,7 +1889,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-runtime-abort abort" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/runtime/abort")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/runtime/abort"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1900,7 +1900,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-runtime-abort abort" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/runtime/connect
 # operationId: protocol_mqtt_client_runtime_connect
 export def "mimic-agent-protocol-msg-mqtt-client-runtime-connect connect" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1912,7 +1912,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-runtime-connect connect" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/runtime/connect")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/runtime/connect"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1923,7 +1923,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-runtime-connect connect" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/runtime/disconnect
 # operationId: protocol_mqtt_client_runtime_disconnect
 export def "mimic-agent-protocol-msg-mqtt-client-runtime-disconnect disconnect" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1935,7 +1935,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-runtime-disconnect disconnect" 
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/runtime/disconnect")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/runtime/disconnect"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1946,8 +1946,8 @@ export def "mimic-agent-protocol-msg-mqtt-client-runtime-disconnect disconnect" 
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/broker/{brokerAddr}
 # operationId: protocol_mqtt_client_set_broker
 export def "mimic-agent-protocol-msg-mqtt-client-set-broker broker" [
-  agentNum: int
-  brokerAddr: string
+  agent_num: int
+  broker_addr: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1959,7 +1959,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-broker broker" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/set/broker/($brokerAddr)")
+  let full_url = (build-url $base ({agent_num: $agent_num, broker_addr: $broker_addr} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/broker/{broker_addr}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1970,8 +1970,8 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-broker broker" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/cleansession/{cleanOrNot}
 # operationId: protocol_mqtt_client_set_cleansession
 export def "mimic-agent-protocol-msg-mqtt-client-set-cleansession cleansession" [
-  agentNum: int
-  cleanOrNot: int
+  agent_num: int
+  clean_or_not: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1983,7 +1983,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-cleansession cleansession" 
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/set/cleansession/($cleanOrNot)")
+  let full_url = (build-url $base ({agent_num: $agent_num, clean_or_not: $clean_or_not} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/cleansession/{clean_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1994,8 +1994,8 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-cleansession cleansession" 
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/clientid/{clientID}
 # operationId: protocol_mqtt_client_set_clientid
 export def "mimic-agent-protocol-msg-mqtt-client-set-clientid clientid" [
-  agentNum: int
-  clientID: string
+  agent_num: int
+  client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2007,7 +2007,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-clientid clientid" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/set/clientid/($clientID)")
+  let full_url = (build-url $base ({agent_num: $agent_num, client_id: $client_id} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/clientid/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2018,8 +2018,8 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-clientid clientid" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/keepalive/{aliveTime}
 # operationId: protocol_mqtt_client_set_keepalive
 export def "mimic-agent-protocol-msg-mqtt-client-set-keepalive keepalive" [
-  agentNum: int
-  aliveTime: int
+  agent_num: int
+  alive_time: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2031,7 +2031,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-keepalive keepalive" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/set/keepalive/($aliveTime)")
+  let full_url = (build-url $base ({agent_num: $agent_num, alive_time: $alive_time} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/keepalive/{alive_time}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2042,7 +2042,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-keepalive keepalive" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/on_disconnect/{action}
 # operationId: protocol_mqtt_client_set_on_disconnect
 export def "mimic-agent-protocol-msg-mqtt-client-set-on-disconnect disconnect" [
-  agentNum: int
+  agent_num: int
   action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2055,7 +2055,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-on-disconnect disconnect" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/set/on_disconnect/($action)")
+  let full_url = (build-url $base ({agent_num: $agent_num, action: $action} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/on_disconnect/{action}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2066,7 +2066,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-on-disconnect disconnect" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/password/{password}
 # operationId: protocol_mqtt_client_set_password
 export def "mimic-agent-protocol-msg-mqtt-client-set-password password" [
-  agentNum: int
+  agent_num: int
   password: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2079,7 +2079,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-password password" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/set/password/($password)")
+  let full_url = (build-url $base ({agent_num: $agent_num, password: $password} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/password/{password}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2090,7 +2090,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-password password" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/port/{port}
 # operationId: protocol_mqtt_client_set_port
 export def "mimic-agent-protocol-msg-mqtt-client-set-port port" [
-  agentNum: int
+  agent_num: int
   port: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2103,7 +2103,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-port port" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/set/port/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/port/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2114,7 +2114,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-port port" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/username/{username}
 # operationId: protocol_mqtt_client_set_username
 export def "mimic-agent-protocol-msg-mqtt-client-set-username username" [
-  agentNum: int
+  agent_num: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2127,7 +2127,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-username username" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/set/username/($username)")
+  let full_url = (build-url $base ({agent_num: $agent_num, username: $username} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/username/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2138,7 +2138,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-username username" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/willmsg/{msg}
 # operationId: protocol_mqtt_client_set_willmsg
 export def "mimic-agent-protocol-msg-mqtt-client-set-willmsg willmsg" [
-  agentNum: int
+  agent_num: int
   msg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2151,7 +2151,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-willmsg willmsg" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/set/willmsg/($msg)")
+  let full_url = (build-url $base ({agent_num: $agent_num, msg: $msg} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/willmsg/{msg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2162,7 +2162,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-willmsg willmsg" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/willqos/{qos}
 # operationId: protocol_mqtt_client_set_willqos
 export def "mimic-agent-protocol-msg-mqtt-client-set-willqos willqos" [
-  agentNum: int
+  agent_num: int
   qos: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2175,7 +2175,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-willqos willqos" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/set/willqos/($qos)")
+  let full_url = (build-url $base ({agent_num: $agent_num, qos: $qos} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/willqos/{qos}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2186,7 +2186,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-willqos willqos" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/willretain/{retain}
 # operationId: protocol_mqtt_client_set_willretain
 export def "mimic-agent-protocol-msg-mqtt-client-set-willretain willretain" [
-  agentNum: int
+  agent_num: int
   retain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2199,7 +2199,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-willretain willretain" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/set/willretain/($retain)")
+  let full_url = (build-url $base ({agent_num: $agent_num, retain: $retain} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/willretain/{retain}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2210,7 +2210,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-willretain willretain" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/willtopic/{topic}
 # operationId: protocol_mqtt_client_set_willtopic
 export def "mimic-agent-protocol-msg-mqtt-client-set-willtopic willtopic" [
-  agentNum: int
+  agent_num: int
   topic: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2223,7 +2223,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-willtopic willtopic" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/set/willtopic/($topic)")
+  let full_url = (build-url $base ({agent_num: $agent_num, topic: $topic} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/willtopic/{topic}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2234,7 +2234,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-willtopic willtopic" [
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/client/subscribe/card
 # operationId: protocol_mqtt_client_subscribe_card
 export def "mimic-agent-protocol-msg-mqtt-client-subscribe-card card" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2246,7 +2246,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-subscribe-card card" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/subscribe/card")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/subscribe/card"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2257,8 +2257,8 @@ export def "mimic-agent-protocol-msg-mqtt-client-subscribe-card card" [
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/client/subscribe/get/{subNum}/{attr}
 # operationId: protocol_mqtt_client_subscribe_get
 export def "mimic-agent-protocol-msg-mqtt-client-subscribe-get get" [
-  agentNum: int
-  subNum: int
+  agent_num: int
+  sub_num: int
   attr: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2271,7 +2271,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-subscribe-get get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/subscribe/get/($subNum)/($attr)")
+  let full_url = (build-url $base ({agent_num: $agent_num, sub_num: $sub_num, attr: $attr} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/subscribe/get/{sub_num}/{attr}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2282,8 +2282,8 @@ export def "mimic-agent-protocol-msg-mqtt-client-subscribe-get get" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/subscribe/set/{subNum}/{attr}/{value}
 # operationId: protocol_mqtt_client_subscribe_set
 export def "mimic-agent-protocol-msg-mqtt-client-subscribe-set set" [
-  agentNum: int
-  subNum: int
+  agent_num: int
+  sub_num: int
   attr: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2297,7 +2297,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-subscribe-set set" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/subscribe/set/($subNum)/($attr)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, sub_num: $sub_num, attr: $attr, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/subscribe/set/{sub_num}/{attr}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2308,8 +2308,8 @@ export def "mimic-agent-protocol-msg-mqtt-client-subscribe-set set" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/unsubscribe/{subNum}
 # operationId: protocol_mqtt_client_unsubscribe
 export def "mimic-agent-protocol-msg-mqtt-client-unsubscribe unsubscribe" [
-  agentNum: int
-  subNum: int
+  agent_num: int
+  sub_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2321,7 +2321,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-unsubscribe unsubscribe" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/client/unsubscribe/($subNum)")
+  let full_url = (build-url $base ({agent_num: $agent_num, sub_num: $sub_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/unsubscribe/{sub_num}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2332,7 +2332,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-unsubscribe unsubscribe" [
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/get/args
 # operationId: protocol_mqtt_get_args
 export def "mimic-agent-protocol-msg-mqtt-get-args args" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2344,7 +2344,7 @@ export def "mimic-agent-protocol-msg-mqtt-get-args args" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/get/args")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2355,7 +2355,7 @@ export def "mimic-agent-protocol-msg-mqtt-get-args args" [
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/get/config
 # operationId: protocol_mqtt_get_config
 export def "mimic-agent-protocol-msg-mqtt-get-config config" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2367,7 +2367,7 @@ export def "mimic-agent-protocol-msg-mqtt-get-config config" [
 ]: nothing -> record<broker: string, clientid: string, filename: string, is_tls: string, password: string, port: int, tls_conf_filename: string, username: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/get/config")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2378,7 +2378,7 @@ export def "mimic-agent-protocol-msg-mqtt-get-config config" [
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/get/statistics
 # operationId: protocol_mqtt_get_statistics
 export def "mimic-agent-protocol-msg-mqtt-get-statistics statistics" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2390,7 +2390,7 @@ export def "mimic-agent-protocol-msg-mqtt-get-statistics statistics" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/get/statistics")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2401,7 +2401,7 @@ export def "mimic-agent-protocol-msg-mqtt-get-statistics statistics" [
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/get/trace
 # operationId: protocol_mqtt_get_trace
 export def "mimic-agent-protocol-msg-mqtt-get-trace trace" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2413,7 +2413,7 @@ export def "mimic-agent-protocol-msg-mqtt-get-trace trace" [
 ]: nothing -> record<broker: string, clientid: string, filename: string, is_tls: string, password: string, port: int, tls_conf_filename: string, username: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/get/trace")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2424,7 +2424,7 @@ export def "mimic-agent-protocol-msg-mqtt-get-trace trace" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/set/config/{argument}/{value}
 # operationId: protocol_mqtt_set_config
 export def "mimic-agent-protocol-msg-mqtt-set-config config" [
-  agentNum: int
+  agent_num: int
   argument: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2438,7 +2438,7 @@ export def "mimic-agent-protocol-msg-mqtt-set-config config" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/set/config/($argument)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, argument: $argument, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2449,8 +2449,8 @@ export def "mimic-agent-protocol-msg-mqtt-set-config config" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/set/trace/{enableOrNot}
 # operationId: protocol_mqtt_set_trace
 export def "mimic-agent-protocol-msg-mqtt-set-trace trace" [
-  agentNum: int
-  enableOrNot: string
+  agent_num: int
+  enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2462,7 +2462,7 @@ export def "mimic-agent-protocol-msg-mqtt-set-trace trace" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/mqtt/set/trace/($enableOrNot)")
+  let full_url = (build-url $base ({agent_num: $agent_num, enable_or_not: $enable_or_not} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2473,7 +2473,7 @@ export def "mimic-agent-protocol-msg-mqtt-set-trace trace" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/flow/change/dfs_interval/{interval}
 # operationId: protocol_netflow_change_dfs
 export def "mimic-agent-protocol-msg-netflow-flow-change-dfs-interval dfs" [
-  agentNum: int
+  agent_num: int
   interval: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2486,7 +2486,7 @@ export def "mimic-agent-protocol-msg-netflow-flow-change-dfs-interval dfs" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/netflow/flow/change/dfs_interval/($interval)")
+  let full_url = (build-url $base ({agent_num: $agent_num, interval: $interval} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/flow/change/dfs_interval/{interval}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2497,7 +2497,7 @@ export def "mimic-agent-protocol-msg-netflow-flow-change-dfs-interval dfs" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/flow/change/tfs_interval/{interval}
 # operationId: protocol_netflow_change_tfs
 export def "mimic-agent-protocol-msg-netflow-flow-change-tfs-interval tfs" [
-  agentNum: int
+  agent_num: int
   interval: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2510,7 +2510,7 @@ export def "mimic-agent-protocol-msg-netflow-flow-change-tfs-interval tfs" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/netflow/flow/change/tfs_interval/($interval)")
+  let full_url = (build-url $base ({agent_num: $agent_num, interval: $interval} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/flow/change/tfs_interval/{interval}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2521,7 +2521,7 @@ export def "mimic-agent-protocol-msg-netflow-flow-change-tfs-interval tfs" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/flow/change/{flowset-uid}/{field-num}/{attr}/{value}
 # operationId: protocol_netflow_change_attr
 export def "mimic-agent-protocol-msg-netflow-flow-change attr" [
-  agentNum: int
+  agent_num: int
   flowset_uid: int
   field_num: int
   attr: string
@@ -2537,7 +2537,7 @@ export def "mimic-agent-protocol-msg-netflow-flow-change attr" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/netflow/flow/change/($flowset_uid)/($field_num)/($attr)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, flowset_uid: $flowset_uid, field_num: $field_num, attr: $attr, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/flow/change/{flowset_uid}/{field_num}/{attr}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2548,7 +2548,7 @@ export def "mimic-agent-protocol-msg-netflow-flow-change attr" [
 # GET /mimic/agent/{agentNum}/protocol/msg/netflow/flow/list
 # operationId: protocol_netflow_list
 export def "mimic-agent-protocol-msg-netflow-flow-list list" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2560,7 +2560,7 @@ export def "mimic-agent-protocol-msg-netflow-flow-list list" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/netflow/flow/list")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/flow/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2571,7 +2571,7 @@ export def "mimic-agent-protocol-msg-netflow-flow-list list" [
 # GET /mimic/agent/{agentNum}/protocol/msg/netflow/get/args
 # operationId: protocol_netflow_get_args
 export def "mimic-agent-protocol-msg-netflow-get-args args" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2583,7 +2583,7 @@ export def "mimic-agent-protocol-msg-netflow-get-args args" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/netflow/get/args")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2594,7 +2594,7 @@ export def "mimic-agent-protocol-msg-netflow-get-args args" [
 # GET /mimic/agent/{agentNum}/protocol/msg/netflow/get/config
 # operationId: protocol_netflow_get_config
 export def "mimic-agent-protocol-msg-netflow-get-config config" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2606,7 +2606,7 @@ export def "mimic-agent-protocol-msg-netflow-get-config config" [
 ]: nothing -> record<bundleflowsets: int, collector: string, collectorport: int, filename: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/netflow/get/config")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2617,7 +2617,7 @@ export def "mimic-agent-protocol-msg-netflow-get-config config" [
 # GET /mimic/agent/{agentNum}/protocol/msg/netflow/get/statistics
 # operationId: protocol_netflow_get_statistics
 export def "mimic-agent-protocol-msg-netflow-get-statistics statistics" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2629,7 +2629,7 @@ export def "mimic-agent-protocol-msg-netflow-get-statistics statistics" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/netflow/get/statistics")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2640,7 +2640,7 @@ export def "mimic-agent-protocol-msg-netflow-get-statistics statistics" [
 # GET /mimic/agent/{agentNum}/protocol/msg/netflow/get/trace
 # operationId: protocol_netflow_get_trace
 export def "mimic-agent-protocol-msg-netflow-get-trace trace" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2652,7 +2652,7 @@ export def "mimic-agent-protocol-msg-netflow-get-trace trace" [
 ]: nothing -> record<bundleflowsets: int, collector: string, collectorport: int, filename: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/netflow/get/trace")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2663,7 +2663,7 @@ export def "mimic-agent-protocol-msg-netflow-get-trace trace" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/halt
 # operationId: protocol_netflow_halt
 export def "mimic-agent-protocol-msg-netflow-halt halt" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2675,7 +2675,7 @@ export def "mimic-agent-protocol-msg-netflow-halt halt" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/netflow/halt")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/halt"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2686,7 +2686,7 @@ export def "mimic-agent-protocol-msg-netflow-halt halt" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/reload
 # operationId: protocol_netflow_reload
 export def "mimic-agent-protocol-msg-netflow-reload reload" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2698,7 +2698,7 @@ export def "mimic-agent-protocol-msg-netflow-reload reload" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/netflow/reload")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/reload"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2709,7 +2709,7 @@ export def "mimic-agent-protocol-msg-netflow-reload reload" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/resume
 # operationId: protocol_netflow_resume
 export def "mimic-agent-protocol-msg-netflow-resume resume" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2721,7 +2721,7 @@ export def "mimic-agent-protocol-msg-netflow-resume resume" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/netflow/resume")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/resume"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2732,8 +2732,8 @@ export def "mimic-agent-protocol-msg-netflow-resume resume" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/set/collector/{collectorIP}
 # operationId: protocol_netflow_set_collector
 export def "mimic-agent-protocol-msg-netflow-set-collector collector" [
-  agentNum: int
-  collectorIP: string
+  agent_num: int
+  collector_ip: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2745,7 +2745,7 @@ export def "mimic-agent-protocol-msg-netflow-set-collector collector" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/netflow/set/collector/($collectorIP)")
+  let full_url = (build-url $base ({agent_num: $agent_num, collector_ip: $collector_ip} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/set/collector/{collector_ip}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2756,7 +2756,7 @@ export def "mimic-agent-protocol-msg-netflow-set-collector collector" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/set/config/{argument}/{value}
 # operationId: protocol_netflow_set_config
 export def "mimic-agent-protocol-msg-netflow-set-config config" [
-  agentNum: int
+  agent_num: int
   argument: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2770,7 +2770,7 @@ export def "mimic-agent-protocol-msg-netflow-set-config config" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/netflow/set/config/($argument)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, argument: $argument, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2781,8 +2781,8 @@ export def "mimic-agent-protocol-msg-netflow-set-config config" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/set/filename/{fileName}
 # operationId: protocol_netflow_set_fileName
 export def "mimic-agent-protocol-msg-netflow-set-filename fileName" [
-  agentNum: int
-  fileName: string
+  agent_num: int
+  file_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2794,7 +2794,7 @@ export def "mimic-agent-protocol-msg-netflow-set-filename fileName" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/netflow/set/filename/($fileName)")
+  let full_url = (build-url $base ({agent_num: $agent_num, file_name: $file_name} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/set/filename/{file_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2805,8 +2805,8 @@ export def "mimic-agent-protocol-msg-netflow-set-filename fileName" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/set/trace/{enableOrNot}
 # operationId: protocol_netflow_set_trace
 export def "mimic-agent-protocol-msg-netflow-set-trace trace" [
-  agentNum: int
-  enableOrNot: string
+  agent_num: int
+  enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2818,7 +2818,7 @@ export def "mimic-agent-protocol-msg-netflow-set-trace trace" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/netflow/set/trace/($enableOrNot)")
+  let full_url = (build-url $base ({agent_num: $agent_num, enable_or_not: $enable_or_not} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2829,7 +2829,7 @@ export def "mimic-agent-protocol-msg-netflow-set-trace trace" [
 # GET /mimic/agent/{agentNum}/protocol/msg/proxy/get/args
 # operationId: protocol_proxy_get_args
 export def "mimic-agent-protocol-msg-proxy-get-args args" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2841,7 +2841,7 @@ export def "mimic-agent-protocol-msg-proxy-get-args args" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/proxy/get/args")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2852,7 +2852,7 @@ export def "mimic-agent-protocol-msg-proxy-get-args args" [
 # GET /mimic/agent/{agentNum}/protocol/msg/proxy/get/config
 # operationId: protocol_proxy_get_config
 export def "mimic-agent-protocol-msg-proxy-get-config config" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2864,7 +2864,7 @@ export def "mimic-agent-protocol-msg-proxy-get-config config" [
 ]: nothing -> record<TCP_NODELAY: int, client_to_server: string, disconnect_delay: int, max_connects: int, portno: int, pre_connect: string, server_to_client: string, target: string, transport: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/proxy/get/config")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2875,7 +2875,7 @@ export def "mimic-agent-protocol-msg-proxy-get-config config" [
 # GET /mimic/agent/{agentNum}/protocol/msg/proxy/get/statistics
 # operationId: protocol_proxy_get_statistics
 export def "mimic-agent-protocol-msg-proxy-get-statistics statistics" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2887,7 +2887,7 @@ export def "mimic-agent-protocol-msg-proxy-get-statistics statistics" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/proxy/get/statistics")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2898,7 +2898,7 @@ export def "mimic-agent-protocol-msg-proxy-get-statistics statistics" [
 # GET /mimic/agent/{agentNum}/protocol/msg/proxy/get/trace
 # operationId: protocol_proxy_get_trace
 export def "mimic-agent-protocol-msg-proxy-get-trace trace" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2910,7 +2910,7 @@ export def "mimic-agent-protocol-msg-proxy-get-trace trace" [
 ]: nothing -> record<TCP_NODELAY: int, client_to_server: string, disconnect_delay: int, max_connects: int, portno: int, pre_connect: string, server_to_client: string, target: string, transport: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/proxy/get/trace")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2921,10 +2921,10 @@ export def "mimic-agent-protocol-msg-proxy-get-trace trace" [
 # POST /mimic/agent/{agentNum}/protocol/msg/proxy/port/add/{port}/{target}/{targetPort}
 # operationId: protocol_proxy_port_add
 export def "mimic-agent-protocol-msg-proxy-port-add add" [
-  agentNum: int
+  agent_num: int
   port: int
   target: string
-  targetPort: int
+  target_port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2936,7 +2936,7 @@ export def "mimic-agent-protocol-msg-proxy-port-add add" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/proxy/port/add/($port)/($target)/($targetPort)")
+  let full_url = (build-url $base ({agent_num: $agent_num, port: $port, target: $target, target_port: $target_port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/add/{port}/{target}/{target_port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2947,7 +2947,7 @@ export def "mimic-agent-protocol-msg-proxy-port-add add" [
 # GET /mimic/agent/{agentNum}/protocol/msg/proxy/port/isStarted/{port}
 # operationId: protocol_proxy_port_isstarted
 export def "mimic-agent-protocol-msg-proxy-port-is-started isstarted" [
-  agentNum: int
+  agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2960,7 +2960,7 @@ export def "mimic-agent-protocol-msg-proxy-port-is-started isstarted" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/proxy/port/isStarted/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/isStarted/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2971,7 +2971,7 @@ export def "mimic-agent-protocol-msg-proxy-port-is-started isstarted" [
 # GET /mimic/agent/{agentNum}/protocol/msg/proxy/port/list
 # operationId: protocol_proxy_port_list
 export def "mimic-agent-protocol-msg-proxy-port-list list" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2983,7 +2983,7 @@ export def "mimic-agent-protocol-msg-proxy-port-list list" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/proxy/port/list")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2994,7 +2994,7 @@ export def "mimic-agent-protocol-msg-proxy-port-list list" [
 # DELETE /mimic/agent/{agentNum}/protocol/msg/proxy/port/remove/{port}
 # operationId: protocol_proxy_port_remove
 export def "mimic-agent-protocol-msg-proxy-port-remove remove" [
-  agentNum: int
+  agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3007,7 +3007,7 @@ export def "mimic-agent-protocol-msg-proxy-port-remove remove" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/proxy/port/remove/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/remove/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3018,7 +3018,7 @@ export def "mimic-agent-protocol-msg-proxy-port-remove remove" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/proxy/port/start/{port}
 # operationId: protocol_proxy_port_start
 export def "mimic-agent-protocol-msg-proxy-port-start start" [
-  agentNum: int
+  agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3031,7 +3031,7 @@ export def "mimic-agent-protocol-msg-proxy-port-start start" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/proxy/port/start/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/start/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3042,7 +3042,7 @@ export def "mimic-agent-protocol-msg-proxy-port-start start" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/proxy/port/stop/{port}
 # operationId: protocol_proxy_port_stop
 export def "mimic-agent-protocol-msg-proxy-port-stop stop" [
-  agentNum: int
+  agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3055,7 +3055,7 @@ export def "mimic-agent-protocol-msg-proxy-port-stop stop" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/proxy/port/stop/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/stop/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3066,7 +3066,7 @@ export def "mimic-agent-protocol-msg-proxy-port-stop stop" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/proxy/set/config/{argument}/{value}
 # operationId: protocol_proxy_set_config
 export def "mimic-agent-protocol-msg-proxy-set-config config" [
-  agentNum: int
+  agent_num: int
   argument: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3080,7 +3080,7 @@ export def "mimic-agent-protocol-msg-proxy-set-config config" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/proxy/set/config/($argument)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, argument: $argument, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3091,8 +3091,8 @@ export def "mimic-agent-protocol-msg-proxy-set-config config" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/proxy/set/trace/{enableOrNot}
 # operationId: protocol_proxy_set_trace
 export def "mimic-agent-protocol-msg-proxy-set-trace trace" [
-  agentNum: int
-  enableOrNot: string
+  agent_num: int
+  enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3104,7 +3104,7 @@ export def "mimic-agent-protocol-msg-proxy-set-trace trace" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/proxy/set/trace/($enableOrNot)")
+  let full_url = (build-url $base ({agent_num: $agent_num, enable_or_not: $enable_or_not} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3115,7 +3115,7 @@ export def "mimic-agent-protocol-msg-proxy-set-trace trace" [
 # GET /mimic/agent/{agentNum}/protocol/msg/sflow/get/args
 # operationId: protocol_sflow_get_args
 export def "mimic-agent-protocol-msg-sflow-get-args args" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3127,7 +3127,7 @@ export def "mimic-agent-protocol-msg-sflow-get-args args" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/sflow/get/args")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3138,7 +3138,7 @@ export def "mimic-agent-protocol-msg-sflow-get-args args" [
 # GET /mimic/agent/{agentNum}/protocol/msg/sflow/get/config
 # operationId: protocol_sflow_get_config
 export def "mimic-agent-protocol-msg-sflow-get-config config" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3150,7 +3150,7 @@ export def "mimic-agent-protocol-msg-sflow-get-config config" [
 ]: nothing -> record<collector: string, collectorport: int, encoding_type: string, filename: string, flows_per_min: int, include_samples: string, records_per_sample: string, samples_per_datagram: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/sflow/get/config")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3161,7 +3161,7 @@ export def "mimic-agent-protocol-msg-sflow-get-config config" [
 # GET /mimic/agent/{agentNum}/protocol/msg/sflow/get/statistics
 # operationId: protocol_sflow_get_statistics
 export def "mimic-agent-protocol-msg-sflow-get-statistics statistics" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3173,7 +3173,7 @@ export def "mimic-agent-protocol-msg-sflow-get-statistics statistics" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/sflow/get/statistics")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3184,7 +3184,7 @@ export def "mimic-agent-protocol-msg-sflow-get-statistics statistics" [
 # GET /mimic/agent/{agentNum}/protocol/msg/sflow/get/trace
 # operationId: protocol_sflow_get_trace
 export def "mimic-agent-protocol-msg-sflow-get-trace trace" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3196,7 +3196,7 @@ export def "mimic-agent-protocol-msg-sflow-get-trace trace" [
 ]: nothing -> record<collector: string, collectorport: int, encoding_type: string, filename: string, flows_per_min: int, include_samples: string, records_per_sample: string, samples_per_datagram: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/sflow/get/trace")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3207,7 +3207,7 @@ export def "mimic-agent-protocol-msg-sflow-get-trace trace" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/sflow/halt
 # operationId: protocol_sflow_halt
 export def "mimic-agent-protocol-msg-sflow-halt halt" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3219,7 +3219,7 @@ export def "mimic-agent-protocol-msg-sflow-halt halt" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/sflow/halt")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/halt"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3230,7 +3230,7 @@ export def "mimic-agent-protocol-msg-sflow-halt halt" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/sflow/reload
 # operationId: protocol_sflow_reload
 export def "mimic-agent-protocol-msg-sflow-reload reload" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3242,7 +3242,7 @@ export def "mimic-agent-protocol-msg-sflow-reload reload" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/sflow/reload")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/reload"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3253,7 +3253,7 @@ export def "mimic-agent-protocol-msg-sflow-reload reload" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/sflow/resume
 # operationId: protocol_sflow_resume
 export def "mimic-agent-protocol-msg-sflow-resume resume" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3265,7 +3265,7 @@ export def "mimic-agent-protocol-msg-sflow-resume resume" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/sflow/resume")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/resume"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3276,7 +3276,7 @@ export def "mimic-agent-protocol-msg-sflow-resume resume" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/sflow/set/config/{argument}/{value}
 # operationId: protocol_sflow_set_config
 export def "mimic-agent-protocol-msg-sflow-set-config config" [
-  agentNum: int
+  agent_num: int
   argument: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3290,7 +3290,7 @@ export def "mimic-agent-protocol-msg-sflow-set-config config" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/sflow/set/config/($argument)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, argument: $argument, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3301,8 +3301,8 @@ export def "mimic-agent-protocol-msg-sflow-set-config config" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/sflow/set/trace/{enableOrNot}
 # operationId: protocol_sflow_set_trace
 export def "mimic-agent-protocol-msg-sflow-set-trace trace" [
-  agentNum: int
-  enableOrNot: string
+  agent_num: int
+  enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3314,7 +3314,7 @@ export def "mimic-agent-protocol-msg-sflow-set-trace trace" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/sflow/set/trace/($enableOrNot)")
+  let full_url = (build-url $base ({agent_num: $agent_num, enable_or_not: $enable_or_not} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3325,7 +3325,7 @@ export def "mimic-agent-protocol-msg-sflow-set-trace trace" [
 # GET /mimic/agent/{agentNum}/protocol/msg/snmptcp/get/args
 # operationId: protocol_snmptcp_get_args
 export def "mimic-agent-protocol-msg-snmptcp-get-args args" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3337,7 +3337,7 @@ export def "mimic-agent-protocol-msg-snmptcp-get-args args" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmptcp/get/args")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3348,7 +3348,7 @@ export def "mimic-agent-protocol-msg-snmptcp-get-args args" [
 # GET /mimic/agent/{agentNum}/protocol/msg/snmptcp/get/config
 # operationId: protocol_snmptcp_get_config
 export def "mimic-agent-protocol-msg-snmptcp-get-config config" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3360,7 +3360,7 @@ export def "mimic-agent-protocol-msg-snmptcp-get-config config" [
 ]: nothing -> record<connections: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmptcp/get/config")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3371,7 +3371,7 @@ export def "mimic-agent-protocol-msg-snmptcp-get-config config" [
 # GET /mimic/agent/{agentNum}/protocol/msg/snmptcp/get/statistics
 # operationId: protocol_snmptcp_get_statistics
 export def "mimic-agent-protocol-msg-snmptcp-get-statistics statistics" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3383,7 +3383,7 @@ export def "mimic-agent-protocol-msg-snmptcp-get-statistics statistics" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmptcp/get/statistics")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3394,7 +3394,7 @@ export def "mimic-agent-protocol-msg-snmptcp-get-statistics statistics" [
 # GET /mimic/agent/{agentNum}/protocol/msg/snmptcp/get/trace
 # operationId: protocol_snmptcp_get_trace
 export def "mimic-agent-protocol-msg-snmptcp-get-trace trace" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3406,7 +3406,7 @@ export def "mimic-agent-protocol-msg-snmptcp-get-trace trace" [
 ]: nothing -> record<connections: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmptcp/get/trace")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3417,7 +3417,7 @@ export def "mimic-agent-protocol-msg-snmptcp-get-trace trace" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmptcp/ipalias/disable/{ipaddress}/{port}
 # operationId: protocol_snmptcp_ipalias_disable
 export def "mimic-agent-protocol-msg-snmptcp-ipalias-disable disable" [
-  agentNum: int
+  agent_num: int
   ipaddress: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3431,7 +3431,7 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-disable disable" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmptcp/ipalias/disable/($ipaddress)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ipaddress: $ipaddress, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/ipalias/disable/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3442,7 +3442,7 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-disable disable" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmptcp/ipalias/enable/{ipaddress}/{port}
 # operationId: protocol_snmptcp_ipalias_enable
 export def "mimic-agent-protocol-msg-snmptcp-ipalias-enable enable" [
-  agentNum: int
+  agent_num: int
   ipaddress: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3456,7 +3456,7 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-enable enable" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmptcp/ipalias/enable/($ipaddress)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ipaddress: $ipaddress, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/ipalias/enable/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3467,7 +3467,7 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-enable enable" [
 # GET /mimic/agent/{agentNum}/protocol/msg/snmptcp/ipalias/isenabled/{ipaddress}/{port}
 # operationId: protocol_snmptcp_ipalias_isenabled
 export def "mimic-agent-protocol-msg-snmptcp-ipalias-isenabled isenabled" [
-  agentNum: int
+  agent_num: int
   ipaddress: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3481,7 +3481,7 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-isenabled isenabled" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmptcp/ipalias/isenabled/($ipaddress)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ipaddress: $ipaddress, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/ipalias/isenabled/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3492,7 +3492,7 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-isenabled isenabled" [
 # GET /mimic/agent/{agentNum}/protocol/msg/snmptcp/ipalias/list
 # operationId: protocol_snmptcp_ipalias_list
 export def "mimic-agent-protocol-msg-snmptcp-ipalias-list list" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3504,7 +3504,7 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-list list" [
 ]: nothing -> table<IP: string, interface: string, mask: string, port: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmptcp/ipalias/list")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/ipalias/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3515,7 +3515,7 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-list list" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmptcp/set/config/{argument}/{value}
 # operationId: protocol_snmptcp_set_config
 export def "mimic-agent-protocol-msg-snmptcp-set-config config" [
-  agentNum: int
+  agent_num: int
   argument: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3529,7 +3529,7 @@ export def "mimic-agent-protocol-msg-snmptcp-set-config config" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmptcp/set/config/($argument)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, argument: $argument, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3540,8 +3540,8 @@ export def "mimic-agent-protocol-msg-snmptcp-set-config config" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmptcp/set/trace/{enableOrNot}
 # operationId: protocol_snmptcp_set_trace
 export def "mimic-agent-protocol-msg-snmptcp-set-trace trace" [
-  agentNum: int
-  enableOrNot: string
+  agent_num: int
+  enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3553,7 +3553,7 @@ export def "mimic-agent-protocol-msg-snmptcp-set-trace trace" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmptcp/set/trace/($enableOrNot)")
+  let full_url = (build-url $base ({agent_num: $agent_num, enable_or_not: $enable_or_not} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3564,15 +3564,15 @@ export def "mimic-agent-protocol-msg-snmptcp-set-trace trace" [
 # POST /mimic/agent/{agentNum}/protocol/msg/snmpv3/access/add/{groupName}/{prefix}/{securityModel}/{securityLevel}/{contextMatch}/{readView}/{writeView}/{notifyView}
 # operationId: protocol_snmpv3_access_add
 export def "mimic-agent-protocol-msg-snmpv3-access-add add" [
-  agentNum: int
-  groupName: string
+  agent_num: int
+  group_name: string
   prefix: string
-  securityModel: string
-  securityLevel: string
-  contextMatch: string
-  readView: string
-  writeView: string
-  notifyView: string
+  security_model: string
+  security_level: string
+  context_match: string
+  read_view: string
+  write_view: string
+  notify_view: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3584,7 +3584,7 @@ export def "mimic-agent-protocol-msg-snmpv3-access-add add" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/access/add/($groupName)/($prefix)/($securityModel)/($securityLevel)/($contextMatch)/($readView)/($writeView)/($notifyView)")
+  let full_url = (build-url $base ({agent_num: $agent_num, group_name: $group_name, prefix: $prefix, security_model: $security_model, security_level: $security_level, context_match: $context_match, read_view: $read_view, write_view: $write_view, notify_view: $notify_view} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/access/add/{group_name}/{prefix}/{security_model}/{security_level}/{context_match}/{read_view}/{write_view}/{notify_view}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3595,7 +3595,7 @@ export def "mimic-agent-protocol-msg-snmpv3-access-add add" [
 # DELETE /mimic/agent/{agentNum}/protocol/msg/snmpv3/access/clear
 # operationId: protocol_snmpv3_access_clear
 export def "mimic-agent-protocol-msg-snmpv3-access-clear clear" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3607,7 +3607,7 @@ export def "mimic-agent-protocol-msg-snmpv3-access-clear clear" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/access/clear")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/access/clear"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3618,8 +3618,8 @@ export def "mimic-agent-protocol-msg-snmpv3-access-clear clear" [
 # DELETE /mimic/agent/{agentNum}/protocol/msg/snmpv3/access/del/{accessName}
 # operationId: protocol_snmpv3_access_del
 export def "mimic-agent-protocol-msg-snmpv3-access-del del" [
-  agentNum: int
-  accessName: string
+  agent_num: int
+  access_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3631,7 +3631,7 @@ export def "mimic-agent-protocol-msg-snmpv3-access-del del" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/access/del/($accessName)")
+  let full_url = (build-url $base ({agent_num: $agent_num, access_name: $access_name} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/access/del/{access_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3642,7 +3642,7 @@ export def "mimic-agent-protocol-msg-snmpv3-access-del del" [
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/access/list
 # operationId: protocol_snmpv3_access_list
 export def "mimic-agent-protocol-msg-snmpv3-access-list list" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3654,7 +3654,7 @@ export def "mimic-agent-protocol-msg-snmpv3-access-list list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/access/list")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/access/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3665,7 +3665,7 @@ export def "mimic-agent-protocol-msg-snmpv3-access-list list" [
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/get/config
 # operationId: protocol_snmpv3_get_config
 export def "mimic-agent-protocol-msg-snmpv3-get-config config" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3677,7 +3677,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-config config" [
 ]: nothing -> record<context_engine_id: string, engine_id: string, usm_db: string, vacm_db: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/get/config")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3688,7 +3688,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-config config" [
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/get/context_engineid
 # operationId: protocol_snmpv3_get_context_engineid
 export def "mimic-agent-protocol-msg-snmpv3-get-context-engineid engineid" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3700,7 +3700,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-context-engineid engineid" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/get/context_engineid")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/get/context_engineid"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3711,7 +3711,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-context-engineid engineid" [
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/get/engineboots
 # operationId: protocol_snmpv3_get_engineboots
 export def "mimic-agent-protocol-msg-snmpv3-get-engineboots engineboots" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3723,7 +3723,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-engineboots engineboots" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/get/engineboots")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/get/engineboots"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3734,7 +3734,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-engineboots engineboots" [
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/get/engineid
 # operationId: protocol_snmpv3_get_engineid
 export def "mimic-agent-protocol-msg-snmpv3-get-engineid engineid" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3746,7 +3746,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-engineid engineid" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/get/engineid")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/get/engineid"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3757,7 +3757,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-engineid engineid" [
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/get/enginetime
 # operationId: protocol_snmpv3_get_enginetime
 export def "mimic-agent-protocol-msg-snmpv3-get-enginetime enginetime" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3769,7 +3769,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-enginetime enginetime" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/get/enginetime")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/get/enginetime"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3780,10 +3780,10 @@ export def "mimic-agent-protocol-msg-snmpv3-get-enginetime enginetime" [
 # POST /mimic/agent/{agentNum}/protocol/msg/snmpv3/group/add/{groupName}/{securityModel}/{securityName}
 # operationId: protocol_snmpv3_group_add
 export def "mimic-agent-protocol-msg-snmpv3-group-add add" [
-  agentNum: int
-  groupName: string
-  securityModel: string
-  securityName: string
+  agent_num: int
+  group_name: string
+  security_model: string
+  security_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3795,7 +3795,7 @@ export def "mimic-agent-protocol-msg-snmpv3-group-add add" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/group/add/($groupName)/($securityModel)/($securityName)")
+  let full_url = (build-url $base ({agent_num: $agent_num, group_name: $group_name, security_model: $security_model, security_name: $security_name} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/group/add/{group_name}/{security_model}/{security_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3806,7 +3806,7 @@ export def "mimic-agent-protocol-msg-snmpv3-group-add add" [
 # DELETE /mimic/agent/{agentNum}/protocol/msg/snmpv3/group/clear
 # operationId: protocol_snmpv3_group_clear
 export def "mimic-agent-protocol-msg-snmpv3-group-clear clear" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3818,7 +3818,7 @@ export def "mimic-agent-protocol-msg-snmpv3-group-clear clear" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/group/clear")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/group/clear"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3829,8 +3829,8 @@ export def "mimic-agent-protocol-msg-snmpv3-group-clear clear" [
 # DELETE /mimic/agent/{agentNum}/protocol/msg/snmpv3/group/del/{groupName}
 # operationId: protocol_snmpv3_group_del
 export def "mimic-agent-protocol-msg-snmpv3-group-del del" [
-  agentNum: int
-  groupName: string
+  agent_num: int
+  group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3842,7 +3842,7 @@ export def "mimic-agent-protocol-msg-snmpv3-group-del del" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/group/del/($groupName)")
+  let full_url = (build-url $base ({agent_num: $agent_num, group_name: $group_name} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/group/del/{group_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3853,7 +3853,7 @@ export def "mimic-agent-protocol-msg-snmpv3-group-del del" [
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/group/list
 # operationId: protocol_snmpv3_group_list
 export def "mimic-agent-protocol-msg-snmpv3-group-list list" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3865,7 +3865,7 @@ export def "mimic-agent-protocol-msg-snmpv3-group-list list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/group/list")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/group/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3876,7 +3876,7 @@ export def "mimic-agent-protocol-msg-snmpv3-group-list list" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmpv3/set/config/{parameter}/{value}
 # operationId: protocol_snmpv3_set_config
 export def "mimic-agent-protocol-msg-snmpv3-set-config config" [
-  agentNum: int
+  agent_num: int
   parameter: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3890,7 +3890,7 @@ export def "mimic-agent-protocol-msg-snmpv3-set-config config" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/set/config/($parameter)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, parameter: $parameter, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/set/config/{parameter}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3901,13 +3901,13 @@ export def "mimic-agent-protocol-msg-snmpv3-set-config config" [
 # POST /mimic/agent/{agentNum}/protocol/msg/snmpv3/user/add/{userName}/{securityName}/{authProtocol}/{authKey}/{privProtocol}/{privKey}
 # operationId: protocol_snmpv3_user_add
 export def "mimic-agent-protocol-msg-snmpv3-user-add add" [
-  agentNum: int
-  userName: string
-  securityName: string
-  authProtocol: string
-  authKey: string
-  privProtocol: string
-  privKey: string
+  agent_num: int
+  user_name: string
+  security_name: string
+  auth_protocol: string
+  auth_key: string
+  priv_protocol: string
+  priv_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3919,7 +3919,7 @@ export def "mimic-agent-protocol-msg-snmpv3-user-add add" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/user/add/($userName)/($securityName)/($authProtocol)/($authKey)/($privProtocol)/($privKey)")
+  let full_url = (build-url $base ({agent_num: $agent_num, user_name: $user_name, security_name: $security_name, auth_protocol: $auth_protocol, auth_key: $auth_key, priv_protocol: $priv_protocol, priv_key: $priv_key} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/user/add/{user_name}/{security_name}/{auth_protocol}/{auth_key}/{priv_protocol}/{priv_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3930,7 +3930,7 @@ export def "mimic-agent-protocol-msg-snmpv3-user-add add" [
 # DELETE /mimic/agent/{agentNum}/protocol/msg/snmpv3/user/clear
 # operationId: protocol_snmpv3_user_clear
 export def "mimic-agent-protocol-msg-snmpv3-user-clear clear" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3942,7 +3942,7 @@ export def "mimic-agent-protocol-msg-snmpv3-user-clear clear" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/user/clear")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/user/clear"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3953,8 +3953,8 @@ export def "mimic-agent-protocol-msg-snmpv3-user-clear clear" [
 # DELETE /mimic/agent/{agentNum}/protocol/msg/snmpv3/user/del/{userName}
 # operationId: protocol_snmpv3_user_del
 export def "mimic-agent-protocol-msg-snmpv3-user-del del" [
-  agentNum: int
-  userName: string
+  agent_num: int
+  user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3966,7 +3966,7 @@ export def "mimic-agent-protocol-msg-snmpv3-user-del del" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/user/del/($userName)")
+  let full_url = (build-url $base ({agent_num: $agent_num, user_name: $user_name} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/user/del/{user_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3977,7 +3977,7 @@ export def "mimic-agent-protocol-msg-snmpv3-user-del del" [
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/user/list
 # operationId: protocol_snmpv3_user_list
 export def "mimic-agent-protocol-msg-snmpv3-user-list list" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3989,7 +3989,7 @@ export def "mimic-agent-protocol-msg-snmpv3-user-list list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/user/list")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/user/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4000,7 +4000,7 @@ export def "mimic-agent-protocol-msg-snmpv3-user-list list" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmpv3/usm/save
 # operationId: protocol_snmpv3_usm_save
 export def "mimic-agent-protocol-msg-snmpv3-usm-save save" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4012,7 +4012,7 @@ export def "mimic-agent-protocol-msg-snmpv3-usm-save save" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/usm/save")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/usm/save"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4023,7 +4023,7 @@ export def "mimic-agent-protocol-msg-snmpv3-usm-save save" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmpv3/usm/saveas/{filename}
 # operationId: protocol_snmpv3_usm_saveas
 export def "mimic-agent-protocol-msg-snmpv3-usm-saveas saveas" [
-  agentNum: int
+  agent_num: int
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4036,7 +4036,7 @@ export def "mimic-agent-protocol-msg-snmpv3-usm-saveas saveas" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/usm/saveas/($filename)")
+  let full_url = (build-url $base ({agent_num: $agent_num, filename: $filename} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/usm/saveas/{filename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4047,7 +4047,7 @@ export def "mimic-agent-protocol-msg-snmpv3-usm-saveas saveas" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmpv3/vacm/save
 # operationId: protocol_snmpv3_vacm_save
 export def "mimic-agent-protocol-msg-snmpv3-vacm-save save" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4059,7 +4059,7 @@ export def "mimic-agent-protocol-msg-snmpv3-vacm-save save" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/vacm/save")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/vacm/save"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4070,7 +4070,7 @@ export def "mimic-agent-protocol-msg-snmpv3-vacm-save save" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmpv3/vacm/saveas/{filename}
 # operationId: protocol_snmpv3_vacm_saveas
 export def "mimic-agent-protocol-msg-snmpv3-vacm-saveas saveas" [
-  agentNum: int
+  agent_num: int
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4083,7 +4083,7 @@ export def "mimic-agent-protocol-msg-snmpv3-vacm-saveas saveas" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/vacm/saveas/($filename)")
+  let full_url = (build-url $base ({agent_num: $agent_num, filename: $filename} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/vacm/saveas/{filename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4094,9 +4094,9 @@ export def "mimic-agent-protocol-msg-snmpv3-vacm-saveas saveas" [
 # POST /mimic/agent/{agentNum}/protocol/msg/snmpv3/view/add/{viewName}/{viewType}/{subtree}/{mask}
 # operationId: protocol_snmpv3_view_add
 export def "mimic-agent-protocol-msg-snmpv3-view-add add" [
-  agentNum: int
-  viewName: string
-  viewType: string
+  agent_num: int
+  view_name: string
+  view_type: string
   subtree: string
   mask: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4110,7 +4110,7 @@ export def "mimic-agent-protocol-msg-snmpv3-view-add add" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/view/add/($viewName)/($viewType)/($subtree)/($mask)")
+  let full_url = (build-url $base ({agent_num: $agent_num, view_name: $view_name, view_type: $view_type, subtree: $subtree, mask: $mask} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/view/add/{view_name}/{view_type}/{subtree}/{mask}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4121,7 +4121,7 @@ export def "mimic-agent-protocol-msg-snmpv3-view-add add" [
 # DELETE /mimic/agent/{agentNum}/protocol/msg/snmpv3/view/clear
 # operationId: protocol_snmpv3_view_clear
 export def "mimic-agent-protocol-msg-snmpv3-view-clear clear" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4133,7 +4133,7 @@ export def "mimic-agent-protocol-msg-snmpv3-view-clear clear" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/view/clear")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/view/clear"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4144,8 +4144,8 @@ export def "mimic-agent-protocol-msg-snmpv3-view-clear clear" [
 # DELETE /mimic/agent/{agentNum}/protocol/msg/snmpv3/view/del/{viewName}
 # operationId: protocol_snmpv3_view_del
 export def "mimic-agent-protocol-msg-snmpv3-view-del del" [
-  agentNum: int
-  viewName: string
+  agent_num: int
+  view_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4157,7 +4157,7 @@ export def "mimic-agent-protocol-msg-snmpv3-view-del del" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/view/del/($viewName)")
+  let full_url = (build-url $base ({agent_num: $agent_num, view_name: $view_name} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/view/del/{view_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4168,7 +4168,7 @@ export def "mimic-agent-protocol-msg-snmpv3-view-del del" [
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/view/list
 # operationId: protocol_snmpv3_view_list
 export def "mimic-agent-protocol-msg-snmpv3-view-list list" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4180,7 +4180,7 @@ export def "mimic-agent-protocol-msg-snmpv3-view-list list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/snmpv3/view/list")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/view/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4191,7 +4191,7 @@ export def "mimic-agent-protocol-msg-snmpv3-view-list list" [
 # GET /mimic/agent/{agentNum}/protocol/msg/ssh/get/args
 # operationId: protocol_ssh_get_args
 export def "mimic-agent-protocol-msg-ssh-get-args args" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4203,7 +4203,7 @@ export def "mimic-agent-protocol-msg-ssh-get-args args" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ssh/get/args")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4214,7 +4214,7 @@ export def "mimic-agent-protocol-msg-ssh-get-args args" [
 # GET /mimic/agent/{agentNum}/protocol/msg/ssh/get/config
 # operationId: protocol_ssh_get_config
 export def "mimic-agent-protocol-msg-ssh-get-config config" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4226,7 +4226,7 @@ export def "mimic-agent-protocol-msg-ssh-get-config config" [
 ]: nothing -> record<port: int, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ssh/get/config")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4237,7 +4237,7 @@ export def "mimic-agent-protocol-msg-ssh-get-config config" [
 # GET /mimic/agent/{agentNum}/protocol/msg/ssh/get/statistics
 # operationId: protocol_ssh_get_statistics
 export def "mimic-agent-protocol-msg-ssh-get-statistics statistics" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4249,7 +4249,7 @@ export def "mimic-agent-protocol-msg-ssh-get-statistics statistics" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ssh/get/statistics")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4260,7 +4260,7 @@ export def "mimic-agent-protocol-msg-ssh-get-statistics statistics" [
 # GET /mimic/agent/{agentNum}/protocol/msg/ssh/get/trace
 # operationId: protocol_ssh_get_trace
 export def "mimic-agent-protocol-msg-ssh-get-trace trace" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4272,7 +4272,7 @@ export def "mimic-agent-protocol-msg-ssh-get-trace trace" [
 ]: nothing -> record<port: int, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ssh/get/trace")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4283,7 +4283,7 @@ export def "mimic-agent-protocol-msg-ssh-get-trace trace" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/ssh/ipalias/disable/{ipaddress}/{port}
 # operationId: protocol_ssh_ipalias_disable
 export def "mimic-agent-protocol-msg-ssh-ipalias-disable disable" [
-  agentNum: int
+  agent_num: int
   ipaddress: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4297,7 +4297,7 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-disable disable" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ssh/ipalias/disable/($ipaddress)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ipaddress: $ipaddress, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/ipalias/disable/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4308,7 +4308,7 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-disable disable" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/ssh/ipalias/enable/{ipaddress}/{port}
 # operationId: protocol_ssh_ipalias_enable
 export def "mimic-agent-protocol-msg-ssh-ipalias-enable enable" [
-  agentNum: int
+  agent_num: int
   ipaddress: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4322,7 +4322,7 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-enable enable" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ssh/ipalias/enable/($ipaddress)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ipaddress: $ipaddress, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/ipalias/enable/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4333,7 +4333,7 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-enable enable" [
 # GET /mimic/agent/{agentNum}/protocol/msg/ssh/ipalias/isenabled/{ipaddress}/{port}
 # operationId: protocol_ssh_ipalias_isenabled
 export def "mimic-agent-protocol-msg-ssh-ipalias-isenabled isenabled" [
-  agentNum: int
+  agent_num: int
   ipaddress: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4347,7 +4347,7 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-isenabled isenabled" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ssh/ipalias/isenabled/($ipaddress)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ipaddress: $ipaddress, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/ipalias/isenabled/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4358,7 +4358,7 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-isenabled isenabled" [
 # GET /mimic/agent/{agentNum}/protocol/msg/ssh/ipalias/list
 # operationId: protocol_ssh_ipalias_list
 export def "mimic-agent-protocol-msg-ssh-ipalias-list list" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4370,7 +4370,7 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-list list" [
 ]: nothing -> table<IP: string, interface: string, mask: string, port: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ssh/ipalias/list")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/ipalias/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4381,7 +4381,7 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-list list" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/ssh/set/config/{argument}/{value}
 # operationId: protocol_ssh_set_config
 export def "mimic-agent-protocol-msg-ssh-set-config config" [
-  agentNum: int
+  agent_num: int
   argument: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4395,7 +4395,7 @@ export def "mimic-agent-protocol-msg-ssh-set-config config" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ssh/set/config/($argument)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, argument: $argument, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4406,8 +4406,8 @@ export def "mimic-agent-protocol-msg-ssh-set-config config" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/ssh/set/trace/{enableOrNot}
 # operationId: protocol_ssh_set_trace
 export def "mimic-agent-protocol-msg-ssh-set-trace trace" [
-  agentNum: int
-  enableOrNot: string
+  agent_num: int
+  enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4419,7 +4419,7 @@ export def "mimic-agent-protocol-msg-ssh-set-trace trace" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/ssh/set/trace/($enableOrNot)")
+  let full_url = (build-url $base ({agent_num: $agent_num, enable_or_not: $enable_or_not} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4430,7 +4430,7 @@ export def "mimic-agent-protocol-msg-ssh-set-trace trace" [
 # GET /mimic/agent/{agentNum}/protocol/msg/syslog/get/args
 # operationId: protocol_syslog_get_args
 export def "mimic-agent-protocol-msg-syslog-get-args args" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4442,7 +4442,7 @@ export def "mimic-agent-protocol-msg-syslog-get-args args" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/syslog/get/args")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4453,7 +4453,7 @@ export def "mimic-agent-protocol-msg-syslog-get-args args" [
 # GET /mimic/agent/{agentNum}/protocol/msg/syslog/get/config
 # operationId: protocol_syslog_get_config
 export def "mimic-agent-protocol-msg-syslog-get-config config" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4465,7 +4465,7 @@ export def "mimic-agent-protocol-msg-syslog-get-config config" [
 ]: nothing -> record<client: string, hostname: string, localport: int, separator: string, sequence: int, server: string, serverport: int, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/syslog/get/config")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4476,7 +4476,7 @@ export def "mimic-agent-protocol-msg-syslog-get-config config" [
 # GET /mimic/agent/{agentNum}/protocol/msg/syslog/get/statistics
 # operationId: protocol_syslog_get_statistics
 export def "mimic-agent-protocol-msg-syslog-get-statistics statistics" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4488,7 +4488,7 @@ export def "mimic-agent-protocol-msg-syslog-get-statistics statistics" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/syslog/get/statistics")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4499,7 +4499,7 @@ export def "mimic-agent-protocol-msg-syslog-get-statistics statistics" [
 # GET /mimic/agent/{agentNum}/protocol/msg/syslog/get/trace
 # operationId: protocol_syslog_get_trace
 export def "mimic-agent-protocol-msg-syslog-get-trace trace" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4511,7 +4511,7 @@ export def "mimic-agent-protocol-msg-syslog-get-trace trace" [
 ]: nothing -> record<client: string, hostname: string, localport: int, separator: string, sequence: int, server: string, serverport: int, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/syslog/get/trace")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4522,7 +4522,7 @@ export def "mimic-agent-protocol-msg-syslog-get-trace trace" [
 # GET /mimic/agent/{agentNum}/protocol/msg/syslog/get/{attr}
 # operationId: protocol_syslog_get_attr
 export def "mimic-agent-protocol-msg-syslog-get attr" [
-  agentNum: int
+  agent_num: int
   attr: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4535,7 +4535,7 @@ export def "mimic-agent-protocol-msg-syslog-get attr" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/syslog/get/($attr)")
+  let full_url = (build-url $base ({agent_num: $agent_num, attr: $attr} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/get/{attr}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4546,7 +4546,7 @@ export def "mimic-agent-protocol-msg-syslog-get attr" [
 # POST /mimic/agent/{agentNum}/protocol/msg/syslog/send/{pri}
 # operationId: protocol_syslog_send
 export def "mimic-agent-protocol-msg-syslog-send send" [
-  agentNum: int
+  agent_num: int
   pri: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4565,8 +4565,8 @@ export def "mimic-agent-protocol-msg-syslog-send send" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/syslog/send/($pri)")
-  let body = {hostname: $hostname, message: $message, separator: $separator, sequence: $sequence, timestamp: $timestamp} | compact
+  let full_url = (build-url $base ({agent_num: $agent_num, pri: $pri} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/send/{pri}"))
+  let body = {"hostname": $hostname, "message": $message, "separator": $separator, "sequence": $sequence, "timestamp": $timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4578,7 +4578,7 @@ export def "mimic-agent-protocol-msg-syslog-send send" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/syslog/set/config/{argument}/{value}
 # operationId: protocol_syslog_set_config
 export def "mimic-agent-protocol-msg-syslog-set-config config" [
-  agentNum: int
+  agent_num: int
   argument: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4592,7 +4592,7 @@ export def "mimic-agent-protocol-msg-syslog-set-config config" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/syslog/set/config/($argument)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, argument: $argument, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4603,8 +4603,8 @@ export def "mimic-agent-protocol-msg-syslog-set-config config" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/syslog/set/trace/{enableOrNot}
 # operationId: protocol_syslog_set_trace
 export def "mimic-agent-protocol-msg-syslog-set-trace trace" [
-  agentNum: int
-  enableOrNot: string
+  agent_num: int
+  enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4616,7 +4616,7 @@ export def "mimic-agent-protocol-msg-syslog-set-trace trace" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/syslog/set/trace/($enableOrNot)")
+  let full_url = (build-url $base ({agent_num: $agent_num, enable_or_not: $enable_or_not} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4627,7 +4627,7 @@ export def "mimic-agent-protocol-msg-syslog-set-trace trace" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/syslog/set/{attr}/{value}
 # operationId: protocol_syslog_set_attr
 export def "mimic-agent-protocol-msg-syslog-set attr" [
-  agentNum: int
+  agent_num: int
   attr: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4641,7 +4641,7 @@ export def "mimic-agent-protocol-msg-syslog-set attr" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/syslog/set/($attr)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, attr: $attr, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/set/{attr}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4652,8 +4652,8 @@ export def "mimic-agent-protocol-msg-syslog-set attr" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/telnet/connection/logon/{connectionID}/{user}/{password}
 # operationId: protocol_telnet_connection_logon
 export def "mimic-agent-protocol-msg-telnet-connection-logon logon" [
-  agentNum: int
-  connectionID: int
+  agent_num: int
+  connection_id: int
   user: string
   password: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4667,7 +4667,7 @@ export def "mimic-agent-protocol-msg-telnet-connection-logon logon" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/connection/logon/($connectionID)/($user)/($password)")
+  let full_url = (build-url $base ({agent_num: $agent_num, connection_id: $connection_id, user: $user, password: $password} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/connection/logon/{connection_id}/{user}/{password}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4678,8 +4678,8 @@ export def "mimic-agent-protocol-msg-telnet-connection-logon logon" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/telnet/connection/request/{connectionID}/{command}
 # operationId: protocol_telnet_connection_request
 export def "mimic-agent-protocol-msg-telnet-connection-request request" [
-  agentNum: int
-  connectionID: int
+  agent_num: int
+  connection_id: int
   command: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4692,7 +4692,7 @@ export def "mimic-agent-protocol-msg-telnet-connection-request request" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/connection/request/($connectionID)/($command)")
+  let full_url = (build-url $base ({agent_num: $agent_num, connection_id: $connection_id, command: $command} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/connection/request/{connection_id}/{command}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4703,9 +4703,9 @@ export def "mimic-agent-protocol-msg-telnet-connection-request request" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/telnet/connection/signal/{connectionID}/{signalName}
 # operationId: protocol_telnet_connection_signal
 export def "mimic-agent-protocol-msg-telnet-connection-signal signal" [
-  agentNum: int
-  connectionID: int
-  signalName: string
+  agent_num: int
+  connection_id: int
+  signal_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4717,7 +4717,7 @@ export def "mimic-agent-protocol-msg-telnet-connection-signal signal" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/connection/signal/($connectionID)/($signalName)")
+  let full_url = (build-url $base ({agent_num: $agent_num, connection_id: $connection_id, signal_name: $signal_name} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/connection/signal/{connection_id}/{signal_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4728,7 +4728,7 @@ export def "mimic-agent-protocol-msg-telnet-connection-signal signal" [
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/get/args
 # operationId: protocol_telnet_get_args
 export def "mimic-agent-protocol-msg-telnet-get-args args" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4740,7 +4740,7 @@ export def "mimic-agent-protocol-msg-telnet-get-args args" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/get/args")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4751,7 +4751,7 @@ export def "mimic-agent-protocol-msg-telnet-get-args args" [
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/get/config
 # operationId: protocol_telnet_get_config
 export def "mimic-agent-protocol-msg-telnet-get-config config" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4763,7 +4763,7 @@ export def "mimic-agent-protocol-msg-telnet-get-config config" [
 ]: nothing -> record<keymap: string, paging_prompt: string, port: int, prompt: string, rule: string, userdb: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/get/config")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4774,7 +4774,7 @@ export def "mimic-agent-protocol-msg-telnet-get-config config" [
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/get/statistics
 # operationId: protocol_telnet_get_statistics
 export def "mimic-agent-protocol-msg-telnet-get-statistics statistics" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4786,7 +4786,7 @@ export def "mimic-agent-protocol-msg-telnet-get-statistics statistics" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/get/statistics")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4797,7 +4797,7 @@ export def "mimic-agent-protocol-msg-telnet-get-statistics statistics" [
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/get/trace
 # operationId: protocol_telnet_get_trace
 export def "mimic-agent-protocol-msg-telnet-get-trace trace" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4809,7 +4809,7 @@ export def "mimic-agent-protocol-msg-telnet-get-trace trace" [
 ]: nothing -> record<keymap: string, paging_prompt: string, port: int, prompt: string, rule: string, userdb: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/get/trace")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4820,7 +4820,7 @@ export def "mimic-agent-protocol-msg-telnet-get-trace trace" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/telnet/ipalias/disable/{ipaddress}/{port}
 # operationId: protocol_telnet_ipalias_disable
 export def "mimic-agent-protocol-msg-telnet-ipalias-disable disable" [
-  agentNum: int
+  agent_num: int
   ipaddress: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4834,7 +4834,7 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-disable disable" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/ipalias/disable/($ipaddress)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ipaddress: $ipaddress, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/ipalias/disable/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4845,7 +4845,7 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-disable disable" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/telnet/ipalias/enable/{ipaddress}/{port}
 # operationId: protocol_telnet_ipalias_enable
 export def "mimic-agent-protocol-msg-telnet-ipalias-enable enable" [
-  agentNum: int
+  agent_num: int
   ipaddress: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4859,7 +4859,7 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-enable enable" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/ipalias/enable/($ipaddress)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ipaddress: $ipaddress, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/ipalias/enable/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4870,7 +4870,7 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-enable enable" [
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/ipalias/isenabled/{ipaddress}/{port}
 # operationId: protocol_telnet_ipalias_isenabled
 export def "mimic-agent-protocol-msg-telnet-ipalias-isenabled isenabled" [
-  agentNum: int
+  agent_num: int
   ipaddress: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4884,7 +4884,7 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-isenabled isenabled" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/ipalias/isenabled/($ipaddress)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ipaddress: $ipaddress, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/ipalias/isenabled/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4895,7 +4895,7 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-isenabled isenabled" [
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/ipalias/list
 # operationId: protocol_telnet_ipalias_list
 export def "mimic-agent-protocol-msg-telnet-ipalias-list list" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4907,7 +4907,7 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-list list" [
 ]: nothing -> table<IP: string, interface: string, mask: string, port: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/ipalias/list")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/ipalias/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4918,7 +4918,7 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-list list" [
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/server/get/connections
 # operationId: protocol_telnet_server_get_connections
 export def "mimic-agent-protocol-msg-telnet-server-get-connections connections" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4930,7 +4930,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-connections connections" 
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/server/get/connections")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/connections"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4941,7 +4941,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-connections connections" 
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/server/get/keymap
 # operationId: protocol_telnet_server_get_keymap
 export def "mimic-agent-protocol-msg-telnet-server-get-keymap keymap" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4953,7 +4953,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-keymap keymap" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/server/get/keymap")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/keymap"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4964,7 +4964,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-keymap keymap" [
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/server/get/rulesdb
 # operationId: protocol_telnet_server_get_rulesdb
 export def "mimic-agent-protocol-msg-telnet-server-get-rulesdb rulesdb" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4976,7 +4976,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-rulesdb rulesdb" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/server/get/rulesdb")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/rulesdb"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4987,7 +4987,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-rulesdb rulesdb" [
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/server/get/state
 # operationId: protocol_telnet_server_get_state
 export def "mimic-agent-protocol-msg-telnet-server-get-state state" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4999,7 +4999,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-state state" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/server/get/state")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5010,7 +5010,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-state state" [
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/server/get/userdb
 # operationId: protocol_telnet_server_get_userdb
 export def "mimic-agent-protocol-msg-telnet-server-get-userdb userdb" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5022,7 +5022,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-userdb userdb" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/server/get/userdb")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/userdb"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5033,7 +5033,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-userdb userdb" [
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/server/get/users
 # operationId: protocol_telnet_server_get_users
 export def "mimic-agent-protocol-msg-telnet-server-get-users users" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5045,7 +5045,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-users users" [
 ]: nothing -> table<groups: list<string>, hasPassword: int, password: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/server/get/users")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5056,7 +5056,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-users users" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/telnet/set/config/{argument}/{value}
 # operationId: protocol_telnet_set_config
 export def "mimic-agent-protocol-msg-telnet-set-config config" [
-  agentNum: int
+  agent_num: int
   argument: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5070,7 +5070,7 @@ export def "mimic-agent-protocol-msg-telnet-set-config config" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/set/config/($argument)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, argument: $argument, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5081,8 +5081,8 @@ export def "mimic-agent-protocol-msg-telnet-set-config config" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/telnet/set/trace/{enableOrNot}
 # operationId: protocol_telnet_set_trace
 export def "mimic-agent-protocol-msg-telnet-set-trace trace" [
-  agentNum: int
-  enableOrNot: string
+  agent_num: int
+  enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5094,7 +5094,7 @@ export def "mimic-agent-protocol-msg-telnet-set-trace trace" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/telnet/set/trace/($enableOrNot)")
+  let full_url = (build-url $base ({agent_num: $agent_num, enable_or_not: $enable_or_not} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5105,7 +5105,7 @@ export def "mimic-agent-protocol-msg-telnet-set-trace trace" [
 # GET /mimic/agent/{agentNum}/protocol/msg/tftp/get/args
 # operationId: protocol_tftp_get_args
 export def "mimic-agent-protocol-msg-tftp-get-args args" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5117,7 +5117,7 @@ export def "mimic-agent-protocol-msg-tftp-get-args args" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tftp/get/args")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5128,7 +5128,7 @@ export def "mimic-agent-protocol-msg-tftp-get-args args" [
 # GET /mimic/agent/{agentNum}/protocol/msg/tftp/get/config
 # operationId: protocol_tftp_get_config
 export def "mimic-agent-protocol-msg-tftp-get-config config" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5140,7 +5140,7 @@ export def "mimic-agent-protocol-msg-tftp-get-config config" [
 ]: nothing -> record<cache: int, client: string, dstfile: string, mode: string, port: int, retries: int, script: string, server: string, srcfile: string, timeout: int, trace: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tftp/get/config")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5151,7 +5151,7 @@ export def "mimic-agent-protocol-msg-tftp-get-config config" [
 # GET /mimic/agent/{agentNum}/protocol/msg/tftp/get/statistics
 # operationId: protocol_tftp_get_statistics
 export def "mimic-agent-protocol-msg-tftp-get-statistics statistics" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5163,7 +5163,7 @@ export def "mimic-agent-protocol-msg-tftp-get-statistics statistics" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tftp/get/statistics")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5174,7 +5174,7 @@ export def "mimic-agent-protocol-msg-tftp-get-statistics statistics" [
 # GET /mimic/agent/{agentNum}/protocol/msg/tftp/get/trace
 # operationId: protocol_tftp_get_trace
 export def "mimic-agent-protocol-msg-tftp-get-trace trace" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5186,7 +5186,7 @@ export def "mimic-agent-protocol-msg-tftp-get-trace trace" [
 ]: nothing -> record<cache: int, client: string, dstfile: string, mode: string, port: int, retries: int, script: string, server: string, srcfile: string, timeout: int, trace: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tftp/get/trace")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5197,7 +5197,7 @@ export def "mimic-agent-protocol-msg-tftp-get-trace trace" [
 # POST /mimic/agent/{agentNum}/protocol/msg/tftp/session/read/server/{srcfile}
 # operationId: protocol_tftp_session_read
 export def "mimic-agent-protocol-msg-tftp-session-read-server read" [
-  agentNum: int
+  agent_num: int
   srcfile: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5210,7 +5210,7 @@ export def "mimic-agent-protocol-msg-tftp-session-read-server read" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tftp/session/read/server/($srcfile)")
+  let full_url = (build-url $base ({agent_num: $agent_num, srcfile: $srcfile} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/session/read/server/{srcfile}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5221,7 +5221,7 @@ export def "mimic-agent-protocol-msg-tftp-session-read-server read" [
 # POST /mimic/agent/{agentNum}/protocol/msg/tftp/session/write/server/{srcfile}
 # operationId: protocol_tftp_session_write
 export def "mimic-agent-protocol-msg-tftp-session-write-server write" [
-  agentNum: int
+  agent_num: int
   srcfile: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5234,7 +5234,7 @@ export def "mimic-agent-protocol-msg-tftp-session-write-server write" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tftp/session/write/server/($srcfile)")
+  let full_url = (build-url $base ({agent_num: $agent_num, srcfile: $srcfile} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/session/write/server/{srcfile}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5245,7 +5245,7 @@ export def "mimic-agent-protocol-msg-tftp-session-write-server write" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/tftp/set/config/{argument}/{value}
 # operationId: protocol_tftp_set_config
 export def "mimic-agent-protocol-msg-tftp-set-config config" [
-  agentNum: int
+  agent_num: int
   argument: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5259,7 +5259,7 @@ export def "mimic-agent-protocol-msg-tftp-set-config config" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tftp/set/config/($argument)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, argument: $argument, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5270,8 +5270,8 @@ export def "mimic-agent-protocol-msg-tftp-set-config config" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/tftp/set/trace/{enableOrNot}
 # operationId: protocol_tftp_set_trace
 export def "mimic-agent-protocol-msg-tftp-set-trace trace" [
-  agentNum: int
-  enableOrNot: string
+  agent_num: int
+  enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5283,7 +5283,7 @@ export def "mimic-agent-protocol-msg-tftp-set-trace trace" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tftp/set/trace/($enableOrNot)")
+  let full_url = (build-url $base ({agent_num: $agent_num, enable_or_not: $enable_or_not} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5294,8 +5294,8 @@ export def "mimic-agent-protocol-msg-tftp-set-trace trace" [
 # GET /mimic/agent/{agentNum}/protocol/msg/tftp/{sessionID}/get/{parameter}
 # operationId: protocol_tftp_session_get_parameter
 export def "mimic-agent-protocol-msg-tftp-get parameter" [
-  agentNum: int
-  sessionID: string
+  agent_num: int
+  session_id: string
   parameter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5308,7 +5308,7 @@ export def "mimic-agent-protocol-msg-tftp-get parameter" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tftp/($sessionID)/get/($parameter)")
+  let full_url = (build-url $base ({agent_num: $agent_num, session_id: $session_id, parameter: $parameter} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/{session_id}/get/{parameter}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5319,8 +5319,8 @@ export def "mimic-agent-protocol-msg-tftp-get parameter" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/tftp/{sessionID}/set/{parameter}/{value}
 # operationId: protocol_tftp_session_set_parameter
 export def "mimic-agent-protocol-msg-tftp-set parameter" [
-  agentNum: int
-  sessionID: string
+  agent_num: int
+  session_id: string
   parameter: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5334,7 +5334,7 @@ export def "mimic-agent-protocol-msg-tftp-set parameter" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tftp/($sessionID)/set/($parameter)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, session_id: $session_id, parameter: $parameter, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/{session_id}/set/{parameter}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5345,8 +5345,8 @@ export def "mimic-agent-protocol-msg-tftp-set parameter" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/tftp/{sessionID}/start
 # operationId: protocol_tftp_session_start
 export def "mimic-agent-protocol-msg-tftp-start start" [
-  agentNum: int
-  sessionID: string
+  agent_num: int
+  session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5358,7 +5358,7 @@ export def "mimic-agent-protocol-msg-tftp-start start" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tftp/($sessionID)/start")
+  let full_url = (build-url $base ({agent_num: $agent_num, session_id: $session_id} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/{session_id}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5369,8 +5369,8 @@ export def "mimic-agent-protocol-msg-tftp-start start" [
 # GET /mimic/agent/{agentNum}/protocol/msg/tftp/{sessionID}/status
 # operationId: protocol_tftp_session_status
 export def "mimic-agent-protocol-msg-tftp-status status" [
-  agentNum: int
-  sessionID: string
+  agent_num: int
+  session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5382,7 +5382,7 @@ export def "mimic-agent-protocol-msg-tftp-status status" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tftp/($sessionID)/status")
+  let full_url = (build-url $base ({agent_num: $agent_num, session_id: $session_id} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/{session_id}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5393,8 +5393,8 @@ export def "mimic-agent-protocol-msg-tftp-status status" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/tftp/{sessionID}/stop
 # operationId: protocol_tftp_session_stop
 export def "mimic-agent-protocol-msg-tftp-stop stop" [
-  agentNum: int
-  sessionID: string
+  agent_num: int
+  session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5406,7 +5406,7 @@ export def "mimic-agent-protocol-msg-tftp-stop stop" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tftp/($sessionID)/stop")
+  let full_url = (build-url $base ({agent_num: $agent_num, session_id: $session_id} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/{session_id}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5417,7 +5417,7 @@ export def "mimic-agent-protocol-msg-tftp-stop stop" [
 # GET /mimic/agent/{agentNum}/protocol/msg/tod/get/args
 # operationId: protocol_tod_get_args
 export def "mimic-agent-protocol-msg-tod-get-args args" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5429,7 +5429,7 @@ export def "mimic-agent-protocol-msg-tod-get-args args" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tod/get/args")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5440,7 +5440,7 @@ export def "mimic-agent-protocol-msg-tod-get-args args" [
 # GET /mimic/agent/{agentNum}/protocol/msg/tod/get/config
 # operationId: protocol_tod_get_config
 export def "mimic-agent-protocol-msg-tod-get-config config" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5452,7 +5452,7 @@ export def "mimic-agent-protocol-msg-tod-get-config config" [
 ]: nothing -> record<port: int, retries: int, script: string, server: string, timeout: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tod/get/config")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5463,7 +5463,7 @@ export def "mimic-agent-protocol-msg-tod-get-config config" [
 # GET /mimic/agent/{agentNum}/protocol/msg/tod/get/statistics
 # operationId: protocol_tod_get_statistics
 export def "mimic-agent-protocol-msg-tod-get-statistics statistics" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5475,7 +5475,7 @@ export def "mimic-agent-protocol-msg-tod-get-statistics statistics" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tod/get/statistics")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5486,7 +5486,7 @@ export def "mimic-agent-protocol-msg-tod-get-statistics statistics" [
 # GET /mimic/agent/{agentNum}/protocol/msg/tod/get/trace
 # operationId: protocol_tod_get_trace
 export def "mimic-agent-protocol-msg-tod-get-trace trace" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5498,7 +5498,7 @@ export def "mimic-agent-protocol-msg-tod-get-trace trace" [
 ]: nothing -> record<port: int, retries: int, script: string, server: string, timeout: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tod/get/trace")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5508,13 +5508,13 @@ export def "mimic-agent-protocol-msg-tod-get-trace trace" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/tod/gettime/server/{serverAddr}/port/{portNum}/script/{scriptName}/timeout/{timeSec}/retries/{numRetries}
 # operationId: protocol_tod_gettime
-export def "mimic-agent-protocol-msg-tod-gettime-server-port-script-timeout-retries gettime" [
-  agentNum: int
-  serverAddr: string
-  portNum: int
-  scriptName: string
-  timeSec: int
-  numRetries: int
+export def "mimic-agent-protocol-msg-tod-gettime-server-port-script-timeout-retries get-time" [
+  agent_num: int
+  server_addr: string
+  port_num: int
+  script_name: string
+  time_sec: int
+  num_retries: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5526,7 +5526,7 @@ export def "mimic-agent-protocol-msg-tod-gettime-server-port-script-timeout-retr
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tod/gettime/server/($serverAddr)/port/($portNum)/script/($scriptName)/timeout/($timeSec)/retries/($numRetries)")
+  let full_url = (build-url $base ({agent_num: $agent_num, server_addr: $server_addr, port_num: $port_num, script_name: $script_name, time_sec: $time_sec, num_retries: $num_retries} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/gettime/server/{server_addr}/port/{port_num}/script/{script_name}/timeout/{time_sec}/retries/{num_retries}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5537,7 +5537,7 @@ export def "mimic-agent-protocol-msg-tod-gettime-server-port-script-timeout-retr
 # PUT /mimic/agent/{agentNum}/protocol/msg/tod/set/config/{argument}/{value}
 # operationId: protocol_tod_set_config
 export def "mimic-agent-protocol-msg-tod-set-config config" [
-  agentNum: int
+  agent_num: int
   argument: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5551,7 +5551,7 @@ export def "mimic-agent-protocol-msg-tod-set-config config" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tod/set/config/($argument)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, argument: $argument, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5562,8 +5562,8 @@ export def "mimic-agent-protocol-msg-tod-set-config config" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/tod/set/trace/{enableOrNot}
 # operationId: protocol_tod_set_trace
 export def "mimic-agent-protocol-msg-tod-set-trace trace" [
-  agentNum: int
-  enableOrNot: string
+  agent_num: int
+  enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5575,7 +5575,7 @@ export def "mimic-agent-protocol-msg-tod-set-trace trace" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/tod/set/trace/($enableOrNot)")
+  let full_url = (build-url $base ({agent_num: $agent_num, enable_or_not: $enable_or_not} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5586,7 +5586,7 @@ export def "mimic-agent-protocol-msg-tod-set-trace trace" [
 # GET /mimic/agent/{agentNum}/protocol/msg/web/get/args
 # operationId: protocol_web_get_args
 export def "mimic-agent-protocol-msg-web-get-args args" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5598,7 +5598,7 @@ export def "mimic-agent-protocol-msg-web-get-args args" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/web/get/args")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5609,7 +5609,7 @@ export def "mimic-agent-protocol-msg-web-get-args args" [
 # GET /mimic/agent/{agentNum}/protocol/msg/web/get/config
 # operationId: protocol_web_get_config
 export def "mimic-agent-protocol-msg-web-get-config config" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5621,7 +5621,7 @@ export def "mimic-agent-protocol-msg-web-get-config config" [
 ]: nothing -> record<is_persistent_connections: int, password: string, port: int, rule: string, username: string, wsdl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/web/get/config")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5632,7 +5632,7 @@ export def "mimic-agent-protocol-msg-web-get-config config" [
 # GET /mimic/agent/{agentNum}/protocol/msg/web/get/statistics
 # operationId: protocol_web_get_statistics
 export def "mimic-agent-protocol-msg-web-get-statistics statistics" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5644,7 +5644,7 @@ export def "mimic-agent-protocol-msg-web-get-statistics statistics" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/web/get/statistics")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5655,7 +5655,7 @@ export def "mimic-agent-protocol-msg-web-get-statistics statistics" [
 # GET /mimic/agent/{agentNum}/protocol/msg/web/get/trace
 # operationId: protocol_web_get_trace
 export def "mimic-agent-protocol-msg-web-get-trace trace" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5667,7 +5667,7 @@ export def "mimic-agent-protocol-msg-web-get-trace trace" [
 ]: nothing -> record<is_persistent_connections: int, password: string, port: int, rule: string, username: string, wsdl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/web/get/trace")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5678,7 +5678,7 @@ export def "mimic-agent-protocol-msg-web-get-trace trace" [
 # POST /mimic/agent/{agentNum}/protocol/msg/web/port/add/{port}
 # operationId: protocol_web_port_add
 export def "mimic-agent-protocol-msg-web-port-add add" [
-  agentNum: int
+  agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5691,7 +5691,7 @@ export def "mimic-agent-protocol-msg-web-port-add add" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/web/port/add/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/add/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5702,7 +5702,7 @@ export def "mimic-agent-protocol-msg-web-port-add add" [
 # GET /mimic/agent/{agentNum}/protocol/msg/web/port/exists/{port}
 # operationId: protocol_web_port_exists
 export def "mimic-agent-protocol-msg-web-port-exists exists" [
-  agentNum: int
+  agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5715,7 +5715,7 @@ export def "mimic-agent-protocol-msg-web-port-exists exists" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/web/port/exists/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/exists/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5726,7 +5726,7 @@ export def "mimic-agent-protocol-msg-web-port-exists exists" [
 # DELETE /mimic/agent/{agentNum}/protocol/msg/web/port/remove/{port}
 # operationId: protocol_web_port_remove
 export def "mimic-agent-protocol-msg-web-port-remove remove" [
-  agentNum: int
+  agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5739,7 +5739,7 @@ export def "mimic-agent-protocol-msg-web-port-remove remove" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/web/port/remove/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/remove/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5750,7 +5750,7 @@ export def "mimic-agent-protocol-msg-web-port-remove remove" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/web/port/set/{port}/{protocol}/{version}
 # operationId: protocol_web_port_set
 export def "mimic-agent-protocol-msg-web-port-set set" [
-  agentNum: int
+  agent_num: int
   port: int
   protocol: string
   version: string
@@ -5765,7 +5765,7 @@ export def "mimic-agent-protocol-msg-web-port-set set" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/web/port/set/($port)/($protocol)/($version)")
+  let full_url = (build-url $base ({agent_num: $agent_num, port: $port, protocol: $protocol, version: $version} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/set/{port}/{protocol}/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5776,7 +5776,7 @@ export def "mimic-agent-protocol-msg-web-port-set set" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/web/port/start/{port}
 # operationId: protocol_web_port_start
 export def "mimic-agent-protocol-msg-web-port-start start" [
-  agentNum: int
+  agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5789,7 +5789,7 @@ export def "mimic-agent-protocol-msg-web-port-start start" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/web/port/start/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/start/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5800,7 +5800,7 @@ export def "mimic-agent-protocol-msg-web-port-start start" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/web/port/stop/{port}
 # operationId: protocol_web_port_stop
 export def "mimic-agent-protocol-msg-web-port-stop stop" [
-  agentNum: int
+  agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5813,7 +5813,7 @@ export def "mimic-agent-protocol-msg-web-port-stop stop" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/web/port/stop/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, port: $port} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/stop/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5824,7 +5824,7 @@ export def "mimic-agent-protocol-msg-web-port-stop stop" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/web/set/config/{argument}/{value}
 # operationId: protocol_web_set_config
 export def "mimic-agent-protocol-msg-web-set-config config" [
-  agentNum: int
+  agent_num: int
   argument: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5838,7 +5838,7 @@ export def "mimic-agent-protocol-msg-web-set-config config" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/web/set/config/($argument)/($value)")
+  let full_url = (build-url $base ({agent_num: $agent_num, argument: $argument, value: $value} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5849,8 +5849,8 @@ export def "mimic-agent-protocol-msg-web-set-config config" [
 # PUT /mimic/agent/{agentNum}/protocol/msg/web/set/trace/{enableOrNot}
 # operationId: protocol_web_set_trace
 export def "mimic-agent-protocol-msg-web-set-trace trace" [
-  agentNum: int
-  enableOrNot: string
+  agent_num: int
+  enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5862,7 +5862,7 @@ export def "mimic-agent-protocol-msg-web-set-trace trace" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/msg/web/set/trace/($enableOrNot)")
+  let full_url = (build-url $base ({agent_num: $agent_num, enable_or_not: $enable_or_not} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5873,7 +5873,7 @@ export def "mimic-agent-protocol-msg-web-set-trace trace" [
 # GET /mimic/agent/{agentNum}/protocol/{prot}/get/config
 # operationId: protocol_get_config
 export def "mimic-agent-protocol-get-config config" [
-  agentNum: int
+  agent_num: int
   prot: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5886,7 +5886,7 @@ export def "mimic-agent-protocol-get-config config" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/protocol/($prot)/get/config")
+  let full_url = (build-url $base ({agent_num: $agent_num, prot: $prot} | format pattern "/mimic/agent/{agent_num}/protocol/{prot}/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5897,7 +5897,7 @@ export def "mimic-agent-protocol-get-config config" [
 # PUT /mimic/agent/{agentNum}/reload
 # operationId: reload
 export def "mimic-agent-reload reload" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5909,7 +5909,7 @@ export def "mimic-agent-reload reload" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/reload")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/reload"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5920,7 +5920,7 @@ export def "mimic-agent-reload reload" [
 # DELETE /mimic/agent/{agentNum}/remove
 # operationId: agent_remove
 export def "mimic-agent-remove remove" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5932,7 +5932,7 @@ export def "mimic-agent-remove remove" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/remove")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/remove"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5943,7 +5943,7 @@ export def "mimic-agent-remove remove" [
 # PUT /mimic/agent/{agentNum}/resume
 # operationId: resume
 export def "mimic-agent-resume resume" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5955,7 +5955,7 @@ export def "mimic-agent-resume resume" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/resume")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/resume"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5966,7 +5966,7 @@ export def "mimic-agent-resume resume" [
 # PUT /mimic/agent/{agentNum}/save
 # operationId: save
 export def "mimic-agent-save save" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5978,7 +5978,7 @@ export def "mimic-agent-save save" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/save")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/save"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5989,7 +5989,7 @@ export def "mimic-agent-save save" [
 # PUT /mimic/agent/{agentNum}/set/delay/{delay}
 # operationId: set_delay
 export def "mimic-agent-set-delay delay" [
-  agentNum: int
+  agent_num: int
   delay: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6002,7 +6002,7 @@ export def "mimic-agent-set-delay delay" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/delay/($delay)")
+  let full_url = (build-url $base ({agent_num: $agent_num, delay: $delay} | format pattern "/mimic/agent/{agent_num}/set/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6013,7 +6013,7 @@ export def "mimic-agent-set-delay delay" [
 # PUT /mimic/agent/{agentNum}/set/drops/{drops}
 # operationId: set_drops
 export def "mimic-agent-set-drops drops" [
-  agentNum: int
+  agent_num: int
   drops: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6026,7 +6026,7 @@ export def "mimic-agent-set-drops drops" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/drops/($drops)")
+  let full_url = (build-url $base ({agent_num: $agent_num, drops: $drops} | format pattern "/mimic/agent/{agent_num}/set/drops/{drops}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6037,7 +6037,7 @@ export def "mimic-agent-set-drops drops" [
 # PUT /mimic/agent/{agentNum}/set/host/{host}
 # operationId: set_host
 export def "mimic-agent-set-host host" [
-  agentNum: int
+  agent_num: int
   host: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6050,7 +6050,7 @@ export def "mimic-agent-set-host host" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/host/($host)")
+  let full_url = (build-url $base ({agent_num: $agent_num, host: $host} | format pattern "/mimic/agent/{agent_num}/set/host/{host}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6061,7 +6061,7 @@ export def "mimic-agent-set-host host" [
 # PUT /mimic/agent/{agentNum}/set/inform_timeout/{inform_timeout}
 # operationId: set_inform_timeout
 export def "mimic-agent-set-inform-timeout timeout" [
-  agentNum: int
+  agent_num: int
   inform_timeout: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6074,7 +6074,7 @@ export def "mimic-agent-set-inform-timeout timeout" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/inform_timeout/($inform_timeout)")
+  let full_url = (build-url $base ({agent_num: $agent_num, inform_timeout: $inform_timeout} | format pattern "/mimic/agent/{agent_num}/set/inform_timeout/{inform_timeout}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6085,7 +6085,7 @@ export def "mimic-agent-set-inform-timeout timeout" [
 # PUT /mimic/agent/{agentNum}/set/interface/{interface}
 # operationId: set_interface
 export def "mimic-agent-set-interface interface" [
-  agentNum: int
+  agent_num: int
   interface: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6098,7 +6098,7 @@ export def "mimic-agent-set-interface interface" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/interface/($interface)")
+  let full_url = (build-url $base ({agent_num: $agent_num, interface: $interface} | format pattern "/mimic/agent/{agent_num}/set/interface/{interface}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6109,7 +6109,7 @@ export def "mimic-agent-set-interface interface" [
 # PUT /mimic/agent/{agentNum}/set/mask/{mask}
 # operationId: set_mask
 export def "mimic-agent-set-mask mask" [
-  agentNum: int
+  agent_num: int
   mask: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6122,7 +6122,7 @@ export def "mimic-agent-set-mask mask" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/mask/($mask)")
+  let full_url = (build-url $base ({agent_num: $agent_num, mask: $mask} | format pattern "/mimic/agent/{agent_num}/set/mask/{mask}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6133,7 +6133,7 @@ export def "mimic-agent-set-mask mask" [
 # PUT /mimic/agent/{agentNum}/set/mibs
 # operationId: set_mibs
 export def "mimic-agent-set-mibs mibs" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6147,7 +6147,7 @@ export def "mimic-agent-set-mibs mibs" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/mibs")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/set/mibs"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6159,7 +6159,7 @@ export def "mimic-agent-set-mibs mibs" [
 # PUT /mimic/agent/{agentNum}/set/oiddir/{oiddir}
 # operationId: set_oiddir
 export def "mimic-agent-set-oiddir oiddir" [
-  agentNum: int
+  agent_num: int
   oiddir: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6172,7 +6172,7 @@ export def "mimic-agent-set-oiddir oiddir" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/oiddir/($oiddir)")
+  let full_url = (build-url $base ({agent_num: $agent_num, oiddir: $oiddir} | format pattern "/mimic/agent/{agent_num}/set/oiddir/{oiddir}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6183,7 +6183,7 @@ export def "mimic-agent-set-oiddir oiddir" [
 # PUT /mimic/agent/{agentNum}/set/owner/{owner}
 # operationId: set_owner
 export def "mimic-agent-set-owner owner" [
-  agentNum: int
+  agent_num: int
   owner: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6196,7 +6196,7 @@ export def "mimic-agent-set-owner owner" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/owner/($owner)")
+  let full_url = (build-url $base ({agent_num: $agent_num, owner: $owner} | format pattern "/mimic/agent/{agent_num}/set/owner/{owner}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6207,7 +6207,7 @@ export def "mimic-agent-set-owner owner" [
 # PUT /mimic/agent/{agentNum}/set/pdusize/{pdusize}
 # operationId: set_pdusize
 export def "mimic-agent-set-pdusize pdusize" [
-  agentNum: int
+  agent_num: int
   pdusize: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6220,7 +6220,7 @@ export def "mimic-agent-set-pdusize pdusize" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/pdusize/($pdusize)")
+  let full_url = (build-url $base ({agent_num: $agent_num, pdusize: $pdusize} | format pattern "/mimic/agent/{agent_num}/set/pdusize/{pdusize}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6231,7 +6231,7 @@ export def "mimic-agent-set-pdusize pdusize" [
 # PUT /mimic/agent/{agentNum}/set/port/{port}
 # operationId: set_port
 export def "mimic-agent-set-port port" [
-  agentNum: int
+  agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6244,7 +6244,7 @@ export def "mimic-agent-set-port port" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/port/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, port: $port} | format pattern "/mimic/agent/{agent_num}/set/port/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6255,7 +6255,7 @@ export def "mimic-agent-set-port port" [
 # PUT /mimic/agent/{agentNum}/set/privdir/{privdir}
 # operationId: set_privdir
 export def "mimic-agent-set-privdir privdir" [
-  agentNum: int
+  agent_num: int
   privdir: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6268,7 +6268,7 @@ export def "mimic-agent-set-privdir privdir" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/privdir/($privdir)")
+  let full_url = (build-url $base ({agent_num: $agent_num, privdir: $privdir} | format pattern "/mimic/agent/{agent_num}/set/privdir/{privdir}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6279,7 +6279,7 @@ export def "mimic-agent-set-privdir privdir" [
 # PUT /mimic/agent/{agentNum}/set/protocol
 # operationId: set_protocols
 export def "mimic-agent-set-protocol protocols" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6293,7 +6293,7 @@ export def "mimic-agent-set-protocol protocols" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/protocol")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/set/protocol"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6305,7 +6305,7 @@ export def "mimic-agent-set-protocol protocols" [
 # PUT /mimic/agent/{agentNum}/set/read/{read}
 # operationId: set_read_community
 export def "mimic-agent-set-read community" [
-  agentNum: int
+  agent_num: int
   read: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6318,7 +6318,7 @@ export def "mimic-agent-set-read community" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/read/($read)")
+  let full_url = (build-url $base ({agent_num: $agent_num, read: $read} | format pattern "/mimic/agent/{agent_num}/set/read/{read}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6328,8 +6328,8 @@ export def "mimic-agent-set-read community" [
 #
 # PUT /mimic/agent/{agentNum}/set/start/{start}
 # operationId: set_starttime
-export def "mimic-agent-set-start starttime" [
-  agentNum: int
+export def "mimic-agent-set-start start-time" [
+  agent_num: int
   start: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6342,7 +6342,7 @@ export def "mimic-agent-set-start starttime" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/start/($start)")
+  let full_url = (build-url $base ({agent_num: $agent_num, start: $start} | format pattern "/mimic/agent/{agent_num}/set/start/{start}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6353,7 +6353,7 @@ export def "mimic-agent-set-start starttime" [
 # PUT /mimic/agent/{agentNum}/set/trace/{trace}
 # operationId: set_trace
 export def "mimic-agent-set-trace trace" [
-  agentNum: int
+  agent_num: int
   trace: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6366,7 +6366,7 @@ export def "mimic-agent-set-trace trace" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/trace/($trace)")
+  let full_url = (build-url $base ({agent_num: $agent_num, trace: $trace} | format pattern "/mimic/agent/{agent_num}/set/trace/{trace}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6377,7 +6377,7 @@ export def "mimic-agent-set-trace trace" [
 # PUT /mimic/agent/{agentNum}/set/validate/{validate}
 # operationId: set_validate
 export def "mimic-agent-set-validate validate" [
-  agentNum: int
+  agent_num: int
   validate: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6390,7 +6390,7 @@ export def "mimic-agent-set-validate validate" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/validate/($validate)")
+  let full_url = (build-url $base ({agent_num: $agent_num, validate: $validate} | format pattern "/mimic/agent/{agent_num}/set/validate/{validate}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6401,7 +6401,7 @@ export def "mimic-agent-set-validate validate" [
 # PUT /mimic/agent/{agentNum}/set/write/{write}
 # operationId: set_write_community
 export def "mimic-agent-set-write community" [
-  agentNum: int
+  agent_num: int
   write: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6414,7 +6414,7 @@ export def "mimic-agent-set-write community" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/set/write/($write)")
+  let full_url = (build-url $base ({agent_num: $agent_num, write: $write} | format pattern "/mimic/agent/{agent_num}/set/write/{write}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6425,7 +6425,7 @@ export def "mimic-agent-set-write community" [
 # PUT /mimic/agent/{agentNum}/start
 # operationId: start
 export def "mimic-agent-start start" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6437,7 +6437,7 @@ export def "mimic-agent-start start" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/start")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6448,7 +6448,7 @@ export def "mimic-agent-start start" [
 # PUT /mimic/agent/{agentNum}/stop
 # operationId: stop
 export def "mimic-agent-stop stop" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6460,7 +6460,7 @@ export def "mimic-agent-stop stop" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/stop")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6471,8 +6471,8 @@ export def "mimic-agent-stop stop" [
 # PUT /mimic/agent/{agentNum}/store/copy/{otherAgent}
 # operationId: agent_store_copy
 export def "mimic-agent-store-copy copy" [
-  agentNum: int
-  otherAgent: int
+  agent_num: int
+  other_agent: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6484,7 +6484,7 @@ export def "mimic-agent-store-copy copy" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/store/copy/($otherAgent)")
+  let full_url = (build-url $base ({agent_num: $agent_num, other_agent: $other_agent} | format pattern "/mimic/agent/{agent_num}/store/copy/{other_agent}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6495,7 +6495,7 @@ export def "mimic-agent-store-copy copy" [
 # GET /mimic/agent/{agentNum}/store/exists/{var}
 # operationId: agent_store_exists
 export def "mimic-agent-store-exists exists" [
-  agentNum: int
+  agent_num: int
   var: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6508,7 +6508,7 @@ export def "mimic-agent-store-exists exists" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/store/exists/($var)")
+  let full_url = (build-url $base ({agent_num: $agent_num, var: $var} | format pattern "/mimic/agent/{agent_num}/store/exists/{var}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6519,7 +6519,7 @@ export def "mimic-agent-store-exists exists" [
 # GET /mimic/agent/{agentNum}/store/get/{var}
 # operationId: agent_store_get
 export def "mimic-agent-store-get get" [
-  agentNum: int
+  agent_num: int
   var: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6532,7 +6532,7 @@ export def "mimic-agent-store-get get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/store/get/($var)")
+  let full_url = (build-url $base ({agent_num: $agent_num, var: $var} | format pattern "/mimic/agent/{agent_num}/store/get/{var}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6543,7 +6543,7 @@ export def "mimic-agent-store-get get" [
 # GET /mimic/agent/{agentNum}/store/list
 # operationId: agent_store_list
 export def "mimic-agent-store-list list" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6555,7 +6555,7 @@ export def "mimic-agent-store-list list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/store/list")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/store/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6566,7 +6566,7 @@ export def "mimic-agent-store-list list" [
 # PUT /mimic/agent/{agentNum}/store/lreplace/{var}/{index}
 # operationId: agent_store_lreplace
 export def "mimic-agent-store-lreplace lreplace" [
-  agentNum: int
+  agent_num: int
   var: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6582,7 +6582,7 @@ export def "mimic-agent-store-lreplace lreplace" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/store/lreplace/($var)/($index)")
+  let full_url = (build-url $base ({agent_num: $agent_num, var: $var, index: $index} | format pattern "/mimic/agent/{agent_num}/store/lreplace/{var}/{index}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6594,7 +6594,7 @@ export def "mimic-agent-store-lreplace lreplace" [
 # GET /mimic/agent/{agentNum}/store/persists/{var}
 # operationId: agent_store_persists
 export def "mimic-agent-store-persists persists" [
-  agentNum: int
+  agent_num: int
   var: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6607,7 +6607,7 @@ export def "mimic-agent-store-persists persists" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/store/persists/($var)")
+  let full_url = (build-url $base ({agent_num: $agent_num, var: $var} | format pattern "/mimic/agent/{agent_num}/store/persists/{var}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6618,7 +6618,7 @@ export def "mimic-agent-store-persists persists" [
 # PUT /mimic/agent/{agentNum}/store/set/{var}/{persist}
 # operationId: agent_store_set
 export def "mimic-agent-store-set set" [
-  agentNum: int
+  agent_num: int
   var: string
   persist: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6634,7 +6634,7 @@ export def "mimic-agent-store-set set" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/store/set/($var)/($persist)")
+  let full_url = (build-url $base ({agent_num: $agent_num, var: $var, persist: $persist} | format pattern "/mimic/agent/{agent_num}/store/set/{var}/{persist}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6646,7 +6646,7 @@ export def "mimic-agent-store-set set" [
 # PUT /mimic/agent/{agentNum}/store/unset/{var}
 # operationId: agent_store_unset
 export def "mimic-agent-store-unset unset" [
-  agentNum: int
+  agent_num: int
   var: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6659,7 +6659,7 @@ export def "mimic-agent-store-unset unset" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/store/unset/($var)")
+  let full_url = (build-url $base ({agent_num: $agent_num, var: $var} | format pattern "/mimic/agent/{agent_num}/store/unset/{var}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6670,7 +6670,7 @@ export def "mimic-agent-store-unset unset" [
 # POST /mimic/agent/{agentNum}/timer/script/add/{script}/{interval}/{arg}
 # operationId: add_timer_script
 export def "mimic-agent-timer-script-add script" [
-  agentNum: int
+  agent_num: int
   script: string
   interval: int
   arg: string
@@ -6685,7 +6685,7 @@ export def "mimic-agent-timer-script-add script" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/timer/script/add/($script)/($interval)/($arg)")
+  let full_url = (build-url $base ({agent_num: $agent_num, script: $script, interval: $interval, arg: $arg} | format pattern "/mimic/agent/{agent_num}/timer/script/add/{script}/{interval}/{arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6696,7 +6696,7 @@ export def "mimic-agent-timer-script-add script" [
 # DELETE /mimic/agent/{agentNum}/timer/script/delete/{script}/{interval}/{arg}
 # operationId: del_timer_script
 export def "mimic-agent-timer-script-delete script" [
-  agentNum: int
+  agent_num: int
   script: string
   interval: int
   arg: string
@@ -6711,7 +6711,7 @@ export def "mimic-agent-timer-script-delete script" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/timer/script/delete/($script)/($interval)/($arg)")
+  let full_url = (build-url $base ({agent_num: $agent_num, script: $script, interval: $interval, arg: $arg} | format pattern "/mimic/agent/{agent_num}/timer/script/delete/{script}/{interval}/{arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6722,7 +6722,7 @@ export def "mimic-agent-timer-script-delete script" [
 # GET /mimic/agent/{agentNum}/timer/script/list
 # operationId: list_timer_scripts
 export def "mimic-agent-timer-script-list scripts" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6734,7 +6734,7 @@ export def "mimic-agent-timer-script-list scripts" [
 ]: nothing -> table<arg: string, interval: int, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/timer/script/list")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/timer/script/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6745,8 +6745,8 @@ export def "mimic-agent-timer-script-list scripts" [
 # POST /mimic/agent/{agentNum}/trap/config/add/{IP}/{port}
 # operationId: trap_config_add
 export def "mimic-agent-trap-config-add add" [
-  agentNum: int
-  IP: string
+  agent_num: int
+  ip: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6759,7 +6759,7 @@ export def "mimic-agent-trap-config-add add" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/trap/config/add/($IP)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ip: $ip, port: $port} | format pattern "/mimic/agent/{agent_num}/trap/config/add/{ip}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6770,8 +6770,8 @@ export def "mimic-agent-trap-config-add add" [
 # DELETE /mimic/agent/{agentNum}/trap/config/delete/{IP}/{port}
 # operationId: trap_config_del
 export def "mimic-agent-trap-config-delete del" [
-  agentNum: int
-  IP: string
+  agent_num: int
+  ip: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6784,7 +6784,7 @@ export def "mimic-agent-trap-config-delete del" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/trap/config/delete/($IP)/($port)")
+  let full_url = (build-url $base ({agent_num: $agent_num, ip: $ip, port: $port} | format pattern "/mimic/agent/{agent_num}/trap/config/delete/{ip}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6795,7 +6795,7 @@ export def "mimic-agent-trap-config-delete del" [
 # GET /mimic/agent/{agentNum}/trap/config/list
 # operationId: trap_config_list
 export def "mimic-agent-trap-config-list list" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6807,7 +6807,7 @@ export def "mimic-agent-trap-config-list list" [
 ]: nothing -> table<IP: string, port: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/trap/config/list")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/trap/config/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6818,7 +6818,7 @@ export def "mimic-agent-trap-config-list list" [
 # GET /mimic/agent/{agentNum}/trap/list
 # operationId: trap_list
 export def "mimic-agent-trap-list list" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6830,7 +6830,7 @@ export def "mimic-agent-trap-list list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/trap/list")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/trap/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6841,7 +6841,7 @@ export def "mimic-agent-trap-list list" [
 # POST /mimic/agent/{agentNum}/value/add/{object}/{instance}
 # operationId: add
 export def "mimic-agent-value-add add" [
-  agentNum: int
+  agent_num: int
   object: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6855,7 +6855,7 @@ export def "mimic-agent-value-add add" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/add/($object)/($instance)")
+  let full_url = (build-url $base ({agent_num: $agent_num, object: $object, instance: $instance} | format pattern "/mimic/agent/{agent_num}/value/add/{object}/{instance}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6866,7 +6866,7 @@ export def "mimic-agent-value-add add" [
 # GET /mimic/agent/{agentNum}/value/eval/{object}/{instance}
 # operationId: eval_value
 export def "mimic-agent-value-eval value" [
-  agentNum: int
+  agent_num: int
   object: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6880,7 +6880,7 @@ export def "mimic-agent-value-eval value" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/eval/($object)/($instance)")
+  let full_url = (build-url $base ({agent_num: $agent_num, object: $object, instance: $instance} | format pattern "/mimic/agent/{agent_num}/value/eval/{object}/{instance}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6891,7 +6891,7 @@ export def "mimic-agent-value-eval value" [
 # GET /mimic/agent/{agentNum}/value/get/{object}/{instance}/{variable}
 # operationId: get_value
 export def "mimic-agent-value-get value" [
-  agentNum: int
+  agent_num: int
   object: string
   instance: string
   variable: string
@@ -6906,7 +6906,7 @@ export def "mimic-agent-value-get value" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/get/($object)/($instance)/($variable)")
+  let full_url = (build-url $base ({agent_num: $agent_num, object: $object, instance: $instance, variable: $variable} | format pattern "/mimic/agent/{agent_num}/value/get/{object}/{instance}/{variable}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6917,7 +6917,7 @@ export def "mimic-agent-value-get value" [
 # GET /mimic/agent/{agentNum}/value/info/{object}
 # operationId: get_info
 export def "mimic-agent-value-info info" [
-  agentNum: int
+  agent_num: int
   object: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6930,7 +6930,7 @@ export def "mimic-agent-value-info info" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/info/($object)")
+  let full_url = (build-url $base ({agent_num: $agent_num, object: $object} | format pattern "/mimic/agent/{agent_num}/value/info/{object}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6941,7 +6941,7 @@ export def "mimic-agent-value-info info" [
 # GET /mimic/agent/{agentNum}/value/instances/{object}
 # operationId: get_instances
 export def "mimic-agent-value-instances instances" [
-  agentNum: int
+  agent_num: int
   object: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6954,7 +6954,7 @@ export def "mimic-agent-value-instances instances" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/instances/($object)")
+  let full_url = (build-url $base ({agent_num: $agent_num, object: $object} | format pattern "/mimic/agent/{agent_num}/value/instances/{object}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6965,8 +6965,8 @@ export def "mimic-agent-value-instances instances" [
 # GET /mimic/agent/{agentNum}/value/list/{OID}
 # operationId: get_objects
 export def "mimic-agent-value-list objects" [
-  agentNum: int
-  OID: string
+  agent_num: int
+  oid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6978,7 +6978,7 @@ export def "mimic-agent-value-list objects" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/list/($OID)")
+  let full_url = (build-url $base ({agent_num: $agent_num, oid: $oid} | format pattern "/mimic/agent/{agent_num}/value/list/{oid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6989,8 +6989,8 @@ export def "mimic-agent-value-list objects" [
 # GET /mimic/agent/{agentNum}/value/meval/{objInsArray}
 # operationId: meval_value
 export def "mimic-agent-value-meval value" [
-  agentNum: int
-  objInsArray: list
+  agent_num: int
+  obj_ins_array: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7002,7 +7002,7 @@ export def "mimic-agent-value-meval value" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/meval/($objInsArray)")
+  let full_url = (build-url $base ({agent_num: $agent_num, obj_ins_array: $obj_ins_array} | format pattern "/mimic/agent/{agent_num}/value/meval/{obj_ins_array}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7013,8 +7013,8 @@ export def "mimic-agent-value-meval value" [
 # GET /mimic/agent/{agentNum}/value/mget/{objInsVarArray}
 # operationId: mget_value
 export def "mimic-agent-value-mget value" [
-  agentNum: int
-  objInsVarArray: list
+  agent_num: int
+  obj_ins_var_array: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7026,7 +7026,7 @@ export def "mimic-agent-value-mget value" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/mget/($objInsVarArray)")
+  let full_url = (build-url $base ({agent_num: $agent_num, obj_ins_var_array: $obj_ins_var_array} | format pattern "/mimic/agent/{agent_num}/value/mget/{obj_ins_var_array}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7037,7 +7037,7 @@ export def "mimic-agent-value-mget value" [
 # GET /mimic/agent/{agentNum}/value/mib/{object}
 # operationId: get_mib
 export def "mimic-agent-value-mib mib" [
-  agentNum: int
+  agent_num: int
   object: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7050,7 +7050,7 @@ export def "mimic-agent-value-mib mib" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/mib/($object)")
+  let full_url = (build-url $base ({agent_num: $agent_num, object: $object} | format pattern "/mimic/agent/{agent_num}/value/mib/{object}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7061,7 +7061,7 @@ export def "mimic-agent-value-mib mib" [
 # PUT /mimic/agent/{agentNum}/value/mset
 # operationId: mset_value
 export def "mimic-agent-value-mset value" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7075,7 +7075,7 @@ export def "mimic-agent-value-mset value" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/mset")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/value/mset"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7087,7 +7087,7 @@ export def "mimic-agent-value-mset value" [
 # PUT /mimic/agent/{agentNum}/value/munset
 # operationId: munset_value
 export def "mimic-agent-value-munset value" [
-  agentNum: int
+  agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7101,7 +7101,7 @@ export def "mimic-agent-value-munset value" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/munset")
+  let full_url = (build-url $base ({agent_num: $agent_num} | format pattern "/mimic/agent/{agent_num}/value/munset"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7113,8 +7113,8 @@ export def "mimic-agent-value-munset value" [
 # GET /mimic/agent/{agentNum}/value/name/{OID}
 # operationId: get_name
 export def "mimic-agent-value-name name" [
-  agentNum: int
-  OID: string
+  agent_num: int
+  oid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7126,7 +7126,7 @@ export def "mimic-agent-value-name name" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/name/($OID)")
+  let full_url = (build-url $base ({agent_num: $agent_num, oid: $oid} | format pattern "/mimic/agent/{agent_num}/value/name/{oid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7137,7 +7137,7 @@ export def "mimic-agent-value-name name" [
 # GET /mimic/agent/{agentNum}/value/oid/{object}
 # operationId: get_oid
 export def "mimic-agent-value-oid oid" [
-  agentNum: int
+  agent_num: int
   object: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7150,7 +7150,7 @@ export def "mimic-agent-value-oid oid" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/oid/($object)")
+  let full_url = (build-url $base ({agent_num: $agent_num, object: $object} | format pattern "/mimic/agent/{agent_num}/value/oid/{object}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7161,7 +7161,7 @@ export def "mimic-agent-value-oid oid" [
 # DELETE /mimic/agent/{agentNum}/value/remove/{object}/{instance}
 # operationId: remove
 export def "mimic-agent-value-remove remove" [
-  agentNum: int
+  agent_num: int
   object: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7175,7 +7175,7 @@ export def "mimic-agent-value-remove remove" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/remove/($object)/($instance)")
+  let full_url = (build-url $base ({agent_num: $agent_num, object: $object, instance: $instance} | format pattern "/mimic/agent/{agent_num}/value/remove/{object}/{instance}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7186,7 +7186,7 @@ export def "mimic-agent-value-remove remove" [
 # PUT /mimic/agent/{agentNum}/value/set/{object}/{instance}/{variable}
 # operationId: set_value
 export def "mimic-agent-value-set value" [
-  agentNum: int
+  agent_num: int
   object: string
   instance: string
   variable: string
@@ -7203,7 +7203,7 @@ export def "mimic-agent-value-set value" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/set/($object)/($instance)/($variable)")
+  let full_url = (build-url $base ({agent_num: $agent_num, object: $object, instance: $instance, variable: $variable} | format pattern "/mimic/agent/{agent_num}/value/set/{object}/{instance}/{variable}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7215,8 +7215,8 @@ export def "mimic-agent-value-set value" [
 # GET /mimic/agent/{agentNum}/value/split/{OID}
 # operationId: split_oid
 export def "mimic-agent-value-split oid" [
-  agentNum: int
-  OID: string
+  agent_num: int
+  oid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7228,7 +7228,7 @@ export def "mimic-agent-value-split oid" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/split/($OID)")
+  let full_url = (build-url $base ({agent_num: $agent_num, oid: $oid} | format pattern "/mimic/agent/{agent_num}/value/split/{oid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7239,7 +7239,7 @@ export def "mimic-agent-value-split oid" [
 # GET /mimic/agent/{agentNum}/value/state/get/{object}
 # operationId: get_state
 export def "mimic-agent-value-state-get state" [
-  agentNum: int
+  agent_num: int
   object: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7252,7 +7252,7 @@ export def "mimic-agent-value-state-get state" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/state/get/($object)")
+  let full_url = (build-url $base ({agent_num: $agent_num, object: $object} | format pattern "/mimic/agent/{agent_num}/value/state/get/{object}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7263,7 +7263,7 @@ export def "mimic-agent-value-state-get state" [
 # PUT /mimic/agent/{agentNum}/value/state/set/{object}/{state}
 # operationId: set_state
 export def "mimic-agent-value-state-set state" [
-  agentNum: int
+  agent_num: int
   object: string
   state: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7277,7 +7277,7 @@ export def "mimic-agent-value-state-set state" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/state/set/($object)/($state)")
+  let full_url = (build-url $base ({agent_num: $agent_num, object: $object, state: $state} | format pattern "/mimic/agent/{agent_num}/value/state/set/{object}/{state}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7288,7 +7288,7 @@ export def "mimic-agent-value-state-set state" [
 # PUT /mimic/agent/{agentNum}/value/unset/{object}/{instance}/{variable}
 # operationId: unset_value
 export def "mimic-agent-value-unset value" [
-  agentNum: int
+  agent_num: int
   object: string
   instance: string
   variable: string
@@ -7303,7 +7303,7 @@ export def "mimic-agent-value-unset value" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/unset/($object)/($instance)/($variable)")
+  let full_url = (build-url $base ({agent_num: $agent_num, object: $object, instance: $instance, variable: $variable} | format pattern "/mimic/agent/{agent_num}/value/unset/{object}/{instance}/{variable}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7314,7 +7314,7 @@ export def "mimic-agent-value-unset value" [
 # GET /mimic/agent/{agentNum}/value/variables/{object}/{instance}
 # operationId: get_variables
 export def "mimic-agent-value-variables variables" [
-  agentNum: int
+  agent_num: int
   object: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7328,7 +7328,7 @@ export def "mimic-agent-value-variables variables" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/agent/($agentNum)/value/variables/($object)/($instance)")
+  let full_url = (build-url $base ({agent_num: $agent_num, object: $object, instance: $instance} | format pattern "/mimic/agent/{agent_num}/value/variables/{object}/{instance}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7339,8 +7339,8 @@ export def "mimic-agent-value-variables variables" [
 # PUT /mimic/clear/{firstAgentNum}/{lastAgentNum}
 # operationId: cfg_new
 export def "mimic-clear new" [
-  firstAgentNum: int
-  lastAgentNum: int
+  first_agent_num: int
+  last_agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7352,7 +7352,7 @@ export def "mimic-clear new" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/clear/($firstAgentNum)/($lastAgentNum)")
+  let full_url = (build-url $base ({first_agent_num: $first_agent_num, last_agent_num: $last_agent_num} | format pattern "/mimic/clear/{first_agent_num}/{last_agent_num}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7759,10 +7759,10 @@ export def "mimic-get-version version" [
 # PUT /mimic/load/{cfgFile}/{firstAgentNum}/{lastAgentNum}/{startAgentNum}
 # operationId: cfg_load
 export def "mimic-load load" [
-  cfgFile: string
-  firstAgentNum: int
-  lastAgentNum: int
-  startAgentNum: int
+  cfg_file: string
+  first_agent_num: int
+  last_agent_num: int
+  start_agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7774,7 +7774,7 @@ export def "mimic-load load" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/load/($cfgFile)/($firstAgentNum)/($lastAgentNum)/($startAgentNum)")
+  let full_url = (build-url $base ({cfg_file: $cfg_file, first_agent_num: $first_agent_num, last_agent_num: $last_agent_num, start_agent_num: $start_agent_num} | format pattern "/mimic/load/{cfg_file}/{first_agent_num}/{last_agent_num}/{start_agent_num}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7785,7 +7785,7 @@ export def "mimic-load load" [
 # GET /mimic/mget/{infoArray}
 # operationId: mget_info
 export def "mimic-mget info" [
-  infoArray: list
+  info_array: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7797,7 +7797,7 @@ export def "mimic-mget info" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/mget/($infoArray)")
+  let full_url = (build-url $base ({info_array: $info_array} | format pattern "/mimic/mget/{info_array}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8138,9 +8138,9 @@ export def "mimic-save save" [
 # PUT /mimic/saveas/{cfgFile}/{firstAgentNum}/{lastAgentNum}
 # operationId: cfg_saveas
 export def "mimic-saveas saveas" [
-  cfgFile: string
-  firstAgentNum: int
-  lastAgentNum: int
+  cfg_file: string
+  first_agent_num: int
+  last_agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8152,7 +8152,7 @@ export def "mimic-saveas saveas" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/saveas/($cfgFile)/($firstAgentNum)/($lastAgentNum)")
+  let full_url = (build-url $base ({cfg_file: $cfg_file, first_agent_num: $first_agent_num, last_agent_num: $last_agent_num} | format pattern "/mimic/saveas/{cfg_file}/{first_agent_num}/{last_agent_num}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8288,7 +8288,7 @@ export def "mimic-store-exists exists" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/store/exists/($var)")
+  let full_url = (build-url $base ({var: $var} | format pattern "/mimic/store/exists/{var}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8311,7 +8311,7 @@ export def "mimic-store-get get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/store/get/($var)")
+  let full_url = (build-url $base ({var: $var} | format pattern "/mimic/store/get/{var}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8359,7 +8359,7 @@ export def "mimic-store-lreplace lreplace" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/store/lreplace/($var)/($index)")
+  let full_url = (build-url $base ({var: $var, index: $index} | format pattern "/mimic/store/lreplace/{var}/{index}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8383,7 +8383,7 @@ export def "mimic-store-persists persists" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/store/persists/($var)")
+  let full_url = (build-url $base ({var: $var} | format pattern "/mimic/store/persists/{var}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8409,7 +8409,7 @@ export def "mimic-store-set set" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/store/set/($var)/($persist)")
+  let full_url = (build-url $base ({var: $var, persist: $persist} | format pattern "/mimic/store/set/{var}/{persist}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8433,7 +8433,7 @@ export def "mimic-store-unset unset" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/store/unset/($var)")
+  let full_url = (build-url $base ({var: $var} | format pattern "/mimic/store/unset/{var}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8480,7 +8480,7 @@ export def "mimic-timer-script-add script" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/timer/script/add/($script)/($interval)/($arg)")
+  let full_url = (build-url $base ({script: $script, interval: $interval, arg: $arg} | format pattern "/mimic/timer/script/add/{script}/{interval}/{arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8505,7 +8505,7 @@ export def "mimic-timer-script-delete script" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mimic/timer/script/delete/($script)/($interval)/($arg)")
+  let full_url = (build-url $base ({script: $script, interval: $interval, arg: $arg} | format pattern "/mimic/timer/script/delete/{script}/{interval}/{arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

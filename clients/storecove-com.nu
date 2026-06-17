@@ -70,7 +70,7 @@ def mode-completer [] { ["direct"] }
 def country-completer [] { ["AD" "AE" "AF" "AG" "AI" "AL" "AM" "AO" "AQ" "AR" "AS" "AT" "AU" "AW" "AX" "AZ" "BA" "BB" "BD" "BE" "BF" "BG" "BH" "BI" "BJ" "BL" "BM" "BN" "BO" "BQ" "BR" "BS" "BT" "BV" "BW" "BY" "BZ" "CA" "CC" "CD" "CF" "CG" "CH" "CI" "CK" "CL" "CM" "CN" "CO" "CR" "CU" "CV" "CW" "CX" "CY" "CZ" "DE" "DJ" "DK" "DM" "DO" "DZ" "EC" "EE" "EG" "EH" "ER" "ES" "ET" "FI" "FJ" "FK" "FM" "FO" "FR" "GA" "GB" "GD" "GE" "GF" "GG" "GH" "GI" "GL" "GM" "GN" "GP" "GQ" "GR" "GS" "GT" "GU" "GW" "GY" "HK" "HM" "HN" "HR" "HT" "HU" "ID" "IE" "IL" "IM" "IN" "IO" "IQ" "IR" "IS" "IT" "JE" "JM" "JO" "JP" "KE" "KG" "KH" "KI" "KM" "KN" "KP" "KR" "KW" "KY" "KZ" "LA" "LB" "LC" "LI" "LK" "LR" "LS" "LT" "LU" "LV" "LY" "MA" "MC" "MD" "ME" "MF" "MG" "MH" "MK" "ML" "MM" "MN" "MO" "MP" "MQ" "MR" "MS" "MT" "MU" "MV" "MW" "MX" "MY" "MZ" "NA" "NC" "NE" "NF" "NG" "NI" "NL" "NO" "NP" "NR" "NU" "NZ" "OM" "PA" "PE" "PF" "PG" "PH" "PK" "PL" "PM" "PN" "PR" "PS" "PT" "PW" "PY" "QA" "RE" "RO" "RS" "RU" "RW" "SA" "SB" "SC" "SD" "SE" "SG" "SH" "SI" "SJ" "SK" "SL" "SM" "SN" "SO" "SR" "SS" "ST" "SV" "SX" "SY" "SZ" "TC" "TD" "TF" "TG" "TH" "TJ" "TK" "TL" "TM" "TN" "TO" "TR" "TT" "TV" "TW" "TZ" "UA" "UG" "UM" "US" "UY" "UZ" "VA" "VC" "VE" "VG" "VI" "VN" "VU" "WF" "WS" "XI" "YE" "YT" "ZA" "ZM" "ZW"] }
 def package-version-completer [] { ["aunz" "peppol_bis_v3" "sg"] }
 def packaging-completer [] { ["ubl"] }
-def parseStrategy-completer [] { ["rfc822"] }
+def parse-strategy-completer [] { ["rfc822"] }
 def syntax-completer [] { ["json" "original"] }
 
 # List all available API commands with their parameters
@@ -109,9 +109,9 @@ export def "discovery-exists exists" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --documentTypes: list # An array of document types to discover. The default is '["invoice", "creditnote"]'. This is ignored when only checking existence.
+  --document-types: list # An array of document types to discover. The default is '["invoice", "creditnote"]'. This is ignored when only checking existence.
   identifier: string # The actual identifier.
-  --metaScheme: string # The meta scheme of the identifier. For Peppol this is always 'iso6523-actorid-upis'. (default: iso6523-actorid-upis)
+  --meta-scheme: string # The meta scheme of the identifier. For Peppol this is always 'iso6523-actorid-upis'. (default: iso6523-actorid-upis)
   --network: string # The network to check. Currently only 'peppol' is supported. (default: peppol)
   scheme: string # The scheme of the identifier. See <<_receiver_identifiers_list>> for a list.
 ]: any -> record<code: string, email: bool> {
@@ -119,7 +119,7 @@ export def "discovery-exists exists" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/discovery/exists")
-  let body = {documentTypes: $documentTypes, identifier: $identifier, metaScheme: $metaScheme, network: $network, scheme: $scheme} | compact
+  let body = {"documentTypes": $document_types, "identifier": $identifier, "metaScheme": $meta_scheme, "network": $network, "scheme": $scheme} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -152,7 +152,7 @@ export def "discovery-identifiers identifiers" [
 #
 # POST /discovery/receives
 # operationId: discovery_receives
-export def "discovery-receives receives" [
+export def "discovery-receives receive-s" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,9 +161,9 @@ export def "discovery-receives receives" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --documentTypes: list # An array of document types to discover. The default is '["invoice", "creditnote"]'. This is ignored when only checking existence.
+  --document-types: list # An array of document types to discover. The default is '["invoice", "creditnote"]'. This is ignored when only checking existence.
   identifier: string # The actual identifier.
-  --metaScheme: string # The meta scheme of the identifier. For Peppol this is always 'iso6523-actorid-upis'. (default: iso6523-actorid-upis)
+  --meta-scheme: string # The meta scheme of the identifier. For Peppol this is always 'iso6523-actorid-upis'. (default: iso6523-actorid-upis)
   --network: string # The network to check. Currently only 'peppol' is supported. (default: peppol)
   scheme: string # The scheme of the identifier. See <<_receiver_identifiers_list>> for a list.
 ]: any -> record<code: string, email: bool> {
@@ -171,7 +171,7 @@ export def "discovery-receives receives" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/discovery/receives")
-  let body = {documentTypes: $documentTypes, identifier: $identifier, metaScheme: $metaScheme, network: $network, scheme: $scheme} | compact
+  let body = {"documentTypes": $document_types, "identifier": $identifier, "metaScheme": $meta_scheme, "network": $network, "scheme": $scheme} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -195,18 +195,18 @@ export def "document-submissions submission" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --attachments: list # DEPRECATED. Use the attachments array inside the 'document' property. An array of attachments. You may provide up to 10 attchments, but the total size must not exceed 10MB after Base64 encoding. — item shape: {description?: string, document: string, documentId?: string, filename?: string, mimeType: "application/pdf", primaryImage?: bool}
-  --createPrimaryImage: oneof<nothing, bool> # DEPRECATED. In the future we will no longer support creating PDF invoices. Whether or not to create a primary image (PDF) if one is not provided. For customers who started from December 1st 2022, the default is false. For customers who started before that, the default is true.
+  --create-primary-image: oneof<nothing, bool> # DEPRECATED. In the future we will no longer support creating PDF invoices. Whether or not to create a primary image (PDF) if one is not provided. For customers who started from December 1st 2022, the default is false. For customers who started before that, the default is true.
   --document: record # The document to send. — shape: {documentType: "invoice"|"invoice_response"|"order", invoice?: record, invoiceResponse?: record, order?: record, rawDocumentData?: record}
-  --idempotencyGuid: string # A guid that you generated for this DocumentSubmission to achieve idempotency. If you submit multiple documents with the same idempotencyGuid, only the first one will be processed and any subsequent ones will trigger an HTTP 422 Unprocessable Entity response.
-  --legalEntityId: int # The id of the LegalEntity this document should be sent on behalf of. Either legalEntityId or receiveGuid is mandatory.
-  --receiveGuid: string # The GUID that was in the received_document webhook. Either legalEntityId or receiveGuid is mandatory. This field is used for sending response documents, such as InvoiceReponse and OrderResponse.
+  --idempotency-guid: string # A guid that you generated for this DocumentSubmission to achieve idempotency. If you submit multiple documents with the same idempotencyGuid, only the first one will be processed and any subsequent ones will trigger an HTTP 422 Unprocessable Entity response.
+  --legal-entity-id: int # The id of the LegalEntity this document should be sent on behalf of. Either legalEntityId or receiveGuid is mandatory.
+  --receive-guid: string # The GUID that was in the received_document webhook. Either legalEntityId or receiveGuid is mandatory. This field is used for sending response documents, such as InvoiceReponse and OrderResponse.
   --routing: record # The different ways to send the invoice to the recipient. The publicIdentifiers are used to send via the Peppol network, if the recipient is not registered on the Peppol network, the invoice will be sent to the email addresses in the emails property. This property is only mandatory when sending the invoice data using the <<_openapi_invoice>> property, not when sending using the <<_openapi_invoicedata>> property, in which case this information will be extracted from the <<_openapi_invoicedata>> object. If you do specify an <<_openapi_invoicerecipient>> object and an <<_openapi_invoicedata>> object, the data from the two will be merged. — shape: {clearWithoutSending?: bool, eIdentifiers?: list, emails?: list}
 ]: any -> record<guid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/document_submissions")
-  let body = {attachments: $attachments, createPrimaryImage: $createPrimaryImage, document: $document, idempotencyGuid: $idempotencyGuid, legalEntityId: $legalEntityId, receiveGuid: $receiveGuid, routing: $routing} | compact
+  let body = {"attachments": $attachments, "createPrimaryImage": $create_primary_image, "document": $document, "idempotencyGuid": $idempotency_guid, "legalEntityId": $legal_entity_id, "receiveGuid": $receive_guid, "routing": $routing} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -231,7 +231,7 @@ export def "document-submissions-evidence evidence" [
 ]: nothing -> record<documents: table<document: string, expires_at: string, mime_type: string>, evidence: record<message_id: string, receiving_accesspoint: string, remote_mta_ip: string, reporting_mta: string, smtp_response: string, timestamp: string, transmission_id: string, xml: string>, network: string, receiver: string, sender: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/document_submissions/($guid)/evidence/($evidence_type)")
+  let full_url = (build-url $base ({guid: $guid, evidence_type: $evidence_type} | format pattern "/document_submissions/{guid}/evidence/{evidence_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,24 +256,24 @@ export def "invoice-submissions submission" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --attachments: list # An array of attachments. You may provide up to 10 attchments, but the total size must not exceed 10MB after Base64 encoding. — item shape: {description?: string, document: string, documentId?: string, filename?: string, mimeType: "application/pdf", primaryImage?: bool}
-  --createPrimaryImage: oneof<nothing, bool> # DEPRECATED. In the future we will no longer support creating PDF invoices. Whether or not to create a primary image (PDF) if one is not provided. For customers who started from December 1st 2022, the default is false. For customers who started before that, the default is true.
+  --create-primary-image: oneof<nothing, bool> # DEPRECATED. In the future we will no longer support creating PDF invoices. Whether or not to create a primary image (PDF) if one is not provided. For customers who started from December 1st 2022, the default is false. For customers who started before that, the default is true.
   --document: string # DEPRECATED. Use attachments.
-  --documentUrl: string # DEPRECATED. Use attachments. (format: uri)
-  --idempotencyGuid: string # A guid that you generated for this InvoiceSubmission to achieve idempotency. If you submit multiple documents with the same idempotencyGuid, only the first one will be processed.
+  --document-url: string # DEPRECATED. Use attachments. (format: uri)
+  --idempotency-guid: string # A guid that you generated for this InvoiceSubmission to achieve idempotency. If you submit multiple documents with the same idempotencyGuid, only the first one will be processed.
   --invoice: record # The invoice to send. Provide either invoice, or invoiceData, but not both. — shape: {accountingCost?: string, accountingCurrencyTaxAmount?: float, accountingCurrencyTaxAmountCurrency?: "AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BOV"|"BRL"|"BSD"|"BTN"|"BWP"|"BYN"|"BYR"|"BZD"|"CAD"|"CDF"|"CHE"|"CHF"|"CHW"|"CLF"|"CLP"|"CNY"|"COP"|"COU"|"CRC"|"CUC"|"CUP"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IQD"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MXV"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLE"|"SLL"|"SOS"|"SRD"|"SSP"|"STD"|"SYP"|"SZL"|"THB"|"TJS"|"TMT"|"TND"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"USN"|"UYI"|"UYU"|"UZS"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XBA"|"XBB"|"XBC"|"XBD"|"XCD"|"XDR"|"XFU"|"XOF"|"XPD"|"XPF"|"XPT"|"XSU"|"XTS"|"XUA"|"XXX"|"YER"|"ZAR"|"ZMW", accountingCustomerParty: record, accountingSupplierParty?: record, allowanceCharges?: list, amountIncludingVat: float, attachments?: list, billingReference?: string, buyerReference?: string, consumerTaxMode?: bool, contractDocumentReference?: string, delivery?: record, documentCurrencyCode?: "AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BOV"|"BRL"|"BSD"|"BTN"|"BWP"|"BYN"|"BYR"|"BZD"|"CAD"|"CDF"|"CHE"|"CHF"|"CHW"|"CLF"|"CLP"|"CNY"|"COP"|"COU"|"CRC"|"CUC"|"CUP"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IQD"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MXV"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLE"|"SLL"|"SOS"|"SRD"|"SSP"|"STD"|"SYP"|"SZL"|"THB"|"TJS"|"TMT"|"TND"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"USN"|"UYI"|"UYU"|"UZS"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XBA"|"XBB"|"XBC"|"XBD"|"XCD"|"XDR"|"XFU"|"XOF"|"XPD"|"XPF"|"XPT"|"XSU"|"XTS"|"XUA"|"XXX"|"YER"|"ZAR"|"ZMW", dueDate?: string, invoiceLines: list, invoiceNumber: string, invoicePeriod?: string, invoiceType?: "380"|"381"|"384", issueDate: string, issueReasons?: list, note?: string, orderReference?: string, paymentMeansArray?: list, paymentMeansBic?: string, paymentMeansCode?: "online_payment_service"|"bank_card"|"direct_debit"|"standing_agreement"|"credit_transfer"|"se_bankgiro"|"se_plusgiro"|"aunz_npp"|""|"1"|"30"|"31"|"42"|"48"|"49"|"57"|"58", paymentMeansIban?: string, paymentMeansPaymentId?: string, paymentTerms?: record, preferredInvoiceType?: "prefer_autodetect"|"prefer_invoice"|"prefer_creditnote", prepaidAmount?: float, projectReference?: string, references?: list, salesOrderId?: string, selfBillingMode?: bool, taxExemptReason?: "export"|"reverse_charge"|"zero_rated"|"exempt"|"outside_scope"|"intra_community", taxPointDate?: string, taxSubtotals?: list, taxSystem?: "tax_line_amounts"|"tax_line_percentages", taxesDutiesFees?: list, transactionType?: "b2b"|"sezwp"|"sezwop"|"expwp"|"expwop"|"dexp", ublExtensions?: list, vatReverseCharge?: bool, x2y?: "b2b"|"b2g"|"b2c"|"b2b_sez"}
-  --invoiceData: record # The invoice to send, in base64 encoded format. Provide either invoice, or invoiceData, but not both. — shape: {conversionStrategy?: "ubl"|"cii"|"idoc", document?: string}
-  --invoiceRecipient: record # The different ways to send the invoice to the recipient. The publicIdentifiers are used to send via the Peppol network, if the recipient is not registered on the Peppol network, the invoice will be sent to the email addresses in the emails property. This property is only mandatory when sending the invoice data using the <<_openapi_invoice>> property, not when sending using the <<_openapi_invoicedata>> property, in which case this information will be extracted from the <<_openapi_invoicedata>> object. If you do specify an <<_openapi_invoicerecipient>> object and an <<_openapi_invoicedata>> object, the data from the two will be merged. — shape: {emails?: list, publicIdentifiers?: list}
-  --legalEntityId: int # The id of the LegalEntity this invoice should be sent for.
-  --legalSupplierId: int # DEPRECATED. Use legalEntityId
+  --invoice-data: record # The invoice to send, in base64 encoded format. Provide either invoice, or invoiceData, but not both. — shape: {conversionStrategy?: "ubl"|"cii"|"idoc", document?: string}
+  --invoice-recipient: record # The different ways to send the invoice to the recipient. The publicIdentifiers are used to send via the Peppol network, if the recipient is not registered on the Peppol network, the invoice will be sent to the email addresses in the emails property. This property is only mandatory when sending the invoice data using the <<_openapi_invoice>> property, not when sending using the <<_openapi_invoicedata>> property, in which case this information will be extracted from the <<_openapi_invoicedata>> object. If you do specify an <<_openapi_invoicerecipient>> object and an <<_openapi_invoicedata>> object, the data from the two will be merged. — shape: {emails?: list, publicIdentifiers?: list}
+  --legal-entity-id: int # The id of the LegalEntity this invoice should be sent for.
+  --legal-supplier-id: int # DEPRECATED. Use legalEntityId
   --mode: string@mode-completer # DEPRECATED.
   --routing: record # The different ways to send the invoice to the recipient. The publicIdentifiers are used to send via the Peppol network, if the recipient is not registered on the Peppol network, the invoice will be sent to the email addresses in the emails property. This property is only mandatory when sending the invoice data using the <<_openapi_invoice>> property, not when sending using the <<_openapi_invoicedata>> property, in which case this information will be extracted from the <<_openapi_invoicedata>> object. If you do specify an <<_openapi_invoicerecipient>> object and an <<_openapi_invoicedata>> object, the data from the two will be merged. — shape: {clearWithoutSending?: bool, eIdentifiers?: list, emails?: list}
-  --supplierId: int # DEPRECATED.
+  --supplier-id: int # DEPRECATED.
 ]: any -> record<guid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invoice_submissions")
-  let body = {attachments: $attachments, createPrimaryImage: $createPrimaryImage, document: $document, documentUrl: $documentUrl, idempotencyGuid: $idempotencyGuid, invoice: $invoice, invoiceData: $invoiceData, invoiceRecipient: $invoiceRecipient, legalEntityId: $legalEntityId, legalSupplierId: $legalSupplierId, mode: $mode, routing: $routing, supplierId: $supplierId} | compact
+  let body = {"attachments": $attachments, "createPrimaryImage": $create_primary_image, "document": $document, "documentUrl": $document_url, "idempotencyGuid": $idempotency_guid, "invoice": $invoice, "invoiceData": $invoice_data, "invoiceRecipient": $invoice_recipient, "legalEntityId": $legal_entity_id, "legalSupplierId": $legal_supplier_id, "mode": $mode, "routing": $routing, "supplierId": $supplier_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -294,13 +294,13 @@ export def "invoice-submissions-preflight recipient" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --publicIdentifiers: list # A list of public identifiers that uniquely identify this customer. — item shape: {id: string, scheme: string}
+  --public-identifiers: list # A list of public identifiers that uniquely identify this customer. — item shape: {id: string, scheme: string}
 ]: any -> record<code: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invoice_submissions/preflight")
-  let body = {publicIdentifiers: $publicIdentifiers} | compact
+  let body = {"publicIdentifiers": $public_identifiers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -324,7 +324,7 @@ export def "invoice-submissions-evidence evidence" [
 ]: nothing -> record<actions: table<receiver_response: string, transmission_datetime: string, transmission_result: string, transmission_type: string, transmitted_document: string>, guid: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/invoice_submissions/($guid)/evidence")
+  let full_url = (build-url $base ({guid: $guid} | format pattern "/invoice_submissions/{guid}/evidence"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -362,7 +362,7 @@ export def "legal-entities entity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/legal_entities")
-  let body = {advertisements: $advertisements, city: $city, country: $country, county: $county, line1: $line1, line2: $line2, party_name: $party_name, public: $public, rea: $rea, tenant_id: $tenant_id, third_party_password: $third_party_password, third_party_username: $third_party_username, zip: $zip} | compact
+  let body = {"advertisements": $advertisements, "city": $city, "country": $country, "county": $county, "line1": $line1, "line2": $line2, "party_name": $party_name, "public": $public, "rea": $rea, "tenant_id": $tenant_id, "third_party_password": $third_party_password, "third_party_username": $third_party_username, "zip": $zip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -386,7 +386,7 @@ export def "legal-entities entity-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legal_entities/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/legal_entities/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -409,7 +409,7 @@ export def "legal-entities entity-by-id-1" [
 ]: nothing -> record<advertisements: list<string>, city: string, country: string, county: string, id: int, line1: string, line2: string, party_name: string, public: bool, rea: record<capital: float, identifier: string, liquidation_status: string, partners: string, province: string>, smart_inbox: string, tenant_id: string, third_party_password: string, third_party_username: string, zip: string, peppol_identifiers: table<corppass: record, identifier: string, scheme: string, superscheme: string>, additional_tax_identifiers: table<country: string, county: string, id: int, identifier: string, scheme: string, superscheme: string>, api_keys: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legal_entities/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/legal_entities/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -449,8 +449,8 @@ export def "legal-entities entity-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legal_entities/($id)")
-  let body = {advertisements: $advertisements, city: $city, country: $country, county: $county, id: $body_id, line1: $line1, line2: $line2, party_name: $party_name, public: $public, rea: $rea, smart_inbox: $smart_inbox, tenant_id: $tenant_id, third_party_password: $third_party_password, third_party_username: $third_party_username, zip: $zip} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/legal_entities/{id}"))
+  let body = {"advertisements": $advertisements, "city": $city, "country": $country, "county": $county, "id": $body_id, "line1": $line1, "line2": $line2, "party_name": $party_name, "public": $public, "rea": $rea, "smart_inbox": $smart_inbox, "tenant_id": $tenant_id, "third_party_password": $third_party_password, "third_party_username": $third_party_username, "zip": $zip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -482,8 +482,8 @@ export def "legal-entities-additional-tax-identifiers identifier-by-legal_entity
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legal_entities/($legal_entity_id)/additional_tax_identifiers")
-  let body = {country: $country, county: $county, identifier: $identifier, scheme: $scheme, superscheme: $superscheme, third_party_password: $third_party_password, third_party_username: $third_party_username} | compact
+  let full_url = (build-url $base ({legal_entity_id: $legal_entity_id} | format pattern "/legal_entities/{legal_entity_id}/additional_tax_identifiers"))
+  let body = {"country": $country, "county": $county, "identifier": $identifier, "scheme": $scheme, "superscheme": $superscheme, "third_party_password": $third_party_password, "third_party_username": $third_party_username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -508,7 +508,7 @@ export def "legal-entities-additional-tax-identifiers identifier-by-legal_entity
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legal_entities/($legal_entity_id)/additional_tax_identifiers/($id)")
+  let full_url = (build-url $base ({legal_entity_id: $legal_entity_id, id: $id} | format pattern "/legal_entities/{legal_entity_id}/additional_tax_identifiers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -532,7 +532,7 @@ export def "legal-entities-additional-tax-identifiers identifier-by-legal_entity
 ]: nothing -> record<country: string, county: string, id: int, identifier: string, scheme: string, superscheme: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legal_entities/($legal_entity_id)/additional_tax_identifiers/($id)")
+  let full_url = (build-url $base ({legal_entity_id: $legal_entity_id, id: $id} | format pattern "/legal_entities/{legal_entity_id}/additional_tax_identifiers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -560,8 +560,8 @@ export def "legal-entities-additional-tax-identifiers identifier-by-legal_entity
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legal_entities/($legal_entity_id)/additional_tax_identifiers/($id)")
-  let body = {identifier: $identifier, third_party_password: $third_party_password, third_party_username: $third_party_username} | compact
+  let full_url = (build-url $base ({legal_entity_id: $legal_entity_id, id: $id} | format pattern "/legal_entities/{legal_entity_id}/additional_tax_identifiers/{id}"))
+  let body = {"identifier": $identifier, "third_party_password": $third_party_password, "third_party_username": $third_party_username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -591,8 +591,8 @@ export def "legal-entities-administrations administration-by-legal_entity_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legal_entities/($legal_entity_id)/administrations")
-  let body = {email: $email, legal_entity_id: $body_legal_entity_id, package_version: $package_version, packaging: $packaging, sender_email_identity_id: $sender_email_identity_id} | compact
+  let full_url = (build-url $base ({legal_entity_id: $legal_entity_id} | format pattern "/legal_entities/{legal_entity_id}/administrations"))
+  let body = {"email": $email, "legal_entity_id": $body_legal_entity_id, "package_version": $package_version, "packaging": $packaging, "sender_email_identity_id": $sender_email_identity_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -617,7 +617,7 @@ export def "legal-entities-administrations administration-by-legal_entity_id-id"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legal_entities/($legal_entity_id)/administrations/($id)")
+  let full_url = (build-url $base ({legal_entity_id: $legal_entity_id, id: $id} | format pattern "/legal_entities/{legal_entity_id}/administrations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -641,7 +641,7 @@ export def "legal-entities-administrations administration-by-legal_entity_id-id-
 ]: nothing -> record<email: string, id: int, legal_entity_id: int, package_version: string, packaging: string, sender_email_identity_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legal_entities/($legal_entity_id)/administrations/($id)")
+  let full_url = (build-url $base ({legal_entity_id: $legal_entity_id, id: $id} | format pattern "/legal_entities/{legal_entity_id}/administrations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -670,8 +670,8 @@ export def "legal-entities-administrations administration-by-legal_entity_id-id-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legal_entities/($legal_entity_id)/administrations/($id)")
-  let body = {email: $email, package_version: $package_version, packaging: $packaging, sender_email_identity_id: $sender_email_identity_id} | compact
+  let full_url = (build-url $base ({legal_entity_id: $legal_entity_id, id: $id} | format pattern "/legal_entities/{legal_entity_id}/administrations/{id}"))
+  let body = {"email": $email, "package_version": $package_version, "packaging": $packaging, "sender_email_identity_id": $sender_email_identity_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -701,8 +701,8 @@ export def "legal-entities-peppol-identifiers identifier-by-legal_entity_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legal_entities/($legal_entity_id)/peppol_identifiers")
-  let body = {corppass: $corppass, identifier: $identifier, scheme: $scheme, superscheme: $superscheme} | compact
+  let full_url = (build-url $base ({legal_entity_id: $legal_entity_id} | format pattern "/legal_entities/{legal_entity_id}/peppol_identifiers"))
+  let body = {"corppass": $corppass, "identifier": $identifier, "scheme": $scheme, "superscheme": $superscheme} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -729,7 +729,7 @@ export def "legal-entities-peppol-identifiers identifier-by-legal_entity_id-supe
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legal_entities/($legal_entity_id)/peppol_identifiers/($superscheme)/($scheme)/($identifier)")
+  let full_url = (build-url $base ({legal_entity_id: $legal_entity_id, superscheme: $superscheme, scheme: $scheme, identifier: $identifier} | format pattern "/legal_entities/{legal_entity_id}/peppol_identifiers/{superscheme}/{scheme}/{identifier}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -751,13 +751,13 @@ export def "legal-entities-received-documents documenht" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --document: string # The Base64 encoded document.
   --body-legal-entity-id: int # The of the LegalEntity this document was received for. (format: int64)
-  --parseStrategy: string@parseStrategy-completer # The attachment content type (mime type).
+  --parse-strategy: string@parse-strategy-completer # The attachment content type (mime type).
 ]: any -> record<guid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legal_entities/($legal_entity_id)/received_documents")
-  let body = {document: $document, legal_entity_id: $body_legal_entity_id, parseStrategy: $parseStrategy} | compact
+  let full_url = (build-url $base ({legal_entity_id: $legal_entity_id} | format pattern "/legal_entities/{legal_entity_id}/received_documents"))
+  let body = {"document": $document, "legal_entity_id": $body_legal_entity_id, "parseStrategy": $parse_strategy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -783,7 +783,7 @@ export def "purchase-invoices json" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pmv" $pmv "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/purchase_invoices/($guid)" $qp)
+  let full_url = (build-url $base ({guid: $guid} | format pattern "/purchase_invoices/{guid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -809,7 +809,7 @@ export def "purchase-invoices ubl" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pmv" $pmv "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/purchase_invoices/($guid)/($packaging)" $qp)
+  let full_url = (build-url $base ({guid: $guid, packaging: $packaging} | format pattern "/purchase_invoices/{guid}/{packaging}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -819,7 +819,7 @@ export def "purchase-invoices ubl" [
 #
 # GET /purchase_invoices/{guid}/{packaging}/{package_version}
 # operationId: get_invoice_ubl_versioned
-export def "purchase-invoices versioned" [
+export def "purchase-invoices version-ed" [
   guid: string
   packaging: string
   package_version: string
@@ -834,7 +834,7 @@ export def "purchase-invoices versioned" [
 ]: nothing -> record<external_key: string, external_user_id: string, guid: string, legal_entity_id: int, system_generated_primary_image: bool, tax_system: string, ubl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/purchase_invoices/($guid)/($packaging)/($package_version)")
+  let full_url = (build-url $base ({guid: $guid, packaging: $packaging, package_version: $package_version} | format pattern "/purchase_invoices/{guid}/{packaging}/{package_version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -855,13 +855,13 @@ export def "received-documents document" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --document: string # The Base64 encoded document.
   --legal-entity-id: int # The of the LegalEntity this document was received for. (format: int64)
-  --parseStrategy: string@parseStrategy-completer # The attachment content type (mime type).
+  --parse-strategy: string@parse-strategy-completer # The attachment content type (mime type).
 ]: any -> record<guid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/received_documents")
-  let body = {document: $document, legal_entity_id: $legal_entity_id, parseStrategy: $parseStrategy} | compact
+  let body = {"document": $document, "legal_entity_id": $legal_entity_id, "parseStrategy": $parse_strategy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -888,7 +888,7 @@ export def "received-documents document-by-guid-format" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "syntax" $syntax "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/received_documents/($guid)/($format)" $qp)
+  let full_url = (build-url $base ({guid: $guid, format: $format} | format pattern "/received_documents/{guid}/{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -933,7 +933,7 @@ export def "webhook-instances instance" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhook_instances/($guid)")
+  let full_url = (build-url $base ({guid: $guid} | format pattern "/webhook_instances/{guid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

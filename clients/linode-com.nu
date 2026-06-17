@@ -142,7 +142,7 @@ export def "account get" [
 # operationId: updateAccount
 # --active_promotions item shape: {credit_monthly_cap?: string, credit_remaining?: string, description?: string, expire_dt?: string, image_url?: string, service_type?: "all"|"backup"|"blockstorage"|"db_mysql"|"ip_v4"|"linode"|"linode_disk"|"linode_memory"|"longview"|"managed"|"nodebalancer"|"objectstorage"|"transfer_tx", summary?: string, this_month_credit_remaining?: string}
 # --credit_card shape: {expiry?: string, last_four?: string}
-export def "account updateAccount" [
+export def "account update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "account updateAccount" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account")
-  let body = {address_1: $address_1, address_2: $address_2, city: $city, company: $company, country: $country, email: $email, first_name: $first_name, last_name: $last_name, phone: $phone, state: $state, tax_id: $tax_id, zip: $zip} | compact
+  let body = {"address_1": $address_1, "address_2": $address_2, "city": $city, "company": $company, "country": $country, "email": $email, "first_name": $first_name, "last_name": $last_name, "phone": $phone, "state": $state, "tax_id": $tax_id, "zip": $zip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -179,7 +179,7 @@ export def "account updateAccount" [
 #
 # POST /account/cancel
 # operationId: cancelAccount
-export def "account-cancel cancelAccount" [
+export def "account-cancel cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "account-cancel cancelAccount" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/cancel")
-  let body = {comments: $comments} | compact
+  let body = {"comments": $comments} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -207,7 +207,7 @@ export def "account-cancel cancelAccount" [
 # DEPRECATED
 # operationId: createCreditCard
 @deprecated
-export def "account-credit-card createCreditCard" [
+export def "account-credit-card create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +225,7 @@ export def "account-credit-card createCreditCard" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/credit-card")
-  let body = {card_number: $card_number, cvv: $cvv, expiry_month: $expiry_month, expiry_year: $expiry_year} | compact
+  let body = {"card_number": $card_number, "cvv": $cvv, "expiry_month": $expiry_month, "expiry_year": $expiry_year} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -265,7 +265,7 @@ export def "account-entity-transfers list" [
 # DEPRECATED
 # operationId: createEntityTransfer
 @deprecated
-export def "account-entity-transfers createEntityTransfer" [
+export def "account-entity-transfers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "account-entity-transfers createEntityTransfer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/entity-transfers")
-  let body = {entities: $entities} | compact
+  let body = {"entities": $entities} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -294,7 +294,7 @@ export def "account-entity-transfers createEntityTransfer" [
 # operationId: deleteEntityTransfer
 @deprecated
 export def "account-entity-transfers delete" [
-  token: string
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "account-entity-transfers delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/entity-transfers/($token)")
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/account/entity-transfers/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -319,7 +319,7 @@ export def "account-entity-transfers delete" [
 # operationId: getEntityTransfer
 @deprecated
 export def "account-entity-transfers get" [
-  token: string
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "account-entity-transfers get" [
 ]: nothing -> record<created: string, entities: record<linodes: list<int>>, expiry: string, is_sender: bool, status: string, token: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/entity-transfers/($token)")
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/account/entity-transfers/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,7 +344,7 @@ export def "account-entity-transfers get" [
 # operationId: acceptEntityTransfer
 @deprecated
 export def "account-entity-transfers-accept acceptEntityTransfer" [
-  token: string
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,7 +356,7 @@ export def "account-entity-transfers-accept acceptEntityTransfer" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/entity-transfers/($token)/accept")
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/account/entity-transfers/{token_arg}/accept"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -392,7 +392,7 @@ export def "account-events list" [
 # GET /account/events/{eventId}
 # operationId: getEvent
 export def "account-events get" [
-  eventId: int
+  event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,7 +404,7 @@ export def "account-events get" [
 ]: nothing -> record<action: string, created: string, duration: float, entity: record<id: int, label: string, type: string, url: string>, id: int, message: string, percent_complete: int, rate: string, read: bool, secondary_entity: record<id: string, label: string, type: string, url: string>, seen: bool, status: string, time_remaining: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/events/($eventId)")
+  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/account/events/{event_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -415,7 +415,7 @@ export def "account-events get" [
 # POST /account/events/{eventId}/read
 # operationId: eventRead
 export def "account-events-read eventRead" [
-  eventId: int
+  event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "account-events-read eventRead" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/events/($eventId)/read")
+  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/account/events/{event_id}/read"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -438,7 +438,7 @@ export def "account-events-read eventRead" [
 # POST /account/events/{eventId}/seen
 # operationId: eventSeen
 export def "account-events-seen eventSeen" [
-  eventId: int
+  event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +450,7 @@ export def "account-events-seen eventSeen" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/events/($eventId)/seen")
+  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/account/events/{event_id}/seen"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -486,7 +486,7 @@ export def "account-invoices list" [
 # GET /account/invoices/{invoiceId}
 # operationId: getInvoice
 export def "account-invoices get" [
-  invoiceId: int
+  invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -498,7 +498,7 @@ export def "account-invoices get" [
 ]: nothing -> record<date: string, id: int, label: string, subtotal: float, tax: float, tax_summary: table<name: string, tax: float>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/invoices/($invoiceId)")
+  let full_url = (build-url $base ({invoice_id: $invoice_id} | format pattern "/account/invoices/{invoice_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -509,7 +509,7 @@ export def "account-invoices get" [
 # GET /account/invoices/{invoiceId}/items
 # operationId: getInvoiceItems
 export def "account-invoices-items get" [
-  invoiceId: int
+  invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -524,7 +524,7 @@ export def "account-invoices-items get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/invoices/($invoiceId)/items" $qp)
+  let full_url = (build-url $base ({invoice_id: $invoice_id} | format pattern "/account/invoices/{invoice_id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -557,7 +557,7 @@ export def "account-logins list" [
 # GET /account/logins/{loginId}
 # operationId: getAccountLogin
 export def "account-logins get" [
-  loginId: int
+  login_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,7 +569,7 @@ export def "account-logins get" [
 ]: nothing -> record<datetime: string, id: int, ip: string, restricted: bool, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/logins/($loginId)")
+  let full_url = (build-url $base ({login_id: $login_id} | format pattern "/account/logins/{login_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -648,7 +648,7 @@ export def "account-oauth-clients list" [
 #
 # POST /account/oauth-clients
 # operationId: createClient
-export def "account-oauth-clients createClient" [
+export def "account-oauth-clients create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,7 +665,7 @@ export def "account-oauth-clients createClient" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/oauth-clients")
-  let body = {label: $label, public: $public, redirect_uri: $redirect_uri} | compact
+  let body = {"label": $label, "public": $public, "redirect_uri": $redirect_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -677,7 +677,7 @@ export def "account-oauth-clients createClient" [
 # DELETE /account/oauth-clients/{clientId}
 # operationId: deleteClient
 export def "account-oauth-clients delete" [
-  clientId: string
+  client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,7 +689,7 @@ export def "account-oauth-clients delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/oauth-clients/($clientId)")
+  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/account/oauth-clients/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -700,7 +700,7 @@ export def "account-oauth-clients delete" [
 # GET /account/oauth-clients/{clientId}
 # operationId: getClient
 export def "account-oauth-clients get" [
-  clientId: string
+  client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -712,7 +712,7 @@ export def "account-oauth-clients get" [
 ]: nothing -> record<id: string, label: string, public: bool, redirect_uri: string, secret: string, status: string, thumbnail_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/oauth-clients/($clientId)")
+  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/account/oauth-clients/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -722,8 +722,8 @@ export def "account-oauth-clients get" [
 #
 # PUT /account/oauth-clients/{clientId}
 # operationId: updateClient
-export def "account-oauth-clients updateClient" [
-  clientId: string
+export def "account-oauth-clients update" [
+  client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,8 +739,8 @@ export def "account-oauth-clients updateClient" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/oauth-clients/($clientId)")
-  let body = {label: $label, public: $public, redirect_uri: $redirect_uri} | compact
+  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/account/oauth-clients/{client_id}"))
+  let body = {"label": $label, "public": $public, "redirect_uri": $redirect_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -751,8 +751,8 @@ export def "account-oauth-clients updateClient" [
 #
 # POST /account/oauth-clients/{clientId}/reset-secret
 # operationId: resetClientSecret
-export def "account-oauth-clients-reset-secret resetClientSecret" [
-  clientId: string
+export def "account-oauth-clients-reset-secret reset" [
+  client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -764,7 +764,7 @@ export def "account-oauth-clients-reset-secret resetClientSecret" [
 ]: nothing -> record<id: string, label: string, public: bool, redirect_uri: string, secret: string, status: string, thumbnail_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/oauth-clients/($clientId)/reset-secret")
+  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/account/oauth-clients/{client_id}/reset-secret"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -775,7 +775,7 @@ export def "account-oauth-clients-reset-secret resetClientSecret" [
 # GET /account/oauth-clients/{clientId}/thumbnail
 # operationId: getClientThumbnail
 export def "account-oauth-clients-thumbnail get" [
-  clientId: string
+  client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -787,7 +787,7 @@ export def "account-oauth-clients-thumbnail get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/oauth-clients/($clientId)/thumbnail")
+  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/account/oauth-clients/{client_id}/thumbnail"))
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -798,7 +798,7 @@ export def "account-oauth-clients-thumbnail get" [
 # PUT /account/oauth-clients/{clientId}/thumbnail
 # operationId: setClientThumbnail
 export def "account-oauth-clients-thumbnail setClientThumbnail" [
-  clientId: string
+  client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -812,7 +812,7 @@ export def "account-oauth-clients-thumbnail setClientThumbnail" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/oauth-clients/($clientId)/thumbnail")
+  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/account/oauth-clients/{client_id}/thumbnail"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -849,7 +849,7 @@ export def "account-payment-methods list" [
 # POST /account/payment-methods
 # operationId: createPaymentMethod
 # --data shape: {card_number: string, cvv: string, expiry_month: int, expiry_year: int}
-export def "account-payment-methods createPaymentMethod" [
+export def "account-payment-methods create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -866,7 +866,7 @@ export def "account-payment-methods createPaymentMethod" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let full_url = (build-url $base "/account/payment-methods")
-  let body = {data: $data, is_default: $is_default, type: $type} | compact
+  let body = {"data": $data, "is_default": $is_default, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -878,7 +878,7 @@ export def "account-payment-methods createPaymentMethod" [
 # DELETE /account/payment-methods/{paymentMethodId}
 # operationId: deletePaymentMethod
 export def "account-payment-methods delete" [
-  paymentMethodId: int
+  payment_method_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -890,7 +890,7 @@ export def "account-payment-methods delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/payment-methods/($paymentMethodId)")
+  let full_url = (build-url $base ({payment_method_id: $payment_method_id} | format pattern "/account/payment-methods/{payment_method_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -901,7 +901,7 @@ export def "account-payment-methods delete" [
 # GET /account/payment-methods/{paymentMethodId}
 # operationId: getPaymentMethod
 export def "account-payment-methods get" [
-  paymentMethodId: int
+  payment_method_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,7 +913,7 @@ export def "account-payment-methods get" [
 ]: nothing -> record<created: string, data: any, id: int, is_default: bool, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/account/payment-methods/($paymentMethodId)")
+  let full_url = (build-url $base ({payment_method_id: $payment_method_id} | format pattern "/account/payment-methods/{payment_method_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -924,7 +924,7 @@ export def "account-payment-methods get" [
 # POST /account/payment-methods/{paymentMethodId}/make-default
 # operationId: makePaymentMethodDefault
 export def "account-payment-methods-make-default makePaymentMethodDefault" [
-  paymentMethodId: int
+  payment_method_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -936,7 +936,7 @@ export def "account-payment-methods-make-default makePaymentMethodDefault" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/account/payment-methods/($paymentMethodId)/make-default")
+  let full_url = (build-url $base ({payment_method_id: $payment_method_id} | format pattern "/account/payment-methods/{payment_method_id}/make-default"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -971,7 +971,7 @@ export def "account-payments list" [
 #
 # POST /account/payments
 # operationId: createPayment
-export def "account-payments createPayment" [
+export def "account-payments create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -988,7 +988,7 @@ export def "account-payments createPayment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/payments")
-  let body = {cvv: $cvv, payment_method_id: $payment_method_id, usd: $usd} | compact
+  let body = {"cvv": $cvv, "payment_method_id": $payment_method_id, "usd": $usd} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1001,7 +1001,7 @@ export def "account-payments createPayment" [
 # DEPRECATED
 # operationId: createPayPalPayment
 @deprecated
-export def "account-payments-paypal createPayPalPayment" [
+export def "account-payments-paypal create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1018,7 +1018,7 @@ export def "account-payments-paypal createPayPalPayment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/payments/paypal")
-  let body = {cancel_url: $cancel_url, redirect_url: $redirect_url, usd: $usd} | compact
+  let body = {"cancel_url": $cancel_url, "redirect_url": $redirect_url, "usd": $usd} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1031,7 +1031,7 @@ export def "account-payments-paypal createPayPalPayment" [
 # DEPRECATED
 # operationId: executePayPalPayment
 @deprecated
-export def "account-payments-paypal-execute executePayPalPayment" [
+export def "account-payments-paypal-execute exec-ute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1047,7 +1047,7 @@ export def "account-payments-paypal-execute executePayPalPayment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/payments/paypal/execute")
-  let body = {payer_id: $payer_id, payment_id: $payment_id} | compact
+  let body = {"payer_id": $payer_id, "payment_id": $payment_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1059,7 +1059,7 @@ export def "account-payments-paypal-execute executePayPalPayment" [
 # GET /account/payments/{paymentId}
 # operationId: getPayment
 export def "account-payments get" [
-  paymentId: int
+  payment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1071,7 +1071,7 @@ export def "account-payments get" [
 ]: nothing -> record<date: string, id: int, usd: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/payments/($paymentId)")
+  let full_url = (build-url $base ({payment_id: $payment_id} | format pattern "/account/payments/{payment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1081,7 +1081,7 @@ export def "account-payments get" [
 #
 # POST /account/promo-codes
 # operationId: createPromoCredit
-export def "account-promo-codes createPromoCredit" [
+export def "account-promo-codes create-promo-credit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1096,7 +1096,7 @@ export def "account-promo-codes createPromoCredit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/promo-codes")
-  let body = {promo_code: $promo_code} | compact
+  let body = {"promo_code": $promo_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1132,7 +1132,7 @@ export def "account-service-transfers list" [
 #
 # POST /account/service-transfers
 # operationId: createServiceTransfer
-export def "account-service-transfers createServiceTransfer" [
+export def "account-service-transfers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1147,7 +1147,7 @@ export def "account-service-transfers createServiceTransfer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/service-transfers")
-  let body = {entities: $entities} | compact
+  let body = {"entities": $entities} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1159,7 +1159,7 @@ export def "account-service-transfers createServiceTransfer" [
 # DELETE /account/service-transfers/{token}
 # operationId: deleteServiceTransfer
 export def "account-service-transfers delete" [
-  token: string
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1171,7 +1171,7 @@ export def "account-service-transfers delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/service-transfers/($token)")
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/account/service-transfers/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1182,7 +1182,7 @@ export def "account-service-transfers delete" [
 # GET /account/service-transfers/{token}
 # operationId: getServiceTransfer
 export def "account-service-transfers get" [
-  token: string
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,7 +1194,7 @@ export def "account-service-transfers get" [
 ]: nothing -> record<created: string, entities: record<linodes: list<int>>, expiry: string, is_sender: bool, status: string, token: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/service-transfers/($token)")
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/account/service-transfers/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1205,7 +1205,7 @@ export def "account-service-transfers get" [
 # POST /account/service-transfers/{token}/accept
 # operationId: acceptServiceTransfer
 export def "account-service-transfers-accept acceptServiceTransfer" [
-  token: string
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1217,7 +1217,7 @@ export def "account-service-transfers-accept acceptServiceTransfer" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/service-transfers/($token)/accept")
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/account/service-transfers/{token_arg}/accept"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1249,7 +1249,7 @@ export def "account-settings get" [
 #
 # PUT /account/settings
 # operationId: updateAccountSettings
-export def "account-settings updateAccountSettings" [
+export def "account-settings update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1265,7 +1265,7 @@ export def "account-settings updateAccountSettings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/settings")
-  let body = {backups_enabled: $backups_enabled, network_helper: $network_helper} | compact
+  let body = {"backups_enabled": $backups_enabled, "network_helper": $network_helper} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1276,7 +1276,7 @@ export def "account-settings updateAccountSettings" [
 #
 # POST /account/settings/managed-enable
 # operationId: enableAccountManaged
-export def "account-settings-managed-enable enableAccountManaged" [
+export def "account-settings-managed-enable enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1345,7 +1345,7 @@ export def "account-users list" [
 #
 # POST /account/users
 # operationId: createUser
-export def "account-users createUser" [
+export def "account-users create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1362,7 +1362,7 @@ export def "account-users createUser" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/users")
-  let body = {email: $email, restricted: $restricted, username: $username} | compact
+  let body = {"email": $email, "restricted": $restricted, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1386,7 +1386,7 @@ export def "account-users delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/users/($username)")
+  let full_url = (build-url $base ({username: $username} | format pattern "/account/users/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1409,7 +1409,7 @@ export def "account-users get" [
 ]: nothing -> record<email: string, restricted: bool, ssh_keys: list<string>, tfa_enabled: bool, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/users/($username)")
+  let full_url = (build-url $base ({username: $username} | format pattern "/account/users/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1419,7 +1419,7 @@ export def "account-users get" [
 #
 # PUT /account/users/{username}
 # operationId: updateUser
-export def "account-users updateUser" [
+export def "account-users update" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1436,8 +1436,8 @@ export def "account-users updateUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/users/($username)")
-  let body = {email: $email, restricted: $restricted, username: $body_username} | compact
+  let full_url = (build-url $base ({username: $username} | format pattern "/account/users/{username}"))
+  let body = {"email": $email, "restricted": $restricted, "username": $body_username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1461,7 +1461,7 @@ export def "account-users-grants get" [
 ]: nothing -> record<database: table<id: int, label: string, permissions: string>, domain: table<id: int, label: string, permissions: string>, global: record<account_access: string, add_databases: bool, add_domains: bool, add_firewalls: bool, add_images: bool, add_linodes: bool, add_longview: bool, add_nodebalancers: bool, add_stackscripts: bool, add_volumes: bool, cancel_account: bool, longview_subscription: bool>, image: table<id: int, label: string, permissions: string>, linode: table<id: int, label: string, permissions: string>, longview: table<id: int, label: string, permissions: string>, nodebalancer: table<id: int, label: string, permissions: string>, stackscript: table<id: int, label: string, permissions: string>, volume: table<id: int, label: string, permissions: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/users/($username)/grants")
+  let full_url = (build-url $base ({username: $username} | format pattern "/account/users/{username}/grants"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1480,7 +1480,7 @@ export def "account-users-grants get" [
 # --nodebalancer item shape: {id?: int, permissions?: "read_only"|"read_write"}
 # --stackscript item shape: {id?: int, permissions?: "read_only"|"read_write"}
 # --volume item shape: {id?: int, permissions?: "read_only"|"read_write"}
-export def "account-users-grants updateUserGrants" [
+export def "account-users-grants update" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1503,8 +1503,8 @@ export def "account-users-grants updateUserGrants" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/users/($username)/grants")
-  let body = {database: $database, domain: $domain, global: $global, image: $image, linode: $linode, longview: $longview, nodebalancer: $nodebalancer, stackscript: $stackscript, volume: $volume} | compact
+  let full_url = (build-url $base ({username: $username} | format pattern "/account/users/{username}/grants"))
+  let body = {"database": $database, "domain": $domain, "global": $global, "image": $image, "linode": $linode, "longview": $longview, "nodebalancer": $nodebalancer, "stackscript": $stackscript, "volume": $volume} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1541,7 +1541,7 @@ export def "databases-engines list" [
 # GET /databases/engines/{engineId}
 # operationId: getDatabasesEngine
 export def "databases-engines get" [
-  engineId: string
+  engine_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1556,7 +1556,7 @@ export def "databases-engines get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/databases/engines/($engineId)" $qp)
+  let full_url = (build-url $base ({engine_id: $engine_id} | format pattern "/databases/engines/{engine_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1617,7 +1617,7 @@ export def "databases-mongodb-instances list" [
 # DELETE /databases/mongodb/instances/{instanceId}
 # operationId: deleteDatabasesMongoDBInstance
 export def "databases-mongodb-instances delete" [
-  instanceId: int
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1629,7 +1629,7 @@ export def "databases-mongodb-instances delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mongodb/instances/($instanceId)")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mongodb/instances/{instance_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1640,7 +1640,7 @@ export def "databases-mongodb-instances delete" [
 # GET /databases/mongodb/instances/{instanceId}
 # operationId: getDatabasesMongoDBInstance
 export def "databases-mongodb-instances get" [
-  instanceId: int
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1652,7 +1652,7 @@ export def "databases-mongodb-instances get" [
 ]: nothing -> record<allow_list: any, cluster_size: any, compression_type: string, created: any, encrypted: any, engine: string, hosts: record<primary: string, secondary: string>, id: any, label: any, peers: list<string>, port: int, region: any, replica_set: string, ssl_connection: bool, status: any, storage_engine: string, type: any, updated: any, updates: any, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mongodb/instances/($instanceId)")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mongodb/instances/{instance_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1662,8 +1662,8 @@ export def "databases-mongodb-instances get" [
 #
 # PUT /databases/mongodb/instances/{instanceId}
 # operationId: putDatabasesMongoDBInstance
-export def "databases-mongodb-instances put" [
-  instanceId: int
+export def "databases-mongodb-instances update" [
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1679,8 +1679,8 @@ export def "databases-mongodb-instances put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mongodb/instances/($instanceId)")
-  let body = {allow_list: $allow_list, label: $label, updates: $updates} | compact
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mongodb/instances/{instance_id}"))
+  let body = {"allow_list": $allow_list, "label": $label, "updates": $updates} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1692,7 +1692,7 @@ export def "databases-mongodb-instances put" [
 # GET /databases/mongodb/instances/{instanceId}/backups
 # operationId: getDatabasesMongoDBInstanceBackups
 export def "databases-mongodb-instances-backups list" [
-  instanceId: int
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1707,7 +1707,7 @@ export def "databases-mongodb-instances-backups list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/databases/mongodb/instances/($instanceId)/backups" $qp)
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mongodb/instances/{instance_id}/backups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1717,8 +1717,8 @@ export def "databases-mongodb-instances-backups list" [
 #
 # POST /databases/mongodb/instances/{instanceId}/backups
 # operationId: postDatabasesMongoDBInstanceBackup
-export def "databases-mongodb-instances-backups post" [
-  instanceId: int
+export def "databases-mongodb-instances-backups create" [
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1733,8 +1733,8 @@ export def "databases-mongodb-instances-backups post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mongodb/instances/($instanceId)/backups")
-  let body = {label: $label, target: $target} | compact
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mongodb/instances/{instance_id}/backups"))
+  let body = {"label": $label, "target": $target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1746,8 +1746,8 @@ export def "databases-mongodb-instances-backups post" [
 # DELETE /databases/mongodb/instances/{instanceId}/backups/{backupId}
 # operationId: deleteDatabaseMongoDBInstanceBackup
 export def "databases-mongodb-instances-backups delete" [
-  instanceId: int
-  backupId: int
+  instance_id: int
+  backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1759,7 +1759,7 @@ export def "databases-mongodb-instances-backups delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mongodb/instances/($instanceId)/backups/($backupId)")
+  let full_url = (build-url $base ({instance_id: $instance_id, backup_id: $backup_id} | format pattern "/databases/mongodb/instances/{instance_id}/backups/{backup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1770,8 +1770,8 @@ export def "databases-mongodb-instances-backups delete" [
 # GET /databases/mongodb/instances/{instanceId}/backups/{backupId}
 # operationId: getDatabasesMongoDBInstanceBackup
 export def "databases-mongodb-instances-backups get" [
-  instanceId: int
-  backupId: int
+  instance_id: int
+  backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1783,7 +1783,7 @@ export def "databases-mongodb-instances-backups get" [
 ]: nothing -> record<created: string, id: int, label: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mongodb/instances/($instanceId)/backups/($backupId)")
+  let full_url = (build-url $base ({instance_id: $instance_id, backup_id: $backup_id} | format pattern "/databases/mongodb/instances/{instance_id}/backups/{backup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1793,9 +1793,9 @@ export def "databases-mongodb-instances-backups get" [
 #
 # POST /databases/mongodb/instances/{instanceId}/backups/{backupId}/restore
 # operationId: postDatabasesMongoDBInstanceBackupRestore
-export def "databases-mongodb-instances-backups-restore post" [
-  instanceId: int
-  backupId: int
+export def "databases-mongodb-instances-backups-restore create" [
+  instance_id: int
+  backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1807,7 +1807,7 @@ export def "databases-mongodb-instances-backups-restore post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mongodb/instances/($instanceId)/backups/($backupId)/restore")
+  let full_url = (build-url $base ({instance_id: $instance_id, backup_id: $backup_id} | format pattern "/databases/mongodb/instances/{instance_id}/backups/{backup_id}/restore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1818,7 +1818,7 @@ export def "databases-mongodb-instances-backups-restore post" [
 # GET /databases/mongodb/instances/{instanceId}/credentials
 # operationId: getDatabasesMongoDBInstanceCredentials
 export def "databases-mongodb-instances-credentials get" [
-  instanceId: int
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1830,7 +1830,7 @@ export def "databases-mongodb-instances-credentials get" [
 ]: nothing -> record<password: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mongodb/instances/($instanceId)/credentials")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mongodb/instances/{instance_id}/credentials"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1840,8 +1840,8 @@ export def "databases-mongodb-instances-credentials get" [
 #
 # POST /databases/mongodb/instances/{instanceId}/credentials/reset
 # operationId: postDatabasesMongoDBInstanceCredentialsReset
-export def "databases-mongodb-instances-credentials-reset post" [
-  instanceId: int
+export def "databases-mongodb-instances-credentials-reset create" [
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1853,7 +1853,7 @@ export def "databases-mongodb-instances-credentials-reset post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mongodb/instances/($instanceId)/credentials/reset")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mongodb/instances/{instance_id}/credentials/reset"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1863,8 +1863,8 @@ export def "databases-mongodb-instances-credentials-reset post" [
 #
 # POST /databases/mongodb/instances/{instanceId}/patch
 # operationId: postDatabasesMongoDBInstancePatch
-export def "databases-mongodb-instances-patch post" [
-  instanceId: int
+export def "databases-mongodb-instances-patch create" [
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1876,7 +1876,7 @@ export def "databases-mongodb-instances-patch post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mongodb/instances/($instanceId)/patch")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mongodb/instances/{instance_id}/patch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1887,7 +1887,7 @@ export def "databases-mongodb-instances-patch post" [
 # GET /databases/mongodb/instances/{instanceId}/ssl
 # operationId: getDatabasesMongoDBInstanceSSL
 export def "databases-mongodb-instances-ssl get" [
-  instanceId: int
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1899,7 +1899,7 @@ export def "databases-mongodb-instances-ssl get" [
 ]: nothing -> record<ca_certificate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mongodb/instances/($instanceId)/ssl")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mongodb/instances/{instance_id}/ssl"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1934,7 +1934,7 @@ export def "databases-mysql-instances list" [
 #
 # POST /databases/mysql/instances
 # operationId: postDatabasesMySQLInstances
-export def "databases-mysql-instances post" [
+export def "databases-mysql-instances create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1957,7 +1957,7 @@ export def "databases-mysql-instances post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let full_url = (build-url $base "/databases/mysql/instances")
-  let body = {allow_list: $allow_list, cluster_size: $cluster_size, encrypted: $encrypted, engine: $engine, label: $label, region: $region, replication_type: $replication_type, ssl_connection: $ssl_connection, type: $type} | compact
+  let body = {"allow_list": $allow_list, "cluster_size": $cluster_size, "encrypted": $encrypted, "engine": $engine, "label": $label, "region": $region, "replication_type": $replication_type, "ssl_connection": $ssl_connection, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1969,7 +1969,7 @@ export def "databases-mysql-instances post" [
 # DELETE /databases/mysql/instances/{instanceId}
 # operationId: deleteDatabasesMySQLInstance
 export def "databases-mysql-instances delete" [
-  instanceId: int
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1981,7 +1981,7 @@ export def "databases-mysql-instances delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mysql/instances/($instanceId)")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mysql/instances/{instance_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1992,7 +1992,7 @@ export def "databases-mysql-instances delete" [
 # GET /databases/mysql/instances/{instanceId}
 # operationId: getDatabasesMySQLInstance
 export def "databases-mysql-instances get" [
-  instanceId: int
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2004,7 +2004,7 @@ export def "databases-mysql-instances get" [
 ]: nothing -> record<allow_list: any, cluster_size: any, created: any, encrypted: any, engine: string, hosts: any, id: any, label: any, port: int, region: any, replication_type: string, ssl_connection: bool, status: any, type: any, updated: any, updates: any, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mysql/instances/($instanceId)")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mysql/instances/{instance_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2014,8 +2014,8 @@ export def "databases-mysql-instances get" [
 #
 # PUT /databases/mysql/instances/{instanceId}
 # operationId: putDatabasesMySQLInstance
-export def "databases-mysql-instances put" [
-  instanceId: int
+export def "databases-mysql-instances update" [
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2031,8 +2031,8 @@ export def "databases-mysql-instances put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mysql/instances/($instanceId)")
-  let body = {allow_list: $allow_list, label: $label, updates: $updates} | compact
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mysql/instances/{instance_id}"))
+  let body = {"allow_list": $allow_list, "label": $label, "updates": $updates} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2044,7 +2044,7 @@ export def "databases-mysql-instances put" [
 # GET /databases/mysql/instances/{instanceId}/backups
 # operationId: getDatabasesMySQLInstanceBackups
 export def "databases-mysql-instances-backups list" [
-  instanceId: int
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2059,7 +2059,7 @@ export def "databases-mysql-instances-backups list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/databases/mysql/instances/($instanceId)/backups" $qp)
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mysql/instances/{instance_id}/backups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2069,8 +2069,8 @@ export def "databases-mysql-instances-backups list" [
 #
 # POST /databases/mysql/instances/{instanceId}/backups
 # operationId: postDatabasesMySQLInstanceBackup
-export def "databases-mysql-instances-backups post" [
-  instanceId: int
+export def "databases-mysql-instances-backups create" [
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2085,8 +2085,8 @@ export def "databases-mysql-instances-backups post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mysql/instances/($instanceId)/backups")
-  let body = {label: $label, target: $target} | compact
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mysql/instances/{instance_id}/backups"))
+  let body = {"label": $label, "target": $target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2098,8 +2098,8 @@ export def "databases-mysql-instances-backups post" [
 # DELETE /databases/mysql/instances/{instanceId}/backups/{backupId}
 # operationId: deleteDatabaseMySQLInstanceBackup
 export def "databases-mysql-instances-backups delete" [
-  instanceId: int
-  backupId: int
+  instance_id: int
+  backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2111,7 +2111,7 @@ export def "databases-mysql-instances-backups delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mysql/instances/($instanceId)/backups/($backupId)")
+  let full_url = (build-url $base ({instance_id: $instance_id, backup_id: $backup_id} | format pattern "/databases/mysql/instances/{instance_id}/backups/{backup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2122,8 +2122,8 @@ export def "databases-mysql-instances-backups delete" [
 # GET /databases/mysql/instances/{instanceId}/backups/{backupId}
 # operationId: getDatabasesMySQLInstanceBackup
 export def "databases-mysql-instances-backups get" [
-  instanceId: int
-  backupId: int
+  instance_id: int
+  backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2135,7 +2135,7 @@ export def "databases-mysql-instances-backups get" [
 ]: nothing -> record<created: string, id: int, label: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mysql/instances/($instanceId)/backups/($backupId)")
+  let full_url = (build-url $base ({instance_id: $instance_id, backup_id: $backup_id} | format pattern "/databases/mysql/instances/{instance_id}/backups/{backup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2145,9 +2145,9 @@ export def "databases-mysql-instances-backups get" [
 #
 # POST /databases/mysql/instances/{instanceId}/backups/{backupId}/restore
 # operationId: postDatabasesMySQLInstanceBackupRestore
-export def "databases-mysql-instances-backups-restore post" [
-  instanceId: int
-  backupId: int
+export def "databases-mysql-instances-backups-restore create" [
+  instance_id: int
+  backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2159,7 +2159,7 @@ export def "databases-mysql-instances-backups-restore post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mysql/instances/($instanceId)/backups/($backupId)/restore")
+  let full_url = (build-url $base ({instance_id: $instance_id, backup_id: $backup_id} | format pattern "/databases/mysql/instances/{instance_id}/backups/{backup_id}/restore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2170,7 +2170,7 @@ export def "databases-mysql-instances-backups-restore post" [
 # GET /databases/mysql/instances/{instanceId}/credentials
 # operationId: getDatabasesMySQLInstanceCredentials
 export def "databases-mysql-instances-credentials get" [
-  instanceId: int
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2182,7 +2182,7 @@ export def "databases-mysql-instances-credentials get" [
 ]: nothing -> record<password: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mysql/instances/($instanceId)/credentials")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mysql/instances/{instance_id}/credentials"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2192,8 +2192,8 @@ export def "databases-mysql-instances-credentials get" [
 #
 # POST /databases/mysql/instances/{instanceId}/credentials/reset
 # operationId: postDatabasesMySQLInstanceCredentialsReset
-export def "databases-mysql-instances-credentials-reset post" [
-  instanceId: int
+export def "databases-mysql-instances-credentials-reset create" [
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2205,7 +2205,7 @@ export def "databases-mysql-instances-credentials-reset post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mysql/instances/($instanceId)/credentials/reset")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mysql/instances/{instance_id}/credentials/reset"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2215,8 +2215,8 @@ export def "databases-mysql-instances-credentials-reset post" [
 #
 # POST /databases/mysql/instances/{instanceId}/patch
 # operationId: postDatabasesMySQLInstancePatch
-export def "databases-mysql-instances-patch post" [
-  instanceId: int
+export def "databases-mysql-instances-patch create" [
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2228,7 +2228,7 @@ export def "databases-mysql-instances-patch post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mysql/instances/($instanceId)/patch")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mysql/instances/{instance_id}/patch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2239,7 +2239,7 @@ export def "databases-mysql-instances-patch post" [
 # GET /databases/mysql/instances/{instanceId}/ssl
 # operationId: getDatabasesMySQLInstanceSSL
 export def "databases-mysql-instances-ssl get" [
-  instanceId: int
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2251,7 +2251,7 @@ export def "databases-mysql-instances-ssl get" [
 ]: nothing -> record<ca_certificate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/mysql/instances/($instanceId)/ssl")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/mysql/instances/{instance_id}/ssl"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2286,7 +2286,7 @@ export def "databases-postgresql-instances list" [
 #
 # POST /databases/postgresql/instances
 # operationId: postDatabasesPostgreSQLInstances
-export def "databases-postgresql-instances post" [
+export def "databases-postgresql-instances create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2310,7 +2310,7 @@ export def "databases-postgresql-instances post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let full_url = (build-url $base "/databases/postgresql/instances")
-  let body = {allow_list: $allow_list, cluster_size: $cluster_size, encrypted: $encrypted, engine: $engine, label: $label, region: $region, replication_commit_type: $replication_commit_type, replication_type: $replication_type, ssl_connection: $ssl_connection, type: $type} | compact
+  let body = {"allow_list": $allow_list, "cluster_size": $cluster_size, "encrypted": $encrypted, "engine": $engine, "label": $label, "region": $region, "replication_commit_type": $replication_commit_type, "replication_type": $replication_type, "ssl_connection": $ssl_connection, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2322,7 +2322,7 @@ export def "databases-postgresql-instances post" [
 # DELETE /databases/postgresql/instances/{instanceId}
 # operationId: deleteDatabasesPostgreSQLInstance
 export def "databases-postgresql-instances delete" [
-  instanceId: int
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2334,7 +2334,7 @@ export def "databases-postgresql-instances delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/postgresql/instances/($instanceId)")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/postgresql/instances/{instance_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2345,7 +2345,7 @@ export def "databases-postgresql-instances delete" [
 # GET /databases/postgresql/instances/{instanceId}
 # operationId: getDatabasesPostgreSQLInstance
 export def "databases-postgresql-instances get" [
-  instanceId: int
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2357,7 +2357,7 @@ export def "databases-postgresql-instances get" [
 ]: nothing -> record<allow_list: any, cluster_size: any, created: any, encrypted: any, engine: string, hosts: record<primary: string, secondary: string>, id: any, label: any, port: int, region: any, replication_commit_type: string, replication_type: string, ssl_connection: bool, status: any, type: any, updated: any, updates: any, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/postgresql/instances/($instanceId)")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/postgresql/instances/{instance_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2367,8 +2367,8 @@ export def "databases-postgresql-instances get" [
 #
 # PUT /databases/postgresql/instances/{instanceId}
 # operationId: putDatabasesPostgreSQLInstance
-export def "databases-postgresql-instances put" [
-  instanceId: int
+export def "databases-postgresql-instances update" [
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2384,8 +2384,8 @@ export def "databases-postgresql-instances put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/postgresql/instances/($instanceId)")
-  let body = {allow_list: $allow_list, label: $label, updates: $updates} | compact
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/postgresql/instances/{instance_id}"))
+  let body = {"allow_list": $allow_list, "label": $label, "updates": $updates} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2397,7 +2397,7 @@ export def "databases-postgresql-instances put" [
 # GET /databases/postgresql/instances/{instanceId}/backups
 # operationId: getDatabasesPostgreSQLInstanceBackups
 export def "databases-postgresql-instances-backups list" [
-  instanceId: int
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2412,7 +2412,7 @@ export def "databases-postgresql-instances-backups list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/databases/postgresql/instances/($instanceId)/backups" $qp)
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/postgresql/instances/{instance_id}/backups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2422,8 +2422,8 @@ export def "databases-postgresql-instances-backups list" [
 #
 # POST /databases/postgresql/instances/{instanceId}/backups
 # operationId: postDatabasesPostgreSQLInstanceBackup
-export def "databases-postgresql-instances-backups post" [
-  instanceId: int
+export def "databases-postgresql-instances-backups create" [
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2438,8 +2438,8 @@ export def "databases-postgresql-instances-backups post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/postgresql/instances/($instanceId)/backups")
-  let body = {label: $label, target: $target} | compact
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/postgresql/instances/{instance_id}/backups"))
+  let body = {"label": $label, "target": $target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2451,8 +2451,8 @@ export def "databases-postgresql-instances-backups post" [
 # DELETE /databases/postgresql/instances/{instanceId}/backups/{backupId}
 # operationId: deleteDatabasePostgreSQLInstanceBackup
 export def "databases-postgresql-instances-backups delete" [
-  instanceId: int
-  backupId: int
+  instance_id: int
+  backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2464,7 +2464,7 @@ export def "databases-postgresql-instances-backups delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/postgresql/instances/($instanceId)/backups/($backupId)")
+  let full_url = (build-url $base ({instance_id: $instance_id, backup_id: $backup_id} | format pattern "/databases/postgresql/instances/{instance_id}/backups/{backup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2475,8 +2475,8 @@ export def "databases-postgresql-instances-backups delete" [
 # GET /databases/postgresql/instances/{instanceId}/backups/{backupId}
 # operationId: getDatabasesPostgreSQLInstanceBackup
 export def "databases-postgresql-instances-backups get" [
-  instanceId: int
-  backupId: int
+  instance_id: int
+  backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2488,7 +2488,7 @@ export def "databases-postgresql-instances-backups get" [
 ]: nothing -> record<created: string, id: int, label: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/postgresql/instances/($instanceId)/backups/($backupId)")
+  let full_url = (build-url $base ({instance_id: $instance_id, backup_id: $backup_id} | format pattern "/databases/postgresql/instances/{instance_id}/backups/{backup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2498,9 +2498,9 @@ export def "databases-postgresql-instances-backups get" [
 #
 # POST /databases/postgresql/instances/{instanceId}/backups/{backupId}/restore
 # operationId: postDatabasesPostgreSQLInstanceBackupRestore
-export def "databases-postgresql-instances-backups-restore post" [
-  instanceId: int
-  backupId: int
+export def "databases-postgresql-instances-backups-restore create" [
+  instance_id: int
+  backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2512,7 +2512,7 @@ export def "databases-postgresql-instances-backups-restore post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/postgresql/instances/($instanceId)/backups/($backupId)/restore")
+  let full_url = (build-url $base ({instance_id: $instance_id, backup_id: $backup_id} | format pattern "/databases/postgresql/instances/{instance_id}/backups/{backup_id}/restore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2523,7 +2523,7 @@ export def "databases-postgresql-instances-backups-restore post" [
 # GET /databases/postgresql/instances/{instanceId}/credentials
 # operationId: getDatabasesPostgreSQLInstanceCredentials
 export def "databases-postgresql-instances-credentials get" [
-  instanceId: int
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2535,7 +2535,7 @@ export def "databases-postgresql-instances-credentials get" [
 ]: nothing -> record<password: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/postgresql/instances/($instanceId)/credentials")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/postgresql/instances/{instance_id}/credentials"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2545,8 +2545,8 @@ export def "databases-postgresql-instances-credentials get" [
 #
 # POST /databases/postgresql/instances/{instanceId}/credentials/reset
 # operationId: postDatabasesPostgreSQLInstanceCredentialsReset
-export def "databases-postgresql-instances-credentials-reset post" [
-  instanceId: int
+export def "databases-postgresql-instances-credentials-reset create" [
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2558,7 +2558,7 @@ export def "databases-postgresql-instances-credentials-reset post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/postgresql/instances/($instanceId)/credentials/reset")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/postgresql/instances/{instance_id}/credentials/reset"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2568,8 +2568,8 @@ export def "databases-postgresql-instances-credentials-reset post" [
 #
 # POST /databases/postgresql/instances/{instanceId}/patch
 # operationId: postDatabasesPostgreSQLInstancePatch
-export def "databases-postgresql-instances-patch post" [
-  instanceId: int
+export def "databases-postgresql-instances-patch create" [
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2581,7 +2581,7 @@ export def "databases-postgresql-instances-patch post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/postgresql/instances/($instanceId)/patch")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/postgresql/instances/{instance_id}/patch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2592,7 +2592,7 @@ export def "databases-postgresql-instances-patch post" [
 # GET /databases/postgresql/instances/{instanceId}/ssl
 # operationId: getDatabasesPostgreSQLInstanceSSL
 export def "databases-postgresql-instances-ssl get" [
-  instanceId: int
+  instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2604,7 +2604,7 @@ export def "databases-postgresql-instances-ssl get" [
 ]: nothing -> record<ca_certificate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/databases/postgresql/instances/($instanceId)/ssl")
+  let full_url = (build-url $base ({instance_id: $instance_id} | format pattern "/databases/postgresql/instances/{instance_id}/ssl"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2640,7 +2640,7 @@ export def "databases-types list" [
 # GET /databases/types/{typeId}
 # operationId: getDatabasesType
 export def "databases-types get" [
-  typeId: string
+  type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2655,7 +2655,7 @@ export def "databases-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/databases/types/($typeId)" $qp)
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/databases/types/{type_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2691,7 +2691,7 @@ export def "domains list" [
 # POST /domains
 # operationId: createDomain
 @deprecated --flag group
-export def "domains createDomain" [
+export def "domains create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2718,7 +2718,7 @@ export def "domains createDomain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/domains")
-  let body = {axfr_ips: $axfr_ips, description: $description, domain: $domain, expire_sec: $expire_sec, group: $group, master_ips: $master_ips, refresh_sec: $refresh_sec, retry_sec: $retry_sec, soa_email: $soa_email, status: $status, tags: $tags, ttl_sec: $ttl_sec, type: $type} | compact
+  let body = {"axfr_ips": $axfr_ips, "description": $description, "domain": $domain, "expire_sec": $expire_sec, "group": $group, "master_ips": $master_ips, "refresh_sec": $refresh_sec, "retry_sec": $retry_sec, "soa_email": $soa_email, "status": $status, "tags": $tags, "ttl_sec": $ttl_sec, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2729,7 +2729,7 @@ export def "domains createDomain" [
 #
 # POST /domains/import
 # operationId: importDomain
-export def "domains-import importDomain" [
+export def "domains-import import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2745,7 +2745,7 @@ export def "domains-import importDomain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/domains/import")
-  let body = {domain: $domain, remote_nameserver: $remote_nameserver} | compact
+  let body = {"domain": $domain, "remote_nameserver": $remote_nameserver} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2757,7 +2757,7 @@ export def "domains-import importDomain" [
 # DELETE /domains/{domainId}
 # operationId: deleteDomain
 export def "domains delete" [
-  domainId: int
+  domain_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2769,7 +2769,7 @@ export def "domains delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($domainId)")
+  let full_url = (build-url $base ({domain_id: $domain_id} | format pattern "/domains/{domain_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2780,7 +2780,7 @@ export def "domains delete" [
 # GET /domains/{domainId}
 # operationId: getDomain
 export def "domains get" [
-  domainId: int
+  domain_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2792,7 +2792,7 @@ export def "domains get" [
 ]: nothing -> record<axfr_ips: list<string>, description: string, domain: string, expire_sec: int, group: string, id: int, master_ips: list<string>, refresh_sec: int, retry_sec: int, soa_email: string, status: string, tags: list<string>, ttl_sec: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($domainId)")
+  let full_url = (build-url $base ({domain_id: $domain_id} | format pattern "/domains/{domain_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2803,8 +2803,8 @@ export def "domains get" [
 # PUT /domains/{domainId}
 # operationId: updateDomain
 @deprecated --flag group
-export def "domains updateDomain" [
-  domainId: int
+export def "domains update" [
+  domain_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2830,8 +2830,8 @@ export def "domains updateDomain" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($domainId)")
-  let body = {axfr_ips: $axfr_ips, description: $description, domain: $domain, expire_sec: $expire_sec, group: $group, master_ips: $master_ips, refresh_sec: $refresh_sec, retry_sec: $retry_sec, soa_email: $soa_email, status: $status, tags: $tags, ttl_sec: $ttl_sec, type: $type} | compact
+  let full_url = (build-url $base ({domain_id: $domain_id} | format pattern "/domains/{domain_id}"))
+  let body = {"axfr_ips": $axfr_ips, "description": $description, "domain": $domain, "expire_sec": $expire_sec, "group": $group, "master_ips": $master_ips, "refresh_sec": $refresh_sec, "retry_sec": $retry_sec, "soa_email": $soa_email, "status": $status, "tags": $tags, "ttl_sec": $ttl_sec, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2842,8 +2842,8 @@ export def "domains updateDomain" [
 #
 # POST /domains/{domainId}/clone
 # operationId: cloneDomain
-export def "domains-clone cloneDomain" [
-  domainId: string
+export def "domains-clone clone" [
+  domain_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2857,8 +2857,8 @@ export def "domains-clone cloneDomain" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($domainId)/clone")
-  let body = {domain: $domain} | compact
+  let full_url = (build-url $base ({domain_id: $domain_id} | format pattern "/domains/{domain_id}/clone"))
+  let body = {"domain": $domain} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2870,7 +2870,7 @@ export def "domains-clone cloneDomain" [
 # GET /domains/{domainId}/records
 # operationId: getDomainRecords
 export def "domains-records list" [
-  domainId: int
+  domain_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2885,7 +2885,7 @@ export def "domains-records list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/($domainId)/records" $qp)
+  let full_url = (build-url $base ({domain_id: $domain_id} | format pattern "/domains/{domain_id}/records") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2895,8 +2895,8 @@ export def "domains-records list" [
 #
 # POST /domains/{domainId}/records
 # operationId: createDomainRecord
-export def "domains-records createDomainRecord" [
-  domainId: int
+export def "domains-records create" [
+  domain_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2919,8 +2919,8 @@ export def "domains-records createDomainRecord" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($domainId)/records")
-  let body = {name: $name, port: $port, priority: $priority, protocol: $protocol, service: $service, tag: $tag, target: $target, ttl_sec: $ttl_sec, type: $type, weight: $weight} | compact
+  let full_url = (build-url $base ({domain_id: $domain_id} | format pattern "/domains/{domain_id}/records"))
+  let body = {"name": $name, "port": $port, "priority": $priority, "protocol": $protocol, "service": $service, "tag": $tag, "target": $target, "ttl_sec": $ttl_sec, "type": $type, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2932,8 +2932,8 @@ export def "domains-records createDomainRecord" [
 # DELETE /domains/{domainId}/records/{recordId}
 # operationId: deleteDomainRecord
 export def "domains-records delete" [
-  domainId: int
-  recordId: int
+  domain_id: int
+  record_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2945,7 +2945,7 @@ export def "domains-records delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($domainId)/records/($recordId)")
+  let full_url = (build-url $base ({domain_id: $domain_id, record_id: $record_id} | format pattern "/domains/{domain_id}/records/{record_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2956,8 +2956,8 @@ export def "domains-records delete" [
 # GET /domains/{domainId}/records/{recordId}
 # operationId: getDomainRecord
 export def "domains-records get" [
-  domainId: int
-  recordId: int
+  domain_id: int
+  record_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2969,7 +2969,7 @@ export def "domains-records get" [
 ]: nothing -> record<created: string, id: int, name: string, port: int, priority: int, protocol: string, service: string, tag: string, target: string, ttl_sec: int, type: string, updated: string, weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($domainId)/records/($recordId)")
+  let full_url = (build-url $base ({domain_id: $domain_id, record_id: $record_id} | format pattern "/domains/{domain_id}/records/{record_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2979,9 +2979,9 @@ export def "domains-records get" [
 #
 # PUT /domains/{domainId}/records/{recordId}
 # operationId: updateDomainRecord
-export def "domains-records updateDomainRecord" [
-  domainId: int
-  recordId: int
+export def "domains-records update" [
+  domain_id: int
+  record_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3003,8 +3003,8 @@ export def "domains-records updateDomainRecord" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($domainId)/records/($recordId)")
-  let body = {name: $name, port: $port, priority: $priority, protocol: $protocol, service: $service, tag: $tag, target: $target, ttl_sec: $ttl_sec, weight: $weight} | compact
+  let full_url = (build-url $base ({domain_id: $domain_id, record_id: $record_id} | format pattern "/domains/{domain_id}/records/{record_id}"))
+  let body = {"name": $name, "port": $port, "priority": $priority, "protocol": $protocol, "service": $service, "tag": $tag, "target": $target, "ttl_sec": $ttl_sec, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3016,7 +3016,7 @@ export def "domains-records updateDomainRecord" [
 # GET /domains/{domainId}/zone-file
 # operationId: getDomainZone
 export def "domains-zone-file get" [
-  domainId: string
+  domain_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3028,7 +3028,7 @@ export def "domains-zone-file get" [
 ]: nothing -> record<zone_file: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($domainId)/zone-file")
+  let full_url = (build-url $base ({domain_id: $domain_id} | format pattern "/domains/{domain_id}/zone-file"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3063,7 +3063,7 @@ export def "images list" [
 #
 # POST /images
 # operationId: createImage
-export def "images createImage" [
+export def "images create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3080,7 +3080,7 @@ export def "images createImage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/images")
-  let body = {description: $description, disk_id: $disk_id, label: $label} | compact
+  let body = {"description": $description, "disk_id": $disk_id, "label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3107,7 +3107,7 @@ export def "images-upload post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let full_url = (build-url $base "/images/upload")
-  let body = {description: $description, label: $label, region: $region} | compact
+  let body = {"description": $description, "label": $label, "region": $region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3119,7 +3119,7 @@ export def "images-upload post" [
 # DELETE /images/{imageId}
 # operationId: deleteImage
 export def "images delete" [
-  imageId: string
+  image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3131,7 +3131,7 @@ export def "images delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($imageId)")
+  let full_url = (build-url $base ({image_id: $image_id} | format pattern "/images/{image_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3142,7 +3142,7 @@ export def "images delete" [
 # GET /images/{imageId}
 # operationId: getImage
 export def "images get" [
-  imageId: string
+  image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3154,7 +3154,7 @@ export def "images get" [
 ]: nothing -> record<created: string, created_by: string, deprecated: bool, description: string, eol: string, expiry: string, id: string, is_public: bool, label: string, size: int, status: string, type: string, updated: string, vendor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($imageId)")
+  let full_url = (build-url $base ({image_id: $image_id} | format pattern "/images/{image_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3164,8 +3164,8 @@ export def "images get" [
 #
 # PUT /images/{imageId}
 # operationId: updateImage
-export def "images updateImage" [
-  imageId: string
+export def "images update" [
+  image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3180,8 +3180,8 @@ export def "images updateImage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($imageId)")
-  let body = {description: $description, label: $label} | compact
+  let full_url = (build-url $base ({image_id: $image_id} | format pattern "/images/{image_id}"))
+  let body = {"description": $description, "label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3218,7 +3218,7 @@ export def "linode-instances list" [
 # POST /linode/instances
 # operationId: createLinodeInstance
 # --interfaces item shape: {ipam_address?: string, label?: string, purpose?: "public"|"vlan"}
-export def "linode-instances createLinodeInstance" [
+export def "linode-instances create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3249,7 +3249,7 @@ export def "linode-instances createLinodeInstance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/linode/instances")
-  let body = {authorized_keys: $authorized_keys, authorized_users: $authorized_users, booted: $booted, image: $image, root_pass: $root_pass, stackscript_data: $stackscript_data, stackscript_id: $stackscript_id, backup_id: $backup_id, backups_enabled: $backups_enabled, group: $group, interfaces: $interfaces, label: $label, private_ip: $private_ip, region: $region, swap_size: $swap_size, tags: $tags, type: $type} | compact
+  let body = {"authorized_keys": $authorized_keys, "authorized_users": $authorized_users, "booted": $booted, "image": $image, "root_pass": $root_pass, "stackscript_data": $stackscript_data, "stackscript_id": $stackscript_id, "backup_id": $backup_id, "backups_enabled": $backups_enabled, "group": $group, "interfaces": $interfaces, "label": $label, "private_ip": $private_ip, "region": $region, "swap_size": $swap_size, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3261,7 +3261,7 @@ export def "linode-instances createLinodeInstance" [
 # DELETE /linode/instances/{linodeId}
 # operationId: deleteLinodeInstance
 export def "linode-instances delete" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3273,7 +3273,7 @@ export def "linode-instances delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)")
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3284,7 +3284,7 @@ export def "linode-instances delete" [
 # GET /linode/instances/{linodeId}
 # operationId: getLinodeInstance
 export def "linode-instances get" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3296,7 +3296,7 @@ export def "linode-instances get" [
 ]: nothing -> record<alerts: record<cpu: int, io: int, network_in: int, network_out: int, transfer_quota: int>, backups: record<available: bool, enabled: bool, last_successful: string, schedule: record<day: string, window: string>>, created: string, group: string, host_uuid: string, hypervisor: string, id: int, image: record, ipv4: list<string>, ipv6: string, label: string, region: string, specs: record<disk: int, memory: int, transfer: int, vcpus: int>, status: string, tags: list<string>, type: string, updated: string, watchdog_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)")
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3309,8 +3309,8 @@ export def "linode-instances get" [
 # --alerts shape: {cpu?: int, io?: int, network_in?: int, network_out?: int, transfer_quota?: int}
 # --backups shape: {schedule?: record}
 @deprecated --flag group
-export def "linode-instances updateLinodeInstance" [
-  linodeId: int
+export def "linode-instances update" [
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3329,8 +3329,8 @@ export def "linode-instances updateLinodeInstance" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)")
-  let body = {alerts: $alerts, backups: $backups, group: $group, label: $label, tags: $tags, watchdog_enabled: $watchdog_enabled} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}"))
+  let body = {"alerts": $alerts, "backups": $backups, "group": $group, "label": $label, "tags": $tags, "watchdog_enabled": $watchdog_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3342,7 +3342,7 @@ export def "linode-instances updateLinodeInstance" [
 # GET /linode/instances/{linodeId}/backups
 # operationId: getBackups
 export def "linode-instances-backups list" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3354,7 +3354,7 @@ export def "linode-instances-backups list" [
 ]: nothing -> record<automatic: table<available: bool, configs: list, created: string, disks: list, finished: string, id: int, label: string, status: string, type: string, updated: string>, snapshot: record<current: record<available: bool, configs: list, created: string, disks: list, finished: string, id: int, label: string, status: string, type: string, updated: string>, in_progress: record<available: bool, configs: list, created: string, disks: list, finished: string, id: int, label: string, status: string, type: string, updated: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/backups")
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/backups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3364,8 +3364,8 @@ export def "linode-instances-backups list" [
 #
 # POST /linode/instances/{linodeId}/backups
 # operationId: createSnapshot
-export def "linode-instances-backups createSnapshot" [
-  linodeId: int
+export def "linode-instances-backups create-snapshot" [
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3379,8 +3379,8 @@ export def "linode-instances-backups createSnapshot" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/backups")
-  let body = {label: $label} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/backups"))
+  let body = {"label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3391,8 +3391,8 @@ export def "linode-instances-backups createSnapshot" [
 #
 # POST /linode/instances/{linodeId}/backups/cancel
 # operationId: cancelBackups
-export def "linode-instances-backups-cancel cancelBackups" [
-  linodeId: int
+export def "linode-instances-backups-cancel cancel" [
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3404,7 +3404,7 @@ export def "linode-instances-backups-cancel cancelBackups" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/backups/cancel")
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/backups/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3414,8 +3414,8 @@ export def "linode-instances-backups-cancel cancelBackups" [
 #
 # POST /linode/instances/{linodeId}/backups/enable
 # operationId: enableBackups
-export def "linode-instances-backups-enable enableBackups" [
-  linodeId: int
+export def "linode-instances-backups-enable enable" [
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3427,7 +3427,7 @@ export def "linode-instances-backups-enable enableBackups" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/backups/enable")
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/backups/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3438,8 +3438,8 @@ export def "linode-instances-backups-enable enableBackups" [
 # GET /linode/instances/{linodeId}/backups/{backupId}
 # operationId: getBackup
 export def "linode-instances-backups get" [
-  linodeId: int
-  backupId: int
+  linode_id: int
+  backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3451,7 +3451,7 @@ export def "linode-instances-backups get" [
 ]: nothing -> record<available: bool, configs: list<string>, created: string, disks: table<filesystem: any, label: string, size: int>, finished: string, id: int, label: string, status: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/backups/($backupId)")
+  let full_url = (build-url $base ({linode_id: $linode_id, backup_id: $backup_id} | format pattern "/linode/instances/{linode_id}/backups/{backup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3462,8 +3462,8 @@ export def "linode-instances-backups get" [
 # POST /linode/instances/{linodeId}/backups/{backupId}/restore
 # operationId: restoreBackup
 export def "linode-instances-backups-restore restoreBackup" [
-  linodeId: int
-  backupId: int
+  linode_id: int
+  backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3472,14 +3472,14 @@ export def "linode-instances-backups-restore restoreBackup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  linode_id: int # The ID of the Linode to restore a Backup to.  (e.g. 234)
+  --body-linode-id: int # The ID of the Linode to restore a Backup to.  (e.g. 234)
   --overwrite: oneof<nothing, bool> # If True, deletes all Disks and Configs on the target Linode before restoring.  If False, and the Disk image size is larger than the available space on the Linode, an error message indicating insufficient space is returned.  (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/backups/($backupId)/restore")
-  let body = {linode_id: $linode_id, overwrite: $overwrite} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id, backup_id: $backup_id} | format pattern "/linode/instances/{linode_id}/backups/{backup_id}/restore"))
+  let body = {"linode_id": $body_linode_id, "overwrite": $overwrite} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3491,7 +3491,7 @@ export def "linode-instances-backups-restore restoreBackup" [
 # POST /linode/instances/{linodeId}/boot
 # operationId: bootLinodeInstance
 export def "linode-instances-boot bootLinodeInstance" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3505,8 +3505,8 @@ export def "linode-instances-boot bootLinodeInstance" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/boot")
-  let body = {config_id: $config_id} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/boot"))
+  let body = {"config_id": $config_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3518,8 +3518,8 @@ export def "linode-instances-boot bootLinodeInstance" [
 # POST /linode/instances/{linodeId}/clone
 # operationId: cloneLinodeInstance
 @deprecated --flag group
-export def "linode-instances-clone cloneLinodeInstance" [
-  linodeId: int
+export def "linode-instances-clone clone" [
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3533,7 +3533,7 @@ export def "linode-instances-clone cloneLinodeInstance" [
   --disks: list # An array of disk IDs. * If the `disks` parameter **is not provided**, then **no extra disks will be cloned** from the source Linode. All disks associated with the configuration profiles specified by the `configs` parameter will still be cloned. * **If an empty array is provided** for the `disks` parameter, then **no extra disks will be cloned** from the source Linode. All disks associated with the configuration profiles specified by the `configs` parameter will still be cloned. * **If a non-empty array is provided** for the `disks` parameter, then **the disks specified in the array will be cloned** from the source Linode, in addition to any disks associated with the configuration profiles specified by the `configs` parameter.
   --group: string # A label used to group Linodes for display. Linodes are not required to have a group.  (DEPRECATED, e.g. Linode-Group)
   --label: string # The label to assign this Linode when cloning to a new Linode. * Can only be provided when cloning to a new Linode. * Defaults to "linode".  (e.g. cloned-linode)
-  --linode-id: int # If an existing Linode is the target for the clone, the ID of that Linode. The existing Linode must have enough resources to accept the clone.  (e.g. 124)
+  --body-linode-id: int # If an existing Linode is the target for the clone, the ID of that Linode. The existing Linode must have enough resources to accept the clone.  (e.g. 124)
   --private-ip: oneof<nothing, bool> # If true, the created Linode will have private networking enabled and assigned a private IPv4 address. * Can only be provided when cloning to a new Linode.  (e.g. true)
   --region: string # This is the Region where the Linode will be deployed. To view all available Regions you can deploy to see [/regions](/docs/api/regions/#regions-list). * Region can only be provided and is required when cloning to a new Linode.  (e.g. us-east)
   --type: string # A Linode's Type determines what resources are available to it, including disk space, memory, and virtual cpus. The amounts available to a specific Linode are returned as `specs` on the Linode object.  To view all available Linode Types you can deploy with see [/linode/types](/docs/api/linode-types/#types-list).  * Type can only be provided and is required when cloning to a new Linode.  (e.g. g6-standard-2)
@@ -3541,8 +3541,8 @@ export def "linode-instances-clone cloneLinodeInstance" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/clone")
-  let body = {backups_enabled: $backups_enabled, configs: $configs, disks: $disks, group: $group, label: $label, linode_id: $linode_id, private_ip: $private_ip, region: $region, type: $type} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/clone"))
+  let body = {"backups_enabled": $backups_enabled, "configs": $configs, "disks": $disks, "group": $group, "label": $label, "linode_id": $body_linode_id, "private_ip": $private_ip, "region": $region, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3554,7 +3554,7 @@ export def "linode-instances-clone cloneLinodeInstance" [
 # GET /linode/instances/{linodeId}/configs
 # operationId: getLinodeConfigs
 export def "linode-instances-configs list" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3569,7 +3569,7 @@ export def "linode-instances-configs list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/configs" $qp)
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/configs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3582,8 +3582,8 @@ export def "linode-instances-configs list" [
 # --devices shape: {sda?: record, sdb?: record, sdc?: record, sdd?: record, sde?: record, sdf?: record, sdg?: record, sdh?: record}
 # --helpers shape: {devtmpfs_automount?: bool, distro?: bool, modules_dep?: bool, network?: bool, updatedb_disabled?: bool}
 # --interfaces item shape: {ipam_address?: string, label?: string, purpose?: "public"|"vlan"}
-export def "linode-instances-configs addLinodeConfig" [
-  linodeId: int
+export def "linode-instances-configs create" [
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3606,8 +3606,8 @@ export def "linode-instances-configs addLinodeConfig" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/configs")
-  let body = {comments: $comments, devices: $devices, helpers: $helpers, interfaces: $interfaces, kernel: $kernel, label: $label, memory_limit: $memory_limit, root_device: $root_device, run_level: $run_level, virt_mode: $virt_mode} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/configs"))
+  let body = {"comments": $comments, "devices": $devices, "helpers": $helpers, "interfaces": $interfaces, "kernel": $kernel, "label": $label, "memory_limit": $memory_limit, "root_device": $root_device, "run_level": $run_level, "virt_mode": $virt_mode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3619,8 +3619,8 @@ export def "linode-instances-configs addLinodeConfig" [
 # DELETE /linode/instances/{linodeId}/configs/{configId}
 # operationId: deleteLinodeConfig
 export def "linode-instances-configs delete" [
-  linodeId: int
-  configId: int
+  linode_id: int
+  config_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3632,7 +3632,7 @@ export def "linode-instances-configs delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/configs/($configId)")
+  let full_url = (build-url $base ({linode_id: $linode_id, config_id: $config_id} | format pattern "/linode/instances/{linode_id}/configs/{config_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3643,8 +3643,8 @@ export def "linode-instances-configs delete" [
 # GET /linode/instances/{linodeId}/configs/{configId}
 # operationId: getLinodeConfig
 export def "linode-instances-configs get" [
-  linodeId: int
-  configId: int
+  linode_id: int
+  config_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3656,7 +3656,7 @@ export def "linode-instances-configs get" [
 ]: nothing -> record<comments: string, devices: record<sda: record<disk_id: int, volume_id: int>, sdb: record<disk_id: int, volume_id: int>, sdc: record<disk_id: int, volume_id: int>, sdd: record<disk_id: int, volume_id: int>, sde: record<disk_id: int, volume_id: int>, sdf: record<disk_id: int, volume_id: int>, sdg: record<disk_id: int, volume_id: int>, sdh: record<disk_id: int, volume_id: int>>, helpers: record<devtmpfs_automount: bool, distro: bool, modules_dep: bool, network: bool, updatedb_disabled: bool>, id: int, interfaces: table<ipam_address: string, label: string, purpose: string>, kernel: string, label: string, memory_limit: int, root_device: string, run_level: string, virt_mode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/configs/($configId)")
+  let full_url = (build-url $base ({linode_id: $linode_id, config_id: $config_id} | format pattern "/linode/instances/{linode_id}/configs/{config_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3669,9 +3669,9 @@ export def "linode-instances-configs get" [
 # --devices shape: {sda?: record, sdb?: record, sdc?: record, sdd?: record, sde?: record, sdf?: record, sdg?: record, sdh?: record}
 # --helpers shape: {devtmpfs_automount?: bool, distro?: bool, modules_dep?: bool, network?: bool, updatedb_disabled?: bool}
 # --interfaces item shape: {ipam_address?: string, label?: string, purpose?: "public"|"vlan"}
-export def "linode-instances-configs updateLinodeConfig" [
-  linodeId: int
-  configId: int
+export def "linode-instances-configs update" [
+  linode_id: int
+  config_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3694,8 +3694,8 @@ export def "linode-instances-configs updateLinodeConfig" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/configs/($configId)")
-  let body = {comments: $comments, devices: $devices, helpers: $helpers, interfaces: $interfaces, kernel: $kernel, label: $label, memory_limit: $memory_limit, root_device: $root_device, run_level: $run_level, virt_mode: $virt_mode} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id, config_id: $config_id} | format pattern "/linode/instances/{linode_id}/configs/{config_id}"))
+  let body = {"comments": $comments, "devices": $devices, "helpers": $helpers, "interfaces": $interfaces, "kernel": $kernel, "label": $label, "memory_limit": $memory_limit, "root_device": $root_device, "run_level": $run_level, "virt_mode": $virt_mode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3707,7 +3707,7 @@ export def "linode-instances-configs updateLinodeConfig" [
 # GET /linode/instances/{linodeId}/disks
 # operationId: getLinodeDisks
 export def "linode-instances-disks list" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3722,7 +3722,7 @@ export def "linode-instances-disks list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/disks" $qp)
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/disks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3732,8 +3732,8 @@ export def "linode-instances-disks list" [
 #
 # POST /linode/instances/{linodeId}/disks
 # operationId: addLinodeDisk
-export def "linode-instances-disks addLinodeDisk" [
-  linodeId: int
+export def "linode-instances-disks create" [
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3755,8 +3755,8 @@ export def "linode-instances-disks addLinodeDisk" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/disks")
-  let body = {authorized_keys: $authorized_keys, authorized_users: $authorized_users, filesystem: $filesystem, image: $image, label: $label, root_pass: $root_pass, size: $size, stackscript_data: $stackscript_data, stackscript_id: $stackscript_id} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/disks"))
+  let body = {"authorized_keys": $authorized_keys, "authorized_users": $authorized_users, "filesystem": $filesystem, "image": $image, "label": $label, "root_pass": $root_pass, "size": $size, "stackscript_data": $stackscript_data, "stackscript_id": $stackscript_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3768,8 +3768,8 @@ export def "linode-instances-disks addLinodeDisk" [
 # DELETE /linode/instances/{linodeId}/disks/{diskId}
 # operationId: deleteDisk
 export def "linode-instances-disks delete" [
-  linodeId: int
-  diskId: int
+  linode_id: int
+  disk_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3781,7 +3781,7 @@ export def "linode-instances-disks delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/disks/($diskId)")
+  let full_url = (build-url $base ({linode_id: $linode_id, disk_id: $disk_id} | format pattern "/linode/instances/{linode_id}/disks/{disk_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3792,8 +3792,8 @@ export def "linode-instances-disks delete" [
 # GET /linode/instances/{linodeId}/disks/{diskId}
 # operationId: getLinodeDisk
 export def "linode-instances-disks get" [
-  linodeId: int
-  diskId: int
+  linode_id: int
+  disk_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3805,7 +3805,7 @@ export def "linode-instances-disks get" [
 ]: nothing -> record<created: string, filesystem: string, id: int, label: string, size: int, status: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/disks/($diskId)")
+  let full_url = (build-url $base ({linode_id: $linode_id, disk_id: $disk_id} | format pattern "/linode/instances/{linode_id}/disks/{disk_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3815,9 +3815,9 @@ export def "linode-instances-disks get" [
 #
 # PUT /linode/instances/{linodeId}/disks/{diskId}
 # operationId: updateDisk
-export def "linode-instances-disks updateDisk" [
-  linodeId: int
-  diskId: int
+export def "linode-instances-disks update" [
+  linode_id: int
+  disk_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3833,8 +3833,8 @@ export def "linode-instances-disks updateDisk" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/disks/($diskId)")
-  let body = {filesystem: $filesystem, label: $label, size: $size} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id, disk_id: $disk_id} | format pattern "/linode/instances/{linode_id}/disks/{disk_id}"))
+  let body = {"filesystem": $filesystem, "label": $label, "size": $size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3845,9 +3845,9 @@ export def "linode-instances-disks updateDisk" [
 #
 # POST /linode/instances/{linodeId}/disks/{diskId}/clone
 # operationId: cloneLinodeDisk
-export def "linode-instances-disks-clone cloneLinodeDisk" [
-  linodeId: int
-  diskId: int
+export def "linode-instances-disks-clone clone" [
+  linode_id: int
+  disk_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3859,7 +3859,7 @@ export def "linode-instances-disks-clone cloneLinodeDisk" [
 ]: nothing -> record<created: string, filesystem: string, id: int, label: string, size: int, status: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/disks/($diskId)/clone")
+  let full_url = (build-url $base ({linode_id: $linode_id, disk_id: $disk_id} | format pattern "/linode/instances/{linode_id}/disks/{disk_id}/clone"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3869,9 +3869,9 @@ export def "linode-instances-disks-clone cloneLinodeDisk" [
 #
 # POST /linode/instances/{linodeId}/disks/{diskId}/password
 # operationId: resetDiskPassword
-export def "linode-instances-disks-password resetDiskPassword" [
-  linodeId: int
-  diskId: int
+export def "linode-instances-disks-password reset" [
+  linode_id: int
+  disk_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3885,8 +3885,8 @@ export def "linode-instances-disks-password resetDiskPassword" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/disks/($diskId)/password")
-  let body = {password: $password} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id, disk_id: $disk_id} | format pattern "/linode/instances/{linode_id}/disks/{disk_id}/password"))
+  let body = {"password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3897,9 +3897,9 @@ export def "linode-instances-disks-password resetDiskPassword" [
 #
 # POST /linode/instances/{linodeId}/disks/{diskId}/resize
 # operationId: resizeDisk
-export def "linode-instances-disks-resize resizeDisk" [
-  linodeId: int
-  diskId: int
+export def "linode-instances-disks-resize resize" [
+  linode_id: int
+  disk_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3913,8 +3913,8 @@ export def "linode-instances-disks-resize resizeDisk" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/disks/($diskId)/resize")
-  let body = {size: $size} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id, disk_id: $disk_id} | format pattern "/linode/instances/{linode_id}/disks/{disk_id}/resize"))
+  let body = {"size": $size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3926,7 +3926,7 @@ export def "linode-instances-disks-resize resizeDisk" [
 # GET /linode/instances/{linodeId}/firewalls
 # operationId: getLinodeFirewalls
 export def "linode-instances-firewalls get" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3941,7 +3941,7 @@ export def "linode-instances-firewalls get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/firewalls" $qp)
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/firewalls") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3952,7 +3952,7 @@ export def "linode-instances-firewalls get" [
 # GET /linode/instances/{linodeId}/ips
 # operationId: getLinodeIPs
 export def "linode-instances-ips list" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3964,7 +3964,7 @@ export def "linode-instances-ips list" [
 ]: nothing -> record<ipv4: record<private: list<record>, public: list<record>, reserved: list<record>, shared: list<record>>, ipv6: record<global: record<prefix: int, range: string, region: string, route_target: string>, link_local: record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string>, slaac: record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/ips")
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/ips"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3974,8 +3974,8 @@ export def "linode-instances-ips list" [
 #
 # POST /linode/instances/{linodeId}/ips
 # operationId: addLinodeIP
-export def "linode-instances-ips addLinodeIP" [
-  linodeId: int
+export def "linode-instances-ips create" [
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3990,8 +3990,8 @@ export def "linode-instances-ips addLinodeIP" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/ips")
-  let body = {public: $public, type: $type} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/ips"))
+  let body = {"public": $public, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4002,8 +4002,8 @@ export def "linode-instances-ips addLinodeIP" [
 #
 # DELETE /linode/instances/{linodeId}/ips/{address}
 # operationId: removeLinodeIP
-export def "linode-instances-ips removeLinodeIP" [
-  linodeId: int
+export def "linode-instances-ips delete" [
+  linode_id: int
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4016,7 +4016,7 @@ export def "linode-instances-ips removeLinodeIP" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/ips/($address)")
+  let full_url = (build-url $base ({linode_id: $linode_id, address: $address} | format pattern "/linode/instances/{linode_id}/ips/{address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4027,7 +4027,7 @@ export def "linode-instances-ips removeLinodeIP" [
 # GET /linode/instances/{linodeId}/ips/{address}
 # operationId: getLinodeIP
 export def "linode-instances-ips get" [
-  linodeId: int
+  linode_id: int
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4040,7 +4040,7 @@ export def "linode-instances-ips get" [
 ]: nothing -> record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/ips/($address)")
+  let full_url = (build-url $base ({linode_id: $linode_id, address: $address} | format pattern "/linode/instances/{linode_id}/ips/{address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4050,8 +4050,8 @@ export def "linode-instances-ips get" [
 #
 # PUT /linode/instances/{linodeId}/ips/{address}
 # operationId: updateLinodeIP
-export def "linode-instances-ips updateLinodeIP" [
-  linodeId: int
+export def "linode-instances-ips update" [
+  linode_id: int
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4066,8 +4066,8 @@ export def "linode-instances-ips updateLinodeIP" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/ips/($address)")
-  let body = {rdns: $rdns} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id, address: $address} | format pattern "/linode/instances/{linode_id}/ips/{address}"))
+  let body = {"rdns": $rdns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4079,7 +4079,7 @@ export def "linode-instances-ips updateLinodeIP" [
 # POST /linode/instances/{linodeId}/migrate
 # operationId: migrateLinodeInstance
 export def "linode-instances-migrate migrateLinodeInstance" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4094,8 +4094,8 @@ export def "linode-instances-migrate migrateLinodeInstance" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/migrate")
-  let body = {region: $region, upgrade: $upgrade} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/migrate"))
+  let body = {"region": $region, "upgrade": $upgrade} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4107,7 +4107,7 @@ export def "linode-instances-migrate migrateLinodeInstance" [
 # POST /linode/instances/{linodeId}/mutate
 # operationId: mutateLinodeInstance
 export def "linode-instances-mutate mutateLinodeInstance" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4121,8 +4121,8 @@ export def "linode-instances-mutate mutateLinodeInstance" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/mutate")
-  let body = {allow_auto_disk_resize: $allow_auto_disk_resize} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/mutate"))
+  let body = {"allow_auto_disk_resize": $allow_auto_disk_resize} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4134,7 +4134,7 @@ export def "linode-instances-mutate mutateLinodeInstance" [
 # GET /linode/instances/{linodeId}/nodebalancers
 # operationId: getLinodeNodeBalancers
 export def "linode-instances-nodebalancers get" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4146,7 +4146,7 @@ export def "linode-instances-nodebalancers get" [
 ]: nothing -> record<data: table<client_conn_throttle: int, created: string, hostname: string, id: int, ipv4: string, ipv6: string, label: string, region: string, tags: list, transfer: record, updated: string>, page: any, pages: any, results: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/nodebalancers")
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/nodebalancers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4156,8 +4156,8 @@ export def "linode-instances-nodebalancers get" [
 #
 # POST /linode/instances/{linodeId}/password
 # operationId: resetLinodePassword
-export def "linode-instances-password resetLinodePassword" [
-  linodeId: int
+export def "linode-instances-password reset" [
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4171,8 +4171,8 @@ export def "linode-instances-password resetLinodePassword" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/password")
-  let body = {root_pass: $root_pass} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/password"))
+  let body = {"root_pass": $root_pass} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4184,7 +4184,7 @@ export def "linode-instances-password resetLinodePassword" [
 # POST /linode/instances/{linodeId}/reboot
 # operationId: rebootLinodeInstance
 export def "linode-instances-reboot rebootLinodeInstance" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4198,8 +4198,8 @@ export def "linode-instances-reboot rebootLinodeInstance" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/reboot")
-  let body = {config_id: $config_id} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/reboot"))
+  let body = {"config_id": $config_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4211,7 +4211,7 @@ export def "linode-instances-reboot rebootLinodeInstance" [
 # POST /linode/instances/{linodeId}/rebuild
 # operationId: rebuildLinodeInstance
 export def "linode-instances-rebuild rebuildLinodeInstance" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4231,8 +4231,8 @@ export def "linode-instances-rebuild rebuildLinodeInstance" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/rebuild")
-  let body = {authorized_keys: $authorized_keys, authorized_users: $authorized_users, booted: $booted, image: $image, root_pass: $root_pass, stackscript_data: $stackscript_data, stackscript_id: $stackscript_id} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/rebuild"))
+  let body = {"authorized_keys": $authorized_keys, "authorized_users": $authorized_users, "booted": $booted, "image": $image, "root_pass": $root_pass, "stackscript_data": $stackscript_data, "stackscript_id": $stackscript_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4245,7 +4245,7 @@ export def "linode-instances-rebuild rebuildLinodeInstance" [
 # operationId: rescueLinodeInstance
 # --devices shape: {sda?: record, sdb?: record, sdc?: record, sdd?: record, sde?: record, sdf?: record, sdg?: record}
 export def "linode-instances-rescue rescueLinodeInstance" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4259,8 +4259,8 @@ export def "linode-instances-rescue rescueLinodeInstance" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/rescue")
-  let body = {devices: $devices} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/rescue"))
+  let body = {"devices": $devices} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4271,8 +4271,8 @@ export def "linode-instances-rescue rescueLinodeInstance" [
 #
 # POST /linode/instances/{linodeId}/resize
 # operationId: resizeLinodeInstance
-export def "linode-instances-resize resizeLinodeInstance" [
-  linodeId: int
+export def "linode-instances-resize resize" [
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4287,8 +4287,8 @@ export def "linode-instances-resize resizeLinodeInstance" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/resize")
-  let body = {allow_auto_disk_resize: $allow_auto_disk_resize, type: $type} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/resize"))
+  let body = {"allow_auto_disk_resize": $allow_auto_disk_resize, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4300,7 +4300,7 @@ export def "linode-instances-resize resizeLinodeInstance" [
 # POST /linode/instances/{linodeId}/shutdown
 # operationId: shutdownLinodeInstance
 export def "linode-instances-shutdown shutdownLinodeInstance" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4312,7 +4312,7 @@ export def "linode-instances-shutdown shutdownLinodeInstance" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/shutdown")
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/shutdown"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4323,7 +4323,7 @@ export def "linode-instances-shutdown shutdownLinodeInstance" [
 # GET /linode/instances/{linodeId}/stats
 # operationId: getLinodeStats
 export def "linode-instances-stats get-by-linodeId" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4335,7 +4335,7 @@ export def "linode-instances-stats get-by-linodeId" [
 ]: nothing -> record<cpu: list<list<float>>, io: record<io: list<list>, swap: list<list>>, netv4: record<in: list<list>, out: list<list>, private_in: list<list>, private_out: list<list>>, netv6: record<in: list<list>, out: list<list>, private_in: list<list>, private_out: list<list>>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/stats")
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/stats"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4346,7 +4346,7 @@ export def "linode-instances-stats get-by-linodeId" [
 # GET /linode/instances/{linodeId}/stats/{year}/{month}
 # operationId: getLinodeStatsByYearMonth
 export def "linode-instances-stats get-by-linodeId-year-month" [
-  linodeId: int
+  linode_id: int
   year: int
   month: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4360,7 +4360,7 @@ export def "linode-instances-stats get-by-linodeId-year-month" [
 ]: nothing -> record<cpu: list<list<float>>, io: record<io: list<list>, swap: list<list>>, netv4: record<in: list<list>, out: list<list>, private_in: list<list>, private_out: list<list>>, netv6: record<in: list<list>, out: list<list>, private_in: list<list>, private_out: list<list>>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/stats/($year)/($month)")
+  let full_url = (build-url $base ({linode_id: $linode_id, year: $year, month: $month} | format pattern "/linode/instances/{linode_id}/stats/{year}/{month}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4371,7 +4371,7 @@ export def "linode-instances-stats get-by-linodeId-year-month" [
 # GET /linode/instances/{linodeId}/transfer
 # operationId: getLinodeTransfer
 export def "linode-instances-transfer get-by-linodeId" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4383,7 +4383,7 @@ export def "linode-instances-transfer get-by-linodeId" [
 ]: nothing -> record<billable: int, quota: int, used: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/transfer")
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/transfer"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4394,7 +4394,7 @@ export def "linode-instances-transfer get-by-linodeId" [
 # GET /linode/instances/{linodeId}/transfer/{year}/{month}
 # operationId: getLinodeTransferByYearMonth
 export def "linode-instances-transfer get-by-linodeId-year-month" [
-  linodeId: int
+  linode_id: int
   year: int
   month: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4408,7 +4408,7 @@ export def "linode-instances-transfer get-by-linodeId-year-month" [
 ]: nothing -> record<bytes_in: int, bytes_out: int, bytes_total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/transfer/($year)/($month)")
+  let full_url = (build-url $base ({linode_id: $linode_id, year: $year, month: $month} | format pattern "/linode/instances/{linode_id}/transfer/{year}/{month}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4419,7 +4419,7 @@ export def "linode-instances-transfer get-by-linodeId-year-month" [
 # GET /linode/instances/{linodeId}/volumes
 # operationId: getLinodeVolumes
 export def "linode-instances-volumes get" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4434,7 +4434,7 @@ export def "linode-instances-volumes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linode/instances/($linodeId)/volumes" $qp)
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/linode/instances/{linode_id}/volumes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4470,7 +4470,7 @@ export def "linode-kernels list" [
 # GET /linode/kernels/{kernelId}
 # operationId: getKernel
 export def "linode-kernels get" [
-  kernelId: string
+  kernel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4482,7 +4482,7 @@ export def "linode-kernels get" [
 ]: nothing -> record<architecture: string, built: string, deprecated: bool, id: string, kvm: bool, label: string, pvops: bool, version: string, xen: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/kernels/($kernelId)")
+  let full_url = (build-url $base ({kernel_id: $kernel_id} | format pattern "/linode/kernels/{kernel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4517,7 +4517,7 @@ export def "linode-stackscripts list" [
 #
 # POST /linode/stackscripts
 # operationId: addStackScript
-export def "linode-stackscripts addStackScript" [
+export def "linode-stackscripts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4537,7 +4537,7 @@ export def "linode-stackscripts addStackScript" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/linode/stackscripts")
-  let body = {description: $description, images: $images, is_public: $is_public, label: $label, rev_note: $rev_note, script: $script} | compact
+  let body = {"description": $description, "images": $images, "is_public": $is_public, "label": $label, "rev_note": $rev_note, "script": $script} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4549,7 +4549,7 @@ export def "linode-stackscripts addStackScript" [
 # DELETE /linode/stackscripts/{stackscriptId}
 # operationId: deleteStackScript
 export def "linode-stackscripts delete" [
-  stackscriptId: string
+  stackscript_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4561,7 +4561,7 @@ export def "linode-stackscripts delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/stackscripts/($stackscriptId)")
+  let full_url = (build-url $base ({stackscript_id: $stackscript_id} | format pattern "/linode/stackscripts/{stackscript_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4572,7 +4572,7 @@ export def "linode-stackscripts delete" [
 # GET /linode/stackscripts/{stackscriptId}
 # operationId: getStackScript
 export def "linode-stackscripts get" [
-  stackscriptId: string
+  stackscript_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4584,7 +4584,7 @@ export def "linode-stackscripts get" [
 ]: nothing -> record<created: string, deployments_active: int, deployments_total: int, description: string, id: int, images: list<string>, is_public: bool, label: string, mine: bool, rev_note: string, script: string, updated: string, user_defined_fields: table<default: string, example: string, label: string, manyOf: string, name: string, oneOf: string>, user_gravatar_id: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/stackscripts/($stackscriptId)")
+  let full_url = (build-url $base ({stackscript_id: $stackscript_id} | format pattern "/linode/stackscripts/{stackscript_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4594,8 +4594,8 @@ export def "linode-stackscripts get" [
 #
 # PUT /linode/stackscripts/{stackscriptId}
 # operationId: updateStackScript
-export def "linode-stackscripts updateStackScript" [
-  stackscriptId: string
+export def "linode-stackscripts update" [
+  stackscript_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4614,8 +4614,8 @@ export def "linode-stackscripts updateStackScript" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/stackscripts/($stackscriptId)")
-  let body = {description: $description, images: $images, is_public: $is_public, label: $label, rev_note: $rev_note, script: $script} | compact
+  let full_url = (build-url $base ({stackscript_id: $stackscript_id} | format pattern "/linode/stackscripts/{stackscript_id}"))
+  let body = {"description": $description, "images": $images, "is_public": $is_public, "label": $label, "rev_note": $rev_note, "script": $script} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4649,7 +4649,7 @@ export def "linode-types list" [
 # GET /linode/types/{typeId}
 # operationId: getLinodeType
 export def "linode-types get" [
-  typeId: string
+  type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4661,7 +4661,7 @@ export def "linode-types get" [
 ]: nothing -> record<addons: record<backups: record<price: record>>, class: string, disk: int, gpus: int, id: string, label: string, memory: int, network_out: int, price: record<hourly: int, monthly: int>, successor: string, transfer: int, vcpus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/linode/types/($typeId)")
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/linode/types/{type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4695,7 +4695,7 @@ export def "lke-clusters list" [
 # operationId: createLKECluster
 # --control_plane shape: {high_availability?: bool}
 # --node_pools item shape: {autoscaler?: record, count?: any, disks?: list, tags?: any, type?: any}
-export def "lke-clusters createLKECluster" [
+export def "lke-clusters create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4715,7 +4715,7 @@ export def "lke-clusters createLKECluster" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lke/clusters")
-  let body = {control_plane: $control_plane, k8s_version: $k8s_version, label: $label, node_pools: $node_pools, region: $region, tags: $tags} | compact
+  let body = {"control_plane": $control_plane, "k8s_version": $k8s_version, "label": $label, "node_pools": $node_pools, "region": $region, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4727,7 +4727,7 @@ export def "lke-clusters createLKECluster" [
 # DELETE /lke/clusters/{clusterId}
 # operationId: deleteLKECluster
 export def "lke-clusters delete" [
-  clusterId: int
+  cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4739,7 +4739,7 @@ export def "lke-clusters delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)")
+  let full_url = (build-url $base ({cluster_id: $cluster_id} | format pattern "/lke/clusters/{cluster_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4750,7 +4750,7 @@ export def "lke-clusters delete" [
 # GET /lke/clusters/{clusterId}
 # operationId: getLKECluster
 export def "lke-clusters get" [
-  clusterId: int
+  cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4762,7 +4762,7 @@ export def "lke-clusters get" [
 ]: nothing -> record<control_plane: record<high_availability: bool>, created: string, id: int, k8s_version: string, label: string, region: string, tags: list<string>, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)")
+  let full_url = (build-url $base ({cluster_id: $cluster_id} | format pattern "/lke/clusters/{cluster_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4773,8 +4773,8 @@ export def "lke-clusters get" [
 # PUT /lke/clusters/{clusterId}
 # operationId: putLKECluster
 # --control_plane shape: {high_availability?: bool}
-export def "lke-clusters put" [
-  clusterId: int
+export def "lke-clusters update" [
+  cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4791,8 +4791,8 @@ export def "lke-clusters put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)")
-  let body = {control_plane: $control_plane, k8s_version: $k8s_version, label: $label, tags: $tags} | compact
+  let full_url = (build-url $base ({cluster_id: $cluster_id} | format pattern "/lke/clusters/{cluster_id}"))
+  let body = {"control_plane": $control_plane, "k8s_version": $k8s_version, "label": $label, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4804,7 +4804,7 @@ export def "lke-clusters put" [
 # GET /lke/clusters/{clusterId}/api-endpoints
 # operationId: getLKEClusterAPIEndpoints
 export def "lke-clusters-api-endpoints get" [
-  clusterId: int
+  cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4816,7 +4816,7 @@ export def "lke-clusters-api-endpoints get" [
 ]: nothing -> record<data: table<endpoint: string>, page: any, pages: any, results: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)/api-endpoints")
+  let full_url = (build-url $base ({cluster_id: $cluster_id} | format pattern "/lke/clusters/{cluster_id}/api-endpoints"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4827,7 +4827,7 @@ export def "lke-clusters-api-endpoints get" [
 # GET /lke/clusters/{clusterId}/dashboard
 # operationId: getLKEClusterDashboard
 export def "lke-clusters-dashboard get" [
-  clusterId: int
+  cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4839,7 +4839,7 @@ export def "lke-clusters-dashboard get" [
 ]: nothing -> record<url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)/dashboard")
+  let full_url = (build-url $base ({cluster_id: $cluster_id} | format pattern "/lke/clusters/{cluster_id}/dashboard"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4850,7 +4850,7 @@ export def "lke-clusters-dashboard get" [
 # DELETE /lke/clusters/{clusterId}/kubeconfig
 # operationId: deleteLKEClusterKubeconfig
 export def "lke-clusters-kubeconfig delete" [
-  clusterId: int
+  cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4862,7 +4862,7 @@ export def "lke-clusters-kubeconfig delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)/kubeconfig")
+  let full_url = (build-url $base ({cluster_id: $cluster_id} | format pattern "/lke/clusters/{cluster_id}/kubeconfig"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4873,7 +4873,7 @@ export def "lke-clusters-kubeconfig delete" [
 # GET /lke/clusters/{clusterId}/kubeconfig
 # operationId: getLKEClusterKubeconfig
 export def "lke-clusters-kubeconfig get" [
-  clusterId: int
+  cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4885,7 +4885,7 @@ export def "lke-clusters-kubeconfig get" [
 ]: nothing -> record<kubeconfig: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)/kubeconfig")
+  let full_url = (build-url $base ({cluster_id: $cluster_id} | format pattern "/lke/clusters/{cluster_id}/kubeconfig"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4896,8 +4896,8 @@ export def "lke-clusters-kubeconfig get" [
 # DELETE /lke/clusters/{clusterId}/nodes/{nodeId}
 # operationId: deleteLKEClusterNode
 export def "lke-clusters-nodes delete" [
-  clusterId: int
-  nodeId: string
+  cluster_id: int
+  node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4909,7 +4909,7 @@ export def "lke-clusters-nodes delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)/nodes/($nodeId)")
+  let full_url = (build-url $base ({cluster_id: $cluster_id, node_id: $node_id} | format pattern "/lke/clusters/{cluster_id}/nodes/{node_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4920,8 +4920,8 @@ export def "lke-clusters-nodes delete" [
 # GET /lke/clusters/{clusterId}/nodes/{nodeId}
 # operationId: getLKEClusterNode
 export def "lke-clusters-nodes get" [
-  clusterId: int
-  nodeId: string
+  cluster_id: int
+  node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4933,7 +4933,7 @@ export def "lke-clusters-nodes get" [
 ]: nothing -> record<id: string, instance_id: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)/nodes/($nodeId)")
+  let full_url = (build-url $base ({cluster_id: $cluster_id, node_id: $node_id} | format pattern "/lke/clusters/{cluster_id}/nodes/{node_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4943,9 +4943,9 @@ export def "lke-clusters-nodes get" [
 #
 # POST /lke/clusters/{clusterId}/nodes/{nodeId}/recycle
 # operationId: postLKEClusterNodeRecycle
-export def "lke-clusters-nodes-recycle post" [
-  clusterId: int
-  nodeId: string
+export def "lke-clusters-nodes-recycle create" [
+  cluster_id: int
+  node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4957,7 +4957,7 @@ export def "lke-clusters-nodes-recycle post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)/nodes/($nodeId)/recycle")
+  let full_url = (build-url $base ({cluster_id: $cluster_id, node_id: $node_id} | format pattern "/lke/clusters/{cluster_id}/nodes/{node_id}/recycle"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4967,8 +4967,8 @@ export def "lke-clusters-nodes-recycle post" [
 #
 # GET /lke/clusters/{clusterId}/pools
 # operationId: getLKEClusterPools
-export def "lke-clusters-pools list" [
-  clusterId: int
+export def "lke-clusters-pools get" [
+  cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4980,7 +4980,7 @@ export def "lke-clusters-pools list" [
 ]: nothing -> record<data: table<autoscaler: record, count: int, disks: list, id: int, nodes: list, tags: list, type: string>, page: any, pages: any, results: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)/pools")
+  let full_url = (build-url $base ({cluster_id: $cluster_id} | format pattern "/lke/clusters/{cluster_id}/pools"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4991,8 +4991,8 @@ export def "lke-clusters-pools list" [
 # POST /lke/clusters/{clusterId}/pools
 # operationId: postLKEClusterPools
 # --autoscaler shape: {enabled?: bool, max?: int, min?: int}
-export def "lke-clusters-pools post" [
-  clusterId: int
+export def "lke-clusters-pools create" [
+  cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5010,8 +5010,8 @@ export def "lke-clusters-pools post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)/pools")
-  let body = {autoscaler: $autoscaler, count: $count, disks: $disks, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({cluster_id: $cluster_id} | format pattern "/lke/clusters/{cluster_id}/pools"))
+  let body = {"autoscaler": $autoscaler, "count": $count, "disks": $disks, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5022,9 +5022,9 @@ export def "lke-clusters-pools post" [
 #
 # DELETE /lke/clusters/{clusterId}/pools/{poolId}
 # operationId: deleteLKENodePool
-export def "lke-clusters-pools delete" [
-  clusterId: int
-  poolId: int
+export def "lke-clusters-pools delete-lke-node" [
+  cluster_id: int
+  pool_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5036,7 +5036,7 @@ export def "lke-clusters-pools delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)/pools/($poolId)")
+  let full_url = (build-url $base ({cluster_id: $cluster_id, pool_id: $pool_id} | format pattern "/lke/clusters/{cluster_id}/pools/{pool_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5046,9 +5046,9 @@ export def "lke-clusters-pools delete" [
 #
 # GET /lke/clusters/{clusterId}/pools/{poolId}
 # operationId: getLKENodePool
-export def "lke-clusters-pools get" [
-  clusterId: int
-  poolId: int
+export def "lke-clusters-pools get-lke-node" [
+  cluster_id: int
+  pool_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5060,7 +5060,7 @@ export def "lke-clusters-pools get" [
 ]: nothing -> record<autoscaler: record<enabled: bool, max: int, min: int>, count: int, disks: table<size: int, type: string>, id: int, nodes: table<id: string, instance_id: string, status: string>, tags: list<string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)/pools/($poolId)")
+  let full_url = (build-url $base ({cluster_id: $cluster_id, pool_id: $pool_id} | format pattern "/lke/clusters/{cluster_id}/pools/{pool_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5070,9 +5070,9 @@ export def "lke-clusters-pools get" [
 #
 # PUT /lke/clusters/{clusterId}/pools/{poolId}
 # operationId: putLKENodePool
-export def "lke-clusters-pools put" [
-  clusterId: int
-  poolId: int
+export def "lke-clusters-pools update-lke-node" [
+  cluster_id: int
+  pool_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5087,8 +5087,8 @@ export def "lke-clusters-pools put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)/pools/($poolId)")
-  let body = {autoscaler: $autoscaler, count: $count} | compact
+  let full_url = (build-url $base ({cluster_id: $cluster_id, pool_id: $pool_id} | format pattern "/lke/clusters/{cluster_id}/pools/{pool_id}"))
+  let body = {"autoscaler": $autoscaler, "count": $count} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5099,9 +5099,9 @@ export def "lke-clusters-pools put" [
 #
 # POST /lke/clusters/{clusterId}/pools/{poolId}/recycle
 # operationId: postLKEClusterPoolRecycle
-export def "lke-clusters-pools-recycle post" [
-  clusterId: int
-  poolId: int
+export def "lke-clusters-pools-recycle create" [
+  cluster_id: int
+  pool_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5113,7 +5113,7 @@ export def "lke-clusters-pools-recycle post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)/pools/($poolId)/recycle")
+  let full_url = (build-url $base ({cluster_id: $cluster_id, pool_id: $pool_id} | format pattern "/lke/clusters/{cluster_id}/pools/{pool_id}/recycle"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5123,8 +5123,8 @@ export def "lke-clusters-pools-recycle post" [
 #
 # POST /lke/clusters/{clusterId}/recycle
 # operationId: postLKEClusterRecycle
-export def "lke-clusters-recycle post" [
-  clusterId: int
+export def "lke-clusters-recycle create" [
+  cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5136,7 +5136,7 @@ export def "lke-clusters-recycle post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)/recycle")
+  let full_url = (build-url $base ({cluster_id: $cluster_id} | format pattern "/lke/clusters/{cluster_id}/recycle"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5146,8 +5146,8 @@ export def "lke-clusters-recycle post" [
 #
 # POST /lke/clusters/{clusterId}/regenerate
 # operationId: postLKEClusterRegenerate
-export def "lke-clusters-regenerate post" [
-  clusterId: int
+export def "lke-clusters-regenerate create" [
+  cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5162,8 +5162,8 @@ export def "lke-clusters-regenerate post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)/regenerate")
-  let body = {kubeconfig: $kubeconfig, servicetoken: $servicetoken} | compact
+  let full_url = (build-url $base ({cluster_id: $cluster_id} | format pattern "/lke/clusters/{cluster_id}/regenerate"))
+  let body = {"kubeconfig": $kubeconfig, "servicetoken": $servicetoken} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5174,8 +5174,8 @@ export def "lke-clusters-regenerate post" [
 #
 # DELETE /lke/clusters/{clusterId}/servicetoken
 # operationId: postLKECServiceTokenDelete
-export def "lke-clusters-servicetoken delete" [
-  clusterId: int
+export def "lke-clusters-servicetoken create-lkec-service-token-delete" [
+  cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5187,7 +5187,7 @@ export def "lke-clusters-servicetoken delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/clusters/($clusterId)/servicetoken")
+  let full_url = (build-url $base ({cluster_id: $cluster_id} | format pattern "/lke/clusters/{cluster_id}/servicetoken"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5232,7 +5232,7 @@ export def "lke-versions get" [
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lke/versions/($version)")
+  let full_url = (build-url $base ({version: $version} | format pattern "/lke/versions/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5267,7 +5267,7 @@ export def "longview-clients list" [
 #
 # POST /longview/clients
 # operationId: createLongviewClient
-export def "longview-clients createLongviewClient" [
+export def "longview-clients create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5282,7 +5282,7 @@ export def "longview-clients createLongviewClient" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/longview/clients")
-  let body = {label: $label} | compact
+  let body = {"label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5294,7 +5294,7 @@ export def "longview-clients createLongviewClient" [
 # DELETE /longview/clients/{clientId}
 # operationId: deleteLongviewClient
 export def "longview-clients delete" [
-  clientId: int
+  client_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5306,7 +5306,7 @@ export def "longview-clients delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/longview/clients/($clientId)")
+  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/longview/clients/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5317,7 +5317,7 @@ export def "longview-clients delete" [
 # GET /longview/clients/{clientId}
 # operationId: getLongviewClient
 export def "longview-clients get" [
-  clientId: int
+  client_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5329,7 +5329,7 @@ export def "longview-clients get" [
 ]: nothing -> record<api_key: string, apps: record<apache: bool, mysql: bool, nginx: bool>, created: string, id: int, install_code: string, label: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/longview/clients/($clientId)")
+  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/longview/clients/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5339,8 +5339,8 @@ export def "longview-clients get" [
 #
 # PUT /longview/clients/{clientId}
 # operationId: updateLongviewClient
-export def "longview-clients updateLongviewClient" [
-  clientId: int
+export def "longview-clients update" [
+  client_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5354,8 +5354,8 @@ export def "longview-clients updateLongviewClient" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/longview/clients/($clientId)")
-  let body = {label: $label} | compact
+  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/longview/clients/{client_id}"))
+  let body = {"label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5388,7 +5388,7 @@ export def "longview-plan get" [
 #
 # PUT /longview/plan
 # operationId: updateLongviewPlan
-export def "longview-plan updateLongviewPlan" [
+export def "longview-plan update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5403,7 +5403,7 @@ export def "longview-plan updateLongviewPlan" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/longview/plan")
-  let body = {longview_subscription: $longview_subscription} | compact
+  let body = {"longview_subscription": $longview_subscription} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5440,7 +5440,7 @@ export def "longview-subscriptions list" [
 # GET /longview/subscriptions/{subscriptionId}
 # operationId: getLongviewSubscription
 export def "longview-subscriptions get" [
-  subscriptionId: string
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5452,7 +5452,7 @@ export def "longview-subscriptions get" [
 ]: nothing -> record<clients_included: int, id: string, label: string, price: record<hourly: float, monthly: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/longview/subscriptions/($subscriptionId)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/longview/subscriptions/{subscription_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5488,7 +5488,7 @@ export def "managed-contacts list" [
 # POST /managed/contacts
 # operationId: createManagedContact
 # --phone shape: {primary?: string, secondary?: string}
-export def "managed-contacts createManagedContact" [
+export def "managed-contacts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5506,7 +5506,7 @@ export def "managed-contacts createManagedContact" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/managed/contacts")
-  let body = {email: $email, group: $group, name: $name, phone: $phone} | compact
+  let body = {"email": $email, "group": $group, "name": $name, "phone": $phone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5518,7 +5518,7 @@ export def "managed-contacts createManagedContact" [
 # DELETE /managed/contacts/{contactId}
 # operationId: deleteManagedContact
 export def "managed-contacts delete" [
-  contactId: int
+  contact_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5530,7 +5530,7 @@ export def "managed-contacts delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed/contacts/($contactId)")
+  let full_url = (build-url $base ({contact_id: $contact_id} | format pattern "/managed/contacts/{contact_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5541,7 +5541,7 @@ export def "managed-contacts delete" [
 # GET /managed/contacts/{contactId}
 # operationId: getManagedContact
 export def "managed-contacts get" [
-  contactId: int
+  contact_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5553,7 +5553,7 @@ export def "managed-contacts get" [
 ]: nothing -> record<email: string, group: string, id: int, name: string, phone: record<primary: string, secondary: string>, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed/contacts/($contactId)")
+  let full_url = (build-url $base ({contact_id: $contact_id} | format pattern "/managed/contacts/{contact_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5564,8 +5564,8 @@ export def "managed-contacts get" [
 # PUT /managed/contacts/{contactId}
 # operationId: updateManagedContact
 # --phone shape: {primary?: string, secondary?: string}
-export def "managed-contacts updateManagedContact" [
-  contactId: int
+export def "managed-contacts update" [
+  contact_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5582,8 +5582,8 @@ export def "managed-contacts updateManagedContact" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed/contacts/($contactId)")
-  let body = {email: $email, group: $group, name: $name, phone: $phone} | compact
+  let full_url = (build-url $base ({contact_id: $contact_id} | format pattern "/managed/contacts/{contact_id}"))
+  let body = {"email": $email, "group": $group, "name": $name, "phone": $phone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5619,7 +5619,7 @@ export def "managed-credentials list" [
 #
 # POST /managed/credentials
 # operationId: createManagedCredential
-export def "managed-credentials createManagedCredential" [
+export def "managed-credentials create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5636,7 +5636,7 @@ export def "managed-credentials createManagedCredential" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/managed/credentials")
-  let body = {label: $label, password: $password, username: $username} | compact
+  let body = {"label": $label, "password": $password, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5670,7 +5670,7 @@ export def "managed-credentials-sshkey viewManagedSSHKey" [
 # GET /managed/credentials/{credentialId}
 # operationId: getManagedCredential
 export def "managed-credentials get" [
-  credentialId: int
+  credential_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5682,7 +5682,7 @@ export def "managed-credentials get" [
 ]: nothing -> record<id: int, label: string, last_decrypted: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed/credentials/($credentialId)")
+  let full_url = (build-url $base ({credential_id: $credential_id} | format pattern "/managed/credentials/{credential_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5692,8 +5692,8 @@ export def "managed-credentials get" [
 #
 # PUT /managed/credentials/{credentialId}
 # operationId: updateManagedCredential
-export def "managed-credentials updateManagedCredential" [
-  credentialId: int
+export def "managed-credentials update" [
+  credential_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5707,8 +5707,8 @@ export def "managed-credentials updateManagedCredential" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed/credentials/($credentialId)")
-  let body = {label: $label} | compact
+  let full_url = (build-url $base ({credential_id: $credential_id} | format pattern "/managed/credentials/{credential_id}"))
+  let body = {"label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5719,8 +5719,8 @@ export def "managed-credentials updateManagedCredential" [
 #
 # POST /managed/credentials/{credentialId}/revoke
 # operationId: deleteManagedCredential
-export def "managed-credentials-revoke post" [
-  credentialId: int
+export def "managed-credentials-revoke delete" [
+  credential_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5732,7 +5732,7 @@ export def "managed-credentials-revoke post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed/credentials/($credentialId)/revoke")
+  let full_url = (build-url $base ({credential_id: $credential_id} | format pattern "/managed/credentials/{credential_id}/revoke"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5742,8 +5742,8 @@ export def "managed-credentials-revoke post" [
 #
 # POST /managed/credentials/{credentialId}/update
 # operationId: updateManagedCredentialUsernamePassword
-export def "managed-credentials-update updateManagedCredentialUsernamePassword" [
-  credentialId: int
+export def "managed-credentials-update update-managed-credential-username-password" [
+  credential_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5758,8 +5758,8 @@ export def "managed-credentials-update updateManagedCredentialUsernamePassword" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed/credentials/($credentialId)/update")
-  let body = {password: $password, username: $username} | compact
+  let full_url = (build-url $base ({credential_id: $credential_id} | format pattern "/managed/credentials/{credential_id}/update"))
+  let body = {"password": $password, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5796,7 +5796,7 @@ export def "managed-issues list" [
 # GET /managed/issues/{issueId}
 # operationId: getManagedIssue
 export def "managed-issues get" [
-  issueId: int
+  issue_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5808,7 +5808,7 @@ export def "managed-issues get" [
 ]: nothing -> record<created: string, entity: record<id: int, label: string, type: string, url: string>, id: int, services: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed/issues/($issueId)")
+  let full_url = (build-url $base ({issue_id: $issue_id} | format pattern "/managed/issues/{issue_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5844,7 +5844,7 @@ export def "managed-linode-settings list" [
 # GET /managed/linode-settings/{linodeId}
 # operationId: getManagedLinodeSetting
 export def "managed-linode-settings get" [
-  linodeId: int
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5856,7 +5856,7 @@ export def "managed-linode-settings get" [
 ]: nothing -> record<group: string, id: int, label: string, ssh: record<access: bool, ip: string, port: int, user: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed/linode-settings/($linodeId)")
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/managed/linode-settings/{linode_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5867,8 +5867,8 @@ export def "managed-linode-settings get" [
 # PUT /managed/linode-settings/{linodeId}
 # operationId: updateManagedLinodeSetting
 # --ssh shape: {access?: bool, ip?: string, port?: int, user?: string}
-export def "managed-linode-settings updateManagedLinodeSetting" [
-  linodeId: int
+export def "managed-linode-settings update" [
+  linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5882,8 +5882,8 @@ export def "managed-linode-settings updateManagedLinodeSetting" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed/linode-settings/($linodeId)")
-  let body = {ssh: $ssh} | compact
+  let full_url = (build-url $base ({linode_id: $linode_id} | format pattern "/managed/linode-settings/{linode_id}"))
+  let body = {"ssh": $ssh} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5916,7 +5916,7 @@ export def "managed-services list" [
 #
 # POST /managed/services
 # operationId: createManagedService
-export def "managed-services createManagedService" [
+export def "managed-services create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5939,7 +5939,7 @@ export def "managed-services createManagedService" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/managed/services")
-  let body = {address: $address, body: $body_body, consultation_group: $consultation_group, credentials: $credentials, label: $label, notes: $notes, region: $region, service_type: $service_type, timeout: $timeout} | compact
+  let body = {"address": $address, "body": $body_body, "consultation_group": $consultation_group, "credentials": $credentials, "label": $label, "notes": $notes, "region": $region, "service_type": $service_type, "timeout": $timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5951,7 +5951,7 @@ export def "managed-services createManagedService" [
 # DELETE /managed/services/{serviceId}
 # operationId: deleteManagedService
 export def "managed-services delete" [
-  serviceId: int
+  service_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5963,7 +5963,7 @@ export def "managed-services delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed/services/($serviceId)")
+  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/managed/services/{service_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5974,7 +5974,7 @@ export def "managed-services delete" [
 # GET /managed/services/{serviceId}
 # operationId: getManagedService
 export def "managed-services get" [
-  serviceId: int
+  service_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5986,7 +5986,7 @@ export def "managed-services get" [
 ]: nothing -> record<address: string, body: string, consultation_group: string, created: string, credentials: list<int>, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed/services/($serviceId)")
+  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/managed/services/{service_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5996,8 +5996,8 @@ export def "managed-services get" [
 #
 # PUT /managed/services/{serviceId}
 # operationId: updateManagedService
-export def "managed-services updateManagedService" [
-  serviceId: int
+export def "managed-services update" [
+  service_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6019,8 +6019,8 @@ export def "managed-services updateManagedService" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed/services/($serviceId)")
-  let body = {address: $address, body: $body_body, consultation_group: $consultation_group, credentials: $credentials, label: $label, notes: $notes, region: $region, service_type: $service_type, timeout: $timeout} | compact
+  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/managed/services/{service_id}"))
+  let body = {"address": $address, "body": $body_body, "consultation_group": $consultation_group, "credentials": $credentials, "label": $label, "notes": $notes, "region": $region, "service_type": $service_type, "timeout": $timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6031,8 +6031,8 @@ export def "managed-services updateManagedService" [
 #
 # POST /managed/services/{serviceId}/disable
 # operationId: disableManagedService
-export def "managed-services-disable disableManagedService" [
-  serviceId: int
+export def "managed-services-disable disable" [
+  service_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6044,7 +6044,7 @@ export def "managed-services-disable disableManagedService" [
 ]: nothing -> record<address: string, body: string, consultation_group: string, created: string, credentials: list<int>, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed/services/($serviceId)/disable")
+  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/managed/services/{service_id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6054,8 +6054,8 @@ export def "managed-services-disable disableManagedService" [
 #
 # POST /managed/services/{serviceId}/enable
 # operationId: enableManagedService
-export def "managed-services-enable enableManagedService" [
-  serviceId: int
+export def "managed-services-enable enable" [
+  service_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6067,7 +6067,7 @@ export def "managed-services-enable enableManagedService" [
 ]: nothing -> record<address: string, body: string, consultation_group: string, created: string, credentials: list<int>, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/managed/services/($serviceId)/enable")
+  let full_url = (build-url $base ({service_id: $service_id} | format pattern "/managed/services/{service_id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6126,7 +6126,7 @@ export def "networking-firewalls list" [
 # operationId: createFirewalls
 # --devices shape: {linodes?: list}
 # --rules shape: {inbound?: list, inbound_policy?: "ACCEPT"|"DROP", outbound?: list, outbound_policy?: "ACCEPT"|"DROP"}
-export def "networking-firewalls createFirewalls" [
+export def "networking-firewalls create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6144,7 +6144,7 @@ export def "networking-firewalls createFirewalls" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let full_url = (build-url $base "/networking/firewalls")
-  let body = {devices: $devices, rules: $rules, label: $label, tags: $tags} | compact
+  let body = {"devices": $devices, "rules": $rules, "label": $label, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6156,7 +6156,7 @@ export def "networking-firewalls createFirewalls" [
 # DELETE /networking/firewalls/{firewallId}
 # operationId: deleteFirewall
 export def "networking-firewalls delete" [
-  firewallId: int
+  firewall_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6168,7 +6168,7 @@ export def "networking-firewalls delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/networking/firewalls/($firewallId)")
+  let full_url = (build-url $base ({firewall_id: $firewall_id} | format pattern "/networking/firewalls/{firewall_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6179,7 +6179,7 @@ export def "networking-firewalls delete" [
 # GET /networking/firewalls/{firewallId}
 # operationId: getFirewall
 export def "networking-firewalls get" [
-  firewallId: int
+  firewall_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6191,7 +6191,7 @@ export def "networking-firewalls get" [
 ]: nothing -> record<created: string, id: int, label: string, rules: record<inbound: list<record>, inbound_policy: string, outbound: list<record>, outbound_policy: string>, status: string, tags: list<string>, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/networking/firewalls/($firewallId)")
+  let full_url = (build-url $base ({firewall_id: $firewall_id} | format pattern "/networking/firewalls/{firewall_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6201,8 +6201,8 @@ export def "networking-firewalls get" [
 #
 # PUT /networking/firewalls/{firewallId}
 # operationId: updateFirewall
-export def "networking-firewalls updateFirewall" [
-  firewallId: int
+export def "networking-firewalls update" [
+  firewall_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6218,8 +6218,8 @@ export def "networking-firewalls updateFirewall" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/networking/firewalls/($firewallId)")
-  let body = {label: $label, status: $status, tags: $tags} | compact
+  let full_url = (build-url $base ({firewall_id: $firewall_id} | format pattern "/networking/firewalls/{firewall_id}"))
+  let body = {"label": $label, "status": $status, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6231,7 +6231,7 @@ export def "networking-firewalls updateFirewall" [
 # GET /networking/firewalls/{firewallId}/devices
 # operationId: getFirewallDevices
 export def "networking-firewalls-devices list" [
-  firewallId: int
+  firewall_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6246,7 +6246,7 @@ export def "networking-firewalls-devices list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/networking/firewalls/($firewallId)/devices" $qp)
+  let full_url = (build-url $base ({firewall_id: $firewall_id} | format pattern "/networking/firewalls/{firewall_id}/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6256,8 +6256,8 @@ export def "networking-firewalls-devices list" [
 #
 # POST /networking/firewalls/{firewallId}/devices
 # operationId: createFirewallDevice
-export def "networking-firewalls-devices createFirewallDevice" [
-  firewallId: int
+export def "networking-firewalls-devices create" [
+  firewall_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6271,7 +6271,7 @@ export def "networking-firewalls-devices createFirewallDevice" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/networking/firewalls/($firewallId)/devices")
+  let full_url = (build-url $base ({firewall_id: $firewall_id} | format pattern "/networking/firewalls/{firewall_id}/devices"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6283,8 +6283,8 @@ export def "networking-firewalls-devices createFirewallDevice" [
 # DELETE /networking/firewalls/{firewallId}/devices/{deviceId}
 # operationId: deleteFirewallDevice
 export def "networking-firewalls-devices delete" [
-  firewallId: int
-  deviceId: int
+  firewall_id: int
+  device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6296,7 +6296,7 @@ export def "networking-firewalls-devices delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/networking/firewalls/($firewallId)/devices/($deviceId)")
+  let full_url = (build-url $base ({firewall_id: $firewall_id, device_id: $device_id} | format pattern "/networking/firewalls/{firewall_id}/devices/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6307,8 +6307,8 @@ export def "networking-firewalls-devices delete" [
 # GET /networking/firewalls/{firewallId}/devices/{deviceId}
 # operationId: getFirewallDevice
 export def "networking-firewalls-devices get" [
-  firewallId: int
-  deviceId: int
+  firewall_id: int
+  device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6320,7 +6320,7 @@ export def "networking-firewalls-devices get" [
 ]: nothing -> record<created: string, entity: record<id: int, label: string, type: string, url: string>, id: int, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/networking/firewalls/($firewallId)/devices/($deviceId)")
+  let full_url = (build-url $base ({firewall_id: $firewall_id, device_id: $device_id} | format pattern "/networking/firewalls/{firewall_id}/devices/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6331,7 +6331,7 @@ export def "networking-firewalls-devices get" [
 # GET /networking/firewalls/{firewallId}/rules
 # operationId: getFirewallRules
 export def "networking-firewalls-rules get" [
-  firewallId: int
+  firewall_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6343,7 +6343,7 @@ export def "networking-firewalls-rules get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/networking/firewalls/($firewallId)/rules")
+  let full_url = (build-url $base ({firewall_id: $firewall_id} | format pattern "/networking/firewalls/{firewall_id}/rules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6353,8 +6353,8 @@ export def "networking-firewalls-rules get" [
 #
 # PUT /networking/firewalls/{firewallId}/rules
 # operationId: updateFirewallRules
-export def "networking-firewalls-rules updateFirewallRules" [
-  firewallId: int
+export def "networking-firewalls-rules update" [
+  firewall_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6369,8 +6369,8 @@ export def "networking-firewalls-rules updateFirewallRules" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/networking/firewalls/($firewallId)/rules")
-  let body = {inbound: $inbound, outbound: $outbound} | compact
+  let full_url = (build-url $base ({firewall_id: $firewall_id} | format pattern "/networking/firewalls/{firewall_id}/rules"))
+  let body = {"inbound": $inbound, "outbound": $outbound} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6420,7 +6420,7 @@ export def "networking-ips allocateIP" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/networking/ips")
-  let body = {linode_id: $linode_id, public: $public, type: $type} | compact
+  let body = {"linode_id": $linode_id, "public": $public, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6448,7 +6448,7 @@ export def "networking-ips-assign assignIPs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/networking/ips/assign")
-  let body = {assignments: $assignments, region: $region} | compact
+  let body = {"assignments": $assignments, "region": $region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6475,7 +6475,7 @@ export def "networking-ips-share shareIPs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4beta")
   let full_url = (build-url $base "/networking/ips/share")
-  let body = {ips: $ips, linode_id: $linode_id} | compact
+  let body = {"ips": $ips, "linode_id": $linode_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6499,7 +6499,7 @@ export def "networking-ips get" [
 ]: nothing -> record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/networking/ips/($address)")
+  let full_url = (build-url $base ({address: $address} | format pattern "/networking/ips/{address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6509,7 +6509,7 @@ export def "networking-ips get" [
 #
 # PUT /networking/ips/{address}
 # operationId: updateIP
-export def "networking-ips updateIP" [
+export def "networking-ips update" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6524,8 +6524,8 @@ export def "networking-ips updateIP" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/networking/ips/($address)")
-  let body = {rdns: $rdns} | compact
+  let full_url = (build-url $base ({address: $address} | format pattern "/networking/ips/{address}"))
+  let body = {"rdns": $rdns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6553,7 +6553,7 @@ export def "networking-ipv4-assign assignIPv4s" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/networking/ipv4/assign")
-  let body = {assignments: $assignments, region: $region} | compact
+  let body = {"assignments": $assignments, "region": $region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6580,7 +6580,7 @@ export def "networking-ipv4-share shareIPv4s" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/networking/ipv4/share")
-  let body = {ips: $ips, linode_id: $linode_id} | compact
+  let body = {"ips": $ips, "linode_id": $linode_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6641,7 +6641,7 @@ export def "networking-ipv6-ranges list" [
 #
 # POST /networking/ipv6/ranges
 # operationId: postIPv6Range
-export def "networking-ipv6-ranges post" [
+export def "networking-ipv6-ranges create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6658,7 +6658,7 @@ export def "networking-ipv6-ranges post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/networking/ipv6/ranges")
-  let body = {linode_id: $linode_id, prefix_length: $prefix_length, route_target: $route_target} | compact
+  let body = {"linode_id": $linode_id, "prefix_length": $prefix_length, "route_target": $route_target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6682,7 +6682,7 @@ export def "networking-ipv6-ranges delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/networking/ipv6/ranges/($range)")
+  let full_url = (build-url $base ({range: $range} | format pattern "/networking/ipv6/ranges/{range}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6705,7 +6705,7 @@ export def "networking-ipv6-ranges get" [
 ]: nothing -> record<is_bgp: bool, linodes: list<int>, prefix: int, range: string, region: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/networking/ipv6/ranges/($range)")
+  let full_url = (build-url $base ({range: $range} | format pattern "/networking/ipv6/ranges/{range}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6766,7 +6766,7 @@ export def "nodebalancers list" [
 # POST /nodebalancers
 # operationId: createNodeBalancer
 # --configs item shape: {algorithm?: any, check?: any, check_attempts?: any, check_body?: any, check_interval?: any, check_passive?: any, check_path?: any, check_timeout?: any, cipher_suite?: any, nodes?: list, port?: any, protocol?: any, proxy_protocol?: any, ssl_cert?: any, ssl_key?: any, stickiness?: any}
-export def "nodebalancers createNodeBalancer" [
+export def "nodebalancers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6784,7 +6784,7 @@ export def "nodebalancers createNodeBalancer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/nodebalancers")
-  let body = {client_conn_throttle: $client_conn_throttle, configs: $configs, label: $label, region: $region} | compact
+  let body = {"client_conn_throttle": $client_conn_throttle, "configs": $configs, "label": $label, "region": $region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6796,7 +6796,7 @@ export def "nodebalancers createNodeBalancer" [
 # DELETE /nodebalancers/{nodeBalancerId}
 # operationId: deleteNodeBalancer
 export def "nodebalancers delete" [
-  nodeBalancerId: int
+  node_balancer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6808,7 +6808,7 @@ export def "nodebalancers delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/nodebalancers/($nodeBalancerId)")
+  let full_url = (build-url $base ({node_balancer_id: $node_balancer_id} | format pattern "/nodebalancers/{node_balancer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6819,7 +6819,7 @@ export def "nodebalancers delete" [
 # GET /nodebalancers/{nodeBalancerId}
 # operationId: getNodeBalancer
 export def "nodebalancers get" [
-  nodeBalancerId: int
+  node_balancer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6831,7 +6831,7 @@ export def "nodebalancers get" [
 ]: nothing -> record<client_conn_throttle: int, created: string, hostname: string, id: int, ipv4: string, ipv6: string, label: string, region: string, tags: list<string>, transfer: record<in: float, out: float, total: float>, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/nodebalancers/($nodeBalancerId)")
+  let full_url = (build-url $base ({node_balancer_id: $node_balancer_id} | format pattern "/nodebalancers/{node_balancer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6841,8 +6841,8 @@ export def "nodebalancers get" [
 #
 # PUT /nodebalancers/{nodeBalancerId}
 # operationId: updateNodeBalancer
-export def "nodebalancers updateNodeBalancer" [
-  nodeBalancerId: int
+export def "nodebalancers update" [
+  node_balancer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6858,8 +6858,8 @@ export def "nodebalancers updateNodeBalancer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/nodebalancers/($nodeBalancerId)")
-  let body = {client_conn_throttle: $client_conn_throttle, label: $label, tags: $tags} | compact
+  let full_url = (build-url $base ({node_balancer_id: $node_balancer_id} | format pattern "/nodebalancers/{node_balancer_id}"))
+  let body = {"client_conn_throttle": $client_conn_throttle, "label": $label, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6871,7 +6871,7 @@ export def "nodebalancers updateNodeBalancer" [
 # GET /nodebalancers/{nodeBalancerId}/configs
 # operationId: getNodeBalancerConfigs
 export def "nodebalancers-configs list" [
-  nodeBalancerId: int
+  node_balancer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6886,7 +6886,7 @@ export def "nodebalancers-configs list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nodebalancers/($nodeBalancerId)/configs" $qp)
+  let full_url = (build-url $base ({node_balancer_id: $node_balancer_id} | format pattern "/nodebalancers/{node_balancer_id}/configs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6896,8 +6896,8 @@ export def "nodebalancers-configs list" [
 #
 # POST /nodebalancers/{nodeBalancerId}/configs
 # operationId: createNodeBalancerConfig
-export def "nodebalancers-configs createNodeBalancerConfig" [
-  nodeBalancerId: int
+export def "nodebalancers-configs create" [
+  node_balancer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6925,8 +6925,8 @@ export def "nodebalancers-configs createNodeBalancerConfig" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/nodebalancers/($nodeBalancerId)/configs")
-  let body = {algorithm: $algorithm, check: $check, check_attempts: $check_attempts, check_body: $check_body, check_interval: $check_interval, check_passive: $check_passive, check_path: $check_path, check_timeout: $check_timeout, cipher_suite: $cipher_suite, port: $port, protocol: $protocol, proxy_protocol: $proxy_protocol, ssl_cert: $ssl_cert, ssl_key: $ssl_key, stickiness: $stickiness} | compact
+  let full_url = (build-url $base ({node_balancer_id: $node_balancer_id} | format pattern "/nodebalancers/{node_balancer_id}/configs"))
+  let body = {"algorithm": $algorithm, "check": $check, "check_attempts": $check_attempts, "check_body": $check_body, "check_interval": $check_interval, "check_passive": $check_passive, "check_path": $check_path, "check_timeout": $check_timeout, "cipher_suite": $cipher_suite, "port": $port, "protocol": $protocol, "proxy_protocol": $proxy_protocol, "ssl_cert": $ssl_cert, "ssl_key": $ssl_key, "stickiness": $stickiness} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6938,8 +6938,8 @@ export def "nodebalancers-configs createNodeBalancerConfig" [
 # DELETE /nodebalancers/{nodeBalancerId}/configs/{configId}
 # operationId: deleteNodeBalancerConfig
 export def "nodebalancers-configs delete" [
-  nodeBalancerId: int
-  configId: int
+  node_balancer_id: int
+  config_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6951,7 +6951,7 @@ export def "nodebalancers-configs delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/nodebalancers/($nodeBalancerId)/configs/($configId)")
+  let full_url = (build-url $base ({node_balancer_id: $node_balancer_id, config_id: $config_id} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6962,8 +6962,8 @@ export def "nodebalancers-configs delete" [
 # GET /nodebalancers/{nodeBalancerId}/configs/{configId}
 # operationId: getNodeBalancerConfig
 export def "nodebalancers-configs get" [
-  nodeBalancerId: int
-  configId: int
+  node_balancer_id: int
+  config_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6975,7 +6975,7 @@ export def "nodebalancers-configs get" [
 ]: nothing -> record<algorithm: string, check: string, check_attempts: int, check_body: string, check_interval: int, check_passive: bool, check_path: string, check_timeout: int, cipher_suite: string, id: int, nodebalancer_id: int, nodes_status: record<down: int, up: int>, port: int, protocol: string, proxy_protocol: string, ssl_cert: string, ssl_commonname: string, ssl_fingerprint: string, ssl_key: string, stickiness: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/nodebalancers/($nodeBalancerId)/configs/($configId)")
+  let full_url = (build-url $base ({node_balancer_id: $node_balancer_id, config_id: $config_id} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6985,9 +6985,9 @@ export def "nodebalancers-configs get" [
 #
 # PUT /nodebalancers/{nodeBalancerId}/configs/{configId}
 # operationId: updateNodeBalancerConfig
-export def "nodebalancers-configs updateNodeBalancerConfig" [
-  nodeBalancerId: int
-  configId: int
+export def "nodebalancers-configs update" [
+  node_balancer_id: int
+  config_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7015,8 +7015,8 @@ export def "nodebalancers-configs updateNodeBalancerConfig" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/nodebalancers/($nodeBalancerId)/configs/($configId)")
-  let body = {algorithm: $algorithm, check: $check, check_attempts: $check_attempts, check_body: $check_body, check_interval: $check_interval, check_passive: $check_passive, check_path: $check_path, check_timeout: $check_timeout, cipher_suite: $cipher_suite, port: $port, protocol: $protocol, proxy_protocol: $proxy_protocol, ssl_cert: $ssl_cert, ssl_key: $ssl_key, stickiness: $stickiness} | compact
+  let full_url = (build-url $base ({node_balancer_id: $node_balancer_id, config_id: $config_id} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}"))
+  let body = {"algorithm": $algorithm, "check": $check, "check_attempts": $check_attempts, "check_body": $check_body, "check_interval": $check_interval, "check_passive": $check_passive, "check_path": $check_path, "check_timeout": $check_timeout, "cipher_suite": $cipher_suite, "port": $port, "protocol": $protocol, "proxy_protocol": $proxy_protocol, "ssl_cert": $ssl_cert, "ssl_key": $ssl_key, "stickiness": $stickiness} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7028,8 +7028,8 @@ export def "nodebalancers-configs updateNodeBalancerConfig" [
 # GET /nodebalancers/{nodeBalancerId}/configs/{configId}/nodes
 # operationId: getNodeBalancerConfigNodes
 export def "nodebalancers-configs-nodes list" [
-  nodeBalancerId: int
-  configId: int
+  node_balancer_id: int
+  config_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7044,7 +7044,7 @@ export def "nodebalancers-configs-nodes list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/nodebalancers/($nodeBalancerId)/configs/($configId)/nodes" $qp)
+  let full_url = (build-url $base ({node_balancer_id: $node_balancer_id, config_id: $config_id} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}/nodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7054,9 +7054,9 @@ export def "nodebalancers-configs-nodes list" [
 #
 # POST /nodebalancers/{nodeBalancerId}/configs/{configId}/nodes
 # operationId: createNodeBalancerNode
-export def "nodebalancers-configs-nodes createNodeBalancerNode" [
-  nodeBalancerId: int
-  configId: int
+export def "nodebalancers-configs-nodes create" [
+  node_balancer_id: int
+  config_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7073,8 +7073,8 @@ export def "nodebalancers-configs-nodes createNodeBalancerNode" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/nodebalancers/($nodeBalancerId)/configs/($configId)/nodes")
-  let body = {address: $address, label: $label, mode: $mode, weight: $weight} | compact
+  let full_url = (build-url $base ({node_balancer_id: $node_balancer_id, config_id: $config_id} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}/nodes"))
+  let body = {"address": $address, "label": $label, "mode": $mode, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7086,9 +7086,9 @@ export def "nodebalancers-configs-nodes createNodeBalancerNode" [
 # DELETE /nodebalancers/{nodeBalancerId}/configs/{configId}/nodes/{nodeId}
 # operationId: deleteNodeBalancerConfigNode
 export def "nodebalancers-configs-nodes delete" [
-  nodeBalancerId: int
-  configId: int
-  nodeId: int
+  node_balancer_id: int
+  config_id: int
+  node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7100,7 +7100,7 @@ export def "nodebalancers-configs-nodes delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/nodebalancers/($nodeBalancerId)/configs/($configId)/nodes/($nodeId)")
+  let full_url = (build-url $base ({node_balancer_id: $node_balancer_id, config_id: $config_id, node_id: $node_id} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}/nodes/{node_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7111,9 +7111,9 @@ export def "nodebalancers-configs-nodes delete" [
 # GET /nodebalancers/{nodeBalancerId}/configs/{configId}/nodes/{nodeId}
 # operationId: getNodeBalancerNode
 export def "nodebalancers-configs-nodes get" [
-  nodeBalancerId: int
-  configId: int
-  nodeId: int
+  node_balancer_id: int
+  config_id: int
+  node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7125,7 +7125,7 @@ export def "nodebalancers-configs-nodes get" [
 ]: nothing -> record<address: string, config_id: int, id: int, label: string, mode: string, nodebalancer_id: int, status: string, weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/nodebalancers/($nodeBalancerId)/configs/($configId)/nodes/($nodeId)")
+  let full_url = (build-url $base ({node_balancer_id: $node_balancer_id, config_id: $config_id, node_id: $node_id} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}/nodes/{node_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7135,10 +7135,10 @@ export def "nodebalancers-configs-nodes get" [
 #
 # PUT /nodebalancers/{nodeBalancerId}/configs/{configId}/nodes/{nodeId}
 # operationId: updateNodeBalancerNode
-export def "nodebalancers-configs-nodes updateNodeBalancerNode" [
-  nodeBalancerId: int
-  configId: int
-  nodeId: int
+export def "nodebalancers-configs-nodes update" [
+  node_balancer_id: int
+  config_id: int
+  node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7155,8 +7155,8 @@ export def "nodebalancers-configs-nodes updateNodeBalancerNode" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/nodebalancers/($nodeBalancerId)/configs/($configId)/nodes/($nodeId)")
-  let body = {address: $address, label: $label, mode: $mode, weight: $weight} | compact
+  let full_url = (build-url $base ({node_balancer_id: $node_balancer_id, config_id: $config_id, node_id: $node_id} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}/nodes/{node_id}"))
+  let body = {"address": $address, "label": $label, "mode": $mode, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7169,8 +7169,8 @@ export def "nodebalancers-configs-nodes updateNodeBalancerNode" [
 # operationId: rebuildNodeBalancerConfig
 # --nodes item shape: {address?: any, id?: int, label?: any, mode?: any, weight?: any}
 export def "nodebalancers-configs-rebuild rebuildNodeBalancerConfig" [
-  nodeBalancerId: int
-  configId: int
+  node_balancer_id: int
+  config_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7199,8 +7199,8 @@ export def "nodebalancers-configs-rebuild rebuildNodeBalancerConfig" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/nodebalancers/($nodeBalancerId)/configs/($configId)/rebuild")
-  let body = {algorithm: $algorithm, check: $check, check_attempts: $check_attempts, check_body: $check_body, check_interval: $check_interval, check_passive: $check_passive, check_path: $check_path, check_timeout: $check_timeout, cipher_suite: $cipher_suite, port: $port, protocol: $protocol, proxy_protocol: $proxy_protocol, ssl_cert: $ssl_cert, ssl_key: $ssl_key, stickiness: $stickiness, nodes: $nodes} | compact
+  let full_url = (build-url $base ({node_balancer_id: $node_balancer_id, config_id: $config_id} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}/rebuild"))
+  let body = {"algorithm": $algorithm, "check": $check, "check_attempts": $check_attempts, "check_body": $check_body, "check_interval": $check_interval, "check_passive": $check_passive, "check_path": $check_path, "check_timeout": $check_timeout, "cipher_suite": $cipher_suite, "port": $port, "protocol": $protocol, "proxy_protocol": $proxy_protocol, "ssl_cert": $ssl_cert, "ssl_key": $ssl_key, "stickiness": $stickiness, "nodes": $nodes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7211,7 +7211,7 @@ export def "nodebalancers-configs-rebuild rebuildNodeBalancerConfig" [
 #
 # GET /nodebalancers/{nodeBalancerId}/stats
 export def "nodebalancers-stats get" [
-  nodeBalancerId: int
+  node_balancer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7223,7 +7223,7 @@ export def "nodebalancers-stats get" [
 ]: nothing -> record<data: record<connections: list<float>, traffic: record<in: list, out: list>>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/nodebalancers/($nodeBalancerId)/stats")
+  let full_url = (build-url $base ({node_balancer_id: $node_balancer_id} | format pattern "/nodebalancers/{node_balancer_id}/stats"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7255,7 +7255,7 @@ export def "object-storage-buckets get" [
 #
 # POST /object-storage/buckets
 # operationId: createObjectStorageBucket
-export def "object-storage-buckets createObjectStorageBucket" [
+export def "object-storage-buckets create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7273,7 +7273,7 @@ export def "object-storage-buckets createObjectStorageBucket" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let full_url = (build-url $base "/object-storage/buckets")
-  let body = {acl: $acl, cluster: $cluster, cors_enabled: $cors_enabled, label: $label} | compact
+  let body = {"acl": $acl, "cluster": $cluster, "cors_enabled": $cors_enabled, "label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7284,8 +7284,8 @@ export def "object-storage-buckets createObjectStorageBucket" [
 #
 # GET /object-storage/buckets/{clusterId}
 # operationId: getObjectStorageBucketinCluster
-export def "object-storage-buckets get-by-clusterId" [
-  clusterId: string
+export def "object-storage-buckets get-object-storage-bucketin-cluster" [
+  cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7297,7 +7297,7 @@ export def "object-storage-buckets get-by-clusterId" [
 ]: nothing -> record<data: table<cluster: string, created: string, hostname: string, label: string, objects: int, size: int>, page: any, pages: any, results: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/object-storage/buckets/($clusterId)")
+  let full_url = (build-url $base ({cluster_id: $cluster_id} | format pattern "/object-storage/buckets/{cluster_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7308,7 +7308,7 @@ export def "object-storage-buckets get-by-clusterId" [
 # DELETE /object-storage/buckets/{clusterId}/{bucket}
 # operationId: deleteObjectStorageBucket
 export def "object-storage-buckets delete" [
-  clusterId: string
+  cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7321,7 +7321,7 @@ export def "object-storage-buckets delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/object-storage/buckets/($clusterId)/($bucket)")
+  let full_url = (build-url $base ({cluster_id: $cluster_id, bucket: $bucket} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7332,7 +7332,7 @@ export def "object-storage-buckets delete" [
 # GET /object-storage/buckets/{clusterId}/{bucket}
 # operationId: getObjectStorageBucket
 export def "object-storage-buckets get-by-clusterId-bucket" [
-  clusterId: string
+  cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7345,7 +7345,7 @@ export def "object-storage-buckets get-by-clusterId-bucket" [
 ]: nothing -> record<cluster: string, created: string, hostname: string, label: string, objects: int, size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/object-storage/buckets/($clusterId)/($bucket)")
+  let full_url = (build-url $base ({cluster_id: $cluster_id, bucket: $bucket} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7356,7 +7356,7 @@ export def "object-storage-buckets get-by-clusterId-bucket" [
 # POST /object-storage/buckets/{clusterId}/{bucket}/access
 # operationId: modifyObjectStorageBucketAccess
 export def "object-storage-buckets-access modifyObjectStorageBucketAccess" [
-  clusterId: string
+  cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7372,8 +7372,8 @@ export def "object-storage-buckets-access modifyObjectStorageBucketAccess" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/object-storage/buckets/($clusterId)/($bucket)/access")
-  let body = {acl: $acl, cors_enabled: $cors_enabled} | compact
+  let full_url = (build-url $base ({cluster_id: $cluster_id, bucket: $bucket} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/access"))
+  let body = {"acl": $acl, "cors_enabled": $cors_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7384,8 +7384,8 @@ export def "object-storage-buckets-access modifyObjectStorageBucketAccess" [
 #
 # PUT /object-storage/buckets/{clusterId}/{bucket}/access
 # operationId: updateObjectStorageBucketAccess
-export def "object-storage-buckets-access updateObjectStorageBucketAccess" [
-  clusterId: string
+export def "object-storage-buckets-access update" [
+  cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7401,8 +7401,8 @@ export def "object-storage-buckets-access updateObjectStorageBucketAccess" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/object-storage/buckets/($clusterId)/($bucket)/access")
-  let body = {acl: $acl, cors_enabled: $cors_enabled} | compact
+  let full_url = (build-url $base ({cluster_id: $cluster_id, bucket: $bucket} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/access"))
+  let body = {"acl": $acl, "cors_enabled": $cors_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7414,7 +7414,7 @@ export def "object-storage-buckets-access updateObjectStorageBucketAccess" [
 # GET /object-storage/buckets/{clusterId}/{bucket}/object-acl
 # operationId: viewObjectStorageBucketACL
 export def "object-storage-buckets-object-acl viewObjectStorageBucketACL" [
-  clusterId: string
+  cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7429,7 +7429,7 @@ export def "object-storage-buckets-object-acl viewObjectStorageBucketACL" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/object-storage/buckets/($clusterId)/($bucket)/object-acl" $qp)
+  let full_url = (build-url $base ({cluster_id: $cluster_id, bucket: $bucket} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/object-acl") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7439,8 +7439,8 @@ export def "object-storage-buckets-object-acl viewObjectStorageBucketACL" [
 #
 # PUT /object-storage/buckets/{clusterId}/{bucket}/object-acl
 # operationId: updateObjectStorageBucketACL
-export def "object-storage-buckets-object-acl updateObjectStorageBucketACL" [
-  clusterId: string
+export def "object-storage-buckets-object-acl update" [
+  cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7456,8 +7456,8 @@ export def "object-storage-buckets-object-acl updateObjectStorageBucketACL" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/object-storage/buckets/($clusterId)/($bucket)/object-acl")
-  let body = {acl: $acl, name: $name} | compact
+  let full_url = (build-url $base ({cluster_id: $cluster_id, bucket: $bucket} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/object-acl"))
+  let body = {"acl": $acl, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7468,8 +7468,8 @@ export def "object-storage-buckets-object-acl updateObjectStorageBucketACL" [
 #
 # GET /object-storage/buckets/{clusterId}/{bucket}/object-list
 # operationId: getObjectStorageBucketContent
-export def "object-storage-buckets-object-list get" [
-  clusterId: string
+export def "object-storage-buckets-object-list get-object-storage-content" [
+  cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7487,7 +7487,7 @@ export def "object-storage-buckets-object-list get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/object-storage/buckets/($clusterId)/($bucket)/object-list" $qp)
+  let full_url = (build-url $base ({cluster_id: $cluster_id, bucket: $bucket} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/object-list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7497,8 +7497,8 @@ export def "object-storage-buckets-object-list get" [
 #
 # POST /object-storage/buckets/{clusterId}/{bucket}/object-url
 # operationId: createObjectStorageObjectURL
-export def "object-storage-buckets-object-url createObjectStorageObjectURL" [
-  clusterId: string
+export def "object-storage-buckets-object-url create" [
+  cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7516,8 +7516,8 @@ export def "object-storage-buckets-object-url createObjectStorageObjectURL" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/object-storage/buckets/($clusterId)/($bucket)/object-url")
-  let body = {content_type: $content_type, expires_in: $expires_in, method: $method, name: $name} | compact
+  let full_url = (build-url $base ({cluster_id: $cluster_id, bucket: $bucket} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/object-url"))
+  let body = {"content_type": $content_type, "expires_in": $expires_in, "method": $method, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7529,7 +7529,7 @@ export def "object-storage-buckets-object-url createObjectStorageObjectURL" [
 # DELETE /object-storage/buckets/{clusterId}/{bucket}/ssl
 # operationId: deleteObjectStorageSSL
 export def "object-storage-buckets-ssl delete" [
-  clusterId: string
+  cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7542,7 +7542,7 @@ export def "object-storage-buckets-ssl delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/object-storage/buckets/($clusterId)/($bucket)/ssl")
+  let full_url = (build-url $base ({cluster_id: $cluster_id, bucket: $bucket} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/ssl"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7553,7 +7553,7 @@ export def "object-storage-buckets-ssl delete" [
 # GET /object-storage/buckets/{clusterId}/{bucket}/ssl
 # operationId: getObjectStorageSSL
 export def "object-storage-buckets-ssl get" [
-  clusterId: string
+  cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7566,7 +7566,7 @@ export def "object-storage-buckets-ssl get" [
 ]: nothing -> record<ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/object-storage/buckets/($clusterId)/($bucket)/ssl")
+  let full_url = (build-url $base ({cluster_id: $cluster_id, bucket: $bucket} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/ssl"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7576,8 +7576,8 @@ export def "object-storage-buckets-ssl get" [
 #
 # POST /object-storage/buckets/{clusterId}/{bucket}/ssl
 # operationId: createObjectStorageSSL
-export def "object-storage-buckets-ssl createObjectStorageSSL" [
-  clusterId: string
+export def "object-storage-buckets-ssl create" [
+  cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7593,8 +7593,8 @@ export def "object-storage-buckets-ssl createObjectStorageSSL" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/object-storage/buckets/($clusterId)/($bucket)/ssl")
-  let body = {certificate: $certificate, private_key: $private_key} | compact
+  let full_url = (build-url $base ({cluster_id: $cluster_id, bucket: $bucket} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/ssl"))
+  let body = {"certificate": $certificate, "private_key": $private_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7605,7 +7605,7 @@ export def "object-storage-buckets-ssl createObjectStorageSSL" [
 #
 # POST /object-storage/cancel
 # operationId: cancelObjectStorage
-export def "object-storage-cancel cancelObjectStorage" [
+export def "object-storage-cancel cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7650,7 +7650,7 @@ export def "object-storage-clusters list" [
 # GET /object-storage/clusters/{clusterId}
 # operationId: getObjectStorageCluster
 export def "object-storage-clusters get" [
-  clusterId: string
+  cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7662,7 +7662,7 @@ export def "object-storage-clusters get" [
 ]: nothing -> record<domain: string, id: string, region: string, static_site_domain: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/object-storage/clusters/($clusterId)")
+  let full_url = (build-url $base ({cluster_id: $cluster_id} | format pattern "/object-storage/clusters/{cluster_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7695,7 +7695,7 @@ export def "object-storage-keys list" [
 # POST /object-storage/keys
 # operationId: createObjectStorageKeys
 # --bucket_access item shape: {bucket_name?: string, cluster?: string, permissions?: "read_write"|"read_only"}
-export def "object-storage-keys createObjectStorageKeys" [
+export def "object-storage-keys create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7711,7 +7711,7 @@ export def "object-storage-keys createObjectStorageKeys" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
   let full_url = (build-url $base "/object-storage/keys")
-  let body = {bucket_access: $bucket_access, label: $label} | compact
+  let body = {"bucket_access": $bucket_access, "label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7723,7 +7723,7 @@ export def "object-storage-keys createObjectStorageKeys" [
 # DELETE /object-storage/keys/{keyId}
 # operationId: deleteObjectStorageKey
 export def "object-storage-keys delete" [
-  keyId: int
+  key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7735,7 +7735,7 @@ export def "object-storage-keys delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/object-storage/keys/($keyId)")
+  let full_url = (build-url $base ({key_id: $key_id} | format pattern "/object-storage/keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7746,7 +7746,7 @@ export def "object-storage-keys delete" [
 # GET /object-storage/keys/{keyId}
 # operationId: getObjectStorageKey
 export def "object-storage-keys get" [
-  keyId: int
+  key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7758,7 +7758,7 @@ export def "object-storage-keys get" [
 ]: nothing -> record<access_key: string, bucket_access: table<bucket_name: string, cluster: string, permissions: string>, id: int, label: string, limited: bool, secret_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/object-storage/keys/($keyId)")
+  let full_url = (build-url $base ({key_id: $key_id} | format pattern "/object-storage/keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7768,8 +7768,8 @@ export def "object-storage-keys get" [
 #
 # PUT /object-storage/keys/{keyId}
 # operationId: updateObjectStorageKey
-export def "object-storage-keys updateObjectStorageKey" [
-  keyId: int
+export def "object-storage-keys update" [
+  key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7783,8 +7783,8 @@ export def "object-storage-keys updateObjectStorageKey" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
-  let full_url = (build-url $base $"/object-storage/keys/($keyId)")
-  let body = {label: $label} | compact
+  let full_url = (build-url $base ({key_id: $key_id} | format pattern "/object-storage/keys/{key_id}"))
+  let body = {"label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7840,7 +7840,7 @@ export def "profile get" [
 # PUT /profile
 # operationId: updateProfile
 @deprecated --flag ip-whitelist-enabled
-export def "profile updateProfile" [
+export def "profile update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7862,7 +7862,7 @@ export def "profile updateProfile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile")
-  let body = {authorized_keys: $authorized_keys, email: $email, email_notifications: $email_notifications, ip_whitelist_enabled: $ip_whitelist_enabled, lish_auth_method: $lish_auth_method, restricted: $restricted, timezone: $timezone, two_factor_auth: $two_factor_auth} | compact
+  let body = {"authorized_keys": $authorized_keys, "email": $email, "email_notifications": $email_notifications, "ip_whitelist_enabled": $ip_whitelist_enabled, "lish_auth_method": $lish_auth_method, "restricted": $restricted, "timezone": $timezone, "two_factor_auth": $two_factor_auth} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7899,7 +7899,7 @@ export def "profile-apps list" [
 # DELETE /profile/apps/{appId}
 # operationId: deleteProfileApp
 export def "profile-apps delete" [
-  appId: int
+  app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7911,7 +7911,7 @@ export def "profile-apps delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/profile/apps/($appId)")
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/profile/apps/{app_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7922,7 +7922,7 @@ export def "profile-apps delete" [
 # GET /profile/apps/{appId}
 # operationId: getProfileApp
 export def "profile-apps get" [
-  appId: int
+  app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7934,7 +7934,7 @@ export def "profile-apps get" [
 ]: nothing -> record<created: string, expiry: string, id: int, label: string, scopes: string, thumbnail_url: string, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/profile/apps/($appId)")
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/profile/apps/{app_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7944,7 +7944,7 @@ export def "profile-apps get" [
 #
 # GET /profile/devices
 # operationId: getDevices
-export def "profile-devices list" [
+export def "profile-devices get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7966,8 +7966,8 @@ export def "profile-devices list" [
 #
 # DELETE /profile/devices/{deviceId}
 # operationId: revokeTrustedDevice
-export def "profile-devices revokeTrustedDevice" [
-  deviceId: int
+export def "profile-devices delete-trusted" [
+  device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7979,7 +7979,7 @@ export def "profile-devices revokeTrustedDevice" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/profile/devices/($deviceId)")
+  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/profile/devices/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7989,8 +7989,8 @@ export def "profile-devices revokeTrustedDevice" [
 #
 # GET /profile/devices/{deviceId}
 # operationId: getTrustedDevice
-export def "profile-devices get" [
-  deviceId: int
+export def "profile-devices get-trusted" [
+  device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8002,7 +8002,7 @@ export def "profile-devices get" [
 ]: nothing -> record<created: string, expiry: string, id: int, last_authenticated: string, last_remote_addr: string, user_agent: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/profile/devices/($deviceId)")
+  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/profile/devices/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8057,7 +8057,7 @@ export def "profile-logins list" [
 # GET /profile/logins/{loginId}
 # operationId: getProfileLogin
 export def "profile-logins get" [
-  loginId: int
+  login_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8069,7 +8069,7 @@ export def "profile-logins get" [
 ]: nothing -> record<datetime: string, id: int, ip: string, restricted: bool, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/profile/logins/($loginId)")
+  let full_url = (build-url $base ({login_id: $login_id} | format pattern "/profile/logins/{login_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8101,7 +8101,7 @@ export def "profile-phone-number delete" [
 #
 # POST /profile/phone-number
 # operationId: postProfilePhoneNumber
-export def "profile-phone-number post" [
+export def "profile-phone-number create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8117,7 +8117,7 @@ export def "profile-phone-number post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile/phone-number")
-  let body = {iso_code: $iso_code, phone_number: $phone_number} | compact
+  let body = {"iso_code": $iso_code, "phone_number": $phone_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8128,7 +8128,7 @@ export def "profile-phone-number post" [
 #
 # POST /profile/phone-number/verify
 # operationId: postProfilePhoneNumberVerify
-export def "profile-phone-number-verify post" [
+export def "profile-phone-number-verify create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8143,7 +8143,7 @@ export def "profile-phone-number-verify post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile/phone-number/verify")
-  let body = {otp_code: $otp_code} | compact
+  let body = {"otp_code": $otp_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8154,7 +8154,7 @@ export def "profile-phone-number-verify post" [
 #
 # GET /profile/preferences
 # operationId: getUserPreferences
-export def "profile-preferences get" [
+export def "profile-preferences get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8176,7 +8176,7 @@ export def "profile-preferences get" [
 #
 # PUT /profile/preferences
 # operationId: updateUserPreferences
-export def "profile-preferences updateUserPreferences" [
+export def "profile-preferences update-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8224,7 +8224,7 @@ export def "profile-security-questions get" [
 # POST /profile/security-questions
 # operationId: postSecurityQuestions
 # --security_questions item shape: {question_id?: any, response?: any, security_question?: any}
-export def "profile-security-questions post" [
+export def "profile-security-questions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8239,7 +8239,7 @@ export def "profile-security-questions post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile/security-questions")
-  let body = {security_questions: $security_questions} | compact
+  let body = {"security_questions": $security_questions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8275,7 +8275,7 @@ export def "profile-sshkeys list" [
 #
 # POST /profile/sshkeys
 # operationId: addSSHKey
-export def "profile-sshkeys addSSHKey" [
+export def "profile-sshkeys create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8291,7 +8291,7 @@ export def "profile-sshkeys addSSHKey" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile/sshkeys")
-  let body = {label: $label, ssh_key: $ssh_key} | compact
+  let body = {"label": $label, "ssh_key": $ssh_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8303,7 +8303,7 @@ export def "profile-sshkeys addSSHKey" [
 # DELETE /profile/sshkeys/{sshKeyId}
 # operationId: deleteSSHKey
 export def "profile-sshkeys delete" [
-  sshKeyId: int
+  ssh_key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8315,7 +8315,7 @@ export def "profile-sshkeys delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/profile/sshkeys/($sshKeyId)")
+  let full_url = (build-url $base ({ssh_key_id: $ssh_key_id} | format pattern "/profile/sshkeys/{ssh_key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8326,7 +8326,7 @@ export def "profile-sshkeys delete" [
 # GET /profile/sshkeys/{sshKeyId}
 # operationId: getSSHKey
 export def "profile-sshkeys get" [
-  sshKeyId: int
+  ssh_key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8338,7 +8338,7 @@ export def "profile-sshkeys get" [
 ]: nothing -> record<created: string, id: int, label: string, ssh_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/profile/sshkeys/($sshKeyId)")
+  let full_url = (build-url $base ({ssh_key_id: $ssh_key_id} | format pattern "/profile/sshkeys/{ssh_key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8348,8 +8348,8 @@ export def "profile-sshkeys get" [
 #
 # PUT /profile/sshkeys/{sshKeyId}
 # operationId: updateSSHKey
-export def "profile-sshkeys updateSSHKey" [
-  sshKeyId: int
+export def "profile-sshkeys update" [
+  ssh_key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8363,8 +8363,8 @@ export def "profile-sshkeys updateSSHKey" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/profile/sshkeys/($sshKeyId)")
-  let body = {label: $label} | compact
+  let full_url = (build-url $base ({ssh_key_id: $ssh_key_id} | format pattern "/profile/sshkeys/{ssh_key_id}"))
+  let body = {"label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8434,7 +8434,7 @@ export def "profile-tfa-enable-confirm tfaConfirm" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile/tfa-enable-confirm")
-  let body = {tfa_code: $tfa_code} | compact
+  let body = {"tfa_code": $tfa_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8467,7 +8467,7 @@ export def "profile-tokens list" [
 #
 # POST /profile/tokens
 # operationId: createPersonalAccessToken
-export def "profile-tokens createPersonalAccessToken" [
+export def "profile-tokens create-personal-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8484,7 +8484,7 @@ export def "profile-tokens createPersonalAccessToken" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile/tokens")
-  let body = {expiry: $expiry, label: $label, scopes: $scopes} | compact
+  let body = {"expiry": $expiry, "label": $label, "scopes": $scopes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8495,8 +8495,8 @@ export def "profile-tokens createPersonalAccessToken" [
 #
 # DELETE /profile/tokens/{tokenId}
 # operationId: deletePersonalAccessToken
-export def "profile-tokens delete" [
-  tokenId: int
+export def "profile-tokens delete-personal-access" [
+  token_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8508,7 +8508,7 @@ export def "profile-tokens delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/profile/tokens/($tokenId)")
+  let full_url = (build-url $base ({token_id: $token_id} | format pattern "/profile/tokens/{token_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8518,8 +8518,8 @@ export def "profile-tokens delete" [
 #
 # GET /profile/tokens/{tokenId}
 # operationId: getPersonalAccessToken
-export def "profile-tokens get" [
-  tokenId: int
+export def "profile-tokens get-personal-access" [
+  token_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8531,7 +8531,7 @@ export def "profile-tokens get" [
 ]: nothing -> record<created: string, expiry: string, id: int, label: string, scopes: string, token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/profile/tokens/($tokenId)")
+  let full_url = (build-url $base ({token_id: $token_id} | format pattern "/profile/tokens/{token_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8541,8 +8541,8 @@ export def "profile-tokens get" [
 #
 # PUT /profile/tokens/{tokenId}
 # operationId: updatePersonalAccessToken
-export def "profile-tokens updatePersonalAccessToken" [
-  tokenId: int
+export def "profile-tokens update-personal-access" [
+  token_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8556,8 +8556,8 @@ export def "profile-tokens updatePersonalAccessToken" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/profile/tokens/($tokenId)")
-  let body = {label: $label} | compact
+  let full_url = (build-url $base ({token_id: $token_id} | format pattern "/profile/tokens/{token_id}"))
+  let body = {"label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8591,7 +8591,7 @@ export def "regions list" [
 # GET /regions/{regionId}
 # operationId: getRegion
 export def "regions get" [
-  regionId: string
+  region_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8603,7 +8603,7 @@ export def "regions get" [
 ]: nothing -> record<capabilities: list<string>, country: string, id: string, label: string, resolvers: record<ipv4: string, ipv6: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/regions/($regionId)")
+  let full_url = (build-url $base ({region_id: $region_id} | format pattern "/regions/{region_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8638,7 +8638,7 @@ export def "support-tickets list" [
 #
 # POST /support/tickets
 # operationId: createTicket
-export def "support-tickets createTicket" [
+export def "support-tickets create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8665,7 +8665,7 @@ export def "support-tickets createTicket" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/support/tickets")
-  let body = {database_id: $database_id, description: $description, domain_id: $domain_id, firewall_id: $firewall_id, linode_id: $linode_id, lkecluster_id: $lkecluster_id, longviewclient_id: $longviewclient_id, managed_issue: $managed_issue, nodebalancer_id: $nodebalancer_id, region: $region, summary: $summary, vlan: $vlan, volume_id: $volume_id} | compact
+  let body = {"database_id": $database_id, "description": $description, "domain_id": $domain_id, "firewall_id": $firewall_id, "linode_id": $linode_id, "lkecluster_id": $lkecluster_id, "longviewclient_id": $longviewclient_id, "managed_issue": $managed_issue, "nodebalancer_id": $nodebalancer_id, "region": $region, "summary": $summary, "vlan": $vlan, "volume_id": $volume_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8677,7 +8677,7 @@ export def "support-tickets createTicket" [
 # GET /support/tickets/{ticketId}
 # operationId: getTicket
 export def "support-tickets get" [
-  ticketId: int
+  ticket_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8689,7 +8689,7 @@ export def "support-tickets get" [
 ]: nothing -> record<attachments: list<string>, closable: bool, closed: string, description: string, entity: record<id: int, label: string, type: string, url: string>, gravatar_id: string, id: int, opened: string, opened_by: string, status: string, summary: string, updated: string, updated_by: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/support/tickets/($ticketId)")
+  let full_url = (build-url $base ({ticket_id: $ticket_id} | format pattern "/support/tickets/{ticket_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8699,8 +8699,8 @@ export def "support-tickets get" [
 #
 # POST /support/tickets/{ticketId}/attachments
 # operationId: createTicketAttachment
-export def "support-tickets-attachments createTicketAttachment" [
-  ticketId: int
+export def "support-tickets-attachments create" [
+  ticket_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8714,8 +8714,8 @@ export def "support-tickets-attachments createTicketAttachment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/support/tickets/($ticketId)/attachments")
-  let body = {file: $file} | compact
+  let full_url = (build-url $base ({ticket_id: $ticket_id} | format pattern "/support/tickets/{ticket_id}/attachments"))
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8726,8 +8726,8 @@ export def "support-tickets-attachments createTicketAttachment" [
 #
 # POST /support/tickets/{ticketId}/close
 # operationId: closeTicket
-export def "support-tickets-close closeTicket" [
-  ticketId: int
+export def "support-tickets-close close" [
+  ticket_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8739,7 +8739,7 @@ export def "support-tickets-close closeTicket" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/support/tickets/($ticketId)/close")
+  let full_url = (build-url $base ({ticket_id: $ticket_id} | format pattern "/support/tickets/{ticket_id}/close"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8750,7 +8750,7 @@ export def "support-tickets-close closeTicket" [
 # GET /support/tickets/{ticketId}/replies
 # operationId: getTicketReplies
 export def "support-tickets-replies get" [
-  ticketId: int
+  ticket_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8765,7 +8765,7 @@ export def "support-tickets-replies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/support/tickets/($ticketId)/replies" $qp)
+  let full_url = (build-url $base ({ticket_id: $ticket_id} | format pattern "/support/tickets/{ticket_id}/replies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8775,8 +8775,8 @@ export def "support-tickets-replies get" [
 #
 # POST /support/tickets/{ticketId}/replies
 # operationId: createTicketReply
-export def "support-tickets-replies createTicketReply" [
-  ticketId: int
+export def "support-tickets-replies create-ticket-reply" [
+  ticket_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8790,8 +8790,8 @@ export def "support-tickets-replies createTicketReply" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/support/tickets/($ticketId)/replies")
-  let body = {description: $description} | compact
+  let full_url = (build-url $base ({ticket_id: $ticket_id} | format pattern "/support/tickets/{ticket_id}/replies"))
+  let body = {"description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8802,7 +8802,7 @@ export def "support-tickets-replies createTicketReply" [
 #
 # GET /tags
 # operationId: getTags
-export def "tags list" [
+export def "tags get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8827,7 +8827,7 @@ export def "tags list" [
 #
 # POST /tags
 # operationId: createTag
-export def "tags createTag" [
+export def "tags create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8846,7 +8846,7 @@ export def "tags createTag" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tags")
-  let body = {domains: $domains, label: $label, linodes: $linodes, nodebalancers: $nodebalancers, volumes: $volumes} | compact
+  let body = {"domains": $domains, "label": $label, "linodes": $linodes, "nodebalancers": $nodebalancers, "volumes": $volumes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8870,7 +8870,7 @@ export def "tags delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($label)")
+  let full_url = (build-url $base ({label: $label} | format pattern "/tags/{label}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8880,7 +8880,7 @@ export def "tags delete" [
 #
 # GET /tags/{label}
 # operationId: getTaggedObjects
-export def "tags get" [
+export def "tags get-tagged-objects" [
   label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8896,7 +8896,7 @@ export def "tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($label)" $qp)
+  let full_url = (build-url $base ({label: $label} | format pattern "/tags/{label}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8931,7 +8931,7 @@ export def "volumes list" [
 #
 # POST /volumes
 # operationId: createVolume
-export def "volumes createVolume" [
+export def "volumes create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8951,7 +8951,7 @@ export def "volumes createVolume" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/volumes")
-  let body = {config_id: $config_id, label: $label, linode_id: $linode_id, region: $region, size: $size, tags: $tags} | compact
+  let body = {"config_id": $config_id, "label": $label, "linode_id": $linode_id, "region": $region, "size": $size, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8963,7 +8963,7 @@ export def "volumes createVolume" [
 # DELETE /volumes/{volumeId}
 # operationId: deleteVolume
 export def "volumes delete" [
-  volumeId: int
+  volume_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8975,7 +8975,7 @@ export def "volumes delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/volumes/($volumeId)")
+  let full_url = (build-url $base ({volume_id: $volume_id} | format pattern "/volumes/{volume_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8986,7 +8986,7 @@ export def "volumes delete" [
 # GET /volumes/{volumeId}
 # operationId: getVolume
 export def "volumes get" [
-  volumeId: int
+  volume_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9001,7 +9001,7 @@ export def "volumes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/volumes/($volumeId)" $qp)
+  let full_url = (build-url $base ({volume_id: $volume_id} | format pattern "/volumes/{volume_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9011,8 +9011,8 @@ export def "volumes get" [
 #
 # PUT /volumes/{volumeId}
 # operationId: updateVolume
-export def "volumes updateVolume" [
-  volumeId: int
+export def "volumes update" [
+  volume_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9028,8 +9028,8 @@ export def "volumes updateVolume" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/volumes/($volumeId)")
-  let body = {label: $label, region: $region, tags: $tags} | compact
+  let full_url = (build-url $base ({volume_id: $volume_id} | format pattern "/volumes/{volume_id}"))
+  let body = {"label": $label, "region": $region, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9040,8 +9040,8 @@ export def "volumes updateVolume" [
 #
 # POST /volumes/{volumeId}/attach
 # operationId: attachVolume
-export def "volumes-attach attachVolume" [
-  volumeId: int
+export def "volumes-attach attach" [
+  volume_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9057,8 +9057,8 @@ export def "volumes-attach attachVolume" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/volumes/($volumeId)/attach")
-  let body = {config_id: $config_id, linode_id: $linode_id, persist_across_boots: $persist_across_boots} | compact
+  let full_url = (build-url $base ({volume_id: $volume_id} | format pattern "/volumes/{volume_id}/attach"))
+  let body = {"config_id": $config_id, "linode_id": $linode_id, "persist_across_boots": $persist_across_boots} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9069,8 +9069,8 @@ export def "volumes-attach attachVolume" [
 #
 # POST /volumes/{volumeId}/clone
 # operationId: cloneVolume
-export def "volumes-clone cloneVolume" [
-  volumeId: int
+export def "volumes-clone clone" [
+  volume_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9084,8 +9084,8 @@ export def "volumes-clone cloneVolume" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/volumes/($volumeId)/clone")
-  let body = {label: $label} | compact
+  let full_url = (build-url $base ({volume_id: $volume_id} | format pattern "/volumes/{volume_id}/clone"))
+  let body = {"label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9097,7 +9097,7 @@ export def "volumes-clone cloneVolume" [
 # POST /volumes/{volumeId}/detach
 # operationId: detachVolume
 export def "volumes-detach detachVolume" [
-  volumeId: int
+  volume_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9109,7 +9109,7 @@ export def "volumes-detach detachVolume" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/volumes/($volumeId)/detach")
+  let full_url = (build-url $base ({volume_id: $volume_id} | format pattern "/volumes/{volume_id}/detach"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9119,8 +9119,8 @@ export def "volumes-detach detachVolume" [
 #
 # POST /volumes/{volumeId}/resize
 # operationId: resizeVolume
-export def "volumes-resize resizeVolume" [
-  volumeId: int
+export def "volumes-resize resize" [
+  volume_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9134,8 +9134,8 @@ export def "volumes-resize resizeVolume" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/volumes/($volumeId)/resize")
-  let body = {size: $size} | compact
+  let full_url = (build-url $base ({volume_id: $volume_id} | format pattern "/volumes/{volume_id}/resize"))
+  let body = {"size": $size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

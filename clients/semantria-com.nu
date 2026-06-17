@@ -70,7 +70,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "blacklist-content-type delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "blacklist-content-type delete-blacklist-items" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /blacklist.{content_type}
 # operationId: deleteBlacklistItems
-export def "blacklist-content-type delete" [
+export def "blacklist-content-type delete-blacklist-items" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -112,7 +112,7 @@ export def "blacklist-content-type delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/blacklist.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/blacklist.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -139,7 +139,7 @@ export def "blacklist-content-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/blacklist.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/blacklist.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -149,7 +149,7 @@ export def "blacklist-content-type get" [
 #
 # POST /blacklist.{content_type}
 # operationId: addBlacklist
-export def "blacklist-content-type addBlacklist" [
+export def "blacklist-content-type create" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -167,7 +167,7 @@ export def "blacklist-content-type addBlacklist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/blacklist.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/blacklist.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -178,7 +178,7 @@ export def "blacklist-content-type addBlacklist" [
 #
 # PUT /blacklist.{content_type}
 # operationId: updateBlacklist
-export def "blacklist-content-type updateBlacklist" [
+export def "blacklist-content-type update" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,7 +196,7 @@ export def "blacklist-content-type updateBlacklist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/blacklist.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/blacklist.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -225,7 +225,7 @@ export def "categories-content-type delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/categories.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -252,7 +252,7 @@ export def "categories-content-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/categories.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,7 +262,7 @@ export def "categories-content-type get" [
 #
 # POST /categories.{content_type}
 # operationId: addCategories
-export def "categories-content-type addCategories" [
+export def "categories-content-type create" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -280,7 +280,7 @@ export def "categories-content-type addCategories" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/categories.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -291,7 +291,7 @@ export def "categories-content-type addCategories" [
 #
 # PUT /categories.{content_type}
 # operationId: updateCategories
-export def "categories-content-type updateCategories" [
+export def "categories-content-type update" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +309,7 @@ export def "categories-content-type updateCategories" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/categories.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -338,7 +338,7 @@ export def "collection-content-type queueCollection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/collection.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/collection.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -349,7 +349,7 @@ export def "collection-content-type queueCollection" [
 #
 # GET /collection/processed.{content_type}
 # operationId: retrieveProcessedCollections
-export def "collection-processed-content-type retrieveProcessedCollections" [
+export def "collection-processed-content-type retrieve" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -365,7 +365,7 @@ export def "collection-processed-content-type retrieveProcessedCollections" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/collection/processed.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/collection/processed.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -375,7 +375,7 @@ export def "collection-processed-content-type retrieveProcessedCollections" [
 #
 # DELETE /collection/{collection_id}.{content_type}
 # operationId: cancelCollection
-export def "collection cancelCollection" [
+export def "collection cancel" [
   collection_id: string
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -392,7 +392,7 @@ export def "collection cancelCollection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/collection/($collection_id).($content_type)" $qp)
+  let full_url = (build-url $base ({collection_id: $collection_id, content_type: $content_type} | format pattern "/collection/{collection_id}.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -402,7 +402,7 @@ export def "collection cancelCollection" [
 #
 # GET /collection/{collection_id}.{content_type}
 # operationId: receiveCollectionAnalyticData
-export def "collection receiveCollectionAnalyticData" [
+export def "collection receive-collection-analytic-data" [
   collection_id: string
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -419,7 +419,7 @@ export def "collection receiveCollectionAnalyticData" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/collection/($collection_id).($content_type)" $qp)
+  let full_url = (build-url $base ({collection_id: $collection_id, content_type: $content_type} | format pattern "/collection/{collection_id}.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -445,7 +445,7 @@ export def "configurations-content-type delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/configurations.($content_type)")
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/configurations.{content_type}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -470,7 +470,7 @@ export def "configurations-content-type get" [
 ]: nothing -> table<auto_response: bool, callback: string, categories_threshold: float, chars_threshold: int, collection: record<attribute_mentions_limit: int, concept_topics_limit: int, facet_atts_limit: int, facet_mentions_limit: int, facets_limit: int, named_entities_limit: int, named_mentions_limit: int, query_topics_limit: int, theme_mentions_limit: int, themes_limit: int, user_entities_limit: int, user_mentions_limit: int>, config_id: string, document: record<auto_categories_limit: int, concept_topics_limit: int, detect_language: bool, entity_themes_limit: int, intentions: bool, model_sentiment: bool, named_entities_limit: int, named_mentions_limit: int, named_opinions_limit: int, named_relations_limit: int, phrases_limit: int, pos_types: string, possible_phrases_limit: int, query_topics_limit: int, summary_limit: int, theme_mentions_limit: int, themes_limit: int, user_entities_limit: int, user_mentions_limit: int, user_opinions_limit: int, user_relations_limit: int>, entities_threshold: int, from_template_config_id: string, is_primary: bool, language: string, modified: string, name: string, one_sentence: bool, process_html: bool, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/configurations.($content_type)")
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/configurations.{content_type}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -480,7 +480,7 @@ export def "configurations-content-type get" [
 #
 # POST /configurations.{content_type}
 # operationId: addConfigurations
-export def "configurations-content-type addConfigurations" [
+export def "configurations-content-type create" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -496,7 +496,7 @@ export def "configurations-content-type addConfigurations" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/configurations.($content_type)")
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/configurations.{content_type}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -507,7 +507,7 @@ export def "configurations-content-type addConfigurations" [
 #
 # PUT /configurations.{content_type}
 # operationId: updateConfigurations
-export def "configurations-content-type updateConfigurations" [
+export def "configurations-content-type update" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -523,7 +523,7 @@ export def "configurations-content-type updateConfigurations" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/configurations.($content_type)")
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/configurations.{content_type}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -552,7 +552,7 @@ export def "document-content-type queueDocument" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/document.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/document.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -581,7 +581,7 @@ export def "document-batch-content-type queueBatchOfDocuments" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/document/batch.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/document/batch.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -592,7 +592,7 @@ export def "document-batch-content-type queueBatchOfDocuments" [
 #
 # GET /document/processed.{content_type}
 # operationId: retrieveProcessedDocuments
-export def "document-processed-content-type retrieveProcessedDocuments" [
+export def "document-processed-content-type retrieve" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -608,7 +608,7 @@ export def "document-processed-content-type retrieveProcessedDocuments" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/document/processed.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/document/processed.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -618,7 +618,7 @@ export def "document-processed-content-type retrieveProcessedDocuments" [
 #
 # DELETE /document/{document_id}.{content_type}
 # operationId: cancelDocument
-export def "document cancelDocument" [
+export def "document cancel" [
   document_id: string
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -635,7 +635,7 @@ export def "document cancelDocument" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/document/($document_id).($content_type)" $qp)
+  let full_url = (build-url $base ({document_id: $document_id, content_type: $content_type} | format pattern "/document/{document_id}.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -645,7 +645,7 @@ export def "document cancelDocument" [
 #
 # GET /document/{document_id}.{content_type}
 # operationId: receiveDocumentAnalyticData
-export def "document receiveDocumentAnalyticData" [
+export def "document receive-document-analytic-data" [
   document_id: string
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -662,7 +662,7 @@ export def "document receiveDocumentAnalyticData" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/document/($document_id).($content_type)" $qp)
+  let full_url = (build-url $base ({document_id: $document_id, content_type: $content_type} | format pattern "/document/{document_id}.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -686,7 +686,7 @@ export def "entities-content-type delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/entities.($content_type)")
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/entities.{content_type}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -712,7 +712,7 @@ export def "entities-content-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/entities.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -722,7 +722,7 @@ export def "entities-content-type get" [
 #
 # POST /entities.{content_type}
 # operationId: addEntities
-export def "entities-content-type addEntities" [
+export def "entities-content-type create" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -740,7 +740,7 @@ export def "entities-content-type addEntities" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/entities.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -751,7 +751,7 @@ export def "entities-content-type addEntities" [
 #
 # PUT /entities.{content_type}
 # operationId: updateEntities
-export def "entities-content-type updateEntities" [
+export def "entities-content-type update" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -769,7 +769,7 @@ export def "entities-content-type updateEntities" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/entities.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -796,7 +796,7 @@ export def "features-content-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/features.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/features.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -824,7 +824,7 @@ export def "phrases-content-type delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/phrases.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/phrases.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -851,7 +851,7 @@ export def "phrases-content-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/phrases.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/phrases.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -861,7 +861,7 @@ export def "phrases-content-type get" [
 #
 # POST /phrases.{content_type}
 # operationId: addPhrases
-export def "phrases-content-type addPhrases" [
+export def "phrases-content-type create" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -879,7 +879,7 @@ export def "phrases-content-type addPhrases" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/phrases.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/phrases.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -890,7 +890,7 @@ export def "phrases-content-type addPhrases" [
 #
 # PUT /phrases.{content_type}
 # operationId: updatePhrases
-export def "phrases-content-type updatePhrases" [
+export def "phrases-content-type update" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -908,7 +908,7 @@ export def "phrases-content-type updatePhrases" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/phrases.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/phrases.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -937,7 +937,7 @@ export def "queries-content-type delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/queries.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/queries.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -964,7 +964,7 @@ export def "queries-content-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/queries.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/queries.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -974,7 +974,7 @@ export def "queries-content-type get" [
 #
 # POST /queries.{content_type}
 # operationId: addQueries
-export def "queries-content-type addQueries" [
+export def "queries-content-type create" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -992,7 +992,7 @@ export def "queries-content-type addQueries" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/queries.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/queries.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1003,7 +1003,7 @@ export def "queries-content-type addQueries" [
 #
 # PUT /queries.{content_type}
 # operationId: updateQueries
-export def "queries-content-type updateQueries" [
+export def "queries-content-type update" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1021,7 +1021,7 @@ export def "queries-content-type updateQueries" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/queries.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/queries.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1049,7 +1049,7 @@ export def "statistics-content-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/statistics.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/statistics.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1073,7 +1073,7 @@ export def "status-content-type get" [
 ]: nothing -> record<api_version: string, service_status: string, service_version: string, supported_compression: string, supported_encoding: string, supported_languages: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/status.($content_type)")
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/status.{content_type}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1097,7 +1097,7 @@ export def "subscription-content-type get" [
 ]: nothing -> record<basic_settings: record<auto_response_limit: int, batch_limit: int, blacklist_limit: int, callback_batch_limit: int, categories_limit: int, category_samples_limit: int, characters_limit: int, collection_limit: int, configurations_limit: int, entities_limit: int, output_data_limit: int, processed_batch_limit: int, queries_limit: int, return_source_text: bool, sentiment_limit: int>, billing_settings: record<app_seats_allocated: int, app_seats_permitted: int, data_calls_balance: int, data_calls_limit: int, data_calls_limit_interval: int, docs_balance: int, docs_limit: int, docs_limit_interval: int, docs_suggested: int, docs_suggested_interval: int, expiration_date: string, limit_type: string, polling_calls_balance: int, polling_calls_limit: int, polling_calls_limit_interval: int, priority: string, settings_calls_balance: int, settings_calls_limit: int, settings_calls_limit_interval: int>, feature_settings: record<collection: record<concept_topics: bool, facets: bool, mentions: bool, named_entities: bool, query_topics: bool, themes: bool, user_entities: bool>, document: record<auto_categories: bool, concept_topics: bool, entity_themes: bool, intentions: bool, language_detection: bool, mentions: bool, model_sentiment: bool, named_entities: bool, named_relations: bool, opinions: bool, phrases_detection: bool, pos_tagging: bool, query_topics: bool, sentiment_phrases: bool, summary: bool, themes: bool, user_entities: bool, user_relations: bool>, html_processing: bool, supported_languages: string, templates: record<config_id: string, description: string, id: string, is_free: bool, language: string, name: string, type: string, version: string>>, name: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscription.($content_type)")
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/subscription.{content_type}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1125,7 +1125,7 @@ export def "taxonomy-content-type delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/taxonomy.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/taxonomy.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1152,7 +1152,7 @@ export def "taxonomy-content-type get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/taxonomy.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/taxonomy.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1162,7 +1162,7 @@ export def "taxonomy-content-type get" [
 #
 # POST /taxonomy.{content_type}
 # operationId: addTaxonomy
-export def "taxonomy-content-type addTaxonomy" [
+export def "taxonomy-content-type create" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1180,7 +1180,7 @@ export def "taxonomy-content-type addTaxonomy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/taxonomy.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/taxonomy.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1191,7 +1191,7 @@ export def "taxonomy-content-type addTaxonomy" [
 #
 # PUT /taxonomy.{content_type}
 # operationId: updateTaxonomy
-export def "taxonomy-content-type updateTaxonomy" [
+export def "taxonomy-content-type update" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1209,7 +1209,7 @@ export def "taxonomy-content-type updateTaxonomy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/taxonomy.($content_type)" $qp)
+  let full_url = (build-url $base ({content_type: $content_type} | format pattern "/taxonomy.{content_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

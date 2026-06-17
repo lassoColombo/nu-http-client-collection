@@ -109,7 +109,7 @@ export def "name get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/name/($concept_type)/($specific_concept).json" $qp)
+  let full_url = (build-url $base ({concept_type: $concept_type, specific_concept: $specific_concept} | format pattern "/name/{concept_type}/{specific_concept}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

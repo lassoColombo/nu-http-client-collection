@@ -113,20 +113,20 @@ export def "v3-log-impressions playablelocationslogImpressions" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientInfo: record # Client information. — shape: {apiClient?: string, applicationId?: string, applicationVersion?: string, deviceModel?: string, languageCode?: string, operatingSystem?: string, operatingSystemBuild?: string, platform?: "PLATFORM_UNSPECIFIED"|"EDITOR"|"MAC_OS"|"WINDOWS"|"LINUX"|"ANDROID"|"IOS"|"WEB_GL"}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-info: record # Client information. — shape: {apiClient?: string, applicationId?: string, applicationVersion?: string, deviceModel?: string, languageCode?: string, operatingSystem?: string, operatingSystemBuild?: string, platform?: "PLATFORM_UNSPECIFIED"|"EDITOR"|"MAC_OS"|"WINDOWS"|"LINUX"|"ANDROID"|"IOS"|"WEB_GL"}
   --impressions: list # Required. Impression event details. The maximum number of impression reports that you can log at once is 50. — item shape: {gameObjectType?: int, impressionType?: "IMPRESSION_TYPE_UNSPECIFIED"|"PRESENTED"|"INTERACTED", locationName?: string}
-  --requestId: string # Required. A string that uniquely identifies the log impressions request. This allows you to detect duplicate requests. We recommend that you use UUIDs for this value. The value must not exceed 50 characters. You should reuse the `request_id` only when retrying a request in case of failure. In this case, the request must be identical to the one that failed.
+  --request-id: string # Required. A string that uniquely identifies the log impressions request. This allows you to detect duplicate requests. We recommend that you use UUIDs for this value. The value must not exceed 50 characters. You should reuse the `request_id` only when retrying a request in case of failure. In this case, the request must be identical to the one that failed.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3:logImpressions" $qp)
-  let body = {clientInfo: $clientInfo, impressions: $impressions, requestId: $requestId} | compact
+  let body = {"clientInfo": $client_info, "impressions": $impressions, "requestId": $request_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -155,20 +155,20 @@ export def "v3-log-player-reports playablelocationslogPlayerReports" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientInfo: record # Client information. — shape: {apiClient?: string, applicationId?: string, applicationVersion?: string, deviceModel?: string, languageCode?: string, operatingSystem?: string, operatingSystemBuild?: string, platform?: "PLATFORM_UNSPECIFIED"|"EDITOR"|"MAC_OS"|"WINDOWS"|"LINUX"|"ANDROID"|"IOS"|"WEB_GL"}
-  --playerReports: list # Required. Player reports. The maximum number of player reports that you can log at once is 50. — item shape: {languageCode?: string, locationName?: string, reasonDetails?: string, reasons?: list}
-  --requestId: string # Required. A string that uniquely identifies the log player reports request. This allows you to detect duplicate requests. We recommend that you use UUIDs for this value. The value must not exceed 50 characters. You should reuse the `request_id` only when retrying a request in the case of a failure. In that case, the request must be identical to the one that failed.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-info: record # Client information. — shape: {apiClient?: string, applicationId?: string, applicationVersion?: string, deviceModel?: string, languageCode?: string, operatingSystem?: string, operatingSystemBuild?: string, platform?: "PLATFORM_UNSPECIFIED"|"EDITOR"|"MAC_OS"|"WINDOWS"|"LINUX"|"ANDROID"|"IOS"|"WEB_GL"}
+  --player-reports: list # Required. Player reports. The maximum number of player reports that you can log at once is 50. — item shape: {languageCode?: string, locationName?: string, reasonDetails?: string, reasons?: list}
+  --request-id: string # Required. A string that uniquely identifies the log player reports request. This allows you to detect duplicate requests. We recommend that you use UUIDs for this value. The value must not exceed 50 characters. You should reuse the `request_id` only when retrying a request in the case of a failure. In that case, the request must be identical to the one that failed.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3:logPlayerReports" $qp)
-  let body = {clientInfo: $clientInfo, playerReports: $playerReports, requestId: $requestId} | compact
+  let body = {"clientInfo": $client_info, "playerReports": $player_reports, "requestId": $request_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -197,19 +197,19 @@ export def "v3-sample-playable-locations playablelocationssamplePlayableLocation
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --areaFilter: record # Specifies the area to search for playable locations. — shape: {s2CellId?: string}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --area-filter: record # Specifies the area to search for playable locations. — shape: {s2CellId?: string}
   --criteria: list # Required. Specifies one or more (up to 5) criteria for filtering the returned playable locations. — item shape: {fieldsToReturn?: string, filter?: record, gameObjectType?: int}
 ]: any -> record<locationsPerGameObjectType: record, ttl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3:samplePlayableLocations" $qp)
-  let body = {areaFilter: $areaFilter, criteria: $criteria} | compact
+  let body = {"areaFilter": $area_filter, "criteria": $criteria} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

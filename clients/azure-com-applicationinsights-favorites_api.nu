@@ -66,14 +66,13 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def favoriteType-completer [] { ["shared" "user"] }
-def sourceType-completer [] { ["events" "funnel" "impact" "notebook" "retention" "segmentation" "sessions" "userflows"] }
-def FavoriteType-completer [] { ["shared" "user"] }
+def favorite-type-completer [] { ["shared" "user"] }
+def source-type-completer [] { ["events" "funnel" "impact" "notebook" "retention" "segmentation" "sessions" "userflows"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-insights-components-favorites List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-insights-components-favorites list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,10 +96,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/favorites
 # operationId: Favorites_List
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-favorites List" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-favorites list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,15 +109,15 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --favoriteType: string@favoriteType-completer # The type of favorite. Value can be either shared or user. (default: shared)
-  --sourceType: string@sourceType-completer # Source type of favorite to return. When left out, the source type defaults to 'other' (not present in this enum). (allows empty value)
-  --canFetchContent: oneof<nothing, bool> # Flag indicating whether or not to return the full content for each applicable favorite. If false, only return summary content for favorites.
+  --favorite-type: string@favorite-type-completer # The type of favorite. Value can be either shared or user. (default: shared)
+  --source-type: string@source-type-completer # Source type of favorite to return. When left out, the source type defaults to 'other' (not present in this enum). (allows empty value)
+  --can-fetch-content: oneof<nothing, bool> # Flag indicating whether or not to return the full content for each applicable favorite. If false, only return summary content for favorites.
   --tags: list # Tags that must be present on each favorite returned.
 ]: nothing -> table<Category: string, Config: string, FavoriteId: string, FavoriteType: string, IsGeneratedFromTemplate: bool, Name: string, SourceType: string, Tags: list<string>, TimeModified: string, UserId: string, Version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "favoriteType" $favoriteType "scalar") (serialize-qp "sourceType" $sourceType "scalar") (serialize-qp "canFetchContent" $canFetchContent "scalar") (serialize-qp "tags" $tags "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/favorites" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "favoriteType" $favorite_type "scalar") (serialize-qp "sourceType" $source_type "scalar") (serialize-qp "canFetchContent" $can_fetch_content "scalar") (serialize-qp "tags" $tags "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -128,11 +127,11 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/favorites/{favoriteId}
 # operationId: Favorites_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-favorites Delete" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
-  favoriteId: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-favorites delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  favorite_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,7 +145,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/favorites/($favoriteId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, favorite_id: $favorite_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites/{favorite_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -156,11 +155,11 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/favorites/{favoriteId}
 # operationId: Favorites_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-favorites Get" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
-  favoriteId: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-favorites get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  favorite_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +173,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/favorites/($favoriteId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, favorite_id: $favorite_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites/{favorite_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -184,11 +183,11 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/favorites/{favoriteId}
 # operationId: Favorites_Update
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-favorites Update" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
-  favoriteId: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-favorites update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  favorite_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,21 +197,21 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --Category: string # Favorite category, as defined by the user at creation time.
-  --Config: string # Configuration of this particular favorite, which are driven by the Azure portal UX. Configuration data is a string containing valid JSON
-  --FavoriteType: string@FavoriteType-completer # Enum indicating if this favorite definition is owned by a specific user or is shared between all users with access to the Application Insights component.
-  --IsGeneratedFromTemplate: oneof<nothing, bool> # Flag denoting wether or not this favorite was generated from a template.
-  --Name: string # The user-defined name of the favorite.
-  --SourceType: string # The source of the favorite definition.
-  --Tags: list # A list of 0 or more tags that are associated with this favorite definition
-  --Version: string # This instance's version of the data model. This can change as new features are added that can be marked favorite. Current examples include MetricsExplorer (ME) and Search.
+  --category: string # Favorite category, as defined by the user at creation time.
+  --config: string # Configuration of this particular favorite, which are driven by the Azure portal UX. Configuration data is a string containing valid JSON
+  --favorite-type: string@favorite-type-completer # Enum indicating if this favorite definition is owned by a specific user or is shared between all users with access to the Application Insights component.
+  --is-generated-from-template: oneof<nothing, bool> # Flag denoting wether or not this favorite was generated from a template.
+  --name: string # The user-defined name of the favorite.
+  --source-type: string # The source of the favorite definition.
+  --tags: list # A list of 0 or more tags that are associated with this favorite definition
+  --version: string # This instance's version of the data model. This can change as new features are added that can be marked favorite. Current examples include MetricsExplorer (ME) and Search.
 ]: any -> record<Category: string, Config: string, FavoriteId: string, FavoriteType: string, IsGeneratedFromTemplate: bool, Name: string, SourceType: string, Tags: list<string>, TimeModified: string, UserId: string, Version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/favorites/($favoriteId)" $qp)
-  let body = {Category: $Category, Config: $Config, FavoriteType: $FavoriteType, IsGeneratedFromTemplate: $IsGeneratedFromTemplate, Name: $Name, SourceType: $SourceType, Tags: $Tags, Version: $Version} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, favorite_id: $favorite_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites/{favorite_id}") $qp)
+  let body = {"Category": $category, "Config": $config, "FavoriteType": $favorite_type, "IsGeneratedFromTemplate": $is_generated_from_template, "Name": $name, "SourceType": $source_type, "Tags": $tags, "Version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -223,11 +222,11 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/favorites/{favoriteId}
 # operationId: Favorites_Add
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-favorites Add" [
-  resourceGroupName: string
-  subscriptionId: string
-  resourceName: string
-  favoriteId: string
+export def "subscriptions-resource-groups-providers-microsoft-insights-components-favorites create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  favorite_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,21 +236,21 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --Category: string # Favorite category, as defined by the user at creation time.
-  --Config: string # Configuration of this particular favorite, which are driven by the Azure portal UX. Configuration data is a string containing valid JSON
-  --FavoriteType: string@FavoriteType-completer # Enum indicating if this favorite definition is owned by a specific user or is shared between all users with access to the Application Insights component.
-  --IsGeneratedFromTemplate: oneof<nothing, bool> # Flag denoting wether or not this favorite was generated from a template.
-  --Name: string # The user-defined name of the favorite.
-  --SourceType: string # The source of the favorite definition.
-  --Tags: list # A list of 0 or more tags that are associated with this favorite definition
-  --Version: string # This instance's version of the data model. This can change as new features are added that can be marked favorite. Current examples include MetricsExplorer (ME) and Search.
+  --category: string # Favorite category, as defined by the user at creation time.
+  --config: string # Configuration of this particular favorite, which are driven by the Azure portal UX. Configuration data is a string containing valid JSON
+  --favorite-type: string@favorite-type-completer # Enum indicating if this favorite definition is owned by a specific user or is shared between all users with access to the Application Insights component.
+  --is-generated-from-template: oneof<nothing, bool> # Flag denoting wether or not this favorite was generated from a template.
+  --name: string # The user-defined name of the favorite.
+  --source-type: string # The source of the favorite definition.
+  --tags: list # A list of 0 or more tags that are associated with this favorite definition
+  --version: string # This instance's version of the data model. This can change as new features are added that can be marked favorite. Current examples include MetricsExplorer (ME) and Search.
 ]: any -> record<Category: string, Config: string, FavoriteId: string, FavoriteType: string, IsGeneratedFromTemplate: bool, Name: string, SourceType: string, Tags: list<string>, TimeModified: string, UserId: string, Version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Insights/components/($resourceName)/favorites/($favoriteId)" $qp)
-  let body = {Category: $Category, Config: $Config, FavoriteType: $FavoriteType, IsGeneratedFromTemplate: $IsGeneratedFromTemplate, Name: $Name, SourceType: $SourceType, Tags: $Tags, Version: $Version} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, favorite_id: $favorite_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites/{favorite_id}") $qp)
+  let body = {"Category": $category, "Config": $config, "FavoriteType": $favorite_type, "IsGeneratedFromTemplate": $is_generated_from_template, "Name": $name, "SourceType": $source_type, "Tags": $tags, "Version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

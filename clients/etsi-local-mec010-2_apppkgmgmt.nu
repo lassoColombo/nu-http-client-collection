@@ -65,11 +65,11 @@ def base-url-completer [] { ["http://etsi.local" "https://localhost/app_pkgm/v1"
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def operationState-completer [] { ["DISABLED" "ENABLED"] }
+def operation-state-completer [] { ["DISABLED" "ENABLED"] }
 def accept-completer [] { ["application/zip" "text/plain"] }
-def subsctiptionType-completer [] { ["AppPacakgeOperationChange" "AppPackageDeletion" "AppPackageOnBoarding"] }
-def notificationType-completer [] { ["AppPacakgeDisabled" "AppPacakgeEnabled" "AppPackageDeleted" "AppPackageOnBoarded"] }
-def operationalState-completer [] { ["DISABLED" "ENABLED"] }
+def subsctiption-type-completer [] { ["AppPacakgeOperationChange" "AppPackageDeletion" "AppPackageOnBoarding"] }
+def notification-type-completer [] { ["AppPacakgeDisabled" "AppPacakgeEnabled" "AppPackageDeleted" "AppPackageOnBoarded"] }
+def operational-state-completer [] { ["DISABLED" "ENABLED"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -136,18 +136,18 @@ export def "app-packages packagesPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  appPkgName: string # Name of the application package to be onboarded.
-  appPkgPath: string
-  appPkgVersion: string # Version of the application package to be onboarded. The appPkgName with appPkgVersion can be used to uniquely identify the application package.
-  --appProvider: string # The provider's name of the application package to be onboarded.
+  app_pkg_name: string # Name of the application package to be onboarded.
+  app_pkg_path: string
+  app_pkg_version: string # Version of the application package to be onboarded. The appPkgName with appPkgVersion can be used to uniquely identify the application package.
+  --app-provider: string # The provider's name of the application package to be onboarded.
   checksum: record # shape: {algorithm: string, hash: string}
-  --userDefinedData: record # 'This data type represents a list of key-value pairs. The order of the pairs in the list is not significant. In JSON, a set of key-value pairs is represented as an object. It shall comply with the provisions defined in clause 4 of IETF RFC 8259'
+  --user-defined-data: record # 'This data type represents a list of key-value pairs. The order of the pairs in the list is not significant. In JSON, a set of key-value pairs is represented as an object. It shall comply with the provisions defined in clause 4 of IETF RFC 8259'
 ]: any -> table<_links: record<appD: record, appPkgContent: record, self: record>, additionalArtifacts: any, appDId: string, appDVersion: string, appName: string, appProvider: string, appSoftwareVersion: string, checksum: record<algorithm: string, hash: string>, id: string, onboardingState: string, operationalState: string, softwareImages: any, usageState: string, userDefinedData: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/app_packages")
-  let body = {appPkgName: $appPkgName, appPkgPath: $appPkgPath, appPkgVersion: $appPkgVersion, appProvider: $appProvider, checksum: $checksum, userDefinedData: $userDefinedData} | compact
+  let body = {"appPkgName": $app_pkg_name, "appPkgPath": $app_pkg_path, "appPkgVersion": $app_pkg_version, "appProvider": $app_provider, "checksum": $checksum, "userDefinedData": $user_defined_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -159,7 +159,7 @@ export def "app-packages packagesPOST" [
 # DELETE /app_packages/{appPkgId}
 # operationId: app_packageDELETE
 export def "app-packages packageDELETE" [
-  appPkgId: string
+  app_pkg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "app-packages packageDELETE" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/app_packages/($appPkgId)")
+  let full_url = (build-url $base ({app_pkg_id: $app_pkg_id} | format pattern "/app_packages/{app_pkg_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -182,7 +182,7 @@ export def "app-packages packageDELETE" [
 # GET /app_packages/{appPkgId}
 # operationId: app_packageGET
 export def "app-packages packageGET" [
-  appPkgId: string
+  app_pkg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "app-packages packageGET" [
 ]: nothing -> record<_links: record<appD: record<href: string>, appPkgContent: record<href: string>, self: record<href: string>>, additionalArtifacts: any, appDId: string, appDVersion: string, appName: string, appProvider: string, appSoftwareVersion: string, checksum: record<algorithm: string, hash: string>, id: string, onboardingState: string, operationalState: string, softwareImages: any, usageState: string, userDefinedData: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/app_packages/($appPkgId)")
+  let full_url = (build-url $base ({app_pkg_id: $app_pkg_id} | format pattern "/app_packages/{app_pkg_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -205,7 +205,7 @@ export def "app-packages packageGET" [
 # PATCH /app_packages/{appPkgId}
 # operationId: app_packagePATCH
 export def "app-packages packagePATCH" [
-  appPkgId: string
+  app_pkg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,13 +214,13 @@ export def "app-packages packagePATCH" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  operationState: string@operationState-completer
+  operation_state: string@operation-state-completer
 ]: any -> record<operationState: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/app_packages/($appPkgId)")
-  let body = {operationState: $operationState} | compact
+  let full_url = (build-url $base ({app_pkg_id: $app_pkg_id} | format pattern "/app_packages/{app_pkg_id}"))
+  let body = {"operationState": $operation_state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,7 +232,7 @@ export def "app-packages packagePATCH" [
 # GET /app_packages/{appPkgId}/appd
 # operationId: appPkgIdGET
 export def "app-packages-appd appPkgIdGET" [
-  appPkgId: string
+  app_pkg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "app-packages-appd appPkgIdGET" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "all_fields" $all_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "exclude_fields" $exclude_fields "scalar") (serialize-qp "exclude_default" $exclude_default "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/app_packages/($appPkgId)/appd" $qp)
+  let full_url = (build-url $base ({app_pkg_id: $app_pkg_id} | format pattern "/app_packages/{app_pkg_id}/appd") $qp)
   let accept_val = ($accept | default "application/zip")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,7 +262,7 @@ export def "app-packages-appd appPkgIdGET" [
 # GET /app_packages/{appPkgId}/package_content
 # operationId: appPkgGET
 export def "app-packages-package-content appPkgGET" [
-  appPkgId: string
+  app_pkg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,7 +274,7 @@ export def "app-packages-package-content appPkgGET" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/app_packages/($appPkgId)/package_content")
+  let full_url = (build-url $base ({app_pkg_id: $app_pkg_id} | format pattern "/app_packages/{app_pkg_id}/package_content"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -285,7 +285,7 @@ export def "app-packages-package-content appPkgGET" [
 # PUT /app_packages/{appPkgId}/package_content
 # operationId: appPkgPUT
 export def "app-packages-package-content appPkgPUT" [
-  appPkgId: string
+  app_pkg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,7 +299,7 @@ export def "app-packages-package-content appPkgPUT" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/app_packages/($appPkgId)/package_content")
+  let full_url = (build-url $base ({app_pkg_id: $app_pkg_id} | format pattern "/app_packages/{app_pkg_id}/package_content"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -311,7 +311,7 @@ export def "app-packages-package-content appPkgPUT" [
 # GET /onboarded_app_packages/{appDId}/appd
 # operationId: appDGET
 export def "onboarded-app-packages-appd appDGET" [
-  appDId: string
+  app_d_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,7 +330,7 @@ export def "onboarded-app-packages-appd appDGET" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "all_fields" $all_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "exclude_fields" $exclude_fields "scalar") (serialize-qp "exclude_default" $exclude_default "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/onboarded_app_packages/($appDId)/appd" $qp)
+  let full_url = (build-url $base ({app_d_id: $app_d_id} | format pattern "/onboarded_app_packages/{app_d_id}/appd") $qp)
   let accept_val = ($accept | default "application/zip")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -341,7 +341,7 @@ export def "onboarded-app-packages-appd appDGET" [
 # GET /onboarded_app_packages/{appDId}/package_content
 # operationId: appDIdGET
 export def "onboarded-app-packages-package-content appDIdGET" [
-  appDId: string
+  app_d_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "onboarded-app-packages-package-content appDIdGET" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/onboarded_app_packages/($appDId)/package_content")
+  let full_url = (build-url $base ({app_d_id: $app_d_id} | format pattern "/onboarded_app_packages/{app_d_id}/package_content"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -364,7 +364,7 @@ export def "onboarded-app-packages-package-content appDIdGET" [
 # PUT /onboarded_app_packages/{appDId}/package_content
 # operationId: appDIdPUT
 export def "onboarded-app-packages-package-content appDIdPUT" [
-  appDId: string
+  app_d_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,7 +378,7 @@ export def "onboarded-app-packages-package-content appDIdPUT" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/onboarded_app_packages/($appDId)/package_content")
+  let full_url = (build-url $base ({app_d_id: $app_d_id} | format pattern "/onboarded_app_packages/{app_d_id}/package_content"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -420,15 +420,15 @@ export def "subscriptions subscriptionsPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --appPkgFilter: list
-  callbackUri: string # The URI of the endpoint for the notification to be sent to. (format: uri)
-  subsctiptionType: string@subsctiptionType-completer # 'Subscribed notification type'
+  --app-pkg-filter: list
+  callback_uri: string # The URI of the endpoint for the notification to be sent to. (format: uri)
+  subsctiption_type: string@subsctiption-type-completer # 'Subscribed notification type'
 ]: any -> record<_links: record<self: record<href: string>>, callbackUri: string, id: string, subscriptionType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions")
-  let body = {appPkgFilter: $appPkgFilter, callbackUri: $callbackUri, subsctiptionType: $subsctiptionType} | compact
+  let body = {"appPkgFilter": $app_pkg_filter, "callbackUri": $callback_uri, "subsctiptionType": $subsctiption_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -440,7 +440,7 @@ export def "subscriptions subscriptionsPOST" [
 # DELETE /subscriptions/{subscriptionId}
 # operationId: individualSubscriptionDELETE
 export def "subscriptions individualSubscriptionDELETE" [
-  subscriptionId: string
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "subscriptions individualSubscriptionDELETE" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -463,7 +463,7 @@ export def "subscriptions individualSubscriptionDELETE" [
 # GET /subscriptions/{subscriptionId}
 # operationId: individualSubscriptionGET
 export def "subscriptions individualSubscriptionGET" [
-  subscriptionId: string
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,7 +475,7 @@ export def "subscriptions individualSubscriptionGET" [
 ]: nothing -> record<_links: record<self: record<href: string>>, callbackUri: string, id: string, subscriptionType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -497,19 +497,19 @@ export def "user-defined-notification notificationPOST" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   links: record # Links to resources related to this resource. — shape: {subscription: record}
-  appDId: string # Identifier of this MEC application descriptor. This attribute shall be globally unique.
-  appPkgId: string # Identifier of the onboarded application package.
+  app_d_id: string # Identifier of this MEC application descriptor. This attribute shall be globally unique.
+  app_pkg_id: string # Identifier of the onboarded application package.
   id: string # ''
-  notificationType: string@notificationType-completer # Discriminator for the different notification types
-  operationalState: string@operationalState-completer
-  subscriptionId: string # Identifier of the subscription related to this notification.
-  timeStamp: record # shape: {nanoSeconds: int, seconds: int}
+  notification_type: string@notification-type-completer # Discriminator for the different notification types
+  operational_state: string@operational-state-completer
+  subscription_id: string # Identifier of the subscription related to this notification.
+  time_stamp: record # shape: {nanoSeconds: int, seconds: int}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user_defined_notification")
-  let body = {_links: $links, appDId: $appDId, appPkgId: $appPkgId, id: $id, notificationType: $notificationType, operationalState: $operationalState, subscriptionId: $subscriptionId, timeStamp: $timeStamp} | compact
+  let body = {"_links": $links, "appDId": $app_d_id, "appPkgId": $app_pkg_id, "id": $id, "notificationType": $notification_type, "operationalState": $operational_state, "subscriptionId": $subscription_id, "timeStamp": $time_stamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

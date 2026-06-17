@@ -315,7 +315,7 @@ export def "candidate get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "multi") (serialize-qp "candidate_status" $candidate_status "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "state" $state "multi") (serialize-qp "district" $district "multi") (serialize-qp "year" $year "scalar") (serialize-qp "name" $name "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "federal_funds_flag" $federal_funds_flag "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_raised_funds" $has_raised_funds "scalar") (serialize-qp "election_year" $election_year "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "incumbent_challenge" $incumbent_challenge "multi") (serialize-qp "party" $party "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/candidate/($candidate_id)/" $qp)
+  let full_url = (build-url $base ({candidate_id: $candidate_id} | format pattern "/candidate/{candidate_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -351,7 +351,7 @@ export def "candidate-committees get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "designation" $designation "multi") (serialize-qp "committee_type" $committee_type "multi") (serialize-qp "page" $page "scalar") (serialize-qp "filing_frequency" $filing_frequency "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "year" $year "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "organization_type" $organization_type "multi") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/candidate/($candidate_id)/committees/" $qp)
+  let full_url = (build-url $base ({candidate_id: $candidate_id} | format pattern "/candidate/{candidate_id}/committees/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -383,7 +383,7 @@ export def "candidate-committees-history list" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "designation" $designation "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/candidate/($candidate_id)/committees/history/" $qp)
+  let full_url = (build-url $base ({candidate_id: $candidate_id} | format pattern "/candidate/{candidate_id}/committees/history/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -416,7 +416,7 @@ export def "candidate-committees-history get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "designation" $designation "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/candidate/($candidate_id)/committees/history/($cycle)/" $qp)
+  let full_url = (build-url $base ({candidate_id: $candidate_id, cycle: $cycle} | format pattern "/candidate/{candidate_id}/committees/history/{cycle}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -468,7 +468,7 @@ export def "candidate-filings get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "multi") (serialize-qp "file_number" $file_number "multi") (serialize-qp "form_category" $form_category "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "district" $district "multi") (serialize-qp "document_type" $document_type "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "state" $state "multi") (serialize-qp "amendment_indicator" $amendment_indicator "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "is_amended" $is_amended "scalar") (serialize-qp "filer_type" $filer_type "scalar") (serialize-qp "max_receipt_date" $max_receipt_date "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "primary_general_indicator" $primary_general_indicator "multi") (serialize-qp "request_type" $request_type "multi") (serialize-qp "report_year" $report_year "multi") (serialize-qp "form_type" $form_type "multi") (serialize-qp "committee_type" $committee_type "scalar") (serialize-qp "beginning_image_number" $beginning_image_number "multi") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_receipt_date" $min_receipt_date "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "q_filer" $q_filer "multi") (serialize-qp "report_type" $report_type "multi") (serialize-qp "party" $party "multi") (serialize-qp "most_recent" $most_recent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/candidate/($candidate_id)/filings/" $qp)
+  let full_url = (build-url $base ({candidate_id: $candidate_id} | format pattern "/candidate/{candidate_id}/filings/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -499,7 +499,7 @@ export def "candidate-history list" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/candidate/($candidate_id)/history/" $qp)
+  let full_url = (build-url $base ({candidate_id: $candidate_id} | format pattern "/candidate/{candidate_id}/history/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -531,7 +531,7 @@ export def "candidate-history get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/candidate/($candidate_id)/history/($cycle)/" $qp)
+  let full_url = (build-url $base ({candidate_id: $candidate_id, cycle: $cycle} | format pattern "/candidate/{candidate_id}/history/{cycle}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -563,7 +563,7 @@ export def "candidate-totals get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/candidate/($candidate_id)/totals/" $qp)
+  let full_url = (build-url $base ({candidate_id: $candidate_id} | format pattern "/candidate/{candidate_id}/totals/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -847,7 +847,7 @@ export def "committee get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "designation" $designation "multi") (serialize-qp "committee_type" $committee_type "multi") (serialize-qp "page" $page "scalar") (serialize-qp "filing_frequency" $filing_frequency "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "year" $year "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "organization_type" $organization_type "multi") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/committee/($committee_id)/" $qp)
+  let full_url = (build-url $base ({committee_id: $committee_id} | format pattern "/committee/{committee_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -889,7 +889,7 @@ export def "committee-candidates get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "multi") (serialize-qp "candidate_status" $candidate_status "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "state" $state "multi") (serialize-qp "district" $district "multi") (serialize-qp "year" $year "scalar") (serialize-qp "name" $name "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "federal_funds_flag" $federal_funds_flag "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_raised_funds" $has_raised_funds "scalar") (serialize-qp "election_year" $election_year "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "incumbent_challenge" $incumbent_challenge "multi") (serialize-qp "party" $party "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/committee/($committee_id)/candidates/" $qp)
+  let full_url = (build-url $base ({committee_id: $committee_id} | format pattern "/committee/{committee_id}/candidates/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -920,7 +920,7 @@ export def "committee-candidates-history list" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/committee/($committee_id)/candidates/history/" $qp)
+  let full_url = (build-url $base ({committee_id: $committee_id} | format pattern "/committee/{committee_id}/candidates/history/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -952,7 +952,7 @@ export def "committee-candidates-history get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/committee/($committee_id)/candidates/history/($cycle)/" $qp)
+  let full_url = (build-url $base ({committee_id: $committee_id, cycle: $cycle} | format pattern "/committee/{committee_id}/candidates/history/{cycle}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1004,7 +1004,7 @@ export def "committee-filings get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "office" $office "multi") (serialize-qp "file_number" $file_number "multi") (serialize-qp "form_category" $form_category "multi") (serialize-qp "cycle" $cycle "multi") (serialize-qp "district" $district "multi") (serialize-qp "document_type" $document_type "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "state" $state "multi") (serialize-qp "amendment_indicator" $amendment_indicator "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "is_amended" $is_amended "scalar") (serialize-qp "filer_type" $filer_type "scalar") (serialize-qp "max_receipt_date" $max_receipt_date "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "primary_general_indicator" $primary_general_indicator "multi") (serialize-qp "request_type" $request_type "multi") (serialize-qp "report_year" $report_year "multi") (serialize-qp "form_type" $form_type "multi") (serialize-qp "committee_type" $committee_type "scalar") (serialize-qp "beginning_image_number" $beginning_image_number "multi") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_receipt_date" $min_receipt_date "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "q_filer" $q_filer "multi") (serialize-qp "report_type" $report_type "multi") (serialize-qp "party" $party "multi") (serialize-qp "most_recent" $most_recent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/committee/($committee_id)/filings/" $qp)
+  let full_url = (build-url $base ({committee_id: $committee_id} | format pattern "/committee/{committee_id}/filings/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1036,7 +1036,7 @@ export def "committee-history list" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "designation" $designation "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/committee/($committee_id)/history/" $qp)
+  let full_url = (build-url $base ({committee_id: $committee_id} | format pattern "/committee/{committee_id}/history/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1069,7 +1069,7 @@ export def "committee-history get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "designation" $designation "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "election_full" $election_full "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/committee/($committee_id)/history/($cycle)/" $qp)
+  let full_url = (build-url $base ({committee_id: $committee_id, cycle: $cycle} | format pattern "/committee/{committee_id}/history/{cycle}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1120,7 +1120,7 @@ export def "committee-reports get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "min_debts_owed_amount" $min_debts_owed_amount "scalar") (serialize-qp "max_disbursements_amount" $max_disbursements_amount "scalar") (serialize-qp "max_total_contributions" $max_total_contributions "scalar") (serialize-qp "max_debts_owed_expenditures" $max_debts_owed_expenditures "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "year" $year "multi") (serialize-qp "max_receipts_amount" $max_receipts_amount "scalar") (serialize-qp "max_cash_on_hand_end_period_amount" $max_cash_on_hand_end_period_amount "scalar") (serialize-qp "is_amended" $is_amended "scalar") (serialize-qp "min_disbursements_amount" $min_disbursements_amount "scalar") (serialize-qp "max_party_coordinated_expenditures" $max_party_coordinated_expenditures "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "max_independent_expenditures" $max_independent_expenditures "scalar") (serialize-qp "min_receipts_amount" $min_receipts_amount "scalar") (serialize-qp "min_party_coordinated_expenditures" $min_party_coordinated_expenditures "scalar") (serialize-qp "candidate_id" $candidate_id "scalar") (serialize-qp "beginning_image_number" $beginning_image_number "multi") (serialize-qp "page" $page "scalar") (serialize-qp "type" $type "multi") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "min_total_contributions" $min_total_contributions "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_cash_on_hand_end_period_amount" $min_cash_on_hand_end_period_amount "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "min_independent_expenditures" $min_independent_expenditures "scalar") (serialize-qp "report_type" $report_type "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/committee/($committee_id)/reports/" $qp)
+  let full_url = (build-url $base ({committee_id: $committee_id} | format pattern "/committee/{committee_id}/reports/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1151,7 +1151,7 @@ export def "committee-totals get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cycle" $cycle "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/committee/($committee_id)/totals/" $qp)
+  let full_url = (build-url $base ({committee_id: $committee_id} | format pattern "/committee/{committee_id}/totals/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2298,7 +2298,7 @@ export def "reports get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "min_debts_owed_amount" $min_debts_owed_amount "scalar") (serialize-qp "max_debts_owed_expenditures" $max_debts_owed_expenditures "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "year" $year "multi") (serialize-qp "max_cash_on_hand_end_period_amount" $max_cash_on_hand_end_period_amount "scalar") (serialize-qp "filer_type" $filer_type "scalar") (serialize-qp "max_party_coordinated_expenditures" $max_party_coordinated_expenditures "scalar") (serialize-qp "q_spender" $q_spender "multi") (serialize-qp "max_receipt_date" $max_receipt_date "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "max_independent_expenditures" $max_independent_expenditures "scalar") (serialize-qp "min_party_coordinated_expenditures" $min_party_coordinated_expenditures "scalar") (serialize-qp "committee_type" $committee_type "multi") (serialize-qp "page" $page "scalar") (serialize-qp "min_total_contributions" $min_total_contributions "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "min_cash_on_hand_end_period_amount" $min_cash_on_hand_end_period_amount "scalar") (serialize-qp "min_receipt_date" $min_receipt_date "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "min_independent_expenditures" $min_independent_expenditures "scalar") (serialize-qp "q_filer" $q_filer "multi") (serialize-qp "max_disbursements_amount" $max_disbursements_amount "scalar") (serialize-qp "max_total_contributions" $max_total_contributions "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "amendment_indicator" $amendment_indicator "multi") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "max_receipts_amount" $max_receipts_amount "scalar") (serialize-qp "is_amended" $is_amended "scalar") (serialize-qp "min_disbursements_amount" $min_disbursements_amount "scalar") (serialize-qp "min_receipts_amount" $min_receipts_amount "scalar") (serialize-qp "candidate_id" $candidate_id "scalar") (serialize-qp "beginning_image_number" $beginning_image_number "multi") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "report_type" $report_type "multi") (serialize-qp "most_recent" $most_recent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/reports/($entity_type)/" $qp)
+  let full_url = (build-url $base ({entity_type: $entity_type} | format pattern "/reports/{entity_type}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2740,7 +2740,7 @@ export def "schedules-schedule-a get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_load_date" $max_load_date "scalar") (serialize-qp "max_amount" $max_amount "scalar") (serialize-qp "max_image_number" $max_image_number "scalar") (serialize-qp "contributor_occupation" $contributor_occupation "multi") (serialize-qp "recipient_committee_designation" $recipient_committee_designation "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "is_individual" $is_individual "scalar") (serialize-qp "line_number" $line_number "scalar") (serialize-qp "contributor_type" $contributor_type "multi") (serialize-qp "recipient_committee_type" $recipient_committee_type "multi") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "contributor_zip" $contributor_zip "multi") (serialize-qp "contributor_city" $contributor_city "multi") (serialize-qp "last_index" $last_index "scalar") (serialize-qp "last_contribution_receipt_amount" $last_contribution_receipt_amount "scalar") (serialize-qp "contributor_id" $contributor_id "multi") (serialize-qp "recipient_committee_org_type" $recipient_committee_org_type "multi") (serialize-qp "contributor_state" $contributor_state "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "two_year_transaction_period" $two_year_transaction_period "multi") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "contributor_employer" $contributor_employer "multi") (serialize-qp "min_load_date" $min_load_date "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "last_contribution_receipt_date" $last_contribution_receipt_date "scalar") (serialize-qp "min_image_number" $min_image_number "scalar") (serialize-qp "contributor_name" $contributor_name "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "image_number" $image_number "multi") (serialize-qp "min_amount" $min_amount "scalar") (serialize-qp "max_date" $max_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/schedules/schedule_a/($sub_id)/" $qp)
+  let full_url = (build-url $base ({sub_id: $sub_id} | format pattern "/schedules/schedule_a/{sub_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2973,7 +2973,7 @@ export def "schedules-schedule-b get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "disbursement_description" $disbursement_description "multi") (serialize-qp "max_amount" $max_amount "scalar") (serialize-qp "max_image_number" $max_image_number "scalar") (serialize-qp "image_number" $image_number "multi") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "last_disbursement_date" $last_disbursement_date "scalar") (serialize-qp "line_number" $line_number "scalar") (serialize-qp "spender_committee_designation" $spender_committee_designation "multi") (serialize-qp "last_disbursement_amount" $last_disbursement_amount "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "last_index" $last_index "scalar") (serialize-qp "spender_committee_type" $spender_committee_type "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "two_year_transaction_period" $two_year_transaction_period "multi") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "disbursement_purpose_category" $disbursement_purpose_category "multi") (serialize-qp "recipient_name" $recipient_name "multi") (serialize-qp "recipient_state" $recipient_state "multi") (serialize-qp "recipient_city" $recipient_city "multi") (serialize-qp "min_image_number" $min_image_number "scalar") (serialize-qp "spender_committee_org_type" $spender_committee_org_type "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "recipient_committee_id" $recipient_committee_id "multi") (serialize-qp "min_amount" $min_amount "scalar") (serialize-qp "max_date" $max_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/schedules/schedule_b/($sub_id)/" $qp)
+  let full_url = (build-url $base ({sub_id: $sub_id} | format pattern "/schedules/schedule_b/{sub_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3046,7 +3046,7 @@ export def "schedules-schedule-c get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/schedules/schedule_c/($sub_id)/" $qp)
+  let full_url = (build-url $base ({sub_id: $sub_id} | format pattern "/schedules/schedule_c/{sub_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3122,7 +3122,7 @@ export def "schedules-schedule-d get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/schedules/schedule_d/($sub_id)/" $qp)
+  let full_url = (build-url $base ({sub_id: $sub_id} | format pattern "/schedules/schedule_d/{sub_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3367,7 +3367,7 @@ export def "schedules-schedule-f get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/schedules/schedule_f/($sub_id)/" $qp)
+  let full_url = (build-url $base ({sub_id: $sub_id} | format pattern "/schedules/schedule_f/{sub_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3476,7 +3476,7 @@ export def "totals get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_first_f1_date" $max_first_f1_date "scalar") (serialize-qp "min_receipts" $min_receipts "scalar") (serialize-qp "cycle" $cycle "multi") (serialize-qp "filing_frequency" $filing_frequency "multi") (serialize-qp "max_receipts" $max_receipts "scalar") (serialize-qp "sort_hide_null" $sort_hide_null "scalar") (serialize-qp "sort_nulls_last" $sort_nulls_last "scalar") (serialize-qp "min_last_debts_owed_by_committee" $min_last_debts_owed_by_committee "scalar") (serialize-qp "max_last_cash_on_hand_end_period" $max_last_cash_on_hand_end_period "scalar") (serialize-qp "treasurer_name" $treasurer_name "multi") (serialize-qp "sponsor_candidate_id" $sponsor_candidate_id "multi") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "max_disbursements" $max_disbursements "scalar") (serialize-qp "committee_state" $committee_state "multi") (serialize-qp "committee_type" $committee_type "multi") (serialize-qp "page" $page "scalar") (serialize-qp "max_last_debts_owed_by_committee" $max_last_debts_owed_by_committee "scalar") (serialize-qp "committee_id" $committee_id "multi") (serialize-qp "api_key" $api_key "scalar") (serialize-qp "committee_designation" $committee_designation "multi") (serialize-qp "sort_null_only" $sort_null_only "scalar") (serialize-qp "min_first_f1_date" $min_first_f1_date "scalar") (serialize-qp "organization_type" $organization_type "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "min_disbursements" $min_disbursements "scalar") (serialize-qp "min_last_cash_on_hand_end_period" $min_last_cash_on_hand_end_period "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/totals/($entity_type)/" $qp)
+  let full_url = (build-url $base ({entity_type: $entity_type} | format pattern "/totals/{entity_type}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -120,7 +120,7 @@ export def "api2-convert post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/convert")
-  let body = {base_url: $body_base_url, html: $html, key: $key, margin_bottom: $margin_bottom, margin_left: $margin_left, margin_right: $margin_right, margin_top: $margin_top, page_orientation: $page_orientation, page_size: $page_size, url: $body_url} | compact
+  let body = {"base_url": $body_base_url, "html": $html, "key": $key, "margin_bottom": $margin_bottom, "margin_left": $margin_left, "margin_right": $margin_right, "margin_top": $margin_top, "page_orientation": $page_orientation, "page_size": $page_size, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

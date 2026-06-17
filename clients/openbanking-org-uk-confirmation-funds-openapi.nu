@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "funds-confirmation-consents CreateFundsConfirmationConsents" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "funds-confirmation-consents create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 # POST /funds-confirmation-consents
 # operationId: CreateFundsConfirmationConsents
 # --Data shape: {DebtorAccount: record, ExpirationDateTime?: string}
-export def "funds-confirmation-consents CreateFundsConfirmationConsents" [
+export def "funds-confirmation-consents create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,17 +106,17 @@ export def "funds-confirmation-consents CreateFundsConfirmationConsents" [
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP.  All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below:  Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --Authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  Data: record # shape: {DebtorAccount: record, ExpirationDateTime?: string}
+  data: record # shape: {DebtorAccount: record, ExpirationDateTime?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/funds-confirmation-consents")
-  let body = {Data: $Data} | compact
+  let body = {"Data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $Authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
+  let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -127,8 +127,8 @@ export def "funds-confirmation-consents CreateFundsConfirmationConsents" [
 #
 # DELETE /funds-confirmation-consents/{ConsentId}
 # operationId: DeleteFundsConfirmationConsentsConsentId
-export def "funds-confirmation-consents DeleteFundsConfirmationConsentsConsentId" [
-  ConsentId: string
+export def "funds-confirmation-consents delete" [
+  consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,13 +140,13 @@ export def "funds-confirmation-consents DeleteFundsConfirmationConsentsConsentId
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP.  All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below:  Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --Authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/funds-confirmation-consents/($ConsentId)")
-  let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $Authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
+  let full_url = (build-url $base ({consent_id: $consent_id} | format pattern "/funds-confirmation-consents/{consent_id}"))
+  let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -157,8 +157,8 @@ export def "funds-confirmation-consents DeleteFundsConfirmationConsentsConsentId
 #
 # GET /funds-confirmation-consents/{ConsentId}
 # operationId: GetFundsConfirmationConsentsConsentId
-export def "funds-confirmation-consents GetFundsConfirmationConsentsConsentId" [
-  ConsentId: string
+export def "funds-confirmation-consents get" [
+  consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,13 +170,13 @@ export def "funds-confirmation-consents GetFundsConfirmationConsentsConsentId" [
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP.  All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below:  Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --Authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/funds-confirmation-consents/($ConsentId)")
-  let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $Authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
+  let full_url = (build-url $base ({consent_id: $consent_id} | format pattern "/funds-confirmation-consents/{consent_id}"))
+  let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -188,7 +188,7 @@ export def "funds-confirmation-consents GetFundsConfirmationConsentsConsentId" [
 # POST /funds-confirmations
 # operationId: CreateFundsConfirmations
 # --Data shape: {ConsentId: string, InstructedAmount: record, Reference: string}
-export def "funds-confirmations CreateFundsConfirmations" [
+export def "funds-confirmations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,17 +200,17 @@ export def "funds-confirmations CreateFundsConfirmations" [
   --x-fapi-auth-date: string # The time when the PSU last logged in with the TPP.  All dates in the HTTP headers are represented as RFC 7231 Full Dates. An example is below:  Sun, 10 Sep 2017 19:43:31 UTC
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
-  --Authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
+  --authorization: string # An Authorisation Token as per https://tools.ietf.org/html/rfc6750
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  Data: record # shape: {ConsentId: string, InstructedAmount: record, Reference: string}
+  data: record # shape: {ConsentId: string, InstructedAmount: record, Reference: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/funds-confirmations")
-  let body = {Data: $Data} | compact
+  let body = {"Data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $Authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
+  let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

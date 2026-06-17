@@ -101,11 +101,11 @@ export def "e-reputation-hotel-sentiments get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hotelIds: list # Comma-separated list of Amadeus Hotel Ids (max. 3) . Amadeus Hotel Ids are found in the Hotel Search response (parameter name is 'hotelId'). (e.g. [TELONMFS])
+  --hotel-ids: list # Comma-separated list of Amadeus Hotel Ids (max. 3) . Amadeus Hotel Ids are found in the Hotel Search response (parameter name is 'hotelId'). (e.g. [TELONMFS])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelIds" $hotelIds "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "hotelIds" $hotel_ids "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/e-reputation/hotel-sentiments" $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -124,15 +124,15 @@ export def "credits-transfer transferCredits" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  receivingAccountNumber: int # The WinSMS account number of the account to which credits will be added. (e.g. 10345)
-  sendingAccountNumber: int # The WinSMS account number of the account from which credits will be deducted. (e.g. 7564)
-  transferQuantity: int # The number of credits to transfer from the sending account to the receiving account. (e.g. 100)
+  receiving_account_number: int # The WinSMS account number of the account to which credits will be added. (e.g. 10345)
+  sending_account_number: int # The WinSMS account number of the account from which credits will be deducted. (e.g. 7564)
+  transfer_quantity: int # The number of credits to transfer from the sending account to the receiving account. (e.g. 100)
 ]: any -> record<statusCode: int, timeStamp: string, transferSuccessful: bool, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credits/transfer")
-  let body = {receivingAccountNumber: $receivingAccountNumber, sendingAccountNumber: $sendingAccountNumber, transferQuantity: $transferQuantity} | compact
+  let body = {"receivingAccountNumber": $receiving_account_number, "sendingAccountNumber": $sending_account_number, "transferQuantity": $transfer_quantity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -143,7 +143,7 @@ export def "credits-transfer transferCredits" [
 #
 # GET /shortcode/incoming
 # operationId: getShortCodeMessages
-export def "shortcode-incoming get" [
+export def "shortcode-incoming get-short-code-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "shortcode-incoming get" [
 #
 # GET /sms/incoming
 # operationId: getIncomingMessages
-export def "sms-incoming get" [
+export def "sms-incoming get-incoming-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "sms-incoming get" [
 #
 # GET /sms/incoming/optout
 # operationId: getOptoutMessages
-export def "sms-incoming-optout get" [
+export def "sms-incoming-optout get-optout-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,16 +225,16 @@ export def "sms-outgoing-send smsSend" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxSegments: int # ***Optional*** - The maximum [GSM Encoded segment count]("https://support.winsms.co.za/rest/GSM") that the message is allowed to utilise.  This defaults to 1, allowing for a maximum GSM Encoded message length of 160 characters.  The maximum value is 6, which allows for a GSM Encoded message length of 918 characters.  If you intend to send a message longer than 160 characters, this value should be specified.  (default: 1, e.g. 3)
+  --max-segments: int # ***Optional*** - The maximum [GSM Encoded segment count]("https://support.winsms.co.za/rest/GSM") that the message is allowed to utilise.  This defaults to 1, allowing for a maximum GSM Encoded message length of 160 characters.  The maximum value is 6, which allows for a GSM Encoded message length of 918 characters.  If you intend to send a message longer than 160 characters, this value should be specified.  (default: 1, e.g. 3)
   message: string # The SMS text to be sent. (e.g. Happy holidays from all at TelAmeriCorp.)
   recipients: list # An array of messageRecipientDetails objects. — item shape: {clientMessageId?: string, mobileNumber: string}
-  --scheduledTime: string # ***Optional*** - The date and time that an SMS should be delivered. If not specified, or is set for a date/time prior to the current date/time, the SMS message will be sent immediately.  If specified, this value should have the format YYYYMMDDHHmm.  (e.g. 201712251430)
+  --scheduled-time: string # ***Optional*** - The date and time that an SMS should be delivered. If not specified, or is set for a date/time prior to the current date/time, the SMS message will be sent immediately.  If specified, this value should have the format YYYYMMDDHHmm.  (e.g. 201712251430)
 ]: any -> record<recipients: table<acceptError: string, accepted: bool, apiMessageId: int, clientMessageId: string, creditCost: float, mobileNumber: string, newCreditBalance: float, scheduledTime: string>, statusCode: int, timeStamp: string, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms/outgoing/send")
-  let body = {maxSegments: $maxSegments, message: $message, recipients: $recipients, scheduledTime: $scheduledTime} | compact
+  let body = {"maxSegments": $max_segments, "message": $message, "recipients": $recipients, "scheduledTime": $scheduled_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -261,7 +261,7 @@ export def "sms-outgoing-sendmulti smsSendBatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms/outgoing/sendmulti")
-  let body = {messages: $messages} | compact
+  let body = {"messages": $messages} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -297,7 +297,7 @@ export def "sms-outgoing-status smsStatus" [
 #
 # GET /sms/scheduled
 # operationId: getScheduledMessages
-export def "sms-scheduled get" [
+export def "sms-scheduled get-scheduled-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,7 +322,7 @@ export def "sms-scheduled get" [
 #
 # POST /sms/scheduled/delete
 # operationId: deleteScheduledMessages
-export def "sms-scheduled-delete post" [
+export def "sms-scheduled-delete delete-scheduled-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

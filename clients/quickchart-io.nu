@@ -108,11 +108,11 @@ export def "chart get" [
   --width: int # The width of the chart in pixels.
   --height: int # The height of the chart in pixels.
   --format: string # The output format of the chart, e.g., 'png', 'jpg', 'svg', or 'webp'.
-  --backgroundColor: string # The background color of the chart.
+  --background-color: string # The background color of the chart.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "chart" $chart "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "backgroundColor" $backgroundColor "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "chart" $chart "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "backgroundColor" $background_color "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/chart" $qp)
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -132,7 +132,7 @@ export def "chart post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --backgroundColor: string # The background color of the chart.
+  --background-color: string # The background color of the chart.
   --chart: record # The chart configuration in JSON format.
   --format: string # The output format of the chart, e.g., 'png', 'jpg', 'svg', or 'webp'.
   --height: int # The height of the chart in pixels.
@@ -142,7 +142,7 @@ export def "chart post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chart")
-  let body = {backgroundColor: $backgroundColor, chart: $chart, format: $format, height: $height, width: $width} | compact
+  let body = {"backgroundColor": $background_color, "chart": $chart, "format": $format, "height": $height, "width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,7 +200,7 @@ export def "qr post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qr")
-  let body = {format: $format, height: $height, margin: $margin, text: $text, width: $width} | compact
+  let body = {"format": $format, "height": $height, "margin": $margin, "text": $text, "width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "image/png")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

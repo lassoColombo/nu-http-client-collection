@@ -71,7 +71,7 @@ def accept-completer [] { ["application/json" "application/xml" "text/json" "tex
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyze Get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyze get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/Analyze
 # operationId: Analyze_Get
-export def "analyze Get" [
+export def "analyze get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -118,7 +118,7 @@ export def "analyze Get" [
 #
 # POST /v3/Analyze
 # operationId: Analyze_Post
-export def "analyze Post" [
+export def "analyze create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,20 +128,20 @@ export def "analyze Post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --DocumentLanguage: string
-  DocumentText: string
-  --IsTwitterContent: oneof<nothing, bool>
-  PrivateKey: string
-  --RequestIdentifier: string
-  --Secret: string
-  --SerializeFormat: int # format: int32
-  --UserCategoryModelName: string
+  --document-language: string
+  document_text: string
+  --is-twitter-content: oneof<nothing, bool>
+  private_key: string
+  --request-identifier: string
+  --secret: string
+  --serialize-format: int # format: int32
+  --user-category-model-name: string
 ]: any -> record<AutoCategories: table<CategoryName: string, Score: float>, Citations: table<KeywordType: string, Magnitude: float, Mentions: int, SentencePartType: string, SentenceText: string, SentimentPolarity: string, SentimentResult: string, SentimentValue: float, Text: string>, CloudTagHTML: string, CoreSentences: table<Magnitude: float, SentenceNumber: int, SentimentPolarity: string, SentimentResultString: string, SentimentValue: float, Text: string>, DetectedLanguage: string, DocSentimentPolarity: string, DocSentimentResultString: string, DocSentimentValue: float, Entities: table<KeywordType: string, Magnitude: float, Mentions: int, SentencePartType: string, SentenceText: string, SentimentPolarity: string, SentimentResult: string, SentimentValue: float, Text: string>, ErrorMessage: string, Keywords: table<KeywordType: string, Magnitude: float, Mentions: int, SentencePartType: string, SentenceText: string, SentimentPolarity: string, SentimentResult: string, SentimentValue: float, Text: string>, Magnitude: float, PartsOfSpeech: table<Action: string, Object: string, ObjectSentimentPolarity: string, ObjectSentimentResultString: string, ObjectSentimentValue: float, Subject: string, Text: string>, ResultTextHtml: string, SlangWords: table<SlangWordText: string, SlangWordTranslation: string>, Status: int, StorageInfo: record<CreateDate: string, DocumentText: string, IP: string, IsExcel: bool, IsGSExcel: bool, IsTwitterMode: bool, PrivateKey: string, RequestIdentifier: string, UserCategoryModelName: string>, Subjectivity: string, SwearWords: table<SlangWordText: string, SlangWordTranslation: string>, Themes: table<KeywordType: string, Magnitude: float, Mentions: int, SentencePartType: string, SentenceText: string, SentimentPolarity: string, SentimentResult: string, SentimentValue: float, Text: string>, Timestamp: int, TransactionCurrentDay: int, TransactionDailyLimit: int, TransactionTotalCreditsLeft: int, TransactionUseByDate: string, UserCategories: table<CategoryName: string, Score: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-PrivateKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/Analyze")
-  let body = {DocumentLanguage: $DocumentLanguage, DocumentText: $DocumentText, IsTwitterContent: $IsTwitterContent, PrivateKey: $PrivateKey, RequestIdentifier: $RequestIdentifier, Secret: $Secret, SerializeFormat: $SerializeFormat, UserCategoryModelName: $UserCategoryModelName} | compact
+  let body = {"DocumentLanguage": $document_language, "DocumentText": $document_text, "IsTwitterContent": $is_twitter_content, "PrivateKey": $private_key, "RequestIdentifier": $request_identifier, "Secret": $secret, "SerializeFormat": $serialize_format, "UserCategoryModelName": $user_category_model_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -152,7 +152,7 @@ export def "analyze Post" [
 #
 # GET /v3/Categorize
 # operationId: Categorize_Get
-export def "categorize Get" [
+export def "categorize get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "categorize Get" [
 #
 # POST /v3/Categorize
 # operationId: Categorize_Post
-export def "categorize Post" [
+export def "categorize create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,20 +185,20 @@ export def "categorize Post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --DocumentLanguage: string
-  DocumentText: string
-  --IsTwitterContent: oneof<nothing, bool>
-  PrivateKey: string
-  --RequestIdentifier: string
-  --Secret: string
-  --SerializeFormat: int # format: int32
-  --UserCategoryModelName: string
+  --document-language: string
+  document_text: string
+  --is-twitter-content: oneof<nothing, bool>
+  private_key: string
+  --request-identifier: string
+  --secret: string
+  --serialize-format: int # format: int32
+  --user-category-model-name: string
 ]: any -> record<AutoCategories: table<CategoryName: string, Score: float>, Citations: table<KeywordType: string, Magnitude: float, Mentions: int, SentencePartType: string, SentenceText: string, SentimentPolarity: string, SentimentResult: string, SentimentValue: float, Text: string>, CloudTagHTML: string, CoreSentences: table<Magnitude: float, SentenceNumber: int, SentimentPolarity: string, SentimentResultString: string, SentimentValue: float, Text: string>, DetectedLanguage: string, DocSentimentPolarity: string, DocSentimentResultString: string, DocSentimentValue: float, Entities: table<KeywordType: string, Magnitude: float, Mentions: int, SentencePartType: string, SentenceText: string, SentimentPolarity: string, SentimentResult: string, SentimentValue: float, Text: string>, ErrorMessage: string, Keywords: table<KeywordType: string, Magnitude: float, Mentions: int, SentencePartType: string, SentenceText: string, SentimentPolarity: string, SentimentResult: string, SentimentValue: float, Text: string>, Magnitude: float, PartsOfSpeech: table<Action: string, Object: string, ObjectSentimentPolarity: string, ObjectSentimentResultString: string, ObjectSentimentValue: float, Subject: string, Text: string>, ResultTextHtml: string, SlangWords: table<SlangWordText: string, SlangWordTranslation: string>, Status: int, StorageInfo: record<CreateDate: string, DocumentText: string, IP: string, IsExcel: bool, IsGSExcel: bool, IsTwitterMode: bool, PrivateKey: string, RequestIdentifier: string, UserCategoryModelName: string>, Subjectivity: string, SwearWords: table<SlangWordText: string, SlangWordTranslation: string>, Themes: table<KeywordType: string, Magnitude: float, Mentions: int, SentencePartType: string, SentenceText: string, SentimentPolarity: string, SentimentResult: string, SentimentValue: float, Text: string>, Timestamp: int, TransactionCurrentDay: int, TransactionDailyLimit: int, TransactionTotalCreditsLeft: int, TransactionUseByDate: string, UserCategories: table<CategoryName: string, Score: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-PrivateKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/Categorize")
-  let body = {DocumentLanguage: $DocumentLanguage, DocumentText: $DocumentText, IsTwitterContent: $IsTwitterContent, PrivateKey: $PrivateKey, RequestIdentifier: $RequestIdentifier, Secret: $Secret, SerializeFormat: $SerializeFormat, UserCategoryModelName: $UserCategoryModelName} | compact
+  let body = {"DocumentLanguage": $document_language, "DocumentText": $document_text, "IsTwitterContent": $is_twitter_content, "PrivateKey": $private_key, "RequestIdentifier": $request_identifier, "Secret": $secret, "SerializeFormat": $serialize_format, "UserCategoryModelName": $user_category_model_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -209,7 +209,7 @@ export def "categorize Post" [
 #
 # GET /v3/Extract
 # operationId: Extract_Get
-export def "extract Get" [
+export def "extract get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "extract Get" [
 #
 # POST /v3/Extract
 # operationId: Extract_Post
-export def "extract Post" [
+export def "extract create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,20 +242,20 @@ export def "extract Post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --DocumentLanguage: string
-  DocumentText: string
-  --IsTwitterContent: oneof<nothing, bool>
-  PrivateKey: string
-  --RequestIdentifier: string
-  --Secret: string
-  --SerializeFormat: int # format: int32
-  --UserCategoryModelName: string
+  --document-language: string
+  document_text: string
+  --is-twitter-content: oneof<nothing, bool>
+  private_key: string
+  --request-identifier: string
+  --secret: string
+  --serialize-format: int # format: int32
+  --user-category-model-name: string
 ]: any -> record<AutoCategories: table<CategoryName: string, Score: float>, Citations: table<KeywordType: string, Magnitude: float, Mentions: int, SentencePartType: string, SentenceText: string, SentimentPolarity: string, SentimentResult: string, SentimentValue: float, Text: string>, CloudTagHTML: string, CoreSentences: table<Magnitude: float, SentenceNumber: int, SentimentPolarity: string, SentimentResultString: string, SentimentValue: float, Text: string>, DetectedLanguage: string, DocSentimentPolarity: string, DocSentimentResultString: string, DocSentimentValue: float, Entities: table<KeywordType: string, Magnitude: float, Mentions: int, SentencePartType: string, SentenceText: string, SentimentPolarity: string, SentimentResult: string, SentimentValue: float, Text: string>, ErrorMessage: string, Keywords: table<KeywordType: string, Magnitude: float, Mentions: int, SentencePartType: string, SentenceText: string, SentimentPolarity: string, SentimentResult: string, SentimentValue: float, Text: string>, Magnitude: float, PartsOfSpeech: table<Action: string, Object: string, ObjectSentimentPolarity: string, ObjectSentimentResultString: string, ObjectSentimentValue: float, Subject: string, Text: string>, ResultTextHtml: string, SlangWords: table<SlangWordText: string, SlangWordTranslation: string>, Status: int, StorageInfo: record<CreateDate: string, DocumentText: string, IP: string, IsExcel: bool, IsGSExcel: bool, IsTwitterMode: bool, PrivateKey: string, RequestIdentifier: string, UserCategoryModelName: string>, Subjectivity: string, SwearWords: table<SlangWordText: string, SlangWordTranslation: string>, Themes: table<KeywordType: string, Magnitude: float, Mentions: int, SentencePartType: string, SentenceText: string, SentimentPolarity: string, SentimentResult: string, SentimentValue: float, Text: string>, Timestamp: int, TransactionCurrentDay: int, TransactionDailyLimit: int, TransactionTotalCreditsLeft: int, TransactionUseByDate: string, UserCategories: table<CategoryName: string, Score: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-PrivateKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/Extract")
-  let body = {DocumentLanguage: $DocumentLanguage, DocumentText: $DocumentText, IsTwitterContent: $IsTwitterContent, PrivateKey: $PrivateKey, RequestIdentifier: $RequestIdentifier, Secret: $Secret, SerializeFormat: $SerializeFormat, UserCategoryModelName: $UserCategoryModelName} | compact
+  let body = {"DocumentLanguage": $document_language, "DocumentText": $document_text, "IsTwitterContent": $is_twitter_content, "PrivateKey": $private_key, "RequestIdentifier": $request_identifier, "Secret": $secret, "SerializeFormat": $serialize_format, "UserCategoryModelName": $user_category_model_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

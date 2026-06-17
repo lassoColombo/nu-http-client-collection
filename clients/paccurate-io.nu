@@ -65,7 +65,7 @@ def base-url-completer [] { ["https://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def placementStyle-completer [] { ["corner" "default" "mound" "orb" "wedge"] }
+def placement-style-completer [] { ["corner" "default" "mound" "orb" "wedge"] }
 def template-completer [] { ["boat.tmpl" "demo.tmpl" "shipapp.tmpl"] }
 
 # List all available API commands with their parameters
@@ -106,41 +106,41 @@ export def "api post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allowableOverhang: float # The amount an item can overhang lower items that it is placed upon. The units are whatever units the box and item dimensions are given in. By convention, inches. (default: -1)
-  --boxTypeSets: list # predefined box types to be used, separated by commas. Will be overridden by boxTypes. Acceptable values are <ul><li>"fedex"--FedEx OneRate</li><li>"usps"--USPS Priority Flat Rate</li><li>"pallet"--full-, half-, and quarter-sized 48"x40" pallets.
-  --boxTypes: list # box type definitions for packing, will override boxTypeSets defined. — item shape: {dimensions: any, name?: string, price?: int, rateTable?: any, weightMax: float, weightTare?: float}
-  --cohortMax: int # the maximum number of contiguous cohorts for a given item type within a single container. E.g., if you pack 40 chairs in a single container, a cohortMax of 2 could yield one (all 40 chairs in a single block if space is availabe) or two (say, 25 chairs in one corner and 15 in the other) contiguous cohorts. (default: 2)
-  --cohortPacking: oneof<nothing, bool> # if selected, will ensure that all like items will be packed together, in no more than [cohortMax] different groups within a single container. (default: false)
-  --coordOrder: list # If placementStyle is set to "default", coordOrder sets the placement priority of axes ascendingly. "0,1,2" would search for placement points along the Z(length,"2"), then Y(width,"1"), and finally X(height"0"). Keep in mind that in the default rendering the "up" direction is X and the other axes follow the right-hand rule. This is useful for different packing methods. E.g., Utilizing "2,0,1" would pack a shipping container first in the Y(width) direction, then in the X(height) direction, and finally in the Z(length) direction, replication a floor-to-ceiling, front-to-back loading method.
+  --allowable-overhang: float # The amount an item can overhang lower items that it is placed upon. The units are whatever units the box and item dimensions are given in. By convention, inches. (default: -1)
+  --box-type-sets: list # predefined box types to be used, separated by commas. Will be overridden by boxTypes. Acceptable values are <ul><li>"fedex"--FedEx OneRate</li><li>"usps"--USPS Priority Flat Rate</li><li>"pallet"--full-, half-, and quarter-sized 48"x40" pallets.
+  --box-types: list # box type definitions for packing, will override boxTypeSets defined. — item shape: {dimensions: any, name?: string, price?: int, rateTable?: any, weightMax: float, weightTare?: float}
+  --cohort-max: int # the maximum number of contiguous cohorts for a given item type within a single container. E.g., if you pack 40 chairs in a single container, a cohortMax of 2 could yield one (all 40 chairs in a single block if space is availabe) or two (say, 25 chairs in one corner and 15 in the other) contiguous cohorts. (default: 2)
+  --cohort-packing: oneof<nothing, bool> # if selected, will ensure that all like items will be packed together, in no more than [cohortMax] different groups within a single container. (default: false)
+  --coord-order: list # If placementStyle is set to "default", coordOrder sets the placement priority of axes ascendingly. "0,1,2" would search for placement points along the Z(length,"2"), then Y(width,"1"), and finally X(height"0"). Keep in mind that in the default rendering the "up" direction is X and the other axes follow the right-hand rule. This is useful for different packing methods. E.g., Utilizing "2,0,1" would pack a shipping container first in the Y(width) direction, then in the X(height) direction, and finally in the Z(length) direction, replication a floor-to-ceiling, front-to-back loading method.
   --corners: oneof<nothing, bool> # only pack items at valid corner points of other items (optimal) (default: true)
   --eye: any # The x,y,z coordinates of the virtual eye looking at the package for visualization purposes. Default is isometric, "1,1,1". To generate a side view, one could use "0.001,1.0,0.001".
-  --imgSize: int # width of rendered SVGs in pixels. (default: 400)
-  --includeImages: oneof<nothing, bool> # include inline images, default is always on (default: true)
-  --includeScripts: oneof<nothing, bool> # include inline javascripts and styles for base template (default: true)
+  --img-size: int # width of rendered SVGs in pixels. (default: 400)
+  --include-images: oneof<nothing, bool> # include inline images, default is always on (default: true)
+  --include-scripts: oneof<nothing, bool> # include inline javascripts and styles for base template (default: true)
   --interlock: oneof<nothing, bool> # alternates layFlat orientation by layer, so as to create an interlocked placement pattern and improve item stability. (default: false)
-  --itemSets: list # item set definitions if not creating random items. — item shape: {color?: string, dimensions: any, name?: string, refId?: int, sequence?: string, weight: float, quantity?: int}
+  --item-sets: list # item set definitions if not creating random items. — item shape: {color?: string, dimensions: any, name?: string, refId?: int, sequence?: string, weight: float, quantity?: int}
   --key: string # issued API key.
-  --layFlat: oneof<nothing, bool> # aligns all items laying flat. If possible, it may create a "brick-laying" pattern to increase stability. (default: false)
-  --maxSequenceDistance: int # This is the maximum distance allowable between two sequence values of items packed in a common box. E.g., "Distance" for an item sequence composed of aisle/bin combinations of "0401" and "1228" has a sequence distance of \|1228 - 401\| = 827
+  --lay-flat: oneof<nothing, bool> # aligns all items laying flat. If possible, it may create a "brick-laying" pattern to increase stability. (default: false)
+  --max-sequence-distance: int # This is the maximum distance allowable between two sequence values of items packed in a common box. E.g., "Distance" for an item sequence composed of aisle/bin combinations of "0401" and "1228" has a sequence distance of \|1228 - 401\| = 827
   --n: int # number of random items to generate and the quantity of each if "random" is set to true. a value of 5 would create 5 different items with a quantity of 5 each, making the total item quantity equal to n&sup2; (default: 5)
-  --packOrigin: any # the x,y,z coordinates of an optional packing origin. A packing origin is used to create more balanced packing for situations where load needs to be considered. E.g., for a 40"x48" pallet, a packOrigin representing the middle of the pallet, "0,20,24", would cause placement to minimize the distance of the packed items from the center of the pallet.
-  --placementStyle: string@placementStyle-completer # How to place items. 'default' will defer to coordOrder, 'corner' minimizes distance to rear, bottom corner, 'wedge' minimizes distance to middle of bottom, back edge, 'mound' minimizes distance to center of carton bottom. (default: default)
+  --pack-origin: any # the x,y,z coordinates of an optional packing origin. A packing origin is used to create more balanced packing for situations where load needs to be considered. E.g., for a 40"x48" pallet, a packOrigin representing the middle of the pallet, "0,20,24", would cause placement to minimize the distance of the packed items from the center of the pallet.
+  --placement-style: string@placement-style-completer # How to place items. 'default' will defer to coordOrder, 'corner' minimizes distance to rear, bottom corner, 'wedge' minimizes distance to middle of bottom, back edge, 'mound' minimizes distance to center of carton bottom. (default: default)
   --random: oneof<nothing, bool> # create random items (default: false)
-  --randomMaxDimension: int # maximum item dimension along a single axis for randomly generated items. (default: 10)
-  --randomMaxWeight: int # maximum item weight for randomly generated items. (default: 10)
+  --random-max-dimension: int # maximum item dimension along a single axis for randomly generated items. (default: 10)
+  --random-max-weight: int # maximum item weight for randomly generated items. (default: 10)
   --rules: list # Array of packing rules. — item shape: {itemRefId?: int, operation: "exclude"|"exclude-all"|"pack-as-is"|"irregular"|"lock-orientation", options?: record, parameters?: list, targetItemRefIds?: list}
   --seed: oneof<nothing, bool> # if random is selected, seed the random number generator to deterministically generate random items to pack. (default: true)
-  --sequenceHeatMap: oneof<nothing, bool> # Colorize items solely by their sequence value, light when sequence is high, dark when it is low. Useful for indicating item bin location, weight, or other sequence property that may not be apparent from the default visualization. (default: false)
-  --sequenceSort: oneof<nothing, bool> # Whether or not the items should be initially sorted by their sequence value instead of their volume. This is not always useful, as the default "biggest-first" volume sort is very effective for items, and constraining by maxSequenceDistance is applied regardless of this field. That said, for doing custom pre-sorts such as weight-based instead of volume based, this value should be set to true. (default: false)
+  --sequence-heat-map: oneof<nothing, bool> # Colorize items solely by their sequence value, light when sequence is high, dark when it is low. Useful for indicating item bin location, weight, or other sequence property that may not be apparent from the default visualization. (default: false)
+  --sequence-sort: oneof<nothing, bool> # Whether or not the items should be initially sorted by their sequence value instead of their volume. This is not always useful, as the default "biggest-first" volume sort is very effective for items, and constraining by maxSequenceDistance is applied regardless of this field. That said, for doing custom pre-sorts such as weight-based instead of volume based, this value should be set to true. (default: false)
   --template: string@template-completer # template name for markup generation.
-  --usableSpace: float # estimate of percentage space in boxes that is usable, i.e., not packing material. (default: 0.5)
+  --usable-space: float # estimate of percentage space in boxes that is usable, i.e., not packing material. (default: 0.5)
   --zone: int # <b>[experimental]</b> the shipping zone in order to use basic zone-based price optimization.
 ]: any -> record<boxes: table<dimensions: record, name: string, price: int, rateTable: record, weightMax: float, weightTare: float, dimensionalWeight: float, dimensionalWeightUsed: bool, id: int, items: list, svg: string, volumeMax: float, volumeRemaining: float, volumeUsed: float, volumeUtilization: float, weightNet: float, weightRemaining: float, weightUsed: float, weightUtilization: float>, built: string, leftovers: table<color: string, dimensions: record, name: string, refId: int, sequence: string, weight: float, index: int, message: string, origin: record>, lenBoxes: int, lenItems: int, lenLeftovers: int, packTime: float, renderTime: float, scripts: string, styles: string, svgs: string, title: string, totalCost: int, totalTime: float, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/")
-  let body = {allowableOverhang: $allowableOverhang, boxTypeSets: $boxTypeSets, boxTypes: $boxTypes, cohortMax: $cohortMax, cohortPacking: $cohortPacking, coordOrder: $coordOrder, corners: $corners, eye: $eye, imgSize: $imgSize, includeImages: $includeImages, includeScripts: $includeScripts, interlock: $interlock, itemSets: $itemSets, key: $key, layFlat: $layFlat, maxSequenceDistance: $maxSequenceDistance, n: $n, packOrigin: $packOrigin, placementStyle: $placementStyle, random: $random, randomMaxDimension: $randomMaxDimension, randomMaxWeight: $randomMaxWeight, rules: $rules, seed: $seed, sequenceHeatMap: $sequenceHeatMap, sequenceSort: $sequenceSort, template: $template, usableSpace: $usableSpace, zone: $zone} | compact
+  let body = {"allowableOverhang": $allowable_overhang, "boxTypeSets": $box_type_sets, "boxTypes": $box_types, "cohortMax": $cohort_max, "cohortPacking": $cohort_packing, "coordOrder": $coord_order, "corners": $corners, "eye": $eye, "imgSize": $img_size, "includeImages": $include_images, "includeScripts": $include_scripts, "interlock": $interlock, "itemSets": $item_sets, "key": $key, "layFlat": $lay_flat, "maxSequenceDistance": $max_sequence_distance, "n": $n, "packOrigin": $pack_origin, "placementStyle": $placement_style, "random": $random, "randomMaxDimension": $random_max_dimension, "randomMaxWeight": $random_max_weight, "rules": $rules, "seed": $seed, "sequenceHeatMap": $sequence_heat_map, "sequenceSort": $sequence_sort, "template": $template, "usableSpace": $usable_space, "zone": $zone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

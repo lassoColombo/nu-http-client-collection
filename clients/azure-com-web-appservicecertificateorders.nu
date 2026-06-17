@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-certificate-registration-certificate-orders List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-certificate-registration-certificate-orders list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.CertificateRegistration/certificateOrders
 # operationId: AppServiceCertificateOrders_List
-export def "subscriptions-providers-microsoft-certificate-registration-certificate-orders List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-certificate-registration-certificate-orders list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "subscriptions-providers-microsoft-certificate-registration-certifica
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.CertificateRegistration/certificateOrders" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.CertificateRegistration/certificateOrders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,8 +119,8 @@ export def "subscriptions-providers-microsoft-certificate-registration-certifica
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.CertificateRegistration/validateCertificateRegistrationInformation
 # operationId: AppServiceCertificateOrders_ValidatePurchaseInformation
 # --properties shape: {autoRenew?: bool, certificates?: record, csr?: string, distinguishedName?: string, intermediate?: record, keySize?: int, productType: "StandardDomainValidatedSsl"|"StandardDomainValidatedWildCardSsl", root?: record, signedCertificate?: record, validityInYears?: int}
-export def "subscriptions-providers-microsoft-certificate-registration-validate-certificate-registration-information ValidatePurchaseInformation" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-certificate-registration-validate-certificate-registration-information validate-purchase" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,8 +139,8 @@ export def "subscriptions-providers-microsoft-certificate-registration-validate-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.CertificateRegistration/validateCertificateRegistrationInformation" $qp)
-  let body = {properties: $properties, kind: $kind, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.CertificateRegistration/validateCertificateRegistrationInformation") $qp)
+  let body = {"properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -151,9 +151,9 @@ export def "subscriptions-providers-microsoft-certificate-registration-validate-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders
 # operationId: AppServiceCertificateOrders_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -177,10 +177,10 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}
 # operationId: AppServiceCertificateOrders_Delete
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders Delete" [
-  resourceGroupName: string
-  certificateOrderName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders delete" [
+  subscription_id: string
+  resource_group_name: string
+  certificate_order_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($certificateOrderName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, certificate_order_name: $certificate_order_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,10 +204,10 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}
 # operationId: AppServiceCertificateOrders_Get
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders Get" [
-  resourceGroupName: string
-  certificateOrderName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders get" [
+  subscription_id: string
+  resource_group_name: string
+  certificate_order_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($certificateOrderName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, certificate_order_name: $certificate_order_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -232,10 +232,10 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}
 # operationId: AppServiceCertificateOrders_Update
 # --properties shape: {autoRenew?: bool, certificates?: record, csr?: string, distinguishedName?: string, intermediate?: record, keySize?: int, productType: "StandardDomainValidatedSsl"|"StandardDomainValidatedWildCardSsl", root?: record, signedCertificate?: record, validityInYears?: int}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders Update" [
-  resourceGroupName: string
-  certificateOrderName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders update" [
+  subscription_id: string
+  resource_group_name: string
+  certificate_order_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,8 +252,8 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($certificateOrderName)" $qp)
-  let body = {properties: $properties, kind: $kind} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, certificate_order_name: $certificate_order_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}") $qp)
+  let body = {"properties": $properties, "kind": $kind} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -265,10 +265,10 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}
 # operationId: AppServiceCertificateOrders_CreateOrUpdate
 # --properties shape: {autoRenew?: bool, certificates?: record, csr?: string, distinguishedName?: string, intermediate?: record, keySize?: int, productType: "StandardDomainValidatedSsl"|"StandardDomainValidatedWildCardSsl", root?: record, signedCertificate?: record, validityInYears?: int}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders CreateOrUpdate" [
-  resourceGroupName: string
-  certificateOrderName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  certificate_order_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,8 +287,8 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($certificateOrderName)" $qp)
-  let body = {properties: $properties, kind: $kind, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, certificate_order_name: $certificate_order_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}") $qp)
+  let body = {"properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -299,10 +299,10 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/certificates
 # operationId: AppServiceCertificateOrders_ListCertificates
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates ListCertificates" [
-  resourceGroupName: string
-  certificateOrderName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates list" [
+  subscription_id: string
+  resource_group_name: string
+  certificate_order_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($certificateOrderName)/certificates" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, certificate_order_name: $certificate_order_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/certificates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -326,11 +326,11 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/certificates/{name}
 # operationId: AppServiceCertificateOrders_DeleteCertificate
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates DeleteCertificate" [
-  resourceGroupName: string
-  certificateOrderName: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates delete" [
+  subscription_id: string
+  resource_group_name: string
+  certificate_order_name: string
   name: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,7 +344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($certificateOrderName)/certificates/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, certificate_order_name: $certificate_order_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/certificates/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -354,11 +354,11 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/certificates/{name}
 # operationId: AppServiceCertificateOrders_GetCertificate
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates GetCertificate" [
-  resourceGroupName: string
-  certificateOrderName: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates get" [
+  subscription_id: string
+  resource_group_name: string
+  certificate_order_name: string
   name: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($certificateOrderName)/certificates/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, certificate_order_name: $certificate_order_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/certificates/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -383,11 +383,11 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/certificates/{name}
 # operationId: AppServiceCertificateOrders_UpdateCertificate
 # --properties shape: {keyVaultId?: string, keyVaultSecretName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates UpdateCertificate" [
-  resourceGroupName: string
-  certificateOrderName: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates update" [
+  subscription_id: string
+  resource_group_name: string
+  certificate_order_name: string
   name: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,8 +404,8 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($certificateOrderName)/certificates/($name)" $qp)
-  let body = {properties: $properties, kind: $kind} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, certificate_order_name: $certificate_order_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/certificates/{name}") $qp)
+  let body = {"properties": $properties, "kind": $kind} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -417,11 +417,11 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/certificates/{name}
 # operationId: AppServiceCertificateOrders_CreateOrUpdateCertificate
 # --properties shape: {keyVaultId?: string, keyVaultSecretName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates CreateOrUpdateCertificate" [
-  resourceGroupName: string
-  certificateOrderName: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  certificate_order_name: string
   name: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,8 +440,8 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($certificateOrderName)/certificates/($name)" $qp)
-  let body = {properties: $properties, kind: $kind, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, certificate_order_name: $certificate_order_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/certificates/{name}") $qp)
+  let body = {"properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -453,10 +453,10 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/reissue
 # operationId: AppServiceCertificateOrders_Reissue
 # --properties shape: {csr?: string, delayExistingRevokeInHours?: int, isPrivateKeyExternal?: bool, keySize?: int}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-reissue Reissue" [
-  resourceGroupName: string
-  certificateOrderName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-reissue post" [
+  subscription_id: string
+  resource_group_name: string
+  certificate_order_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -473,8 +473,8 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($certificateOrderName)/reissue" $qp)
-  let body = {properties: $properties, kind: $kind} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, certificate_order_name: $certificate_order_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/reissue") $qp)
+  let body = {"properties": $properties, "kind": $kind} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -486,10 +486,10 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/renew
 # operationId: AppServiceCertificateOrders_Renew
 # --properties shape: {csr?: string, isPrivateKeyExternal?: bool, keySize?: int}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-renew Renew" [
-  resourceGroupName: string
-  certificateOrderName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-renew post" [
+  subscription_id: string
+  resource_group_name: string
+  certificate_order_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -506,8 +506,8 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($certificateOrderName)/renew" $qp)
-  let body = {properties: $properties, kind: $kind} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, certificate_order_name: $certificate_order_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/renew") $qp)
+  let body = {"properties": $properties, "kind": $kind} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -518,10 +518,10 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/resendEmail
 # operationId: AppServiceCertificateOrders_ResendEmail
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-resend-email ResendEmail" [
-  resourceGroupName: string
-  certificateOrderName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-resend-email post" [
+  subscription_id: string
+  resource_group_name: string
+  certificate_order_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -535,7 +535,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($certificateOrderName)/resendEmail" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, certificate_order_name: $certificate_order_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/resendEmail") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -545,10 +545,10 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/resendRequestEmails
 # operationId: AppServiceCertificateOrders_ResendRequestEmails
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-resend-request-emails ResendRequestEmails" [
-  resourceGroupName: string
-  certificateOrderName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-resend-request-emails post" [
+  subscription_id: string
+  resource_group_name: string
+  certificate_order_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,8 +564,8 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($certificateOrderName)/resendRequestEmails" $qp)
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, certificate_order_name: $certificate_order_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/resendRequestEmails") $qp)
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -576,10 +576,10 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/retrieveSiteSeal
 # operationId: AppServiceCertificateOrders_RetrieveSiteSeal
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-retrieve-site-seal RetrieveSiteSeal" [
-  resourceGroupName: string
-  certificateOrderName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-retrieve-site-seal retrieve" [
+  subscription_id: string
+  resource_group_name: string
+  certificate_order_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -589,15 +589,15 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-  --lightTheme: oneof<nothing, bool> # If <code>true</code> use the light color theme for site seal; otherwise, use the default color theme.
+  --light-theme: oneof<nothing, bool> # If <code>true</code> use the light color theme for site seal; otherwise, use the default color theme.
   --locale: string # Locale of site seal.
 ]: any -> record<html: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($certificateOrderName)/retrieveSiteSeal" $qp)
-  let body = {lightTheme: $lightTheme, locale: $locale} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, certificate_order_name: $certificate_order_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/retrieveSiteSeal") $qp)
+  let body = {"lightTheme": $light_theme, "locale": $locale} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -608,10 +608,10 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/verifyDomainOwnership
 # operationId: AppServiceCertificateOrders_VerifyDomainOwnership
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-verify-domain-ownership VerifyDomainOwnership" [
-  resourceGroupName: string
-  certificateOrderName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-verify-domain-ownership verify" [
+  subscription_id: string
+  resource_group_name: string
+  certificate_order_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,7 +625,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($certificateOrderName)/verifyDomainOwnership" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, certificate_order_name: $certificate_order_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/verifyDomainOwnership") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -635,10 +635,10 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}/retrieveCertificateActions
 # operationId: AppServiceCertificateOrders_RetrieveCertificateActions
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-retrieve-certificate-actions RetrieveCertificateActions" [
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-retrieve-certificate-actions retrieve" [
+  subscription_id: string
+  resource_group_name: string
   name: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -652,7 +652,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($name)/retrieveCertificateActions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}/retrieveCertificateActions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -662,10 +662,10 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}/retrieveEmailHistory
 # operationId: AppServiceCertificateOrders_RetrieveCertificateEmailHistory
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-retrieve-email-history RetrieveCertificateEmailHistory" [
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-retrieve-email-history retrieve" [
+  subscription_id: string
+  resource_group_name: string
   name: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,7 +679,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CertificateRegistration/certificateOrders/($name)/retrieveEmailHistory" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}/retrieveEmailHistory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

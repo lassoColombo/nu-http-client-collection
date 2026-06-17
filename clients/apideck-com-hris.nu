@@ -166,7 +166,7 @@ export def "hris-companies companiesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/companies" $qp)
-  let body = {addresses: $addresses, company_number: $company_number, debtor_id: $debtor_id, display_name: $display_name, emails: $emails, legal_name: $legal_name, phone_numbers: $phone_numbers, status: $status, subdomain: $subdomain, websites: $websites} | compact
+  let body = {"addresses": $addresses, "company_number": $company_number, "debtor_id": $debtor_id, "display_name": $display_name, "emails": $emails, "legal_name": $legal_name, "phone_numbers": $phone_numbers, "status": $status, "subdomain": $subdomain, "websites": $websites} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -197,7 +197,7 @@ export def "hris-companies companiesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/companies/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/hris/companies/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -228,7 +228,7 @@ export def "hris-companies companiesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/companies/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/hris/companies/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -273,8 +273,8 @@ export def "hris-companies companiesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/companies/($id)" $qp)
-  let body = {addresses: $addresses, company_number: $company_number, debtor_id: $debtor_id, display_name: $display_name, emails: $emails, legal_name: $legal_name, phone_numbers: $phone_numbers, status: $status, subdomain: $subdomain, websites: $websites} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/hris/companies/{id}") $qp)
+  let body = {"addresses": $addresses, "company_number": $company_number, "debtor_id": $debtor_id, "display_name": $display_name, "emails": $emails, "legal_name": $legal_name, "phone_numbers": $phone_numbers, "status": $status, "subdomain": $subdomain, "websites": $websites} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -341,7 +341,7 @@ export def "hris-departments departmentsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/departments" $qp)
-  let body = {code: $code, description: $description, name: $name} | compact
+  let body = {"code": $code, "description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -372,7 +372,7 @@ export def "hris-departments departmentsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/departments/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/hris/departments/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -403,7 +403,7 @@ export def "hris-departments departmentsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/departments/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/hris/departments/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -437,8 +437,8 @@ export def "hris-departments departmentsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/departments/($id)" $qp)
-  let body = {code: $code, description: $description, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/hris/departments/{id}") $qp)
+  let body = {"code": $code, "description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -572,7 +572,7 @@ export def "hris-employees employeesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/employees" $qp)
-  let body = {addresses: $addresses, birthday: $birthday, company_id: $company_id, company_name: $company_name, compensations: $compensations, country_of_birth: $country_of_birth, custom_fields: $custom_fields, deceased_on: $deceased_on, deleted: $deleted, department: $department, department_id: $department_id, department_name: $department_name, description: $description, dietary_preference: $dietary_preference, direct_reports: $direct_reports, display_name: $display_name, division: $division, division_id: $division_id, emails: $emails, employee_number: $employee_number, employment_end_date: $employment_end_date, employment_role: $employment_role, employment_start_date: $employment_start_date, employment_status: $employment_status, first_name: $first_name, food_allergies: $food_allergies, gender: $gender, initials: $initials, jobs: $jobs, languages: $languages, last_name: $last_name, leaving_reason: $leaving_reason, manager: $manager, marital_status: $marital_status, middle_name: $middle_name, nationalities: $nationalities, partner: $partner, phone_numbers: $phone_numbers, photo_url: $photo_url, preferred_language: $preferred_language, preferred_name: $preferred_name, pronouns: $pronouns, record_url: $record_url, row_version: $row_version, salutation: $salutation, social_links: $social_links, social_security_number: $social_security_number, source: $body_source, source_id: $source_id, tags: $tags, tax_code: $tax_code, tax_id: $tax_id, team: $team, timezone: $timezone, title: $title, works_remote: $works_remote} | compact
+  let body = {"addresses": $addresses, "birthday": $birthday, "company_id": $company_id, "company_name": $company_name, "compensations": $compensations, "country_of_birth": $country_of_birth, "custom_fields": $custom_fields, "deceased_on": $deceased_on, "deleted": $deleted, "department": $department, "department_id": $department_id, "department_name": $department_name, "description": $description, "dietary_preference": $dietary_preference, "direct_reports": $direct_reports, "display_name": $display_name, "division": $division, "division_id": $division_id, "emails": $emails, "employee_number": $employee_number, "employment_end_date": $employment_end_date, "employment_role": $employment_role, "employment_start_date": $employment_start_date, "employment_status": $employment_status, "first_name": $first_name, "food_allergies": $food_allergies, "gender": $gender, "initials": $initials, "jobs": $jobs, "languages": $languages, "last_name": $last_name, "leaving_reason": $leaving_reason, "manager": $manager, "marital_status": $marital_status, "middle_name": $middle_name, "nationalities": $nationalities, "partner": $partner, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "preferred_language": $preferred_language, "preferred_name": $preferred_name, "pronouns": $pronouns, "record_url": $record_url, "row_version": $row_version, "salutation": $salutation, "social_links": $social_links, "social_security_number": $social_security_number, "source": $body_source, "source_id": $source_id, "tags": $tags, "tax_code": $tax_code, "tax_id": $tax_id, "team": $team, "timezone": $timezone, "title": $title, "works_remote": $works_remote} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -603,7 +603,7 @@ export def "hris-employees employeesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/employees/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/hris/employees/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -634,7 +634,7 @@ export def "hris-employees employeesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/employees/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/hris/employees/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -733,8 +733,8 @@ export def "hris-employees employeesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/employees/($id)" $qp)
-  let body = {addresses: $addresses, birthday: $birthday, company_id: $company_id, company_name: $company_name, compensations: $compensations, country_of_birth: $country_of_birth, custom_fields: $custom_fields, deceased_on: $deceased_on, deleted: $deleted, department: $department, department_id: $department_id, department_name: $department_name, description: $description, dietary_preference: $dietary_preference, direct_reports: $direct_reports, display_name: $display_name, division: $division, division_id: $division_id, emails: $emails, employee_number: $employee_number, employment_end_date: $employment_end_date, employment_role: $employment_role, employment_start_date: $employment_start_date, employment_status: $employment_status, first_name: $first_name, food_allergies: $food_allergies, gender: $gender, initials: $initials, jobs: $jobs, languages: $languages, last_name: $last_name, leaving_reason: $leaving_reason, manager: $manager, marital_status: $marital_status, middle_name: $middle_name, nationalities: $nationalities, partner: $partner, phone_numbers: $phone_numbers, photo_url: $photo_url, preferred_language: $preferred_language, preferred_name: $preferred_name, pronouns: $pronouns, record_url: $record_url, row_version: $row_version, salutation: $salutation, social_links: $social_links, social_security_number: $social_security_number, source: $body_source, source_id: $source_id, tags: $tags, tax_code: $tax_code, tax_id: $tax_id, team: $team, timezone: $timezone, title: $title, works_remote: $works_remote} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/hris/employees/{id}") $qp)
+  let body = {"addresses": $addresses, "birthday": $birthday, "company_id": $company_id, "company_name": $company_name, "compensations": $compensations, "country_of_birth": $country_of_birth, "custom_fields": $custom_fields, "deceased_on": $deceased_on, "deleted": $deleted, "department": $department, "department_id": $department_id, "department_name": $department_name, "description": $description, "dietary_preference": $dietary_preference, "direct_reports": $direct_reports, "display_name": $display_name, "division": $division, "division_id": $division_id, "emails": $emails, "employee_number": $employee_number, "employment_end_date": $employment_end_date, "employment_role": $employment_role, "employment_start_date": $employment_start_date, "employment_status": $employment_status, "first_name": $first_name, "food_allergies": $food_allergies, "gender": $gender, "initials": $initials, "jobs": $jobs, "languages": $languages, "last_name": $last_name, "leaving_reason": $leaving_reason, "manager": $manager, "marital_status": $marital_status, "middle_name": $middle_name, "nationalities": $nationalities, "partner": $partner, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "preferred_language": $preferred_language, "preferred_name": $preferred_name, "pronouns": $pronouns, "record_url": $record_url, "row_version": $row_version, "salutation": $salutation, "social_links": $social_links, "social_security_number": $social_security_number, "source": $body_source, "source_id": $source_id, "tags": $tags, "tax_code": $tax_code, "tax_id": $tax_id, "team": $team, "timezone": $timezone, "title": $title, "works_remote": $works_remote} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -766,7 +766,7 @@ export def "hris-jobs-employees jobsAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/jobs/employees/($employee_id)" $qp)
+  let full_url = (build-url $base ({employee_id: $employee_id} | format pattern "/hris/jobs/employees/{employee_id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -779,8 +779,8 @@ export def "hris-jobs-employees jobsAll" [
 # GET /hris/jobs/employees/{employee_id}/jobs/{job_id}
 # operationId: jobsOne
 export def "hris-jobs-employees-jobs jobsOne" [
-  job_id: string
   employee_id: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -798,7 +798,7 @@ export def "hris-jobs-employees-jobs jobsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/jobs/employees/($employee_id)/jobs/($job_id)" $qp)
+  let full_url = (build-url $base ({employee_id: $employee_id, job_id: $job_id} | format pattern "/hris/jobs/employees/{employee_id}/jobs/{job_id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -861,7 +861,7 @@ export def "hris-payrolls-employees employeePayrollsAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/payrolls/employees/($employee_id)" $qp)
+  let full_url = (build-url $base ({employee_id: $employee_id} | format pattern "/hris/payrolls/employees/{employee_id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -874,8 +874,8 @@ export def "hris-payrolls-employees employeePayrollsAll" [
 # GET /hris/payrolls/employees/{employee_id}/payrolls/{payroll_id}
 # operationId: employeePayrollsOne
 export def "hris-payrolls-employees-payrolls employeePayrollsOne" [
-  payroll_id: string
   employee_id: string
+  payroll_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -893,7 +893,7 @@ export def "hris-payrolls-employees-payrolls employeePayrollsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/payrolls/employees/($employee_id)/payrolls/($payroll_id)" $qp)
+  let full_url = (build-url $base ({employee_id: $employee_id, payroll_id: $payroll_id} | format pattern "/hris/payrolls/employees/{employee_id}/payrolls/{payroll_id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -924,7 +924,7 @@ export def "hris-payrolls payrollsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/payrolls/($payroll_id)" $qp)
+  let full_url = (build-url $base ({payroll_id: $payroll_id} | format pattern "/hris/payrolls/{payroll_id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -955,7 +955,7 @@ export def "hris-schedules-employees employeeSchedulesAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/schedules/employees/($employee_id)" $qp)
+  let full_url = (build-url $base ({employee_id: $employee_id} | format pattern "/hris/schedules/employees/{employee_id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1032,7 +1032,7 @@ export def "hris-time-off-requests timeOffRequestsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/time-off-requests" $qp)
-  let body = {amount: $amount, approval_date: $approval_date, description: $description, employee_id: $employee_id, end_date: $end_date, notes: $notes, policy_id: $policy_id, request_date: $request_date, request_type: $request_type, start_date: $start_date, status: $status, units: $units} | compact
+  let body = {"amount": $amount, "approval_date": $approval_date, "description": $description, "employee_id": $employee_id, "end_date": $end_date, "notes": $notes, "policy_id": $policy_id, "request_date": $request_date, "request_type": $request_type, "start_date": $start_date, "status": $status, "units": $units} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1063,7 +1063,7 @@ export def "hris-time-off-requests timeOffRequestsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/time-off-requests/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/hris/time-off-requests/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1094,7 +1094,7 @@ export def "hris-time-off-requests timeOffRequestsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/time-off-requests/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/hris/time-off-requests/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1138,8 +1138,8 @@ export def "hris-time-off-requests timeOffRequestsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/hris/time-off-requests/($id)" $qp)
-  let body = {amount: $amount, approval_date: $approval_date, description: $description, employee_id: $employee_id, end_date: $end_date, notes: $notes, policy_id: $policy_id, request_date: $request_date, request_type: $request_type, start_date: $start_date, status: $status, units: $units} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/hris/time-off-requests/{id}") $qp)
+  let body = {"amount": $amount, "approval_date": $approval_date, "description": $description, "employee_id": $employee_id, "end_date": $end_date, "notes": $notes, "policy_id": $policy_id, "request_date": $request_date, "request_type": $request_type, "start_date": $start_date, "status": $status, "units": $units} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

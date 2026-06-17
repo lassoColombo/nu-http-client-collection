@@ -70,7 +70,7 @@ def culture-completer [] { ["de" "en" "lt" "ru"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-order createOrder" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-order create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # POST /api/createOrder
 # operationId: createOrder
-export def "create-order createOrder" [
+export def "create-order create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,28 +103,28 @@ export def "create-order createOrder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiId: int # API ID of specific API you have configured on your merchant account (format: int64)
-  --callbackUrl: string # Url of merchant endpoint callback about order status to be returned
+  api_id: int # API ID of specific API you have configured on your merchant account (format: int64)
+  --callback-url: string # Url of merchant endpoint callback about order status to be returned
   --culture: string@culture-completer # Merchant customer culture payment window to be presented
   --description: string # Order description. Will be presented for merchant customer at payment window
-  --failureUrl: string # Url of merchant page customer should be redirected after unsuccessful payment
-  merchantId: int # Merchant ID assigned to your account (format: int64)
-  --orderId: string # Custom order ID. Must be unique per API. If not provided it will be generated.
-  --payAmount: float # Pay amount in pay currency of value which should be paid by merchant customer. If not provided receive amount will be used to calculate pay amount
-  payCurrency: string # Currency of pay amount
-  --payerEmail: string # Specified payer email.
-  --payerName: string # Specified payer name.
-  --payerSurname: string # Specified payer surname.
-  --receiveAmount: float # Receive amount in receive currency of value that merchant will be funded after merchant customers payment approval. If not provided pay amount will be used to calculate receive amount
-  receiveCurrency: string # Currency of receive amount
+  --failure-url: string # Url of merchant page customer should be redirected after unsuccessful payment
+  merchant_id: int # Merchant ID assigned to your account (format: int64)
+  --order-id: string # Custom order ID. Must be unique per API. If not provided it will be generated.
+  --pay-amount: float # Pay amount in pay currency of value which should be paid by merchant customer. If not provided receive amount will be used to calculate pay amount
+  pay_currency: string # Currency of pay amount
+  --payer-email: string # Specified payer email.
+  --payer-name: string # Specified payer name.
+  --payer-surname: string # Specified payer surname.
+  --receive-amount: float # Receive amount in receive currency of value that merchant will be funded after merchant customers payment approval. If not provided pay amount will be used to calculate receive amount
+  receive_currency: string # Currency of receive amount
   sign: string # Signature required for signing create order request
-  --successUrl: string # Url of merchant page customer should be redirected after successful payment
+  --success-url: string # Url of merchant page customer should be redirected after successful payment
 ]: any -> record<depositAddress: string, orderId: string, orderRequestId: int, payAmount: float, payCurrency: string, receiveAmount: float, receiveCurrency: string, redirectUrl: string, validUntil: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/createOrder")
-  let body = {apiId: $apiId, callbackUrl: $callbackUrl, culture: $culture, description: $description, failureUrl: $failureUrl, merchantId: $merchantId, orderId: $orderId, payAmount: $payAmount, payCurrency: $payCurrency, payerEmail: $payerEmail, payerName: $payerName, payerSurname: $payerSurname, receiveAmount: $receiveAmount, receiveCurrency: $receiveCurrency, sign: $sign, successUrl: $successUrl} | compact
+  let body = {"apiId": $api_id, "callbackUrl": $callback_url, "culture": $culture, "description": $description, "failureUrl": $failure_url, "merchantId": $merchant_id, "orderId": $order_id, "payAmount": $pay_amount, "payCurrency": $pay_currency, "payerEmail": $payer_email, "payerName": $payer_name, "payerSurname": $payer_surname, "receiveAmount": $receive_amount, "receiveCurrency": $receive_currency, "sign": $sign, "successUrl": $success_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

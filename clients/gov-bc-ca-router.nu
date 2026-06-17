@@ -66,9 +66,9 @@ def base-url-completer [] { ["https://router.api.gov.bc.ca" "https://routertst.a
 def auth-scheme-completer [] { ["apikey"] }
 
 # Completers for enum parameters
-def outputSRS-completer [] { ["26907" "26908" "26909" "26910" "26911" "3005" "4269" "4326"] }
+def output-srs-completer [] { ["26907" "26908" "26909" "26910" "26911" "3005" "4269" "4326"] }
 def criteria-completer [] { ["fastest" "shortest"] }
-def distanceUnit-completer [] { ["km" "mi"] }
+def distance-unit-completer [] { ["km" "mi"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -97,7 +97,7 @@ export def commands []: nothing -> table {
 #
 # GET /directions.{outputFormat}
 export def "directions-output-format get" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,19 +107,19 @@ export def "directions-output-format get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start/end point.Default is false. (default: false)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start/end point.Default is false. (default: false)
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/directions.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/directions.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -129,7 +129,7 @@ export def "directions-output-format get" [
 #
 # POST /directions.{outputFormat}
 export def "directions-output-format post" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,19 +139,19 @@ export def "directions-output-format post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start/end point.Default is false. (default: false)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start/end point.Default is false. (default: false)
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/directions.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/directions.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -161,7 +161,7 @@ export def "directions-output-format post" [
 #
 # GET /distance.{outputFormat}
 export def "distance-output-format get" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,19 +171,19 @@ export def "distance-output-format get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/distance.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/distance.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -193,7 +193,7 @@ export def "distance-output-format get" [
 #
 # POST /distance.{outputFormat}
 export def "distance-output-format post" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,19 +203,19 @@ export def "distance-output-format post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/distance.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/distance.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -225,7 +225,7 @@ export def "distance-output-format post" [
 #
 # GET /distance/betweenPairs.{outputFormat}
 export def "distance-between-pairs-output-format get" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,21 +234,21 @@ export def "distance-between-pairs-output-format get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fromPoints: string # A comma-separated list of origin points.  See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#fromPoints target='_blank'>fromPoints</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --toPoints: string # A comma-separated list of destination points. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#toPoints target='_blank'>toPoints</a> (e.g. -124.972951,49.715181,-123.139464,49.704015)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --from-points: string # A comma-separated list of origin points.  See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#fromPoints target='_blank'>fromPoints</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
+  --to-points: string # A comma-separated list of destination points. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#toPoints target='_blank'>toPoints</a> (e.g. -124.972951,49.715181,-123.139464,49.704015)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
-  --maxPairs: int # The maximum number of pairs to return for each toPoint.  Pairs are ordered by distance/time from fromPoint. For example, given 1 fromPoint, and 10 toPoints, and maxPairs=1 , return the nearest toPoint to the fromPoint. Given 3 fromPoints and 10 toPoints, maxPairs=3 means return the 3 nearest toPoints to each fromPoint.
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --max-pairs: int # The maximum number of pairs to return for each toPoint.  Pairs are ordered by distance/time from fromPoint. For example, given 1 fromPoint, and 10 toPoints, and maxPairs=1 , return the nearest toPoint to the fromPoint. Given 3 fromPoints and 10 toPoints, maxPairs=3 means return the 3 nearest toPoints to each fromPoint.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fromPoints" $fromPoints "scalar") (serialize-qp "toPoints" $toPoints "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar") (serialize-qp "maxPairs" $maxPairs "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/distance/betweenPairs.($outputFormat)" $qp)
+  let qp = [(serialize-qp "fromPoints" $from_points "scalar") (serialize-qp "toPoints" $to_points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar") (serialize-qp "maxPairs" $max_pairs "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/distance/betweenPairs.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,7 +258,7 @@ export def "distance-between-pairs-output-format get" [
 #
 # POST /distance/betweenPairs.{outputFormat}
 export def "distance-between-pairs-output-format post" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,21 +267,21 @@ export def "distance-between-pairs-output-format post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fromPoints: string # A comma-separated list of origin points.  See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#fromPoints target='_blank'>fromPoints</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --toPoints: string # A comma-separated list of destination points. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#toPoints target='_blank'>toPoints</a> (e.g. -124.972951,49.715181,-123.139464,49.704015)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --from-points: string # A comma-separated list of origin points.  See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#fromPoints target='_blank'>fromPoints</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
+  --to-points: string # A comma-separated list of destination points. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#toPoints target='_blank'>toPoints</a> (e.g. -124.972951,49.715181,-123.139464,49.704015)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
-  --maxPairs: int # The maximum number of pairs to return for each toPoint.  Pairs are ordered by distance/time from fromPoint. For example, given 1 fromPoint, and 10 toPoints, and maxPairs=1 , return the nearest toPoint to the fromPoint. Given 3 fromPoints and 10 toPoints, maxPairs=3 means return the 3 nearest toPoints to each fromPoint.
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --max-pairs: int # The maximum number of pairs to return for each toPoint.  Pairs are ordered by distance/time from fromPoint. For example, given 1 fromPoint, and 10 toPoints, and maxPairs=1 , return the nearest toPoint to the fromPoint. Given 3 fromPoints and 10 toPoints, maxPairs=3 means return the 3 nearest toPoints to each fromPoint.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fromPoints" $fromPoints "scalar") (serialize-qp "toPoints" $toPoints "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar") (serialize-qp "maxPairs" $maxPairs "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/distance/betweenPairs.($outputFormat)" $qp)
+  let qp = [(serialize-qp "fromPoints" $from_points "scalar") (serialize-qp "toPoints" $to_points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar") (serialize-qp "maxPairs" $max_pairs "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/distance/betweenPairs.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -291,7 +291,7 @@ export def "distance-between-pairs-output-format post" [
 #
 # GET /optimalDirections.{outputFormat}
 export def "optimal-directions-output-format get" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,19 +301,19 @@ export def "optimal-directions-output-format get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/optimalDirections.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/optimalDirections.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -323,7 +323,7 @@ export def "optimal-directions-output-format get" [
 #
 # POST /optimalDirections.{outputFormat}
 export def "optimal-directions-output-format post" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,19 +333,19 @@ export def "optimal-directions-output-format post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/optimalDirections.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/optimalDirections.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -355,7 +355,7 @@ export def "optimal-directions-output-format post" [
 #
 # GET /optimalRoute.{outputFormat}
 export def "optimal-route-output-format get" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,19 +365,19 @@ export def "optimal-route-output-format get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/optimalRoute.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/optimalRoute.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -387,7 +387,7 @@ export def "optimal-route-output-format get" [
 #
 # POST /optimalRoute.{outputFormat}
 export def "optimal-route-output-format post" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,19 +397,19 @@ export def "optimal-route-output-format post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/optimalRoute.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/optimalRoute.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -419,7 +419,7 @@ export def "optimal-route-output-format post" [
 #
 # GET /route.{outputFormat}
 export def "route-output-format get" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,19 +429,19 @@ export def "route-output-format get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start/end point.Default is false. (default: false)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start/end point.Default is false. (default: false)
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br> Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/route.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/route.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -451,7 +451,7 @@ export def "route-output-format get" [
 #
 # POST /route.{outputFormat}
 export def "route-output-format post" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,19 +461,19 @@ export def "route-output-format post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start/end point.Default is false. (default: false)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start/end point.Default is false. (default: false)
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/route.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/route.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -483,7 +483,7 @@ export def "route-output-format post" [
 #
 # GET /truck/directions.{outputFormat}
 export def "truck-directions-output-format get" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,21 +493,21 @@ export def "truck-directions-output-format get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start/end point.Default is false. (default: false)
-  --truckRouteMultiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start/end point.Default is false. (default: false)
+  --truck-route-multiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
   --partition: string # A comma-separated list of values to identify sections of the route that correspond to truck route sections and non-truck route sections, ferry sections and non-ferry sections, and locality names.  The response includes a partitions attribute, which is an array of objects, each of which has an index (into the route coordinate array) and a value for each of the attributes requested in the partition parameter. Any or all of the following values can be used. <br><br>Partition values:<br> isTruckRoute – Distinguish between truck route sections and non-truck route sections <br> isFerry – Distinguish between ferry sections and non-ferry sections <br> locality – Include the locality name for the route partition (default: )
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "truckRouteMultiplier" $truckRouteMultiplier "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/truck/directions.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "truckRouteMultiplier" $truck_route_multiplier "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/truck/directions.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -517,7 +517,7 @@ export def "truck-directions-output-format get" [
 #
 # POST /truck/directions.{outputFormat}
 export def "truck-directions-output-format post" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -527,21 +527,21 @@ export def "truck-directions-output-format post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start/end point.Default is false. (default: false)
-  --truckRouteMultiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start/end point.Default is false. (default: false)
+  --truck-route-multiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
   --partition: string # A comma-separated list of values to identify sections of the route that correspond to truck route sections and non-truck route sections, ferry sections and non-ferry sections, and locality names.  The response includes a partitions attribute, which is an array of objects, each of which has an index (into the route coordinate array) and a value for each of the attributes requested in the partition parameter. Any or all of the following values can be used. <br><br>Partition values:<br> isTruckRoute – Distinguish between truck route sections and non-truck route sections <br> isFerry – Distinguish between ferry sections and non-ferry sections <br> locality – Include the locality name for the route partition (default: )
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "truckRouteMultiplier" $truckRouteMultiplier "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/truck/directions.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "truckRouteMultiplier" $truck_route_multiplier "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/truck/directions.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -551,7 +551,7 @@ export def "truck-directions-output-format post" [
 #
 # GET /truck/distance.{outputFormat}
 export def "truck-distance-output-format get" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -561,20 +561,20 @@ export def "truck-distance-output-format get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
-  --truckRouteMultiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
+  --truck-route-multiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "truckRouteMultiplier" $truckRouteMultiplier "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/truck/distance.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "truckRouteMultiplier" $truck_route_multiplier "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/truck/distance.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -584,7 +584,7 @@ export def "truck-distance-output-format get" [
 #
 # POST /truck/distance.{outputFormat}
 export def "truck-distance-output-format post" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,19 +594,19 @@ export def "truck-distance-output-format post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/truck/distance.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/truck/distance.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -616,7 +616,7 @@ export def "truck-distance-output-format post" [
 #
 # GET /truck/distance/betweenPairs.{outputFormat}
 export def "truck-distance-between-pairs-output-format get" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,21 +625,21 @@ export def "truck-distance-between-pairs-output-format get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fromPoints: string # A comma-separated list of origin points.  See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#fromPoints target='_blank'>fromPoints</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --toPoints: string # A comma-separated list of destination points. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#toPoints target='_blank'>toPoints</a> (e.g. -124.972951,49.715181,-123.139464,49.704015)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --from-points: string # A comma-separated list of origin points.  See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#fromPoints target='_blank'>fromPoints</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
+  --to-points: string # A comma-separated list of destination points. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#toPoints target='_blank'>toPoints</a> (e.g. -124.972951,49.715181,-123.139464,49.704015)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
-  --maxPairs: int # The maximum number of pairs to return for each toPoint.  Pairs are ordered by distance/time from fromPoint. For example, given 1 fromPoint, and 10 toPoints, and maxPairs=1 , return the nearest toPoint to the fromPoint. Given 3 fromPoints and 10 toPoints, maxPairs=3 means return the 3 nearest toPoints to each fromPoint.
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --max-pairs: int # The maximum number of pairs to return for each toPoint.  Pairs are ordered by distance/time from fromPoint. For example, given 1 fromPoint, and 10 toPoints, and maxPairs=1 , return the nearest toPoint to the fromPoint. Given 3 fromPoints and 10 toPoints, maxPairs=3 means return the 3 nearest toPoints to each fromPoint.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fromPoints" $fromPoints "scalar") (serialize-qp "toPoints" $toPoints "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar") (serialize-qp "maxPairs" $maxPairs "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/truck/distance/betweenPairs.($outputFormat)" $qp)
+  let qp = [(serialize-qp "fromPoints" $from_points "scalar") (serialize-qp "toPoints" $to_points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar") (serialize-qp "maxPairs" $max_pairs "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/truck/distance/betweenPairs.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -649,7 +649,7 @@ export def "truck-distance-between-pairs-output-format get" [
 #
 # POST /truck/distance/betweenPairs.{outputFormat}
 export def "truck-distance-between-pairs-output-format post" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,21 +658,21 @@ export def "truck-distance-between-pairs-output-format post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fromPoints: string # A comma-separated list of origin points.  See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#fromPoints target='_blank'>fromPoints</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --toPoints: string # A comma-separated list of destination points. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#toPoints target='_blank'>toPoints</a> (e.g. -124.972951,49.715181,-123.139464,49.704015)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --from-points: string # A comma-separated list of origin points.  See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#fromPoints target='_blank'>fromPoints</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
+  --to-points: string # A comma-separated list of destination points. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#toPoints target='_blank'>toPoints</a> (e.g. -124.972951,49.715181,-123.139464,49.704015)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
-  --maxPairs: int # The maximum number of pairs to return for each toPoint.  Pairs are ordered by distance/time from fromPoint. For example, given 1 fromPoint, and 10 toPoints, and maxPairs=1 , return the nearest toPoint to the fromPoint. Given 3 fromPoints and 10 toPoints, maxPairs=3 means return the 3 nearest toPoints to each fromPoint.
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --max-pairs: int # The maximum number of pairs to return for each toPoint.  Pairs are ordered by distance/time from fromPoint. For example, given 1 fromPoint, and 10 toPoints, and maxPairs=1 , return the nearest toPoint to the fromPoint. Given 3 fromPoints and 10 toPoints, maxPairs=3 means return the 3 nearest toPoints to each fromPoint.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fromPoints" $fromPoints "scalar") (serialize-qp "toPoints" $toPoints "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar") (serialize-qp "maxPairs" $maxPairs "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/truck/distance/betweenPairs.($outputFormat)" $qp)
+  let qp = [(serialize-qp "fromPoints" $from_points "scalar") (serialize-qp "toPoints" $to_points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar") (serialize-qp "maxPairs" $max_pairs "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/truck/distance/betweenPairs.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -682,7 +682,7 @@ export def "truck-distance-between-pairs-output-format post" [
 #
 # GET /truck/optimalDirections.{outputFormat}
 export def "truck-optimal-directions-output-format get" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,21 +692,21 @@ export def "truck-optimal-directions-output-format get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
-  --truckRouteMultiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
+  --truck-route-multiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
   --partition: string # A comma-separated list of values to identify sections of the route that correspond to truck route sections and non-truck route sections, ferry sections and non-ferry sections, and locality names.  The response includes a partitions attribute, which is an array of objects, each of which has an index (into the route coordinate array) and a value for each of the attributes requested in the partition parameter. Any or all of the following values can be used. <br><br>Partition values:<br> isTruckRoute – Distinguish between truck route sections and non-truck route sections <br> isFerry – Distinguish between ferry sections and non-ferry sections <br> locality – Include the locality name for the route partition (default: )
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "truckRouteMultiplier" $truckRouteMultiplier "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/truck/optimalDirections.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "truckRouteMultiplier" $truck_route_multiplier "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/truck/optimalDirections.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -716,7 +716,7 @@ export def "truck-optimal-directions-output-format get" [
 #
 # POST /truck/optimalDirections.{outputFormat}
 export def "truck-optimal-directions-output-format post" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,21 +726,21 @@ export def "truck-optimal-directions-output-format post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
-  --truckRouteMultiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
+  --truck-route-multiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
   --partition: string # A comma-separated list of values to identify sections of the route that correspond to truck route sections and non-truck route sections, ferry sections and non-ferry sections, and locality names.  The response includes a partitions attribute, which is an array of objects, each of which has an index (into the route coordinate array) and a value for each of the attributes requested in the partition parameter. Any or all of the following values can be used. <br><br>Partition values:<br> isTruckRoute – Distinguish between truck route sections and non-truck route sections <br> isFerry – Distinguish between ferry sections and non-ferry sections <br> locality – Include the locality name for the route partition (default: )
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "truckRouteMultiplier" $truckRouteMultiplier "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/truck/optimalDirections.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "truckRouteMultiplier" $truck_route_multiplier "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/truck/optimalDirections.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -750,7 +750,7 @@ export def "truck-optimal-directions-output-format post" [
 #
 # GET /truck/optimalRoute.{outputFormat}
 export def "truck-optimal-route-output-format get" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -760,21 +760,21 @@ export def "truck-optimal-route-output-format get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
-  --truckRouteMultiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
+  --truck-route-multiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
   --partition: string # A comma-separated list of values to identify sections of the route that correspond to truck route sections and non-truck route sections, ferry sections and non-ferry sections, and locality names.  The response includes a partitions attribute, which is an array of objects, each of which has an index (into the route coordinate array) and a value for each of the attributes requested in the partition parameter. Any or all of the following values can be used. <br><br>Partition values:<br> isTruckRoute – Distinguish between truck route sections and non-truck route sections <br> isFerry – Distinguish between ferry sections and non-ferry sections <br> locality – Include the locality name for the route partition (default: )
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "truckRouteMultiplier" $truckRouteMultiplier "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/truck/optimalRoute.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "truckRouteMultiplier" $truck_route_multiplier "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/truck/optimalRoute.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -784,7 +784,7 @@ export def "truck-optimal-route-output-format get" [
 #
 # POST /truck/optimalRoute.{outputFormat}
 export def "truck-optimal-route-output-format post" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -794,21 +794,21 @@ export def "truck-optimal-route-output-format post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
-  --truckRouteMultiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start and end points.Default is false. (default: false)
+  --truck-route-multiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
   --partition: string # A comma-separated list of values to identify sections of the route that correspond to truck route sections and non-truck route sections, ferry sections and non-ferry sections, and locality names.  The response includes a partitions attribute, which is an array of objects, each of which has an index (into the route coordinate array) and a value for each of the attributes requested in the partition parameter. Any or all of the following values can be used. <br><br>Partition values:<br> isTruckRoute – Distinguish between truck route sections and non-truck route sections <br> isFerry – Distinguish between ferry sections and non-ferry sections <br> locality – Include the locality name for the route partition (default: )
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "truckRouteMultiplier" $truckRouteMultiplier "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/truck/optimalRoute.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "truckRouteMultiplier" $truck_route_multiplier "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/truck/optimalRoute.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -818,7 +818,7 @@ export def "truck-optimal-route-output-format post" [
 #
 # GET /truck/route.{outputFormat}
 export def "truck-route-output-format get" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -828,21 +828,21 @@ export def "truck-route-output-format get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start/end point.Default is false. (default: false)
-  --truckRouteMultiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start/end point.Default is false. (default: false)
+  --truck-route-multiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
   --partition: string # A comma-separated list of values to identify sections of the route that correspond to truck route sections and non-truck route sections, ferry sections and non-ferry sections, and locality names.  The response includes a partitions attribute, which is an array of objects, each of which has an index (into the route coordinate array) and a value for each of the attributes requested in the partition parameter. Any or all of the following values can be used. <br><br>Partition values:<br> isTruckRoute – Distinguish between truck route sections and non-truck route sections <br> isFerry – Distinguish between ferry sections and non-ferry sections <br> locality – Include the locality name for the route partition (default: )
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br> Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "truckRouteMultiplier" $truckRouteMultiplier "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/truck/route.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "truckRouteMultiplier" $truck_route_multiplier "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/truck/route.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -852,7 +852,7 @@ export def "truck-route-output-format get" [
 #
 # POST /truck/route.{outputFormat}
 export def "truck-route-output-format post" [
-  outputFormat: string
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -862,21 +862,21 @@ export def "truck-route-output-format post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --points: string # A list of any number of route points in start to end order. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#points target='_blank'>points</a> (e.g. -123.70794,48.77869,-123.53785,48.38200)
-  --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-router/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --criteria: string@criteria-completer # Routing criteria to optimize (e.g., shortest, fastest). Default is shortest. (default: shortest)
-  --distanceUnit: string@distanceUnit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
-  --roundTrip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
+  --distance-unit: string@distance-unit-completer # distance unit of measure (e.g., km, mi). Default is km. (default: km)
+  --round-trip: oneof<nothing, bool> # If true, route ends at start point. Default is false. (default: false)
   --departure: string # departure date and time in internet timestamp notation as defined in RFC 3339, section 5.6 (e.g., 2019-02-28T11:36:00-08:00);<br> Ignored if time-dependency modules are disabled (format: date-time)
-  --correctSide: oneof<nothing, bool> # If true, route starts and ends on same side of road as start/end point.Default is false. (default: false)
-  --truckRouteMultiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
+  --correct-side: oneof<nothing, bool> # If true, route starts and ends on same side of road as start/end point.Default is false. (default: false)
+  --truck-route-multiplier: int # The truck route multiplier value is used to multiply the cost of using roads that are not truck routes. (default: 9)
   --partition: string # A comma-separated list of values to identify sections of the route that correspond to truck route sections and non-truck route sections, ferry sections and non-ferry sections, and locality names.  The response includes a partitions attribute, which is an array of objects, each of which has an index (into the route coordinate array) and a value for each of the attributes requested in the partition parameter. Any or all of the following values can be used. <br><br>Partition values:<br> isTruckRoute – Distinguish between truck route sections and non-truck route sections <br> isFerry – Distinguish between ferry sections and non-ferry sections <br> locality – Include the locality name for the route partition (default: )
   --disable: string # A comma-separated list of time-related modules to disable (e.g., sc,tf,ev,td).<br><br>Module names include:<br> sc – ferry schedules; disabled by default; disabled by default and only suitable for demos<br>tf – historic traffic congestion; disabled by default and only suitable for demos<br>ev – road events; disabled by default and only suitable for demos<br>td – time-dependency; disabling this disables sc, tf, and ev modules<br>tr – turn restrictions; if td is disabled, time-dependent turn restrictions are ignored<br>tc - turn costs (e.g., left turns take longer than right turns) (default: sc,tf,ev,td)
-  --routeDescription: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
+  --route-description: string # Route description (e.g., Shortest route from 1002 Johnson St, Victoria to 1105 Royal Ave,New Westminster) (default: Routing results)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $outputSRS "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distanceUnit "scalar") (serialize-qp "roundTrip" $roundTrip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correctSide "scalar") (serialize-qp "truckRouteMultiplier" $truckRouteMultiplier "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $routeDescription "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/truck/route.($outputFormat)" $qp)
+  let qp = [(serialize-qp "points" $points "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "criteria" $criteria "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "roundTrip" $round_trip "scalar") (serialize-qp "departure" $departure "scalar") (serialize-qp "correctSide" $correct_side "scalar") (serialize-qp "truckRouteMultiplier" $truck_route_multiplier "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "disable" $disable "scalar") (serialize-qp "routeDescription" $route_description "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/truck/route.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

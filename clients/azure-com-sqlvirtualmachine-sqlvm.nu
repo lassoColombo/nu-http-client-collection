@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-sql-virtual-machine-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-sql-virtual-machine-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.SqlVirtualMachine/operations
 # operationId: Operations_List
-export def "providers-microsoft-sql-virtual-machine-operations List" [
+export def "providers-microsoft-sql-virtual-machine-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-sql-virtual-machine-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups
 # operationId: SqlVirtualMachineGroups_List
-export def "subscriptions-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "subscriptions-providers-microsoft-sql-virtual-machine-sql-virtual-ma
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,8 +142,8 @@ export def "subscriptions-providers-microsoft-sql-virtual-machine-sql-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines
 # operationId: SqlVirtualMachines_List
-export def "subscriptions-providers-microsoft-sql-virtual-machine-sql-virtual-machines List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-sql-virtual-machine-sql-virtual-machines list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,7 +157,7 @@ export def "subscriptions-providers-microsoft-sql-virtual-machine-sql-virtual-ma
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -167,9 +167,9 @@ export def "subscriptions-providers-microsoft-sql-virtual-machine-sql-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups
 # operationId: SqlVirtualMachineGroups_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -193,10 +193,10 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}
 # operationId: SqlVirtualMachineGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups Delete" [
-  resourceGroupName: string
-  sqlVirtualMachineGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups delete" [
+  subscription_id: string
+  resource_group_name: string
+  sql_virtual_machine_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/($sqlVirtualMachineGroupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sql_virtual_machine_group_name: $sql_virtual_machine_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -220,10 +220,10 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}
 # operationId: SqlVirtualMachineGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups Get" [
-  resourceGroupName: string
-  sqlVirtualMachineGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups get" [
+  subscription_id: string
+  resource_group_name: string
+  sql_virtual_machine_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/($sqlVirtualMachineGroupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sql_virtual_machine_group_name: $sql_virtual_machine_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -247,10 +247,10 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}
 # operationId: SqlVirtualMachineGroups_Update
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups Update" [
-  resourceGroupName: string
-  sqlVirtualMachineGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups update" [
+  subscription_id: string
+  resource_group_name: string
+  sql_virtual_machine_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,8 +266,8 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/($sqlVirtualMachineGroupName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sql_virtual_machine_group_name: $sql_virtual_machine_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -279,10 +279,10 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}
 # operationId: SqlVirtualMachineGroups_CreateOrUpdate
 # --properties shape: {sqlImageOffer?: string, sqlImageSku?: "Developer"|"Enterprise", wsfcDomainProfile?: record}
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups CreateOrUpdate" [
-  resourceGroupName: string
-  sqlVirtualMachineGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  sql_virtual_machine_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,8 +300,8 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/($sqlVirtualMachineGroupName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sql_virtual_machine_group_name: $sql_virtual_machine_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -312,10 +312,10 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}/availabilityGroupListeners
 # operationId: AvailabilityGroupListeners_ListByGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-listeners ListByGroup" [
-  resourceGroupName: string
-  sqlVirtualMachineGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-listeners list-by" [
+  subscription_id: string
+  resource_group_name: string
+  sql_virtual_machine_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +329,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/($sqlVirtualMachineGroupName)/availabilityGroupListeners" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sql_virtual_machine_group_name: $sql_virtual_machine_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}/availabilityGroupListeners") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -339,11 +339,11 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}/availabilityGroupListeners/{availabilityGroupListenerName}
 # operationId: AvailabilityGroupListeners_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-listeners Delete" [
-  resourceGroupName: string
-  sqlVirtualMachineGroupName: string
-  availabilityGroupListenerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-listeners delete" [
+  subscription_id: string
+  resource_group_name: string
+  sql_virtual_machine_group_name: string
+  availability_group_listener_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +357,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/($sqlVirtualMachineGroupName)/availabilityGroupListeners/($availabilityGroupListenerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sql_virtual_machine_group_name: $sql_virtual_machine_group_name, availability_group_listener_name: $availability_group_listener_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}/availabilityGroupListeners/{availability_group_listener_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -367,11 +367,11 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}/availabilityGroupListeners/{availabilityGroupListenerName}
 # operationId: AvailabilityGroupListeners_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-listeners Get" [
-  resourceGroupName: string
-  sqlVirtualMachineGroupName: string
-  availabilityGroupListenerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-listeners get" [
+  subscription_id: string
+  resource_group_name: string
+  sql_virtual_machine_group_name: string
+  availability_group_listener_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,7 +385,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/($sqlVirtualMachineGroupName)/availabilityGroupListeners/($availabilityGroupListenerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sql_virtual_machine_group_name: $sql_virtual_machine_group_name, availability_group_listener_name: $availability_group_listener_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}/availabilityGroupListeners/{availability_group_listener_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -396,11 +396,11 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}/availabilityGroupListeners/{availabilityGroupListenerName}
 # operationId: AvailabilityGroupListeners_CreateOrUpdate
 # --properties shape: {availabilityGroupName?: string, createDefaultAvailabilityGroupIfNotExist?: bool, loadBalancerConfigurations?: list, port?: int}
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-listeners CreateOrUpdate" [
-  resourceGroupName: string
-  sqlVirtualMachineGroupName: string
-  availabilityGroupListenerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-listeners create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  sql_virtual_machine_group_name: string
+  availability_group_listener_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,8 +416,8 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/($sqlVirtualMachineGroupName)/availabilityGroupListeners/($availabilityGroupListenerName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sql_virtual_machine_group_name: $sql_virtual_machine_group_name, availability_group_listener_name: $availability_group_listener_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}/availabilityGroupListeners/{availability_group_listener_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -428,10 +428,10 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}/sqlVirtualMachines
 # operationId: SqlVirtualMachines_ListBySqlVmGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-sql-virtual-machines ListBySqlVmGroup" [
-  resourceGroupName: string
-  sqlVirtualMachineGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-sql-virtual-machines list-by-sql-vm" [
+  subscription_id: string
+  resource_group_name: string
+  sql_virtual_machine_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -445,7 +445,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/($sqlVirtualMachineGroupName)/sqlVirtualMachines" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sql_virtual_machine_group_name: $sql_virtual_machine_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}/sqlVirtualMachines") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -455,9 +455,9 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines
 # operationId: SqlVirtualMachines_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machines ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machines list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,7 +471,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -481,10 +481,10 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/{sqlVirtualMachineName}
 # operationId: SqlVirtualMachines_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machines Delete" [
-  resourceGroupName: string
-  sqlVirtualMachineName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machines delete" [
+  subscription_id: string
+  resource_group_name: string
+  sql_virtual_machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -498,7 +498,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/($sqlVirtualMachineName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sql_virtual_machine_name: $sql_virtual_machine_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/{sql_virtual_machine_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -508,10 +508,10 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/{sqlVirtualMachineName}
 # operationId: SqlVirtualMachines_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machines Get" [
-  resourceGroupName: string
-  sqlVirtualMachineName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machines get" [
+  subscription_id: string
+  resource_group_name: string
+  sql_virtual_machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -526,7 +526,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/($sqlVirtualMachineName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sql_virtual_machine_name: $sql_virtual_machine_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/{sql_virtual_machine_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -536,10 +536,10 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/{sqlVirtualMachineName}
 # operationId: SqlVirtualMachines_Update
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machines Update" [
-  resourceGroupName: string
-  sqlVirtualMachineName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machines update" [
+  subscription_id: string
+  resource_group_name: string
+  sql_virtual_machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -555,8 +555,8 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/($sqlVirtualMachineName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sql_virtual_machine_name: $sql_virtual_machine_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/{sql_virtual_machine_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -569,10 +569,10 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 # operationId: SqlVirtualMachines_CreateOrUpdate
 # --identity shape: {type?: "SystemAssigned"}
 # --properties shape: {autoBackupSettings?: record, autoPatchingSettings?: record, keyVaultCredentialSettings?: record, serverConfigurationsManagementSettings?: record, sqlImageOffer?: string, sqlImageSku?: "Developer"|"Express"|"Standard"|"Enterprise"|"Web", sqlManagement?: "Full"|"LightWeight"|"NoAgent", sqlServerLicenseType?: "PAYG"|"AHUB"|"DR", sqlVirtualMachineGroupResourceId?: string, storageConfigurationSettings?: record, virtualMachineResourceId?: string, wsfcDomainCredentials?: record}
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machines CreateOrUpdate" [
-  resourceGroupName: string
-  sqlVirtualMachineName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machines create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  sql_virtual_machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -591,8 +591,8 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/($sqlVirtualMachineName)" $qp)
-  let body = {identity: $identity, properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sql_virtual_machine_name: $sql_virtual_machine_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/{sql_virtual_machine_name}") $qp)
+  let body = {"identity": $identity, "properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

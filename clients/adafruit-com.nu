@@ -120,7 +120,7 @@ export def "user currentUser" [
 #
 # POST /webhooks/feed/:token
 # operationId: createWebhookFeedData
-export def "webhooks-feed-token createWebhookFeedData" [
+export def "webhooks-feed-token create-webhook-feed-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,7 +136,7 @@ export def "webhooks-feed-token createWebhookFeedData" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/feed/:token")
-  let body = {value: $value} | compact
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -147,7 +147,7 @@ export def "webhooks-feed-token createWebhookFeedData" [
 #
 # POST /webhooks/feed/:token/raw
 # operationId: createRawWebhookFeedData
-export def "webhooks-feed-token-raw createRawWebhookFeedData" [
+export def "webhooks-feed-token-raw create-raw-webhook-feed-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "webhooks-feed-token-raw createRawWebhookFeedData" [
 #
 # DELETE /{username}/activities
 # operationId: destroyActivities
-export def "activities destroyActivities" [
+export def "activities delete" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -184,7 +184,7 @@ export def "activities destroyActivities" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/activities")
+  let full_url = (build-url $base ({username: $username} | format pattern "/{username}/activities"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +212,7 @@ export def "activities allActivities" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/activities" $qp)
+  let full_url = (build-url $base ({username: $username} | format pattern "/{username}/activities") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -222,7 +222,7 @@ export def "activities allActivities" [
 #
 # GET /{username}/activities/{type}
 # operationId: getActivity
-export def "activities get" [
+export def "activities get-activity" [
   username: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -241,7 +241,7 @@ export def "activities get" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/activities/($type)" $qp)
+  let full_url = (build-url $base ({username: $username, type: $type} | format pattern "/{username}/activities/{type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -265,7 +265,7 @@ export def "dashboards allDashboards" [
 ]: nothing -> table<blocks: list<record>, description: string, key: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards")
+  let full_url = (build-url $base ({username: $username} | format pattern "/{username}/dashboards"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -275,7 +275,7 @@ export def "dashboards allDashboards" [
 #
 # POST /{username}/dashboards
 # operationId: createDashboard
-export def "dashboards createDashboard" [
+export def "dashboards create" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +289,7 @@ export def "dashboards createDashboard" [
 ]: nothing -> record<blocks: table<block_feeds: list, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, description: string, key: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards")
+  let full_url = (build-url $base ({username: $username} | format pattern "/{username}/dashboards"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -314,7 +314,7 @@ export def "dashboards-blocks allBlocks" [
 ]: nothing -> table<block_feeds: list<record>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($dashboard_id)/blocks")
+  let full_url = (build-url $base ({username: $username, dashboard_id: $dashboard_id} | format pattern "/{username}/dashboards/{dashboard_id}/blocks"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -324,7 +324,7 @@ export def "dashboards-blocks allBlocks" [
 #
 # POST /{username}/dashboards/{dashboard_id}/blocks
 # operationId: createBlock
-export def "dashboards-blocks createBlock" [
+export def "dashboards-blocks create" [
   username: string
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -339,7 +339,7 @@ export def "dashboards-blocks createBlock" [
 ]: nothing -> record<block_feeds: table<feed: record, group: record, id: string>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($dashboard_id)/blocks")
+  let full_url = (build-url $base ({username: $username, dashboard_id: $dashboard_id} | format pattern "/{username}/dashboards/{dashboard_id}/blocks"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -349,7 +349,7 @@ export def "dashboards-blocks createBlock" [
 #
 # DELETE /{username}/dashboards/{dashboard_id}/blocks/{id}
 # operationId: destroyBlock
-export def "dashboards-blocks destroyBlock" [
+export def "dashboards-blocks delete" [
   username: string
   dashboard_id: string
   id: string
@@ -365,7 +365,7 @@ export def "dashboards-blocks destroyBlock" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($dashboard_id)/blocks/($id)")
+  let full_url = (build-url $base ({username: $username, dashboard_id: $dashboard_id, id: $id} | format pattern "/{username}/dashboards/{dashboard_id}/blocks/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -391,7 +391,7 @@ export def "dashboards-blocks get" [
 ]: nothing -> record<block_feeds: table<feed: record, group: record, id: string>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($dashboard_id)/blocks/($id)")
+  let full_url = (build-url $base ({username: $username, dashboard_id: $dashboard_id, id: $id} | format pattern "/{username}/dashboards/{dashboard_id}/blocks/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -401,7 +401,7 @@ export def "dashboards-blocks get" [
 #
 # PATCH /{username}/dashboards/{dashboard_id}/blocks/{id}
 # operationId: updateBlock
-export def "dashboards-blocks updateBlock" [
+export def "dashboards-blocks update-by-username-dashboard_id-id" [
   username: string
   dashboard_id: string
   id: string
@@ -417,7 +417,7 @@ export def "dashboards-blocks updateBlock" [
 ]: nothing -> record<block_feeds: table<feed: record, group: record, id: string>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($dashboard_id)/blocks/($id)")
+  let full_url = (build-url $base ({username: $username, dashboard_id: $dashboard_id, id: $id} | format pattern "/{username}/dashboards/{dashboard_id}/blocks/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -427,7 +427,7 @@ export def "dashboards-blocks updateBlock" [
 #
 # PUT /{username}/dashboards/{dashboard_id}/blocks/{id}
 # operationId: replaceBlock
-export def "dashboards-blocks replaceBlock" [
+export def "dashboards-blocks update-by-username-dashboard_id-id-1" [
   username: string
   dashboard_id: string
   id: string
@@ -443,7 +443,7 @@ export def "dashboards-blocks replaceBlock" [
 ]: nothing -> record<block_feeds: table<feed: record, group: record, id: string>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($dashboard_id)/blocks/($id)")
+  let full_url = (build-url $base ({username: $username, dashboard_id: $dashboard_id, id: $id} | format pattern "/{username}/dashboards/{dashboard_id}/blocks/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -453,7 +453,7 @@ export def "dashboards-blocks replaceBlock" [
 #
 # DELETE /{username}/dashboards/{id}
 # operationId: destroyDashboard
-export def "dashboards destroyDashboard" [
+export def "dashboards delete" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -468,7 +468,7 @@ export def "dashboards destroyDashboard" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($id)")
+  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/{username}/dashboards/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -493,7 +493,7 @@ export def "dashboards get" [
 ]: nothing -> record<blocks: table<block_feeds: list, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, description: string, key: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($id)")
+  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/{username}/dashboards/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -503,7 +503,7 @@ export def "dashboards get" [
 #
 # PATCH /{username}/dashboards/{id}
 # operationId: updateDashboard
-export def "dashboards updateDashboard" [
+export def "dashboards update-by-username-id" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -518,7 +518,7 @@ export def "dashboards updateDashboard" [
 ]: nothing -> record<blocks: table<block_feeds: list, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, description: string, key: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($id)")
+  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/{username}/dashboards/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -528,7 +528,7 @@ export def "dashboards updateDashboard" [
 #
 # PUT /{username}/dashboards/{id}
 # operationId: replaceDashboard
-export def "dashboards replaceDashboard" [
+export def "dashboards update-by-username-id-1" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -543,7 +543,7 @@ export def "dashboards replaceDashboard" [
 ]: nothing -> record<blocks: table<block_feeds: list, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, description: string, key: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/dashboards/($id)")
+  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/{username}/dashboards/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -567,7 +567,7 @@ export def "feeds allFeeds" [
 ]: nothing -> table<created_at: string, description: string, details: record<data: record, shared_with: list>, enabled: bool, group: record, groups: list<record>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds")
+  let full_url = (build-url $base ({username: $username} | format pattern "/{username}/feeds"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -577,7 +577,7 @@ export def "feeds allFeeds" [
 #
 # POST /{username}/feeds
 # operationId: createFeed
-export def "feeds createFeed" [
+export def "feeds create" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -593,7 +593,7 @@ export def "feeds createFeed" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "group_key" $group_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/feeds" $qp)
+  let full_url = (build-url $base ({username: $username} | format pattern "/{username}/feeds") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -603,7 +603,7 @@ export def "feeds createFeed" [
 #
 # DELETE /{username}/feeds/{feed_key}
 # operationId: destroyFeed
-export def "feeds destroyFeed" [
+export def "feeds delete" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -618,7 +618,7 @@ export def "feeds destroyFeed" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)")
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key} | format pattern "/{username}/feeds/{feed_key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -643,7 +643,7 @@ export def "feeds get" [
 ]: nothing -> record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)")
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key} | format pattern "/{username}/feeds/{feed_key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -653,7 +653,7 @@ export def "feeds get" [
 #
 # PATCH /{username}/feeds/{feed_key}
 # operationId: updateFeed
-export def "feeds updateFeed" [
+export def "feeds update-by-username-feed_key" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -668,7 +668,7 @@ export def "feeds updateFeed" [
 ]: nothing -> record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)")
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key} | format pattern "/{username}/feeds/{feed_key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -678,7 +678,7 @@ export def "feeds updateFeed" [
 #
 # PUT /{username}/feeds/{feed_key}
 # operationId: replaceFeed
-export def "feeds replaceFeed" [
+export def "feeds update-by-username-feed_key-1" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -693,7 +693,7 @@ export def "feeds replaceFeed" [
 ]: nothing -> record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)")
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key} | format pattern "/{username}/feeds/{feed_key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -723,7 +723,7 @@ export def "feeds-data allData" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data" $qp)
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key} | format pattern "/{username}/feeds/{feed_key}/data") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -733,7 +733,7 @@ export def "feeds-data allData" [
 #
 # POST /{username}/feeds/{feed_key}/data
 # operationId: createData
-export def "feeds-data createData" [
+export def "feeds-data create" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -748,7 +748,7 @@ export def "feeds-data createData" [
 ]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data")
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key} | format pattern "/{username}/feeds/{feed_key}/data"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -773,7 +773,7 @@ export def "feeds-data-batch batchCreateData" [
 ]: nothing -> table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/batch")
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key} | format pattern "/{username}/feeds/{feed_key}/data/batch"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -803,7 +803,7 @@ export def "feeds-data-chart chartData" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "hours" $hours "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/chart" $qp)
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key} | format pattern "/{username}/feeds/{feed_key}/data/chart") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -830,7 +830,7 @@ export def "feeds-data-first firstData" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/first" $qp)
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key} | format pattern "/{username}/feeds/{feed_key}/data/first") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -857,7 +857,7 @@ export def "feeds-data-last lastData" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/last" $qp)
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key} | format pattern "/{username}/feeds/{feed_key}/data/last") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -884,7 +884,7 @@ export def "feeds-data-next nextData" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/next" $qp)
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key} | format pattern "/{username}/feeds/{feed_key}/data/next") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -911,7 +911,7 @@ export def "feeds-data-previous previousData" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/previous" $qp)
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key} | format pattern "/{username}/feeds/{feed_key}/data/previous") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -935,7 +935,7 @@ export def "feeds-data-retain retainData" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/retain")
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key} | format pattern "/{username}/feeds/{feed_key}/data/retain"))
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -945,7 +945,7 @@ export def "feeds-data-retain retainData" [
 #
 # DELETE /{username}/feeds/{feed_key}/data/{id}
 # operationId: destroyData
-export def "feeds-data destroyData" [
+export def "feeds-data delete" [
   username: string
   feed_key: string
   id: string
@@ -961,7 +961,7 @@ export def "feeds-data destroyData" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/($id)")
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key, id: $id} | format pattern "/{username}/feeds/{feed_key}/data/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -989,7 +989,7 @@ export def "feeds-data get" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/($id)" $qp)
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key, id: $id} | format pattern "/{username}/feeds/{feed_key}/data/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -999,7 +999,7 @@ export def "feeds-data get" [
 #
 # PATCH /{username}/feeds/{feed_key}/data/{id}
 # operationId: updateData
-export def "feeds-data updateData" [
+export def "feeds-data update-by-username-feed_key-id" [
   username: string
   feed_key: string
   id: string
@@ -1015,7 +1015,7 @@ export def "feeds-data updateData" [
 ]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/($id)")
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key, id: $id} | format pattern "/{username}/feeds/{feed_key}/data/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1025,7 +1025,7 @@ export def "feeds-data updateData" [
 #
 # PUT /{username}/feeds/{feed_key}/data/{id}
 # operationId: replaceData
-export def "feeds-data replaceData" [
+export def "feeds-data update-by-username-feed_key-id-1" [
   username: string
   feed_key: string
   id: string
@@ -1041,7 +1041,7 @@ export def "feeds-data replaceData" [
 ]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/data/($id)")
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key, id: $id} | format pattern "/{username}/feeds/{feed_key}/data/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1066,7 +1066,7 @@ export def "feeds-details get" [
 ]: nothing -> record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/feeds/($feed_key)/details")
+  let full_url = (build-url $base ({username: $username, feed_key: $feed_key} | format pattern "/{username}/feeds/{feed_key}/details"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1090,7 +1090,7 @@ export def "groups allGroups" [
 ]: nothing -> table<created_at: string, description: string, feeds: list<record>, id: float, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups")
+  let full_url = (build-url $base ({username: $username} | format pattern "/{username}/groups"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1100,7 +1100,7 @@ export def "groups allGroups" [
 #
 # POST /{username}/groups
 # operationId: createGroup
-export def "groups createGroup" [
+export def "groups create" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1114,7 +1114,7 @@ export def "groups createGroup" [
 ]: nothing -> record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups")
+  let full_url = (build-url $base ({username: $username} | format pattern "/{username}/groups"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1124,7 +1124,7 @@ export def "groups createGroup" [
 #
 # DELETE /{username}/groups/{group_key}
 # operationId: destroyGroup
-export def "groups destroyGroup" [
+export def "groups delete" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1139,7 +1139,7 @@ export def "groups destroyGroup" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)")
+  let full_url = (build-url $base ({username: $username, group_key: $group_key} | format pattern "/{username}/groups/{group_key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1164,7 +1164,7 @@ export def "groups get" [
 ]: nothing -> record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)")
+  let full_url = (build-url $base ({username: $username, group_key: $group_key} | format pattern "/{username}/groups/{group_key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1174,7 +1174,7 @@ export def "groups get" [
 #
 # PATCH /{username}/groups/{group_key}
 # operationId: updateGroup
-export def "groups updateGroup" [
+export def "groups update-by-username-group_key" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1189,7 +1189,7 @@ export def "groups updateGroup" [
 ]: nothing -> record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)")
+  let full_url = (build-url $base ({username: $username, group_key: $group_key} | format pattern "/{username}/groups/{group_key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1199,7 +1199,7 @@ export def "groups updateGroup" [
 #
 # PUT /{username}/groups/{group_key}
 # operationId: replaceGroup
-export def "groups replaceGroup" [
+export def "groups update-by-username-group_key-1" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1214,7 +1214,7 @@ export def "groups replaceGroup" [
 ]: nothing -> record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)")
+  let full_url = (build-url $base ({username: $username, group_key: $group_key} | format pattern "/{username}/groups/{group_key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1224,9 +1224,9 @@ export def "groups replaceGroup" [
 #
 # POST /{username}/groups/{group_key}/add
 # operationId: addFeedToGroup
-export def "groups-add addFeedToGroup" [
-  group_key: string
+export def "groups-add create-feed-to" [
   username: string
+  group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1241,7 +1241,7 @@ export def "groups-add addFeedToGroup" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "feed_key" $feed_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/groups/($group_key)/add" $qp)
+  let full_url = (build-url $base ({username: $username, group_key: $group_key} | format pattern "/{username}/groups/{group_key}/add") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1251,7 +1251,7 @@ export def "groups-add addFeedToGroup" [
 #
 # POST /{username}/groups/{group_key}/data
 # operationId: createGroupData
-export def "groups-data createGroupData" [
+export def "groups-data create" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1266,7 +1266,7 @@ export def "groups-data createGroupData" [
 ]: nothing -> table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)/data")
+  let full_url = (build-url $base ({username: $username, group_key: $group_key} | format pattern "/{username}/groups/{group_key}/data"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1277,8 +1277,8 @@ export def "groups-data createGroupData" [
 # GET /{username}/groups/{group_key}/feeds
 # operationId: allGroupFeeds
 export def "groups-feeds allGroupFeeds" [
-  group_key: string
   username: string
+  group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1291,7 +1291,7 @@ export def "groups-feeds allGroupFeeds" [
 ]: nothing -> table<created_at: string, description: string, details: record<data: record, shared_with: list>, enabled: bool, group: record, groups: list<record>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)/feeds")
+  let full_url = (build-url $base ({username: $username, group_key: $group_key} | format pattern "/{username}/groups/{group_key}/feeds"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1301,7 +1301,7 @@ export def "groups-feeds allGroupFeeds" [
 #
 # POST /{username}/groups/{group_key}/feeds
 # operationId: createGroupFeed
-export def "groups-feeds createGroupFeed" [
+export def "groups-feeds create" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1316,7 +1316,7 @@ export def "groups-feeds createGroupFeed" [
 ]: nothing -> record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)/feeds")
+  let full_url = (build-url $base ({username: $username, group_key: $group_key} | format pattern "/{username}/groups/{group_key}/feeds"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1346,7 +1346,7 @@ export def "groups-feeds-data allGroupFeedData" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/groups/($group_key)/feeds/($feed_key)/data" $qp)
+  let full_url = (build-url $base ({username: $username, group_key: $group_key, feed_key: $feed_key} | format pattern "/{username}/groups/{group_key}/feeds/{feed_key}/data") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1356,7 +1356,7 @@ export def "groups-feeds-data allGroupFeedData" [
 #
 # POST /{username}/groups/{group_key}/feeds/{feed_key}/data
 # operationId: createGroupFeedData
-export def "groups-feeds-data createGroupFeedData" [
+export def "groups-feeds-data create" [
   username: string
   group_key: string
   feed_key: string
@@ -1372,7 +1372,7 @@ export def "groups-feeds-data createGroupFeedData" [
 ]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)/feeds/($feed_key)/data")
+  let full_url = (build-url $base ({username: $username, group_key: $group_key, feed_key: $feed_key} | format pattern "/{username}/groups/{group_key}/feeds/{feed_key}/data"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1398,7 +1398,7 @@ export def "groups-feeds-data-batch batchCreateGroupFeedData" [
 ]: nothing -> table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/groups/($group_key)/feeds/($feed_key)/data/batch")
+  let full_url = (build-url $base ({username: $username, group_key: $group_key, feed_key: $feed_key} | format pattern "/{username}/groups/{group_key}/feeds/{feed_key}/data/batch"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1408,9 +1408,9 @@ export def "groups-feeds-data-batch batchCreateGroupFeedData" [
 #
 # POST /{username}/groups/{group_key}/remove
 # operationId: removeFeedFromGroup
-export def "groups-remove removeFeedFromGroup" [
-  group_key: string
+export def "groups-remove delete-feed-from" [
   username: string
+  group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1425,7 +1425,7 @@ export def "groups-remove removeFeedFromGroup" [
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "feed_key" $feed_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($username)/groups/($group_key)/remove" $qp)
+  let full_url = (build-url $base ({username: $username, group_key: $group_key} | format pattern "/{username}/groups/{group_key}/remove") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1435,7 +1435,7 @@ export def "groups-remove removeFeedFromGroup" [
 #
 # GET /{username}/throttle
 # operationId: getCurrentUserThrottle
-export def "throttle get" [
+export def "throttle get-current-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1449,7 +1449,7 @@ export def "throttle get" [
 ]: nothing -> record<active_data_rate: int, data_rate_limit: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/throttle")
+  let full_url = (build-url $base ({username: $username} | format pattern "/{username}/throttle"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1473,7 +1473,7 @@ export def "tokens allTokens" [
 ]: nothing -> table<token: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/tokens")
+  let full_url = (build-url $base ({username: $username} | format pattern "/{username}/tokens"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1483,7 +1483,7 @@ export def "tokens allTokens" [
 #
 # POST /{username}/tokens
 # operationId: createToken
-export def "tokens createToken" [
+export def "tokens create" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1497,7 +1497,7 @@ export def "tokens createToken" [
 ]: nothing -> record<token: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/tokens")
+  let full_url = (build-url $base ({username: $username} | format pattern "/{username}/tokens"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1507,7 +1507,7 @@ export def "tokens createToken" [
 #
 # DELETE /{username}/tokens/{id}
 # operationId: destroyToken
-export def "tokens destroyToken" [
+export def "tokens delete" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1522,7 +1522,7 @@ export def "tokens destroyToken" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/tokens/($id)")
+  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/{username}/tokens/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1547,7 +1547,7 @@ export def "tokens get" [
 ]: nothing -> record<token: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/tokens/($id)")
+  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/{username}/tokens/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1557,7 +1557,7 @@ export def "tokens get" [
 #
 # PATCH /{username}/tokens/{id}
 # operationId: updateToken
-export def "tokens updateToken" [
+export def "tokens update-by-username-id" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1572,7 +1572,7 @@ export def "tokens updateToken" [
 ]: nothing -> record<token: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/tokens/($id)")
+  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/{username}/tokens/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1582,7 +1582,7 @@ export def "tokens updateToken" [
 #
 # PUT /{username}/tokens/{id}
 # operationId: replaceToken
-export def "tokens replaceToken" [
+export def "tokens update-by-username-id-1" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1597,7 +1597,7 @@ export def "tokens replaceToken" [
 ]: nothing -> record<token: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/tokens/($id)")
+  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/{username}/tokens/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1621,7 +1621,7 @@ export def "triggers allTriggers" [
 ]: nothing -> table<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/triggers")
+  let full_url = (build-url $base ({username: $username} | format pattern "/{username}/triggers"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1631,7 +1631,7 @@ export def "triggers allTriggers" [
 #
 # POST /{username}/triggers
 # operationId: createTrigger
-export def "triggers createTrigger" [
+export def "triggers create" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1645,7 +1645,7 @@ export def "triggers createTrigger" [
 ]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/triggers")
+  let full_url = (build-url $base ({username: $username} | format pattern "/{username}/triggers"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1655,7 +1655,7 @@ export def "triggers createTrigger" [
 #
 # DELETE /{username}/triggers/{id}
 # operationId: destroyTrigger
-export def "triggers destroyTrigger" [
+export def "triggers delete" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1670,7 +1670,7 @@ export def "triggers destroyTrigger" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/triggers/($id)")
+  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/{username}/triggers/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1695,7 +1695,7 @@ export def "triggers get" [
 ]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/triggers/($id)")
+  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/{username}/triggers/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1705,7 +1705,7 @@ export def "triggers get" [
 #
 # PATCH /{username}/triggers/{id}
 # operationId: updateTrigger
-export def "triggers updateTrigger" [
+export def "triggers update-by-username-id" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1720,7 +1720,7 @@ export def "triggers updateTrigger" [
 ]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/triggers/($id)")
+  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/{username}/triggers/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1730,7 +1730,7 @@ export def "triggers updateTrigger" [
 #
 # PUT /{username}/triggers/{id}
 # operationId: replaceTrigger
-export def "triggers replaceTrigger" [
+export def "triggers update-by-username-id-1" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1745,7 +1745,7 @@ export def "triggers replaceTrigger" [
 ]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/triggers/($id)")
+  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/{username}/triggers/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1771,7 +1771,7 @@ export def "acl allPermissions" [
 ]: nothing -> table<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/($type)/($type_id)/acl")
+  let full_url = (build-url $base ({username: $username, type: $type, type_id: $type_id} | format pattern "/{username}/{type}/{type_id}/acl"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1781,7 +1781,7 @@ export def "acl allPermissions" [
 #
 # POST /{username}/{type}/{type_id}/acl
 # operationId: createPermission
-export def "acl createPermission" [
+export def "acl create-permission" [
   username: string
   type: string
   type_id: string
@@ -1797,7 +1797,7 @@ export def "acl createPermission" [
 ]: nothing -> record<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/($type)/($type_id)/acl")
+  let full_url = (build-url $base ({username: $username, type: $type, type_id: $type_id} | format pattern "/{username}/{type}/{type_id}/acl"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1807,7 +1807,7 @@ export def "acl createPermission" [
 #
 # DELETE /{username}/{type}/{type_id}/acl/{id}
 # operationId: destroyPermission
-export def "acl destroyPermission" [
+export def "acl delete-permission" [
   username: string
   type: string
   type_id: string
@@ -1824,7 +1824,7 @@ export def "acl destroyPermission" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/($type)/($type_id)/acl/($id)")
+  let full_url = (build-url $base ({username: $username, type: $type, type_id: $type_id, id: $id} | format pattern "/{username}/{type}/{type_id}/acl/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1834,7 +1834,7 @@ export def "acl destroyPermission" [
 #
 # GET /{username}/{type}/{type_id}/acl/{id}
 # operationId: getPermission
-export def "acl get" [
+export def "acl get-permission" [
   username: string
   type: string
   type_id: string
@@ -1851,7 +1851,7 @@ export def "acl get" [
 ]: nothing -> record<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/($type)/($type_id)/acl/($id)")
+  let full_url = (build-url $base ({username: $username, type: $type, type_id: $type_id, id: $id} | format pattern "/{username}/{type}/{type_id}/acl/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1861,7 +1861,7 @@ export def "acl get" [
 #
 # PATCH /{username}/{type}/{type_id}/acl/{id}
 # operationId: updatePermission
-export def "acl updatePermission" [
+export def "acl update-permission-by-username-type-type_id-id" [
   username: string
   type: string
   type_id: string
@@ -1878,7 +1878,7 @@ export def "acl updatePermission" [
 ]: nothing -> record<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/($type)/($type_id)/acl/($id)")
+  let full_url = (build-url $base ({username: $username, type: $type, type_id: $type_id, id: $id} | format pattern "/{username}/{type}/{type_id}/acl/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1888,7 +1888,7 @@ export def "acl updatePermission" [
 #
 # PUT /{username}/{type}/{type_id}/acl/{id}
 # operationId: replacePermission
-export def "acl replacePermission" [
+export def "acl update-permission-by-username-type-type_id-id-1" [
   username: string
   type: string
   type_id: string
@@ -1905,7 +1905,7 @@ export def "acl replacePermission" [
 ]: nothing -> record<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($username)/($type)/($type_id)/acl/($id)")
+  let full_url = (build-url $base ({username: $username, type: $type, type_id: $type_id, id: $id} | format pattern "/{username}/{type}/{type_id}/acl/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
